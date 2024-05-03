@@ -144,6 +144,21 @@ pub(super) mod internal_to_encoder {
         Ok(wasm_encoder::ConstExpr::raw(bytes))
     }
 
+    pub(crate) fn catch(catch: &wasmparser::Catch) -> wasm_encoder::Catch {
+        match catch {
+            wasmparser::Catch::One { tag, label } => wasm_encoder::Catch::One {
+                tag: *tag,
+                label: *label,
+            },
+            wasmparser::Catch::OneRef { tag, label } => wasm_encoder::Catch::OneRef {
+                tag: *tag,
+                label: *label,
+            },
+            wasmparser::Catch::All { label } => wasm_encoder::Catch::All { label: *label },
+            wasmparser::Catch::AllRef { label } => wasm_encoder::Catch::AllRef { label: *label },
+        }
+    }
+
     /// Convert [`wasmparser::Operator`] to [`wasm_encoder::Instruction`]. A
     /// simplified example of the conversion done in wasm-mutate
     /// [here](https://github.com/bytecodealliance/wasm-tools/blob/a8c4fddd239b0cb8978c76e6dfd856d5bd29b860/crates/wasm-mutate/src/mutators/translate.rs#L279).
@@ -169,6 +184,16 @@ pub(super) mod internal_to_encoder {
 
             // Arguments which need to be explicitly converted or ignored.
             (map $arg:ident blockty) => (block_type($arg)?);
+            (map $arg:ident try_table) => ((
+                block_type($arg.ty)?,
+                std::borrow::Cow::from(
+                    $arg
+                        .catches
+                        .iter()
+                        .map(|c| catch(c))
+                        .collect::<std::vec::Vec<_>>()
+                )
+            ));
             (map $arg:ident targets) => ((
                 $arg
                     .targets()
@@ -184,6 +209,15 @@ pub(super) mod internal_to_encoder {
                 wasm_encoder::HeapType::try_from($arg)
                     .map_err(|()| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
             );
+            (map $arg:ident from_ref_type) => (
+                wasm_encoder::RefType::try_from($arg)
+                    .map_err(|()| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
+            );
+            (map $arg:ident to_ref_type) => (
+                wasm_encoder::RefType::try_from($arg)
+                    .map_err(|()| Error::ConversionError(format!("Failed to convert type: {:?}", $arg)))?
+            );
+
             (map $arg:ident memarg) => (memarg(&$arg));
             (map $arg:ident table_byte) => (());
             (map $arg:ident mem_byte) => (());
@@ -202,6 +236,7 @@ pub(super) mod internal_to_encoder {
 
             // Special cases with a single argument.
             (build BrTable $arg:ident) => (Ok(I::BrTable($arg.0, $arg.1)));
+            (build TryTable $arg:ident) => (Ok(I::TryTable($arg.0, $arg.1)));
             (build F32Const $arg:ident) => (Ok(I::F32Const(f32::from_bits($arg.bits()))));
             (build F64Const $arg:ident) => (Ok(I::F64Const(f64::from_bits($arg.bits()))));
             (build V128Const $arg:ident) => (Ok(I::V128Const($arg.i128())));

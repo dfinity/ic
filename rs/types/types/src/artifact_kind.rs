@@ -8,10 +8,9 @@ use crate::{
         certification::CertificationMessage,
         dkg::DkgMessageId,
         dkg::Message as DkgMessage,
-        ecdsa::{EcdsaMessage, EcdsaMessageAttribute},
-        ConsensusMessage, ConsensusMessageAttribute,
+        idkg::{EcdsaMessage, EcdsaMessageAttribute},
+        ConsensusMessage,
     },
-    crypto::crypto_hash,
     messages::SignedIngress,
     CountBytes,
 };
@@ -32,21 +31,17 @@ impl ArtifactKind for ConsensusArtifact {
     type PbMessage = ic_protobuf::types::v1::ConsensusMessage;
     type Message = ConsensusMessage;
     type PbMessageError = ProxyDecodeError;
-    type PbAttribute = ic_protobuf::types::v1::ConsensusMessageAttribute;
-    type PbAttributeError = ProxyDecodeError;
-    type Attribute = ConsensusMessageAttribute;
-    type PbFilter = ic_protobuf::types::v1::ConsensusMessageFilter;
-    type PbFilterError = ProxyDecodeError;
-    type Filter = ConsensusMessageFilter;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
+    type Attribute = ();
 
     /// The function converts a `ConsensusMessage` into an advert for a
     /// `ConsensusArtifact`.
     fn message_to_advert(msg: &ConsensusMessage) -> Advert<ConsensusArtifact> {
         Advert {
             id: ConsensusMessageId::from(msg),
-            attribute: ConsensusMessageAttribute::from(msg),
+            attribute: (),
             size: bincode::serialized_size(&msg).unwrap() as usize,
-            integrity_hash: crypto_hash(msg).get(),
         }
     }
 }
@@ -67,9 +62,6 @@ impl ArtifactKind for IngressArtifact {
     type PbAttribute = ();
     type PbAttributeError = Infallible;
     type Attribute = ();
-    type PbFilter = ();
-    type PbFilterError = Infallible;
-    type Filter = ();
 
     /// The function converts a `SignedIngress` into an advert for an
     /// `IngressArtifact`.
@@ -78,7 +70,6 @@ impl ArtifactKind for IngressArtifact {
             id: IngressMessageId::from(msg),
             attribute: (),
             size: msg.count_bytes(),
-            integrity_hash: crypto_hash(msg.binary()).get(),
         }
     }
 }
@@ -99,9 +90,6 @@ impl ArtifactKind for CertificationArtifact {
     type PbAttribute = ();
     type PbAttributeError = Infallible;
     type Attribute = ();
-    type PbFilter = ic_protobuf::types::v1::CertificationMessageFilter;
-    type PbFilterError = ProxyDecodeError;
-    type Filter = CertificationMessageFilter;
 
     /// The function converts a `CertificationMessage` into an advert for a
     /// `CertificationArtifact`.
@@ -110,7 +98,6 @@ impl ArtifactKind for CertificationArtifact {
             id: CertificationMessageId::from(msg),
             attribute: (),
             size: bincode::serialized_size(&msg).unwrap() as usize,
-            integrity_hash: crypto_hash(msg).get(),
         }
     }
 }
@@ -131,9 +118,6 @@ impl ArtifactKind for DkgArtifact {
     type PbAttribute = ();
     type PbAttributeError = Infallible;
     type Attribute = ();
-    type PbFilter = ();
-    type PbFilterError = Infallible;
-    type Filter = ();
 
     /// The function converts a `DkgMessage` into an advert for a
     /// `DkgArtifact`.
@@ -142,7 +126,6 @@ impl ArtifactKind for DkgArtifact {
             id: DkgMessageId::from(msg),
             attribute: (),
             size: bincode::serialized_size(&msg).unwrap() as usize,
-            integrity_hash: crypto_hash(msg).get(),
         }
     }
 }
@@ -163,9 +146,6 @@ impl ArtifactKind for EcdsaArtifact {
     type PbAttribute = ic_protobuf::types::v1::EcdsaMessageAttribute;
     type PbAttributeError = ProxyDecodeError;
     type Attribute = EcdsaMessageAttribute;
-    type PbFilter = ();
-    type PbFilterError = Infallible;
-    type Filter = ();
 
     /// The function converts a `EcdsaMessage` into an advert for a
     /// `EcdsaArtifact`.
@@ -174,7 +154,6 @@ impl ArtifactKind for EcdsaArtifact {
             id: EcdsaMessageId::from(msg),
             attribute: EcdsaMessageAttribute::from(msg),
             size: bincode::serialized_size(&msg).unwrap() as usize,
-            integrity_hash: crypto_hash(msg).get(),
         }
     }
 }
@@ -195,9 +174,6 @@ impl ArtifactKind for CanisterHttpArtifact {
     type PbAttribute = ();
     type PbAttributeError = Infallible;
     type Attribute = ();
-    type PbFilterError = Infallible;
-    type PbFilter = ();
-    type Filter = ();
 
     /// This function converts a `CanisterHttpResponseShare` into an advert for a
     /// `CanisterHttpArtifact`.
@@ -206,7 +182,6 @@ impl ArtifactKind for CanisterHttpArtifact {
             id: msg.clone(),
             attribute: (),
             size: bincode::serialized_size(&msg).unwrap() as usize,
-            integrity_hash: crypto_hash(msg).get(),
         }
     }
 }

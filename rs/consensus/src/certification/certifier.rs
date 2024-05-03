@@ -16,7 +16,7 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::consensus::{Committee, HasCommittee, HasHeight};
 use ic_types::{
-    artifact::{CertificationMessageFilter, CertificationMessageId, Priority, PriorityFn},
+    artifact::{CertificationMessageId, Priority, PriorityFn},
     artifact_kind::CertificationArtifact,
     consensus::certification::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
@@ -47,7 +47,6 @@ pub struct CertifierImpl {
 /// The Certification component, processing the changes on the certification
 /// pool and submitting the corresponding change sets.
 pub struct CertifierGossipImpl {
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
 }
 
@@ -79,33 +78,9 @@ impl<Pool: CertificationPool> PriorityFnAndFilterProducer<CertificationArtifact,
             if height < cup_height || certified_heights.contains(&height) {
                 Priority::Drop
             } else {
-                Priority::Fetch
+                Priority::FetchNow
             }
         })
-    }
-
-    /// Return the height above which we want a certification. Note that
-    /// this is not always equal the upper bound of what we have in the
-    /// certification pool for the following reasons:
-    /// 1. The pool is not persisted. We will not have any certification
-    ///    in there.
-    /// 2. We might have certification in the pool that is not yet
-    ///    verified or delivered to the state_manager.
-    fn get_filter(&self) -> CertificationMessageFilter {
-        let to_certify = self.state_manager.list_state_hashes_to_certify();
-        let filter_height = if to_certify.is_empty() {
-            self.state_manager.latest_state_height()
-        } else {
-            let h = to_certify[0].0;
-            assert!(
-                h > Height::from(0),
-                "State height to certify must be 1 or above"
-            );
-            h.decrement()
-        };
-        CertificationMessageFilter {
-            height: filter_height,
-        }
     }
 }
 
@@ -124,13 +99,12 @@ pub fn setup(
             replica_config,
             membership,
             crypto,
-            state_manager.clone(),
+            state_manager,
             consensus_pool_cache.clone(),
             metrics_registry,
             log,
         ),
         CertifierGossipImpl {
-            state_manager,
             consensus_pool_cache,
         },
     )
@@ -753,9 +727,9 @@ mod tests {
                 let prio_fn = certifier_gossip.get_priority_function(&cert_pool);
                 for (height, prio) in &[
                     (1, Priority::Drop),
-                    (2, Priority::Fetch),
+                    (2, Priority::FetchNow),
                     (3, Priority::Drop),
-                    (4, Priority::Fetch),
+                    (4, Priority::FetchNow),
                 ] {
                     assert_eq!(
                         prio_fn(

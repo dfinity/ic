@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_bench")
+load("//bazel:defs.bzl", "rust_bench", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -82,7 +82,7 @@ rust_test(
     ],
 )
 
-rust_test(
+rust_ic_test(
     name = "state_manager_integration_test",
     timeout = "long",
     srcs = [

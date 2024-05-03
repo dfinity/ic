@@ -464,6 +464,11 @@ impl CanisterState {
         }
     }
 
+    /// Returns the Wasm memory limit from the canister settings.
+    pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
+        self.system_state.wasm_memory_limit
+    }
+
     /// Returns the current compute allocation for the canister.
     pub fn compute_allocation(&self) -> ComputeAllocation {
         self.scheduler_state.compute_allocation
@@ -568,12 +573,19 @@ impl CanisterState {
         }
     }
 
+    /// Appends the given log to the canister log.
     pub fn append_log(&mut self, other: &mut CanisterLog) {
         self.system_state.canister_log.append(other);
     }
 
+    /// Clears the canister log.
     pub fn clear_log(&mut self) {
         self.system_state.canister_log.clear();
+    }
+
+    /// Sets the new canister log.
+    pub fn set_log(&mut self, other: CanisterLog) {
+        self.system_state.canister_log = other;
     }
 }
 

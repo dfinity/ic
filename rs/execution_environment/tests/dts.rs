@@ -20,6 +20,7 @@ use ic_state_machine_tests::{
 };
 use ic_types::{ingress::WasmResult, Cycles, NumInstructions};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use more_asserts::assert_ge;
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
@@ -242,7 +243,7 @@ impl DtsEnvConfig {
                     .ten_update_instructions_execution_fee
                     * (num_pages * dirty_page_overhead / 10)
             }
-            MeteringType::Old | MeteringType::None => Cycles::new(0),
+            MeteringType::None => Cycles::new(0),
         }
     }
 }
@@ -339,8 +340,8 @@ const ACTUAL_EXECUTION_COST: u128 = match EmbeddersConfig::new()
     .feature_flags
     .wasm_native_stable_memory
 {
-    FlagStatus::Enabled => 988_890,
-    FlagStatus::Disabled => 868_892,
+    FlagStatus::Enabled => 984_090,
+    FlagStatus::Disabled => 864_092,
 };
 
 #[test]
@@ -1353,7 +1354,7 @@ fn dts_ingress_status_of_update_is_correct() {
         .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    let original_time = env.time();
+    let original_time = env.time_of_next_round();
     let update = env.send_ingress(user_id, canister, "update", vec![]);
 
     env.tick();
@@ -1423,7 +1424,7 @@ fn dts_ingress_status_of_install_is_correct() {
         .install_canister_with_cycles(binary.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    let original_time = env.time();
+    let original_time = env.time_of_next_round();
 
     let install = {
         let args = InstallCodeArgs::new(
@@ -1504,7 +1505,7 @@ fn dts_ingress_status_of_upgrade_is_correct() {
         .install_canister_with_cycles(binary.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    let original_time = env.time();
+    let original_time = env.time_of_next_round();
 
     let install = {
         let args = InstallCodeArgs::new(
@@ -1604,7 +1605,7 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
         .inter_update(b_id, call_args().other_side(b))
         .build();
 
-    let original_time = env.time();
+    let original_time = env.time_of_next_round();
     let update = env.send_ingress(user_id, a_id, "update", a);
 
     env.tick();
@@ -1792,7 +1793,7 @@ fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
                 assert_eq!(
                     err.description(),
                     format!(
-                        "Attempt to execute a message on canister {} which contains no Wasm module",
+                        "Error from Canister {}: Attempt to execute a message, but the canister contains no Wasm module",
                         canisters[i]
                     )
                 );
@@ -1800,7 +1801,7 @@ fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
             }
         }
     }
-    assert!(errors >= 1);
+    assert_ge!(errors, 1);
 }
 
 #[test]

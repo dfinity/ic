@@ -6,12 +6,12 @@ use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_governance::pb::v1::{neuron::DissolveState, Neuron};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
 
 #[test]
 fn get_build_metadata_test() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
 
         // Boot up the IC.

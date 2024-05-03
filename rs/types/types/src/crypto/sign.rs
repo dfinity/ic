@@ -5,7 +5,7 @@ use crate::canister_http::CanisterHttpResponseMetadata;
 use crate::consensus::{
     certification::CertificationContent,
     dkg::DealingContent,
-    ecdsa::{EcdsaComplaintContent, EcdsaOpeningContent, EcdsaSigShare},
+    idkg::{EcdsaComplaintContent, EcdsaOpeningContent, EcdsaSigShare},
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
     NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };

@@ -113,6 +113,8 @@ impl AdminHelper {
         let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
+            // TODO: Switch to the new command name:
+            // .add_positional_argument("propose-to-revise-elected-guestos-versions")
             .add_positional_argument("propose-to-update-elected-replica-versions")
             .add_argument("replica-version-to-elect", quote(upgrade_version))
             .add_argument("release-package-urls", quote(upgrade_url))
@@ -130,7 +132,7 @@ impl AdminHelper {
         ic_admin
     }
 
-    pub fn get_propose_to_update_subnet_replica_version_command(
+    pub fn get_propose_to_deploy_guestos_to_all_subnet_nodes_command(
         &self,
         subnet_id: SubnetId,
         upgrade_version: &ReplicaVersion,
@@ -138,6 +140,8 @@ impl AdminHelper {
         let mut ic_admin = self.get_ic_admin_cmd_base();
 
         ic_admin
+            // TODO: Switch to the new command name:
+            // .add_positional_argument("propose-to-deploy-guestos-to-all-subnet-nodes")
             .add_positional_argument("propose-to-update-subnet-replica-version")
             .add_positional_argument(subnet_id)
             .add_positional_argument(upgrade_version)
@@ -464,9 +468,9 @@ mod tests {
     }
 
     #[test]
-    fn get_propose_to_update_subnet_replica_version_command_test() {
+    fn get_propose_to_deploy_guestos_to_all_subnet_nodes_command_test() {
         let result = fake_admin_helper()
-            .get_propose_to_update_subnet_replica_version_command(
+            .get_propose_to_deploy_guestos_to_all_subnet_nodes_command(
                 subnet_id_from_str(FAKE_SUBNET_ID_1),
                 &ReplicaVersion::try_from(FAKE_REPLICA_VERSION).unwrap(),
             )

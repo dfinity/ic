@@ -593,25 +593,6 @@ fn canister_state_callback_round_trip() {
 }
 
 #[test]
-fn canister_state_log_visibility_i32_round_trip() {
-    for initial in LogVisibility::iter() {
-        let encoded = i32::from(initial);
-        let round_trip = LogVisibility::try_from(encoded).unwrap();
-
-        assert_eq!(initial, round_trip);
-    }
-}
-
-#[test]
-fn canister_state_log_visibility_i32_default() {
-    const UNSPECIFIED: i32 = 0;
-    assert_eq!(
-        LogVisibility::try_from(UNSPECIFIED).unwrap(),
-        LogVisibility::default()
-    );
-}
-
-#[test]
 fn canister_state_log_visibility_round_trip() {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
 
@@ -621,6 +602,18 @@ fn canister_state_log_visibility_round_trip() {
 
         assert_eq!(initial, round_trip);
     }
+}
+
+#[test]
+fn compatibility_for_log_visibility() {
+    // If this fails, you are making a potentially incompatible change to `LogVisibility`.
+    // See note [Handling changes to Enums in Replicated State] for how to proceed.
+    assert_eq!(
+        LogVisibility::iter()
+            .map(|x| x as i32)
+            .collect::<Vec<i32>>(),
+        [1, 2]
+    );
 }
 
 #[test]

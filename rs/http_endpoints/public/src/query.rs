@@ -1,17 +1,13 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
-use crate::{
-    common::Cbor, validator_executor::ValidatorExecutor, verify_cbor_content_header,
-    ReplicaHealthStatus,
-};
+use crate::{common::Cbor, validator_executor::ValidatorExecutor, ReplicaHealthStatus};
 
 use axum::{
     body::Body,
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     response::{IntoResponse, Response},
     Router,
 };
-use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
@@ -30,7 +26,7 @@ use ic_types::{
     messages::{
         Blob, CertificateDelegation, HasCanisterId, HttpQueryContent, HttpQueryResponse,
         HttpQueryResponseReply, HttpRequest, HttpRequestEnvelope, HttpSignedQueryResponse,
-        NodeSignature, QueryResponseHash, SignedRequestBytes, UserQuery,
+        NodeSignature, QueryResponseHash, UserQuery,
     },
     CanisterId, NodeId,
 };
@@ -133,16 +129,15 @@ impl QueryServiceBuilder {
         };
         Router::new().route_service(
             QueryService::route(),
-            axum::routing::post(query).with_state(state).layer(
-                ServiceBuilder::new().layer(axum::middleware::from_fn(verify_cbor_content_header)),
-            ),
+            axum::routing::post(query)
+                .with_state(state)
+                .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
         )
     }
 
     pub fn build_service(self) -> BoxCloneService<Request<Body>, Response, Infallible> {
-        use axum::extract::DefaultBodyLimit;
         let router = self.build_router();
-        BoxCloneService::new(router.layer(DefaultBodyLimit::disable()).into_service())
+        BoxCloneService::new(router.into_service())
     }
 }
 
@@ -158,12 +153,12 @@ pub(crate) async fn query(
         delegation_from_nns,
         query_execution_service,
     }): State<QueryService>,
-    body: Bytes,
+    Cbor(request): Cbor<HttpRequestEnvelope<HttpQueryContent>>,
 ) -> impl IntoResponse {
     if health_status.load() != ReplicaHealthStatus::Healthy {
         let status = StatusCode::SERVICE_UNAVAILABLE;
         let text = format!(
-            "Replica is unhealthy: {}. Check the /api/v2/status for more information.",
+            "Replica is unhealthy: {:?}. Check the /api/v2/status for more information.",
             health_status.load(),
         );
         return (status, text).into_response();
@@ -171,17 +166,6 @@ pub(crate) async fn query(
     let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
 
     let registry_version = registry_client.get_latest_version();
-
-    let request = match <HttpRequestEnvelope<HttpQueryContent>>::try_from(
-        &SignedRequestBytes::from(body.to_vec()),
-    ) {
-        Ok(request) => request,
-        Err(e) => {
-            let status = StatusCode::BAD_REQUEST;
-            let text = format!("Could not parse body as read request: {}", e);
-            return (status, text).into_response();
-        }
-    };
 
     // Convert the message to a strongly-typed struct, making structural validations
     // on the way.

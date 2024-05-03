@@ -80,6 +80,30 @@
         </table>
         {% endfor %}
         {%- endif %}
+
+        {% if !wasm_store.is_empty() -%}
+        <h1 id="wasm-store">WASM Store</h1>
+        <table>
+            <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>Type</th>
+                <th>Git commit</th>
+                <th>Compressed Wasm Hash</th>
+            </tr>
+            </thead>
+            <tbody>
+            {%- for wasm in wasm_store %}
+            <tr>
+                <td>{{ wasm.timestamp|timestamp_to_datetime }}</td>
+                <td>{{ wasm.wasm_type }}</td>
+                <td>{{ wasm.git_commit }}</td>
+                <td>{{ wasm.wasm_hash }}</td>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        {%- endif %}
     </div>
 </div>
 </body>

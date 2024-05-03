@@ -20,7 +20,7 @@ use ic_types::{
     consensus::{
         certification::{Certification, CertificationMessage, CertificationShare},
         dkg,
-        ecdsa::{
+        idkg::{
             EcdsaArtifactId, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening,
             EcdsaPrefix, EcdsaPrefixOf, EcdsaSigShare,
         },

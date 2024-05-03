@@ -335,12 +335,14 @@ impl CanisterStateBuilder {
                 call_context.metadata().clone(),
             );
 
+            if call_context.has_responded() {
+                call_context_manager
+                    .mark_responded(call_context_id)
+                    .unwrap();
+            }
             let call_context_in_call_context_manager = call_context_manager
                 .call_context_mut(call_context_id)
                 .unwrap();
-            if call_context.has_responded() {
-                call_context_in_call_context_manager.mark_responded();
-            }
             if call_context.is_deleted() {
                 call_context_in_call_context_manager.mark_deleted();
             }
@@ -846,7 +848,7 @@ prop_compose! {
 
         let mut stream = Stream::with_signals(messages, signals_end, reject_signals);
         stream.set_reverse_stream_flags(StreamFlags {
-            responses_only: responses_only_flag,
+            deprecated_responses_only: responses_only_flag,
         });
         stream
     }
@@ -900,7 +902,7 @@ prop_compose! {
             signals_end,
             reject_signals,
             StreamFlags {
-                responses_only,
+                deprecated_responses_only: responses_only,
             },
         )
     }

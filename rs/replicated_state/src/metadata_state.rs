@@ -15,7 +15,7 @@ use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::subnet::v1 as pb_subnet,
     state::{
-        canister_state_bits::v1::ConsumedCyclesByUseCase,
+        canister_state_bits::v1::{ConsumedCyclesByUseCase, CyclesUseCase as pbCyclesUseCase},
         ingress::v1 as pb_ingress,
         queues::v1 as pb_queues,
         system_metadata::v1::{self as pb_metadata},
@@ -345,7 +345,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubnetTopology {
     /// The public key of the subnet (a DER-encoded BLS key, see
-    /// https://sdk.dfinity.org/docs/interface-spec/index.html#certification)
+    /// https://internetcomputer.org/docs/current/references/ic-interface-spec#certification)
     pub public_key: Vec<u8>,
     pub nodes: BTreeSet<NodeId>,
     pub subnet_type: SubnetType,
@@ -484,9 +484,9 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
                 .consumed_cycles_by_use_case
                 .clone()
                 .into_iter()
-                .map(|entry| ConsumedCyclesByUseCase {
-                    use_case: entry.0.into(),
-                    cycles: Some((&entry.1).into()),
+                .map(|(use_case, cycles)| ConsumedCyclesByUseCase {
+                    use_case: pbCyclesUseCase::from(use_case).into(),
+                    cycles: Some((&cycles).into()),
                 })
                 .collect(),
             num_canisters: Some(item.num_canisters),
@@ -499,6 +499,18 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
 impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_metadata::SubnetMetrics) -> Result<Self, Self::Error> {
+        let mut consumed_cycles_by_use_case = BTreeMap::new();
+        for x in item.consumed_cycles_by_use_case.into_iter() {
+            consumed_cycles_by_use_case.insert(
+                CyclesUseCase::try_from(pbCyclesUseCase::try_from(x.use_case).map_err(|_| {
+                    ProxyDecodeError::ValueOutOfRange {
+                        typ: "CyclesUseCase",
+                        err: format!("Unexpected value of cycles use case: {}", x.use_case),
+                    }
+                })?)?,
+                NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
+            );
+        }
         Ok(Self {
             consumed_cycles_by_deleted_canisters: try_from_option_field(
                 item.consumed_cycles_by_deleted_canisters,
@@ -515,16 +527,7 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
             )
             .unwrap_or_else(|_| NominalCycles::from(0_u128)),
             ecdsa_signature_agreements: item.ecdsa_signature_agreements.unwrap_or_default(),
-            consumed_cycles_by_use_case: item
-                .consumed_cycles_by_use_case
-                .into_iter()
-                .map(|ConsumedCyclesByUseCase { use_case, cycles }| {
-                    (
-                        CyclesUseCase::from(use_case),
-                        NominalCycles::try_from(cycles.unwrap_or_default()).unwrap_or_default(),
-                    )
-                })
-                .collect(),
+            consumed_cycles_by_use_case,
             num_canisters: try_from_option_field(
                 item.num_canisters,
                 "SubnetMetrics::num_canisters",
@@ -1215,7 +1218,7 @@ impl Default for Stream {
         let reject_signals = VecDeque::default();
         let messages_size_bytes = Self::size_bytes(&messages);
         let reverse_stream_flags = StreamFlags {
-            responses_only: false,
+            deprecated_responses_only: false,
         };
         Self {
             messages,
@@ -1240,7 +1243,7 @@ impl From<&Stream> for pb_queues::Stream {
             signals_end: item.signals_end.get(),
             reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
-                responses_only: item.reverse_stream_flags.responses_only,
+                deprecated_responses_only: item.reverse_stream_flags.deprecated_responses_only,
             }),
         }
     }
@@ -1270,7 +1273,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
             reverse_stream_flags: item
                 .reverse_stream_flags
                 .map(|flags| StreamFlags {
-                    responses_only: flags.responses_only,
+                    deprecated_responses_only: flags.deprecated_responses_only,
                 })
                 .unwrap_or_default(),
         })

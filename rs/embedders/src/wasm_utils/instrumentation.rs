@@ -25,7 +25,7 @@
 //!
 //! ```wasm
 //! (import "__" "out_of_instructions" (func (;0;) (func)))
-//! (import "__" "update_available_memory" (func (;1;) ((param i32 i32 i32) (result i32))))
+//! (import "__" "try_grow_wasm_memory" (func (;1;) ((param i32 i32) (result i32))))
 //! (import "__" "try_grow_stable_memory" (func (;1;) ((param i64 i64 i32) (result i64))))
 //! (import "__" "internal_trap" (func (;1;) ((param i32))))
 //! (import "__" "stable_read_first_access" (func ((param i64) (param i64) (param i64))))
@@ -136,10 +136,16 @@ use wasmparser::{
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum WasmMemoryType {
+    Wasm32,
+    Wasm64,
+}
+
 // The indices of injected function imports.
 pub(crate) enum InjectedImports {
     OutOfInstructions = 0,
-    UpdateAvailableMemory = 1,
+    TryGrowWasmMemory = 1,
     TryGrowStableMemory = 2,
     InternalTrap = 3,
     StableReadFirstAccess = 4,
@@ -157,21 +163,6 @@ impl InjectedImports {
 
 // Gets the cost of an instruction.
 pub fn instruction_to_cost(i: &Operator) -> u64 {
-    match i {
-        // The following instructions are mostly signaling the start/end of code blocks,
-        // so we assign 0 cost to them.
-        Operator::Block { .. } => 0,
-        Operator::Else => 0,
-        Operator::End => 0,
-        Operator::Loop { .. } => 0,
-
-        // Default cost of an instruction is 1.
-        _ => 1,
-    }
-}
-
-// Gets the cost of an instruction.
-pub fn instruction_to_cost_new(i: &Operator) -> u64 {
     // This aims to be a complete list of all instructions that can be executed, with certain exceptions.
     // The exceptions are: SIMD instructions, atomic instructions, and the dynamic cost of
     // of operations such as table/memory fill, copy, init. This
@@ -450,6 +441,245 @@ pub fn instruction_to_cost_new(i: &Operator) -> u64 {
         // translated to memory manipulation. Validated in benchmarks.
         Operator::RefFunc { .. } => 130,
 
+        ////////////////////////////////////////////////////////////////
+        // WASM SIMD Operators
+        Operator::V128Load { .. } => 1,
+        Operator::V128Load8x8S { .. } => 1,
+        Operator::V128Load8x8U { .. } => 1,
+        Operator::V128Load16x4S { .. } => 1,
+        Operator::V128Load16x4U { .. } => 1,
+        Operator::V128Load32x2S { .. } => 1,
+        Operator::V128Load32x2U { .. } => 1,
+        Operator::V128Load8Splat { .. } => 1,
+        Operator::V128Load16Splat { .. } => 1,
+        Operator::V128Load32Splat { .. } => 1,
+        Operator::V128Load64Splat { .. } => 1,
+        Operator::V128Load32Zero { .. } => 1,
+        Operator::V128Load64Zero { .. } => 1,
+        Operator::V128Store { .. } => 1,
+        Operator::V128Load8Lane { .. } => 2,
+        Operator::V128Load16Lane { .. } => 2,
+        Operator::V128Load32Lane { .. } => 1,
+        Operator::V128Load64Lane { .. } => 1,
+        Operator::V128Store8Lane { .. } => 1,
+        Operator::V128Store16Lane { .. } => 1,
+        Operator::V128Store32Lane { .. } => 1,
+        Operator::V128Store64Lane { .. } => 1,
+        Operator::V128Const { .. } => 1,
+        Operator::I8x16Shuffle { .. } => 3,
+        Operator::I8x16ExtractLaneS { .. } => 1,
+        Operator::I8x16ExtractLaneU { .. } => 1,
+        Operator::I8x16ReplaceLane { .. } => 1,
+        Operator::I16x8ExtractLaneS { .. } => 1,
+        Operator::I16x8ExtractLaneU { .. } => 1,
+        Operator::I16x8ReplaceLane { .. } => 1,
+        Operator::I32x4ExtractLane { .. } => 1,
+        Operator::I32x4ReplaceLane { .. } => 1,
+        Operator::I64x2ExtractLane { .. } => 1,
+        Operator::I64x2ReplaceLane { .. } => 1,
+        Operator::F32x4ExtractLane { .. } => 1,
+        Operator::F32x4ReplaceLane { .. } => 1,
+        Operator::F64x2ExtractLane { .. } => 1,
+        Operator::F64x2ReplaceLane { .. } => 1,
+        Operator::I8x16Swizzle { .. } => 1,
+        Operator::I8x16Splat { .. } => 1,
+        Operator::I16x8Splat { .. } => 1,
+        Operator::I32x4Splat { .. } => 1,
+        Operator::I64x2Splat { .. } => 1,
+        Operator::F32x4Splat { .. } => 1,
+        Operator::F64x2Splat { .. } => 1,
+        Operator::I8x16Eq { .. } => 1,
+        Operator::I8x16Ne { .. } => 1,
+        Operator::I8x16LtS { .. } => 1,
+        Operator::I8x16LtU { .. } => 2,
+        Operator::I8x16GtS { .. } => 1,
+        Operator::I8x16GtU { .. } => 2,
+        Operator::I8x16LeS { .. } => 1,
+        Operator::I8x16LeU { .. } => 1,
+        Operator::I8x16GeS { .. } => 1,
+        Operator::I8x16GeU { .. } => 1,
+        Operator::I16x8Eq { .. } => 1,
+        Operator::I16x8Ne { .. } => 1,
+        Operator::I16x8LtS { .. } => 1,
+        Operator::I16x8LtU { .. } => 2,
+        Operator::I16x8GtS { .. } => 1,
+        Operator::I16x8GtU { .. } => 2,
+        Operator::I16x8LeS { .. } => 1,
+        Operator::I16x8LeU { .. } => 1,
+        Operator::I16x8GeS { .. } => 1,
+        Operator::I16x8GeU { .. } => 1,
+        Operator::I32x4Eq { .. } => 1,
+        Operator::I32x4Ne { .. } => 1,
+        Operator::I32x4LtS { .. } => 1,
+        Operator::I32x4LtU { .. } => 2,
+        Operator::I32x4GtS { .. } => 1,
+        Operator::I32x4GtU { .. } => 2,
+        Operator::I32x4LeS { .. } => 1,
+        Operator::I32x4LeU { .. } => 1,
+        Operator::I32x4GeS { .. } => 1,
+        Operator::I32x4GeU { .. } => 1,
+        Operator::I64x2Eq { .. } => 1,
+        Operator::I64x2Ne { .. } => 1,
+        Operator::I64x2LtS { .. } => 1,
+        Operator::I64x2GtS { .. } => 1,
+        Operator::I64x2LeS { .. } => 1,
+        Operator::I64x2GeS { .. } => 1,
+        Operator::F32x4Eq { .. } => 1,
+        Operator::F32x4Ne { .. } => 1,
+        Operator::F32x4Lt { .. } => 1,
+        Operator::F32x4Gt { .. } => 1,
+        Operator::F32x4Le { .. } => 1,
+        Operator::F32x4Ge { .. } => 1,
+        Operator::F64x2Eq { .. } => 1,
+        Operator::F64x2Ne { .. } => 1,
+        Operator::F64x2Lt { .. } => 1,
+        Operator::F64x2Gt { .. } => 1,
+        Operator::F64x2Le { .. } => 1,
+        Operator::F64x2Ge { .. } => 1,
+        Operator::V128Not { .. } => 1,
+        Operator::V128And { .. } => 1,
+        Operator::V128AndNot { .. } => 1,
+        Operator::V128Or { .. } => 1,
+        Operator::V128Xor { .. } => 1,
+        Operator::V128Bitselect { .. } => 1,
+        Operator::V128AnyTrue { .. } => 1,
+        Operator::I8x16Abs { .. } => 1,
+        Operator::I8x16Neg { .. } => 1,
+        Operator::I8x16Popcnt { .. } => 3,
+        Operator::I8x16AllTrue { .. } => 1,
+        Operator::I8x16Bitmask { .. } => 1,
+        Operator::I8x16NarrowI16x8S { .. } => 1,
+        Operator::I8x16NarrowI16x8U { .. } => 1,
+        Operator::I8x16Shl { .. } => 3,
+        Operator::I8x16ShrS { .. } => 3,
+        Operator::I8x16ShrU { .. } => 2,
+        Operator::I8x16Add { .. } => 1,
+        Operator::I8x16AddSatS { .. } => 1,
+        Operator::I8x16AddSatU { .. } => 1,
+        Operator::I8x16Sub { .. } => 1,
+        Operator::I8x16SubSatS { .. } => 1,
+        Operator::I8x16SubSatU { .. } => 1,
+        Operator::I8x16MinS { .. } => 1,
+        Operator::I8x16MinU { .. } => 1,
+        Operator::I8x16MaxS { .. } => 1,
+        Operator::I8x16MaxU { .. } => 1,
+        Operator::I8x16AvgrU { .. } => 1,
+        Operator::I16x8ExtAddPairwiseI8x16S { .. } => 1,
+        Operator::I16x8ExtAddPairwiseI8x16U { .. } => 2,
+        Operator::I16x8Abs { .. } => 1,
+        Operator::I16x8Neg { .. } => 1,
+        Operator::I16x8Q15MulrSatS { .. } => 1,
+        Operator::I16x8AllTrue { .. } => 1,
+        Operator::I16x8Bitmask { .. } => 1,
+        Operator::I16x8NarrowI32x4S { .. } => 1,
+        Operator::I16x8NarrowI32x4U { .. } => 1,
+        Operator::I16x8ExtendLowI8x16S { .. } => 1,
+        Operator::I16x8ExtendHighI8x16S { .. } => 1,
+        Operator::I16x8ExtendLowI8x16U { .. } => 1,
+        Operator::I16x8ExtendHighI8x16U { .. } => 1,
+        Operator::I16x8Shl { .. } => 2,
+        Operator::I16x8ShrS { .. } => 2,
+        Operator::I16x8ShrU { .. } => 2,
+        Operator::I16x8Add { .. } => 1,
+        Operator::I16x8AddSatS { .. } => 1,
+        Operator::I16x8AddSatU { .. } => 1,
+        Operator::I16x8Sub { .. } => 1,
+        Operator::I16x8SubSatS { .. } => 1,
+        Operator::I16x8SubSatU { .. } => 1,
+        Operator::I16x8Mul { .. } => 1,
+        Operator::I16x8MinS { .. } => 1,
+        Operator::I16x8MinU { .. } => 1,
+        Operator::I16x8MaxS { .. } => 1,
+        Operator::I16x8MaxU { .. } => 1,
+        Operator::I16x8AvgrU { .. } => 1,
+        Operator::I16x8ExtMulLowI8x16S { .. } => 1,
+        Operator::I16x8ExtMulHighI8x16S { .. } => 2,
+        Operator::I16x8ExtMulLowI8x16U { .. } => 1,
+        Operator::I16x8ExtMulHighI8x16U { .. } => 2,
+        Operator::I32x4ExtAddPairwiseI16x8S { .. } => 1,
+        Operator::I32x4ExtAddPairwiseI16x8U { .. } => 3,
+        Operator::I32x4Abs { .. } => 1,
+        Operator::I32x4Neg { .. } => 1,
+        Operator::I32x4AllTrue { .. } => 1,
+        Operator::I32x4Bitmask { .. } => 1,
+        Operator::I32x4ExtendLowI16x8S { .. } => 1,
+        Operator::I32x4ExtendHighI16x8S { .. } => 1,
+        Operator::I32x4ExtendLowI16x8U { .. } => 1,
+        Operator::I32x4ExtendHighI16x8U { .. } => 1,
+        Operator::I32x4Shl { .. } => 2,
+        Operator::I32x4ShrS { .. } => 2,
+        Operator::I32x4ShrU { .. } => 2,
+        Operator::I32x4Add { .. } => 1,
+        Operator::I32x4Sub { .. } => 1,
+        Operator::I32x4Mul { .. } => 2,
+        Operator::I32x4MinS { .. } => 1,
+        Operator::I32x4MinU { .. } => 1,
+        Operator::I32x4MaxS { .. } => 1,
+        Operator::I32x4MaxU { .. } => 1,
+        Operator::I32x4DotI16x8S { .. } => 1,
+        Operator::I32x4ExtMulLowI16x8S { .. } => 2,
+        Operator::I32x4ExtMulHighI16x8S { .. } => 2,
+        Operator::I32x4ExtMulLowI16x8U { .. } => 2,
+        Operator::I32x4ExtMulHighI16x8U { .. } => 2,
+        Operator::I64x2Abs { .. } => 1,
+        Operator::I64x2Neg { .. } => 1,
+        Operator::I64x2AllTrue { .. } => 1,
+        Operator::I64x2Bitmask { .. } => 1,
+        Operator::I64x2ExtendLowI32x4S { .. } => 1,
+        Operator::I64x2ExtendHighI32x4S { .. } => 1,
+        Operator::I64x2ExtendLowI32x4U { .. } => 1,
+        Operator::I64x2ExtendHighI32x4U { .. } => 1,
+        Operator::I64x2Shl { .. } => 2,
+        Operator::I64x2ShrS { .. } => 3,
+        Operator::I64x2ShrU { .. } => 2,
+        Operator::I64x2Add { .. } => 1,
+        Operator::I64x2Sub { .. } => 1,
+        Operator::I64x2Mul { .. } => 4,
+        Operator::I64x2ExtMulLowI32x4S { .. } => 1,
+        Operator::I64x2ExtMulHighI32x4S { .. } => 1,
+        Operator::I64x2ExtMulLowI32x4U { .. } => 1,
+        Operator::I64x2ExtMulHighI32x4U { .. } => 1,
+        Operator::F32x4Ceil { .. } => 2,
+        Operator::F32x4Floor { .. } => 2,
+        Operator::F32x4Trunc { .. } => 2,
+        Operator::F32x4Nearest { .. } => 2,
+        Operator::F32x4Abs { .. } => 2,
+        Operator::F32x4Neg { .. } => 2,
+        Operator::F32x4Sqrt { .. } => 5,
+        Operator::F32x4Add { .. } => 2,
+        Operator::F32x4Sub { .. } => 2,
+        Operator::F32x4Mul { .. } => 2,
+        Operator::F32x4Div { .. } => 10,
+        Operator::F32x4Min { .. } => 4,
+        Operator::F32x4Max { .. } => 4,
+        Operator::F32x4PMin { .. } => 1,
+        Operator::F32x4PMax { .. } => 1,
+        Operator::F64x2Ceil { .. } => 2,
+        Operator::F64x2Floor { .. } => 2,
+        Operator::F64x2Trunc { .. } => 2,
+        Operator::F64x2Nearest { .. } => 2,
+        Operator::F64x2Abs { .. } => 2,
+        Operator::F64x2Neg { .. } => 2,
+        Operator::F64x2Sqrt { .. } => 14,
+        Operator::F64x2Add { .. } => 2,
+        Operator::F64x2Sub { .. } => 2,
+        Operator::F64x2Mul { .. } => 2,
+        Operator::F64x2Div { .. } => 12,
+        Operator::F64x2Min { .. } => 4,
+        Operator::F64x2Max { .. } => 5,
+        Operator::F64x2PMin { .. } => 1,
+        Operator::F64x2PMax { .. } => 1,
+        Operator::I32x4TruncSatF32x4S { .. } => 2,
+        Operator::I32x4TruncSatF32x4U { .. } => 4,
+        Operator::F32x4ConvertI32x4S { .. } => 1,
+        Operator::F32x4ConvertI32x4U { .. } => 4,
+        Operator::I32x4TruncSatF64x2SZero { .. } => 2,
+        Operator::I32x4TruncSatF64x2UZero { .. } => 3,
+        Operator::F64x2ConvertLowI32x4S { .. } => 1,
+        Operator::F64x2ConvertLowI32x4U { .. } => 1,
+        Operator::F32x4DemoteF64x2Zero { .. } => 1,
+        Operator::F64x2PromoteLowF32x4 { .. } => 1,
+
         // Default cost of an instruction is 1.
         _ => 1,
     }
@@ -457,7 +687,7 @@ pub fn instruction_to_cost_new(i: &Operator) -> u64 {
 
 const INSTRUMENTED_FUN_MODULE: &str = "__";
 const OUT_OF_INSTRUCTIONS_FUN_NAME: &str = "out_of_instructions";
-const UPDATE_MEMORY_FUN_NAME: &str = "update_available_memory";
+const TRY_GROW_WASM_MEMORY_FUN_NAME: &str = "try_grow_wasm_memory";
 const TRY_GROW_STABLE_MEMORY_FUN_NAME: &str = "try_grow_stable_memory";
 const INTERNAL_TRAP_FUN_NAME: &str = "internal_trap";
 const STABLE_READ_FIRST_ACCESS_NAME: &str = "stable_read_first_access";
@@ -472,6 +702,7 @@ const BYTEMAP_SIZE_IN_WASM_PAGES: u64 =
     MAX_WASM_MEMORY_IN_BYTES / (PAGE_SIZE as u64) / (WASM_PAGE_SIZE as u64);
 
 const MAX_STABLE_MEMORY_IN_WASM_PAGES: u64 = MAX_STABLE_MEMORY_IN_BYTES / (WASM_PAGE_SIZE as u64);
+const MAX_WASM_MEMORY_IN_WASM_PAGES: u64 = MAX_WASM_MEMORY_IN_BYTES / (WASM_PAGE_SIZE as u64);
 /// There is one byte for each OS page in the stable memory.
 const STABLE_BYTEMAP_SIZE_IN_WASM_PAGES: u64 = MAX_STABLE_MEMORY_IN_WASM_PAGES / (PAGE_SIZE as u64);
 
@@ -558,13 +789,20 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 /// added as the last imports, we'd need to increment only non imported
 /// functions, since imported functions precede all others in the function index
 /// space, but this would be error-prone).
-fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagStatus) -> Module {
+fn inject_helper_functions(
+    mut module: Module,
+    wasm_native_stable_memory: FlagStatus,
+    mem_type: WasmMemoryType,
+) -> Module {
     // insert types
     let ooi_type = FuncType::new([], []);
-    let uam_type = FuncType::new([ValType::I32, ValType::I32, ValType::I32], [ValType::I32]);
+    let tgwm_type = match mem_type {
+        WasmMemoryType::Wasm32 => FuncType::new([ValType::I32, ValType::I32], [ValType::I32]),
+        WasmMemoryType::Wasm64 => FuncType::new([ValType::I64, ValType::I64], [ValType::I64]),
+    };
 
     let ooi_type_idx = add_func_type(&mut module, ooi_type);
-    let uam_type_idx = add_func_type(&mut module, uam_type);
+    let tgwm_type_idx = add_func_type(&mut module, tgwm_type);
 
     // push_front imports
     let ooi_imp = Import {
@@ -573,17 +811,17 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
         ty: TypeRef::Func(ooi_type_idx),
     };
 
-    let uam_imp = Import {
+    let tgwm_imp = Import {
         module: INSTRUMENTED_FUN_MODULE,
-        name: UPDATE_MEMORY_FUN_NAME,
-        ty: TypeRef::Func(uam_type_idx),
+        name: TRY_GROW_WASM_MEMORY_FUN_NAME,
+        ty: TypeRef::Func(tgwm_type_idx),
     };
 
     let mut old_imports = module.imports;
     module.imports =
         Vec::with_capacity(old_imports.len() + InjectedImports::count(wasm_native_stable_memory));
     module.imports.push(ooi_imp);
-    module.imports.push(uam_imp);
+    module.imports.push(tgwm_imp);
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
         let tgsm_type = FuncType::new([ValType::I64, ValType::I64, ValType::I32], [ValType::I64]);
@@ -624,8 +862,7 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
         module.imports[InjectedImports::OutOfInstructions as usize].name == "out_of_instructions"
     );
     debug_assert!(
-        module.imports[InjectedImports::UpdateAvailableMemory as usize].name
-            == "update_available_memory"
+        module.imports[InjectedImports::TryGrowWasmMemory as usize].name == "try_grow_wasm_memory"
     );
     if wasm_native_stable_memory == FlagStatus::Enabled {
         debug_assert!(
@@ -671,8 +908,14 @@ pub(super) fn instrument(
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
+    let mut main_memory_type = WasmMemoryType::Wasm32;
+    if let Some(mem) = module.memories.first() {
+        if mem.memory64 {
+            main_memory_type = WasmMemoryType::Wasm64;
+        }
+    }
     let stable_memory_index;
-    let mut module = inject_helper_functions(module, wasm_native_stable_memory);
+    let mut module = inject_helper_functions(module, wasm_native_stable_memory, main_memory_type);
     module = export_table(module);
     (module, stable_memory_index) =
         update_memories(module, write_barrier, wasm_native_stable_memory);
@@ -750,12 +993,11 @@ pub(super) fn instrument(
         }
     }
 
-    // Inject `update_available_memory` to functions with `memory.grow`
-    // instructions.
+    // Inject `try_grow_wasm_memory` after `memory.grow` instructions.
     if !func_types.is_empty() {
         let func_bodies = &mut module.code_sections;
         for (func_ix, func_type) in func_types.into_iter() {
-            inject_update_available_memory(&mut func_bodies[func_ix], &func_type);
+            inject_try_grow_wasm_memory(&mut func_bodies[func_ix], &func_type, main_memory_type);
             if write_barrier == FlagStatus::Enabled {
                 inject_mem_barrier(&mut func_bodies[func_ix], &func_type);
             }
@@ -770,7 +1012,6 @@ pub(super) fn instrument(
             special_indices,
             subnet_type,
             dirty_page_overhead,
-            metering_type,
         )
     }
 
@@ -854,7 +1095,6 @@ fn replace_system_api_functions(
     special_indices: SpecialIndices,
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
-    metering_type: MeteringType,
 ) {
     let api_indexes = calculate_api_indexes(module);
     let number_of_func_imports = module
@@ -866,12 +1106,9 @@ fn replace_system_api_functions(
     // Collect a single map of all the function indexes that need to be
     // replaced.
     let mut func_index_replacements = BTreeMap::new();
-    for (api, (ty, body)) in replacement_functions(
-        special_indices,
-        subnet_type,
-        dirty_page_overhead,
-        metering_type,
-    ) {
+    for (api, (ty, body)) in
+        replacement_functions(special_indices, subnet_type, dirty_page_overhead)
+    {
         if let Some(old_index) = api_indexes.get(&api) {
             let type_idx = add_func_type(module, ty);
             let new_index = (number_of_func_imports + module.functions.len()) as u32;
@@ -1180,9 +1417,8 @@ fn inject_metering(
     metering_type: MeteringType,
 ) {
     let points = match metering_type {
-        MeteringType::Old => injections_old(code),
         MeteringType::None => Vec::new(),
-        MeteringType::New => injections_new(code),
+        MeteringType::New => injections(code),
     };
     let points = points.iter().filter(|point| match point.cost_detail {
         InjectionPointCostDetail::StaticCost {
@@ -1455,23 +1691,20 @@ fn inject_mem_barrier(func_body: &mut ic_wasm_transform::Body, func_type: &FuncT
     }
 }
 
-// Scans through a function and adds instrumentation after each `memory.grow` or
-// `table.grow` instruction to make sure that there's enough available memory
-// left to support the requested extra memory. If no `memory.grow` or
-// `table.grow` instructions are present then the code remains unchanged.
-fn inject_update_available_memory(func_body: &mut ic_wasm_transform::Body, func_type: &FuncType) {
-    // This is an overestimation of table element size computed based on the
-    // existing canister limits.
-    const TABLE_ELEMENT_SIZE: u32 = 1024;
+// Scans through the function and adds instrumentation after each `memory.grow`
+// instruction to make sure that there's enough available memory left to support
+// the requested extra memory.
+fn inject_try_grow_wasm_memory(
+    func_body: &mut ic_wasm_transform::Body,
+    func_type: &FuncType,
+    mem_type: WasmMemoryType,
+) {
     use Operator::*;
-    let mut injection_points: Vec<(usize, u32)> = Vec::new();
+    let mut injection_points: Vec<usize> = Vec::new();
     {
         for (idx, instr) in func_body.instructions.iter().enumerate() {
             if let MemoryGrow { .. } = instr {
-                injection_points.push((idx, WASM_PAGE_SIZE));
-            }
-            if let TableGrow { .. } = instr {
-                injection_points.push((idx, TABLE_ELEMENT_SIZE));
+                injection_points.push(idx);
             }
         }
     }
@@ -1479,17 +1712,20 @@ fn inject_update_available_memory(func_body: &mut ic_wasm_transform::Body, func_
     // If we found any injection points, we need to instrument the code.
     if !injection_points.is_empty() {
         // We inject a local to cache the argument to `memory.grow`.
-        // The locals are stored as a vector of (count, ValType), so summing over the first field gives
-        // the total number of locals.
+        // The locals are stored as a vector of (count, ValType), so summing
+        // over the first field gives the total number of locals.
         let n_locals: u32 = func_body.locals.iter().map(|x| x.0).sum();
         let memory_local_ix = func_type.params().len() as u32 + n_locals;
-        func_body.locals.push((1, ValType::I32));
+        match mem_type {
+            WasmMemoryType::Wasm32 => func_body.locals.push((1, ValType::I32)),
+            WasmMemoryType::Wasm64 => func_body.locals.push((1, ValType::I64)),
+        };
 
         let orig_elems = &func_body.instructions;
         let mut elems: Vec<Operator> = Vec::new();
         let mut last_injection_position = 0;
-        for (point, element_size) in injection_points {
-            let update_available_memory_instr = orig_elems[point].clone();
+        for point in injection_points {
+            let memory_grow_instr = orig_elems[point].clone();
             elems.extend_from_slice(&orig_elems[last_injection_position..point]);
             // At this point we have a memory.grow so the argument to it will be on top of
             // the stack, which we just assign to `memory_local_ix` with a local.tee
@@ -1498,15 +1734,12 @@ fn inject_update_available_memory(func_body: &mut ic_wasm_transform::Body, func_
                 LocalTee {
                     local_index: memory_local_ix,
                 },
-                update_available_memory_instr,
+                memory_grow_instr,
                 LocalGet {
                     local_index: memory_local_ix,
                 },
-                I32Const {
-                    value: element_size as i32,
-                },
                 Call {
-                    function_index: InjectedImports::UpdateAvailableMemory as u32,
+                    function_index: InjectedImports::TryGrowWasmMemory as u32,
                 },
             ]);
             last_injection_position = point + 1;
@@ -1520,67 +1753,8 @@ fn inject_update_available_memory(func_body: &mut ic_wasm_transform::Body, func_
 // at the beginning of every basic block (straight-line sequence of instructions
 // with no branches) and before each bulk memory instruction. An injection point
 // contains a "hint" about the context of every basic block, specifically if
-// it's re-entrant or not. This version over-estimates the cost of code with
-// returns and jumps.
-fn injections_old(code: &[Operator]) -> Vec<InjectionPoint> {
-    let mut res = Vec::new();
-    let mut stack = Vec::new();
-    use Operator::*;
-    // The function itself is a re-entrant code block.
-    let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 0);
-    for (position, i) in code.iter().enumerate() {
-        curr.cost_detail.increment_cost(instruction_to_cost(i));
-        match i {
-            // Start of a re-entrant code block.
-            Loop { .. } => {
-                stack.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::ReentrantBlockStart, 0);
-            }
-            // Start of a non re-entrant code block.
-            If { .. } | Block { .. } => {
-                stack.push(curr);
-                curr =
-                    InjectionPoint::new_static_cost(position + 1, Scope::NonReentrantBlockStart, 0);
-            }
-            // End of a code block but still more code left.
-            Else | Br { .. } | BrIf { .. } | BrTable { .. } => {
-                res.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd, 0);
-            }
-            // `End` signals the end of a code block. If there's nothing more on the stack, we've
-            // gone through all the code.
-            End => {
-                res.push(curr);
-                curr = match stack.pop() {
-                    Some(val) => val,
-                    None => break,
-                };
-            }
-            // Bulk memory instructions require injected metering __before__ the instruction
-            // executes so that size arguments can be read from the stack at runtime.
-            MemoryFill { .. }
-            | MemoryCopy { .. }
-            | MemoryInit { .. }
-            | TableCopy { .. }
-            | TableInit { .. }
-            | TableFill { .. } => {
-                res.push(InjectionPoint::new_dynamic_cost(position));
-            }
-            // Nothing special to be done for other instructions.
-            _ => (),
-        }
-    }
-
-    res.sort_by_key(|k| k.position);
-    res
-}
-
-// This function scans through the Wasm code and creates an injection point
-// at the beginning of every basic block (straight-line sequence of instructions
-// with no branches) and before each bulk memory instruction. An injection point
-// contains a "hint" about the context of every basic block, specifically if
 // it's re-entrant or not.
-fn injections_new(code: &[Operator]) -> Vec<InjectionPoint> {
+fn injections(code: &[Operator]) -> Vec<InjectionPoint> {
     let mut res = Vec::new();
     use Operator::*;
     // The function itself is a re-entrant code block.
@@ -1588,7 +1762,7 @@ fn injections_new(code: &[Operator]) -> Vec<InjectionPoint> {
     // functions should consume at least some fuel.
     let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 1);
     for (position, i) in code.iter().enumerate() {
-        curr.cost_detail.increment_cost(instruction_to_cost_new(i));
+        curr.cost_detail.increment_cost(instruction_to_cost(i));
         match i {
             // Start of a re-entrant code block.
             Loop { .. } => {
@@ -1716,6 +1890,12 @@ fn update_memories(
     wasm_native_stable_memory: FlagStatus,
 ) -> (Module, u32) {
     let mut stable_index = 0;
+
+    if let Some(mem) = module.memories.first_mut() {
+        if mem.memory64 && mem.maximum.is_none() {
+            mem.maximum = Some(MAX_WASM_MEMORY_IN_WASM_PAGES);
+        }
+    }
 
     let mut memory_already_exported = false;
     for export in &mut module.exports {

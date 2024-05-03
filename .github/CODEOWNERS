@@ -1,0 +1,12 @@
+/.devcontainer/           @dfinity-sandbox/idx
+/.github/                 @dfinity-sandbox/idx
+/licenses/                @dfinity-sandbox/idx
+/bin/                     @dfinity-sandbox/idx
+/bazel/                   @dfinity-sandbox/idx
+/third_party/             @dfinity-sandbox/idx
+.vscode/                  @dfinity-sandbox/idx
+/publish/ @dfinity-sandbox/idx
+/pre-commit/                                                            @dfinity-sandbox/idx
+/.gitlab/                                                               @dfinity-sandbox/idx
+/gitlab-ci/                                                             @dfinity-sandbox/idx
+/rs/bazelifier/                                         @dfinity-sandbox/idx

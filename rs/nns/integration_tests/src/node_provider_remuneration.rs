@@ -26,7 +26,8 @@ use ic_nns_test_utils::{
         get_pending_proposals, ledger_account_balance, nns_get_monthly_node_provider_rewards,
         nns_get_most_recent_monthly_node_provider_rewards, nns_get_network_economics_parameters,
         nns_governance_get_proposal_info, nns_governance_make_proposal,
-        nns_wait_for_proposal_execution, query, setup_nns_canisters, update_with_sender,
+        nns_wait_for_proposal_execution, query, setup_nns_canisters,
+        state_machine_builder_for_nns_tests, update_with_sender,
     },
 };
 use ic_protobuf::registry::{
@@ -71,7 +72,7 @@ impl NodeInfo {
 
 #[test]
 fn test_automated_node_provider_remuneration() {
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()

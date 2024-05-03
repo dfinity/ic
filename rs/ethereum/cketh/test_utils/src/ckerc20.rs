@@ -1,7 +1,9 @@
 use crate::events::MinterEventAssert;
 use crate::flow::{DepositParams, LedgerTransactionAssert, ProcessWithdrawal};
-use crate::mock::{JsonRpcMethod, MockJsonRpcProviders};
-use crate::response::{block_response, empty_logs, Erc20LogEntry};
+use crate::mock::{
+    JsonRpcMethod, JsonRpcRequestMatcher, MockJsonRpcProviders, MockJsonRpcProvidersBuilder,
+};
+use crate::response::{block_response, empty_logs, fee_history, Erc20LogEntry};
 use crate::{
     assert_reply, format_ethereum_address_to_eip_55, new_state_machine, CkEthSetup,
     DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
@@ -17,7 +19,7 @@ use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
 };
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
-use ic_cketh_minter::endpoints::CkErc20Token;
+use ic_cketh_minter::endpoints::{CkErc20Token, MinterInfo};
 use ic_cketh_minter::eth_rpc::FixedSizeData;
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
 use ic_cketh_minter::SCRAPPING_ETH_LOGS_INTERVAL;
@@ -25,11 +27,13 @@ use ic_ethereum_types::Address;
 pub use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
 use ic_ledger_suite_orchestrator::candid::InitArg as LedgerSuiteOrchestratorInitArg;
 use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, LedgerSuiteOrchestrator};
-use ic_state_machine_tests::{ErrorCode, MessageId, StateMachine};
+use ic_state_machine_tests::{ErrorCode, MessageId, StateMachine, WasmResult};
 use icrc_ledger_types::icrc1::account::Account;
+use num_traits::ToPrimitive;
 use serde_json::json;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::identity;
+use std::iter::zip;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -131,6 +135,23 @@ impl CkErc20Setup {
         MinterEventAssert::from_fetching_all_events(self)
     }
 
+    pub fn get_minter_info(&self) -> MinterInfo {
+        self.cketh.get_minter_info()
+    }
+
+    pub fn erc20_balance_from_get_minter_info(&self, erc20_contract_address: &str) -> u64 {
+        let MinterInfo { erc20_balances, .. } = self.get_minter_info();
+        erc20_balances
+            .unwrap()
+            .into_iter()
+            .find(|balance| balance.erc20_contract_address == erc20_contract_address)
+            .unwrap()
+            .balance
+            .0
+            .to_u64()
+            .unwrap()
+    }
+
     pub fn deposit(self, params: CkErc20DepositParams) -> CkErc20DepositFlow {
         CkErc20DepositFlow {
             setup: self,
@@ -193,6 +214,30 @@ impl CkErc20Setup {
             }
         }
         current_balance
+    }
+
+    pub fn stop_ckerc20_ledger(&self, ledger_id: Principal) {
+        let stop_res = self.env.stop_canister_as(
+            self.orchestrator.ledger_suite_orchestrator_id.get(),
+            CanisterId::unchecked_from_principal(ledger_id.into()),
+        );
+        assert_matches!(
+            stop_res,
+            Ok(WasmResult::Reply(_)),
+            "Failed to stop ckERC20 ledger"
+        );
+    }
+
+    pub fn start_ckerc20_ledger(&self, ledger_id: Principal) {
+        let start_res = self.env.start_canister_as(
+            self.orchestrator.ledger_suite_orchestrator_id.get(),
+            CanisterId::unchecked_from_principal(ledger_id.into()),
+        );
+        assert_matches!(
+            start_res,
+            Ok(WasmResult::Reply(_)),
+            "Failed to start ckERC20 ledger"
+        );
     }
 
     pub fn balance_of_ledger(&self, ledger_id: Principal, account: impl Into<Account>) -> Nat {
@@ -271,7 +316,7 @@ impl CkErc20Setup {
         amount: A,
         ckerc20_ledger_id: Principal,
         recipient: R,
-    ) -> Erc20WithdrawalFlow {
+    ) -> RefreshGasFeeEstimate {
         let arg = WithdrawErc20Arg {
             amount: amount.into(),
             ckerc20_ledger_id,
@@ -283,7 +328,7 @@ impl CkErc20Setup {
             "withdraw_erc20",
             Encode!(&arg).expect("failed to encode withdraw args"),
         );
-        Erc20WithdrawalFlow {
+        RefreshGasFeeEstimate {
             setup: self,
             message_id,
         }
@@ -360,7 +405,7 @@ impl CkErc20DepositParams {
 }
 
 pub struct CkErc20DepositFlow {
-    setup: CkErc20Setup,
+    pub setup: CkErc20Setup,
     params: CkErc20DepositParams,
 }
 
@@ -378,6 +423,10 @@ impl CkErc20DepositFlow {
         let ckerc20_balance_before = self
             .setup
             .balance_of_ledger(self.params.token.ledger_canister_id, self.params.recipient);
+        let MinterInfo {
+            erc20_balances: erc20_balances_before,
+            ..
+        } = self.setup.get_minter_info();
 
         self.handle_log_scraping();
 
@@ -391,6 +440,10 @@ impl CkErc20DepositFlow {
             self.params.recipient,
             &ckerc20_balance_before,
         );
+        let MinterInfo {
+            erc20_balances: erc20_balances_after,
+            ..
+        } = self.setup.get_minter_info();
 
         assert_eq!(
             cketh_balance_after - cketh_balance_before,
@@ -400,6 +453,23 @@ impl CkErc20DepositFlow {
             ckerc20_balance_after - ckerc20_balance_before,
             self.params.ckerc20_amount
         );
+
+        let erc20_balances_before = erc20_balances_before.unwrap();
+        let erc20_balances_after = erc20_balances_after.unwrap();
+        assert_eq!(erc20_balances_before.len(), erc20_balances_after.len());
+        let mut has_deposited_token = false;
+        for (balance_before, balance_after) in zip(erc20_balances_before, erc20_balances_after) {
+            if balance_before.erc20_contract_address == self.params.token.erc20_contract_address {
+                assert_eq!(
+                    balance_after.balance - balance_before.balance,
+                    self.params.ckerc20_amount
+                );
+                has_deposited_token = true;
+            } else {
+                assert_eq!(balance_after.balance, balance_before.balance);
+            }
+        }
+        assert!(has_deposited_token);
 
         self.setup.cketh.check_audit_log();
 
@@ -455,7 +525,7 @@ impl CkErc20DepositFlow {
         self.setup
     }
 
-    fn handle_log_scraping(&self) {
+    pub fn handle_log_scraping(&self) {
         let latest_finalized_block =
             LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + MAX_ETH_LOGS_BLOCK_RANGE;
         self.setup.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
@@ -529,9 +599,49 @@ impl CkErc20DepositFlow {
     }
 }
 
+pub struct RefreshGasFeeEstimate {
+    pub setup: CkErc20Setup,
+    pub message_id: MessageId,
+}
+
+impl RefreshGasFeeEstimate {
+    pub fn expect_refresh_gas_fee_estimate<
+        F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder,
+    >(
+        self,
+        mut override_mock: F,
+    ) -> Erc20WithdrawalFlow {
+        let default_eth_fee_history = MockJsonRpcProviders::when(JsonRpcMethod::EthFeeHistory)
+            .respond_for_all_with(fee_history());
+        (override_mock)(default_eth_fee_history)
+            .build()
+            .expect_rpc_calls(&self.setup);
+        Erc20WithdrawalFlow {
+            setup: self.setup,
+            message_id: self.message_id,
+        }
+    }
+
+    pub fn expect_no_refresh_gas_fee_estimate(self) -> Erc20WithdrawalFlow {
+        assert_eq!(
+            JsonRpcRequestMatcher::new_for_all_providers(JsonRpcMethod::EthFeeHistory)
+                .iter()
+                .filter(|(_provider, matcher)| matcher.find_rpc_call(&self.setup.env).is_some())
+                .collect::<BTreeMap<_, _>>(),
+            BTreeMap::new(),
+            "BUG: unexpected EthFeeHistory RPC call"
+        );
+
+        Erc20WithdrawalFlow {
+            setup: self.setup,
+            message_id: self.message_id,
+        }
+    }
+}
+
 pub struct Erc20WithdrawalFlow {
-    setup: CkErc20Setup,
-    message_id: MessageId,
+    pub setup: CkErc20Setup,
+    pub message_id: MessageId,
 }
 
 impl Erc20WithdrawalFlow {

@@ -1,3 +1,4 @@
+mod metrics;
 #[cfg(test)]
 pub mod test_fixtures;
 #[cfg(test)]
@@ -24,21 +25,15 @@ use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
 use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
+pub use metrics::encode_orchestrator_metrics;
+use metrics::observe_task_duration;
 use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::cmp::Ordering;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::str::FromStr;
 use std::time::Duration;
-
-pub const TEN_TRILLIONS: u64 = 10_000_000_000_000; // 10 TC
-pub const HUNDRED_TRILLIONS: u64 = 100_000_000_000_000; // 100 TC
-
-// We need at least 220 TC to be able to spawn ledger suite (200 TC).
-pub const MINIMUM_ORCHESTRATOR_CYCLES: u64 = 220_000_000_000_000;
-// We need at least 110 TC for ledger to spawn archive.
-pub const MINIMUM_MONITORED_CANISTER_CYCLES: u64 = 110_000_000_000_000;
 
 const SEC_NANOS: u64 = 1_000_000_000;
 
@@ -191,7 +186,12 @@ pub fn timer() {
             if task.task_type.is_periodic() {
                 schedule_after(ONE_HOUR, task.task_type.clone());
             }
-            match task.execute(&IC_CANISTER_RUNTIME).await {
+            let start = ic_cdk::api::time();
+            let result = task.execute(&IC_CANISTER_RUNTIME).await;
+            let end = ic_cdk::api::time();
+            observe_task_duration(&task.task_type, &result, start, end);
+
+            match result {
                 Ok(()) => {
                     log!(INFO, "task {:?} accomplished", task.task_type);
                 }
@@ -314,6 +314,7 @@ pub enum TaskError {
     WasmStoreError(WasmStoreError),
     LedgerNotFound(Erc20Token),
     InterCanisterCallError(CallError),
+    InsufficientCyclesToTopUp { required: u128, available: u128 },
 }
 
 impl TaskError {
@@ -336,6 +337,7 @@ impl TaskError {
                 Reason::TransientInternalError(_) => true,
                 Reason::InternalError(_) => false,
             },
+            TaskError::InsufficientCyclesToTopUp { .. } => false, //top-up task is periodic, will retry on next interval
         }
     }
 }
@@ -354,24 +356,30 @@ impl TaskExecution {
 }
 
 async fn maybe_top_up<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> {
-    let mut principals: Vec<Principal> = read_state(|s| {
+    let managed_principals: Vec<Principal> = read_state(|s| {
         s.managed_canisters_iter()
             .flat_map(|(_, canisters)| canisters.collect_principals())
-            .chain(std::iter::once(runtime.id()))
             .collect()
     });
-    if principals.len() == 1 {
+    if managed_principals.is_empty() {
+        log!(INFO, "[maybe_top_up]: No managed canisters to top-up");
         return Ok(());
     }
+    let cycles_management = read_state(|s| s.cycles_management().clone());
+    let minimum_orchestrator_cycles =
+        cycles_to_u128(cycles_management.minimum_orchestrator_cycles());
+    let minimum_monitored_canister_cycles =
+        cycles_to_u128(cycles_management.minimum_monitored_canister_cycles());
+    let top_up_amount = cycles_to_u128(cycles_management.cycles_top_up_increment.clone());
+    log!(
+        INFO,
+        "[maybe_top_up]: Managed canisters {}. \
+        Cycles management: {cycles_management:?}. \
+    Required amount of cycles for orchestrator to be able to top-up: {minimum_orchestrator_cycles}. \
+    Monitored canister minimum target cycles balance {minimum_monitored_canister_cycles}", display_vec(&managed_principals)
+    );
 
-    let mut results =
-        future::join_all(principals.iter().map(|p| runtime.canister_cycles(*p))).await;
-    assert!(!results.is_empty());
-
-    let mut orchestrator_cycle_balance = match results
-        .pop()
-        .expect("BUG: should at least fetch the orchestrator balance")
-    {
+    let mut orchestrator_cycle_balance = match runtime.canister_cycles(runtime.id()).await {
         Ok(balance) => balance,
         Err(e) => {
             log!(
@@ -382,37 +390,57 @@ async fn maybe_top_up<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> 
             return Err(TaskError::CanisterStatusError(e));
         }
     };
-    principals.pop();
+    if orchestrator_cycle_balance < minimum_orchestrator_cycles {
+        return Err(TaskError::InsufficientCyclesToTopUp {
+            required: minimum_orchestrator_cycles,
+            available: orchestrator_cycle_balance,
+        });
+    }
 
-    let cycles_management = read_state(|s| s.cycles_management().clone());
-    let minimum_orchestrator_cycles =
-        cycles_to_u128(cycles_management.minimum_orchestrator_cycles());
-    let minimum_monitored_canister_cycles =
-        cycles_to_u128(cycles_management.minimum_monitored_canister_cycles());
-    let top_up_amount = cycles_to_u128(cycles_management.cycles_top_up_increment);
+    let results = future::join_all(
+        managed_principals
+            .iter()
+            .map(|p| runtime.canister_cycles(*p)),
+    )
+    .await;
+    assert!(!results.is_empty());
 
-    log!(INFO, "[maybe_top_up] ",);
-    for (canister_id, cycles_result) in principals.iter().zip(results) {
+    for (canister_id, cycles_result) in managed_principals.iter().zip(results) {
         match cycles_result {
             Ok(balance) => {
-                if balance < minimum_monitored_canister_cycles
-                    && orchestrator_cycle_balance > minimum_orchestrator_cycles
-                {
-                    match runtime.send_cycles(*canister_id, top_up_amount) {
-                        Ok(()) => {
-                            orchestrator_cycle_balance -= top_up_amount;
-                            log!(
-                                DEBUG,
-                                "[maybe_top_up] topped up canister {canister_id} with previous balance {balance}"
-                            );
-                        }
-                        Err(e) => {
-                            log!(
-                                INFO,
-                                "[maybe_top_up] failed to send cycles to {}, with error: {:?}",
-                                canister_id,
-                                e
-                            );
+                match (
+                    balance.cmp(&minimum_monitored_canister_cycles),
+                    orchestrator_cycle_balance.cmp(&minimum_orchestrator_cycles),
+                ) {
+                    (Ordering::Greater, _) | (Ordering::Equal, _) => {
+                        log!(
+                            DEBUG,
+                            "[maybe_top_up] canister {canister_id} has enough cycles {balance}"
+                        );
+                    }
+                    (_, Ordering::Less) => {
+                        return Err(TaskError::InsufficientCyclesToTopUp {
+                            required: minimum_orchestrator_cycles,
+                            available: orchestrator_cycle_balance,
+                        });
+                    }
+                    (Ordering::Less, Ordering::Equal) | (Ordering::Less, Ordering::Greater) => {
+                        log!(
+                            DEBUG,
+                            "[maybe_top_up] Sending {top_up_amount} cycles to canister {canister_id} with current balance {balance}"
+                        );
+                        match runtime.send_cycles(*canister_id, top_up_amount) {
+                            Ok(()) => {
+                                orchestrator_cycle_balance -= top_up_amount;
+                            }
+                            Err(e) => {
+                                log!(
+                                    INFO,
+                                    "[maybe_top_up] failed to send cycles to {}, with error: {:?}",
+                                    canister_id,
+                                    e
+                                );
+                            }
                         }
                     }
                 }
@@ -457,12 +485,18 @@ async fn install_ledger_suite<R: CanisterRuntime>(
     let ledger_canister_id =
         create_canister_once::<Ledger, _>(&args.contract, runtime, cycles_for_ledger_creation)
             .await?;
+
+    let more_controllers = read_state(|s| s.more_controller_ids().to_vec())
+        .into_iter()
+        .map(PrincipalId)
+        .collect();
     install_canister_once::<Ledger, _, _>(
         &args.contract,
         &args.ledger_compressed_wasm_hash,
         &LedgerArgument::Init(icrc1_ledger_init_arg(
             args.ledger_init_arg.clone(),
             runtime.id().into(),
+            more_controllers,
             cycles_for_archive_creation,
         )),
         runtime,
@@ -506,6 +540,7 @@ fn record_new_erc20_token_once(contract: Erc20Token, metadata: CanistersMetadata
 fn icrc1_ledger_init_arg(
     ledger_init_arg: LedgerInitArg,
     archive_controller_id: PrincipalId,
+    archive_more_controller_ids: Vec<PrincipalId>,
     cycles_for_archive_creation: Nat,
 ) -> LedgerInitArgs {
     use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
@@ -522,7 +557,11 @@ fn icrc1_ledger_init_arg(
             "icrc1:logo".to_string(),
             LedgerMetadataValue::from(ledger_init_arg.token_logo),
         )],
-        archive_options: icrc1_archive_options(archive_controller_id, cycles_for_archive_creation),
+        archive_options: icrc1_archive_options(
+            archive_controller_id,
+            archive_more_controller_ids,
+            cycles_for_archive_creation,
+        ),
         max_memo_length: ledger_init_arg.max_memo_length,
         feature_flags: ledger_init_arg.feature_flags,
         maximum_number_of_accounts: ledger_init_arg.maximum_number_of_accounts,
@@ -532,6 +571,7 @@ fn icrc1_ledger_init_arg(
 
 fn icrc1_archive_options(
     archive_controller_id: PrincipalId,
+    archive_more_controller_ids: Vec<PrincipalId>,
     cycles_for_archive_creation: Nat,
 ) -> ArchiveOptions {
     ArchiveOptions {
@@ -540,7 +580,7 @@ fn icrc1_archive_options(
         node_max_memory_size_bytes: Some(THREE_GIGA_BYTES),
         max_message_size_bytes: None,
         controller_id: archive_controller_id,
-        more_controller_ids: None,
+        more_controller_ids: Some(archive_more_controller_ids),
         cycles_for_archive_creation: Some(
             cycles_for_archive_creation
                 .0
@@ -756,4 +796,14 @@ impl TryFrom<crate::candid::Erc20Contract> for Erc20Token {
             Address::from_str(&contract.address)?,
         ))
     }
+}
+
+fn display_vec<T: Display>(v: &[T]) -> String {
+    format!(
+        "[{}]",
+        v.iter()
+            .map(|x| format!("{}", x))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
 }

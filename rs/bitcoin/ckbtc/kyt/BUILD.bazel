@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -52,7 +53,7 @@ rust_test(
     deps = ["@crate_index//:candid_parser"],
 )
 
-rust_test(
+rust_ic_test(
     name = "kyt_integration_test",
     srcs = ["tests/tests.rs"],
     data = [":kyt_canister"],

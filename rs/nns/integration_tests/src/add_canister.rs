@@ -15,7 +15,7 @@ use ic_nns_governance::{
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::NnsCanisters,
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     registry::get_value_or_panic,
 };
 use ic_protobuf::registry::nns::v1::NnsCanisterRecords;
@@ -26,7 +26,7 @@ use std::convert::TryFrom;
 
 #[test]
 fn add_nns_canister_via_governance_proposal() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_invariant_compliant_mutations()
             .with_test_neurons()

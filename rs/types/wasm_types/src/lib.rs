@@ -2,7 +2,10 @@
 //! Internet Computer.
 mod errors;
 
-pub use errors::{WasmEngineError, WasmError, WasmInstrumentationError, WasmValidationError};
+pub use errors::{
+    AsErrorHelp, ErrorHelp, WasmEngineError, WasmError, WasmInstrumentationError,
+    WasmValidationError,
+};
 use ic_types::CountBytes;
 use ic_utils::byte_slice_fmt::truncate_and_format;
 use std::{

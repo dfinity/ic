@@ -1,4 +1,5 @@
-use crate::state::Canisters;
+use crate::scheduler::Erc20Token;
+use crate::state::{Canister, Canisters};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
 use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
@@ -25,6 +26,7 @@ pub struct UpgradeArg {
     pub ledger_compressed_wasm_hash: Option<String>,
     pub index_compressed_wasm_hash: Option<String>,
     pub archive_compressed_wasm_hash: Option<String>,
+    pub cycles_management: Option<UpdateCyclesManagement>,
 }
 
 impl UpgradeArg {
@@ -168,5 +170,88 @@ impl CyclesManagement {
     /// The chosen amount must ensure that the ledger should be able to spawn an archive canister at any time.
     pub fn minimum_monitored_canister_cycles(&self) -> Nat {
         self.cycles_for_archive_creation.clone() + 2_u8 * self.cycles_top_up_increment.clone()
+    }
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub enum ManagedCanisterStatus {
+    Created {
+        canister_id: Principal,
+    },
+    Installed {
+        canister_id: Principal,
+        installed_wasm_hash: String,
+    },
+}
+
+impl<T> From<&Canister<T>> for ManagedCanisterStatus {
+    fn from(canister: &Canister<T>) -> Self {
+        let canister_id = *canister.canister_id();
+        match canister.installed_wasm_hash() {
+            None => ManagedCanisterStatus::Created { canister_id },
+            Some(installed_wasm_hash) => ManagedCanisterStatus::Installed {
+                canister_id,
+                installed_wasm_hash: installed_wasm_hash.to_string(),
+            },
+        }
+    }
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct ManagedCanisters {
+    pub erc20_contract: Erc20Contract,
+    pub ckerc20_token_symbol: String,
+    pub ledger: Option<ManagedCanisterStatus>,
+    pub index: Option<ManagedCanisterStatus>,
+    pub archives: Vec<Principal>,
+}
+
+impl From<(Erc20Token, Canisters)> for ManagedCanisters {
+    fn from((token, canisters): (Erc20Token, Canisters)) -> Self {
+        ManagedCanisters {
+            erc20_contract: Erc20Contract {
+                chain_id: candid::Nat::from(*token.chain_id().as_ref()),
+                address: token.address().to_string(),
+            },
+            ckerc20_token_symbol: canisters.metadata.ckerc20_token_symbol.to_string(),
+            ledger: canisters.ledger.as_ref().map(ManagedCanisterStatus::from),
+            index: canisters.index.as_ref().map(ManagedCanisterStatus::from),
+            archives: canisters.archives.clone(),
+        }
+    }
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct OrchestratorInfo {
+    pub managed_canisters: Vec<ManagedCanisters>,
+    pub cycles_management: CyclesManagement,
+    pub more_controller_ids: Vec<Principal>,
+    pub minter_id: Option<Principal>,
+}
+
+#[derive(
+    CandidType, serde::Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq, Ord, PartialOrd,
+)]
+pub struct UpdateCyclesManagement {
+    pub cycles_for_ledger_creation: Option<Nat>,
+    pub cycles_for_archive_creation: Option<Nat>,
+    pub cycles_for_index_creation: Option<Nat>,
+    pub cycles_top_up_increment: Option<Nat>,
+}
+
+impl UpdateCyclesManagement {
+    pub fn apply(self, old: &mut CyclesManagement) {
+        if let Some(cycles_for_ledger_creation) = self.cycles_for_ledger_creation {
+            old.cycles_for_ledger_creation = cycles_for_ledger_creation;
+        }
+        if let Some(cycles_for_archive_creation) = self.cycles_for_archive_creation {
+            old.cycles_for_archive_creation = cycles_for_archive_creation;
+        }
+        if let Some(cycles_for_index_creation) = self.cycles_for_index_creation {
+            old.cycles_for_index_creation = cycles_for_index_creation;
+        }
+        if let Some(cycles_top_up_increment) = self.cycles_top_up_increment {
+            old.cycles_top_up_increment = cycles_top_up_increment;
+        }
     }
 }

@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "gzip_compress")
+load("//bazel:defs.bzl", "gzip_compress", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -28,6 +28,7 @@ rust_canister(
         "//rs/types/base_types",
         "@crate_index//:candid",
         "@crate_index//:ciborium",
+        "@crate_index//:ic-cdk",
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:lazy_static",
         "@crate_index//:serde",
@@ -49,4 +50,26 @@ rust_test(
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger/archive",
     },
     deps = ["@crate_index//:candid_parser"],
+)
+
+rust_ic_test(
+    name = "ledger_archive_node_canister_integration",
+    srcs = ["tests/tests.rs"],
+    data = [
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger/archive",
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    },
+    deps = [
+        "//packages/pocket-ic",
+        "//rs/rosetta-api/icp_ledger",
+        "//rs/rosetta-api/icp_ledger/test_utils",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+    ],
 )

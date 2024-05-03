@@ -6,7 +6,8 @@ use ic_config::{
 };
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    CreateCanisterArgs, EmptyBlob, Method, Payload, UpdateSettingsArgs, IC_00,
+    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload, SignWithECDSAArgs,
+    UpdateSettingsArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -15,7 +16,8 @@ use ic_state_machine_tests::{
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::{ingress::WasmResult, CanisterId, Cycles, NumBytes};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use std::{convert::TryInto, sync::Arc, time::Duration};
+use more_asserts::{assert_le, assert_lt};
+use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
 
 /// One billion for better cycles readability.
 const B: u128 = 1e9 as u128;
@@ -578,8 +580,9 @@ fn test_state_machine_consumes_instructions() {
     env.execute_ingress(canister_id, "inc", vec![]).unwrap();
 
     let consumed = env.instructions_consumed();
-    assert!(
-        consumed >= 1000.0,
+    assert_le!(
+        1000.0,
+        consumed,
         "Expected the state machine to consume at least 1000 instructions, got {:?}",
         consumed
     );
@@ -903,7 +906,7 @@ fn subnet_memory_reservation_works() {
 fn subnet_memory_reservation_scales_with_number_of_cores() {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let num_cores = subnet_config.scheduler_config.scheduler_cores as u64;
-    assert!(num_cores > 1);
+    assert_lt!(1, num_cores);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
@@ -956,7 +959,10 @@ fn subnet_memory_reservation_scales_with_number_of_cores() {
     let err = env.execute_ingress(a_id, "update", a).unwrap_err();
     assert_eq!(
         err.description(),
-        format!("Canister {} trapped: stable memory out of bounds", a_id)
+        format!(
+            "Error from Canister {}: Canister trapped: stable memory out of bounds",
+            a_id
+        )
     );
     assert_eq!(err.code(), ErrorCode::CanisterTrapped);
 }
@@ -1083,6 +1089,54 @@ fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation() {
                 (call $msg_reply)
             )
             (memory $memory 1)
+            (export "canister_update update" (func $update))
+        )"#;
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    let a_id = create_canister_with_cycles(
+        &env,
+        wasm.clone(),
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(300 * 64 * 1024)
+                .with_freezing_threshold(0)
+                .build(),
+        ),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let err = env.execute_ingress(a_id, "update", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfMemory);
+}
+
+#[test]
+fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation_wasm64() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let mut embedders_config = ic_config::embedders::Config::default();
+    embedders_config.feature_flags.wasm64 = ic_config::flag_status::FlagStatus::Enabled;
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            subnet_memory_capacity: NumBytes::from(100_000_000),
+            subnet_memory_reservation: NumBytes::from(0),
+            embedders_config,
+            ..Default::default()
+        },
+    ));
+
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+                (func $msg_reply_data_append (param i32 i32)))
+            (func $update
+                (if (i64.ne (memory.grow (i64.const 400)) (i64.const 1))
+                  (then (unreachable))
+                )
+                (call $msg_reply)
+            )
+            (memory $memory i64 1)
             (export "canister_update update" (func $update))
         )"#;
 
@@ -1248,7 +1302,7 @@ fn canister_with_reserved_balance_is_not_frozen_too_early() {
         env.replace_canister_state(Arc::new(state), canister_id);
     }
 
-    assert!(env.cycle_balance(canister_id) < freezing_threshold);
+    assert_lt!(env.cycle_balance(canister_id), freezing_threshold);
 
     let res = env.execute_ingress(
         canister_id,
@@ -1387,56 +1441,6 @@ fn test_update_settings_with_different_controllers_amount() {
 }
 
 #[test]
-fn reserved_balance_limit_is_initialized_after_replica_upgrade() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let env = StateMachine::new_with_config(StateMachineConfig::new(
-        subnet_config,
-        HypervisorConfig::default(),
-    ));
-
-    let initial_cycles = Cycles::new(200 * B);
-
-    let canister_id = create_universal_canister_with_cycles(&env, None, initial_cycles);
-
-    // Clear the reserved balance limit to simulate a canister before the
-    // replica upgrade.
-    {
-        let mut state = env.get_latest_state().as_ref().clone();
-        let canister = state.canister_state_mut(&canister_id).unwrap();
-        assert_eq!(
-            canister.system_state.reserved_balance_limit(),
-            Some(CyclesAccountManagerConfig::application_subnet().default_reserved_balance_limit)
-        );
-        canister
-            .system_state
-            .clear_reserved_balance_limit_for_testing();
-        assert_eq!(canister.system_state.reserved_balance_limit(), None);
-        env.replace_canister_state(Arc::new(state), canister_id);
-    }
-
-    assert_eq!(
-        env.get_latest_state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .system_state
-            .reserved_balance_limit(),
-        None
-    );
-
-    // Execute one round that will initialize the reserved balance limit.
-    env.tick();
-
-    assert_eq!(
-        env.get_latest_state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .system_state
-            .reserved_balance_limit(),
-        Some(CyclesAccountManagerConfig::application_subnet().default_reserved_balance_limit),
-    )
-}
-
-#[test]
 fn execution_observes_oversize_messages() {
     let sm = StateMachine::new();
 
@@ -1508,5 +1512,120 @@ fn execution_observes_oversize_messages() {
             "execution_environment_oversize_intra_subnet_messages_total"
         )
         .unwrap()
+    );
+}
+
+#[test]
+fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
+    // Test consensus queue invariant for the case of exceeding heap delta limit.
+
+    fn setup_test(heap_delta_limit: Option<u64>) -> StateMachine {
+        // This setup creates an environment with the canister that sends a `SignWithECDSA` message.
+        let mut subnet_config = SubnetConfig::new(SubnetType::Application);
+        if let Some(heap_delta_limit) = heap_delta_limit {
+            subnet_config.scheduler_config.subnet_heap_delta_capacity =
+                NumBytes::new(heap_delta_limit);
+        }
+        let key_id = EcdsaKeyId::from_str("Secp256k1:valid_key").unwrap();
+        let env = StateMachineBuilder::new()
+            .with_checkpoints_enabled(false)
+            .with_config(Some(StateMachineConfig::new(
+                subnet_config,
+                HypervisorConfig::default(),
+            )))
+            .with_ecdsa_key(key_id.clone())
+            .build();
+        let canister_id = env
+            .install_canister_with_cycles(
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                vec![],
+                None,
+                Cycles::new(100_000_000_000),
+            )
+            .unwrap();
+
+        // Send SignWithECDSA message to trigger non-empty consensus queue.
+        let _msg_id = env.send_ingress(
+            PrincipalId::new_anonymous(),
+            canister_id,
+            "update",
+            wasm()
+                .call_with_cycles(
+                    IC_00,
+                    Method::SignWithECDSA,
+                    call_args().other_side(
+                        Encode!(&SignWithECDSAArgs {
+                            message_hash: [0; 32],
+                            derivation_path: DerivationPath::new(Vec::new()),
+                            key_id
+                        })
+                        .unwrap(),
+                    ),
+                    Cycles::new(2_000_000_000),
+                )
+                .build(),
+        );
+        // Expected behavior after the setup:
+        //  - Tick #1: process sign_with_ecdsa message, no response yet in that round
+        //  - Tick #2: the response is added to consensus queue and processed then the round is executed normally
+        //  - Tick #3: consensus queue invariant is checked before executing a regular round
+
+        env
+    }
+
+    // Preparation: find out the heap delta limit.
+    let heap_delta_limit = {
+        let env = setup_test(None);
+        // Tick #1.
+        env.tick();
+        // To trigger the condition heap delta limit must be less than the actual heap delta on tick #2.
+        env.heap_delta_estimate_bytes() - 1
+    };
+
+    // Run the actual test with specific heap delta limit.
+    {
+        let env = setup_test(Some(heap_delta_limit));
+        // Tick #1: heap delta is below the limit, process sign_with_ecdsa message, no response in this round.
+        assert_lt!(env.heap_delta_estimate_bytes(), heap_delta_limit);
+        env.tick();
+
+        // Tick #2: heap delta is above the limit, the response is added to consensus queue before executing the payload.
+        assert_lt!(heap_delta_limit, env.heap_delta_estimate_bytes());
+        env.tick();
+
+        // Tick #3: round is executed normally.
+        env.tick();
+    }
+}
+
+#[test]
+fn toolchain_error_message() {
+    let sm = StateMachine::new();
+
+    // Will fail validation because two memories are defined.
+    let wat = r#"
+        (module
+            (func $update)
+            (memory 1)
+            (memory 1)
+            (export "canister_update update" (func $update))
+        )"#;
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    let err = sm
+        .install_canister_with_cycles(wasm, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap_err();
+
+    assert_eq!(
+        err.description(),
+        "Error from Canister \
+    rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister's Wasm module is not valid: Wasmtime \
+    failed to validate wasm module wasmtime::Module::validate() failed with \
+    multiple memories (at offset 0x14).\n\
+    This is likely an error with the compiler/CDK toolchain being used to \
+    build the canister. Please report the error to IC devs on the forum: \
+    https://forum.dfinity.org and include which language/CDK was used to \
+    create the canister."
     );
 }

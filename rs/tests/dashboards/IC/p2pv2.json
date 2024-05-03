@@ -27,7 +27,6 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 37,
   "links": [
     {
       "asDropdown": true,
@@ -1156,7 +1155,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "label_replace(\nlabel_replace(\n  (ic_consensus_manager_slot_table_updates_with_artifact_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}/ic_consensus_manager_slot_table_updates_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}) * 100,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)",
+          "expr": "label_replace(\nlabel_replace(\n  (\n  rate(ic_consensus_manager_slot_table_updates_with_artifact_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}[$period])/\n  rate(ic_consensus_manager_slot_table_updates_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}[$period])\n  ) * 100,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)",
           "interval": "",
           "legendFormat": "{{ic_subnet}} {{instance}} {{result}}",
           "range": true,
@@ -1356,7 +1355,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "label_replace(\nlabel_replace(\n  (ic_consensus_manager_slot_table_seen_id_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}/ic_consensus_manager_slot_table_updates_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}) * 100,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)",
+          "expr": "label_replace(\nlabel_replace(\n  (\n  rate(ic_consensus_manager_slot_table_seen_id_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}[$period])/\n  rate(ic_consensus_manager_slot_table_updates_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}[$period])\n  ) * 100,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n  )",
           "interval": "",
           "legendFormat": "{{ic_subnet}} {{instance}} {{result}}",
           "range": true,
@@ -1869,7 +1868,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "label_replace(\nlabel_replace(\n  (ic_consensus_manager_send_view_consnsus_dup_adverts_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}/(ic_consensus_manager_send_view_consnsus_dup_adverts_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"} + ic_consensus_manager_send_view_consensus_new_adverts_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}))*100,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)",
+          "expr": "label_replace(\nlabel_replace(\n  (\n    rate(ic_consensus_manager_send_view_consnsus_dup_adverts_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}[$period]) /\n  (\n  rate(ic_consensus_manager_send_view_consnsus_dup_adverts_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}[$period]) + \n  rate(ic_consensus_manager_send_view_consensus_new_adverts_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}[$period])\n  )\n  )*100,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)",
           "interval": "",
           "legendFormat": "{{ic_subnet}} {{instance}} {{result}}",
           "range": true,
@@ -2069,7 +2068,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "label_replace(\nlabel_replace(\n  (ic_consensus_manager_send_view_consensus_dup_purge_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}/(ic_consensus_manager_send_view_consensus_dup_purge_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"} + ic_consensus_manager_send_view_consensus_purge_active_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}))*100,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)",
+          "expr": "label_replace(\nlabel_replace(\n  (\n  rate(ic_consensus_manager_send_view_consensus_dup_purge_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}[$period])/\n  (\n  rate(ic_consensus_manager_send_view_consensus_dup_purge_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}[$period]) + \n  rate(ic_consensus_manager_send_view_consensus_purge_active_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}[$period])\n  )\n  )*100,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)",
           "interval": "",
           "legendFormat": "{{ic_subnet}} {{instance}} {{result}}",
           "range": true,
@@ -2269,7 +2268,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "label_replace(\nlabel_replace(\n  ic_consensus_manager_send_view_send_to_peer_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"} - ic_consensus_manager_send_view_send_to_peer_delivered_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"},\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)",
+          "expr": "label_replace(\nlabel_replace(\n  ic_consensus_manager_send_view_send_to_peer_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"} \n  - ic_consensus_manager_send_view_send_to_peer_delivered_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}\n  - ic_consensus_manager_send_view_send_to_peer_cancelled_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"},\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)",
           "interval": "",
           "legendFormat": "{{ic_subnet}} {{instance}} {{result}}",
           "range": true,
@@ -2281,12 +2280,113 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 99
+      },
+      "id": 105,
+      "interval": "10s",
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "asc"
+        }
+      },
+      "pluginVersion": "9.5.8",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "editorMode": "code",
+          "exemplar": true,
+          "expr": "label_replace(\nlabel_replace(\n  rate(ic_consensus_manager_send_view_resend_reconnect_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",client=~\"$client\"}[$period]),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)",
+          "interval": "",
+          "legendFormat": "{{ic_subnet}} {{instance}} {{result}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "advert resent",
+      "transparent": true,
+      "type": "timeseries"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 99
+        "y": 107
       },
       "id": 101,
       "panels": [],
@@ -2357,7 +2457,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 100
+        "y": 108
       },
       "id": 102,
       "interval": "10s",
@@ -2457,7 +2557,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 100
+        "y": 108
       },
       "id": 103,
       "interval": "10s",
@@ -2501,11 +2601,6 @@
   "templating": {
     "list": [
       {
-        "current": {
-          "selected": false,
-          "text": "medium--1698320060558",
-          "value": "medium--1698320060558"
-        },
         "datasource": {
           "type": "prometheus",
           "uid": "000000001"
@@ -2663,9 +2758,9 @@
       },
       {
         "current": {
-          "selected": false,
-          "text": "Consensus",
-          "value": "Consensus"
+          "selected": true,
+          "text": "consensus",
+          "value": "consensus"
         },
         "datasource": {
           "type": "prometheus",
@@ -2690,7 +2785,7 @@
     ]
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {
@@ -2710,6 +2805,6 @@
   "timezone": "utc",
   "title": "p2p v2",
   "uid": "p2p-v2",
-  "version": 2,
+  "version": 1,
   "weekStart": ""
 }

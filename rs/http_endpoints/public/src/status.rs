@@ -4,7 +4,7 @@ use crate::{
     state_reader_executor::StateReaderExecutor,
 };
 
-use axum::extract::State;
+use axum::{extract::State, Router};
 use crossbeam::atomic::AtomicCell;
 use ic_crypto_utils_threshold_sig_der::public_key_to_der;
 use ic_interfaces_registry::RegistryClient;
@@ -21,7 +21,7 @@ use std::sync::Arc;
 const IC_API_VERSION: &str = "0.18.0";
 
 #[derive(Clone)]
-pub(crate) struct StatusState {
+pub(crate) struct StatusService {
     log: ReplicaLogger,
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
@@ -29,25 +29,35 @@ pub(crate) struct StatusState {
     state_read_executor: StateReaderExecutor,
 }
 
-impl StatusState {
-    pub fn new(
+impl StatusService {
+    pub(crate) fn route() -> &'static str {
+        "/api/v2/status"
+    }
+}
+
+impl StatusService {
+    pub fn build_router(
         log: ReplicaLogger,
         nns_subnet_id: SubnetId,
         registry_client: Arc<dyn RegistryClient>,
         replica_health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
         state_read_executor: StateReaderExecutor,
-    ) -> Self {
-        Self {
+    ) -> Router {
+        let state = Self {
             log,
             nns_subnet_id,
             registry_client,
             replica_health_status,
             state_read_executor,
-        }
+        };
+        Router::new().route_service(
+            StatusService::route(),
+            axum::routing::get(status).with_state(state),
+        )
     }
 }
 
-pub(crate) async fn status(State(state): State<StatusState>) -> Cbor<HttpStatusResponse> {
+pub(crate) async fn status(State(state): State<StatusService>) -> Cbor<HttpStatusResponse> {
     // The root key is the public key of this Internet Computer instance,
     // and is the public key of the root (i.e. NNS) subnet.
     let root_key = common::get_root_threshold_public_key(

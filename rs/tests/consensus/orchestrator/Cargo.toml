@@ -1,0 +1,22 @@
+[package]
+name = "consensus-orchestrator-system-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+canister_http = { path = "../../networking/canister_http" }
+ic-agent = { workspace = true }
+ic-recovery = { path = "../../../recovery" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+tests = { path = "../.." }
+ic-types = { path = "../../../types/types" }
+slog = { workspace = true }
+url = "2.1.1"
+
+[[bin]]
+name = "ic-systest-sr-nns-failover-nodes-test"
+path = "sr_nns_failover_nodes_test.rs"

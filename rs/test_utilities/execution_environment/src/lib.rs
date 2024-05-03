@@ -34,18 +34,20 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{execution_state::SandboxMemory, NextExecution},
-    page_map::PAGE_SIZE,
+    page_map::{
+        test_utils::base_only_storage_layout, PageMap, TestPageAllocatorFileDescriptorImpl,
+        PAGE_SIZE,
+    },
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
     PageIndex, ReplicatedState, SubnetTopology,
 };
-use ic_replicated_state::{page_map::TestPageAllocatorFileDescriptorImpl, PageMap};
 use ic_system_api::InstructionLimits;
 use ic_test_utilities::crypto::mock_random_number_generator;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::{
     batch::QueryStats,
-    crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
+    crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId,
@@ -66,6 +68,9 @@ use std::{
 };
 use std::{os::unix::prelude::FileExt, str::FromStr};
 use tempfile::NamedTempFile;
+
+mod wat_canister;
+pub use wat_canister::{wat_canister, wat_fn, WatCanisterBuilder, WatFnCode};
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
 
@@ -190,7 +195,7 @@ pub struct ExecutionTest {
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     caller_canister_id: Option<CanisterId>,
-    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
 
     // The actual implementation.
     exec_env: ExecutionEnvironment,
@@ -560,6 +565,22 @@ impl ExecutionTest {
             canister_id: canister_id.into(),
             settings: CanisterSettingsArgsBuilder::new()
                 .with_reserved_cycles_limit(reserved_cycles_limit.get())
+                .build(),
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
+    }
+
+    pub fn canister_update_wasm_memory_limit(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_memory_limit: NumBytes,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_wasm_memory_limit(wasm_memory_limit.get())
                 .build(),
             sender_canister_version: None,
         }
@@ -1520,7 +1541,8 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.wasm_memory.page_map = PageMap::open(&path, &[], Height::new(0), factory).unwrap();
+            es.wasm_memory.page_map =
+                PageMap::open(&base_only_storage_layout(path), Height::new(0), factory).unwrap();
             *es.wasm_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
 
@@ -1539,7 +1561,8 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.stable_memory.page_map = PageMap::open(&path, &[], Height::new(0), factory).unwrap();
+            es.stable_memory.page_map =
+                PageMap::open(&base_only_storage_layout(path), Height::new(0), factory).unwrap();
             *es.stable_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
         }
@@ -1566,6 +1589,7 @@ pub struct ExecutionTestBuilder {
     caller_canister_id: Option<CanisterId>,
     ecdsa_signature_fee: Option<Cycles>,
     ecdsa_key: Option<EcdsaKeyId>,
+    ecdsa_signing_enabled: bool,
     instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
     install_code_instruction_limit: NumInstructions,
@@ -1602,6 +1626,7 @@ impl Default for ExecutionTestBuilder {
             caller_canister_id: None,
             ecdsa_signature_fee: None,
             ecdsa_key: None,
+            ecdsa_signing_enabled: false,
             instruction_limit: scheduler_config.max_instructions_per_message,
             slice_instruction_limit: scheduler_config.max_instructions_per_slice,
             install_code_instruction_limit: scheduler_config.max_instructions_per_install_code,
@@ -1680,6 +1705,15 @@ impl ExecutionTestBuilder {
     pub fn with_ecdsa_key(self, ecdsa_key: EcdsaKeyId) -> Self {
         Self {
             ecdsa_key: Some(ecdsa_key),
+            ecdsa_signing_enabled: true,
+            ..self
+        }
+    }
+
+    pub fn with_disabled_ecdsa_key(self, ecdsa_key: EcdsaKeyId) -> Self {
+        Self {
+            ecdsa_key: Some(ecdsa_key),
+            ecdsa_signing_enabled: false,
             ..self
         }
     }
@@ -1914,7 +1948,18 @@ impl ExecutionTestBuilder {
     }
 
     pub fn with_canister_logging(mut self, status: FlagStatus) -> Self {
-        self.execution_config.canister_logging = status;
+        self.execution_config
+            .embedders_config
+            .feature_flags
+            .canister_logging = status;
+        self
+    }
+
+    pub fn with_best_effort_responses(mut self, status: FlagStatus) -> Self {
+        self.execution_config
+            .embedders_config
+            .feature_flags
+            .best_effort_responses = status;
         self
     }
 
@@ -1990,11 +2035,13 @@ impl ExecutionTestBuilder {
             config.ecdsa_signature_fee = ecdsa_signature_fee;
         }
         if let Some(ecdsa_key) = &self.ecdsa_key {
-            state
-                .metadata
-                .network_topology
-                .ecdsa_signing_subnets
-                .insert(ecdsa_key.clone(), vec![self.own_subnet_id]);
+            if self.ecdsa_signing_enabled {
+                state
+                    .metadata
+                    .network_topology
+                    .ecdsa_signing_subnets
+                    .insert(ecdsa_key.clone(), vec![self.own_subnet_id]);
+            }
             state
                 .metadata
                 .network_topology
@@ -2017,8 +2064,8 @@ impl ExecutionTestBuilder {
             .map(|key| {
                 (
                     key,
-                    MasterEcdsaPublicKey {
-                        algorithm_id: AlgorithmId::Secp256k1,
+                    MasterPublicKey {
+                        algorithm_id: AlgorithmId::EcdsaSecp256k1,
                         public_key: b"abababab".to_vec(),
                     },
                 )

@@ -120,6 +120,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
             DEFAULT_NUM_INSTRUCTIONS,
         ),
         canister_memory_limit: NumBytes::from(4 << 30),
+        wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,

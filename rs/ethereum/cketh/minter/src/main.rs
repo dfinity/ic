@@ -11,10 +11,9 @@ use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, CkErc20Token, Eip1559TransactionPrice, GasFeeEstimate, MinterInfo,
+    AddCkErc20Token, Eip1559TransactionPrice, Erc20Balance, GasFeeEstimate, MinterInfo,
     RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalError,
 };
-use ic_cketh_minter::erc20;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_withdraw_guard;
 use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
@@ -24,12 +23,16 @@ use ic_cketh_minter::memo::BurnMemo;
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{process_event, Event, EventType};
 use ic_cketh_minter::state::transactions::{
-    Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
+    Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
+    ReimbursementRequest,
 };
 use ic_cketh_minter::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, State, STATE};
+use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
-    process_reimbursement, process_retrieve_eth_requests, CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+    process_reimbursement, process_retrieve_eth_requests, CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+    CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
 };
+use ic_cketh_minter::{endpoints, erc20};
 use ic_cketh_minter::{
     state, storage, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
     SCRAPPING_ETH_LOGS_INTERVAL,
@@ -137,7 +140,6 @@ async fn smart_contract_address() -> String {
 
 /// Estimate price of EIP-1559 transaction based on the
 /// `base_fee_per_gas` included in the last finalized block.
-/// See https://www.blocknative.com/blog/eip-1559-fees
 #[query]
 async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
     match read_state(|s| s.last_transaction_price_estimate.clone()) {
@@ -155,33 +157,50 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
 /// Returns the current parameters used by the minter.
 /// This includes information that can be retrieved form other endpoints as well.
 /// To retain some flexibility in the API all fields in the return value are optional.
+#[allow(deprecated)]
 #[query]
 async fn get_minter_info() -> MinterInfo {
-    read_state(|s| MinterInfo {
-        minter_address: s.minter_address().map(|a| a.to_string()),
-        eth_helper_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
-        erc20_helper_contract_address: s.erc20_helper_contract_address.map(|a| a.to_string()),
-        supported_ckerc20_tokens: Some(
-            s.ckerc20_tokens
-                .iter()
-                .map(|(symbol, addr, canister)| CkErc20Token {
-                    ckerc20_token_symbol: erc20::CkTokenSymbol::to_string(symbol),
-                    erc20_contract_address: addr.to_string(),
-                    ledger_canister_id: *canister,
+    read_state(|s| {
+        let (erc20_balances, supported_ckerc20_tokens) = if s.is_ckerc20_feature_active() {
+            let (balances, tokens) = s
+                .supported_ck_erc20_tokens()
+                .map(|token| {
+                    (
+                        Erc20Balance {
+                            erc20_contract_address: token.erc20_contract_address.to_string(),
+                            balance: s
+                                .erc20_balances
+                                .balance_of(&token.erc20_contract_address)
+                                .into(),
+                        },
+                        endpoints::CkErc20Token::from(token),
+                    )
                 })
-                .collect::<Vec<_>>(),
-        ),
-        minimum_withdrawal_amount: Some(s.minimum_withdrawal_amount.into()),
-        ethereum_block_height: Some(s.ethereum_block_height.into()),
-        last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),
-        eth_balance: Some(s.eth_balance.eth_balance().into()),
-        last_gas_fee_estimate: s.last_transaction_price_estimate.as_ref().map(
-            |(timestamp, estimate)| GasFeeEstimate {
-                max_fee_per_gas: estimate.max_fee_per_gas.into(),
-                max_priority_fee_per_gas: estimate.max_priority_fee_per_gas.into(),
-                timestamp: *timestamp,
-            },
-        ),
+                .unzip();
+            (Some(balances), Some(tokens))
+        } else {
+            (None, None)
+        };
+
+        MinterInfo {
+            minter_address: s.minter_address().map(|a| a.to_string()),
+            smart_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
+            eth_helper_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
+            erc20_helper_contract_address: s.erc20_helper_contract_address.map(|a| a.to_string()),
+            supported_ckerc20_tokens,
+            minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
+            ethereum_block_height: Some(s.ethereum_block_height.into()),
+            last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),
+            eth_balance: Some(s.eth_balance.eth_balance().into()),
+            last_gas_fee_estimate: s.last_transaction_price_estimate.as_ref().map(
+                |(timestamp, estimate)| GasFeeEstimate {
+                    max_fee_per_gas: estimate.estimate_max_fee_per_gas().into(),
+                    max_priority_fee_per_gas: estimate.max_priority_fee_per_gas.into(),
+                    timestamp: *timestamp,
+                },
+            ),
+            erc20_balances,
+        }
     })
 }
 
@@ -208,7 +227,7 @@ async fn withdraw_eth(
 
     let amount = Wei::try_from(amount).expect("failed to convert Nat to u256");
 
-    let minimum_withdrawal_amount = read_state(|s| s.minimum_withdrawal_amount);
+    let minimum_withdrawal_amount = read_state(|s| s.cketh_minimum_withdrawal_amount);
     if amount < minimum_withdrawal_amount {
         return Err(WithdrawalError::AmountTooLow {
             min_withdrawal_amount: minimum_withdrawal_amount.into(),
@@ -302,7 +321,9 @@ async fn withdraw_erc20(
             }
         })?;
     let cketh_ledger = read_state(LedgerClient::cketh_ledger_from_state);
-    let erc20_tx_fee = estimate_erc20_transaction_fee();
+    let erc20_tx_fee = estimate_erc20_transaction_fee().await.ok_or_else(|| {
+        WithdrawErc20Error::TemporarilyUnavailable("Failed to retrieve current gas fee".to_string())
+    })?;
     let now = ic_cdk::api::time();
     log!(INFO, "[withdraw_erc20]: burning {:?} ckETH", erc20_tx_fee);
     match cketh_ledger
@@ -365,6 +386,7 @@ async fn withdraw_erc20(
                     let reimbursed_amount = match &ckerc20_burn_error {
                         LedgerBurnError::TemporarilyUnavailable { .. } => erc20_tx_fee, //don't penalize user in case of an error outside of their control
                         LedgerBurnError::InsufficientFunds { .. }
+                        | LedgerBurnError::AmountTooLow { .. }
                         | LedgerBurnError::InsufficientAllowance { .. } => erc20_tx_fee
                             .checked_sub(CKETH_LEDGER_TRANSACTION_FEE)
                             .unwrap_or(Wei::ZERO),
@@ -397,9 +419,14 @@ async fn withdraw_erc20(
     }
 }
 
-fn estimate_erc20_transaction_fee() -> Wei {
-    //TODO XC-58: better fee estimation
-    read_state(|s| s.minimum_withdrawal_amount)
+async fn estimate_erc20_transaction_fee() -> Option<Wei> {
+    lazy_refresh_gas_fee_estimate()
+        .await
+        .map(|gas_fee_estimate| {
+            gas_fee_estimate
+                .to_price(CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT)
+                .max_transaction_fee()
+        })
 }
 
 #[query]
@@ -439,7 +466,8 @@ async fn get_canister_status() -> ic_cdk::api::management_canister::main::Canist
 #[query]
 fn get_events(arg: GetEventsArg) -> GetEventsResult {
     use ic_cketh_minter::endpoints::events::{
-        AccessListItem, TransactionReceipt as CandidTransactionReceipt,
+        AccessListItem, ReimbursementIndex as CandidReimbursementIndex,
+        TransactionReceipt as CandidTransactionReceipt,
         TransactionStatus as CandidTransactionStatus, UnsignedTransaction,
     };
     use ic_cketh_minter::eth_rpc_client::responses::TransactionReceipt;
@@ -457,6 +485,23 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
         CandidEventSource {
             transaction_hash: transaction_hash.to_string(),
             log_index: log_index.into(),
+        }
+    }
+
+    fn map_reimbursement_index(index: ReimbursementIndex) -> CandidReimbursementIndex {
+        match index {
+            ReimbursementIndex::CkEth { ledger_burn_index } => CandidReimbursementIndex::CkEth {
+                ledger_burn_index: ledger_burn_index.get().into(),
+            },
+            ReimbursementIndex::CkErc20 {
+                cketh_ledger_burn_index,
+                ledger_id,
+                ckerc20_ledger_burn_index,
+            } => CandidReimbursementIndex::CkErc20 {
+                cketh_ledger_burn_index: cketh_ledger_burn_index.get().into(),
+                ledger_id,
+                ckerc20_ledger_burn_index: ckerc20_ledger_burn_index.get().into(),
+            },
         }
     }
 
@@ -681,6 +726,12 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     to,
                     to_subaccount: to_subaccount.map(|s| s.0),
                 },
+                EventType::QuarantinedDeposit { event_source } => EP::QuarantinedDeposit {
+                    event_source: map_event_source(event_source),
+                },
+                EventType::QuarantinedReimbursement { index } => EP::QuarantinedReimbursement {
+                    index: map_reimbursement_index(index),
+                },
             },
         }
     }
@@ -789,7 +840,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_minter_last_max_fee_per_gas",
                     s.last_transaction_price_estimate
                         .clone()
-                        .map(|(_, fee)| fee.max_fee_per_gas.as_f64())
+                        .map(|(_, fee)| fee.estimate_max_fee_per_gas().as_f64())
                         .unwrap_or_default(),
                     "Last max fee per gas",
                 )?;

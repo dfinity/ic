@@ -1,7 +1,6 @@
 load("@rules_motoko//motoko:defs.bzl", "external_actor")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "motoko_canister")
-load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -63,18 +62,5 @@ rust_test(
     crate = ":lifeline",
     deps = [
         "@crate_index//:wasmprinter",
-    ],
-)
-
-rust_ic_test(
-    name = "lifeline_test",
-    srcs = ["tests/test.rs"],
-    deps = [
-        "//rs/nervous_system/clients",
-        "//rs/nervous_system/common",
-        "//rs/nervous_system/root",
-        "//rs/nns/common",
-        "//rs/nns/test_utils",
-        "//rs/rust_canisters/dfn_candid",
     ],
 )

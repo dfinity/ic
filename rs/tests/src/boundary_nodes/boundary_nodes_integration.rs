@@ -41,8 +41,7 @@ use std::{iter, net::SocketAddrV6, time::Duration};
 use anyhow::{anyhow, bail, Error};
 use futures::stream::FuturesUnordered;
 use ic_agent::{
-    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, export::Principal,
-    Agent,
+    agent::http_transport::reqwest_transport::ReqwestTransport, export::Principal, Agent,
 };
 
 use serde::Deserialize;
@@ -2393,10 +2392,8 @@ pub fn direct_to_replica_test(env: TestEnv) {
             .unwrap();
 
             info!(&logger, "creating agent");
-            let transport = ReqwestHttpReplicaV2Transport::create_with_client(
-                format!("https://{host}/"),
-                client,
-            )?;
+            let transport =
+                ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
 
             let agent = Agent::builder().with_transport(transport).build()?;
             agent.fetch_root_key().await?;
@@ -2456,10 +2453,8 @@ pub fn direct_to_replica_test(env: TestEnv) {
             .unwrap();
 
             info!(&logger, "creating agent");
-            let transport = ReqwestHttpReplicaV2Transport::create_with_client(
-                format!("https://{host}/"),
-                client,
-            )?;
+            let transport =
+                ReqwestTransport::create_with_client(format!("https://{host}/"), client)?;
 
             let agent = Agent::builder().with_transport(transport).build()?;
             agent.fetch_root_key().await?;
@@ -2778,10 +2773,8 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             .unwrap();
 
             info!(&logger, "creating agent");
-            let transport = ReqwestHttpReplicaV2Transport::create_with_client(
-                "https://rosetta.dfinity.network/",
-                client,
-            )?;
+            let transport =
+                ReqwestTransport::create_with_client("https://rosetta.dfinity.network/", client)?;
 
             let agent = Agent::builder().with_transport(transport).build()?;
             agent.fetch_root_key().await?;
@@ -2841,10 +2834,8 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             .unwrap();
 
             info!(&logger, "creating agent");
-            let transport = ReqwestHttpReplicaV2Transport::create_with_client(
-                "https://rosetta.dfinity.network/",
-                client,
-            )?;
+            let transport =
+                ReqwestTransport::create_with_client("https://rosetta.dfinity.network/", client)?;
 
             let agent = Agent::builder().with_transport(transport).build()?;
             agent.fetch_root_key().await?;

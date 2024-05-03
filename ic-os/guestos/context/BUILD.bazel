@@ -1,0 +1,21 @@
+package(default_visibility = ["//ic-os/guestos:__subpackages__"])
+
+exports_files(glob(["**"]))
+
+exports_files([
+    "Dockerfile.base",
+    "allow_console_root",
+    "extra_boot_args.template",
+])
+
+filegroup(
+    name = "context-files",
+    srcs = [
+        "Dockerfile",
+        "docker-base.dev",
+        "docker-base.prod",
+        "packages.common",
+        "packages.dev",
+    ],
+    tags = ["manual"],
+)

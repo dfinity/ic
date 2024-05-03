@@ -236,6 +236,7 @@ fn test_sns_lifecycle(
             &pocket_ic,
             direct_participant_initial_icp_balances,
             with_mainnet_nns_canister_versions,
+            None,
         );
 
         let with_mainnet_sns_wasms = false;

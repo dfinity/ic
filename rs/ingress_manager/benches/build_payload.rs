@@ -11,7 +11,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_constants::MAX_INGRESS_TTL;
-use ic_ingress_manager::{CustomRandomState, IngressManager};
+use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     ingress_pool::{ChangeAction, ChangeSet, IngressPool},
@@ -115,7 +115,7 @@ where
                 Arc::new(state_manager),
                 cycles_account_manager,
                 MaliciousFlags::default(),
-                CustomRandomState::default(),
+                RandomStateKind::Random,
             ),
             registry,
             canisters,
@@ -159,7 +159,6 @@ fn prepare(
             .build();
         let message_id = IngressMessageId::from(&ingress);
         let peer_id = (i % 10) as u64;
-        let integrity_hash = ic_types::crypto::crypto_hash(ingress.binary()).get();
         pool.insert(UnvalidatedArtifact {
             message: ingress,
             peer_id: node_test_id(peer_id),
@@ -169,8 +168,6 @@ fn prepare(
             message_id,
             node_test_id(peer_id),
             0,
-            (),
-            integrity_hash,
         )));
     }
     pool.apply_changes(changeset);

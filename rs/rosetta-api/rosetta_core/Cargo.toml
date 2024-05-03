@@ -10,24 +10,23 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
 ecdsa-secp256k1 = { path = "../../crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1", package = "ic-crypto-internal-basic-sig-ecdsa-secp256k1" }
 hex = { workspace = true }
+ic-agent = { workspace = true }
+ic-crypto-ecdsa-secp256k1 = { path = "../../crypto/ecdsa_secp256k1" }
+ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
+ic-types = { path = "../../types/types" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+num-bigint = "0.4.4"
 rand = "0.8"
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_derive = "1.0"
 serde_json = { workspace = true }
 serde_with = { workspace = true }
-ic-canister-client = { path = "../../canister_client" }
-ic-canister-client-sender = { path = "../../canister_client/sender" }
-ic-types = { path = "../../types/types" }
-ic-crypto-ecdsa-secp256k1 = { path = "../../crypto/ecdsa_secp256k1" }
-icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-candid = { workspace = true }
-anyhow = { workspace = true }
-serde_bytes = { workspace = true }
-ic-agent = { workspace = true }
-num-bigint = "0.4.4"
 
 [dev-dependencies]
 proptest = "1.0"

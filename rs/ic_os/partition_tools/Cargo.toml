@@ -10,5 +10,5 @@ anyhow = { workspace = true }
 tempfile = "3.8.0"
 tokio = { workspace = true }
 indoc = "1.0.9"
-async-trait = "0.1.74"
+async-trait = { workspace = true }
 pcre2 = "0.2.6"

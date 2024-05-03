@@ -3,12 +3,13 @@
 use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_nns_governance::pb::v1::{ListProposalInfo, ListProposalInfoResponse};
-use ic_nns_test_utils::state_test_helpers::{create_canister, query};
-use ic_state_machine_tests::StateMachine;
+use ic_nns_test_utils::state_test_helpers::{
+    create_canister, query, state_machine_builder_for_nns_tests,
+};
 
 #[test]
 fn governance_mem_test() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_nns_tests().build();
 
     let state_setup_wasm = Project::cargo_bin_maybe_from_env("governance-mem-test-canister", &[]);
     let governance_canister_id =

@@ -40,12 +40,16 @@ use ic_sns_swap::pb::v1::{
     NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest, OpenResponse, Params,
     RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Ticket,
 };
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_types::ingress::WasmResult;
 use icp_ledger::{
     AccountIdentifier, BlockIndex, Memo, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
+
+pub fn state_machine_builder_for_sns_tests() -> StateMachineBuilder {
+    StateMachineBuilder::new().with_current_time()
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct SnsTestCanisterIds {

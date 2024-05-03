@@ -1,0 +1,20 @@
+[package]
+name = "canister_http"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+tests = { path = "../../" }
+canister-test = { path = "../../../rust_canisters/canister_test" }
+ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-types = { path = "../../../types/types" }
+slog = { workspace = true }
+tokio = { workspace = true }
+
+[lib]
+name = "canister_http"
+path = "canister_http.rs"

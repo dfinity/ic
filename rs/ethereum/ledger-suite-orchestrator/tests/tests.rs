@@ -1,15 +1,16 @@
 use assert_matches::assert_matches;
-use candid::{Encode, Principal};
+use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::HttpRequest;
+use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
 use ic_ledger_suite_orchestrator::candid::{
-    AddErc20Arg, LedgerInitArg, OrchestratorArg, UpgradeArg,
+    AddErc20Arg, CyclesManagement, LedgerInitArg, ManagedCanisterStatus, ManagedCanisters,
+    OrchestratorArg, OrchestratorInfo, UpdateCyclesManagement, UpgradeArg,
 };
-use ic_ledger_suite_orchestrator::scheduler::TEN_TRILLIONS;
 use ic_ledger_suite_orchestrator_test_utils::arbitrary::arb_init_arg;
 use ic_ledger_suite_orchestrator_test_utils::{
-    new_state_machine, supported_erc20_tokens, usdc, usdc_erc20_contract, LedgerSuiteOrchestrator,
+    assert_reply, new_state_machine, supported_erc20_tokens, usdc, usdc_erc20_contract, usdt,
+    LedgerSuiteOrchestrator, NNS_ROOT_PRINCIPAL,
 };
 use ic_state_machine_tests::ErrorCode;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
@@ -21,6 +22,8 @@ use std::sync::Arc;
 
 const MAX_TICKS: usize = 10;
 const GIT_COMMIT_HASH: &str = "6a8e5fca2c6b4e12966638c444e994e204b42989";
+
+pub const TEN_TRILLIONS: u64 = 10_000_000_000_000; // 10 TC
 
 proptest! {
     #![proptest_config(ProptestConfig {
@@ -127,6 +130,70 @@ fn should_spawn_ledger_with_correct_init_args() {
 }
 
 #[test]
+fn should_change_cycles_for_canister_creation() {
+    let orchestrator = LedgerSuiteOrchestrator::default();
+    let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+    let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+
+    let orchestrator = orchestrator
+        .add_erc20_token(usdc(
+            Principal::anonymous(),
+            embedded_ledger_wasm_hash.clone(),
+            embedded_index_wasm_hash.clone(),
+        ))
+        .expect_new_ledger_and_index_canisters()
+        .assert_ledger_has_cycles(100_000_000_000_000_u128)
+        .assert_index_has_cycles(100_000_000_000_000_u128)
+        .setup;
+
+    orchestrator
+        .upgrade_ledger_suite_orchestrator(&OrchestratorArg::UpgradeArg(UpgradeArg {
+            git_commit_hash: None,
+            ledger_compressed_wasm_hash: None,
+            index_compressed_wasm_hash: None,
+            archive_compressed_wasm_hash: None,
+            cycles_management: Some(UpdateCyclesManagement {
+                cycles_for_ledger_creation: Some(200_000_000_000_000_u128.into()),
+                cycles_for_index_creation: Some(50_000_000_000_000_u128.into()),
+                ..Default::default()
+            }),
+        }))
+        .unwrap();
+
+    orchestrator
+        .add_erc20_token(usdt(
+            Principal::anonymous(),
+            embedded_ledger_wasm_hash.clone(),
+            embedded_index_wasm_hash,
+        ))
+        .expect_new_ledger_and_index_canisters()
+        .assert_ledger_has_cycles(200_000_000_000_000_u128)
+        .assert_index_has_cycles(50_000_000_000_000_u128);
+}
+
+#[test]
+fn should_spawn_archive_from_ledger_with_correct_controllers() {
+    let orchestrator = LedgerSuiteOrchestrator::default();
+    let expected_controllers = vec![
+        orchestrator.ledger_suite_orchestrator_id.get().into(),
+        NNS_ROOT_PRINCIPAL,
+    ];
+    let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+    let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+    let usdc = usdc(
+        Principal::anonymous(),
+        embedded_ledger_wasm_hash,
+        embedded_index_wasm_hash,
+    );
+
+    orchestrator
+        .add_erc20_token(usdc.clone())
+        .expect_new_ledger_and_index_canisters()
+        .trigger_creation_of_archive()
+        .assert_all_controlled_by(&expected_controllers);
+}
+
+#[test]
 fn should_reject_adding_an_already_managed_erc20_token() {
     let orchestrator = LedgerSuiteOrchestrator::default();
     let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
@@ -175,20 +242,11 @@ fn should_top_up_spawned_canisters() {
     let pre_top_up_balance_ledger = orchestrator.canister_status_of(ledger_canister_id).cycles();
     let pre_top_up_balance_index = orchestrator.canister_status_of(index_canister_id).cycles();
 
-    orchestrator
-        .env
-        .advance_time(std::time::Duration::from_secs(60 * 60 + 1));
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-
+    orchestrator.advance_time_for_cycles_top_up();
     let balance_ledger_after_first_top_up =
         orchestrator.canister_status_of(ledger_canister_id).cycles();
     let balance_index_after_first_top_up =
         orchestrator.canister_status_of(index_canister_id).cycles();
-
     assert_eq!(
         balance_index_after_first_top_up - pre_top_up_balance_index,
         TEN_TRILLIONS as u128
@@ -198,20 +256,11 @@ fn should_top_up_spawned_canisters() {
         TEN_TRILLIONS as u128
     );
 
-    orchestrator
-        .env
-        .advance_time(std::time::Duration::from_secs(60 * 60 + 1));
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-
+    orchestrator.advance_time_for_cycles_top_up();
     let balance_ledger_after_second_top_up =
         orchestrator.canister_status_of(ledger_canister_id).cycles();
     let balance_index_after_second_top_up =
         orchestrator.canister_status_of(index_canister_id).cycles();
-
     assert_eq!(
         balance_index_after_second_top_up - balance_index_after_first_top_up,
         TEN_TRILLIONS as u128
@@ -273,6 +322,7 @@ fn should_reject_upgrade_with_invalid_args() {
         ledger_compressed_wasm_hash: None,
         index_compressed_wasm_hash: None,
         archive_compressed_wasm_hash: None,
+        cycles_management: None,
     };
 
     test_upgrade_with_invalid_args(
@@ -335,4 +385,110 @@ fn should_reject_update_calls_to_http_request() {
             .await_ingress(message_id.clone(), MAX_TICKS),
         Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("update call rejected")
     );
+}
+
+#[test]
+fn should_retrieve_orchestrator_info() {
+    let orchestrator = LedgerSuiteOrchestrator::default();
+    let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+    let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+    let usdc = usdc(
+        Principal::anonymous(),
+        embedded_ledger_wasm_hash.clone(),
+        embedded_index_wasm_hash.clone(),
+    );
+    let usdt = usdt(
+        Principal::anonymous(),
+        embedded_ledger_wasm_hash,
+        embedded_index_wasm_hash,
+    );
+
+    let canisters = orchestrator
+        .add_erc20_token(usdc.clone())
+        .expect_new_ledger_and_index_canisters();
+    let usdc_ledger_id = canisters.ledger_canister_id();
+    let usdc_index_id = canisters.index_canister_id();
+
+    let orchestrator = canisters.setup;
+    let canisters = orchestrator
+        .add_erc20_token(usdt.clone())
+        .expect_new_ledger_and_index_canisters();
+    let usdt_ledger_id = canisters.ledger_canister_id();
+    let usdt_index_id = canisters.index_canister_id();
+
+    let info = canisters.setup.get_orchestrator_info();
+    assert_eq!(
+        info,
+        OrchestratorInfo {
+            managed_canisters: vec![
+                ManagedCanisters {
+                    erc20_contract: usdc.contract.clone(),
+                    ckerc20_token_symbol: "ckUSDC".to_string(),
+                    ledger: Some(ManagedCanisterStatus::Installed {
+                        canister_id: usdc_ledger_id.into(),
+                        installed_wasm_hash: usdc.ledger_compressed_wasm_hash,
+                    }),
+                    index: Some(ManagedCanisterStatus::Installed {
+                        canister_id: usdc_index_id.into(),
+                        installed_wasm_hash: usdc.index_compressed_wasm_hash,
+                    }),
+                    archives: vec![]
+                },
+                ManagedCanisters {
+                    erc20_contract: usdt.contract.clone(),
+                    ckerc20_token_symbol: "ckUSDT".to_string(),
+                    ledger: Some(ManagedCanisterStatus::Installed {
+                        canister_id: usdt_ledger_id.into(),
+                        installed_wasm_hash: usdt.ledger_compressed_wasm_hash,
+                    }),
+                    index: Some(ManagedCanisterStatus::Installed {
+                        canister_id: usdt_index_id.into(),
+                        installed_wasm_hash: usdt.index_compressed_wasm_hash,
+                    }),
+                    archives: vec![]
+                }
+            ],
+            cycles_management: CyclesManagement {
+                cycles_for_ledger_creation: Nat::from(100000000000000_u64),
+                cycles_for_archive_creation: Nat::from(100000000000000_u64),
+                cycles_for_index_creation: Nat::from(100000000000000_u64),
+                cycles_top_up_increment: Nat::from(10000000000000_u64),
+            },
+            more_controller_ids: vec![NNS_ROOT_PRINCIPAL],
+            minter_id: None
+        }
+    );
+}
+
+#[test]
+fn should_query_logs_and_metrics() {
+    let orchestrator = LedgerSuiteOrchestrator::default();
+    test_http_query(&orchestrator, "/metrics");
+    test_http_query(&orchestrator, "/logs");
+
+    fn test_http_query<U: Into<String>>(orchestrator: &LedgerSuiteOrchestrator, url: U) {
+        let request = HttpRequest {
+            method: "GET".to_string(),
+            url: url.into(),
+            headers: Default::default(),
+            body: Default::default(),
+        };
+
+        let response = Decode!(
+            &assert_reply(
+                orchestrator
+                    .env
+                    .query(
+                        orchestrator.ledger_suite_orchestrator_id,
+                        "http_request",
+                        Encode!(&request).expect("failed to encode HTTP request"),
+                    )
+                    .expect("failed to query get_transactions on the ledger")
+            ),
+            HttpResponse
+        )
+        .unwrap();
+
+        assert_eq!(response.status_code, 200_u16);
+    }
 }

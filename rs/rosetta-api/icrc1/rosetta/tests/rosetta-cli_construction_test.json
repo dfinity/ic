@@ -13,18 +13,17 @@
   "max_reorg_depth": 100,
   "log_configuration": false,
   "compression_disabled": false,
-  "memory_limit_disabled": false,
   "construction": {
     "offline_url": "http://localhost:0000",
     "prefunded_accounts": [
       {
         "account_identifier": {
-          "address": "4ezts-vwttz-kpqqn-l3jy6-tjq43-w2yks-ko2of-7zr4r-3j3h6-njnst-uae",
+          "address": "vydpq-evb4l-dbne2-kj4tz-b2dfh-u4z2c-42hva-6qyqy-v6rbb-bw6ws-qae",
           "sub_account": {
             "address": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         },
-        "privkey": "371fac972ff1317b4708b4daf5556801f2a641f2ad64fc020f9736696f257f57",
+        "privkey": "611830d3641a68f94a690dcc25d1f4b0dac948325ac18f6dd32564371735f32c",
         "curve_type": "edwards25519",
         "currency": {
           "symbol": "XTST",
@@ -33,12 +32,12 @@
       },
       {
         "account_identifier": {
-          "address": "7th46-b7bzq-xj7gn-2nvil-kphkn-z44tt-eyu7y-einza-4grpg-vvwws-tae",
+          "address": "cxmxh-xq3su-rgm2n-djueb-lkdnx-4sw5z-qeap6-q3k5k-al4is-osbbk-4ae",
           "sub_account": {
             "address": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         },
-        "privkey": "e4b7505f1bc1b43653b682d5a707f4f7b1bde4f0af40707bf19d629fda4d23a2",
+        "privkey": "1fbec814b18b1d4c3eaa7cec41007e04bf0a98453b06ec7582aa29882c52eb7e",
         "curve_type": "edwards25519",
         "currency": {
           "symbol": "XTST",
@@ -47,12 +46,12 @@
       },
       {
         "account_identifier": {
-          "address": "4ukk6-4offm-aq7wx-g66ke-ltkni-4pssv-dqvte-ea3hn-xswln-ufos3-zqe",
+          "address": "3mjjd-frtpy-wlyev-b5kwx-3mgpf-n57p3-32yf2-bidz4-g3r2u-7f5kf-4ae",
           "sub_account": {
             "address": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         },
-        "privkey": "2ab71b62caf470939a87c140081a458c512f9511f5959b61dfcc7e414827807f",
+        "privkey": "ecd9c4a53ea15f18447b08fb96a13c5ab7dc7d24067b102fcbaaf7b39ca52e6d",
         "curve_type": "edwards25519",
         "currency": {
           "symbol": "XTST",
@@ -61,12 +60,12 @@
       },
       {
         "account_identifier": {
-          "address": "eednz-ynozv-7spso-eree2-f33zc-juezp-agcdr-ncyy2-plnm7-65wzq-hae",
+          "address": "3oc2t-zmvus-3d3co-x2aqo-ne4in-ifu6i-hypfu-lz4ar-wnk2e-kinrb-fqe",
           "sub_account": {
             "address": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         },
-        "privkey": "a464580bbdb9ed6aebdbb7641993c890e1c65e66cf9cc6ba6568c74f2924533e",
+        "privkey": "e463bcb1a6e57288ffd4671503082fa8656e3eacb78fb1925f8a7c76400e8e95",
         "curve_type": "edwards25519",
         "currency": {
           "symbol": "XTST",
@@ -75,12 +74,12 @@
       },
       {
         "account_identifier": {
-          "address": "jvval-3gavx-jij62-hqhcq-4xc2n-ymp43-xpjz2-3tz6f-f4bzv-kljla-lae",
+          "address": "z5evl-fxu6f-u6jlc-gpvxs-6gm2m-ukuv6-3igz5-csh6m-wh5ye-j6shr-yqe",
           "sub_account": {
             "address": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         },
-        "privkey": "1cfa5bd4fba4c9a9c566f1ef0d4419b44e3e6321432d734d87c3787f2b7110f9",
+        "privkey": "7a19fb2d099a9557f7c10c2efbb8b101d9e0ec85610d5c74a887d1d4fb8d28a7",
         "curve_type": "edwards25519",
         "currency": {
           "symbol": "XTST",
@@ -89,12 +88,12 @@
       },
       {
         "account_identifier": {
-          "address": "vivm5-2dpbl-5pgm4-i4cix-ha4id-7dffz-yirhb-hhu7n-omex6-kr6qf-nae",
+          "address": "h4vrj-mal7j-qdcs5-a5t35-ulvo5-rpzec-fbypn-gfkgt-2yv6o-yf6au-kqe",
           "sub_account": {
             "address": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         },
-        "privkey": "9cd8330e82a656d2285208b97fd6c43f5dcca6e838786ddf782b2725eeb8c04f",
+        "privkey": "4dbad51eb408af559dd91bbbed8dbeae0a2c89e0e05f0cce87c98652a8437fdf",
         "curve_type": "edwards25519",
         "currency": {
           "symbol": "XTST",
@@ -103,12 +102,12 @@
       },
       {
         "account_identifier": {
-          "address": "p45kt-nljjv-7rvmf-5aqst-4bqig-kv36m-fd3t2-z7qoz-tuyvn-i3vof-vqe",
+          "address": "irzi3-u6b25-7j45m-bsflc-dkvyb-4khlr-xcr4j-dwrcy-p2khb-ntjkg-oqe",
           "sub_account": {
             "address": "0000000000000000000000000000000000000000000000000000000000000000"
           }
         },
-        "privkey": "b2a9cd0b047cfec848d80d83fbbc227bc57d03195aaf7e206b2a6aea92ff7772",
+        "privkey": "befba86ae9e0c207865f7e24e8349d4ecdbc8b0f4632842499a0dfa60568e28a",
         "curve_type": "edwards25519",
         "currency": {
           "symbol": "XTST",

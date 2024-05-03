@@ -8,7 +8,7 @@ message Stats {
 }
 
 message QueryStats {
-  uint64 highest_aggregated_epoch = 1;
+  optional uint64 highest_aggregated_epoch = 1;
   repeated QueryStatsInner query_stats = 2;
 }
 

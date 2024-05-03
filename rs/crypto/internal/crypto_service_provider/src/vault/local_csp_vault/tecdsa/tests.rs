@@ -10,7 +10,6 @@ mod ecdsa_sign_share {
         IDkgTranscriptInternal, PolynomialCommitment, SimpleCommitment,
         ThresholdEcdsaSigShareInternal,
     };
-    use ic_crypto_secrets_containers::SecretArray;
     use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaSignShareError;
     use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
     use ic_types::crypto::AlgorithmId;
@@ -46,7 +45,8 @@ mod ecdsa_sign_share {
         let lambda_masked_key_id =
             KeyId::from(parameters.lambda_masked.combined_commitment.commitment());
 
-        proptest!(|(lambda_masked_sk in arb_csp_secret_key_with_wrong_type())| {
+        proptest!(|(lambda_masked_sk in arb_non_commitment_opening_csp_secret_key())| {
+            let wrong_secret_key_type = <&'static str>::from(&lambda_masked_sk).to_string();
             let mut canister_sks = MockSecretKeyStore::new();
             canister_sks
                 .expect_get()
@@ -62,8 +62,8 @@ mod ecdsa_sign_share {
 
             assert_matches!(
                 result,
-                Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { commitment_string })
-                if commitment_string == format!("{:?}", parameters.lambda_masked.combined_commitment.commitment())
+                Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+                if internal_error == format!("obtained secret key has wrong type: {wrong_secret_key_type}")
             )
         });
     }
@@ -98,7 +98,8 @@ mod ecdsa_sign_share {
                 .commitment(),
         );
 
-        proptest!(|(kappa_times_lambda_sk in arb_csp_secret_key_with_wrong_type())| {
+        proptest!(|(kappa_times_lambda_sk in arb_non_commitment_opening_csp_secret_key())| {
+            let wrong_secret_key_type = <&'static str>::from(&kappa_times_lambda_sk).to_string();
             let mut canister_sks = MockSecretKeyStore::new();
             parameters.with_lambda_masked_idkg_commitment(&mut canister_sks);
             canister_sks
@@ -115,8 +116,8 @@ mod ecdsa_sign_share {
 
             assert_matches!(
                 result,
-                Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { commitment_string })
-                if commitment_string == format!("{:?}", parameters.kappa_times_lambda.combined_commitment.commitment())
+                Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+                if internal_error == format!("obtained secret key has wrong type: {wrong_secret_key_type}")
             )
         });
     }
@@ -148,7 +149,8 @@ mod ecdsa_sign_share {
         let key_times_lambda_key_id =
             KeyId::from(parameters.key_times_lambda.combined_commitment.commitment());
 
-        proptest!(|(key_times_lambda_sk in arb_csp_secret_key_with_wrong_type())| {
+        proptest!(|(key_times_lambda_sk in arb_non_commitment_opening_csp_secret_key())| {
+            let wrong_secret_key_type = <&'static str>::from(&key_times_lambda_sk).to_string();
             let mut canister_sks = MockSecretKeyStore::new();
             parameters.with_lambda_masked_idkg_commitment(&mut canister_sks);
             parameters.with_kappa_times_lambda_idkg_commitment(&mut canister_sks);
@@ -166,8 +168,8 @@ mod ecdsa_sign_share {
 
             assert_matches!(
                 result,
-                Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { commitment_string })
-                if commitment_string == format!("{:?}", parameters.key_times_lambda.combined_commitment.commitment())
+                Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+                if internal_error == format!("obtained secret key has wrong type: {wrong_secret_key_type}")
             )
         });
     }
@@ -343,6 +345,7 @@ mod ecdsa_sign_share {
             if internal_error.contains("UnexpectedCommitmentType")
         )
     }
+
     #[test]
     fn should_sign_share() {
         let parameters = EcdsaSignShareParameters::default();
@@ -446,59 +449,9 @@ mod ecdsa_sign_share {
 
             assert_matches!(
                 parameters.ecdsa_sign_share(&vault),
-                Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+                Err(ThresholdEcdsaSignShareError::SerializationError { internal_error })
                 if internal_error == "ThresholdEcdsaSerializationError(\"Invalid point encoding\")"
             );
-        }
-    }
-
-    #[test]
-    fn should_fail_if_secret_shares_not_found_for_opening() {
-        use ic_crypto_internal_basic_sig_ed25519::types::SecretKeyBytes as Ed25519SecretKeyBytes;
-
-        let parameters = EcdsaSignShareParameters::default();
-
-        let invalid_secret_key = Some(CspSecretKey::Ed25519(Ed25519SecretKeyBytes(
-            SecretArray::new_and_dont_zeroize_argument(&[0u8; 32]),
-        )));
-        let no_secret_key = None;
-        let invalid_representations = vec![invalid_secret_key, no_secret_key];
-
-        let keys_openings = parameters.keys_openings();
-
-        for invalidate_key_index in 0..keys_openings.len() {
-            for invalid_representation in invalid_representations.iter() {
-                let mut canister_sks = MockSecretKeyStore::new();
-                for (key_index, (key_id, opening)) in keys_openings.iter().cloned().enumerate() {
-                    let return_value = if key_index == invalidate_key_index {
-                        invalid_representation.clone()
-                    } else {
-                        Some(opening.clone())
-                    };
-
-                    canister_sks
-                        .expect_get()
-                        .times(1)
-                        .withf(move |this_key_id| *this_key_id == key_id)
-                        .return_const(return_value);
-
-                    if key_index == invalidate_key_index {
-                        // We return after the first failure and thus don't
-                        // fetch subsequent commitment openings after the first
-                        // failure, so we need to expect them to not happen.
-                        break;
-                    }
-                }
-                let vault = LocalCspVault::builder_for_test()
-                    .with_mock_stores()
-                    .with_canister_secret_key_store(canister_sks)
-                    .build();
-
-                assert_matches!(
-                    parameters.ecdsa_sign_share(&vault),
-                    Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { .. })
-                );
-            }
         }
     }
 
@@ -635,8 +588,7 @@ mod ecdsa_sign_share {
         }
 
         /// Returns key-opening pairs for the transcripts of `lambda_masked`,
-        /// `kappa_times_lambda`, and `key_times_lambda`. For these transcripts
-        /// we fetch the openings from the canister secret key store.
+        /// `kappa_times_lambda`, and `key_times_lambda`.
         fn keys_openings(&self) -> Vec<(KeyId, CspSecretKey)> {
             [
                 (&self.lambda_masked, &self.lambda_masked_commitment),
@@ -735,7 +687,7 @@ mod ecdsa_sign_share {
             .expect("failed to convert to fixed size array")
     }
 
-    fn arb_csp_secret_key_with_wrong_type() -> impl Strategy<Value = CspSecretKey> {
+    fn arb_non_commitment_opening_csp_secret_key() -> impl Strategy<Value = CspSecretKey> {
         any::<CspSecretKey>().prop_filter(
             "Secret key must not be of type IDkgCommitmentOpening",
             |sk| !matches!(sk, CspSecretKey::IDkgCommitmentOpening(_)),

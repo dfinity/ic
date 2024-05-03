@@ -2,9 +2,15 @@ use std::{
     fmt::Display,
     io,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use anyhow::Result;
+use ic_interfaces::{
+    certification::{Verifier, VerifierError},
+    validation::ValidationResult,
+};
+use ic_state_manager::StateManagerImpl;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -12,17 +18,24 @@ use crate::util::{write_proto_to_file_raw, write_registry_entry};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager};
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint as pbConnectionEndpoint, NodeRecord as pbNodeRecord},
 };
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::{crypto::KeyPurpose, NodeId, PrincipalId, RegistryVersion};
+use ic_registry_subnet_type::SubnetType;
+use ic_types::{
+    consensus::certification::Certification, crypto::KeyPurpose, Height, NodeId, PrincipalId,
+    RegistryVersion, SubnetId,
+};
 use std::net::SocketAddr;
 use std::os::unix::fs::PermissionsExt;
 
 const CRYPTO_DIR: &str = "crypto";
+const STATE_DIR: &str = "state";
+
 pub type SubnetIndex = u64;
 pub type NodeIndex = u64;
 
@@ -59,6 +72,10 @@ impl InitializedNode {
 
     pub fn build_crypto_path<P: AsRef<Path>>(node_path: P) -> PathBuf {
         PathBuf::from(node_path.as_ref()).join(CRYPTO_DIR)
+    }
+
+    pub fn state_path(&self) -> PathBuf {
+        self.node_path.join(STATE_DIR)
     }
 
     pub fn write_registry_entries(
@@ -177,6 +194,52 @@ impl InitializedNode {
         let path = PathBuf::from(self.node_path.as_path()).join("derived_node_id");
         let output = format!("{}", node_id);
         std::fs::write(path, output).map_err(|source| InitializeNodeError::SavingNodeId { source })
+    }
+
+    /// Creates an empty initial state and returns state hash.
+    /// This is needed if the subnet should start from a height other than 0.
+    pub(crate) fn generate_initial_state(
+        &self,
+        subnet_id: SubnetId,
+        subnet_type: SubnetType,
+    ) -> Vec<u8> {
+        struct FakeVerifier;
+        impl Verifier for FakeVerifier {
+            fn validate(
+                &self,
+                _: SubnetId,
+                _: &Certification,
+                _: RegistryVersion,
+            ) -> ValidationResult<VerifierError> {
+                Ok(())
+            }
+        }
+
+        let state_path = self.state_path();
+        let config = ic_config::state_manager::Config::new(state_path);
+        let state_manager = StateManagerImpl::new(
+            Arc::new(FakeVerifier),
+            subnet_id,
+            subnet_type,
+            ic_logger::replica_logger::no_op_logger(),
+            &ic_metrics::MetricsRegistry::new(),
+            &config,
+            None,
+            ic_types::malicious_flags::MaliciousFlags::default(),
+        );
+
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Full);
+
+        loop {
+            match state_manager.get_state_hash_at(Height::new(1)) {
+                Ok(state_hash) => break state_hash.get().0,
+                Err(StateHashError::Transient(_)) => (),
+                Err(StateHashError::Permanent(err)) => {
+                    panic!("Failed to generate initial state {:?}", err)
+                }
+            }
+        }
     }
 }
 

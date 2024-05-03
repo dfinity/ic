@@ -70,7 +70,7 @@ dfx deploy orchestrator --network ic --argument "(variant { InitArg = record { m
 ----
 ====
 
-. Deploy the ckERC20 helper smart contract on Sepolia. You can copy over the existing https://sepolia.etherscan.io/address/0xe1788e4834c896f1932188645cc36c54d1b80ac1#code#code[one] and deploy it from https://remix.ethereum.org/[Remix]. To instantiate it, uses the previously obtained minter address `0x0dBf8d65e434f30738b7Bcbfe5C1F22bb7A7eC81` for the field `cketh_minter_main_address`.
+. Deploy the ckERC20 helper smart contract on Sepolia. You can copy over the existing https://sepolia.etherscan.io/address/0x674Cdbe64Df412DA9bAb1596e00c1520979B5A23#code#code[one] and deploy it from https://remix.ethereum.org/[Remix]. To instantiate it, uses the previously obtained minter address `0x0dBf8d65e434f30738b7Bcbfe5C1F22bb7A7eC81` for the field `cketh_minter_main_address`.
 . On https://sepolia.etherscan.io/address/0x1714678828a618742b5705631f175346e8388b93[Etherscan], verify the contract and publish the source code so that the contract can be interacted with on Etherscan directly.
 
 .Upgrade the minter to active ckERC20 support

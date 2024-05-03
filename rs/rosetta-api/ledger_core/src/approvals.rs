@@ -184,15 +184,15 @@ where
 
             match table.allowances.entry(key.clone()) {
                 Entry::Vacant(e) => {
-                    if amount == Tokens::zero() {
-                        return Ok(amount);
-                    }
                     if let Some(expected_allowance) = expected_allowance {
                         if !expected_allowance.is_zero() {
                             return Err(ApproveError::AllowanceChanged {
                                 current_allowance: Tokens::zero(),
                             });
                         }
+                    }
+                    if amount == Tokens::zero() {
+                        return Ok(amount);
                     }
                     if let Some(expires_at) = expires_at {
                         table.expiration_queue.insert((expires_at, key.clone()));
@@ -208,10 +208,17 @@ where
                 Entry::Occupied(mut e) => {
                     let allowance = e.get_mut();
                     if let Some(expected_allowance) = expected_allowance {
-                        if expected_allowance != allowance.amount {
-                            return Err(ApproveError::AllowanceChanged {
-                                current_allowance: allowance.amount.clone(),
-                            });
+                        let current_allowance = if let Some(expires_at) = allowance.expires_at {
+                            if expires_at <= now {
+                                Tokens::zero()
+                            } else {
+                                allowance.amount.clone()
+                            }
+                        } else {
+                            allowance.amount.clone()
+                        };
+                        if expected_allowance != current_allowance {
+                            return Err(ApproveError::AllowanceChanged { current_allowance });
                         }
                     }
                     table

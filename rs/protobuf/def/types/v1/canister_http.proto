@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package types.v1;
 
+import "types/v1/errors.proto";
 import "types/v1/types.proto";
 
 message HttpHeader {
@@ -38,7 +39,8 @@ message CanisterHttpResponseContent {
 }
 
 message CanisterHttpReject {
-  uint32 reject_code = 1;
+  uint32 reject_code_old = 1;
+  types.v1.RejectCode reject_code = 3;
   string message = 2;
 }
 

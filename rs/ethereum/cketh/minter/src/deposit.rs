@@ -11,6 +11,7 @@ use hex_literal::hex;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
+use scopeguard::ScopeGuard;
 use std::cmp::{min, Ordering};
 use std::time::Duration;
 
@@ -33,6 +34,18 @@ async fn mint() {
     let mut error_count = 0;
 
     for event in events {
+        // Ensure that even if we were to panic in the callback, after having contacted the ledger to mint the tokens,
+        // this event will not be processed again.
+        let prevent_double_minting_guard = scopeguard::guard(event.clone(), |event| {
+            mutate_state(|s| {
+                process_event(
+                    s,
+                    EventType::QuarantinedDeposit {
+                        event_source: event.source(),
+                    },
+                )
+            });
+        });
         let (token_symbol, ledger_canister_id) = match &event {
             ReceivedEvent::Eth(_) => ("ckETH".to_string(), eth_ledger_canister_id),
             ReceivedEvent::Erc20(event) => {
@@ -56,7 +69,7 @@ async fn mint() {
         let block_index = match client
             .transfer(TransferArg {
                 from_subaccount: None,
-                to: (*event.principal()).into(),
+                to: (event.principal()).into(),
                 fee: None,
                 created_at_time: None,
                 memo: Some((&event).into()),
@@ -68,6 +81,8 @@ async fn mint() {
             Ok(Err(err)) => {
                 log!(INFO, "Failed to mint {token_symbol}: {event:?} {err}");
                 error_count += 1;
+                // minting failed, defuse guard
+                ScopeGuard::into_inner(prevent_double_minting_guard);
                 continue;
             }
             Err(err) => {
@@ -76,6 +91,8 @@ async fn mint() {
                     "Failed to send a message to the ledger ({ledger_canister_id}): {err:?}"
                 );
                 error_count += 1;
+                // minting failed, defuse guard
+                ScopeGuard::into_inner(prevent_double_minting_guard);
                 continue;
             }
         };
@@ -103,6 +120,8 @@ async fn mint() {
             event.value(),
             event.principal()
         );
+        // minting succeeded, defuse guard
+        ScopeGuard::into_inner(prevent_double_minting_guard);
     }
 
     if error_count > 0 {
@@ -195,7 +214,7 @@ where
                     event.value(),
                     event.principal()
                 );
-                if crate::blocklist::is_blocked(event.from_address()) {
+                if crate::blocklist::is_blocked(&event.from_address()) {
                     log!(
                         INFO,
                         "Received event from a blocked address: {} for {} {topic_name}",

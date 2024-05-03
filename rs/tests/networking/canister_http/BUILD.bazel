@@ -1,0 +1,48 @@
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//rs/tests:system_tests.bzl", "uvm_config_image")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "universal_vm_activation.sh",
+])
+
+rust_library(
+    name = "canister_http",
+    srcs = ["canister_http.rs"],
+    crate_name = "canister_http",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests",
+        "//rs/types/types",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+uvm_config_image(
+    name = "http_uvm_config_image",
+    srcs = [
+        ":minica_image",
+        ":universal_vm_activation.sh",
+        "//ic-os/rootfs/guestos:dev-certs/canister_http_test_ca.cert",
+        "//ic-os/rootfs/guestos:dev-certs/canister_http_test_ca.key",
+        "//rs/tests/httpbin-rs:httpbin_image.tar",
+    ],
+    remap_paths = {
+        "universal_vm_activation.sh": "activate",
+        "canister_http_test_ca.cert": "cert.pem",
+        "canister_http_test_ca.key": "key.pem",
+    },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+)
+
+copy_file(
+    name = "minica_image",
+    src = "@minica//image",
+    out = "minica.tar",
+)

@@ -26,11 +26,12 @@ use ic_sns_wasm::{
         AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse, GetAllowedPrincipalsRequest,
         GetAllowedPrincipalsResponse, GetDeployedSnsByProposalIdRequest,
         GetDeployedSnsByProposalIdResponse, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
-        GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, GetWasmRequest, GetWasmResponse,
-        InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
-        ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStepsRequest,
-        ListUpgradeStepsResponse, SnsWasmError, UpdateAllowedPrincipalsRequest,
-        UpdateAllowedPrincipalsResponse, UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+        GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, GetWasmMetadataRequest,
+        GetWasmMetadataResponse, GetWasmRequest, GetWasmResponse, InsertUpgradePathEntriesRequest,
+        InsertUpgradePathEntriesResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
+        ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsWasmError,
+        UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
+        UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
     },
     sns_wasm::SnsWasmCanister,
 };
@@ -380,6 +381,22 @@ fn get_wasm() {
 #[candid_method(query, rename = "get_wasm")]
 fn get_wasm_(get_wasm_payload: GetWasmRequest) -> GetWasmResponse {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_wasm(get_wasm_payload))
+}
+
+#[export_name = "canister_query get_wasm_metadata"]
+fn get_wasm_metadata() {
+    over(candid_one, get_wasm_metadata_)
+}
+
+#[candid_method(query, rename = "get_wasm_metadata")]
+fn get_wasm_metadata_(
+    get_wasm_metadata_payload: GetWasmMetadataRequest,
+) -> GetWasmMetadataResponse {
+    SNS_WASM.with(|sns_wasm| {
+        sns_wasm
+            .borrow()
+            .get_wasm_metadata(get_wasm_metadata_payload)
+    })
 }
 
 #[export_name = "canister_query get_next_sns_version"]

@@ -1,18 +1,18 @@
 name: Main CI
 on:
-  # Todo: re-enable once github runner resources have been set
-  # push:
   merge_group:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-  push:
-    branches:
-      - master
+  # Todo: re-enable once we have more capacity
+  # push:
+  #   branches:
+  #     - master
   pull_request:
 # runs for the same workflow are cancelled on PRs but not on master
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
   cancel-in-progress: true
+permissions: read-all
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
@@ -26,25 +26,36 @@ env:
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
+  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
+  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
 jobs:
   bazel-test-all:
     name: Bazel-Test-All
     runs-on:
       labels: bazel-runner-large
     container:
-      image: dfinity/ic-build:abbdc66c19bf32eda2109f97e39fde519ef9b452ab54aee52b234af8638983d8
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
+    outputs:
+      artifacts_produced: ${{ steps.bazel-test-all.outputs.upload_artifacts }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
         if: ${{ github.event_name == 'pull_request' }}
         with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 256
       - name: Checkout
         uses: actions/checkout@v3
         if: ${{ github.event_name != 'pull_request' }}
+      - name: Docker RO SA login
+        id: docker-ro-login
+        shell: bash
+        run: |
+          docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+          if which docker-bin 2>/dev/null; then
+              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+          fi
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -58,26 +69,154 @@ jobs:
           # run on diff only if it is a pull request, otherwise run all targets
           RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
       - name: After script
+        id: after-script
+        shell: bash
         run: |
           bazel clean
-        # - name: Upload Bazel artifacts
-        #   uses: actions/upload-artifact@v3
-        #   if: success() || failure() # don't run if CI job is cancelled
-        #   with:
-        #     name: bazel-artifacts
-        #     retention-days: 2
-        #     if-no-files-found: ignore
-        #     compression-level: 7
-        #     path: |
-        #       bazel-build-log*.json*
-        #       bazel-bep.pb
-        #       bazel-testlogs/**/test.xml
+        #  rm -rf "${CI_PROJECT_DIR}/" # this doesn't work, TODO: figure out if and where data gets stored
+      - name: Upload bazel-targets
+        uses: actions/upload-artifact@v3
+        if: ${{ needs.bazel-test-all.outputs.upload_artifacts == 'true' }}
+        with:
+          name: bazel-targets
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            bazel-targets
+  bazel-test-all-rebuild:
+    name: Bazel-Test-All-Rebuild
+    runs-on:
+      labels: bazel-runner-large
+    container:
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
+    timeout-minutes: 90
+    if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          fetch-depth: 256
+      # TODO: only on master
+      - name: Checkout
+        uses: actions/checkout@v3
+        if: ${{ github.event_name != 'pull_request' }}
+      - name: Docker RO SA login
+        id: docker-ro-login
+        shell: bash
+        run: |
+          docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+          if which docker-bin 2>/dev/null; then
+              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+          fi
+      - name: Run Bazel Test All Rebuild
+        id: bazel-test-all-rebuild
+        uses: ./.github/actions/bazel-test-all/
+        with:
+          BAZEL_CI_CONFIG: "--config=ci"
+          BAZEL_COMMAND: "build"
+          BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
+      - name: After script
+        id: after-script
+        shell: bash
+        run: |
+          bazel clean
+        #  rm -rf "${CI_PROJECT_DIR}/" # this doesn't work, TODO: figure out if and where data gets stored
+  bazel-config-check-all-rebuild:
+    runs-on:
+      labels: bazel-runner-large
+    container:
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
+    timeout-minutes: 90
+    if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
+    name: Bazel-Config-Check-All-Rebuild
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          fetch-depth: 256
+      - name: Checkout
+        uses: actions/checkout@v3
+        if: ${{ github.event_name != 'pull_request' }}
+      - name: Docker RO SA login
+        id: docker-ro-login
+        shell: bash
+        run: |
+          docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+          if which docker-bin 2>/dev/null; then
+              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+          fi
+      - name: Run bazel build --config=check //rs/...
+        id: bazel-build-config-check
+        uses: ./.github/actions/bazel-test-all/
+        with:
+          BAZEL_COMMAND: "build"
+          BAZEL_TARGETS: "//rs/..."
+          BAZEL_CI_CONFIG: "--config=check"
+          # run on diff only if it is a pull request, otherwise run all targets
+          RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
+      - name: After script
+        id: after-script
+        shell: bash
+        run: |
+          bazel clean
+        #  rm -rf "${CI_PROJECT_DIR}/" # this doesn't work, TODO: figure out if and where data gets stored
+  bazel-test-macos:
+    name: Bazel-Test-MacOS
+    timeout-minutes: 90
+    if: ${{ vars.RUN_CI == 'true' && github.event_name != 'pull_request' && github.event_name != 'merge_group' }} # disable until we have more macos runners
+    runs-on:
+      labels: macos
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          filters: |
+            bazel-test-macos:
+              - '.github/workflows/main-ci.yml'
+              - '.bazelrc'
+              - '.bazelversion'
+              - '**/*.bazel'
+              - '**/*.bzl'
+              - '**/*.lock'
+              - '**/*.rs'
+              - '**/*.toml'
+      - name: Docker RO SA login
+        id: docker-ro-login
+        shell: bash
+        run: |
+          docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+          if which docker-bin 2>/dev/null; then
+              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+          fi
+      - name: Run Bazel Test MacOS
+        id: bazel-test-macos
+        if: steps.filter.outputs.bazel-test-macos != 'false'
+        uses: ./.github/actions/bazel-test-all/
+        with:
+          BAZEL_CI_CONFIG: "--config=ci --config macos_ci"
+          BAZEL_COMMAND: test
+          BAZEL_EXTRA_ARGS: "--test_tag_filters=test_macos"
+          BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output//${ROOT_PIPELINE_ID}"
+          BAZEL_TARGETS: "//rs/... //publish/binaries/..."
+      - name: No run
+        if: steps.filter.outputs.bazel-test-macos == 'false'
+        run: echo "No changes, skipping run"
+      - name: After script
+        id: after-script
+        shell: bash
+        run: |
+          sudo rm -rf /var/tmp/bazel-output//${ROOT_PIPELINE_ID}
   bazel-build-fuzzers:
     name: Bazel-Build-Fuzzers
     runs-on:
       labels: bazel-runner-small
     container:
-      image: dfinity/ic-build:abbdc66c19bf32eda2109f97e39fde519ef9b452ab54aee52b234af8638983d8
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -91,12 +230,18 @@ jobs:
           BAZEL_TARGETS: "//rs/..."
           BAZEL_CI_CONFIG: "--config=ci"
           BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
+      - name: After script
+        id: after-script
+        shell: bash
+        run: |
+          bazel clean
+        #  rm -rf "${CI_PROJECT_DIR}/" # this doesn't work, TODO: figure out if and where data gets stored
   bazel-build-fuzzers-afl:
     name: Bazel-Build-Fuzzers-AFL
     runs-on:
       labels: bazel-runner-small
     container:
-      image: dfinity/ic-build:abbdc66c19bf32eda2109f97e39fde519ef9b452ab54aee52b234af8638983d8
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -110,14 +255,17 @@ jobs:
           BAZEL_TARGETS: "//rs/..."
           BAZEL_CI_CONFIG: "--config=ci"
           BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
+      - name: After script
+        id: after-script
+        shell: bash
+        run: |
+          bazel clean
+        #  rm -rf "${CI_PROJECT_DIR}/" # this doesn't work, TODO: figure out if and where data gets stored
   python-ci-tests:
     name: Python-CI-Tests
-    runs-on:
-      labels: default-runner
-    container:
-      image: dfinity/ic-build:abbdc66c19bf32eda2109f97e39fde519ef9b452ab54aee52b234af8638983d8
+    runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}v
+    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -126,16 +274,122 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
-          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies:$PYTHONPATH
+          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
           pytest --ignore=gitlab_config/ --ignore=git_changes/ -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
+  build-ic:
+    name: Build-IC
+    runs-on:
+      labels: bazel-runner-large
+    container:
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
+    timeout-minutes: 90
+    if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
+    outputs:
+      artifacts_produced: ${{ steps.build-ic.outputs.upload_artifacts }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          fetch-depth: 256
+      - name: Checkout
+        uses: actions/checkout@v3
+        if: ${{ github.event_name != 'pull_request' }}
+      - name: Docker RO SA login
+        id: docker-ro-login
+        shell: bash
+        run: |
+          docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+          if which docker-bin 2>/dev/null; then
+              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+          fi
+      - name: Run Build IC
+        id: build-ic
+        shell: bash
+        run: |
+          set -eExuo pipefail
+          rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
+          mkdir -p "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts"
+          ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/ic/ic/artifacts
+          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
+              "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-ic.sh
+          rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
+        env:
+          RUN_ON_DIFF_ONLY: "true"
+          BAZEL_COMMAND: "build"
+      - name: Upload build-ic.tar
+        uses: actions/upload-artifact@v3
+        if: ${{ needs.build-ic.outputs.upload_artifacts == 'true' }}
+        with:
+          name: build-ic
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            build-ic.tar
+  build-determinism:
+    name: Build Determinism
+    runs-on:
+      labels: default-runner
+    container:
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
+    timeout-minutes: 30
+    needs: [build-ic, bazel-test-all]
+    if: ${{ needs.build-ic.outputs.artifacts_produced == 'true' && needs.bazel-test-all.outputs.artifacts_produced == 'true' }}
+    strategy:
+      matrix:
+        include:
+          - TARGET: "//publish/binaries:upload"
+            PATH0: "release"
+            PATH1: "build-ic/release"
+            SETUPOS_FLAG: "false"
+          - TARGET: "//publish/canisters:upload"
+            PATH0: "canisters"
+            PATH1: "build-ic/canisters"
+            SETUPOS_FLAG: "false"
+          - TARGET: "//ic-os/guestos/envs/prod:upload_disk-img"
+            PATH0: "guest-os/update-img"
+            PATH1: "build-ic/icos/guestos"
+            SETUPOS_FLAG: "false"
+          - TARGET: "//ic-os/hostos/envs/prod:upload_update-img"
+            PATH0: "host-os/update-img"
+            PATH1: "build-ic/icos/hostos"
+            SETUPOS_FLAG: "false"
+          - TARGET: "//ic-os/setupos/envs/prod:upload_disk-img"
+            PATH0: "setup-os/disk-img"
+            PATH1: "build-ic/icos/setupos"
+            SETUPOS_FLAG: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Download bazel-targets [bazel-test-all]
+        uses: actions/download-artifact@v3
+        with:
+          name: bazel-targets
+      - name: Download build-ic.tar [build-ic]
+        uses: actions/download-artifact@v3
+        with:
+          name: build-ic
+      - name: Build Determinism Test
+        id: build-determinism
+        shell: bash
+        run: |
+          set -eExuo pipefail
+          git config --global safe.directory '*'
+          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
+              "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-determinism.sh
+        env:
+          TARGET: ${{ matrix.TARGET }}
+          PATH0: ${{ matrix.PATH0 }}
+          PATH1: ${{ matrix.PATH1 }}
+          SETUPOS_FLAG: ${{ matrix.SETUPOS_FLAG }}
   cargo-clippy-linux:
     name: Cargo-Clippy-Linux
     runs-on:
       labels: bazel-runner-small
     container:
-      image: dfinity/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -165,9 +419,9 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: dfinity/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
-    timeout-minutes: 30
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     if: ${{ vars.RUN_CI == 'true' }}
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4

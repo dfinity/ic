@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-async-trait = "0.1.42"
+async-trait = { workspace = true }
 candid = { workspace = true }
 dfn_candid = { path = "../../../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../../../rust_canisters/dfn_core" }

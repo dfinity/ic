@@ -1,15 +1,19 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::DashboardTemplate;
-use candid::Principal;
-use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
+use crate::erc20::CkErc20Token;
+use candid::{Nat, Principal};
+use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{
-    BlockNumber, CkTokenAmount, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex,
+    BlockNumber, CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex,
     TransactionNonce, Wei, WeiPerGas,
 };
 use ic_cketh_minter::state::audit::{apply_state_transition, EventType};
-use ic_cketh_minter::state::transactions::{EthWithdrawalRequest, Subaccount};
+use ic_cketh_minter::state::transactions::{
+    create_transaction, Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex,
+    Subaccount, WithdrawalRequest,
+};
 use ic_cketh_minter::state::State;
 use ic_cketh_minter::tx::{
     Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest, TransactionPrice,
@@ -20,7 +24,7 @@ use std::str::FromStr;
 
 #[test]
 fn should_display_metadata() {
-    let dashboard = DashboardTemplate {
+    let mut dashboard = DashboardTemplate {
         minter_address: "0x1789F79e95324A47c5Fd6693071188e82E9a3558".to_string(),
         eth_helper_contract_address: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
         ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
@@ -31,10 +35,11 @@ fn should_display_metadata() {
         ..initial_dashboard()
     };
 
-    DashboardAssert::assert_that(dashboard)
+    DashboardAssert::assert_that(dashboard.clone())
         .has_ethereum_network("Ethereum Testnet Sepolia")
         .has_minter_address("0x1789F79e95324A47c5Fd6693071188e82E9a3558")
         .has_eth_helper_contract_address("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34")
+        .has_erc20_helper_contract_address("N/A")
         .has_ledger_canister_id("apia6-jaaaa-aaaar-qabma-cai")
         .has_tecdsa_key_name("key_1")
         .has_next_transaction_nonce("42")
@@ -42,30 +47,38 @@ fn should_display_metadata() {
         .has_eth_balance("0")
         .has_total_effective_tx_fees("0")
         .has_total_unspent_tx_fees("0");
+
+    dashboard.erc20_helper_contract_address =
+        "0xE1788E4834c896F1932188645cc36c54d1b80AC1".to_string();
+    DashboardAssert::assert_that(dashboard.clone())
+        .has_erc20_helper_contract_address("0xE1788E4834c896F1932188645cc36c54d1b80AC1");
 }
 
 #[test]
 fn should_display_block_sync() {
     let dashboard = DashboardTemplate {
         last_observed_block: None,
-        last_synced_block: BlockNumber::from(4552270_u32),
+        last_eth_synced_block: BlockNumber::from(4552270_u32),
         ..initial_dashboard()
     };
     DashboardAssert::assert_that(dashboard)
         .has_no_elements_matching("#last-observed-block-number")
-        .has_last_synced_block_href("https://sepolia.etherscan.io/block/4552270")
+        .has_no_elements_matching("#last-erc20-synced-block-number")
+        .has_last_eth_synced_block_href("https://sepolia.etherscan.io/block/4552270")
         .has_first_synced_block_href("https://sepolia.etherscan.io/block/3956207")
         .has_no_elements_matching("#skipped-blocks");
 
     let dashboard = DashboardTemplate {
         last_observed_block: Some(BlockNumber::from(4552271_u32)),
-        last_synced_block: BlockNumber::from(4552270_u32),
+        last_eth_synced_block: BlockNumber::from(4552270_u32),
+        last_erc20_synced_block: Some(BlockNumber::from(4552269_u32)),
         skipped_blocks: btreeset! {BlockNumber::from(3552270_u32), BlockNumber::from(2552270_u32)},
         ..initial_dashboard()
     };
     DashboardAssert::assert_that(dashboard)
         .has_last_observed_block_href("https://sepolia.etherscan.io/block/4552271")
-        .has_last_synced_block_href("https://sepolia.etherscan.io/block/4552270")
+        .has_last_eth_synced_block_href("https://sepolia.etherscan.io/block/4552270")
+        .has_last_erc20_synced_block_href("https://sepolia.etherscan.io/block/4552269")
         .has_first_synced_block_href("https://sepolia.etherscan.io/block/3956207")
         .has_skipped_blocks(
             r#"<a href="https://sepolia.etherscan.io/block/2552270"><code>2552270</code></a>, <a href="https://sepolia.etherscan.io/block/3552270"><code>3552270</code></a>"#,
@@ -81,48 +94,102 @@ fn should_display_block_sync() {
 }
 
 #[test]
-fn should_display_events_to_mint_sorted_by_decreasing_block_number() {
-    DashboardAssert::assert_that(initial_dashboard()).has_no_elements_matching("#events-to-mint");
-
+fn should_display_supported_erc20_tokens() {
+    let usdc = ckusdc();
+    let usdt = ckusdt();
     let dashboard = {
         let mut state = initial_state();
+        state.ethereum_network = EthereumNetwork::Mainnet;
+        state.record_add_ckerc20_token(usdc.clone());
+        state.record_add_ckerc20_token(usdt.clone());
+        DashboardTemplate::from_state(&state)
+    };
+
+    DashboardAssert::assert_that(dashboard)
+        .has_supported_erc20_tokens(
+            1,
+            &vec![
+                "ckUSDC",
+                "0",
+                "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                "mxzaz-hqaaa-aaaar-qaada-cai",
+            ],
+        )
+        .has_supported_erc20_tokens(
+            2,
+            &vec![
+                "ckUSDT",
+                "0",
+                "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                "sa4so-piaaa-aaaar-qacnq-cai",
+            ],
+        );
+}
+
+#[test]
+fn should_display_pending_deposits_sorted_by_decreasing_block_number() {
+    DashboardAssert::assert_that(initial_dashboard()).has_no_elements_matching("#pending-deposits");
+
+    let dashboard = {
+        let mut state = initial_state_with_usdc_support();
+
         let event_1 = ReceivedEthEvent {
             block_number: BlockNumber::from(3960623_u32),
             ..received_eth_event()
         };
         let event_2 = ReceivedEthEvent {
-            block_number: BlockNumber::from(3960624_u32),
+            block_number: BlockNumber::from(3960625_u32),
             transaction_hash: "0x5e5a5954e0a6fe5e61067330ea6f1398425a5e01a1dc1ef895b5dde00994e796"
                 .parse()
                 .unwrap(),
             ..received_eth_event()
         };
+        let event_3 = ReceivedErc20Event {
+            block_number: BlockNumber::from(3960624_u32),
+            ..received_erc20_event()
+        };
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(event_1));
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(event_2));
+        apply_state_transition(&mut state, &EventType::AcceptedErc20Deposit(event_3));
         DashboardTemplate::from_state(&state)
     };
 
     DashboardAssert::assert_that(dashboard)
         .has_eth_balance("20_000_000_000_000_000")
+        .has_erc20_balance(&ckusdc(), "10_000_000_000_000_000_000")
         .has_total_effective_tx_fees("0")
         .has_total_unspent_tx_fees("0")
-        .has_events_to_mint(
+        .has_pending_deposits(
             1,
             &vec![
                 "0x5e5a5954e0a6fe5e61067330ea6f1398425a5e01a1dc1ef895b5dde00994e796",
                 "29",
                 "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
+                "ckETH",
                 "10_000_000_000_000_000",
                 "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae",
+                "3960625",
+            ],
+        )
+        .has_pending_deposits(
+            2,
+            &vec![
+                "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87",
+                "39",
+                "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
+                "ckUSDC",
+                "10_000_000_000_000_000_000",
+                "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe",
                 "3960624",
             ],
         )
-        .has_events_to_mint(
-            2,
+        .has_pending_deposits(
+            3,
             &vec![
                 "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2",
                 "29",
                 "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
+                "ckETH",
                 "10_000_000_000_000_000",
                 "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae",
                 "3960623",
@@ -135,20 +202,29 @@ fn should_display_minted_events_sorted_by_decreasing_mint_block_index() {
     DashboardAssert::assert_that(initial_dashboard()).has_no_elements_matching("#minted-events");
 
     let dashboard = {
-        let mut state = initial_state();
+        let mut state = initial_state_with_usdc_support();
+
         let event_1 = ReceivedEthEvent {
             block_number: BlockNumber::from(3960623_u32),
             ..received_eth_event()
         };
         let event_2 = ReceivedEthEvent {
-            block_number: BlockNumber::from(3960624_u32),
+            block_number: BlockNumber::from(3960625_u32),
             transaction_hash: "0x5e5a5954e0a6fe5e61067330ea6f1398425a5e01a1dc1ef895b5dde00994e796"
                 .parse()
                 .unwrap(),
             ..received_eth_event()
         };
+        let event_3 = ReceivedErc20Event {
+            block_number: BlockNumber::from(3960624_u32),
+            ..received_erc20_event()
+        };
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(event_1.clone()));
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(event_2.clone()));
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedErc20Deposit(event_3.clone()),
+        );
         apply_state_transition(
             &mut state,
             &EventType::MintedCkEth {
@@ -163,6 +239,15 @@ fn should_display_minted_events_sorted_by_decreasing_mint_block_index() {
                 mint_block_index: LedgerMintIndex::new(43),
             },
         );
+        apply_state_transition(
+            &mut state,
+            &EventType::MintedCkErc20 {
+                event_source: event_3.source(),
+                ckerc20_token_symbol: "ckUSDC".to_string(),
+                erc20_contract_address: event_3.erc20_contract_address,
+                mint_block_index: LedgerMintIndex::new(44),
+            },
+        );
         DashboardTemplate::from_state(&state)
     };
 
@@ -173,6 +258,7 @@ fn should_display_minted_events_sorted_by_decreasing_mint_block_index() {
                 "0x5e5a5954e0a6fe5e61067330ea6f1398425a5e01a1dc1ef895b5dde00994e796",
                 "29",
                 "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
+                "ckETH",
                 "10_000_000_000_000_000",
                 "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae",
                 "43",
@@ -181,9 +267,22 @@ fn should_display_minted_events_sorted_by_decreasing_mint_block_index() {
         .has_minted_events(
             2,
             &vec![
+                "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87",
+                "39",
+                "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
+                "ckUSDC",
+                "10_000_000_000_000_000_000",
+                "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe",
+                "44",
+            ],
+        )
+        .has_minted_events(
+            3,
+            &vec![
                 "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2",
                 "29",
                 "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
+                "ckETH",
                 "10_000_000_000_000_000",
                 "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae",
                 "42",
@@ -236,7 +335,7 @@ fn should_display_rejected_deposits() {
             &vec![
                 "0x05c6ec45699c9a6a4b1a4ea2058b0cee852ea2f19b18fb8313c04bf8156efde4",
                 "11",
-                "failed to decode principal",
+                "Invalid deposit: failed to decode principal",
             ],
         )
         .has_rejected_deposits(
@@ -244,29 +343,65 @@ fn should_display_rejected_deposits() {
             &vec![
                 "0x09a5ee10c942f99b79cabcfb9647fc06e79489c6a8e96d39faed4f3ac6bc83d3",
                 "0",
-                "failed to decode principal",
+                "Invalid deposit: failed to decode principal",
             ],
         );
 }
 
 #[test]
-fn should_display_withdrawal_requests_sorted_by_decreasing_ledger_burn_index() {
+fn should_display_correct_cketh_token_symbol_based_on_network() {
+    fn test(ethereum_network: EthereumNetwork, expected_symbol: &str) {
+        let dashboard = {
+            let mut state = initial_state();
+            state.ethereum_network = ethereum_network;
+            apply_state_transition(
+                &mut state,
+                &EventType::AcceptedEthWithdrawalRequest(cketh_withdrawal_request_with_index(
+                    LedgerBurnIndex::new(15),
+                )),
+            );
+            DashboardTemplate::from_state(&state)
+        };
+        DashboardAssert::assert_that(dashboard).has_withdrawal_requests(
+            1,
+            &vec![
+                "15",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                expected_symbol,
+                "1_100_000_000_000_000",
+                "N/A",
+            ],
+        );
+    }
+    test(EthereumNetwork::Sepolia, "ckSepoliaETH");
+    test(EthereumNetwork::Mainnet, "ckETH");
+}
+
+#[test]
+fn should_display_withdrawal_requests_sorted_by_decreasing_cketh_ledger_burn_index() {
     DashboardAssert::assert_that(initial_dashboard())
         .has_no_elements_matching("#withdrawal-requests");
 
     let dashboard = {
-        let mut state = initial_state();
+        let mut state = initial_state_with_usdc_support();
         apply_state_transition(
             &mut state,
-            &EventType::AcceptedEthWithdrawalRequest(withdrawal_request_with_index(
+            &EventType::AcceptedEthWithdrawalRequest(cketh_withdrawal_request_with_index(
                 LedgerBurnIndex::new(15),
+            )),
+        );
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedErc20WithdrawalRequest(ckerc20_withdrawal_request_with_index(
+                LedgerBurnIndex::new(16),
+                &ckusdc(),
             )),
         );
         apply_state_transition(
             &mut state,
             &EventType::AcceptedEthWithdrawalRequest(EthWithdrawalRequest {
                 created_at: Some(1699540751000000000),
-                ..withdrawal_request_with_index(LedgerBurnIndex::new(16))
+                ..cketh_withdrawal_request_with_index(LedgerBurnIndex::new(17))
             }),
         );
         DashboardTemplate::from_state(&state)
@@ -276,8 +411,9 @@ fn should_display_withdrawal_requests_sorted_by_decreasing_ledger_burn_index() {
         .has_withdrawal_requests(
             1,
             &vec![
-                "16",
+                "17",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckETH",
                 "1_100_000_000_000_000",
                 "2023-11-09T14:39:11+00:00",
             ],
@@ -285,8 +421,19 @@ fn should_display_withdrawal_requests_sorted_by_decreasing_ledger_burn_index() {
         .has_withdrawal_requests(
             2,
             &vec![
+                "16",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckUSDC",
+                "2_000_000",
+                "2024-04-05T08:23:43+00:00",
+            ],
+        )
+        .has_withdrawal_requests(
+            3,
+            &vec![
                 "15",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckETH",
                 "1_100_000_000_000_000",
                 "N/A",
             ],
@@ -294,48 +441,69 @@ fn should_display_withdrawal_requests_sorted_by_decreasing_ledger_burn_index() {
 }
 
 #[test]
-fn should_display_pending_transactions_sorted_by_decreasing_ledger_burn_index() {
+fn should_display_pending_transactions_sorted_by_decreasing_cketh_ledger_burn_index() {
     DashboardAssert::assert_that(initial_dashboard())
         .has_no_elements_matching("#pending-transactions");
 
     let dashboard = {
-        let mut state = initial_state();
-        let id_1 = LedgerBurnIndex::new(15);
-        let (req_1, tx_1, _signed_tx_1, _receipt_1) = withdrawal_flow(
-            id_1,
-            TransactionNonce::from(0_u8),
-            TransactionStatus::Success,
-        );
-        apply_state_transition(&mut state, &EventType::AcceptedEthWithdrawalRequest(req_1));
-        apply_state_transition(
-            &mut state,
-            &EventType::CreatedTransaction {
-                withdrawal_id: id_1,
-                transaction: tx_1,
-            },
-        );
+        let mut state = initial_state_with_usdc_support();
+        for (req, tx, _signed_tx, _receipt) in vec![
+            cketh_withdrawal_flow(
+                LedgerBurnIndex::new(15),
+                TransactionNonce::from(0_u8),
+                TransactionStatus::Success,
+            ),
+            ckerc20_withdrawal_flow(
+                LedgerBurnIndex::new(16),
+                TransactionNonce::from(1_u8),
+                &ckusdc(),
+                TransactionStatus::Success,
+            ),
+        ] {
+            apply_state_transition(
+                &mut state,
+                &req.clone().into_accepted_withdrawal_request_event(),
+            );
+            apply_state_transition(
+                &mut state,
+                &EventType::CreatedTransaction {
+                    withdrawal_id: req.cketh_ledger_burn_index(),
+                    transaction: tx,
+                },
+            );
+        }
 
-        let id_2 = LedgerBurnIndex::new(16);
-        let (req_2, tx_2, signed_tx_2, _receipt_2) = withdrawal_flow(
-            id_2,
-            TransactionNonce::from(1_u8),
-            TransactionStatus::Success,
-        );
-        apply_state_transition(&mut state, &EventType::AcceptedEthWithdrawalRequest(req_2));
-        apply_state_transition(
-            &mut state,
-            &EventType::CreatedTransaction {
-                withdrawal_id: id_2,
-                transaction: tx_2,
-            },
-        );
-        apply_state_transition(
-            &mut state,
-            &EventType::SignedTransaction {
-                withdrawal_id: id_2,
-                transaction: signed_tx_2,
-            },
-        );
+        for (req, tx, signed_tx, _receipt) in vec![
+            cketh_withdrawal_flow(
+                LedgerBurnIndex::new(17),
+                TransactionNonce::from(2_u8),
+                TransactionStatus::Success,
+            ),
+            ckerc20_withdrawal_flow(
+                LedgerBurnIndex::new(18),
+                TransactionNonce::from(3_u8),
+                &ckusdc(),
+                TransactionStatus::Success,
+            ),
+        ] {
+            let withdrawal_id = req.cketh_ledger_burn_index();
+            apply_state_transition(&mut state, &req.into_accepted_withdrawal_request_event());
+            apply_state_transition(
+                &mut state,
+                &EventType::CreatedTransaction {
+                    withdrawal_id,
+                    transaction: tx,
+                },
+            );
+            apply_state_transition(
+                &mut state,
+                &EventType::SignedTransaction {
+                    withdrawal_id,
+                    transaction: signed_tx,
+                },
+            );
+        }
+
         DashboardTemplate::from_state(&state)
     };
 
@@ -343,17 +511,39 @@ fn should_display_pending_transactions_sorted_by_decreasing_ledger_burn_index() 
         .has_pending_transactions(
             1,
             &vec![
-                "16",
+                "18",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
-                "1_058_000_000_000_000",
-                "Sent(0x9a4793ece4b3a487679a43dd465d8a4855fa2a23adc128a59eaaa9eb5837105e)",
+                "ckUSDC",
+                "2_000_000",
+                "Sent(0xb5115ef5e39db0cfca5589ac2dca8a91e59825af1216c01826fbf39c3eaeb0c2)",
             ],
         )
         .has_pending_transactions(
             2,
             &vec![
+                "17",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckETH",
+                "1_058_000_000_000_000",
+                "Sent(0xada056f5d3942fac34371527524b5ee8a45833eb5edc41a06ac7a742a6a59762)",
+            ],
+        )
+        .has_pending_transactions(
+            3,
+            &vec![
+                "16",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckUSDC",
+                "2_000_000",
+                "Created",
+            ],
+        )
+        .has_pending_transactions(
+            4,
+            &vec![
                 "15",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckETH",
                 "1_058_000_000_000_000",
                 "Created",
             ],
@@ -361,12 +551,12 @@ fn should_display_pending_transactions_sorted_by_decreasing_ledger_burn_index() 
 }
 
 #[test]
-fn should_display_finalized_transactions_sorted_by_decreasing_ledger_burn_index() {
+fn should_display_finalized_transactions_sorted_by_decreasing_cketh_ledger_burn_index() {
     DashboardAssert::assert_that(initial_dashboard())
         .has_no_elements_matching("#finalized-transactions");
 
     let dashboard = {
-        let mut state = initial_state();
+        let mut state = initial_state_with_usdc_support();
         let deposit = received_eth_event();
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(deposit.clone()));
         apply_state_transition(
@@ -376,20 +566,38 @@ fn should_display_finalized_transactions_sorted_by_decreasing_ledger_burn_index(
                 mint_block_index: LedgerMintIndex::new(42),
             },
         );
+        let deposit = received_erc20_event();
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedErc20Deposit(deposit.clone()),
+        );
+        apply_state_transition(
+            &mut state,
+            &EventType::MintedCkEth {
+                event_source: deposit.source(),
+                mint_block_index: LedgerMintIndex::new(43),
+            },
+        );
         for (req, tx, signed_tx, receipt) in vec![
-            withdrawal_flow(
+            cketh_withdrawal_flow(
                 LedgerBurnIndex::new(15),
                 TransactionNonce::from(0_u8),
                 TransactionStatus::Success,
             ),
-            withdrawal_flow(
+            cketh_withdrawal_flow(
                 LedgerBurnIndex::new(16),
                 TransactionNonce::from(1_u8),
                 TransactionStatus::Failure,
             ),
+            ckerc20_withdrawal_flow(
+                LedgerBurnIndex::new(17),
+                TransactionNonce::from(2_u8),
+                &ckusdc(),
+                TransactionStatus::Success,
+            ),
         ] {
-            let id = req.ledger_burn_index;
-            apply_state_transition(&mut state, &EventType::AcceptedEthWithdrawalRequest(req));
+            let id = req.cketh_ledger_burn_index();
+            apply_state_transition(&mut state, &req.into_accepted_withdrawal_request_event());
             apply_state_transition(
                 &mut state,
                 &EventType::CreatedTransaction {
@@ -417,14 +625,29 @@ fn should_display_finalized_transactions_sorted_by_decreasing_ledger_burn_index(
     };
 
     DashboardAssert::assert_that(dashboard)
-        .has_eth_balance("8_900_000_000_000_000")
-        .has_total_effective_tx_fees("42_000_000_000_000")
-        .has_total_unspent_tx_fees("42_000_000_000_000")
+        .has_eth_balance("8_835_000_000_000_000")
+        .has_total_effective_tx_fees("107_000_000_000_000")
+        .has_total_unspent_tx_fees("107_000_000_000_000")
+        .has_erc20_balance(&ckusdc(), "9_999_999_999_998_000_000")
         .has_finalized_transactions(
             1,
             &vec![
+                "17",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckUSDC",
+                "2_000_000",
+                "65_000_000_000_000",
+                "5558738",
+                "0xe0e5b9da5c1e550501f9ded95c65741b18eec0873db82bb416293b8a42207071",
+                "Success",
+            ],
+        )
+        .has_finalized_transactions(
+            2,
+            &vec![
                 "16",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckETH",
                 "1_058_000_000_000_000",
                 "21_000_000_000_000",
                 "4190269",
@@ -433,10 +656,11 @@ fn should_display_finalized_transactions_sorted_by_decreasing_ledger_burn_index(
             ],
         )
         .has_finalized_transactions(
-            2,
+            3,
             &vec![
                 "15",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckETH",
                 "1_058_000_000_000_000",
                 "21_000_000_000_000",
                 "4190269",
@@ -478,7 +702,7 @@ fn should_display_reimbursed_requests() {
     let reimbursed_amount = CkTokenAmount::new(100_102);
 
     let dashboard = {
-        let mut state = initial_state();
+        let mut state = initial_state_with_usdc_support();
         let deposit = received_eth_event();
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(deposit.clone()));
         apply_state_transition(
@@ -489,25 +713,55 @@ fn should_display_reimbursed_requests() {
             },
         );
 
-        for (req, tx, signed_tx, receipt) in vec![
-            withdrawal_flow(
-                LedgerBurnIndex::new(15),
-                TransactionNonce::from(0_u8),
-                TransactionStatus::Success,
+        for ((req, tx, signed_tx, receipt), is_reimbursed) in vec![
+            (
+                cketh_withdrawal_flow(
+                    LedgerBurnIndex::new(15),
+                    TransactionNonce::from(0_u8),
+                    TransactionStatus::Success,
+                ),
+                true,
             ),
-            withdrawal_flow(
-                LedgerBurnIndex::new(16),
-                TransactionNonce::from(1_u8),
-                TransactionStatus::Failure,
+            (
+                cketh_withdrawal_flow(
+                    LedgerBurnIndex::new(16),
+                    TransactionNonce::from(1_u8),
+                    TransactionStatus::Failure,
+                ),
+                true,
             ),
-            withdrawal_flow(
-                LedgerBurnIndex::new(17),
-                TransactionNonce::from(2_u8),
-                TransactionStatus::Failure,
+            (
+                cketh_withdrawal_flow(
+                    LedgerBurnIndex::new(17),
+                    TransactionNonce::from(2_u8),
+                    TransactionStatus::Failure,
+                ),
+                true,
+            ),
+            (
+                ckerc20_withdrawal_flow(
+                    LedgerBurnIndex::new(18),
+                    TransactionNonce::from(3_u8),
+                    &ckusdc(),
+                    TransactionStatus::Failure,
+                ),
+                true,
+            ),
+            (
+                ckerc20_withdrawal_flow(
+                    LedgerBurnIndex::new(19),
+                    TransactionNonce::from(4_u8),
+                    &ckusdc(),
+                    TransactionStatus::Failure,
+                ),
+                false,
             ),
         ] {
-            let id = req.ledger_burn_index;
-            apply_state_transition(&mut state, &EventType::AcceptedEthWithdrawalRequest(req));
+            let id = req.cketh_ledger_burn_index();
+            apply_state_transition(
+                &mut state,
+                &req.clone().into_accepted_withdrawal_request_event(),
+            );
             apply_state_transition(
                 &mut state,
                 &EventType::CreatedTransaction {
@@ -530,15 +784,43 @@ fn should_display_reimbursed_requests() {
                 },
             );
             if receipt.status == TransactionStatus::Failure {
-                apply_state_transition(
-                    &mut state,
-                    &EventType::ReimbursedEthWithdrawal(Reimbursed {
-                        transaction_hash: Some(receipt.transaction_hash),
-                        burn_in_block: id,
-                        reimbursed_in_block,
-                        reimbursed_amount,
-                    }),
-                );
+                if is_reimbursed {
+                    match req {
+                        WithdrawalRequest::CkEth(_) => {
+                            apply_state_transition(
+                                &mut state,
+                                &EventType::ReimbursedEthWithdrawal(Reimbursed {
+                                    transaction_hash: Some(receipt.transaction_hash),
+                                    burn_in_block: id,
+                                    reimbursed_in_block,
+                                    reimbursed_amount,
+                                }),
+                            );
+                        }
+                        WithdrawalRequest::CkErc20(r) => {
+                            apply_state_transition(
+                                &mut state,
+                                &EventType::ReimbursedErc20Withdrawal {
+                                    cketh_ledger_burn_index: id,
+                                    ckerc20_ledger_id: r.ckerc20_ledger_id,
+                                    reimbursed: Reimbursed {
+                                        transaction_hash: Some(receipt.transaction_hash),
+                                        burn_in_block: r.ckerc20_ledger_burn_index,
+                                        reimbursed_in_block,
+                                        reimbursed_amount,
+                                    },
+                                },
+                            );
+                        }
+                    }
+                } else {
+                    apply_state_transition(
+                        &mut state,
+                        &EventType::QuarantinedReimbursement {
+                            index: ReimbursementIndex::from(&req),
+                        },
+                    )
+                }
             }
         }
         DashboardTemplate::from_state(&state)
@@ -549,8 +831,35 @@ fn should_display_reimbursed_requests() {
         .has_finalized_transactions(
             1,
             &vec![
+                "19",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckUSDC",
+                "2_000_000",
+                "65_000_000_000_000",
+                "5558738",
+                "0x132db1a0a7d5fd70b73fc4b36bce26d3c0625bcfafe0a17b4016de6acaa1852c",
+                "Failure",
+            ],
+        )
+        .has_finalized_transactions(
+            2,
+            &vec![
+                "18",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckUSDC",
+                "2_000_000",
+                "65_000_000_000_000",
+                "5558738",
+                "0xb5115ef5e39db0cfca5589ac2dca8a91e59825af1216c01826fbf39c3eaeb0c2",
+                "Failure",
+            ],
+        )
+        .has_finalized_transactions(
+            3,
+            &vec![
                 "17",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckETH",
                 "1_058_000_000_000_000",
                 "21_000_000_000_000",
                 "4190269",
@@ -559,10 +868,11 @@ fn should_display_reimbursed_requests() {
             ],
         )
         .has_finalized_transactions(
-            2,
+            4,
             &vec![
                 "16",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckETH",
                 "1_058_000_000_000_000",
                 "21_000_000_000_000",
                 "4190269",
@@ -571,10 +881,11 @@ fn should_display_reimbursed_requests() {
             ],
         )
         .has_finalized_transactions(
-            3,
+            5,
             &vec![
                 "15",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckETH",
                 "1_058_000_000_000_000",
                 "21_000_000_000_000",
                 "4190269",
@@ -582,22 +893,38 @@ fn should_display_reimbursed_requests() {
                 "Success",
             ],
         )
-        .has_reimbursed_transactions(
-            1,
-            &vec![
-                "17",
-                "123",
-                "1_058_000_000_000_000",
-                "0xada056f5d3942fac34371527524b5ee8a45833eb5edc41a06ac7a742a6a59762",
-            ],
-        )
+        .has_reimbursed_transactions(1, &vec!["19", "N/A", "ckUSDC", "N/A", "N/A", "Quarantined"])
         .has_reimbursed_transactions(
             2,
             &vec![
+                "18",
+                "123",
+                "ckUSDC",
+                "2_000_000",
+                "0xb5115ef5e39db0cfca5589ac2dca8a91e59825af1216c01826fbf39c3eaeb0c2",
+                "Reimbursed",
+            ],
+        )
+        .has_reimbursed_transactions(
+            3,
+            &vec![
+                "17",
+                "123",
+                "ckETH",
+                "1_058_000_000_000_000",
+                "0xada056f5d3942fac34371527524b5ee8a45833eb5edc41a06ac7a742a6a59762",
+                "Reimbursed",
+            ],
+        )
+        .has_reimbursed_transactions(
+            4,
+            &vec![
                 "16",
                 "123",
+                "ckETH",
                 "1_058_000_000_000_000",
                 "0x9a4793ece4b3a487679a43dd465d8a4855fa2a23adc128a59eaaa9eb5837105e",
+                "Reimbursed",
             ],
         );
 }
@@ -615,11 +942,18 @@ fn initial_state() -> State {
         ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
             .expect("BUG: invalid principal"),
         ethereum_block_height: Default::default(),
-        minimum_withdrawal_amount: Wei::TWO.into(),
+        minimum_withdrawal_amount: Nat::from(10_000_000_000_000_000_u64),
         next_transaction_nonce: TransactionNonce::ZERO.into(),
         last_scraped_block_number: candid::Nat::from(3_956_206_u32),
     })
     .expect("valid init args")
+}
+
+fn initial_state_with_usdc_support() -> State {
+    let mut state = initial_state();
+    state.ethereum_network = EthereumNetwork::Mainnet;
+    state.record_add_ckerc20_token(ckusdc());
+    state
 }
 
 fn received_eth_event() -> ReceivedEthEvent {
@@ -639,7 +973,49 @@ fn received_eth_event() -> ReceivedEthEvent {
     }
 }
 
-fn withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> EthWithdrawalRequest {
+fn received_erc20_event() -> ReceivedErc20Event {
+    ReceivedErc20Event {
+        transaction_hash: "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87"
+            .parse()
+            .unwrap(),
+        block_number: BlockNumber::new(5326500),
+        log_index: LogIndex::from(39_u8),
+        from_address: "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d"
+            .parse()
+            .unwrap(),
+        value: Erc20Value::from(10_000_000_000_000_000_000_u128),
+        principal: "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe"
+            .parse()
+            .unwrap(),
+        erc20_contract_address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+            .parse()
+            .unwrap(),
+    }
+}
+
+pub fn ckusdc() -> CkErc20Token {
+    CkErc20Token {
+        erc20_ethereum_network: EthereumNetwork::Mainnet,
+        erc20_contract_address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+            .parse()
+            .unwrap(),
+        ckerc20_token_symbol: "ckUSDC".parse().unwrap(),
+        ckerc20_ledger_id: "mxzaz-hqaaa-aaaar-qaada-cai".parse().unwrap(),
+    }
+}
+
+pub fn ckusdt() -> CkErc20Token {
+    CkErc20Token {
+        erc20_ethereum_network: EthereumNetwork::Mainnet,
+        erc20_contract_address: "0xdac17f958d2ee523a2206206994597c13d831ec7"
+            .parse()
+            .unwrap(),
+        ckerc20_token_symbol: "ckUSDT".parse().unwrap(),
+        ckerc20_ledger_id: "sa4so-piaaa-aaaar-qacnq-cai".parse().unwrap(),
+    }
+}
+
+fn cketh_withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> EthWithdrawalRequest {
     const DEFAULT_WITHDRAWAL_AMOUNT: u128 = 1_100_000_000_000_000;
     const DEFAULT_PRINCIPAL: &str =
         "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae";
@@ -655,17 +1031,39 @@ fn withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> EthWithd
     }
 }
 
-fn withdrawal_flow(
+fn ckerc20_withdrawal_request_with_index(
+    cketh_ledger_burn_index: LedgerBurnIndex,
+    ckerc20_token: &CkErc20Token,
+) -> Erc20WithdrawalRequest {
+    const DEFAULT_PRINCIPAL: &str =
+        "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae";
+    const DEFAULT_SUBACCOUNT: [u8; 32] = [0x11; 32];
+    const DEFAULT_RECIPIENT_ADDRESS: &str = "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34";
+    Erc20WithdrawalRequest {
+        max_transaction_fee: Wei::from(30_000_000_000_000_000_u64),
+        withdrawal_amount: Erc20Value::from(2_000_000_u32),
+        destination: Address::from_str(DEFAULT_RECIPIENT_ADDRESS).unwrap(),
+        cketh_ledger_burn_index,
+        erc20_contract_address: ckerc20_token.erc20_contract_address,
+        ckerc20_ledger_id: ckerc20_token.ckerc20_ledger_id,
+        ckerc20_ledger_burn_index: (cketh_ledger_burn_index.get() + 1_u64).into(),
+        from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
+        from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
+        created_at: 1712305423000000000,
+    }
+}
+
+fn cketh_withdrawal_flow(
     ledger_burn_index: LedgerBurnIndex,
     nonce: TransactionNonce,
     tx_status: TransactionStatus,
 ) -> (
-    EthWithdrawalRequest,
+    WithdrawalRequest,
     Eip1559TransactionRequest,
     SignedEip1559TransactionRequest,
     TransactionReceipt,
 ) {
-    let withdrawal_request = withdrawal_request_with_index(ledger_burn_index);
+    let withdrawal_request = cketh_withdrawal_request_with_index(ledger_burn_index);
     let fee = TransactionPrice {
         max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
         max_fee_per_gas: WeiPerGas::from(2_000_000_000_u64),
@@ -706,12 +1104,71 @@ fn withdrawal_flow(
         status: tx_status,
         transaction_hash: signed_tx.hash(),
     };
-    (withdrawal_request, transaction, signed_tx, tx_receipt)
+    (
+        withdrawal_request.into(),
+        transaction,
+        signed_tx,
+        tx_receipt,
+    )
+}
+
+fn ckerc20_withdrawal_flow(
+    cketh_ledger_burn_index: LedgerBurnIndex,
+    nonce: TransactionNonce,
+    ckerc20_token: &CkErc20Token,
+    tx_status: TransactionStatus,
+) -> (
+    WithdrawalRequest,
+    Eip1559TransactionRequest,
+    SignedEip1559TransactionRequest,
+    TransactionReceipt,
+) {
+    let withdrawal_request =
+        ckerc20_withdrawal_request_with_index(cketh_ledger_burn_index, ckerc20_token);
+    let fee = TransactionPrice {
+        max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
+        max_fee_per_gas: WeiPerGas::from(2_000_000_000_u64),
+        gas_limit: GasAmount::from(65_000_u32),
+    };
+    let transaction = create_transaction(
+        &withdrawal_request.clone().into(),
+        nonce,
+        fee,
+        EthereumNetwork::Sepolia,
+    )
+    .unwrap();
+    let dummy_signature = Eip1559Signature {
+        signature_y_parity: false,
+        r: Default::default(),
+        s: Default::default(),
+    };
+    let signed_tx = SignedEip1559TransactionRequest::from((transaction.clone(), dummy_signature));
+    let tx_receipt = TransactionReceipt {
+        block_hash: "0x736adb84ba42d14c2cd3611fce58bcc3d834938510739f3762c31b77d592a0e5"
+            .parse()
+            .unwrap(),
+        block_number: BlockNumber::new(5558738),
+        effective_gas_price: signed_tx
+            .transaction()
+            .max_fee_per_gas
+            .checked_div_ceil(2_u8)
+            .unwrap(),
+        gas_used: signed_tx.transaction().gas_limit,
+        status: tx_status,
+        transaction_hash: signed_tx.hash(),
+    };
+    (
+        withdrawal_request.into(),
+        transaction,
+        signed_tx,
+        tx_receipt,
+    )
 }
 
 mod assertions {
     use crate::dashboard::DashboardTemplate;
     use askama::Template;
+    use ic_cketh_minter::erc20::CkErc20Token;
     use scraper::Html;
     use scraper::Selector;
 
@@ -755,11 +1212,19 @@ mod assertions {
             )
         }
 
-        pub fn has_last_synced_block_href(&self, expected_href: &str) -> &Self {
+        pub fn has_last_eth_synced_block_href(&self, expected_href: &str) -> &Self {
             self.has_href_value(
-                "#last-synced-block-number > td > a",
+                "#last-eth-synced-block-number > td > a",
                 expected_href,
-                "wrong last synced block href",
+                "wrong last ETH synced block href",
+            )
+        }
+
+        pub fn has_last_erc20_synced_block_href(&self, expected_href: &str) -> &Self {
+            self.has_href_value(
+                "#last-erc20-synced-block-number > td > a",
+                expected_href,
+                "wrong last ERC20 synced block href",
             )
         }
 
@@ -810,7 +1275,15 @@ mod assertions {
             self.has_string_value(
                 "#eth-helper-contract-address > td",
                 expected_address,
-                "wrong contract address",
+                "wrong ETH helper contract address",
+            )
+        }
+
+        pub fn has_erc20_helper_contract_address(&self, expected_address: &str) -> &Self {
+            self.has_string_value(
+                "#erc20-helper-contract-address > td",
+                expected_address,
+                "wrong ERC20 helper contract address",
             )
         }
 
@@ -866,11 +1339,40 @@ mod assertions {
             )
         }
 
-        pub fn has_events_to_mint(&self, row_index: u8, expected_value: &Vec<&str>) -> &Self {
+        pub fn has_supported_erc20_tokens(
+            &self,
+            row_index: u8,
+            expected_token: &Vec<&str>,
+        ) -> &Self {
             self.has_table_row_string_value(
-                &format!("#events-to-mint + table > tbody > tr:nth-child({row_index})"),
+                &format!("#supported-ckerc20-tokens + table > tbody > tr:nth-child({row_index})"),
+                expected_token,
+                "wrong supported erc20 tokens",
+            )
+        }
+
+        pub fn has_erc20_balance(&self, token: &CkErc20Token, expected_balance: &str) -> &Self {
+            let token_symbol = format!("{}", token.ckerc20_token_symbol);
+            let erc20_contract = format!("{}", token.erc20_contract_address);
+            let ckerc20_ledger = format!("{}", token.ckerc20_ledger_id);
+            let expected_value = vec![
+                token_symbol.as_str(),
+                expected_balance,
+                erc20_contract.as_str(),
+                ckerc20_ledger.as_str(),
+            ];
+            self.has_table_row_string_value(
+                &format!("#supported-ckerc20-{}", token.ckerc20_ledger_id),
+                &expected_value,
+                "wrong supported erc20 tokens",
+            )
+        }
+
+        pub fn has_pending_deposits(&self, row_index: u8, expected_value: &Vec<&str>) -> &Self {
+            self.has_table_row_string_value(
+                &format!("#pending-deposits + table > tbody > tr:nth-child({row_index})"),
                 expected_value,
-                "events-to-mint",
+                "pending-deposits",
             )
         }
 
@@ -878,7 +1380,7 @@ mod assertions {
             self.has_table_row_string_value(
                 &format!("#minted-events + table > tbody > tr:nth-child({row_index})"),
                 expected_value,
-                "events-to-mint",
+                "minted-events",
             )
         }
 

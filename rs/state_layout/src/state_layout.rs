@@ -168,7 +168,6 @@ pub struct CanisterStateBits {
     pub canister_log: CanisterLog,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
-    pub snapshot_ids: BTreeSet<SnapshotId>,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -1889,15 +1888,17 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             consumed_cycles_since_replica_started_by_use_cases: item
                 .consumed_cycles_since_replica_started_by_use_cases
                 .into_iter()
-                .map(|entry| pb_canister_state_bits::ConsumedCyclesByUseCase {
-                    use_case: entry.0.into(),
-                    cycles: Some((&entry.1).into()),
-                })
+                .map(
+                    |(use_case, cycles)| pb_canister_state_bits::ConsumedCyclesByUseCase {
+                        use_case: pb_canister_state_bits::CyclesUseCase::from(use_case).into(),
+                        cycles: Some((&cycles).into()),
+                    },
+                )
                 .collect(),
             canister_history: Some((&item.canister_history).into()),
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
             total_query_stats: Some((&item.total_query_stats).into()),
-            log_visibility: item.log_visibility.into(),
+            log_visibility: pb_canister_state_bits::LogVisibility::from(item.log_visibility).into(),
             canister_log_records: item
                 .canister_log
                 .records()
@@ -1907,11 +1908,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             next_canister_log_record_idx: item.canister_log.next_idx(),
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
-            snapshot_ids: item
-                .snapshot_ids
-                .into_iter()
-                .map(|snapshot_id| snapshot_id.into())
-                .collect(),
         }
     }
 }
@@ -1955,17 +1951,35 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .map(|c| c.into())
             .unwrap_or_else(Cycles::zero);
 
-        let task_queue = value
+        let task_queue: Vec<_> = value
             .task_queue
             .into_iter()
             .map(|v| v.try_into())
             .collect::<Result<_, _>>()?;
+        if task_queue.len() > 1 {
+            return Err(ProxyDecodeError::Other(format!(
+                "Expecting at most one task queue entry. Found {:?}",
+                task_queue
+            )));
+        }
 
-        let snapshot_ids = value
-            .snapshot_ids
+        let mut consumed_cycles_since_replica_started_by_use_cases = BTreeMap::new();
+        for x in value
+            .consumed_cycles_since_replica_started_by_use_cases
             .into_iter()
-            .map(SnapshotId::try_from)
-            .collect::<Result<_, _>>()?;
+        {
+            consumed_cycles_since_replica_started_by_use_cases.insert(
+                CyclesUseCase::try_from(
+                    pb_canister_state_bits::CyclesUseCase::try_from(x.use_case).map_err(|_| {
+                        ProxyDecodeError::ValueOutOfRange {
+                            typ: "CyclesUseCase",
+                            err: format!("Unexpected value of cycles use case: {}", x.use_case),
+                        }
+                    })?,
+                )?,
+                NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
+            );
+        }
 
         Ok(Self {
             controllers,
@@ -2009,18 +2023,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             task_queue,
             global_timer_nanos: value.global_timer_nanos,
             canister_version: value.canister_version,
-            consumed_cycles_since_replica_started_by_use_cases: value
-                .consumed_cycles_since_replica_started_by_use_cases
-                .into_iter()
-                .map(
-                    |pb_canister_state_bits::ConsumedCyclesByUseCase { use_case, cycles }| {
-                        (
-                            CyclesUseCase::from(use_case),
-                            NominalCycles::try_from(cycles.unwrap_or_default()).unwrap_or_default(),
-                        )
-                    },
-                )
-                .collect(),
+            consumed_cycles_since_replica_started_by_use_cases,
             // TODO(MR-412): replace `unwrap_or_default` by returning an error on missing canister_history field
             canister_history: try_from_option_field(
                 value.canister_history,
@@ -2037,7 +2040,17 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::total_query_stats",
             )
             .unwrap_or_default(),
-            log_visibility: value.log_visibility.try_into()?,
+            log_visibility: LogVisibility::from(
+                pb_canister_state_bits::LogVisibility::try_from(value.log_visibility).map_err(
+                    |_| ProxyDecodeError::ValueOutOfRange {
+                        typ: "LogVisibility",
+                        err: format!(
+                            "Unexpected value of log visibility: {}",
+                            value.log_visibility
+                        ),
+                    },
+                )?,
+            ),
             canister_log: CanisterLog::new(
                 value.next_canister_log_record_idx,
                 value
@@ -2048,7 +2061,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             ),
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
-            snapshot_ids,
         })
     }
 }

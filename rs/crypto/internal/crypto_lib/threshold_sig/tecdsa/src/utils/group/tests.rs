@@ -147,3 +147,20 @@ fn non_adjacent_form_transformation_is_correct_ecc_scalar_random_samples(
     }
     Ok(())
 }
+
+#[test]
+fn bip340_k256_serialization_roundtrip_works_correctly() {
+    let rng = &mut reproducible_rng();
+    const K256: EccCurveType = EccCurveType::K256;
+    let mut p = EccPoint::generator_g(K256)
+        .scalar_mul(&EccScalar::random(K256, rng))
+        .expect("failed to generate random point");
+    if !p.is_y_even().expect("failed to check if point is even") {
+        p = p.negate();
+    }
+
+    let raw = p.serialize_bip340().expect("failed to serialize");
+    let deserialized = EccPoint::deserialize_bip340(K256, &raw).expect("failed to deserialize");
+
+    assert_eq!(p, deserialized);
+}

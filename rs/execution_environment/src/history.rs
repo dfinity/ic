@@ -307,18 +307,6 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         CanisterMethodNotFound => "Canister Method Not Found",
         CanisterWasmModuleNotFound => "Canister WASM Module Not Found",
         CanisterAlreadyInstalled => "Canister Already Installed",
-        // TODO: RUN-948: Backward compatibility
-        DeprecatedCanisterMethodNotFound => "Canister Not Found",
-        DeprecatedCanisterAlreadyInstalled => "Canister Already Installed",
-        DeprecatedCanisterWasmModuleNotFound => "Canister WASM Module Not Found",
-        DeprecatedCanisterOutOfCycles => "Canister Out Of Cycles",
-        DeprecatedCertifiedStateUnavailable => "Certified State Unavailable",
-        DeprecatedCanisterRejectedMessage => "Canister rejected the message",
-        DeprecatedUnknownManagementMessage => "Unknown management method",
-        DeprecatedInvalidManagementPayload => "Invalid management message payload",
-        DeprecatedCanisterInstallCodeRateLimited => {
-            "Canister is rate limited because it executed too many instructions \
-                in the previous install_code messages"
-        }
+        CanisterWasmMemoryLimitExceeded => "Canister exceeded its Wasm memory limit",
     }
 }

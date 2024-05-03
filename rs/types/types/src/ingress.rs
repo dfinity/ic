@@ -2,7 +2,7 @@
 
 use crate::artifact::IngressMessageId;
 use crate::{CanisterId, CountBytes, PrincipalId, Time, UserId};
-use ic_error_types::{ErrorCode, TryFromError, UserError};
+use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::ingress::v1 as pb_ingress,
@@ -86,7 +86,7 @@ impl IngressStatus {
     }
 
     /// Returns the name of this status as specified in the interface spec:
-    /// `<https://sdk.dfinity.org/docs/interface-spec/index.html#state-tree-request-status>`
+    /// `<https://internetcomputer.org/docs/current/references/ic-interface-spec#state-tree-request-status>`
     pub fn as_str(&self) -> &'static str {
         match self {
             IngressStatus::Known { state, .. } => match state {
@@ -259,9 +259,9 @@ impl From<&IngressStatus> for pb_ingress::IngressStatus {
                     status: Some(Status::Failed(pb_ingress::IngressStatusFailed {
                         receiver: Some(pb_types::PrincipalId::from(*receiver)),
                         user_id: Some(crate::user_id_into_protobuf(*user_id)),
-                        err_code: error.code() as u64,
                         err_description: error.description().to_string(),
                         time_nanos: time.as_nanos_since_unix_epoch(),
+                        err_code: pb_ingress::ErrorCode::from(error.code()).into(),
                     })),
                 },
                 IngressState::Processing => Self {
@@ -331,14 +331,12 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                         "IngressStatus::Failed::user_id",
                     )?)?,
                     state: IngressState::Failed(UserError::from_proto(
-                        ErrorCode::try_from(f.err_code).map_err(|err| match err {
-                            TryFromError::ValueOutOfRange(code) => {
-                                ProxyDecodeError::ValueOutOfRange {
-                                    typ: "ErrorCode",
-                                    err: code.to_string(),
-                                }
-                            }
-                        })?,
+                        ErrorCode::try_from(pb_ingress::ErrorCode::try_from(f.err_code).map_err(
+                            |_| ProxyDecodeError::ValueOutOfRange {
+                                typ: "ErrorCode",
+                                err: f.err_code.to_string(),
+                            },
+                        )?)?,
                         f.err_description,
                     )),
                 },

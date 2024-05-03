@@ -27,7 +27,6 @@ use ic_config::{
     crypto::CryptoConfig,
     embedders::Config as EmbeddersConfig,
     embedders::FeatureFlags,
-    embedders::MeteringType,
     execution_environment::Config as HypervisorConfig,
     flag_status::FlagStatus,
     http_handler::Config as HttpHandlerConfig,
@@ -130,6 +129,7 @@ fn main() -> Result<()> {
                 vec![],
                 vec![],
                 SubnetRunningState::default(),
+                None,
             ),
         );
 
@@ -336,11 +336,6 @@ struct CliArgs {
     /// Used only for local replicas.
     #[clap(long = "use-specified-ids-allocation-range")]
     use_specified_ids_allocation_range: bool,
-
-    /// Whether the old metering and costs should be used.
-    /// By default, the new metering is used.
-    #[clap(long = "use-old-metering")]
-    use_old_metering: bool,
 }
 
 impl CliArgs {
@@ -544,7 +539,6 @@ impl CliArgs {
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path,
             https_outcalls_uds_path: self.canister_http_uds_path,
             use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
-            use_old_metering: self.use_old_metering,
         })
     }
 }
@@ -586,7 +580,6 @@ struct ValidatedConfig {
     bitcoin_testnet_uds_path: Option<PathBuf>,
     https_outcalls_uds_path: Option<PathBuf>,
     use_specified_ids_allocation_range: bool,
-    use_old_metering: bool,
 
     // Not intended to ever be read: role is to keep the temp dir from being deleted.
     _state_dir_holder: Option<TempDir>,
@@ -639,12 +632,8 @@ impl ValidatedConfig {
             embedders_config: EmbeddersConfig {
                 feature_flags: FeatureFlags {
                     rate_limiting_of_debug_prints: FlagStatus::Disabled,
+                    canister_logging: FlagStatus::Enabled,
                     ..FeatureFlags::default()
-                },
-                metering_type: if self.use_old_metering {
-                    MeteringType::Old
-                } else {
-                    MeteringType::New
                 },
                 ..EmbeddersConfig::default()
             },
@@ -654,7 +643,6 @@ impl ValidatedConfig {
             wasm_chunk_store: FlagStatus::Enabled,
             query_stats_aggregation: FlagStatus::Enabled,
             query_stats_epoch_length: 60,
-            canister_logging: FlagStatus::Enabled,
             ..HypervisorConfig::default()
         };
 

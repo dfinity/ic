@@ -158,14 +158,12 @@ struct ProtogenFile<'a> {
 
 static MACRO_CRATES: &[&str] = &[
     "async-trait",
-    "derive_more",
     "dfn_macro",
     "fe-derive",
     "hex-literal",
     "ic-nervous-system-common-build-metadata",
     "paste",
     "proptest-derive",
-    "slog_derive",
     "strum_macros",
 ];
 

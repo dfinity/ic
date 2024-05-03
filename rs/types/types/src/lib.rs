@@ -69,7 +69,6 @@ pub mod batch;
 pub mod canister_http;
 pub mod consensus;
 pub mod crypto;
-pub mod filetree_sync;
 pub mod funds;
 pub mod hostos_version;
 pub mod ingress;
@@ -83,7 +82,6 @@ pub mod registry;
 pub mod replica_config;
 pub mod replica_version;
 pub mod signature;
-pub mod single_chunked;
 pub mod state_sync;
 pub mod time;
 pub mod xnet;
@@ -230,7 +228,7 @@ impl ComputeAllocation {
     }
 }
 
-// The default `ComputeAllocation` is 0: https://sdk.dfinity.org/docs/interface-spec/index.html#ic-install_code.
+// The default `ComputeAllocation` is 0: https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-install_code.
 #[allow(clippy::derivable_impls)]
 impl Default for ComputeAllocation {
     fn default() -> Self {

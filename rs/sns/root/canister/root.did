@@ -6,7 +6,9 @@ type CanisterStatusResult = record {
   memory_size : nat;
   cycles : nat;
   settings : DefiniteCanisterSettings;
+  idle_cycles_burned_per_day : opt nat;
   module_hash : opt blob;
+  reserved_cycles : opt nat;
 };
 type CanisterStatusResultV2 = record {
   status : CanisterStatusType;
@@ -30,7 +32,13 @@ type ChangeCanisterRequest = record {
   memory_allocation : opt nat;
   compute_allocation : opt nat;
 };
-type DefiniteCanisterSettings = record { controllers : vec principal };
+type DefiniteCanisterSettings = record {
+  freezing_threshold : opt nat;
+  controllers : vec principal;
+  reserved_cycles_limit : opt nat;
+  memory_allocation : opt nat;
+  compute_allocation : opt nat;
+};
 type DefiniteCanisterSettingsArgs = record {
   freezing_threshold : nat;
   controllers : vec principal;
@@ -65,6 +73,7 @@ type ManageDappCanisterSettingsRequest = record {
   canister_ids : vec principal;
   reserved_cycles_limit : opt nat64;
   log_visibility : opt int32;
+  wasm_memory_limit : opt nat64;
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
 };

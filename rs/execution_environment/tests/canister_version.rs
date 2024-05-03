@@ -41,7 +41,7 @@ fn execute_ingress_with_dts(
                 state: IngressState::Completed(result),
                 ..
             } => {
-                assert!(dts == (tick > 0));
+                assert_eq!(dts, 0 < tick);
                 return Ok(result);
             }
             IngressStatus::Known {

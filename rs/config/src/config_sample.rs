@@ -348,6 +348,16 @@ pub const SAMPLE_CONFIG: &str = r#"
         max_simultaneous_connections_per_ip_address: 0,
     },
 
+    boundary_node_firewall: {
+        config_file: "/path/to/nftables/config",
+        file_template: "",
+        ipv4_tcp_rule_template: "",
+        ipv4_udp_rule_template: "",
+        ipv6_tcp_rule_template: "",
+        ipv6_udp_rule_template: "",
+        default_rules: [],
+    },
+
     // =================================
     // Configuration of registration parameters.
     // =================================

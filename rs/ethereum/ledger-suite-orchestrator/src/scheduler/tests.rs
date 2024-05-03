@@ -1,11 +1,8 @@
-use crate::candid::{AddCkErc20Token, InitArg, LedgerInitArg};
+use crate::candid::{AddCkErc20Token, CyclesManagement, InitArg, LedgerInitArg};
 use crate::management::{CallError, Reason};
 use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
 use crate::scheduler::tests::mock::MockCanisterRuntime;
-use crate::scheduler::{
-    InstallLedgerSuiteArgs, Task, TaskError, TaskExecution, MINIMUM_MONITORED_CANISTER_CYCLES,
-    MINIMUM_ORCHESTRATOR_CYCLES,
-};
+use crate::scheduler::{cycles_to_u128, InstallLedgerSuiteArgs, Task, TaskError, TaskExecution};
 use crate::state::test_fixtures::new_state;
 use crate::state::{
     read_state, Canisters, GitCommitHash, IndexCanister, LedgerCanister, ManagedCanisterStatus,
@@ -59,8 +56,11 @@ async fn should_install_ledger_suite() {
 async fn should_top_up_canister() {
     use mockall::Sequence;
     init_state();
+    let cycles_management = CyclesManagement::default();
+    let orchestrator_cycles = cycles_to_u128(cycles_management.minimum_orchestrator_cycles()) * 2;
+    let low_cycles = cycles_to_u128(cycles_management.minimum_monitored_canister_cycles()) / 2;
+    let enough_cycles = cycles_to_u128(cycles_management.minimum_monitored_canister_cycles());
     let mut runtime = MockCanisterRuntime::new();
-
     runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
     expect_create_canister_returning(
         &mut runtime,
@@ -82,14 +82,14 @@ async fn should_top_up_canister() {
     let mut seq = Sequence::new();
     runtime
         .expect_canister_cycles()
-        .times(2)
-        .in_sequence(&mut seq)
-        .return_const(Ok(MINIMUM_MONITORED_CANISTER_CYCLES as u128 / 2));
-    runtime
-        .expect_canister_cycles()
         .times(1)
         .in_sequence(&mut seq)
-        .return_const(Ok(MINIMUM_ORCHESTRATOR_CYCLES as u128 * 2));
+        .return_const(Ok(orchestrator_cycles));
+    runtime
+        .expect_canister_cycles()
+        .times(2)
+        .in_sequence(&mut seq)
+        .return_const(Ok(low_cycles));
 
     runtime
         .expect_send_cycles()
@@ -103,15 +103,14 @@ async fn should_top_up_canister() {
     let mut seq = Sequence::new();
     runtime
         .expect_canister_cycles()
-        .times(2)
-        .in_sequence(&mut seq)
-        .return_const(Ok(MINIMUM_MONITORED_CANISTER_CYCLES as u128 / 2));
-    runtime
-        .expect_canister_cycles()
         .times(1)
         .in_sequence(&mut seq)
-        .return_const(Ok(MINIMUM_ORCHESTRATOR_CYCLES as u128 * 2));
-
+        .return_const(Ok(orchestrator_cycles));
+    runtime
+        .expect_canister_cycles()
+        .times(2)
+        .in_sequence(&mut seq)
+        .return_const(Ok(low_cycles));
     runtime
         .expect_send_cycles()
         .times(1)
@@ -120,15 +119,20 @@ async fn should_top_up_canister() {
             reason: Reason::OutOfCycles,
         }));
     runtime.expect_send_cycles().times(1).return_const(Ok(()));
-
     assert_eq!(task.execute(&runtime).await, Ok(()));
 
+    let mut seq = Sequence::new();
     runtime
         .expect_canister_cycles()
-        .times(3)
-        .return_const(Ok(MINIMUM_MONITORED_CANISTER_CYCLES as u128));
+        .times(1)
+        .in_sequence(&mut seq)
+        .return_const(Ok(orchestrator_cycles));
+    runtime
+        .expect_canister_cycles()
+        .times(2)
+        .in_sequence(&mut seq)
+        .return_const(Ok(enough_cycles));
     runtime.expect_send_cycles().never();
-
     assert_eq!(task.execute(&runtime).await, Ok(()));
 }
 
@@ -645,6 +649,106 @@ fn expect_call_canister_add_ckerc20_token(
                 && args == &expected_args
         })
         .return_const(mocked_result);
+}
+
+mod metrics {
+    use crate::management::CallError;
+    use crate::scheduler::metrics::observe_task_duration;
+    use crate::scheduler::{encode_orchestrator_metrics, Reason, Task, TaskError};
+    use std::time::Duration;
+
+    #[test]
+    fn should_aggregate_task_durations() {
+        observe_task_duration(&Task::MaybeTopUp, &Ok(()), 0, 1);
+        observe_task_duration(
+            &Task::MaybeTopUp,
+            &Ok(()),
+            0,
+            Duration::from_millis(6_500).as_nanos() as u64,
+        );
+        observe_task_duration(
+            &Task::MaybeTopUp,
+            &Err(TaskError::InterCanisterCallError(CallError {
+                method: "error".to_string(),
+                reason: Reason::OutOfCycles,
+            })),
+            0,
+            Duration::from_millis(22_500).as_nanos() as u64,
+        );
+
+        let mut encoder = ic_metrics_encoder::MetricsEncoder::new(Vec::new(), 12346789);
+        encode_orchestrator_metrics(&mut encoder).unwrap();
+        let bytes = encoder.into_inner();
+        let metrics_text = String::from_utf8(bytes).unwrap();
+
+        let actual = metrics_text.trim();
+        let expected = r#"
+# HELP orchestrator_tasks_duration_seconds Histogram of task execution durations in seconds.
+# TYPE orchestrator_tasks_duration_seconds histogram
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="0.1"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="0.5"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="1"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="2"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="3"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="4"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="5"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="6"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="7"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="8"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="9"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="10"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="12"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="14"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="16"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="18"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="20"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="25"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="30"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="35"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="40"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="50"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="100"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="200"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="500"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="+Inf"} 2 12346789
+orchestrator_tasks_duration_seconds_sum{task="maybe_top_up",result="ok"} 6.500000001 12346789
+orchestrator_tasks_duration_seconds_count{task="maybe_top_up",result="ok"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="0.1"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="0.5"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="1"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="2"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="3"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="4"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="5"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="6"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="7"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="8"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="9"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="10"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="12"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="14"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="16"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="18"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="20"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="25"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="30"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="35"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="40"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="50"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="100"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="200"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="500"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="+Inf"} 1 12346789
+orchestrator_tasks_duration_seconds_sum{task="maybe_top_up",result="err"} 22.5 12346789
+orchestrator_tasks_duration_seconds_count{task="maybe_top_up",result="err"} 1 12346789
+"#
+        .trim();
+        assert_eq!(
+            actual, expected,
+            "BUG: Unexpected task durations histogram. Actual:\n{}\nexpected:\n{}",
+            actual, expected
+        );
+    }
 }
 
 mod mock {

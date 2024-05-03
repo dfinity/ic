@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ic"
-version = "2.2.0"
+version = "3.1.0"
 license = "Apache-2.0"
 description = "PocketIC: A Canister Smart Contract Testing Platform"
 repository = "https://github.com/dfinity/ic"
@@ -21,20 +21,14 @@ edition.workspace = true
 
 [dependencies]
 candid = "^0.10.2"
-reqwest = { version = "0.11.22", default-features = false, features = [
-    "blocking",
-    "json",
-    "multipart",
-    "rustls-tls-webpki-roots",
-    "stream",
-] }
+reqwest = { workspace = true }
 serde = { version = "^1.0", features = ["derive"] }
 serde_json = "^1.0.107"
-serde_bytes = "^0.11"
-ic-cdk = "0.13.1"
+serde_bytes = { workspace = true }
+ic-cdk = "0.13.2"
 base64 = "^0.13.1"
+async-trait = { workspace = true }
 hex = { workspace = true }
-async-trait = "^0.1.73"
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }

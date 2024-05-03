@@ -15,7 +15,7 @@ end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
 use super::utils::ssh_access::execute_bash_command;
-use super::utils::upgrade::{bless_replica_version, update_subnet_replica_version};
+use super::utils::upgrade::{bless_replica_version, deploy_guestos_to_all_subnet_nodes};
 use crate::orchestrator::utils::rw_message::{
     can_read_msg_with_retries, cert_state_makes_no_progress_with_retries,
     store_message_with_retries,
@@ -83,7 +83,7 @@ pub fn test(test_env: TestEnv) {
     ));
 
     let subnet_id = test_env.topology_snapshot().root_subnet_id();
-    block_on(update_subnet_replica_version(
+    block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
         &ReplicaVersion::try_from(format!("{}-test", target_version))
             .expect("Wrong format of the version"),

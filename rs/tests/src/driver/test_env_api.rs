@@ -1030,24 +1030,13 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
 
     fn get_ic_os_img_url(&self) -> Result<Url> {
         let url =
-            match InfraProvider::read_attribute(&self.test_env()) {
-                InfraProvider::Farm => self
-                    .read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?,
-                InfraProvider::K8s => self
-                    .read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_GZ_CAS_URL")?,
-            };
+            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
         Ok(Url::parse(&url)?)
     }
 
     fn get_ic_os_img_sha256(&self) -> Result<String> {
-        let sha256 = match InfraProvider::read_attribute(&self.test_env()) {
-            InfraProvider::Farm => {
-                self.read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256")?
-            }
-            InfraProvider::K8s => {
-                self.read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_GZ_SHA256")?
-            }
-        };
+        let sha256 =
+            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256")?;
         bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
         Ok(sha256)
     }
@@ -1147,11 +1136,11 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_canister_http_test_ca_cert(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.cert";
+        let dep_rel_path = "ic-os/rootfs/guestos/dev-certs/canister_http_test_ca.cert";
         self.read_dependency_to_string(dep_rel_path)
     }
     fn get_canister_http_test_ca_key(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.key";
+        let dep_rel_path = "ic-os/rootfs/guestos/dev-certs/canister_http_test_ca.key";
         self.read_dependency_to_string(dep_rel_path)
     }
 

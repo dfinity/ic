@@ -11,7 +11,7 @@ use ic_interfaces::{
 use ic_logger::{warn, ReplicaLogger};
 use ic_registry_client_helpers::node::RegistryVersion;
 use ic_types::{
-    consensus::ecdsa::{EcdsaBlockReader, EcdsaMessage},
+    consensus::idkg::{EcdsaBlockReader, EcdsaMessage},
     crypto::canister_threshold_sig::idkg::{IDkgDealing, IDkgTranscriptParams, SignedIDkgDealing},
     crypto::{BasicSigOf, CryptoResult},
     malicious_flags::MaliciousFlags,

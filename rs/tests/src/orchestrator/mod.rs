@@ -5,7 +5,6 @@ pub mod node_registration_test;
 pub mod rotate_ecdsa_idkg_key;
 pub mod ssh_access_to_nodes;
 pub mod subnet_recovery_app_subnet;
-pub mod subnet_recovery_nns_failover;
 pub mod subnet_recovery_nns_subnet;
 pub mod subnet_splitting;
 pub mod unassigned_node_upgrade_test;

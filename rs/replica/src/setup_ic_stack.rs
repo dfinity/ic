@@ -15,7 +15,7 @@ use ic_interfaces::{
     time_source::SysTimeSource,
 };
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
-use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{info, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
@@ -23,7 +23,6 @@ use ic_metrics::MetricsRegistry;
 use ic_pprof::Pprof;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_registry_local_store::LocalStoreImpl;
 use ic_replica_setup_ic_network::setup_consensus_and_p2p;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
@@ -278,9 +277,6 @@ pub fn construct_ic_stack(
         .into_payload_builder(state_manager.clone(), node_id, log.clone());
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
-    let local_store_cert_time_reader: Arc<dyn LocalStoreCertifiedTimeReader> = Arc::new(
-        LocalStoreImpl::new(config.registry_client.local_store.clone()),
-    );
     let (ingress_throttler, ingress_tx, p2p_runner) = setup_consensus_and_p2p(
         log,
         metrics_registry,
@@ -290,7 +286,6 @@ pub fn construct_ic_stack(
         config.malicious_behaviour.malicious_flags.clone(),
         node_id,
         subnet_id,
-        Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
@@ -308,7 +303,6 @@ pub fn construct_ic_stack(
         registry.clone(),
         execution_services.ingress_history_reader,
         cycles_account_manager,
-        local_store_cert_time_reader,
         canister_http_adapter_client,
         config.nns_registry_replicator.poll_delay_duration_ms,
     );

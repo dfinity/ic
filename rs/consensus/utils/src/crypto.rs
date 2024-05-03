@@ -3,8 +3,8 @@ use ic_types::{
     canister_http::CanisterHttpResponseMetadata,
     consensus::{
         dkg,
-        ecdsa::{EcdsaComplaintContent, EcdsaOpeningContent},
         hashed::Hashed,
+        idkg::{EcdsaComplaintContent, EcdsaOpeningContent},
         Block, BlockMetadata, BlockProposal, CatchUpContent, FinalizationContent, HashedBlock,
         NotarizationContent, RandomBeaconContent, RandomTapeContent,
     },

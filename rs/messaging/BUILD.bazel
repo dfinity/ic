@@ -1,4 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -74,7 +75,7 @@ rust_test(
     ],
 )
 
-rust_test_suite(
+rust_ic_test_suite(
     name = "messaging_integration",
     srcs = glob(["tests/**/*.rs"]),
     data = [

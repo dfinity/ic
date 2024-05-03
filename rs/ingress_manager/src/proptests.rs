@@ -27,7 +27,6 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, node_test_id},
     messages::SignedIngressBuilder,
 };
-use ic_types::crypto::crypto_hash;
 use ic_types::{
     artifact::IngressMessageId, batch::ValidationContext, messages::SignedIngress,
     time::UNIX_EPOCH, CountBytes, Height, NumBytes, RegistryVersion,
@@ -82,11 +81,9 @@ proptest! {
                             message_id.clone(),
                             node_test_id(0),
                             m.count_bytes(),
-                            (),
-                            crypto_hash(m.binary()).get(),
                         ))]);
                         // check that message is indeed in the pool
-                        assert!(ingress_pool.contains(&message_id));
+                        assert!(ingress_pool.get(&message_id).is_some());
                     });
                 }
 

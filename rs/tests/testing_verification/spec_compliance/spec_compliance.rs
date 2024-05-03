@@ -1,7 +1,7 @@
+use canister_http::get_universal_vm_address;
 use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::canister_http::lib::get_universal_vm_address;
 use ic_tests::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
 use ic_tests::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources};
 use ic_tests::driver::test_env::TestEnv;
@@ -96,15 +96,20 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
     if http_requests {
         env::set_var(
             "SSL_CERT_FILE",
-            env.get_dependency_path("ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.cert"),
+            env.get_dependency_path("ic-os/rootfs/guestos/dev-certs/canister_http_test_ca.cert"),
         );
         env::remove_var("NIX_SSL_CERT_FILE");
 
         // Set up Universal VM for httpbin testing service
         UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-            .with_config_img(env.get_dependency_path("rs/tests/http_uvm_config_image.zst"))
+            .with_config_img(
+                env.get_dependency_path(
+                    "rs/tests/networking/canister_http/http_uvm_config_image.zst",
+                ),
+            )
             .start(&env)
             .expect("failed to set up universal VM");
+        canister_http::start_httpbin_on_uvm(&env);
         let log = env.logger();
         retry_with_msg!(
             "check if httpbin is responding to requests",

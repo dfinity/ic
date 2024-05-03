@@ -44,6 +44,9 @@ use std::time::Instant;
 
 const DEFRAG_SIZE: u64 = 1 << 29; // 500 MB
 const DEFRAG_SAMPLE: usize = 100;
+/// We merge starting from MAX_NUMBER_OF_FILES, we take up to 4 rounds to iterate over whole state,
+/// there are 2 overlays created each checkpoint.
+const NUMBER_OF_FILES_HARD_LIMIT: usize = MAX_NUMBER_OF_FILES + 8;
 
 /// Tip directory can be in following states:
 ///    Empty: no data available. The only possible request is ResetTipAndMerge to populate it
@@ -74,7 +77,7 @@ pub(crate) enum TipRequest {
     /// State: Serialized(height) -> Empty
     TipToCheckpoint {
         height: Height,
-        sender: Sender<Result<CheckpointLayout<ReadOnly>, LayoutError>>,
+        sender: Sender<Result<(CheckpointLayout<ReadOnly>, HasDowngrade), LayoutError>>,
     },
     /// Filter canisters in tip. Remove ones not present in the set.
     /// State: !Empty
@@ -90,10 +93,12 @@ pub(crate) enum TipRequest {
     },
     /// Reset tip folder to the checkpoint with given height.
     /// Merge overlays in tip folder if necessary.
+    /// If is_initializing, we have a state with potentially different LSMT status.
     /// State: * -> ReadyForPageDeltas(checkpoint_layout.height())
     ResetTipAndMerge {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         pagemaptypes_with_num_pages: Vec<(PageMapType, usize)>,
+        is_initializing_tip: bool,
     },
     /// Run one round of tip defragmentation.
     /// State: ReadyForPageDeltas(h) -> ReadyForPageDeltas(height), height >= h
@@ -131,17 +136,9 @@ fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum DowngradeState {
-    /// We don't know whether we need to downgrade.
-    Unknown,
-    /// We have discovered we need to downgrade and did the first step: merge all the overlays into
-    /// base files in Tip.
-    DowngradedTip,
-    /// We have created a first checkpoint without overlays.
-    DowngradedCheckpoint,
-    /// We don't need to downgrade. Either we have LSMT on or we have successfully created a
-    /// first downgraded checkpoint and recomputed full Manifest.
-    NotNeeded,
+pub enum HasDowngrade {
+    Yes,
+    No,
 }
 
 pub(crate) fn spawn_tip_thread(
@@ -159,11 +156,7 @@ pub(crate) fn spawn_tip_thread(
     // On top of tip state transitions, we enforce that each checkpoint gets manifest before we
     // create next one. Height(0) doesn't need manifest, so original state is true.
     let mut have_latest_manifest = true;
-    let mut downgrade_state = if lsmt_config.lsmt_status == FlagStatus::Enabled {
-        DowngradeState::NotNeeded
-    } else {
-        DowngradeState::Unknown
-    };
+    let mut tip_downgrade = HasDowngrade::No;
     let tip_handle = JoinOnDrop::new(
         std::thread::Builder::new()
             .name("TipThread".to_string())
@@ -188,6 +181,7 @@ pub(crate) fn spawn_tip_thread(
                         TipRequest::TipToCheckpoint { height, sender } => {
                             debug_assert_eq!(tip_state, TipState::Serialized(height));
                             debug_assert!(have_latest_manifest);
+                            tip_state = TipState::Empty;
                             have_latest_manifest = false;
                             let _timer =
                                 request_timer(&metrics, "tip_to_checkpoint_send_checkpoint");
@@ -214,14 +208,11 @@ pub(crate) fn spawn_tip_thread(
                                         }
                                         Ok(cp) => {
                                             sender
-                                                .send(Ok(cp.clone()))
+                                                .send(Ok((cp.clone(), tip_downgrade.clone())))
                                                 .expect("Failed to return TipToCheckpoint result");
                                         }
                                     }
                                 }
-                            }
-                            if downgrade_state == DowngradeState::DowngradedTip {
-                                downgrade_state = DowngradeState::DowngradedCheckpoint;
                             }
                         }
 
@@ -324,10 +315,19 @@ pub(crate) fn spawn_tip_thread(
                         TipRequest::ResetTipAndMerge {
                             checkpoint_layout,
                             pagemaptypes_with_num_pages,
+                            is_initializing_tip,
                         } => {
                             let _timer = request_timer(&metrics, "reset_tip_to");
+                            if tip_downgrade != HasDowngrade::No {
+                                info!(
+                                    log,
+                                    "tip_downgrade changes from {:?} to {:?}",
+                                    tip_downgrade,
+                                    HasDowngrade::No,
+                                );
+                                tip_downgrade = HasDowngrade::No;
+                            }
                             let height = checkpoint_layout.height();
-                            tip_state = TipState::ReadyForPageDeltas(height);
                             tip_handler
                                 .reset_tip_to(
                                     &state_layout,
@@ -354,22 +354,27 @@ pub(crate) fn spawn_tip_thread(
                                     &metrics,
                                 ),
                                 FlagStatus::Disabled => {
-                                    if downgrade_state == DowngradeState::Unknown {
-                                        if merge_to_base(
+                                    if is_initializing_tip
+                                        && merge_to_base(
                                             &mut tip_handler,
                                             &pagemaptypes_with_num_pages,
                                             height,
                                             &mut thread_pool,
                                             &log,
                                             &metrics,
-                                        ) {
-                                            downgrade_state = DowngradeState::DowngradedTip;
-                                        } else {
-                                            downgrade_state = DowngradeState::NotNeeded;
-                                        }
+                                        )
+                                    {
+                                        info!(
+                                            log,
+                                            "tip_downgrade changes from {:?} to {:?}",
+                                            tip_downgrade,
+                                            HasDowngrade::Yes,
+                                        );
+                                        tip_downgrade = HasDowngrade::Yes;
                                     }
                                 }
                             };
+                            tip_state = TipState::ReadyForPageDeltas(height);
                         }
                         TipRequest::DefragTip {
                             height,
@@ -404,13 +409,6 @@ pub(crate) fn spawn_tip_thread(
                             persist_metadata_guard,
                         } => {
                             let _timer = request_timer(&metrics, "compute_manifest");
-                            // If we are downgrading, do a full manifest computation
-                            let manifest_delta =
-                                if downgrade_state == DowngradeState::DowngradedCheckpoint {
-                                    None
-                                } else {
-                                    manifest_delta
-                                };
                             handle_compute_manifest_request(
                                 &mut thread_pool,
                                 &metrics,
@@ -423,9 +421,6 @@ pub(crate) fn spawn_tip_thread(
                                 &malicious_flags,
                             );
                             have_latest_manifest = true;
-                            if downgrade_state == DowngradeState::DowngradedCheckpoint {
-                                downgrade_state = DowngradeState::NotNeeded;
-                            }
                         }
                         TipRequest::Noop => {}
                     }
@@ -547,7 +542,8 @@ fn merge(
     let merges_by_filenum = merge_candidates
         .iter()
         .scan(0, |state, m| {
-            if *state >= storage_to_merge_for_filenum
+            if (*state >= storage_to_merge_for_filenum
+                && m.num_files_before() <= NUMBER_OF_FILES_HARD_LIMIT as u64)
                 || (m.num_files_before() <= MAX_NUMBER_OF_FILES as u64
                     && (*state + m.page_map_size_bytes() >= min_storage_to_merge))
             {
@@ -581,12 +577,14 @@ fn merge(
         .iter()
         .map(|m| m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64)
         .sum();
+    let mut merges_by_storage = 0;
     for m in merge_candidates.into_iter() {
         if storage_saved >= storage_to_save {
             break;
         }
 
         storage_saved += m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64;
+        merges_by_storage += 1;
         // Only full merges reduce overhead, and there should be enough of them to reach
         // `storage_to_save` before tapping into partial merges.
         debug_assert!(m.is_full_merge());
@@ -603,6 +601,29 @@ fn merge(
         storage_saved,
         merges_by_filenum,
     );
+
+    metrics
+        .merge_metrics
+        .disk_size_bytes
+        .set(storage_info.disk_size as i64);
+    metrics
+        .merge_metrics
+        .memory_size_bytes
+        .set(storage_info.mem_size as i64);
+    metrics
+        .merge_metrics
+        .estimated_storage_savings_bytes
+        .observe(storage_saved as f64);
+    metrics
+        .merge_metrics
+        .num_page_maps_merged
+        .with_label_values(&["file_num"])
+        .observe(merges_by_filenum as f64);
+    metrics
+        .merge_metrics
+        .num_page_maps_merged
+        .with_label_values(&["storage"])
+        .observe(merges_by_storage as f64);
 
     parallel_map(thread_pool, scheduled_merges.iter(), |m| {
         m.apply(&metrics.storage_metrics)
@@ -851,7 +872,6 @@ fn serialize_canister_to_tip(
             canister_log: canister_state.system_state.canister_log.clone(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
-            snapshot_ids: canister_state.system_state.snapshot_ids.clone(),
         }
         .into(),
     )?;

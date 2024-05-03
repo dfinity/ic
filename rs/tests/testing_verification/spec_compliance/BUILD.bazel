@@ -12,9 +12,10 @@ rust_library(
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/tests",
+        "//rs/tests/networking/canister_http",
         "//rs/types/types",
-        "@crate_index//:hyper",
         "@crate_index//:hyper-rustls",
+        "@crate_index//:hyper_0_14_27",
         "@crate_index//:slog",
     ],
 )

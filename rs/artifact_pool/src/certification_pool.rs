@@ -15,7 +15,6 @@ use ic_types::consensus::IsShare;
 use ic_types::crypto::crypto_hash;
 use ic_types::NodeId;
 use ic_types::{
-    artifact::CertificationMessageFilter,
     artifact::CertificationMessageId,
     artifact_kind::CertificationArtifact,
     consensus::certification::{
@@ -373,14 +372,7 @@ impl CertificationPool for CertificationPoolImpl {
 }
 
 impl ValidatedPoolReader<CertificationArtifact> for CertificationPoolImpl {
-    fn contains(&self, id: &CertificationMessageId) -> bool {
-        self.unvalidated.contains_key(&id.hash) || self.persistent_pool.get(id).is_some()
-    }
-
-    fn get_validated_by_identifier(
-        &self,
-        id: &CertificationMessageId,
-    ) -> Option<CertificationMessage> {
+    fn get(&self, id: &CertificationMessageId) -> Option<CertificationMessage> {
         match &id.hash {
             CertificationMessageHash::CertificationShare(hash) => self
                 .shares_at_height(id.height)
@@ -398,25 +390,16 @@ impl ValidatedPoolReader<CertificationArtifact> for CertificationPoolImpl {
         }
     }
 
-    fn get_all_validated_by_filter(
-        &self,
-        filter: &CertificationMessageFilter,
-    ) -> Box<dyn Iterator<Item = CertificationMessage> + '_> {
-        // In case we received a filter of u64::MAX, don't overflow.
-        let Some(filter) = filter.height.get().checked_add(1).map(Height::from) else {
-            return Box::new(std::iter::empty());
-        };
-
+    fn get_all_validated(&self) -> Box<dyn Iterator<Item = CertificationMessage> + '_> {
         let certification_range = self.persistent_pool.certifications().height_range();
         let share_range = self.persistent_pool.certification_shares().height_range();
 
         let ranges = [certification_range.as_ref(), share_range.as_ref()]
             .into_iter()
             .flatten();
-        let Some(min_height) = ranges.clone().map(|range| range.min).min() else {
+        let Some(min) = ranges.clone().map(|range| range.min).min() else {
             return Box::new(std::iter::empty());
         };
-        let min = min_height.max(filter);
         let max = ranges.map(|range| range.max).max().unwrap_or(min);
 
         // For all heights above the minimum, return the validated certification of the subnet,
@@ -568,9 +551,9 @@ mod tests {
             );
 
             for id in [id1, id2, id3, id4] {
-                assert!(pool.contains(&id));
+                assert!(pool.unvalidated.contains_key(&id.hash));
                 pool.remove(&id);
-                assert!(!pool.contains(&id));
+                assert!(!pool.unvalidated.contains_key(&id.hash));
             }
         })
     }
@@ -774,13 +757,21 @@ mod tests {
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
 
-            assert!(!pool.contains(&CertificationMessageId::from(&share_msg)));
-            assert!(!pool.contains(&CertificationMessageId::from(&cert_msg)));
+            assert!(!pool
+                .unvalidated
+                .contains_key(&CertificationMessageId::from(&share_msg).hash));
+            assert!(!pool
+                .unvalidated
+                .contains_key(&CertificationMessageId::from(&cert_msg).hash));
 
             pool.insert(to_unvalidated(share_msg.clone()));
 
-            assert!(pool.contains(&CertificationMessageId::from(&share_msg)));
-            assert!(!pool.contains(&CertificationMessageId::from(&cert_msg)));
+            assert!(pool
+                .unvalidated
+                .contains_key(&CertificationMessageId::from(&share_msg).hash));
+            assert!(!pool
+                .unvalidated
+                .contains_key(&CertificationMessageId::from(&cert_msg).hash));
         });
     }
 
@@ -796,8 +787,14 @@ mod tests {
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
 
-            assert!(!pool.contains(&CertificationMessageId::from(&share_msg)));
-            assert!(!pool.contains(&CertificationMessageId::from(&cert_msg)));
+            assert!(pool
+                .persistent_pool
+                .get(&CertificationMessageId::from(&share_msg))
+                .is_none());
+            assert!(pool
+                .persistent_pool
+                .get(&CertificationMessageId::from(&cert_msg))
+                .is_none());
 
             let result = pool.apply_changes(vec![
                 ChangeAction::AddToValidated(share_msg.clone()),
@@ -810,13 +807,23 @@ mod tests {
                 pool.certification_at_height(Height::from(8)),
                 Some(msg_to_cert(cert_msg.clone()))
             );
-            assert!(pool.contains(&CertificationMessageId::from(&share_msg)));
-            assert!(pool.contains(&CertificationMessageId::from(&cert_msg)));
+            assert_eq!(
+                share_msg,
+                pool.persistent_pool
+                    .get(&CertificationMessageId::from(&share_msg))
+                    .unwrap()
+            );
+            assert_eq!(
+                cert_msg,
+                pool.persistent_pool
+                    .get(&CertificationMessageId::from(&cert_msg))
+                    .unwrap()
+            );
         });
     }
 
     #[test]
-    fn test_get_all_validated_by_filter() {
+    fn test_get_all_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let node = node_test_id(3);
             let mut pool = CertificationPoolImpl::new(
@@ -827,9 +834,6 @@ mod tests {
             );
 
             let height_offset = 5_000_000_000;
-            let filter = CertificationMessageFilter {
-                height: Height::from(height_offset + 10),
-            };
 
             // Create shares from 5 nodes for 20 heights, only add an aggregate on even heights.
             let mut messages = Vec::new();
@@ -853,8 +857,7 @@ mod tests {
             };
 
             let mut heights = HashSet::new();
-            pool.get_all_validated_by_filter(&filter).for_each(|m| {
-                assert!(m.height() >= filter.height);
+            pool.get_all_validated().for_each(|m| {
                 if m.height().get() % 2 == 0 {
                     assert!(!m.is_share());
                 }
@@ -866,17 +869,8 @@ mod tests {
                 }
                 assert!(heights.insert(m.height()));
             });
-            assert_eq!(heights.len(), 10);
-
-            let min_filter = CertificationMessageFilter {
-                height: Height::from(u64::MIN),
-            };
-            assert_eq!(pool.get_all_validated_by_filter(&min_filter).count(), 20);
-
-            let max_filter = CertificationMessageFilter {
-                height: Height::from(u64::MAX),
-            };
-            assert_eq!(pool.get_all_validated_by_filter(&max_filter).count(), 0);
+            assert_eq!(heights.len(), 20);
+            assert_eq!(pool.get_all_validated().count(), 20);
         });
     }
 }

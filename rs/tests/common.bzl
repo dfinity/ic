@@ -101,7 +101,6 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/universal_canister/lib",
-    "//rs/utils",
     "@crate_index//:anyhow",
     "@crate_index//:assert_matches",
     "@crate_index//:assert-json-diff",
@@ -121,7 +120,7 @@ DEPENDENCIES = [
     "@crate_index//:http",
     "@crate_index//:humantime",
     "@crate_index//:hyper-rustls",
-    "@crate_index//:hyper",
+    "@crate_index//:hyper_0_14_27",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
@@ -147,7 +146,7 @@ DEPENDENCIES = [
     "@crate_index//:rayon",
     "@crate_index//:rcgen",
     "@crate_index//:regex",
-    "@crate_index//:reqwest",
+    "@crate_index//:reqwest_0_11_27",
     "@crate_index//:ring",
     "@crate_index//:rsa",
     "@crate_index//:rust_decimal",
@@ -357,7 +356,7 @@ BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
 COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
 
 CANISTER_HTTP_RUNTIME_DEPS = [
-    "//rs/tests:http_uvm_config_image",
+    "//rs/tests/networking/canister_http:http_uvm_config_image",
 ]
 
 CUSTOM_DOMAINS_RUNTIME_DEPS = [

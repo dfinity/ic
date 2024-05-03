@@ -79,7 +79,7 @@ async fn rpc_handler<Artifact: ArtifactKind>(
         let artifact = pool
             .read()
             .unwrap()
-            .get_validated_by_identifier(&id)
+            .get(&id)
             .ok_or(StatusCode::NO_CONTENT)?;
         Ok::<_, StatusCode>(Bytes::from(Artifact::PbMessage::proxy_encode(artifact)))
     });
@@ -1228,14 +1228,16 @@ mod tests {
         mock_pfn
             .expect_get_priority_function()
             .times(1)
-            .returning(|_| Box::new(|_, _| Priority::Fetch))
+            .returning(|_| Box::new(|_, _| Priority::FetchNow))
             .in_sequence(&mut seq);
 
         let mut mock_transport = MockTransport::new();
         mock_transport.expect_rpc().returning(|_, _| {
             Ok(Response::builder()
                 .body(Bytes::from(
-                    <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(0_u64),
+                    <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(
+                        U64Artifact::id_to_msg(0, 1024),
+                    ),
                 ))
                 .unwrap())
         });
@@ -1263,7 +1265,7 @@ mod tests {
         // Check that we received downloaded artifact.
         assert_eq!(
             channels.unvalidated_artifact_receiver.recv().await.unwrap(),
-            UnvalidatedArtifactMutation::Insert((0, NODE_1))
+            UnvalidatedArtifactMutation::Insert((U64Artifact::id_to_msg(0, 1024), NODE_1))
         );
     }
 
@@ -1660,7 +1662,7 @@ mod tests {
         }));
 
         let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
-        let priorities = Arc::new(Mutex::new(vec![Priority::Fetch, Priority::Stash]));
+        let priorities = Arc::new(Mutex::new(vec![Priority::FetchNow, Priority::Stash]));
         mock_pfn
             .expect_get_priority_function()
             .times(1)
@@ -1719,7 +1721,9 @@ mod tests {
             .returning(|_, _| {
                 Ok(Response::builder()
                     .body(Bytes::from(
-                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(1_u64),
+                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(
+                            U64Artifact::id_to_msg(1, 1024),
+                        ),
                     ))
                     .unwrap())
             })
@@ -1732,7 +1736,9 @@ mod tests {
                 // Respond with artifact that does correspond to the advertised ID
                 Ok(Response::builder()
                     .body(Bytes::from(
-                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(0_u64),
+                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(
+                            U64Artifact::id_to_msg(0, 1024),
+                        ),
                     ))
                     .unwrap())
             })
@@ -1741,7 +1747,7 @@ mod tests {
         let mut pc = PeerCounter::new();
         pc.insert(NODE_1);
         let (_peer_tx, mut peer_rx) = watch::channel(pc);
-        let pfn = |_: &_, _: &_| Priority::Fetch;
+        let pfn = |_: &_, _: &_| Priority::FetchNow;
         let (_pfn_tx, pfn_rx) = watch::channel(Box::new(pfn) as Box<_>);
 
         rt.block_on(async {
@@ -1761,7 +1767,7 @@ mod tests {
                     ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
                 )
                 .await,
-                Ok((0, NODE_1))
+                Ok((U64Artifact::id_to_msg(0, 1024), NODE_1))
             )
         });
     }
@@ -1780,14 +1786,11 @@ mod tests {
             type PbIdError = Infallible;
             type PbMessageError = Infallible;
             type PbAttributeError = Infallible;
-            type PbFilterError = Infallible;
             type Message = Vec<u8>;
             type PbId = ();
             type Id = ();
             type PbAttribute = ();
             type Attribute = ();
-            type PbFilter = ();
-            type Filter = ();
 
             fn message_to_advert(_: &Self::Message) -> Advert<BigArtifact> {
                 todo!()

@@ -3,7 +3,7 @@
 use crate::consensus::metrics::EcdsaPayloadMetrics;
 use crate::ecdsa::complaints::{EcdsaTranscriptLoader, TranscriptLoadStatus};
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_crypto::get_tecdsa_master_public_key;
+use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_interfaces_registry::RegistryClient;
@@ -14,19 +14,19 @@ use ic_registry_client_helpers::ecdsa_keys::EcdsaKeysRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
-use ic_types::consensus::ecdsa::{PreSignatureQuadrupleRef, QuadrupleId};
+use ic_types::consensus::idkg::ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef};
 use ic_types::consensus::Block;
 use ic_types::consensus::{
-    ecdsa::{
-        EcdsaBlockReader, EcdsaMessage, IDkgTranscriptParamsRef, RequestId,
-        ThresholdEcdsaSigInputsRef, TranscriptLookupError, TranscriptRef,
+    idkg::{
+        EcdsaBlockReader, EcdsaMessage, IDkgTranscriptParamsRef, QuadrupleId, RequestId,
+        TranscriptLookupError, TranscriptRef,
     },
     HasHeight,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
 };
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey};
+use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey};
 use ic_types::registry::RegistryClientError;
 use ic_types::{Height, RegistryVersion, SubnetId};
 use phantom_newtype::Id;
@@ -81,19 +81,6 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             .as_ecdsa()
             .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
                 Box::new(ecdsa_payload.quadruples_in_creation.keys())
-            })
-    }
-
-    fn requested_signatures(
-        &self,
-    ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_> {
-        self.chain
-            .tip()
-            .payload
-            .as_ref()
-            .as_ecdsa()
-            .map_or(Box::new(std::iter::empty()), |payload| {
-                Box::new(payload.ongoing_signatures.iter())
             })
     }
 
@@ -455,7 +442,7 @@ pub(crate) fn get_ecdsa_subnet_public_key(
     block: &Block,
     pool: &PoolReader<'_>,
     log: &ReplicaLogger,
-) -> Result<BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>, String> {
+) -> Result<BTreeMap<EcdsaKeyId, MasterPublicKey>, String> {
     let Some(ecdsa_payload) = block.payload.as_ref().as_ecdsa() else {
         return Ok(BTreeMap::new());
     };
@@ -504,8 +491,8 @@ pub(crate) fn get_ecdsa_subnet_public_key(
 fn get_ecdsa_subnet_public_key_(
     transcript: &IDkgTranscript,
     log: &ReplicaLogger,
-) -> Option<MasterEcdsaPublicKey> {
-    match get_tecdsa_master_public_key(transcript) {
+) -> Option<MasterPublicKey> {
+    match get_master_public_key_from_transcript(transcript) {
         Ok(public_key) => Some(public_key),
         Err(err) => {
             warn!(log, "Failed to retrieve ECDSA subnet public key: {:?}", err);
@@ -546,7 +533,7 @@ mod tests {
     use ic_types::{
         batch::ValidationContext,
         consensus::{
-            ecdsa::{EcdsaPayload, UnmaskedTranscript},
+            idkg::{EcdsaPayload, UnmaskedTranscript},
             BlockPayload, Payload, SummaryPayload,
         },
         crypto::{AlgorithmId, CryptoHashOf},

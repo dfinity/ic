@@ -14,8 +14,7 @@
 //! * Floating point makes code easier since the reward pool is specified as a
 //!   fraction of the total Token supply.
 
-use crate::{logs::ERROR, pb::v1::VotingRewardsParameters, types::ONE_DAY_SECONDS};
-use ic_canister_log::log;
+use crate::{pb::v1::VotingRewardsParameters, types::ONE_DAY_SECONDS};
 use ic_nervous_system_common::i2d;
 use lazy_static::lazy_static;
 use rust_decimal::Decimal;
@@ -159,6 +158,17 @@ impl LinearMap {
         // to
         //   to.start * (1 - 1) + to.end * 1 = to.end
         to.start * (i2d(1) - t) + to.end * t
+    }
+}
+
+lazy_static! {
+    static ref DEFAULT_VOTING_REWARDS_PARAMETERS: VotingRewardsParameters =
+        VotingRewardsParameters::default();
+}
+
+impl Default for &VotingRewardsParameters {
+    fn default() -> Self {
+        &DEFAULT_VOTING_REWARDS_PARAMETERS
     }
 }
 
@@ -349,26 +359,6 @@ impl VotingRewardsParameters {
                 .final_reward_rate_basis_points
                 .or(base.final_reward_rate_basis_points),
         }
-    }
-
-    pub fn rewards_enabled(&self) -> bool {
-        if self.initial_reward_rate_basis_points.is_none()
-            || self.final_reward_rate_basis_points.is_none()
-        {
-            log!(
-                ERROR,
-                "Cannot determine if rewards are enabled: \
-                initial_reward_rate_basis_points({:?}) or \
-                final_reward_rate_basis_points({:?} is None.",
-                self.initial_reward_rate_basis_points,
-                self.final_reward_rate_basis_points
-            );
-            return false;
-        }
-        let initial_is_zero = self.initial_reward_rate_basis_points == Some(0);
-        let final_is_zero = self.final_reward_rate_basis_points == Some(0);
-        let both_are_zero = initial_is_zero && final_is_zero;
-        !both_are_zero
     }
 }
 

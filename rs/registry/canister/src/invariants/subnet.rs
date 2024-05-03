@@ -7,10 +7,9 @@ use crate::invariants::common::{
     get_subnet_ids_from_snapshot, InvariantCheckError, RegistrySnapshot,
 };
 
-use ic_base_types::SubnetId;
 use ic_base_types::{NodeId, PrincipalId};
 use ic_nns_common::registry::{decode_or_panic, MAX_NUM_SSH_KEYS};
-use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
+use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, SubnetRecord, SubnetType};
 use ic_registry_keys::{make_node_record_key, make_subnet_record_key, SUBNET_RECORD_KEY_PREFIX};
 
 /// Subnet invariants hold iff:
@@ -97,8 +96,6 @@ pub(crate) fn check_subnet_invariants(
         if subnet_record.subnet_type == i32::from(SubnetType::System) {
             system_subnet_count += 1;
         }
-
-        check_gossip_config_invariants(subnet_id, subnet_record);
     }
     // There is at least one system subnet
     if system_subnet_count < 1 {
@@ -121,6 +118,95 @@ pub(crate) fn check_subnet_invariants(
     Ok(())
 }
 
+// TODO[NNS1-2986]: Remove this function after the migration has been performed.
+pub fn subnet_record_mutations_from_ecdsa_configs_to_chain_key_configs(
+    snapshot: &RegistrySnapshot,
+) -> Vec<ic_registry_transport::pb::v1::RegistryMutation> {
+    #[cfg(target_arch = "wasm32")]
+    use dfn_core::println;
+
+    let mut subnet_records_map = get_subnet_records_map(snapshot);
+    let subnet_id_list = get_subnet_ids_from_snapshot(snapshot);
+    let mut mutations = vec![];
+
+    for subnet_id in subnet_id_list {
+        let mut subnet_record = subnet_records_map
+            .remove(&make_subnet_record_key(subnet_id).into_bytes())
+            .unwrap_or_else(|| {
+                panic!(
+                    "Subnet {:} is in subnet list but no record exists",
+                    subnet_id
+                );
+            });
+
+        let chain_key_config = match (
+            subnet_record.ecdsa_config.as_ref(),
+            subnet_record.chain_key_config.as_ref(),
+        ) {
+            (None, None) => {
+                println!(
+                    "Neither ecdsa_config nor chain_key_config are specified in subnet record \
+                     of subnet ID {:?}. Skipping this subnet record.",
+                    subnet_id,
+                );
+                continue;
+            }
+            (None, Some(chain_key_config)) => {
+                // This code should not be reachable, as all operations that set `ecdsa_config`
+                // in subnet records should also set `chain_key_config` to an equavalent value.
+                panic!(
+                    "ecdsa_config not specified, but chain_key_config is specified in subnet \
+                     record of subnet ID {:?}. chain_key_config = {:?}. There must be a bug. \
+                     Aborting Registry upgrade ...",
+                    subnet_id, chain_key_config,
+                );
+            }
+            (Some(ecdsa_config), None) => {
+                // The normal case: We need to retrofit data into `chain_key_config`.
+                let chain_key_config = ChainKeyConfig::from(ecdsa_config.clone());
+                println!(
+                    "Retrofitting data from ecdsa_config to initialize chain_key_config \
+                     in subnet record of subnet ID {:?}. \
+                     ecdsa_config = {:?}. chain_key_config = {:?}.",
+                    subnet_id, ecdsa_config, chain_key_config,
+                );
+                chain_key_config
+            }
+            (Some(ecdsa_config), Some(chain_key_config)) => {
+                // This might happen only if someone invoked a Registry operation that set or
+                // changed the value of the `subnet_record.ecdsa_config` field, thereby setting
+                // a value also for `subnet_record.chain_key_config`.
+                // Comparing debug string representations to circumvent the fact that these types
+                // do not implement `PartialEq`.
+                assert_eq!(
+                    format!("{:?}", chain_key_config),
+                    format!("{:?}", ChainKeyConfig::from(ecdsa_config.clone())),
+                    "Inconsistency detected between already-present chain_key_config and data \
+                     from ecdsa_config. There must be a bug. Aborting Registry upgrade ..."
+                );
+                println!(
+                    "Both ecdsa_config and chain_key_config are specified in subnet record \
+                     of subnet ID {:?}. chain_key_config = f(ecdsa_config) = {:?}. \
+                     Skipping this subnet record.",
+                    subnet_id, chain_key_config,
+                );
+                continue;
+            }
+        };
+
+        subnet_record.chain_key_config = Some(chain_key_config);
+
+        let subnet_record_mutation = ic_registry_transport::upsert(
+            make_subnet_record_key(subnet_id).into_bytes(),
+            crate::mutations::common::encode_or_panic(&subnet_record),
+        );
+
+        mutations.push(subnet_record_mutation);
+    }
+
+    mutations
+}
+
 // Return all subnet records in the snapshot
 pub(crate) fn get_subnet_records_map(
     snapshot: &RegistrySnapshot,
@@ -133,84 +219,4 @@ pub(crate) fn get_subnet_records_map(
         }
     }
     subnets
-}
-
-/// Gossip config invariants hold iff:
-///    * number of chunks requested in parallel > 0
-///    * timeout for chunk > 200 ms
-///    * number of times a chunk is requested from peers in parallel > 0
-///    * 0 < size of receive_check_cache < 2 * priority function interval
-///    * 50ms < priority function interval < 6 * consensus unit delay
-///    * registry poll period > 3000 milliseconds
-///    * 10s < retranmission request interval < 2min
-fn check_gossip_config_invariants(subnet_id: SubnetId, subnet_record: SubnetRecord) {
-    match subnet_record.gossip_config {
-        Some(gossip_config) => {
-            if gossip_config.max_artifact_streams_per_peer < 1 {
-                panic!(
-                    "Gossip config value for max_artifact_streams_per_peer for subnet {:} is \
-                    currently {:} but it must be at least one.",
-                    subnet_id, gossip_config.max_artifact_streams_per_peer
-                )
-            }
-            if gossip_config.max_chunk_wait_ms < 200 {
-                panic!(
-                    "Gossip config value for max_chunk_wait_ms for subnet {:} is currently {:} \
-                    but it must be at least 200ms to take the network delay into account.",
-                    subnet_id, gossip_config.max_chunk_wait_ms
-                )
-            }
-            if gossip_config.max_duplicity < 1 {
-                panic!(
-                    "Gossip config value for max_duplicity for subnet {:} is currently {:} but it \
-                     must be at least 1.",
-                    subnet_id, gossip_config.max_duplicity
-                )
-            }
-            if gossip_config.receive_check_cache_size < 1
-                || gossip_config.receive_check_cache_size
-                    > 6 * gossip_config.pfn_evaluation_period_ms
-            {
-                panic!(
-                    "Gossip config value for receive_check_cache_size for subnet {:} is \
-                    currently {:} but it must be between 1 and  6 * pfn_evaluation_period_ms which is {:} \
-                    (no honest peer sends more than 6000 adverts per second per Gossip client, \
-                    larger cache does not help).",
-                    subnet_id, gossip_config.receive_check_cache_size,
-                    6 * gossip_config.pfn_evaluation_period_ms
-                )
-            }
-            if gossip_config.pfn_evaluation_period_ms < 50
-                || gossip_config.pfn_evaluation_period_ms as u64
-                    > 6 * subnet_record.unit_delay_millis
-            {
-                panic!(
-                    "Gossip config value for pfn_evaluation_period_ms for subnet {:} is currently \
-                    {:} but it must be between 50 and 6 * unit_delay_millis which is {:}, to update the \
-                    priority function at roughly the same rate as consensus progresses.",
-                    subnet_id, gossip_config.pfn_evaluation_period_ms,
-                    6 * subnet_record.unit_delay_millis,
-                )
-            }
-            if gossip_config.registry_poll_period_ms < 2000 {
-                panic!(
-                    "Gossip config value for registry_poll_period_ms for subnet {:} is currently \
-                    {:} but it must be at least 2000, aligned with the NNS block interval.",
-                    subnet_id, gossip_config.registry_poll_period_ms
-                )
-            }
-            if gossip_config.retransmission_request_ms < 10_000
-                || gossip_config.retransmission_request_ms > 120_000
-            {
-                panic!(
-                    "Gossip config value for retransmission_request_ms for subnet {:} is currently\
-                     {:} but it must be between 10_000 and 120_000. This ensures a subnet with \
-                     healthy nodes which have not received all adverts have the opportunity to \
-                     catch up in the order of 10 seconds to two minutes.",
-                    subnet_id, gossip_config.retransmission_request_ms
-                )
-            }
-        }
-        None => panic!("No gossip config defined in subnet record {:}.", subnet_id),
-    }
 }

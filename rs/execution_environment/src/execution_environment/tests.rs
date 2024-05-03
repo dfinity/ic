@@ -2306,6 +2306,72 @@ fn ecdsa_signature_with_unknown_key_rejected() {
 }
 
 #[test]
+fn ecdsa_signature_request_with_disabled_key_rejected() {
+    let disabled_key = make_key("disabled_key");
+    let wrong_key = make_key("wrong_key");
+    let canister_id = canister_test_id(0x10);
+    let own_subnet_id = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .with_own_subnet_id(own_subnet_id)
+        .with_nns_subnet_id(subnet_test_id(2))
+        .with_disabled_ecdsa_key(disabled_key.clone())
+        .with_caller(own_subnet_id, canister_id)
+        .build();
+
+    // Requesting disabled public key (should succeed)
+    test.inject_call_to_ic00(
+        Method::ECDSAPublicKey,
+        ic00::ECDSAPublicKeyArgs {
+            canister_id: None,
+            derivation_path: DerivationPath::new(vec![]),
+            key_id: disabled_key.clone(),
+        }
+        .encode(),
+        Cycles::from(100_000_000_000u128),
+    );
+
+    // Signing with disabled key (should fail)
+    test.inject_call_to_ic00(
+        Method::SignWithECDSA,
+        ic00::SignWithECDSAArgs {
+            message_hash: [1; 32],
+            derivation_path: DerivationPath::new(vec![]),
+            key_id: disabled_key.clone(),
+        }
+        .encode(),
+        Cycles::from(100_000_000_000u128),
+    );
+
+    // Signing with non-existant key (should fail)
+    test.inject_call_to_ic00(
+        Method::SignWithECDSA,
+        ic00::SignWithECDSAArgs {
+            message_hash: [1; 32],
+            derivation_path: DerivationPath::new(vec![]),
+            key_id: wrong_key.clone(),
+        }
+        .encode(),
+        Cycles::from(100_000_000_000u128),
+    );
+    test.execute_all();
+
+    let expected = [
+        // Note this fails with internal error as the test environment doesn't hold a valid key.
+        // However, this is enough to assert that the correct endpoint is reached.
+        "InternalError(\"InvalidPoint\")",
+        "invalid or disabled key Secp256k1:disabled_key",
+        "does not hold ECDSA key Secp256k1:wrong_key",
+    ];
+
+    for (i, expected) in expected.iter().enumerate() {
+        let result = test.xnet_messages()[i].clone();
+        let message = get_reject_message(result);
+        assert!(message.contains(expected));
+    }
+}
+
+#[test]
 fn ecdsa_public_key_req_with_unknown_key_rejected() {
     let correct_key = make_key("correct_key");
     let wrong_key = make_key("wrong_key");
@@ -2484,7 +2550,7 @@ fn canister_output_queue_does_not_overflow_when_calling_ic00() {
                 test.ingress_state(&message_id),
                 IngressState::Failed(UserError::new(
                     ErrorCode::CanisterCalledTrap,
-                    format!("Canister {} trapped explicitly: call_perform failed", uc)
+                    format!("Error from Canister {uc}: Canister trapped explicitly: call_perform failed")
                 ))
             );
         } else {
@@ -2532,7 +2598,7 @@ fn send_messages_to_bitcoin_canister_until_capacity(
                 test.ingress_state(&message_id),
                 IngressState::Failed(UserError::new(
                     ErrorCode::CanisterCalledTrap,
-                    format!("Canister {} trapped explicitly: call_perform failed", uc)
+                    format!("Error from Canister {uc}: Canister trapped explicitly: call_perform failed")
                 ))
             );
         } else {

@@ -40,6 +40,9 @@ type UpgradeArg = record {
    // This exact version will be used for upgrading all existing archive canisters managed by the orchestrator.
    // Leaving this field empty will not upgrade the archive canisters.
    archive_compressed_wasm_hash: opt text;
+
+   // Update the cycles management of the canisters managed by the orchestrator.
+   cycles_management: opt UpdateCyclesManagement;
 };
 
 type AddErc20Arg = record {
@@ -113,11 +116,72 @@ type CyclesManagement = record {
 
    //Number of cycles to add to a canister managed by the orchestrator whose cycles balance is running low.
    cycles_top_up_increment: nat;
-}
+};
+
+type ManagedCanisterStatus = variant {
+    // Canister created with the given principal but wasm module is not yet installed.
+    Created : record { canister_id : principal };
+
+    // Canister created and wasm module installed.
+    // The wasm_hash reflects the installed wasm module by the orchestrator
+    // but *may differ* from the one being currently deployed (if another controller did an upgrade)
+    Installed : record { canister_id : principal; installed_wasm_hash : text };
+};
+
+type ManagedCanisters = record {
+    // Corresponding ERC20 contract
+    erc20_contract: Erc20Contract;
+
+    // ckERC20 Token symbol
+    ckerc20_token_symbol : text;
+
+    // Status of the ledger canister
+    ledger : opt ManagedCanisterStatus;
+
+    // Status of the index canister
+    index : opt ManagedCanisterStatus;
+
+    // List of archive canister ids
+    archives : vec principal;
+};
+
+type OrchestratorInfo = record {
+    // List of managed canisters data for each ERC20 contract.
+    managed_canisters : vec ManagedCanisters;
+
+    // Cycle management parameters.
+    cycles_management : CyclesManagement;
+
+    // Additional controllers that new canisters will be spawned with.
+    more_controller_ids : vec principal;
+
+    // ckETH minter canister id.
+    minter_id : opt principal;
+};
+
+type UpdateCyclesManagement = record {
+   // Change the number of cycles when creating a new ICRC1 ledger canister.
+   // Previously created canisters are not affected.
+   cycles_for_ledger_creation: opt nat;
+
+   // Change the number of cycles when creating a new ICRC1 archive canister.
+   // Previously created canisters are not affected.
+   cycles_for_archive_creation: opt nat;
+
+   // Change the number of cycles when creating a new ICRC1 index canister.
+   // Previously created canisters are not affected.
+   cycles_for_index_creation: opt nat;
+
+   // Change the number of cycles to add to a canister managed by the orchestrator whose cycles balance is running low.
+   cycles_top_up_increment: opt nat;
+};
 
 service : (OrchestratorArg) -> {
 
    // Managed canister IDs for a given ERC20 contract
    canister_ids : (Erc20Contract) -> (opt ManagedCanisterIds) query;
+
+   // Return internal orchestrator parameters
+   get_orchestrator_info : () -> (OrchestratorInfo) query;
 
 }

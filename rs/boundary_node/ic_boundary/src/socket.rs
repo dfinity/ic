@@ -66,6 +66,7 @@ impl SocketTcp {
     pub fn bind(addr: SocketAddr, backlog: u32) -> Result<Self, std::io::Error> {
         let socket = TcpSocket::new_v6()?;
         socket.bind(addr)?;
+        socket.set_keepalive(true)?;
         let listener = socket.listen(backlog)?;
         Ok(Self { listener })
     }
@@ -80,6 +81,7 @@ impl Accept for SocketTcp {
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Conn, Self::Error>>> {
         let conn = ready!(self.listener.poll_accept(cx))?.0;
+        conn.set_nodelay(true)?;
         Poll::Ready(Some(Ok(conn)))
     }
 }

@@ -1,26 +1,33 @@
-use crate::catch_up_package_provider::CatchUpPackageProvider;
-use crate::error::{OrchestratorError, OrchestratorResult};
-use crate::metrics::OrchestratorMetrics;
-use crate::process_manager::{Process, ProcessManager};
-use crate::registry_helper::RegistryHelper;
+use crate::{
+    catch_up_package_provider::CatchUpPackageProvider,
+    error::{OrchestratorError, OrchestratorResult},
+    metrics::OrchestratorMetrics,
+    process_manager::{Process, ProcessManager},
+    registry_helper::RegistryHelper,
+};
 use async_trait::async_trait;
-use ic_crypto::get_tecdsa_master_public_key;
+use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_image_upgrader::error::{UpgradeError, UpgradeResult};
-use ic_image_upgrader::ImageUpgrader;
+use ic_image_upgrader::{
+    error::{UpgradeError, UpgradeResult},
+    ImageUpgrader,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::EcdsaKeyId;
-use ic_registry_client_helpers::node::NodeRegistry;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
-use ic_types::consensus::{CatchUpPackage, HasHeight};
-use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
-use ic_types::{Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
-use std::collections::BTreeMap;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use ic_types::{
+    consensus::{CatchUpPackage, HasHeight},
+    crypto::canister_threshold_sig::MasterPublicKey,
+    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+};
+use std::{
+    collections::BTreeMap,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 
@@ -684,7 +691,7 @@ fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
 fn get_tecdsa_keys(
     cup: &CatchUpPackage,
     log: &ReplicaLogger,
-) -> BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey> {
+) -> BTreeMap<EcdsaKeyId, MasterPublicKey> {
     let mut public_keys = BTreeMap::new();
 
     let Some(ecdsa) = cup.content.block.get_value().payload.as_ref().as_ecdsa() else {
@@ -702,7 +709,7 @@ fn get_tecdsa_keys(
         return public_keys;
     };
 
-    match get_tecdsa_master_public_key(transcript) {
+    match get_master_public_key_from_transcript(transcript) {
         Ok(public_key) => {
             public_keys.insert(key_id, public_key);
         }
@@ -817,7 +824,7 @@ mod tests {
     use ic_types::{
         batch::ValidationContext,
         consensus::{
-            ecdsa::{self, EcdsaKeyTranscript, EcdsaUIDGenerator, TranscriptAttributes},
+            idkg::{self, EcdsaKeyTranscript, EcdsaUIDGenerator, TranscriptAttributes},
             Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
             RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
         },
@@ -835,9 +842,9 @@ mod tests {
         key_transcript: Option<&IDkgTranscript>,
     ) -> CatchUpPackage {
         let unmasked = key_transcript.map(|t| {
-            ecdsa::UnmaskedTranscriptWithAttributes::new(
+            idkg::UnmaskedTranscriptWithAttributes::new(
                 t.to_attributes(),
-                ecdsa::UnmaskedTranscript::try_from((h, t)).unwrap(),
+                idkg::UnmaskedTranscript::try_from((h, t)).unwrap(),
             )
         });
 
@@ -845,9 +852,9 @@ mod tests {
             .map(|t| BTreeMap::from_iter(vec![(t.transcript_id, t.clone())]))
             .unwrap_or_default();
 
-        let ecdsa = ecdsa::EcdsaPayload {
+        let ecdsa = idkg::EcdsaPayload {
             signature_agreements: BTreeMap::new(),
-            ongoing_signatures: BTreeMap::new(),
+            deprecated_ongoing_signatures: BTreeMap::new(),
             available_quadruples: BTreeMap::new(),
             quadruples_in_creation: BTreeMap::new(),
             uid_generator: EcdsaUIDGenerator::new(subnet_test_id(0), h),
@@ -856,11 +863,12 @@ mod tests {
             xnet_reshare_agreements: BTreeMap::new(),
             key_transcript: EcdsaKeyTranscript {
                 current: unmasked,
-                next_in_creation: ecdsa::KeyTranscriptCreation::Begin,
+                next_in_creation: idkg::KeyTranscriptCreation::Begin,
                 key_id: EcdsaKeyId {
                     curve: EcdsaCurve::Secp256k1,
                     name: key_id.to_string(),
                 },
+                master_key_id: None,
             },
         };
 

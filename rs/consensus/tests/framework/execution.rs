@@ -38,14 +38,14 @@ fn execute_instance(
                             .get_priority(&msg)
                         {
                             Priority::Drop => return Some(timestamp),
-                            Priority::Stash | Priority::Later => {
+                            Priority::Stash => {
                                 instance
                                     .buffered
                                     .borrow_mut()
                                     .push(InputMessage::Consensus(msg));
                                 return Some(timestamp);
                             }
-                            Priority::Fetch | Priority::FetchNow => (),
+                            Priority::FetchNow => (),
                         };
                     }
                     let mut pool = instance.driver.consensus_pool.write().unwrap();

@@ -137,34 +137,34 @@ impl ReceivedEvent {
             ReceivedEvent::Erc20(evt) => evt.source(),
         }
     }
-    pub fn from_address(&self) -> &Address {
+    pub fn from_address(&self) -> Address {
         match self {
-            ReceivedEvent::Eth(evt) => &evt.from_address,
-            ReceivedEvent::Erc20(evt) => &evt.from_address,
+            ReceivedEvent::Eth(evt) => evt.from_address,
+            ReceivedEvent::Erc20(evt) => evt.from_address,
         }
     }
-    pub fn principal(&self) -> &Principal {
+    pub fn principal(&self) -> Principal {
         match self {
-            ReceivedEvent::Eth(evt) => &evt.principal,
-            ReceivedEvent::Erc20(evt) => &evt.principal,
+            ReceivedEvent::Eth(evt) => evt.principal,
+            ReceivedEvent::Erc20(evt) => evt.principal,
         }
     }
-    pub fn block_number(&self) -> &BlockNumber {
+    pub fn block_number(&self) -> BlockNumber {
         match self {
-            ReceivedEvent::Eth(evt) => &evt.block_number,
-            ReceivedEvent::Erc20(evt) => &evt.block_number,
+            ReceivedEvent::Eth(evt) => evt.block_number,
+            ReceivedEvent::Erc20(evt) => evt.block_number,
         }
     }
-    pub fn log_index(&self) -> &LogIndex {
+    pub fn log_index(&self) -> LogIndex {
         match self {
-            ReceivedEvent::Eth(evt) => &evt.log_index,
-            ReceivedEvent::Erc20(evt) => &evt.log_index,
+            ReceivedEvent::Eth(evt) => evt.log_index,
+            ReceivedEvent::Erc20(evt) => evt.log_index,
         }
     }
-    pub fn transaction_hash(&self) -> &Hash {
+    pub fn transaction_hash(&self) -> Hash {
         match self {
-            ReceivedEvent::Eth(evt) => &evt.transaction_hash,
-            ReceivedEvent::Erc20(evt) => &evt.transaction_hash,
+            ReceivedEvent::Eth(evt) => evt.transaction_hash,
+            ReceivedEvent::Erc20(evt) => evt.transaction_hash,
         }
     }
     pub fn value(&self) -> candid::Nat {

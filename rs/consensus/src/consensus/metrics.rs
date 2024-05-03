@@ -8,7 +8,7 @@ use ic_metrics::{
 use ic_types::{
     batch::BatchPayload,
     consensus::{
-        ecdsa::{
+        idkg::{
             CompletedReshareRequest, CompletedSignature, EcdsaPayload, HasEcdsaKeyId,
             KeyTranscriptCreation,
         },
@@ -111,25 +111,6 @@ impl ConsensusMetrics {
     }
 }
 
-pub struct ConsensusGossipMetrics {
-    pub get_priority_update_block_duration: HistogramVec,
-}
-
-impl ConsensusGossipMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            get_priority_update_block_duration: metrics_registry.histogram_vec(
-                "consensus_get_priority_update_block_duration",
-                "The time it took to execute the update_block sections of get_priority",
-                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
-                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
-                decimal_buckets(-4, 2),
-                &["block_type"],
-            ),
-        }
-    }
-}
-
 // Block related stats
 pub struct BlockStats {
     pub block_hash: String,
@@ -177,14 +158,12 @@ impl BatchStats {
     }
 }
 
-// TODO(kpop): remove this Option eventually
-type CounterPerEcdsaKeyId = BTreeMap<Option<EcdsaKeyId>, usize>;
+type CounterPerEcdsaKeyId = BTreeMap<EcdsaKeyId, usize>;
 
 // Ecdsa payload stats
 pub struct EcdsaStats {
     pub signature_agreements: usize,
     pub key_transcript_created: CounterPerEcdsaKeyId,
-    pub ongoing_signatures: CounterPerEcdsaKeyId,
     pub available_quadruples: CounterPerEcdsaKeyId,
     pub quadruples_in_creation: CounterPerEcdsaKeyId,
     pub ongoing_xnet_reshares: CounterPerEcdsaKeyId,
@@ -206,12 +185,12 @@ impl From<&EcdsaPayload> for EcdsaStats {
                 && payload.idkg_transcripts.get(transcript_id).is_some()
             {
                 *key_transcript_created
-                    .entry(Some(payload.key_transcript.key_id.clone()))
+                    .entry(payload.key_transcript.key_id.clone())
                     .or_default() += 1;
             }
         }
 
-        let keys = vec![None, Some(payload.key_transcript.key_id.clone())];
+        let keys = vec![payload.key_transcript.key_id.clone()];
 
         Self {
             key_transcript_created,
@@ -220,10 +199,12 @@ impl From<&EcdsaPayload> for EcdsaStats {
                 .values()
                 .filter(|status| matches!(status, CompletedSignature::Unreported(_)))
                 .count(),
-            ongoing_signatures: count_by_ecdsa_key_id(payload.ongoing_signatures.keys(), &keys),
-            available_quadruples: count_by_ecdsa_key_id(payload.available_quadruples.keys(), &keys),
+            available_quadruples: count_by_ecdsa_key_id(
+                payload.available_quadruples.values(),
+                &keys,
+            ),
             quadruples_in_creation: count_by_ecdsa_key_id(
-                payload.quadruples_in_creation.keys(),
+                payload.quadruples_in_creation.values(),
                 &keys,
             ),
             ongoing_xnet_reshares: count_by_ecdsa_key_id(
@@ -243,7 +224,7 @@ impl From<&EcdsaPayload> for EcdsaStats {
 
 fn count_by_ecdsa_key_id<T: HasEcdsaKeyId>(
     collection: impl Iterator<Item = T>,
-    expected_keys: &Vec<Option<EcdsaKeyId>>,
+    expected_keys: &[EcdsaKeyId],
 ) -> CounterPerEcdsaKeyId {
     let mut counter_per_key_id = CounterPerEcdsaKeyId::new();
 
@@ -254,9 +235,7 @@ fn count_by_ecdsa_key_id<T: HasEcdsaKeyId>(
     }
 
     for item in collection {
-        *counter_per_key_id
-            .entry(item.key_id().cloned())
-            .or_default() += 1;
+        *counter_per_key_id.entry(item.key_id().clone()).or_default() += 1;
     }
 
     counter_per_key_id
@@ -272,7 +251,6 @@ pub struct FinalizerMetrics {
     // ecdsa payload related metrics
     pub ecdsa_key_transcript_created: IntCounterVec,
     pub ecdsa_signature_agreements: IntCounter,
-    pub ecdsa_ongoing_signatures: IntGaugeVec,
     pub ecdsa_available_quadruples: IntGaugeVec,
     pub ecdsa_quadruples_in_creation: IntGaugeVec,
     pub ecdsa_ongoing_xnet_reshares: IntGaugeVec,
@@ -328,11 +306,6 @@ impl FinalizerMetrics {
             ecdsa_signature_agreements: metrics_registry.int_counter(
                 "consensus_ecdsa_signature_agreements",
                 "Total number of ECDSA signature agreements created",
-            ),
-            ecdsa_ongoing_signatures: metrics_registry.int_gauge_vec(
-                "consensus_ecdsa_ongoing_signatures",
-                "The number of ongoing ECDSA signatures",
-                &[ECDSA_KEY_ID_LABEL],
             ),
             ecdsa_available_quadruples: metrics_registry.int_gauge_vec(
                 "consensus_ecdsa_available_quadruples",
@@ -393,7 +366,7 @@ impl FinalizerMetrics {
             let set = |metric: &IntGaugeVec, counts: &CounterPerEcdsaKeyId| {
                 for (key_id, count) in counts.iter() {
                     metric
-                        .with_label_values(&[&key_id_label(key_id.as_ref())])
+                        .with_label_values(&[&key_id_label(Some(key_id))])
                         .set(*count as i64);
                 }
             };
@@ -401,7 +374,7 @@ impl FinalizerMetrics {
             let inc_by = |metric: &IntCounterVec, counts: &CounterPerEcdsaKeyId| {
                 for (key_id, count) in counts.iter() {
                     metric
-                        .with_label_values(&[&key_id_label(key_id.as_ref())])
+                        .with_label_values(&[&key_id_label(Some(key_id))])
                         .inc_by(*count as u64);
                 }
             };
@@ -410,7 +383,6 @@ impl FinalizerMetrics {
                 &self.ecdsa_key_transcript_created,
                 &ecdsa.key_transcript_created,
             );
-            set(&self.ecdsa_ongoing_signatures, &ecdsa.ongoing_signatures);
             self.ecdsa_signature_agreements
                 .inc_by(ecdsa.signature_agreements as u64);
             set(
@@ -622,6 +594,7 @@ pub struct PurgerMetrics {
     pub validated_pool_purge_height: IntGauge,
     pub replicated_state_purge_height: IntGauge,
     pub replicated_state_purge_height_disk: IntGauge,
+    pub validated_pool_bounds_exceeded: IntCounter,
 }
 
 impl PurgerMetrics {
@@ -642,6 +615,10 @@ impl PurgerMetrics {
             replicated_state_purge_height_disk: metrics_registry.int_gauge(
                 "replicated_state_purge_height_disk",
                 "The height below which on-disk replicated states (checkpoints) are purged",
+            ),
+            validated_pool_bounds_exceeded: metrics_registry.int_counter(
+                "validated_pool_bounds_exceeded",
+                "The validated pool exceeded its size bounds",
             ),
         }
     }
@@ -826,23 +803,19 @@ impl EcdsaPayloadMetrics {
     }
 
     pub(crate) fn report(&self, payload: &EcdsaPayload) {
-        let expected_keys = vec![None, Some(payload.key_transcript.key_id.clone())];
+        let expected_keys = vec![payload.key_transcript.key_id.clone()];
 
         self.payload_metrics_set_without_key_id_label(
             "signature_agreements",
             payload.signature_agreements.len(),
         );
         self.payload_metrics_set(
-            "ongoing_signatures",
-            count_by_ecdsa_key_id(payload.ongoing_signatures.keys(), &expected_keys),
-        );
-        self.payload_metrics_set(
             "available_quadruples",
-            count_by_ecdsa_key_id(payload.available_quadruples.keys(), &expected_keys),
+            count_by_ecdsa_key_id(payload.available_quadruples.values(), &expected_keys),
         );
         self.payload_metrics_set(
             "quaruples_in_creation",
-            count_by_ecdsa_key_id(payload.quadruples_in_creation.keys(), &expected_keys),
+            count_by_ecdsa_key_id(payload.quadruples_in_creation.values(), &expected_keys),
         );
         self.payload_metrics_set(
             "ongoing_xnet_reshares",
@@ -863,7 +836,7 @@ impl EcdsaPayloadMetrics {
     fn payload_metrics_set(&self, label: &str, values: CounterPerEcdsaKeyId) {
         for (key_id, value) in values {
             self.payload_metrics
-                .with_label_values(&[label, &key_id_label(key_id.as_ref())])
+                .with_label_values(&[label, &key_id_label(Some(&key_id))])
                 .set(value as i64);
         }
     }

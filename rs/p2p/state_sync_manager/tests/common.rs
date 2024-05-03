@@ -297,10 +297,6 @@ impl Chunkable<StateSyncMessage> for FakeChunkable {
 
         Ok(())
     }
-
-    fn completed(&self) -> bool {
-        self.is_completed
-    }
 }
 
 #[derive(Clone, Default)]
@@ -337,10 +333,6 @@ impl Chunkable<StateSyncMessage> for SharableMockChunkable {
     fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError> {
         self.add_chunks_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().add_chunk(chunk_id, chunk)
-    }
-
-    fn completed(&self) -> bool {
-        self.mock.lock().unwrap().completed()
     }
 }
 

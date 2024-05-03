@@ -33,7 +33,7 @@ use tokio::{
     sync::RwLock,
 };
 use tokio_rustls::server::TlsStream;
-use tracing::{info, warn};
+use tracing::{debug, warn};
 use x509_parser::prelude::{Pem, Validity};
 
 use crate::{
@@ -208,7 +208,7 @@ impl Provision for Provisioner {
             .order(name)
             .await
             .context("failed to create ACME order")?;
-        info!("TLS: Order created");
+        debug!("TLS: Order created");
 
         // Set the challenge token
         self.token_owner
@@ -220,7 +220,7 @@ impl Provision for Provisioner {
             .ready(&mut order)
             .await
             .context("failed to mark ACME order as ready")?;
-        info!("TLS: Order marked as ready");
+        debug!("TLS: Order marked as ready");
 
         // Create a certificate for the ACME provider to sign
         let cert = Certificate::from_params({
@@ -229,20 +229,20 @@ impl Provision for Provisioner {
             params
         })
         .context("failed to generate certificate")?;
-        info!("TLS: Certificate generated");
+        debug!("TLS: Certificate generated");
 
         // Create a Certificate Signing Request for the ACME provider
         let csr = cert
             .serialize_request_der()
             .context("failed to create certificate signing request")?;
-        info!("TLS: CSR created");
+        debug!("TLS: CSR created");
 
         // Attempt to finalize the order by having the ACME provider sign our certificate
         self.acme_finalize
             .finalize(&mut order, &csr)
             .await
             .context("failed to finalize ACME order")?;
-        info!("TLS: Order finalized");
+        debug!("TLS: Order finalized");
 
         // Obtain the signed certificate chain from the ACME provider
         let cert_chain_pem = self
@@ -506,12 +506,12 @@ async fn prepare_acme_provisioner(
     let tls_provisioner = WithLoad(tls_provisioner, tls_loader, renew_before);
     let tls_provisioner = Box::new(tls_provisioner);
 
-    info!("TLS: Using ACME provisioner");
+    warn!("TLS: Using ACME provisioner");
     Ok(tls_provisioner)
 }
 
 fn prepare_static_provisioner(loader: Loader) -> Result<Box<dyn Provision>, Error> {
-    info!("TLS: Using static provisioner");
+    warn!("TLS: Using static provisioner");
     Ok(Box::new(ProvisionerStatic(loader.load()?)))
 }
 

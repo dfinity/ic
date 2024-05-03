@@ -4,7 +4,6 @@ pub mod boundary_nodes;
 pub mod btc_integration;
 pub mod canister_agent;
 pub mod canister_api;
-pub mod canister_http;
 pub mod canister_sig_verification_cache_test;
 pub mod certificate_orchestrator;
 pub mod ckbtc;

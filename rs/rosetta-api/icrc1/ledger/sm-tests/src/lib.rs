@@ -100,6 +100,19 @@ pub struct UpgradeArgs {
     pub feature_flags: Option<FeatureFlags>,
     pub maximum_number_of_accounts: Option<u64>,
     pub accounts_overflow_trim_quantity: Option<u64>,
+    pub change_archive_options: Option<ChangeArchiveOptions>,
+}
+
+#[derive(CandidType, Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChangeArchiveOptions {
+    pub trigger_threshold: Option<usize>,
+    pub num_blocks_to_archive: Option<usize>,
+    pub node_max_memory_size_bytes: Option<u64>,
+    pub max_message_size_bytes: Option<u64>,
+    pub controller_id: Option<PrincipalId>,
+    pub more_controller_ids: Option<Vec<PrincipalId>>,
+    pub cycles_for_archive_creation: Option<u64>,
+    pub max_transactions_per_response: Option<u64>,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -238,6 +251,17 @@ fn list_archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo> {
         Vec<ArchiveInfo>
     )
     .expect("failed to decode archives response")
+}
+
+fn get_archive_remaining_capacity(env: &StateMachine, archive: Principal) -> u64 {
+    let canister_id = CanisterId::unchecked_from_principal(archive.into());
+    Decode!(
+        &env.query(canister_id, "remaining_capacity", Encode!().unwrap())
+            .expect("failed to get archive remaining capacity")
+            .bytes(),
+        u64
+    )
+    .expect("failed to decode remaining_capacity response")
 }
 
 fn get_archive_transaction(env: &StateMachine, archive: Principal, block_index: u64) -> Option<Tx> {
@@ -821,7 +845,7 @@ where
         standards.push(standard.name);
     }
     standards.sort();
-    assert_eq!(standards, vec!["ICRC-1", "ICRC-2"]);
+    assert_eq!(standards, vec!["ICRC-1", "ICRC-2", "ICRC-3"]);
 }
 
 pub fn test_total_supply<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -1187,7 +1211,7 @@ where
         vec![(Account::from(p1.0), 10_000_000)],
     );
 
-    let now = system_time_to_nanos(env.time());
+    let now = system_time_to_nanos(env.time_of_next_round());
     let tx_window = TX_WINDOW.as_nanos() as u64;
 
     assert_eq!(
@@ -1206,6 +1230,8 @@ where
             }
         )
     );
+
+    let now = system_time_to_nanos(env.time_of_next_round());
 
     assert_eq!(
         Err(TransferError::CreatedInFuture { ledger_time: now }),
@@ -1381,6 +1407,85 @@ pub fn test_archive_duplicate_controllers(ledger_wasm: Vec<u8>) {
     let p100 = PrincipalId::new_user_test_id(100);
 
     test_controllers(vec![p100], &ledger_wasm, encode_init_args);
+}
+
+pub fn test_upgrade_archive_options<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let archive_controller = PrincipalId::new_user_test_id(100);
+
+    let (env, ledger_id) = setup(
+        ledger_wasm.clone(),
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+
+    for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
+        transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
+    }
+    env.run_until_completion(/*max_ticks=*/ 10);
+
+    let archive_info = list_archives(&env, ledger_id);
+    let first_archive = ArchiveInfo {
+        canister_id: "rrkah-fqaaa-aaaaa-aaaaq-cai".parse().unwrap(),
+        block_range_start: 0_u8.into(),
+        block_range_end: (NUM_BLOCKS_TO_ARCHIVE - 1).into(),
+    };
+    assert_eq!(archive_info, vec![first_archive.clone()]);
+    assert_eq!(
+        get_archive_remaining_capacity(&env, first_archive.canister_id),
+        100
+    );
+    assert_eq!(
+        env.canister_status_as(
+            archive_controller,
+            CanisterId::unchecked_from_principal(first_archive.canister_id.into())
+        )
+        .unwrap()
+        .unwrap()
+        .cycles(),
+        0
+    );
+
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            cycles_for_archive_creation: Some(100_000_000_000_000),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(ledger_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
+        .expect("failed to upgrade the archive canister");
+    env.add_cycles(ledger_id, 200_000_000_000_000);
+
+    for i in 0..NUM_BLOCKS_TO_ARCHIVE {
+        transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
+    }
+    env.run_until_completion(/*max_ticks=*/ 10);
+    let archive_info = list_archives(&env, ledger_id);
+    let second_archive = ArchiveInfo {
+        canister_id: "ryjl3-tyaaa-aaaaa-aaaba-cai".parse().unwrap(),
+        block_range_start: NUM_BLOCKS_TO_ARCHIVE.into(),
+        block_range_end: (2 * NUM_BLOCKS_TO_ARCHIVE - 1).into(),
+    };
+    assert_eq!(
+        archive_info,
+        vec![first_archive.clone(), second_archive.clone()]
+    );
+
+    assert_eq!(
+        env.canister_status_as(
+            archive_controller,
+            CanisterId::unchecked_from_principal(second_archive.canister_id.into())
+        )
+        .unwrap()
+        .unwrap()
+        .cycles(),
+        100_000_000_000_000
+    );
 }
 
 pub fn test_archiving<T>(

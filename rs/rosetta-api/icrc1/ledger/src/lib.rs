@@ -8,11 +8,14 @@ use candid::{
     types::number::{Int, Nat},
     CandidType, Principal,
 };
+use ic_base_types::PrincipalId;
 use ic_canister_log::{log, Sink};
 use ic_crypto_tree_hash::{Label, MixedHashTree};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerBalances, Transaction};
+use ic_ledger_canister_core::archive::Archive;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_canister_core::runtime::Runtime;
 use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
     blockchain::Blockchain,
@@ -27,17 +30,25 @@ use ic_ledger_core::{
     tokens::TokensType,
 };
 use ic_ledger_hash_of::HashOf;
-use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
 use icrc_ledger_types::icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
 };
+use icrc_ledger_types::{
+    icrc::generic_value::ICRC3Value,
+    icrc1::account::Account,
+    icrc3::{
+        archive::{GetArchivesArgs, GetArchivesResult, ICRC3ArchiveInfo, QueryArchiveFn},
+        blocks::{ArchivedBlocks, GetBlocksRequest, GetBlocksResult},
+    },
+};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
+use std::ops::DerefMut;
 use std::time::Duration;
 
 const TRANSACTION_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
@@ -245,6 +256,47 @@ impl From<ChangeFeeCollector> for Option<FeeCollector<Account>> {
     }
 }
 
+#[derive(Deserialize, CandidType, Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChangeArchiveOptions {
+    pub trigger_threshold: Option<usize>,
+    pub num_blocks_to_archive: Option<usize>,
+    pub node_max_memory_size_bytes: Option<u64>,
+    pub max_message_size_bytes: Option<u64>,
+    pub controller_id: Option<PrincipalId>,
+    pub more_controller_ids: Option<Vec<PrincipalId>>,
+    pub cycles_for_archive_creation: Option<u64>,
+    pub max_transactions_per_response: Option<u64>,
+}
+
+impl ChangeArchiveOptions {
+    pub fn apply<Rt: Runtime, Wasm: ArchiveCanisterWasm>(self, archive: &mut Archive<Rt, Wasm>) {
+        if let Some(trigger_threshold) = self.trigger_threshold {
+            archive.trigger_threshold = trigger_threshold;
+        }
+        if let Some(num_blocks_to_archive) = self.num_blocks_to_archive {
+            archive.num_blocks_to_archive = num_blocks_to_archive;
+        }
+        if let Some(node_max_memory_size_bytes) = self.node_max_memory_size_bytes {
+            archive.node_max_memory_size_bytes = node_max_memory_size_bytes;
+        }
+        if let Some(max_message_size_bytes) = self.max_message_size_bytes {
+            archive.max_message_size_bytes = max_message_size_bytes;
+        }
+        if let Some(controller_id) = self.controller_id {
+            archive.controller_id = controller_id;
+        }
+        if let Some(more_controller_ids) = self.more_controller_ids {
+            archive.more_controller_ids = Some(more_controller_ids);
+        }
+        if let Some(cycles_for_archive_creation) = self.cycles_for_archive_creation {
+            archive.cycles_for_archive_creation = cycles_for_archive_creation;
+        }
+        if let Some(max_transactions_per_response) = self.max_transactions_per_response {
+            archive.max_transactions_per_response = Some(max_transactions_per_response);
+        }
+    }
+}
+
 #[derive(Default, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct UpgradeArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -265,6 +317,8 @@ pub struct UpgradeArgs {
     pub maximum_number_of_accounts: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accounts_overflow_trim_quantity: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change_archive_options: Option<ChangeArchiveOptions>,
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
@@ -617,6 +671,19 @@ impl<Tokens: TokensType> Ledger<Tokens> {
             self.accounts_overflow_trim_quantity =
                 accounts_overflow_trim_quantity.try_into().unwrap();
         }
+        if let Some(change_archive_options) = args.change_archive_options {
+            let mut maybe_archive = self.blockchain.archive.write().expect(
+                "BUG: should be unreachable since upgrade has exclusive write access to the ledger",
+            );
+            if maybe_archive.is_none() {
+                ic_cdk::trap(
+                    "[ERROR]: Archive options cannot be changed, since there is no archive!",
+                );
+            }
+            if let Some(archive) = maybe_archive.deref_mut() {
+                change_archive_options.apply(archive);
+            }
+        }
     }
 
     /// Returns the root hash of the certified ledger state.
@@ -712,6 +779,92 @@ impl<Tokens: TokensType> Ledger<Tokens> {
             chain_length: self.blockchain.chain_length(),
             certificate: ic_cdk::api::data_certificate().map(serde_bytes::ByteBuf::from),
             blocks: local_blocks,
+            archived_blocks,
+        }
+    }
+
+    pub fn icrc3_get_archives(&self, args: GetArchivesArgs) -> GetArchivesResult {
+        self.blockchain()
+            .archive
+            .read()
+            .expect("Unable to access the archives")
+            .iter()
+            .flat_map(|archive| {
+                archive
+                    .index()
+                    .into_iter()
+                    .filter_map(|((start, end), canister_id)| {
+                        let canister_id = Principal::from(canister_id);
+                        if let Some(from) = args.from {
+                            if canister_id <= from {
+                                return None;
+                            }
+                        }
+                        Some(ICRC3ArchiveInfo {
+                            canister_id,
+                            start: Nat::from(start),
+                            end: Nat::from(end),
+                        })
+                    })
+            })
+            .collect()
+    }
+
+    // TODO(FI-1268): extend MAX_BLOCKS_PER_RESPONSE to include archives
+    pub fn icrc3_get_blocks(&self, args: Vec<GetBlocksRequest>) -> GetBlocksResult {
+        const MAX_BLOCKS_PER_RESPONSE: u64 = 100;
+
+        let mut blocks = vec![];
+        let mut archived_blocks_by_callback = BTreeMap::new();
+        for arg in args {
+            let (start, length) = arg
+                .as_start_and_length()
+                .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
+            let max_length = MAX_BLOCKS_PER_RESPONSE.saturating_sub(blocks.len() as u64);
+            if max_length == 0 {
+                break;
+            }
+            let length = max_length.min(length).min(usize::MAX as u64) as usize;
+            let (first_index, local_blocks, archived_ranges) = self.query_blocks(
+                start,
+                length,
+                |block| ICRC3Value::from(encoded_block_to_generic_block(block)),
+                |canister_id| {
+                    QueryArchiveFn::<Vec<GetBlocksRequest>, GetBlocksResult>::new(
+                        canister_id,
+                        "icrc3_get_blocks",
+                    )
+                },
+            );
+            for (id, block) in (first_index..).zip(local_blocks) {
+                blocks.push(icrc_ledger_types::icrc3::blocks::BlockWithId {
+                    id: Nat::from(id),
+                    block,
+                });
+            }
+            for ArchivedRange {
+                start,
+                length,
+                callback,
+            } in archived_ranges
+            {
+                let request = GetBlocksRequest { start, length };
+                archived_blocks_by_callback
+                    .entry(callback)
+                    .or_insert(vec![])
+                    .push(request);
+            }
+            if blocks.len() as u64 >= MAX_BLOCKS_PER_RESPONSE {
+                break;
+            }
+        }
+        let mut archived_blocks = vec![];
+        for (callback, args) in archived_blocks_by_callback {
+            archived_blocks.push(ArchivedBlocks { args, callback });
+        }
+        GetBlocksResult {
+            log_length: Nat::from(self.blockchain.chain_length()),
+            blocks,
             archived_blocks,
         }
     }

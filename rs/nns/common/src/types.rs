@@ -1,31 +1,14 @@
-use crate::pb::v1::{
-    CanisterId as CanisterIdProto, NeuronId as NeuronIdProto, ProposalId as ProposalIdProto,
-};
+use crate::pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto};
 use candid::{CandidType, Deserialize};
 use dfn_core::api::CanisterId;
 use serde::Serialize;
 use std::{
     cmp::{Eq, PartialEq},
-    convert::TryFrom,
     fmt::{self, Debug, Display, Formatter},
     hash::Hash,
     num::ParseIntError,
     str::FromStr,
 };
-
-impl From<CanisterId> for CanisterIdProto {
-    fn from(id: CanisterId) -> Self {
-        CanisterIdProto {
-            serialized_id: id.get().as_slice().to_vec(),
-        }
-    }
-}
-
-impl From<CanisterIdProto> for CanisterId {
-    fn from(id: CanisterIdProto) -> Self {
-        CanisterId::try_from(id.serialized_id).unwrap()
-    }
-}
 
 // A unique Id for a Neuron.
 #[derive(

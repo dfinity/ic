@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use ic_config::{embedders::Config, flag_status::FlagStatus};
 use ic_embedders::{
-    wasm_utils::instrumentation::instruction_to_cost_new, wasmtime_embedder::system_api_complexity,
+    wasm_utils::instrumentation::instruction_to_cost, wasmtime_embedder::system_api_complexity,
 };
 use ic_interfaces::execution_environment::{HypervisorError, SystemApi, TrapCode};
 use ic_registry_subnet_type::SubnetType;
@@ -44,9 +44,11 @@ fn cannot_execute_wasm_without_memory() {
         Err(err) => {
             assert_eq!(
                 err,
-                ic_interfaces::execution_environment::HypervisorError::ContractViolation(
-                    "WebAssembly module must define memory".to_string()
-                )
+                ic_interfaces::execution_environment::HypervisorError::ContractViolation {
+                    error: "WebAssembly module must define memory".to_string(),
+                    suggestion: "".to_string(),
+                    doc_link: "".to_string()
+                }
             );
         }
     }
@@ -90,13 +92,13 @@ fn correctly_count_instructions() {
     let system_api = &instance.store_data().system_api().unwrap();
     let instructions_used = system_api.slice_instructions_executed(instruction_counter);
 
-    let const_cost = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
-    let call_cost = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
+    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
 
     let expected_instructions = 1 // Function is 1 instruction.
             + 3 * const_cost
             + call_cost
-            + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
+            + system_api_complexity::overhead::MSG_ARG_DATA_COPY.get()
             + data_size;
     assert_eq!(instructions_used.get(), expected_instructions);
 }
@@ -144,11 +146,10 @@ fn instruction_limit_traps() {
 fn correctly_report_performance_counter() {
     let data_size = 1024;
 
-    let const_cost = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
-    let call_cost = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
-    let drop_const_cost = instruction_to_cost_new(&wasmparser::Operator::Drop) + const_cost;
-    let global_set_cost =
-        instruction_to_cost_new(&wasmparser::Operator::GlobalSet { global_index: 0 });
+    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+    let drop_const_cost = instruction_to_cost(&wasmparser::Operator::Drop) + const_cost;
+    let global_set_cost = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 });
 
     // Note: the instrumentation is a stack machine, which counts and subtracts
     // the number of instructions for the whole block. The "dynamic" part of
@@ -166,12 +167,12 @@ fn correctly_report_performance_counter() {
     let expected_instructions_counter1 = 1 // Function is 1 instruction.
             + 3 * const_cost
             + call_cost
-            + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
+            + system_api_complexity::overhead::MSG_ARG_DATA_COPY.get()
             + data_size
             + drop_const_cost
             + const_cost
             + call_cost
-            + system_api_complexity::overhead::new::PERFORMANCE_COUNTER.get()
+            + system_api_complexity::overhead::PERFORMANCE_COUNTER.get()
             + global_set_cost
             + 2 * drop_const_cost
             + 3 * const_cost
@@ -181,9 +182,9 @@ fn correctly_report_performance_counter() {
             + global_set_cost;
     // Includes dynamic part for second data copy and performance counter calls
     let expected_instructions_counter2 = expected_instructions_counter1
-        + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
+        + system_api_complexity::overhead::MSG_ARG_DATA_COPY.get()
         + data_size
-        + system_api_complexity::overhead::new::PERFORMANCE_COUNTER.get();
+        + system_api_complexity::overhead::PERFORMANCE_COUNTER.get();
     let expected_instructions = expected_instructions_counter2;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(
@@ -413,7 +414,7 @@ fn can_set_and_get_float_globals() {
 }
 
 #[test]
-#[should_panic(expected = "global of type I32 cannot be set to I64")]
+#[should_panic(expected = "attempt to set global to value of wrong type")]
 fn try_to_set_globals_with_wrong_types() {
     let _instance = WasmtimeInstanceBuilder::new()
         .with_wat(
@@ -504,9 +505,11 @@ fn calling_function_with_invalid_signature_fails() {
         .unwrap_err();
     assert_eq!(
         err,
-        HypervisorError::ContractViolation(
-            "function invocation does not match its signature".to_string()
-        )
+        HypervisorError::ContractViolation {
+            error: "function invocation does not match its signature".to_string(),
+            suggestion: "".to_string(),
+            doc_link: "".to_string()
+        }
     );
 }
 
@@ -1530,12 +1533,9 @@ fn passive_data_segment() {
 
 /// Calculate debug_print instruction cost from the message length.
 fn debug_print_cost(bytes: usize) -> u64 {
-    let const_cost = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
-    let call_cost = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
-    3 * const_cost
-        + call_cost
-        + system_api_complexity::overhead::new::DEBUG_PRINT.get()
-        + bytes as u64
+    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+    3 * const_cost + call_cost + system_api_complexity::overhead::DEBUG_PRINT.get() + bytes as u64
 }
 
 // The maximum allowed size of a canister log buffer.
@@ -1710,4 +1710,60 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
             ),
         }
     }
+}
+
+#[test]
+// Verify that we can create 64 bit memory and write to it
+fn wasm64_basic_test() {
+    let wat = r#"
+    (module
+        (global $g1 (export "g1") (mut i64) (i64.const 0))
+        (func $test (export "canister_update test")
+            (i64.store (i64.const 0) (memory.grow (i64.const 1)))
+            (i64.store (i64.const 20) (i64.const 137))
+            (i64.load (i64.const 20))
+            global.set $g1
+        )
+        (memory (export "memory") i64 10)
+    )"#;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .build();
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+    assert_eq!(res.exported_globals[0], Global::I64(137));
+}
+
+#[test]
+// Verify behavior of failed memory grow in wasm64 mode
+fn wasm64_handles_memory_grow_failure_test() {
+    let wat = r#"
+    (module
+        (global $g1 (export "g1") (mut i64) (i64.const 0))
+        (global $g2 (export "g2") (mut i64) (i64.const 0))
+        (func $test (export "canister_update test")
+            (memory.grow (i64.const 165536))
+            global.set $g1
+            (i64.const 137)
+            global.set $g2
+        )
+        (memory (export "memory") i64 10)
+    )"#;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .build();
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+    assert_eq!(res.exported_globals[0], Global::I64(-1));
+    assert_eq!(res.exported_globals[1], Global::I64(137));
 }

@@ -24,7 +24,7 @@ use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_types::consensus::{
     certification::CertificationContent,
     dkg as consensus_dkg,
-    ecdsa::{EcdsaComplaintContent, EcdsaOpeningContent},
+    idkg::{EcdsaComplaintContent, EcdsaOpeningContent},
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
     NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };

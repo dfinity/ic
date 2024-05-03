@@ -8,7 +8,7 @@ use crate::consensus::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
     },
     dkg as consensus_dkg,
-    ecdsa::{
+    idkg::{
         EcdsaComplaintContent, EcdsaMessage, EcdsaOpeningContent, EcdsaSigShare, EcdsaTranscript,
     },
     Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
@@ -35,7 +35,7 @@ mod tests;
 
 /// The domain separator to be used when calculating the sender signature for a
 /// request to the Internet Computer according to the
-/// [interface specification](https://sdk.dfinity.org/docs/interface-spec/index.html).
+/// [interface specification](https://internetcomputer.org/docs/current/references/ic-interface-spec).
 pub const DOMAIN_IC_REQUEST: &[u8; 11] = b"\x0Aic-request";
 
 /// A type that specifies a domain for a cryptographic hash.

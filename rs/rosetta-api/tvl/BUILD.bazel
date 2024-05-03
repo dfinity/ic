@@ -7,7 +7,6 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/rust_canisters/http_types",
     "//rs/types/base_types",
-    "@crate_index//:ic0",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:futures",
@@ -16,6 +15,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:ic-xrc-types",
+    "@crate_index//:ic0",
     "@crate_index//:num-traits",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
@@ -58,26 +58,26 @@ rust_test(
 
 DEV_ENV = {
     "CARGO_MANIFEST_DIR": "rs/nns/integration_tests",
-    "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
+    "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
+    "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
     "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
-    "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
-    "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
-    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
-    "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm)",
+    "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
+    "GOVERNANCE_DIR": "rs/nns/governance",
+    "GOVERNANCE_WASM": "$(rootpath //rs/nns/governance:governance-canister)",
     "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister)",
     "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index:index_canister)",
     "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
-    "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
-    "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
-    "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
+    "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm)",
+    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+    "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
+    "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+    "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
     "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister)",
     "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
     "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
-    "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
-    "GOVERNANCE_DIR": "rs/nns/governance",
-    "XRC_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
-    "GOVERNANCE_WASM": "$(rootpath //rs/nns/governance:governance-canister)",
+    "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
     "TVL_WASM": "$(rootpath //rs/rosetta-api/tvl:tvl_canister)",
+    "XRC_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
 }
 
 DEPENDENCIES_TEST = [
@@ -92,8 +92,6 @@ DEPENDENCIES_TEST = [
 ]
 
 DEV_DATA = [
-    "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
-    "//rs/rosetta-api/tvl:tvl_canister",
     "//rs/nns/cmc:cycles-minting-canister",
     "//rs/nns/governance:governance-canister",
     "//rs/nns/governance:governance-canister-test",
@@ -107,6 +105,8 @@ DEV_DATA = [
     "//rs/rosetta-api/icrc1/archive:archive_canister",
     "//rs/rosetta-api/icrc1/index:index_canister",
     "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+    "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
+    "//rs/rosetta-api/tvl:tvl_canister",
     "//rs/sns/governance:sns-governance-canister",
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",

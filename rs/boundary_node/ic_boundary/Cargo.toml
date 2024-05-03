@@ -18,7 +18,7 @@ tls = []
 anyhow = { workspace = true }
 arc-swap = "1"
 async-scoped = { version = "0.8", features = ["use-tokio"] }
-async-trait = "0.1.56"
+async-trait = { workspace = true }
 axum = "0.6.1"
 axum-extra = "0.9.0"
 axum-server = { version = "0.5.1", features = ["tls-rustls"] }
@@ -72,7 +72,14 @@ prometheus = { workspace = true }
 rand = "0.8.4"
 rcgen = { workspace = true }
 regex = "1.3.9"
-reqwest = { workspace = true }
+reqwest = { version = "0.11.22", default-features = false, features = [
+    "blocking",
+    "json",
+    "multipart",
+    "rustls-tls",
+    "rustls-tls-webpki-roots",
+    "stream",
+] }
 rustls = { workspace = true }
 rustls-pemfile = "^1"
 serde = { workspace = true }

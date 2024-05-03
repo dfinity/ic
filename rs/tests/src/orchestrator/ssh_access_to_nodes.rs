@@ -23,7 +23,7 @@ use crate::{
     orchestrator::utils::ssh_access::{
         assert_authentication_fails, assert_authentication_works, fail_to_update_subnet_record,
         fail_updating_ssh_keys_for_all_unassigned_nodes, generate_key_strings,
-        get_updatesubnetpayload_with_keys, get_updateunassignednodespayload,
+        get_updatesshreadonlyaccesskeyspayload, get_updatesubnetpayload_with_keys,
         update_ssh_keys_for_all_unassigned_nodes, update_subnet_record,
         wait_until_authentication_fails, wait_until_authentication_is_granted, AuthMean,
     },
@@ -152,7 +152,7 @@ pub fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
 
     // Update the registry with two new pairs of keys.
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
-    let payload = get_updateunassignednodespayload(Some(vec![readonly_public_key]));
+    let payload = get_updatesshreadonlyaccesskeyspayload(vec![readonly_public_key]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,
@@ -162,7 +162,7 @@ pub fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
     wait_until_authentication_is_granted(&node_ip, "readonly", &readonly_mean);
 
     // Clear the keys in the registry
-    let no_key_payload = get_updateunassignednodespayload(Some(vec![]));
+    let no_key_payload = get_updatesshreadonlyaccesskeyspayload(vec![]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         no_key_payload,
@@ -227,11 +227,11 @@ pub fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
     let (readonly_private_key1, readonly_public_key1) = generate_key_strings();
     let (readonly_private_key2, readonly_public_key2) = generate_key_strings();
     let (readonly_private_key3, readonly_public_key3) = generate_key_strings();
-    let payload = get_updateunassignednodespayload(Some(vec![
+    let payload = get_updatesshreadonlyaccesskeyspayload(vec![
         readonly_public_key1,
         readonly_public_key2,
         readonly_public_key3,
-    ]));
+    ]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,
@@ -305,7 +305,7 @@ pub fn can_add_max_number_of_readonly_and_backup_keys(env: TestEnv) {
     ));
 
     // Also do that for unassigned nodes
-    let payload_for_the_unassigned = get_updateunassignednodespayload(Some(vec![public_key; 50]));
+    let payload_for_the_unassigned = get_updatesshreadonlyaccesskeyspayload(vec![public_key; 50]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload_for_the_unassigned,
@@ -342,7 +342,7 @@ pub fn cannot_add_more_than_max_number_of_readonly_or_backup_keys(env: TestEnv) 
 
     // Also do that for unassigned nodes
     let readonly_payload_for_the_unassigned =
-        get_updateunassignednodespayload(Some(vec![public_key; MAX_NUM_SSH_KEYS + 1]));
+        get_updatesshreadonlyaccesskeyspayload(vec![public_key; MAX_NUM_SSH_KEYS + 1]);
     block_on(fail_updating_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         readonly_payload_for_the_unassigned,

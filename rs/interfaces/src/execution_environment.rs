@@ -9,8 +9,8 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
 use ic_types::{
-    consensus::ecdsa::QuadrupleId,
-    crypto::canister_threshold_sig::MasterEcdsaPublicKey,
+    consensus::idkg::QuadrupleId,
+    crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{
         AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, MessageId,
@@ -99,6 +99,8 @@ pub enum SystemApiCallId {
     CallOnCleanup,
     /// Tracker for `ic0.call_perform()`
     CallPerform,
+    /// Tracker for `ic0.call_with_best_effort_response()`
+    CallWithBestEffortResponse,
     /// Tracker for `ic0.canister_cycle_balance()`
     CanisterCycleBalance,
     /// Tracker for `ic0.canister_cycle_balance128()`
@@ -189,8 +191,8 @@ pub enum SystemApiCallId {
     Time,
     /// Tracker for `ic0.trap()`
     Trap,
-    /// Tracker for `__.update_available_memory()`
-    UpdateAvailableMemory,
+    /// Tracker for `__.try_grow_wasm_memory()`
+    TryGrowWasmMemory,
 }
 
 /// System API call counters, i.e. how many times each tracked System API call
@@ -702,11 +704,23 @@ pub trait SystemApi {
     /// `ic0.call_new` and `ic0.call_perform`.
     fn ic0_call_data_append(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
 
+    /// Relaxes the response delivery guarantee to be best effort, asking the system to respond at the
+    /// latest after `timeout_seconds` have elapsed. Best effort means the system may also respond with
+    /// a `SYS_UNKNOWN` reject code, signifying that the call may or may not have been processed by
+    /// the callee. Then, even if the callee produces a response, it will not be delivered to the caller.
+    /// Any value for `timeout_seconds` is permitted, but is silently bounded by the `MAX_CALL_TIMEOUT`
+    /// system constant; i.e., larger timeouts are treated as equivalent to `MAX_CALL_TIMEOUT` and do not
+    /// cause an error.
+    ///
+    /// This method can be called only in between `ic0.call_new` and `ic0.call_perform`, and at most once at that.
+    /// Otherwise, it traps. A different timeout can be specified for each call.
+    fn ic0_call_with_best_effort_response(&mut self, timeout_seconds: u32) -> HypervisorResult<()>;
+
     /// Specifies the closure to be called if the reply/reject closures trap.
     /// Can be called at most once between `ic0.call_new` and
     /// `ic0.call_perform`.
     ///
-    /// See <https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-call>
+    /// See <https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-call>
     fn ic0_call_on_cleanup(&mut self, fun: u32, env: u32) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_call_cycles_add128` instead, as this API
@@ -890,13 +904,12 @@ pub trait SystemApi {
     fn yield_for_dirty_memory_copy(&mut self, instruction_counter: i64) -> HypervisorResult<i64>;
 
     /// This system call is not part of the public spec. It's called after a
-    /// native `memory.grow` or `table.grow` has been called to check whether
-    /// there's enough available memory left.
-    fn update_available_memory(
+    /// native `memory.grow` has been executed to check whether there's enough
+    /// available memory left.
+    fn try_grow_wasm_memory(
         &mut self,
         native_memory_grow_res: i64,
-        additional_elements: u64,
-        element_size: u64,
+        additional_wasm_pages: u64,
     ) -> HypervisorResult<()>;
 
     /// Attempts to allocate memory before calling stable grow. Will also check
@@ -1009,7 +1022,7 @@ pub trait SystemApi {
     ) -> HypervisorResult<()>;
 
     /// Sets the certified data for the canister.
-    /// See: <https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-certified-data>
+    /// See: <https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-certified-data>
     fn ic0_certified_data_set(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
 
     /// If run in non-replicated execution (i.e. query),
@@ -1150,7 +1163,7 @@ pub trait Scheduler: Send {
         &self,
         state: Self::State,
         randomness: Randomness,
-        ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+        ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
         ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
         current_round: ExecutionRound,
         next_checkpoint_round: Option<ExecutionRound>,

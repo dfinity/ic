@@ -32,15 +32,16 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
 slog-term = "2.6.0"
-wasm-encoder = { version = "0.38.1", features = ["wasmparser"] }
-wasmparser = "0.118.1"
-wasmtime = { version = "18.0.2", default-features = false, features = [
+wasm-encoder = { version = "0.201.0", features = ["wasmparser"] }
+wasmparser = "0.201.0"
+wasmtime = { version = "19.0.2", default-features = false, features = [
     'cranelift',
+    'gc',
     'parallel-compilation',
     'runtime',
 ] }
-wasmtime-environ = "18.0.2"
-wasmtime-runtime = "18.0.2"
+wasmtime-environ = "19.0.2"
+wasmtime-runtime = "19.0.2"
 
 
 [dev-dependencies]
@@ -49,6 +50,7 @@ candid = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { version = "0.5", features = ["html_reports"] }
 embedders_bench = { path = "benches/embedders_bench" }
+ic-base-types = { path = "../types/base_types" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-system-api = { path = "../system_api" }
 ic-test-utilities = { path = "../test_utilities" }

@@ -12,8 +12,10 @@ fn stream_flags_constant_default_and_default_are_equivalent() {
     let default_flags = ic_types::xnet::StreamFlags::default();
     assert_eq!(default_flags, STREAM_DEFAULT_FLAGS);
 
-    let ic_types::xnet::StreamFlags { responses_only } = default_flags;
-    assert!(!responses_only);
+    let ic_types::xnet::StreamFlags {
+        deprecated_responses_only,
+    } = default_flags;
+    assert!(!deprecated_responses_only);
 }
 
 /// Validates that the flags defined by `StreamFlagBits` are well-formed.
@@ -56,7 +58,7 @@ fn convert_stream_header_with_invalid_signals() {
         end: 25,
         signals_end: 256,
         reject_signal_deltas: vec![300, 50, 6],
-        flags: StreamFlagBits::ResponsesOnly as u64,
+        flags: StreamFlagBits::DeprecatedResponsesOnly as u64,
     };
     match ic_types::xnet::StreamHeader::try_from(header_with_invalid_signals) {
         Ok(ctx) => panic!("Expected Err(_), got Ok({:?})", ctx),

@@ -134,7 +134,11 @@ type MinterInfo = record {
     // Ethereum address controlled by the minter via threshold ECDSA.
     minter_address: opt text;
 
-    // Address of the helper smart contract.
+    // (Deprecated) Address of the ETH helper smart contract.
+    // Use `eth_helper_contract_address`.
+    smart_contract_address: opt text;
+
+    // Address of the ETH helper smart contract.
     eth_helper_contract_address: opt text;
 
     // Address of the ERC20 helper smart contract
@@ -158,6 +162,10 @@ type MinterInfo = record {
 
     // Last gas fee estimate.
     last_gas_fee_estimate: opt GasFeeEstimate;
+
+    // Amount of ETH in Wei controlled by the minter.
+    // This might be less that the actual amount available on the `minter_address()`.
+    erc20_balances : opt vec record { erc20_contract_address: text; balance: nat};
 };
 
 
@@ -225,7 +233,7 @@ type WithdrawalError = variant {
    // Recipient's address is blocked.
    // No withdrawal can be made to that address.
     RecipientAddressBlocked : record { address : text };
-    // The minter is overloaded, retry the request.
+    // The minter or the ckETH ledger is temporarily unavailable, retry the request.
     // The payload contains a human-readable message explaining what caused the unavailability.
     TemporarilyUnavailable : text;
 };
@@ -266,6 +274,10 @@ type WithdrawErc20Error = variant {
     // The minter could not burn the requested amount of ckERC20 tokens.
     // The `cketh_block_index` identifies the burn that occurred on the ckETH ledger and that will be reimbursed.
     CkErc20LedgerError : record { cketh_block_index : nat; error : LedgerError };
+
+    // The minter is temporarily unavailable, retry the request.
+    // The payload contains a human-readable message explaining what caused the unavailability.
+    TemporarilyUnavailable : text;
 };
 
 type LedgerError = variant {
@@ -275,6 +287,9 @@ type LedgerError = variant {
     // The allowance given to the minter is too low.
     InsufficientAllowance : record { allowance : nat; failed_burn_amount : nat; token_symbol : text; ledger_id : principal };
 
+    // The withdrawal amount is too low and doesn't cover the ledger transaction fee.
+    AmountTooLow : record { minimum_burn_amount : nat; failed_burn_amount : nat; token_symbol : text; ledger_id : principal };
+
     // The ledger is overloaded, retry the request.
     // The payload contains a human-readable message explaining what caused the unavailability.
     TemporarilyUnavailable : text;
@@ -283,6 +298,11 @@ type LedgerError = variant {
 type EventSource = record {
     transaction_hash : text;
     log_index : nat;
+};
+
+type ReimbursementIndex = variant {
+    CkEth : record { ledger_burn_index : nat };
+    CkErc20 : record { cketh_ledger_burn_index : nat; ledger_id : principal; ckerc20_ledger_burn_index: nat };
 };
 
 type TransactionReceipt = record {
@@ -412,6 +432,12 @@ type Event = record {
             erc20_contract_address : text;
             mint_block_index : nat;
             ckerc20_token_symbol: text;
+        };
+        QuarantinedDeposit : record {
+            event_source : EventSource;
+        };
+        QuarantinedReimbursement : record {
+            index : ReimbursementIndex;
         };
     };
 };

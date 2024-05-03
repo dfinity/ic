@@ -19,7 +19,7 @@ pub struct Funds {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StreamFlags {
     #[prost(bool, tag = "1")]
-    pub responses_only: bool,
+    pub deprecated_responses_only: bool,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -92,7 +92,9 @@ pub struct Request {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RejectContext {
     #[prost(uint64, tag = "1")]
-    pub reject_code: u64,
+    pub reject_code_old: u64,
+    #[prost(enumeration = "super::super::super::types::v1::RejectCode", tag = "3")]
+    pub reject_code: i32,
     #[prost(string, tag = "2")]
     pub reject_message: ::prost::alloc::string::String,
 }

@@ -22,7 +22,7 @@ default:
     expire_in: 3 days
     when: always
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:abbdc66c19bf32eda2109f97e39fde519ef9b452ab54aee52b234af8638983d8"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9"
   tags:
     - dfinity-ic
 
@@ -67,6 +67,10 @@ before_script:
     if [ "$(uname)" == "Linux" ]; then
       docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
       docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+
+      if [ "${NODE_NAME:-}" != "" ]; then
+          echo "NODE: $NODE_NAME"
+      fi
 
       # set ownership to ic-build container's user,
       # but ignore errors that happen due to git gc:

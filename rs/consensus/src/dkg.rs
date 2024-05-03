@@ -34,7 +34,7 @@ use ic_types::{
     consensus::{
         dkg,
         dkg::{DealingContent, DkgMessageId, Message, Summary},
-        ecdsa, get_faults_tolerated, Block, BlockPayload, CatchUpContent, CatchUpPackage,
+        get_faults_tolerated, idkg, Block, BlockPayload, CatchUpContent, CatchUpPackage,
         HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
     },
     crypto::{
@@ -77,27 +77,27 @@ const REMOTE_DKG_REPEATED_FAILURE_ERROR: &str = "Attempts to run this DKG repeat
 const TAGS: [NiDkgTag; 2] = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold];
 
 struct Metrics {
-    pub on_state_change_duration: Histogram,
-    pub on_state_change_processed: Histogram,
+    on_state_change_duration: Histogram,
+    on_state_change_processed: Histogram,
 }
 
 /// Transient Dkg message validation errors.
-#[allow(missing_docs)]
+// The `Debug` implementation is ignored during the dead code analysis and we are getting a `field
+// is never used` warning on this enum even though we are implicitly reading them when we log the
+// enum. See https://github.com/rust-lang/rust/issues/88900
+#[allow(dead_code)]
 #[derive(Debug)]
-pub enum PermanentError {
+pub(crate) enum PermanentError {
     CryptoError(CryptoError),
     DkgCreateTranscriptError(DkgCreateTranscriptError),
     DkgVerifyDealingError(DkgVerifyDealingError),
     MismatchedDkgSummary(dkg::Summary, dkg::Summary),
     MissingDkgConfigForDealing,
-    LastSummaryHasMultipleConfigsForSameTag,
     DkgStartHeightDoesNotMatchParentBlock,
     DkgSummaryAtNonStartHeight(Height),
     DkgDealingAtStartHeight(Height),
-    MissingRegistryVersion(Height),
     InvalidDealer(NodeId),
     DealerAlreadyDealt(NodeId),
-    FailedToCreateDkgConfig(NiDkgConfigValidationError),
 }
 
 /// Permanent Dkg message validation errors.
@@ -115,7 +115,7 @@ pub enum TransientError {
 }
 
 /// Dkg errors.
-pub type DkgMessageValidationError = ValidationError<PermanentError, TransientError>;
+pub(crate) type DkgMessageValidationError = ValidationError<PermanentError, TransientError>;
 
 impl From<DkgCreateTranscriptError> for PermanentError {
     fn from(err: DkgCreateTranscriptError) -> Self {
@@ -428,7 +428,7 @@ fn get_handle_invalid_change_action<T: AsRef<str>>(message: &Message, reason: T)
 
 /// Validates the DKG payload. The parent block is expected to be a valid block.
 #[allow(clippy::too_many_arguments)]
-pub fn validate_payload(
+pub(crate) fn validate_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
@@ -834,7 +834,7 @@ fn get_node_list(
 }
 
 /// Creates DKG configs for the local subnet for the next DKG intervals.
-pub fn get_configs_for_local_transcripts(
+pub(crate) fn get_configs_for_local_transcripts(
     subnet_id: SubnetId,
     node_ids: BTreeSet<NodeId>,
     start_block_height: Height,
@@ -1302,7 +1302,7 @@ impl<Pool: DkgPool> PriorityFnAndFilterProducer<DkgArtifact, Pool> for DkgGossip
         Box::new(move |id, _| {
             use std::cmp::Ordering;
             match id.height.cmp(&start_height) {
-                Ordering::Equal => Priority::Fetch,
+                Ordering::Equal => Priority::FetchNow,
                 Ordering::Greater => Priority::Stash,
                 Ordering::Less => Priority::Drop,
             }
@@ -1559,7 +1559,7 @@ fn bootstrap_ecdsa_summary_from_cup_contents(
     cup_contents: &CatchUpPackageContents,
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
-) -> Result<ecdsa::Summary, String> {
+) -> Result<idkg::Summary, String> {
     let initial_dealings = inspect_ecdsa_initializations(&cup_contents.ecdsa_initializations)?;
     if initial_dealings.is_empty() {
         return Ok(None);
@@ -1586,7 +1586,7 @@ fn bootstrap_ecdsa_summary(
     registry_version: RegistryVersion,
     registry_client: &dyn RegistryClient,
     logger: &ReplicaLogger,
-) -> Result<ecdsa::Summary, String> {
+) -> Result<idkg::Summary, String> {
     if let Some(summary) =
         bootstrap_ecdsa_summary_from_cup_contents(cup_contents, subnet_id, logger)?
     {
@@ -1639,7 +1639,7 @@ mod tests {
     };
     use ic_types::{
         batch::BatchPayload,
-        consensus::{ecdsa, DataPayload, HasVersion},
+        consensus::{idkg, DataPayload, HasVersion},
         crypto::threshold_sig::ni_dkg::{
             NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
@@ -3503,7 +3503,7 @@ mod tests {
                 BlockPayload::Data(DataPayload {
                     batch: BatchPayload::default(),
                     dealings: dkg::Dealings::new(Height::from(0), messages.clone()),
-                    ecdsa: ecdsa::Payload::default(),
+                    ecdsa: idkg::Payload::default(),
                 }),
             );
             let mut parent = Block::from(pool.make_next_block());

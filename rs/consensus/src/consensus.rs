@@ -3,6 +3,7 @@
 
 pub mod batch_delivery;
 pub(crate) mod block_maker;
+mod bounds;
 mod catchup_package_maker;
 pub mod dkg_key_manager;
 mod finalizer;
@@ -23,23 +24,15 @@ pub mod validator;
 mod proptests;
 
 use crate::consensus::{
-    block_maker::BlockMaker,
-    catchup_package_maker::CatchUpPackageMaker,
-    dkg_key_manager::DkgKeyManager,
-    finalizer::Finalizer,
-    metrics::{ConsensusGossipMetrics, ConsensusMetrics},
-    notary::Notary,
-    payload_builder::PayloadBuilderImpl,
-    priority::get_priority_function,
-    purger::Purger,
-    random_beacon_maker::RandomBeaconMaker,
-    random_tape_maker::RandomTapeMaker,
-    share_aggregator::ShareAggregator,
-    validator::Validator,
+    block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
+    dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
+    notary::Notary, payload_builder::PayloadBuilderImpl, priority::get_priority_function,
+    purger::Purger, random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
+    share_aggregator::ShareAggregator, validator::Validator,
 };
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, get_notarization_delay_settings, is_root_subnet,
-    membership::Membership, pool_reader::PoolReader, RoundRobin,
+    crypto::ConsensusCrypto, get_notarization_delay_settings, membership::Membership,
+    pool_reader::PoolReader, RoundRobin,
 };
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
@@ -52,20 +45,20 @@ use ic_interfaces::{
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
-use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient, POLLING_PERIOD};
+use ic_interfaces_registry::{RegistryClient, POLLING_PERIOD};
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::{ConsensusMessageFilter, ConsensusMessageId, PriorityFn},
+    artifact::{ConsensusMessageId, PriorityFn},
     artifact_kind::ConsensusArtifact,
-    consensus::{ConsensusMessageAttribute, ConsensusMessageHashable},
+    consensus::ConsensusMessageHashable,
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
     replica_version::ReplicaVersion,
-    Height, Time,
+    Time,
 };
 pub use metrics::ValidatorMetrics;
 use std::{
@@ -138,7 +131,6 @@ pub struct ConsensusImpl {
     malicious_flags: MaliciousFlags,
     /// Logger
     pub log: ReplicaLogger,
-    local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
 }
 
 impl ConsensusImpl {
@@ -164,7 +156,6 @@ impl ConsensusImpl {
         malicious_flags: MaliciousFlags,
         metrics_registry: MetricsRegistry,
         logger: ReplicaLogger,
-        local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
     ) -> Self {
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
             replica_config.subnet_id,
@@ -267,8 +258,10 @@ impl ConsensusImpl {
                 logger.clone(),
             ),
             purger: Purger::new(
+                replica_config.clone(),
                 state_manager.clone(),
                 message_routing,
+                registry_client.clone(),
                 logger.clone(),
                 metrics_registry.clone(),
             ),
@@ -281,7 +274,6 @@ impl ConsensusImpl {
             replica_config,
             last_invoked: RefCell::new(last_invoked),
             schedule: RoundRobin::default(),
-            local_store_time_reader,
         }
     }
 
@@ -321,14 +313,6 @@ impl ConsensusImpl {
             .observe(change_set.len() as f64);
 
         change_set
-    }
-
-    /// check whether the subnet should halt because it has not reached
-    /// the registry in a long time
-    pub fn check_registry_outdated(&self) -> Result<(), String> {
-        let _ = self.local_store_time_reader.read_certified_time();
-        let _ = self.time_source.get_relative_time();
-        Ok(())
     }
 
     /// check whether the subnet should halt because the subnet record in the
@@ -417,22 +401,6 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
             .unwrap()
             .on_state_change(&pool_reader);
 
-        // For non-root subnets, we must halt if our registry is outdated
-        if let Ok(false) = is_root_subnet(
-            self.registry_client.as_ref(),
-            self.replica_config.subnet_id,
-            self.registry_client.get_latest_version(),
-        ) {
-            if let Err(e) = self.check_registry_outdated() {
-                info!(
-                    every_n_seconds => 5,
-                    self.log,
-                    "consensus is halted due to outdated registry. {:?}", e
-                );
-                return ChangeSet::new();
-            }
-        }
-
         // Consensus halts if instructed by the registry
         if self.should_halt_by_subnet_record() {
             info!(
@@ -510,6 +478,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
                 self.purger.on_state_change(&pool_reader)
             })
         };
+
         let calls: [&'_ dyn Fn() -> ChangeSet; 10] = [
             &finalize,
             &make_catch_up_package,
@@ -610,19 +579,12 @@ fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>
 /// Implement Consensus Gossip interface.
 pub struct ConsensusGossipImpl {
     message_routing: Arc<dyn MessageRouting>,
-    metrics: ConsensusGossipMetrics,
 }
 
 impl ConsensusGossipImpl {
     /// Create a new [ConsensusGossipImpl].
-    pub fn new(
-        message_routing: Arc<dyn MessageRouting>,
-        metrics_registry: MetricsRegistry,
-    ) -> Self {
-        ConsensusGossipImpl {
-            message_routing,
-            metrics: ConsensusGossipMetrics::new(metrics_registry),
-        }
+    pub fn new(message_routing: Arc<dyn MessageRouting>) -> Self {
+        ConsensusGossipImpl { message_routing }
     }
 }
 
@@ -630,28 +592,8 @@ impl<Pool: ConsensusPool> PriorityFnAndFilterProducer<ConsensusArtifact, Pool>
     for ConsensusGossipImpl
 {
     /// Return a priority function that matches the given consensus pool.
-    fn get_priority_function(
-        &self,
-        pool: &Pool,
-    ) -> PriorityFn<ConsensusMessageId, ConsensusMessageAttribute> {
-        get_priority_function(
-            pool,
-            self.message_routing.expected_batch_height(),
-            &self.metrics,
-        )
-    }
-
-    /// Return a filter that represents what artifacts are needed above the
-    /// filter height.
-    fn get_filter(&self) -> ConsensusMessageFilter {
-        let expected_batch_height = self.message_routing.expected_batch_height();
-        assert!(
-            expected_batch_height > Height::from(0),
-            "Expected batch height must be 1 more higher"
-        );
-        ConsensusMessageFilter {
-            height: expected_batch_height.decrement(),
-        }
+    fn get_priority_function(&self, pool: &Pool) -> PriorityFn<ConsensusMessageId, ()> {
+        get_priority_function(pool, self.message_routing.expected_batch_height())
     }
 }
 
@@ -677,7 +619,6 @@ pub fn setup(
     malicious_flags: MaliciousFlags,
     metrics_registry: MetricsRegistry,
     logger: ReplicaLogger,
-    local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
     registry_poll_delay_duration_ms: u64,
 ) -> (ConsensusImpl, ConsensusGossipImpl) {
     // Currently, the orchestrator polls the registry every
@@ -710,11 +651,10 @@ pub fn setup(
             time_source,
             stable_registry_version_age,
             malicious_flags,
-            metrics_registry.clone(),
+            metrics_registry,
             logger,
-            local_store_time_reader,
         ),
-        ConsensusGossipImpl::new(message_routing, metrics_registry),
+        ConsensusGossipImpl::new(message_routing),
     )
 }
 
@@ -734,10 +674,10 @@ mod tests {
         xnet_payload_builder::FakeXNetPayloadBuilder,
     };
     use ic_test_utilities_consensus::batch::MockBatchPayloadBuilder;
-    use ic_test_utilities_registry::{FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder};
+    use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::{crypto::CryptoHash, CryptoHashOfState, SubnetId};
+    use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height, SubnetId};
     use std::{sync::Arc, time::Duration};
 
     fn set_up_consensus_with_subnet_record(
@@ -804,7 +744,6 @@ mod tests {
             MaliciousFlags::default(),
             metrics_registry,
             no_op_logger(),
-            Arc::new(FakeLocalStoreCertifiedTimeReader::new(time_source.clone())),
         );
         (consensus_impl, pool, time_source)
     }

@@ -200,9 +200,8 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::{
-            ecdsa::ECDSA_IMPROVED_LATENCY, CatchUpPackage, CatchUpPackageShare,
-            CatchUpShareContent, FinalizationShare, HashedBlock, HashedRandomBeacon,
-            NotarizationShare, RandomBeaconShare,
+            CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, FinalizationShare,
+            HashedBlock, HashedRandomBeacon, NotarizationShare, RandomBeaconShare,
         },
         crypto::{CryptoHash, CryptoHashOf},
         signature::ThresholdSignatureShare,
@@ -303,11 +302,7 @@ mod tests {
         );
         assert_eq!(
             cup.get_oldest_registry_version_in_use(),
-            if ECDSA_IMPROVED_LATENCY {
-                RegistryVersion::from(0)
-            } else {
-                RegistryVersion::from(INITIAL_REGISTRY_VERSION)
-            }
+            RegistryVersion::from(0),
         );
     }
 

@@ -32,7 +32,7 @@ use rustls::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use tokio::sync::RwLock;
 use tower::{limit::ConcurrencyLimitLayer, ServiceBuilder};
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
-use tracing::{info, warn};
+use tracing::{debug, error, warn};
 
 use crate::{
     cache::{cache_middleware, Cache},
@@ -46,7 +46,7 @@ use crate::{
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsCheck,
         MetricParamsPersist, MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetrics,
-        WithMetricsCheck, WithMetricsPersist, WithMetricsSnapshot,
+        WithMetricsCheck, WithMetricsPersist, WithMetricsSnapshot, HTTP_DURATION_BUCKETS,
     },
     persist::{Persist, Persister, Routes},
     rate_limiting::RateLimit,
@@ -69,7 +69,7 @@ use {
         socket::listen_tcp_backlog,
         tls::{acme_challenge, prepare_tls, redirect_to_https},
     },
-    axum_server::Server,
+    axum_server::{AddrIncomingConfig, Server},
 };
 
 pub const SERVICE_NAME: &str = "ic_boundary";
@@ -107,9 +107,9 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     }
 
     // Metrics
-    let metrics_registry: Registry = Registry::new_custom(Some(SERVICE_NAME.into()), None)?;
+    let metrics_registry = Registry::new_custom(Some(SERVICE_NAME.into()), None)?;
 
-    info!(
+    warn!(
         msg = format!("Starting {SERVICE_NAME}"),
         metrics_addr = cli.monitoring.metrics_addr.to_string().as_str(),
     );
@@ -118,7 +118,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let registry_snapshot = Arc::new(ArcSwapOption::empty());
 
     // DNS
-    let dns_resolver = DnsResolver::new(Arc::clone(&registry_snapshot));
+    let dns_resolver = Arc::new(DnsResolver::new(Arc::clone(&registry_snapshot)));
 
     // TLS verifier
     let tls_verifier = Arc::new(TlsVerifier::new(
@@ -127,7 +127,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     ));
 
     // TLS Configuration
-    let rustls_config = rustls::ClientConfig::builder()
+    let mut rustls_config = rustls::ClientConfig::builder()
         .with_cipher_suites(&[TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256])
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[&rustls::version::TLS13])
@@ -135,25 +135,28 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         .with_custom_certificate_verifier(tls_verifier)
         .with_no_client_auth();
 
-    let keepalive = Duration::from_secs(cli.listen.http_keepalive);
+    // Enable ALPN to negotiate HTTP version
+    let mut alpn = vec![];
+    if !cli.listen.disable_http2_client {
+        alpn.push(b"h2".to_vec());
+    }
+    alpn.push(b"http/1.1".to_vec());
+    rustls_config.alpn_protocols = alpn;
 
-    // HTTP Client
-    let http_client = reqwest::Client::builder()
-        .timeout(Duration::from_millis(cli.listen.http_timeout))
-        .connect_timeout(Duration::from_millis(cli.listen.http_timeout_connect))
-        .pool_idle_timeout(Some(Duration::from_secs(cli.listen.http_idle_timeout))) // After this duration the idle connection is closed (default 90s)
-        .http2_keep_alive_interval(Some(keepalive)) // Keepalive interval for http2 connections
-        .http2_keep_alive_timeout(Duration::from_secs(cli.listen.http_keepalive_timeout)) // Close connection if no reply after timeout
-        .http2_keep_alive_while_idle(true) // Also ping connections that have no streams open
-        .tcp_keepalive(Some(keepalive)) // Enable TCP keepalives
-        .user_agent(SERVICE_NAME)
-        .redirect(reqwest::redirect::Policy::none())
-        .no_proxy()
-        .use_preconfigured_tls(rustls_config)
-        .dns_resolver(Arc::new(dns_resolver))
-        .build()
-        .context("unable to build HTTP client")?;
-    let http_client = Arc::new(ReqwestClient(http_client));
+    // Set larger session resumption cache to accomodate all replicas (256 by default)
+    rustls_config.resumption = rustls::client::Resumption::in_memory_sessions(4096);
+
+    let http_client = ReqwestClient::new(&cli, rustls_config, dns_resolver)?;
+    let http_client = WithMetrics(
+        http_client,
+        MetricParams::new_with_opts(
+            &metrics_registry,
+            "http_client",
+            &["success", "status", "http_ver"],
+            Some(HTTP_DURATION_BUCKETS),
+        ),
+    );
+    let http_client = Arc::new(http_client);
 
     #[cfg(feature = "tls")]
     let (configuration_runner, tls_acceptor, token_owner) = prepare_tls(&cli, &metrics_registry)
@@ -238,6 +241,13 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), cli.listen.https_port),
         cli.listen.backlog,
     )?)
+    .addr_incoming_config({
+        let mut cfg = AddrIncomingConfig::default();
+        cfg.tcp_keepalive(Some(Duration::from_secs(cli.listen.http_keepalive)));
+        cfg.tcp_keepalive_retries(Some(2));
+        cfg.tcp_nodelay(true);
+        cfg
+    })
     .acceptor(tls_acceptor.clone())
     .serve(
         routers_https
@@ -556,7 +566,7 @@ pub fn setup_router(
         middleware::from_fn_with_state(
             HttpMetricParams::new(
                 metrics_registry,
-                "http_request_in",
+                "http_request",
                 cli.monitoring.log_failed_requests_only,
             ),
             metrics::metrics_middleware,
@@ -676,7 +686,11 @@ impl<T: Run> Run for WithMetrics<T> {
         counter.with_label_values(&[status]).inc();
         recorder.with_label_values(&[status]).observe(duration);
 
-        info!(action, status, duration, error = ?out.as_ref().err());
+        if out.is_err() {
+            error!(action, status, duration, error = ?out.as_ref().err());
+        } else {
+            debug!(action, status, duration, error = ?out.as_ref().err());
+        }
 
         out
     }

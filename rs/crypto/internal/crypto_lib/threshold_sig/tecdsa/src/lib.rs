@@ -186,8 +186,8 @@
 
 #![forbid(unsafe_code)]
 
-use ic_crypto_internal_seed::xmd::XmdError;
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey};
+use ic_crypto_internal_seed::XmdError;
+use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
@@ -198,7 +198,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
     IDkgVerifyTranscriptError,
 };
-pub use ic_types::crypto::canister_threshold_sig::EcdsaPublicKey;
+pub use ic_types::crypto::canister_threshold_sig::PublicKey;
 pub use ic_types::NodeIndex;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -252,11 +252,13 @@ pub use crate::utils::poly::*;
 pub use crate::utils::ro::*;
 
 pub use crate::signing::bip340::{
-    derive_bip340_public_key, ThresholdBip340CombinedSignatureInternal,
-    ThresholdBip340SignatureShareInternal,
+    ThresholdBip340CombinedSignatureInternal, ThresholdBip340SignatureShareInternal,
 };
 pub use crate::signing::ecdsa::{
     ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
+};
+pub use crate::signing::eddsa::{
+    ThresholdEd25519CombinedSignatureInternal, ThresholdEd25519SignatureShareInternal,
 };
 pub use crate::signing::key_derivation::{DerivationIndex, DerivationPath};
 
@@ -925,7 +927,6 @@ impl From<ThresholdEcdsaError> for ThresholdBip340VerifySigShareInternalError {
 ///
 /// The values provided must be consistent with when the signature share
 /// was created
-#[allow(clippy::too_many_arguments)]
 pub fn verify_bip340_signature_share(
     sig_share: &ThresholdBip340SignatureShareInternal,
     derivation_path: &DerivationPath,
@@ -970,7 +971,6 @@ impl From<ThresholdEcdsaError> for ThresholdBip340CombineSigSharesInternalError 
 ///
 /// The signature shares must be verified prior to use, and there must
 /// be at least reconstruction_threshold many of them.
-#[allow(clippy::too_many_arguments)]
 pub fn combine_bip340_signature_shares(
     derivation_path: &DerivationPath,
     message: &[u8],
@@ -1017,10 +1017,10 @@ impl From<ThresholdEcdsaError> for ThresholdBip340VerifySignatureInternalError {
 /// `derivation_path`, this function also verifies that the signature
 /// was generated correctly with regards to the provided presignature
 /// transcript and randomness.
-pub fn verify_bip340_threshold_signature(
+pub fn verify_threshold_bip340_signature(
     signature: &ThresholdBip340CombinedSignatureInternal,
     derivation_path: &DerivationPath,
-    hashed_message: &[u8],
+    message: &[u8],
     randomness: Randomness,
     presig_transcript: &IDkgTranscriptInternal,
     key_transcript: &IDkgTranscriptInternal,
@@ -1028,12 +1028,192 @@ pub fn verify_bip340_threshold_signature(
     signature
         .verify(
             derivation_path,
-            hashed_message,
+            message,
             randomness,
             presig_transcript,
             key_transcript,
         )
         .map_err(ThresholdBip340VerifySignatureInternalError::from)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdEd25519GenerateSigShareInternalError {
+    InvalidArguments(String),
+    InconsistentCommitments,
+    InternalError(String),
+}
+
+impl From<ThresholdEcdsaError> for ThresholdEd25519GenerateSigShareInternalError {
+    fn from(e: ThresholdEcdsaError) -> Self {
+        match e {
+            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+/// Create a new threshold Ed25519 Schnorr signature share
+///
+/// The derivation_path creates a new key relative to the master key
+///
+/// The nonce should be random and shared by all nodes, for instance
+/// by deriving a value from the random tape.
+///
+/// The presig_transcript is the transcript of the pre-signature (kappa)
+///
+/// The message can be of any length
+pub fn create_ed25519_signature_share(
+    derivation_path: &DerivationPath,
+    message: &[u8],
+    nonce: Randomness,
+    key_transcript: &IDkgTranscriptInternal,
+    presig_transcript: &IDkgTranscriptInternal,
+    key_opening: &CommitmentOpening,
+    presig_opening: &CommitmentOpening,
+) -> Result<ThresholdEd25519SignatureShareInternal, ThresholdEd25519GenerateSigShareInternalError> {
+    ThresholdEd25519SignatureShareInternal::new(
+        derivation_path,
+        message,
+        nonce,
+        key_transcript,
+        key_opening,
+        presig_transcript,
+        presig_opening,
+    )
+    .map_err(ThresholdEd25519GenerateSigShareInternalError::from)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdEd25519VerifySigShareInternalError {
+    InvalidArguments(String),
+    InconsistentCommitments,
+    InvalidSignatureShare,
+    InternalError(String),
+}
+
+impl From<ThresholdEcdsaError> for ThresholdEd25519VerifySigShareInternalError {
+    fn from(e: ThresholdEcdsaError) -> Self {
+        match e {
+            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InvalidSignatureShare => Self::InvalidSignatureShare,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+/// Verify a signature share
+///
+/// The values provided must be consistent with when the signature share
+/// was created
+pub fn verify_ed25519_signature_share(
+    sig_share: &ThresholdEd25519SignatureShareInternal,
+    derivation_path: &DerivationPath,
+    hashed_message: &[u8],
+    randomness: Randomness,
+    signer_index: NodeIndex,
+    key_transcript: &IDkgTranscriptInternal,
+    presig_transcript: &IDkgTranscriptInternal,
+) -> Result<(), ThresholdEd25519VerifySigShareInternalError> {
+    sig_share
+        .verify(
+            derivation_path,
+            hashed_message,
+            randomness,
+            signer_index,
+            key_transcript,
+            presig_transcript,
+        )
+        .map_err(ThresholdEd25519VerifySigShareInternalError::from)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdEd25519CombineSigSharesInternalError {
+    UnsupportedAlgorithm,
+    InconsistentCommitments,
+    InsufficientShares,
+    InternalError(String),
+}
+
+impl From<ThresholdEcdsaError> for ThresholdEd25519CombineSigSharesInternalError {
+    fn from(e: ThresholdEcdsaError) -> Self {
+        match e {
+            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InsufficientDealings => Self::InsufficientShares,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+/// Combine sufficient signature shares into an Ed25519 signature
+///
+/// The signature shares must be verified prior to use, and there must
+/// be at least reconstruction_threshold many of them.
+pub fn combine_ed25519_signature_shares(
+    derivation_path: &DerivationPath,
+    message: &[u8],
+    randomness: Randomness,
+    key_transcript: &IDkgTranscriptInternal,
+    presig_transcript: &IDkgTranscriptInternal,
+    reconstruction_threshold: NumberOfNodes,
+    sig_shares: &BTreeMap<NodeIndex, ThresholdEd25519SignatureShareInternal>,
+) -> Result<ThresholdEd25519CombinedSignatureInternal, ThresholdEd25519CombineSigSharesInternalError>
+{
+    ThresholdEd25519CombinedSignatureInternal::new(
+        derivation_path,
+        message,
+        randomness,
+        key_transcript,
+        presig_transcript,
+        reconstruction_threshold,
+        sig_shares,
+    )
+    .map_err(ThresholdEd25519CombineSigSharesInternalError::from)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdEd25519VerifySignatureInternalError {
+    InvalidSignature,
+    UnexpectedCommitmentType,
+    InternalError(String),
+}
+
+impl From<ThresholdEcdsaError> for ThresholdEd25519VerifySignatureInternalError {
+    fn from(e: ThresholdEcdsaError) -> Self {
+        match e {
+            ThresholdEcdsaError::UnexpectedCommitmentType => Self::UnexpectedCommitmentType,
+            ThresholdEcdsaError::InvalidSignature => Self::InvalidSignature,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+/// Verify a threshold Ed25519 Schnorr signature
+///
+/// In addition to checking that the signature itself is consistent
+/// with the provided message and the public key associated with
+/// `derivation_path`, this function also verifies that the signature
+/// was generated correctly with regards to the provided presignature
+/// transcript and randomness.
+pub fn verify_threshold_ed25519_signature(
+    signature: &ThresholdEd25519CombinedSignatureInternal,
+    derivation_path: &DerivationPath,
+    message: &[u8],
+    randomness: Randomness,
+    presig_transcript: &IDkgTranscriptInternal,
+    key_transcript: &IDkgTranscriptInternal,
+) -> Result<(), ThresholdEd25519VerifySignatureInternalError> {
+    signature
+        .verify(
+            derivation_path,
+            message,
+            randomness,
+            presig_transcript,
+            key_transcript,
+        )
+        .map_err(ThresholdEd25519VerifySignatureInternalError::from)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1069,14 +1249,47 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaDerivePublicKeyError {
     }
 }
 
-pub fn derive_ecdsa_public_key(
-    master_public_key: &MasterEcdsaPublicKey,
+/// Returns a public key derived from `master_public_key` according to the
+/// `derivation_path`.  The algorithm id of the derived key is the same
+/// as the algorithm id of `master_public_key`.
+pub fn derive_threshold_public_key(
+    master_public_key: &MasterPublicKey,
     derivation_path: &DerivationPath,
-) -> Result<EcdsaPublicKey, ThresholdEcdsaDerivePublicKeyError> {
-    Ok(crate::signing::ecdsa::derive_public_key(
-        master_public_key,
-        derivation_path,
-    )?)
+) -> Result<PublicKey, ThresholdEcdsaDerivePublicKeyError> {
+    let expected_curve = match master_public_key.algorithm_id {
+        AlgorithmId::EcdsaSecp256k1 => EccCurveType::K256,
+        AlgorithmId::ThresholdEcdsaSecp256k1 => EccCurveType::K256,
+
+        AlgorithmId::EcdsaP256 => EccCurveType::P256,
+        AlgorithmId::ThresholdEcdsaSecp256r1 => EccCurveType::P256,
+
+        AlgorithmId::SchnorrSecp256k1 => EccCurveType::K256,
+        AlgorithmId::ThresholdSchnorrBip340 => EccCurveType::K256,
+
+        AlgorithmId::Ed25519 => EccCurveType::Ed25519,
+        AlgorithmId::ThresholdEd25519 => EccCurveType::Ed25519,
+
+        x => {
+            return Err(ThresholdEcdsaDerivePublicKeyError::InvalidArgument(
+                format!(
+                    "Not a known signature algo related to threshold signatures {:?}",
+                    x
+                ),
+            ))
+        }
+    };
+
+    let raw_master_pk = EccPoint::deserialize(expected_curve, &master_public_key.public_key)?;
+
+    let (key_tweak, chain_key) = derivation_path.derive_tweak(&raw_master_pk)?;
+    let tweak_g = EccPoint::mul_by_g(&key_tweak);
+    let public_key_point = tweak_g.add_points(&raw_master_pk)?;
+
+    Ok(PublicKey {
+        algorithm_id: master_public_key.algorithm_id,
+        public_key: public_key_point.serialize(),
+        chain_key,
+    })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

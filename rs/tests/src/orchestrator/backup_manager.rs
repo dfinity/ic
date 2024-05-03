@@ -38,7 +38,7 @@ use crate::{
         subnet_recovery::{enable_ecdsa_on_subnet, run_ecdsa_signature_test},
         upgrade::{
             assert_assigned_replica_version, bless_public_replica_version,
-            get_assigned_replica_version, update_subnet_replica_version, UpdateImageType,
+            deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
         },
     },
     util::{block_on, get_nns_node, MessageCanister, UniversalCanister},
@@ -257,7 +257,7 @@ pub fn test(env: TestEnv) {
     }
 
     info!(log, "Proposal to upgrade the subnet replica version");
-    block_on(update_subnet_replica_version(
+    block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
         &ReplicaVersion::try_from(mainnet_version.clone()).expect("bad TARGET_VERSION string"),
         subnet_id,

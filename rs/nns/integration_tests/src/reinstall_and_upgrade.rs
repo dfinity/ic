@@ -24,7 +24,7 @@ use ic_nns_test_utils::{
         submit_external_update_proposal, upgrade_nns_canister_by_proposal,
         upgrade_nns_canister_with_arg_by_proposal, upgrade_root_canister_by_proposal,
     },
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
 use icp_ledger::{LedgerCanisterInitPayload, LedgerCanisterPayload, Tokens};
 use lifeline::LIFELINE_CANISTER_WASM;
@@ -47,7 +47,7 @@ const TEST_ECT_ACCOUNTS: &[(&str, u32); 2] = &[
 
 #[test]
 fn test_reinstall_and_upgrade_canisters_canonical_ordering() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let init_state = construct_init_state();
         let nns_canisters = NnsCanisters::set_up(&runtime, init_state.clone()).await;
 
@@ -99,7 +99,7 @@ fn test_reinstall_and_upgrade_canisters_canonical_ordering() {
                 // Root Upgrade via Lifeline
                 upgrade_root_canister_by_proposal(
                     &nns_canisters.governance,
-                    &nns_canisters.lifeline,
+                    &nns_canisters.root,
                     wasm,
                 )
                 .await;
@@ -112,7 +112,7 @@ fn test_reinstall_and_upgrade_canisters_canonical_ordering() {
 
 #[test]
 fn test_reinstall_and_upgrade_canisters_with_state_changes() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let init_state = construct_init_state();
         let nns_canisters = NnsCanisters::set_up(&runtime, init_state.clone()).await;
 
@@ -221,7 +221,7 @@ fn test_reinstall_and_upgrade_canisters_with_state_changes() {
                     // Root Upgrade via Lifeline
                     upgrade_root_canister_by_proposal(
                         &nns_canisters.governance,
-                        &nns_canisters.lifeline,
+                        &nns_canisters.root,
                         wasm,
                     )
                     .await;

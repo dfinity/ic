@@ -20,13 +20,13 @@ pub mod idkg;
 #[cfg(test)]
 mod tests;
 
-/// A threshold ECDSA public key.
+/// A public key for canister threshold signatures.
 ///
 /// The public key itself is stored as raw bytes.
 ///
-/// The chain key is included for BIP32-style key derivation
+/// The chain key is included for BIP32-style key derivation.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EcdsaPublicKey {
+pub struct PublicKey {
     pub algorithm_id: AlgorithmId,
     #[serde(with = "serde_bytes")]
     pub public_key: Vec<u8>,
@@ -34,11 +34,11 @@ pub struct EcdsaPublicKey {
     pub chain_key: Vec<u8>,
 }
 
-/// A threshold ECDSA public key.
+/// A master public key for canister threshold signatures.
 ///
 /// The public key itself is stored as raw bytes.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct MasterEcdsaPublicKey {
+pub struct MasterPublicKey {
     pub algorithm_id: AlgorithmId,
     #[serde(with = "serde_bytes")]
     pub public_key: Vec<u8>,
@@ -651,13 +651,14 @@ impl ThresholdSchnorrSigInputs {
     fn check_algorithm_id_validity(
         algorithm_id: AlgorithmId,
     ) -> Result<(), error::ThresholdSchnorrSigInputsCreationError> {
-        match algorithm_id {
-            AlgorithmId::ThresholdSchnorrBip340 => Ok(()),
-            _ => Err(
+        if algorithm_id.is_threshold_schnorr() {
+            Ok(())
+        } else {
+            Err(
                 error::ThresholdSchnorrSigInputsCreationError::UnsupportedAlgorithm(
                     algorithm_id.to_string(),
                 ),
-            ),
+            )
         }
     }
 
@@ -716,7 +717,7 @@ impl SchnorrPreSignatureTranscript {
     fn check_algorithm_id(
         blinder_unmasked: &IDkgTranscript,
     ) -> Result<(), error::ThresholdSchnorrPresignatureTranscriptCreationError> {
-        if blinder_unmasked.algorithm_id != AlgorithmId::ThresholdSchnorrBip340 {
+        if !blinder_unmasked.algorithm_id.is_threshold_schnorr() {
             return Err(
                 error::ThresholdSchnorrPresignatureTranscriptCreationError::UnsupportedAlgorithm(
                     blinder_unmasked.algorithm_id.to_string(),

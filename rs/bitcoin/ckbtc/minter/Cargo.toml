@@ -11,7 +11,7 @@ name = "ic-ckbtc-minter"
 path = "src/main.rs"
 
 [dependencies]
-async-trait = "0.1.53"
+async-trait = { workspace = true }
 bech32 = "0.9.0"
 bs58 = "0.4.0"
 candid = { workspace = true }

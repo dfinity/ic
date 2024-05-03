@@ -17,4 +17,4 @@ ic-nervous-system-common = { path = "../../nervous_system/common" }
 [dev-dependencies]
 assert_matches = { workspace = true }
 proptest = "1.0"
-serde_bytes = "0.11"
+serde_bytes = { workspace = true }

@@ -36,7 +36,7 @@ pub mod args;
 mod boundary_node;
 mod catch_up_package_provider;
 mod dashboard;
-pub mod error;
+mod error;
 mod firewall;
 mod hostos_upgrade;
 mod ipv4_network;

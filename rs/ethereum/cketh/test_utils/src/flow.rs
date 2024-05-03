@@ -2,8 +2,8 @@ use crate::mock::{
     JsonRpcMethod, JsonRpcProvider, MockJsonRpcProviders, MockJsonRpcProvidersBuilder,
 };
 use crate::response::{
-    block_response, fee_history, send_raw_transaction_response, transaction_count_response,
-    transaction_receipt, EthLogEntry,
+    block_response, encode_transaction, fee_history, send_raw_transaction_response,
+    transaction_count_response, transaction_receipt, EthLogEntry,
 };
 use crate::{
     assert_reply, CkEthSetup, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_NUMBER,
@@ -349,6 +349,33 @@ impl ProcessWithdrawalParams {
         self
     }
 
+    pub fn with_failed_transaction_receipt(self) -> Self {
+        self.with_mock_eth_get_transaction_receipt(move |mock| {
+            mock.modify_response_for_all(
+                &mut |receipt: &mut ethers_core::types::TransactionReceipt| {
+                    receipt.status = Some(0_u64.into())
+                },
+            )
+        })
+    }
+
+    pub fn with_inconsistent_transaction_receipt(self) -> Self {
+        self.with_mock_eth_get_transaction_receipt(move |mock| {
+            mock.modify_response(
+                JsonRpcProvider::Ankr,
+                &mut |response: &mut ethers_core::types::TransactionReceipt| {
+                    response.status = Some(0.into())
+                },
+            )
+            .modify_response(
+                JsonRpcProvider::PublicNode,
+                &mut |response: &mut ethers_core::types::TransactionReceipt| {
+                    response.status = Some(1.into())
+                },
+            )
+        })
+    }
+
     pub fn with_mock_eth_fee_history<
         F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder + 'static,
     >(
@@ -409,6 +436,111 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
             )
             .expect_finalized_transaction()
             .retrieve_transaction_receipt(params.override_rpc_eth_get_transaction_receipt)
+    }
+
+    pub fn process_withdrawal_with_resubmission_and_same_price(
+        self,
+        tx: ethers_core::types::Eip1559TransactionRequest,
+        tx_sig: ethers_core::types::Signature,
+    ) -> T {
+        let sent_tx = encode_transaction(tx.clone(), tx_sig);
+        let transaction = EthTransaction {
+            transaction_hash: format!("{:?}", crate::response::hash_transaction(tx, tx_sig)),
+        };
+        self.start_processing_withdrawals()
+            .retrieve_fee_history(identity)
+            .expect_status(RetrieveEthStatus::Pending)
+            .retrieve_latest_transaction_count(identity)
+            .expect_status(RetrieveEthStatus::TxCreated)
+            .send_raw_transaction_expecting(&sent_tx)
+            .expect_status_sent()
+            .retrieve_finalized_transaction_count(|mock| {
+                mock.modify_response_for_all(&mut |count: &mut String| {
+                    *count = transaction_count_response(0)
+                })
+            })
+            .expect_pending_transaction()
+            .retry_processing_withdrawals()
+            .retrieve_fee_history(identity)
+            .expect_status(RetrieveEthStatus::TxSent(transaction.clone()))
+            .retrieve_latest_transaction_count(|mock| {
+                mock.modify_response_for_all(&mut |count: &mut String| {
+                    *count = transaction_count_response(0)
+                })
+            })
+            .expect_status(RetrieveEthStatus::TxSent(transaction.clone()))
+            .send_raw_transaction_expecting(&sent_tx)
+            .expect_status_sent()
+            .retrieve_finalized_transaction_count(|mock| {
+                mock.modify_response_for_all(&mut |count: &mut String| {
+                    *count = transaction_count_response(1)
+                })
+            })
+            .expect_finalized_transaction()
+            .retrieve_transaction_receipt(identity)
+            .expect_finalized_status(TxFinalizedStatus::Success(transaction))
+    }
+
+    pub fn process_withdrawal_with_resubmission_and_increased_price<
+        F: FnMut(&mut ethers_core::types::FeeHistory),
+    >(
+        self,
+        first_tx: ethers_core::types::Eip1559TransactionRequest,
+        first_tx_sig: ethers_core::types::Signature,
+        change_fee_history: &mut F,
+        resubmitted_tx: ethers_core::types::Eip1559TransactionRequest,
+        resubmitted_tx_sig: ethers_core::types::Signature,
+    ) -> T {
+        let first_sent_tx = encode_transaction(first_tx.clone(), first_tx_sig);
+        let first_tx_hash = hash_transaction(first_tx.clone(), first_tx_sig);
+        let transaction = EthTransaction {
+            transaction_hash: format!("{:?}", first_tx_hash),
+        };
+        let resubmitted_sent_tx = encode_transaction(resubmitted_tx.clone(), resubmitted_tx_sig);
+        let resubmitted_tx_hash = hash_transaction(resubmitted_tx, resubmitted_tx_sig);
+        let resubmitted_transaction = EthTransaction {
+            transaction_hash: format!("{:?}", resubmitted_tx_hash),
+        };
+
+        self.start_processing_withdrawals()
+            .retrieve_fee_history(identity)
+            .expect_status(RetrieveEthStatus::Pending)
+            .retrieve_latest_transaction_count(identity)
+            .expect_status(RetrieveEthStatus::TxCreated)
+            .send_raw_transaction_expecting(&first_sent_tx)
+            .expect_status_sent()
+            .retrieve_finalized_transaction_count(|mock| {
+                mock.modify_response_for_all(&mut |count: &mut String| {
+                    *count = transaction_count_response(0)
+                })
+            })
+            .expect_pending_transaction()
+            .retry_processing_withdrawals()
+            .retrieve_fee_history(|mock| mock.modify_response_for_all(change_fee_history))
+            .expect_status(RetrieveEthStatus::TxSent(transaction))
+            .retrieve_latest_transaction_count(|mock| {
+                mock.modify_response_for_all(&mut |count: &mut String| {
+                    *count = transaction_count_response(0)
+                })
+            })
+            .expect_status(RetrieveEthStatus::TxCreated)
+            .send_raw_transaction_expecting(&resubmitted_sent_tx)
+            .expect_status_sent()
+            .retrieve_finalized_transaction_count(|mock| {
+                mock.modify_response_for_all(&mut |count: &mut String| {
+                    *count = transaction_count_response(1)
+                })
+            })
+            .expect_finalized_transaction()
+            .retrieve_transaction_receipt(|mock| {
+                mock.with_request_params(json!([first_tx_hash]))
+                    .respond_for_all_with(serde_json::Value::Null)
+            })
+            .retrieve_transaction_receipt(|mock| {
+                mock.with_request_params(json!([resubmitted_tx_hash]))
+                    .respond_for_all_with(transaction_receipt(format!("{:?}", resubmitted_tx_hash)))
+            })
+            .expect_finalized_status(TxFinalizedStatus::Success(resubmitted_transaction))
     }
 }
 
@@ -692,4 +824,24 @@ pub fn encode_principal(principal: Principal) -> String {
     fixed_bytes[0] = n as u8;
     fixed_bytes[1..=n].copy_from_slice(principal.as_slice());
     format!("0x{}", hex::encode(fixed_bytes))
+}
+
+pub fn increment_max_priority_fee_per_gas(fee_history: &mut ethers_core::types::FeeHistory) {
+    for rewards in fee_history.reward.iter_mut() {
+        for reward in rewards.iter_mut() {
+            *reward = reward
+                .checked_add(1_u64.into())
+                .unwrap()
+                .max((1_500_000_000_u64 + 1_u64).into());
+        }
+    }
+}
+
+pub fn double_and_increment_base_fee_per_gas(fee_history: &mut ethers_core::types::FeeHistory) {
+    for base_fee_per_gas in fee_history.base_fee_per_gas.iter_mut() {
+        *base_fee_per_gas = base_fee_per_gas
+            .checked_mul(2_u64.into())
+            .and_then(|f| f.checked_add(1_u64.into()))
+            .unwrap();
+    }
 }

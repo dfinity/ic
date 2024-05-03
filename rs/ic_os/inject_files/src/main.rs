@@ -22,6 +22,8 @@ struct Cli {
     file_contexts: Option<PathBuf>,
     #[arg(long)]
     prefix: Option<PathBuf>,
+    #[arg(short)]
+    dflate: PathBuf,
     extra_files: Vec<String>,
 }
 
@@ -42,7 +44,7 @@ async fn main() -> Result<()> {
         .status()
         .await;
 
-    let mut target = ExtPartition::open(temp_file, cli.index).await?;
+    let mut target = ExtPartition::open(temp_file.clone(), cli.index).await?;
 
     let contexts = cli
         .file_contexts
@@ -87,19 +89,25 @@ async fn main() -> Result<()> {
     target.close().await?;
 
     // TODO: Quick hack to unpack and repack file
-    let mut cmd = Command::new("tar");
+    // If dflate is ever misbehaving, it can be replaced with:
+    // tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
+    let temp_tar = temp_dir.path().join("partition.tar");
+    let mut cmd = Command::new(cli.dflate);
     let _ = cmd
-        .arg("cf")
+        .arg("--input")
+        .arg(&temp_file)
+        .arg("--output")
+        .arg(&temp_tar)
+        .status()
+        .await;
+
+    let mut cmd = Command::new("zstd");
+    let _ = cmd
+        .arg("-q")
+        .arg("--threads=0")
+        .arg(&temp_tar)
+        .arg("-o")
         .arg(cli.output)
-        .arg("--sort=name")
-        .arg("--owner=root:0")
-        .arg("--group=root:0")
-        .arg("--mtime=UTC 1970-01-01 00:00:00")
-        .arg("--sparse")
-        .arg("--hole-detection=raw")
-        .arg("-C")
-        .arg(temp_dir.path())
-        .arg("partition.img")
         .status()
         .await;
 

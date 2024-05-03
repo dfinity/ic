@@ -1,25 +1,43 @@
-#!/bin/sh -e
+#!/bin/sh
+# Runs the WASM instructions benchmarks, confirms the results are not optimized
+# by the `wasmtime` compiler, and produces a WASM instructions costs report
+# in Markdown format (see `WASM_BENCHMARKS.md`).
+#
 # Usage: run_wasm_benchmarks.sh [-f]
 # Where:
 #     -f force run benchmarks (do not use cache)
 
-BAZEL_ARGS=${BAZEL_ARGS:=--warm-up-time 1 --sample-size 10 --measurement-time 1}
-BAZEL_RUN_FILE="${0##*/}.bazel.run.tmp"
-# Example content:
+# The command-line arguments to pass to the benchmark.
+# See: https://bheisler.github.io/criterion.rs/book/user_guide/command_line_options.html
+BENCHMARK_ARGS=${BENCHMARK_ARGS:=--warm-up-time 1 --sample-size 10 --measurement-time 1}
+
+# The cache file with benchmark results.
+#
+# Example file content in bencher format:
+#   test wasm_instructions/i32_bin_op/i32.and ... bench:     3333486 ns/iter (+/- 78821)
+CACHE_FILE="${CACHE_FILE:=${0##*/}.cache.tmp}"
+
+# The file with all the benchmark results but confirmations.
+#
+# Example file content in bencher format:
 #   test wasm_instructions/i32_bin_op/i32.and ... bench:     3333486 ns/iter (+/- 78821)
 RES_FILE="${0##*/}.res.tmp"
-# Example content:
+
+# The file with all the benchmark confirmation results.
+#
+# Example file content in bencher format:
 #   test wasm_instructions/i32_bin_op/i32.and/confirmation ... bench:     6553535 ns/iter (+/- 168333)
 CONFIRMATION_RES_FILE="${0##*/}.confirmation.res.tmp"
 
-# Run the benchmarks (or use the cached results).
-[ -s "${BAZEL_RUN_FILE}" -a "${1}" != "-f" ] \
+# Re-run all the benchmarks (or use the cached results).
+[ -s "${CACHE_FILE}" -a "${1}" != "-f" ] \
     || bazel run //rs/execution_environment:wasm_instructions_bench \
-        -- --output-format bencher ${BAZEL_ARGS} | tee "${BAZEL_RUN_FILE}"
+        -- ${BENCHMARK_ARGS} --output-format bencher \
+    | pee "cat" "rg '^test wasm_' > '${CACHE_FILE}'"
 
-# Filter the results.
-cat "${BAZEL_RUN_FILE}" | rg '^test wasm_' | rg -v '/confirmation' >"${RES_FILE}"
-cat "${BAZEL_RUN_FILE}" | rg '^test wasm_' | rg '/confirmation' >"${CONFIRMATION_RES_FILE}"
+# Split the cache into the results and confirmations.
+cat "${CACHE_FILE}" | rg -v '/confirmation' >"${RES_FILE}"
+cat "${CACHE_FILE}" | rg '/confirmation' >"${CONFIRMATION_RES_FILE}"
 
 # The "overhead" (0) is the smallest result.
 overhead=$(cat "${RES_FILE}" | sort -nk 5 | head -1)
@@ -58,5 +76,8 @@ cat "${RES_FILE}" | while read _test name _ellipsis _bench result _rest; do
     COMMENT=$([ "${result}" = "${overhead_result}" ] && echo "OVERHEAD (0) ${COMMENT}" || echo "${COMMENT}")
     # If $result equals $baseline_result -> BASELINE (1)
     COMMENT=$([ "${result}" = "${baseline_result}" ] && echo "BASELINE (1) ${COMMENT}" || echo "${COMMENT}")
-    printf "%-30s | %10s | %4s | | %s\n" "${short_name}" "${result}" "${K}" "${COMMENT}"
+    printf "%-40s | %10s | %4s | %s\n" "${short_name}" "${result}" "${K}" "${COMMENT}"
 done
+
+# Remove temporary files.
+rm -f "${RES_FILE}" "${CONFIRMATION_RES_FILE}"

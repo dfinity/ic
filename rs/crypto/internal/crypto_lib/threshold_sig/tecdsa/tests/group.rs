@@ -46,8 +46,11 @@ fn verify_serialization_round_trips_correctly() -> ThresholdEcdsaResult<()> {
     for curve_type in EccCurveType::all() {
         let identity = EccPoint::identity(curve_type);
 
-        // Identity should consist entirely of zero bytes
-        assert!(identity.serialize().iter().all(|x| *x == 0x00));
+        if curve_type != EccCurveType::Ed25519 {
+            // Identity should consist entirely of zero bytes
+            // except for Edwards which does its own thing
+            assert!(identity.serialize().iter().all(|x| *x == 0x00));
+        }
 
         assert_serialization_round_trips(identity);
         assert_serialization_round_trips(EccPoint::generator_g(curve_type));
@@ -117,7 +120,14 @@ fn generator_h_has_expected_value() -> ThresholdEcdsaResult<()> {
         let h = EccPoint::generator_h(curve_type);
 
         let input = "h";
-        let dst = format!("ic-crypto-tecdsa-{}-generator-h", curve_type);
+
+        let proto_name = if curve_type == EccCurveType::K256 || curve_type == EccCurveType::P256 {
+            "tecdsa"
+        } else {
+            "idkg"
+        };
+
+        let dst = format!("ic-crypto-{}-{}-generator-h", proto_name, curve_type);
 
         let h2p = EccPoint::hash_to_point(curve_type, input.as_bytes(), dst.as_bytes())?;
 
@@ -151,6 +161,24 @@ fn p256_wide_reduce_scalar_expected_value() -> ThresholdEcdsaResult<()> {
     assert_eq!(
         hex::encode(scalar.serialize()),
         "87b5343f875ced075916b4d84e1642aebe8784bd914295c51e484d133595b57e"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn ed25519_wide_reduce_scalar_expected_value() -> ThresholdEcdsaResult<()> {
+    // Checked using Python
+    let wide_input = hex::decode("5465872a72824a73539f16e825035c403a2596407116900d47141fca8cbfd9a638af75a71310b08fe6351dd302b820c86b15e71ea73c78c876c1f88338a0").unwrap();
+
+    let scalar = EccScalar::from_bytes_wide(EccCurveType::Ed25519, &wide_input)?;
+
+    let mut bytes = scalar.serialize();
+    bytes.reverse(); // Ed25519 uses little endian serialization
+
+    assert_eq!(
+        hex::encode(bytes),
+        "0dbde3b1df91378aedecf61861150a7961b23ef8aa7650aaf27c44b73fbec2c2"
     );
 
     Ok(())
@@ -357,6 +385,10 @@ fn test_y_is_even() -> ThresholdEcdsaResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
+        if curve_type == EccCurveType::Ed25519 {
+            continue;
+        }
+
         let g = EccPoint::generator_g(curve_type);
 
         for _trial in 0..100 {

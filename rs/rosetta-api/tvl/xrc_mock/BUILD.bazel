@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/rust_canisters/http_types",
-    "@crate_index//:ic0",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:futures",
@@ -14,6 +13,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:ic-xrc-types",
+    "@crate_index//:ic0",
     "@crate_index//:num-traits",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",

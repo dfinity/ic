@@ -9,6 +9,9 @@ rust_library(
     version = "0.1.0",
     deps = [
         "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
+        "@crate_index//:ed25519-dalek",
         "@crate_index//:rand",
+        "@crate_index//:schnorr_fun",
+        "@crate_index//:sha2",
     ],
 )

@@ -27,6 +27,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_compute_allocation_violation: IntCounter,
     pub(super) canister_balance: Histogram,
     pub(super) canister_binary_size: Histogram,
+    pub(super) canister_log_size: Histogram,
     pub(super) canister_wasm_memory_usage: Histogram,
     pub(super) canister_stable_memory_usage: Histogram,
     pub(super) canister_memory_allocation: Histogram,
@@ -54,7 +55,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) input_queue_messages: IntGaugeVec,
     pub(super) input_queues_size_bytes: IntGaugeVec,
     pub(super) queues_response_bytes: IntGauge,
-    pub(super) queues_reservations: IntGauge,
+    pub(super) queues_memory_reservations: IntGauge,
     pub(super) queues_oversized_requests_extra_bytes: IntGauge,
     pub(super) streams_response_bytes: IntGauge,
     pub(super) canister_messages_where_cycles_were_charged: IntCounter,
@@ -141,6 +142,11 @@ impl SchedulerMetrics {
             canister_binary_size: memory_histogram(
                 "canister_binary_size_bytes",
                 "Canisters WASM binary size distribution in bytes.",
+                metrics_registry,
+            ),
+            canister_log_size: memory_histogram(
+                "canister_log_size_bytes",
+                "Canisters log size distribution in bytes.",
                 metrics_registry,
             ),
             canister_wasm_memory_usage: memory_histogram(
@@ -247,9 +253,9 @@ impl SchedulerMetrics {
                 "execution_queues_response_size_bytes",
                 "Total byte size of all responses in input and output queues.",
             ),
-            queues_reservations: metrics_registry.int_gauge(
+            queues_memory_reservations: metrics_registry.int_gauge(
                 "execution_queues_reservations",
-                "Total number of reserved slots for responses in input and output queues.",
+                "Total number of memory reservations for guaranteed responses in input and output queues.",
             ),
             queues_oversized_requests_extra_bytes: metrics_registry.int_gauge(
                 "execution_queues_oversized_requests_extra_bytes",
@@ -703,8 +709,8 @@ impl SchedulerMetrics {
         self.queues_response_bytes.set(size_bytes as i64);
     }
 
-    pub(super) fn observe_queues_reservations(&self, reservations: usize) {
-        self.queues_reservations.set(reservations as i64);
+    pub(super) fn observe_queues_memory_reservations(&self, reservations: usize) {
+        self.queues_memory_reservations.set(reservations as i64);
     }
 
     pub(super) fn observe_oversized_requests_extra_bytes(&self, size_bytes: usize) {

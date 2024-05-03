@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::Randomness;
-use rand::Rng;
+use rand::{Rng, RngCore};
 use std::collections::BTreeMap;
 
 mod test_utils;
@@ -385,6 +385,67 @@ fn should_be_able_to_perform_bip340_signature() -> Result<(), ThresholdEcdsaErro
     let corrupted_dealings = 1;
     let threshold = (nodes - 1) / 3;
 
+    let msg_lens = [0, 1, 32, rng.gen_range(0..2_000_000)];
+    for msg_len in msg_lens {
+        let mut signed_message = vec![0; msg_len];
+        rng.fill_bytes(&mut signed_message);
+
+        let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
+
+        let random_seed = Seed::from_rng(&mut rng);
+
+        let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
+
+        let cfg = TestConfig::new(EccCurveType::K256);
+
+        let setup = SchnorrSignatureProtocolSetup::new(
+            cfg,
+            nodes,
+            threshold,
+            corrupted_dealings,
+            random_seed,
+        )?;
+
+        let proto = Bip340SignatureProtocolExecution::new(
+            setup,
+            signed_message,
+            random_beacon,
+            derivation_path,
+        );
+
+        let shares = proto.generate_shares()?;
+        assert_eq!(shares.len(), nodes);
+
+        let sig_all_shares = proto.generate_signature(&shares).unwrap();
+        assert_eq!(proto.verify_signature(&sig_all_shares), Ok(()));
+
+        for cnt in 0..(nodes - 1) {
+            let expect_fail = cnt < threshold;
+
+            let share_subset = random_subset(&shares, cnt, &mut rng);
+            let sig = proto.generate_signature(&share_subset);
+
+            if expect_fail {
+                assert_eq!(
+                    sig.unwrap_err(),
+                    ThresholdBip340CombineSigSharesInternalError::InsufficientShares
+                );
+            } else {
+                assert_eq!(sig.unwrap().serialize(), sig_all_shares.serialize());
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn should_be_able_to_perform_ed25519_signature() -> Result<(), ThresholdEcdsaError> {
+    let mut rng = &mut reproducible_rng();
+
+    let nodes = 4;
+    let corrupted_dealings = 0;
+    let threshold = (nodes - 1) / 3;
+
     let signed_message = rng.gen::<[u8; 32]>().to_vec();
     let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
 
@@ -392,16 +453,20 @@ fn should_be_able_to_perform_bip340_signature() -> Result<(), ThresholdEcdsaErro
 
     let random_seed = Seed::from_rng(&mut rng);
 
-    let setup =
-        Bip340SignatureProtocolSetup::new(nodes, threshold, corrupted_dealings, random_seed)?;
+    // Ed25519 signatures using secp256k1 MEGa keys
+    let cfg = TestConfig::new_mixed(EccCurveType::Ed25519, EccCurveType::K256);
 
-    let proto = Bip340SignatureProtocolExecution::new(
+    let setup =
+        SchnorrSignatureProtocolSetup::new(cfg, nodes, threshold, corrupted_dealings, random_seed)?;
+
+    let proto = Ed25519SignatureProtocolExecution::new(
         setup,
         signed_message,
         random_beacon,
         derivation_path,
     );
 
+    println!("creating shares");
     let shares = proto.generate_shares()?;
     assert_eq!(shares.len(), nodes);
 
@@ -415,10 +480,7 @@ fn should_be_able_to_perform_bip340_signature() -> Result<(), ThresholdEcdsaErro
         let sig = proto.generate_signature(&share_subset);
 
         if expect_fail {
-            assert_eq!(
-                sig.unwrap_err(),
-                ThresholdBip340CombineSigSharesInternalError::InsufficientShares
-            );
+            assert!(sig.is_err());
         } else {
             assert_eq!(sig.unwrap().serialize(), sig_all_shares.serialize());
         }

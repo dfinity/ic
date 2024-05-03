@@ -5,15 +5,18 @@ on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
+permissions: read-all
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
   cancel-in-progress: true
 env:
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+  ORG: ${{ vars.ORG }}
   
 anchors:
   image: &image
-      image: dfinity/ic-build:abbdc66c19bf32eda2109f97e39fde519ef9b452ab54aee52b234af8638983d8
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
   bazel-small-setup: &bazel-small-setup
     runs-on:
       labels: bazel-runner-small
@@ -27,7 +30,7 @@ anchors:
     container:
       <<: *image
     timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}v
+    if: ${{ vars.RUN_CI == 'true' }}
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -93,3 +96,15 @@ jobs:
       - name: Commit Lint
         id: commit-lint
         run: ./gitlab-ci/src/ci-scripts/commit-lint.sh
+
+  pre-commit:
+    name: Pre-Commit
+    <<: *bazel-small-setup
+    steps:
+      - <<: *checkout
+        with:
+          fetch-depth: 256
+      - name: Pre-Commit
+        id: pre-commit
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/pre-commit.sh

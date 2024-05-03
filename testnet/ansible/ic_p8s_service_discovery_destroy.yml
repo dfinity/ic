@@ -15,4 +15,4 @@
         return_content: true
         validate_certs: no
       register: delete_response
-      failed_when: delete_response.status not in [200, 400]
+      failed_when: delete_response.status not in [200, 400, 404]

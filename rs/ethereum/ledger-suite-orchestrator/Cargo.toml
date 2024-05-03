@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "ic-leger-suite-orchestrator"
+name = "ic-ledger-suite-orchestrator"
 path = "src/main.rs"
 
 [dependencies]
 askama = { workspace = true }
-async-trait = "0.1.73"
+async-trait = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 futures = { workspace = true }
@@ -23,6 +23,7 @@ ic-cdk-macros = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ethereum-types = { path = "../types" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-metrics-encoder = "1"
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-icrc1-index-ng = { path = "../../rosetta-api/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
@@ -31,6 +32,7 @@ num-traits = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_bytes = { workspace = true }
+time = { workspace = true }
 
 [dev-dependencies]
 ic-ledger-suite-orchestrator-test-utils = { path = "test_utils" }

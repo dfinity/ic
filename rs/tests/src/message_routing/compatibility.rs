@@ -30,7 +30,7 @@ use crate::message_routing::xnet_slo_test;
 use crate::orchestrator::utils::{
     rw_message::install_nns_and_check_progress,
     upgrade::{
-        assert_assigned_replica_version, bless_replica_version, update_subnet_replica_version,
+        assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
         UpdateImageType,
     },
 };
@@ -207,7 +207,7 @@ async fn upgrade_to(
     target_version: &str,
     logger: &Logger,
 ) {
-    update_subnet_replica_version(
+    deploy_guestos_to_all_subnet_nodes(
         nns_node,
         &ic_types::ReplicaVersion::try_from(target_version).unwrap(),
         subnet_id,

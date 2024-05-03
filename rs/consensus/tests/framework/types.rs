@@ -37,7 +37,7 @@ use ic_types::{
     artifact::{ArtifactKind, Priority, PriorityFn},
     artifact_kind::ConsensusArtifact,
     consensus::{
-        certification::CertificationMessage, dkg::Message as DkgMessage, ecdsa::EcdsaMessage,
+        certification::CertificationMessage, dkg::Message as DkgMessage, idkg::EcdsaMessage,
         CatchUpPackage, ConsensusMessage,
     },
     replica_config::ReplicaConfig,

@@ -18,27 +18,23 @@ pub use self::{
     xnet::XNetPayload,
 };
 use crate::{
-    consensus::ecdsa::QuadrupleId,
-    crypto::canister_threshold_sig::MasterEcdsaPublicKey,
-    messages::{CallbackId, Payload, SignedIngress, NO_DEADLINE},
-    time::CoarseTime,
+    consensus::idkg::QuadrupleId,
+    crypto::canister_threshold_sig::MasterPublicKey,
+    messages::{CallbackId, Payload, SignedIngress},
     xnet::CertifiedStreamSlice,
-    Cycles, Funds, Height, Randomness, RegistryVersion, SubnetId, Time,
+    Height, Randomness, RegistryVersion, SubnetId, Time,
 };
-use ic_base_types::{CanisterId, NodeId};
+use ic_base_types::NodeId;
 use ic_btc_types_internal::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::EcdsaKeyId;
-use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
-    types::v1 as pb,
-};
+use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryInto,
-    hash::{Hash, Hasher},
+    hash::Hash,
 };
 
 /// The `Batch` provided to Message Routing for deterministic processing.
@@ -63,7 +59,7 @@ pub struct Batch {
     /// A source of randomness for processing the Batch.
     pub randomness: Randomness,
     /// The ECDSA public keys of the subnet.
-    pub ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    pub ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
     /// The ECDSA quadruple Ids available to be matched with signature requests.
     pub ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
     /// The version of the registry to be referenced when processing the batch.
@@ -183,49 +179,16 @@ impl BlockmakerMetrics {
 ///
 /// Only holds the payload and callback ID, Execution populates other fields
 /// (originator, respondent, refund) from the incoming request.
-/// TODO: Remove optional fields
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ConsensusResponse {
-    pub originator: Option<CanisterId>,
-    pub respondent: Option<CanisterId>,
     pub callback: CallbackId,
-    pub refund: Option<Cycles>,
     pub payload: Payload,
-    pub deadline: Option<CoarseTime>,
 }
 
-/// Custom hash implementation, ensuring consistency with previous version
-/// without `Option`s.
-///
-/// This is a temporary workaround for Consensus integrity checks relying on
-/// hashing Rust structs. This can be dropped once those checks are removed.
-impl Hash for ConsensusResponse {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let ConsensusResponse {
-            originator,
-            respondent,
-            callback,
-            refund,
-            payload,
-            deadline,
-        } = self;
-
-        if let Some(originator) = originator {
-            originator.hash(state);
-        }
-        if let Some(respondent) = respondent {
-            respondent.hash(state);
-        }
-        callback.hash(state);
-        if let Some(refund) = refund {
-            refund.hash(state);
-        }
-        payload.hash(state);
-        if let Some(deadline) = deadline {
-            if *deadline != NO_DEADLINE {
-                deadline.hash(state);
-            }
-        }
+impl ConsensusResponse {
+    pub fn new(callback: CallbackId, payload: Payload) -> Self {
+        Self { callback, payload }
     }
 }
 
@@ -236,15 +199,8 @@ impl From<&ConsensusResponse> for pb::ConsensusResponse {
             Payload::Reject(r) => pb::consensus_response::Payload::Reject(r.into()),
         };
         Self {
-            originator: rep.originator.map(pb::CanisterId::from),
-            respondent: rep.respondent.map(pb::CanisterId::from),
             callback: rep.callback.get(),
-            refund: rep.refund.map(|refund| (&Funds::new(refund)).into()),
             payload: Some(p),
-            cycles_refund: rep.refund.map(|refund| refund.into()),
-            deadline_seconds: rep
-                .deadline
-                .map(|deadline| deadline.as_secs_since_unix_epoch()),
         }
     }
 }
@@ -261,27 +217,9 @@ impl TryFrom<pb::ConsensusResponse> for ConsensusResponse {
             pb::consensus_response::Payload::Reject(r) => Payload::Reject(r.try_into()?),
         };
 
-        // To maintain backwards compatibility we fall back to reading from `refund` if
-        // `cycles_refund` is not set.
-        let refund =
-            match try_from_option_field(rep.cycles_refund, "ConsensusResponse::cycles_refund") {
-                Ok(res) => Some(res),
-                Err(_) => rep
-                    .refund
-                    .map(Funds::try_from)
-                    .transpose()?
-                    .map(|mut res| res.take_cycles()),
-            };
-
         Ok(Self {
-            originator: rep.originator.map(CanisterId::try_from).transpose()?,
-            respondent: rep.respondent.map(CanisterId::try_from).transpose()?,
             callback: rep.callback.into(),
-            refund,
             payload,
-            deadline: rep
-                .deadline_seconds
-                .map(CoarseTime::from_secs_since_unix_epoch),
         })
     }
 }

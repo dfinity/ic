@@ -7,7 +7,7 @@ IC-OS is an umbrella term for all the operating systems within the IC, including
 * SetupOS: Responsible for booting a new replica node and installing HostOS and GuestOS.
 * HostOS: The operating system that runs on the host machine. Its main responsibility is to launch and run the GuestOS in a virtual machine. In terms of its capabilities, it is intentionally limited by design to not perform any trusted capabilities.
 * GuestOS: The operating system that runs inside a virtual machine on the HostOS. The core IC protocol is executed within the GuestOS.
-* Boundary-guestOS: The operating system that runs on boundary nodes.
+* Boundary-GuestOS: The operating system that runs on boundary nodes. It contains all the services necessary to fulfill the two main tasks of the boundary nodes: (1) route ICP API requests to a healthy replica of the right subnet (`ic-boundary`); and (2) translate HTTP requests into ICP API requests to allow direct access to dapps from the browser (`icx-proxy`).
 
 == Building IC-OS images
 
@@ -63,14 +63,14 @@ The docker build process is split into two dockerfiles. This split is necessary 
 
 *Dockerfile.base*
 
-  ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/rootfs/Dockerfile.base
+  ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/context/Dockerfile.base
 
    ** The Dockerfile.base takes care of installing all upstream Ubuntu packages.
    ** Because the versions of these packages can change at any given time (as updates are published regularly), in order to maintain build determinism, once a week, the CI pipeline builds a new base image for each OS. The result is published on the DFINITY public https://hub.docker.com/u/dfinity[Docker Hub].
 
 *Dockerfile*
 
-  ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/rootfs/Dockerfile
+  ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/context/Dockerfile
 
    ** The +Dockerfile+ builds off the published base image and takes care of configuring and assembling the main disk-image.
    ** Any instruction in this file needs to be reproducible in itself.
@@ -86,15 +86,15 @@ This means that some development and testing could be done on the docker image i
 
 To add a new package to an IC-OS image you need to:
 
-   * Update the list of packages to install in `ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/rootfs/packages.common`
+   * Update the list of packages to install in `ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/context/packages.common`
    ** Commit the changes and wait for CI to publish the base image
-   * Update the base image hash in `ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/rootfs/docker-base.<env>`  
+   * Update the base image hash in `ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/context/docker-base.<env>`
 
 == IC-OS Directory Organization
 
 * *bootloader/*: This directory contains everything related to building EFI firmware and the GRUB bootloader image. It is configured to support the A/B partition split on upgradable IC-OS images (HostOS, GuestOS, and potentially Boundary-guestOS)
 
-* *scripts/*: This directory contains build scripts. 
+* *scripts/*: This directory contains build scripts.
 ** Note that GuestOS has its own scripts subdirectory that still need to be unified with the outer scripts directory.
 
 * *rootfs/*: Each rootfs subdirectory contains everything required to build a bootable Ubuntu system. Various template directories (e.g., /opt) are used, which are copied verbatim to the target system. You can add files to these directories to include them in the image.

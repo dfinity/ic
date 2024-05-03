@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = "0.1.36"
+async-trait = { workspace = true }
 axum = { workspace = true }
 bytes = { workspace = true }
 ic-types = { path = "../../types/types" }

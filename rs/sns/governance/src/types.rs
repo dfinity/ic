@@ -11,23 +11,26 @@ use crate::{
             claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
             get_neuron_response,
             governance::{
-                self, neuron_in_flight_command, neuron_in_flight_command::SyncCommand, SnsMetadata,
+                self,
+                neuron_in_flight_command::{self, SyncCommand},
+                SnsMetadata,
             },
             governance_error::ErrorType,
-            manage_neuron, manage_neuron_response,
+            manage_neuron,
             manage_neuron_response::{
-                DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
+                self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
             neuron::Followees,
             proposal::Action,
             ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
             DefaultFollowees, DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction,
-            GovernanceError, ManageDappCanisterSettings, ManageNeuronResponse, MintSnsTokens,
-            Motion, NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId,
-            NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
-            RegisterDappCanisters, RewardEvent, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            GovernanceError, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuronResponse, MintSnsTokens, Motion, NervousSystemFunction,
+            NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+            NeuronPermissionType, ProposalId, RegisterDappCanisters, RewardEvent,
+            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+            VotingRewardsParameters,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -36,13 +39,17 @@ use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
+use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
 use ic_ledger_core::tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY};
 use ic_management_canister_types::CanisterInstallModeError;
-use ic_nervous_system_common::{validate_proposal_url, NervousSystemError, SECONDS_PER_DAY};
+use ic_nervous_system_common::{
+    ledger_validation::MAX_LOGO_LENGTH, validate_proposal_url, NervousSystemError, SECONDS_PER_DAY,
+};
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
 use ic_sns_governance_proposal_criticality::{
     ProposalCriticality, VotingDurationParameters, VotingPowerThresholds,
 };
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::{
@@ -303,6 +310,17 @@ impl From<&manage_neuron::Command> for neuron_in_flight_command::Command {
             S::RemoveNeuronPermissions(x) => D::RemoveNeuronPermissions(x),
             S::StakeMaturity          (_) => D::SyncCommand(SyncCommand{}),
         }
+    }
+}
+
+lazy_static! {
+    static ref DEFAULT_NERVOUS_SYSTEM_PARAMETERS: NervousSystemParameters =
+        NervousSystemParameters::default();
+}
+
+impl Default for &NervousSystemParameters {
+    fn default() -> Self {
+        &DEFAULT_NERVOUS_SYSTEM_PARAMETERS
     }
 }
 
@@ -937,6 +955,15 @@ impl From<NervousSystemError> for GovernanceError {
     }
 }
 
+impl From<prost::DecodeError> for GovernanceError {
+    fn from(decode_error: prost::DecodeError) -> Self {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!("Invalid mode for install_code: {}", decode_error),
+        )
+    }
+}
+
 impl From<CanisterInstallModeError> for GovernanceError {
     fn from(canister_install_mode_error: CanisterInstallModeError) -> Self {
         GovernanceError {
@@ -1325,10 +1352,6 @@ impl SnsMetadata {
     /// The minimum number of characters allowed for a SNS url.
     pub const MIN_URL_LENGTH: usize = 10;
 
-    /// The maximum number of characters allowed for a SNS logo encoding.
-    /// Roughly 256Kb
-    pub const MAX_LOGO_LENGTH: usize = 341334;
-
     /// The maximum number of characters allowed for a SNS name.
     pub const MAX_NAME_LENGTH: usize = 255;
 
@@ -1374,10 +1397,10 @@ impl SnsMetadata {
     pub fn validate_logo(logo: &str) -> Result<(), String> {
         const PREFIX: &str = "data:image/png;base64,";
         // TODO: Should we check that it's a valid PNG?
-        if logo.len() > Self::MAX_LOGO_LENGTH {
+        if logo.len() > MAX_LOGO_LENGTH {
             return Err(format!(
                 "SnsMetadata.logo must be less than {} characters, roughly 256 Kb",
-                Self::MAX_LOGO_LENGTH
+                MAX_LOGO_LENGTH
             ));
         }
         if !logo.starts_with(PREFIX) {
@@ -1735,6 +1758,58 @@ pub fn is_registered_function_id(
     match nervous_system_functions.get(&function_id) {
         None => false,
         Some(function) => function != &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
+    }
+}
+
+impl From<ManageLedgerParameters> for LedgerUpgradeArgs {
+    fn from(manage_ledger_parameters: ManageLedgerParameters) -> Self {
+        let ManageLedgerParameters {
+            transfer_fee,
+            token_name,
+            token_symbol,
+            token_logo,
+        } = manage_ledger_parameters;
+        let metadata = [("icrc1:logo", token_logo.map(MetadataValue::Text))]
+            .into_iter()
+            .filter_map(|(k, v)| v.map(|v| (k.to_string(), v)))
+            .collect();
+
+        LedgerUpgradeArgs {
+            transfer_fee: transfer_fee.map(|tf| tf.into()),
+            token_name,
+            token_symbol,
+            metadata: Some(metadata),
+            ..LedgerUpgradeArgs::default()
+        }
+    }
+}
+
+// This is almost a copy n' paste from NNS. The main difference (as of
+// 2023-11-17) is to account for the fact that here in SNS,
+// total_available_e8s_equivalent is optional. (Therefore, an extra
+// unwrap_or_default call is added.)
+impl RewardEvent {
+    /// Calculates the total_available_e8s_equivalent in this event that should
+    /// be "rolled over" into the next `RewardEvent`.
+    ///
+    /// Behavior:
+    /// - If rewards were distributed for this event, then no available_icp_e8s
+    ///   should be rolled over, so this function returns 0.
+    /// - Otherwise, this function returns
+    ///   `total_available_e8s_equivalent`.
+    pub(crate) fn e8s_equivalent_to_be_rolled_over(&self) -> u64 {
+        if self.rewards_rolled_over() {
+            self.total_available_e8s_equivalent.unwrap_or_default()
+        } else {
+            0
+        }
+    }
+
+    // Not copied from NNS: fn rounds_since_last_distribution_to_be_rolled_over
+
+    /// Whether this is a "rollover event", where no rewards were distributed.
+    pub(crate) fn rewards_rolled_over(&self) -> bool {
+        self.settled_proposals.is_empty()
     }
 }
 
@@ -2125,6 +2200,7 @@ impl From<ManageDappCanisterSettings> for ManageDappCanisterSettingsRequest {
             freezing_threshold,
             reserved_cycles_limit,
             log_visibility,
+            wasm_memory_limit,
         } = manage_dapp_canister_settings;
 
         ManageDappCanisterSettingsRequest {
@@ -2134,6 +2210,7 @@ impl From<ManageDappCanisterSettings> for ManageDappCanisterSettingsRequest {
             freezing_threshold,
             reserved_cycles_limit,
             log_visibility,
+            wasm_memory_limit,
         }
     }
 }
@@ -3101,7 +3178,7 @@ pub(crate) mod tests {
                 ..default.clone()
             },
             SnsMetadata {
-                logo: Some("X".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1)),
+                logo: Some("X".repeat(MAX_LOGO_LENGTH + 1)),
                 ..default.clone()
             },
             SnsMetadata {

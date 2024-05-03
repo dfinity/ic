@@ -4,14 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-async-trait = "0.1.73"
-prost = { workspace = true }
+arc-swap = "1"
+async-trait = { workspace = true }
+ic-agent = { workspace = true }
 tokio = { workspace = true }
-url = "2.4.0"
+tokio-util = { workspace = true }
 thiserror = { workspace = true }
-ic-protobuf = { path = "../../protobuf" }
-ic-registry-client = { path = "../../registry/client" }
-ic-registry-nns-data-provider-wrappers = { path = "../../registry/nns_data_provider_wrappers" }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+http = "0.2.9"
+url = "2.4.0"
 
 [lib]
 name = "discower_bowndary"

@@ -98,3 +98,13 @@ pub struct LogEntry {
 pub struct Log {
     pub entries: Vec<LogEntry>,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum GetBlocksMethod {
+    // The `get_blocks` endpoint used by the Ledger
+    // before ICRC-3 was implemented.
+    GetBlocks,
+    // The `icrc3_get_blocks` endpoint supported by
+    // ICRC-3 compatible Ledgers.
+    ICRC3GetBlocks,
+}

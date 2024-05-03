@@ -3,6 +3,7 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::CanisterId;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
+    OrchestratorInfo,
 };
 use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm, WasmHash};
 use ic_state_machine_tests::{
@@ -20,6 +21,8 @@ const MAX_TICKS: usize = 10;
 const GIT_COMMIT_HASH: &str = "6a8e5fca2c6b4e12966638c444e994e204b42989";
 pub const CKERC20_TRANSFER_FEE: u64 = 4_000; //0.004 USD for ckUSDC/ckUSDT
 
+pub const NNS_ROOT_PRINCIPAL: Principal = Principal::from_slice(&[0_u8]);
+
 pub struct LedgerSuiteOrchestrator {
     pub env: Arc<StateMachine>,
     pub ledger_suite_orchestrator_id: CanisterId,
@@ -32,7 +35,7 @@ impl Default for LedgerSuiteOrchestrator {
         Self::new(
             Arc::new(new_state_machine()),
             InitArg {
-                more_controller_ids: vec![],
+                more_controller_ids: vec![NNS_ROOT_PRINCIPAL],
                 minter_id: None,
                 cycles_management: None,
             },
@@ -97,6 +100,17 @@ impl LedgerSuiteOrchestrator {
         .unwrap()
     }
 
+    pub fn advance_time_for_cycles_top_up(&self) {
+        self.env
+            .advance_time(std::time::Duration::from_secs(60 * 60 + 1));
+        self.env.tick();
+        self.env.tick();
+        self.env.tick();
+        self.env.tick();
+        self.env.tick();
+        self.env.tick();
+    }
+
     pub fn canister_status_of(&self, controlled_canister_id: CanisterId) -> CanisterStatusResultV2 {
         self.env
             .canister_status_as(
@@ -105,6 +119,22 @@ impl LedgerSuiteOrchestrator {
             )
             .unwrap()
             .unwrap()
+    }
+
+    pub fn get_orchestrator_info(&self) -> OrchestratorInfo {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query(
+                        self.ledger_suite_orchestrator_id,
+                        "get_orchestrator_info",
+                        Encode!().unwrap()
+                    )
+                    .unwrap()
+            ),
+            OrchestratorInfo
+        )
+        .unwrap()
     }
 }
 
@@ -187,11 +217,11 @@ pub fn usdc(
 pub fn usdc_erc20_contract() -> Erc20Contract {
     Erc20Contract {
         chain_id: Nat::from(1_u8),
-        address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string(),
+        address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
     }
 }
 
-fn usdt(
+pub fn usdt(
     minter: Principal,
     ledger_compressed_wasm_hash: WasmHash,
     index_compressed_wasm_hash: WasmHash,
@@ -232,7 +262,7 @@ fn ledger_init_arg<U: Into<String>, V: Into<String>>(
     }
 }
 
-fn assert_reply(result: WasmResult) -> Vec<u8> {
+pub fn assert_reply(result: WasmResult) -> Vec<u8> {
     match result {
         WasmResult::Reply(bytes) => bytes,
         WasmResult::Reject(reject) => {

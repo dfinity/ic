@@ -15,7 +15,7 @@ use ic_nns_governance::{
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     registry::get_value_or_panic,
 };
 use ic_protobuf::registry::provisional_whitelist::v1::ProvisionalWhitelist;
@@ -25,7 +25,7 @@ use std::str::FromStr;
 
 #[test]
 fn test_submit_and_accept_clear_provisional_whitelist_proposal() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let principal_id = PrincipalId::from_str(
             "5o66h-77qch-43oup-7aaui-kz5ty-tww4j-t2wmx-e3lym-cbtct-l3gpw-wae",
         )

@@ -10,7 +10,7 @@ use axum::body::Body;
 use hyper::{Method, Request, StatusCode};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_agent::{
-    agent::{http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, QueryBuilder},
+    agent::{http_transport::reqwest_transport::ReqwestTransport, QueryBuilder},
     agent_error::HttpErrorPayload,
     export::Principal,
     hash_tree::Label,
@@ -50,7 +50,7 @@ fn test_load_shedding_query() {
     let load_shedder_returned = Arc::new(Notify::new());
 
     let ok_agent = Agent::builder()
-        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
         .with_verify_query_signatures(false)
         .build()
         .unwrap();
@@ -192,7 +192,7 @@ fn test_load_shedding_read_state() {
     let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
 
     let ok_agent = Agent::builder()
-        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
         .build()
         .unwrap();
     let load_shedded_agent = ok_agent.clone();
@@ -379,7 +379,7 @@ fn test_load_shedding_update_call() {
     let load_shedder_returned = Arc::new(Notify::new());
 
     let ok_agent = Agent::builder()
-        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
         .build()
         .unwrap();
 

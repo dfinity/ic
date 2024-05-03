@@ -17,7 +17,7 @@ use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
-use ic_ingress_manager::{CustomRandomState, IngressManager};
+use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::ingress_pool::{
     IngressPool, PoolSection, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
 };
@@ -79,7 +79,8 @@ use ic_state_layout::{CheckpointLayout, RwPolicy};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_metrics::{
-    fetch_histogram_stats, fetch_int_counter, fetch_int_gauge, fetch_int_gauge_vec, Labels,
+    fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
+    fetch_int_gauge_vec, Labels,
 };
 use ic_test_utilities_registry::{
     add_single_subnet_record, add_subnet_key_record, add_subnet_list_record, SubnetRecordBuilder,
@@ -97,11 +98,10 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
 };
 pub use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{
-    canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId, CombinedThresholdSig,
+    canister_threshold_sig::MasterPublicKey, AlgorithmId, CombinedThresholdSig,
     CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
 };
 use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::messages::NO_DEADLINE;
 use ic_types::signature::ThresholdSignature;
 use ic_types::time::GENESIS;
 use ic_types::xnet::CertifiedStreamSlice;
@@ -109,7 +109,7 @@ use ic_types::{
     batch::{Batch, BatchMessages, XNetPayload},
     consensus::certification::Certification,
     messages::{
-        Blob, CallbackId, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
+        Blob, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
         HttpRequestEnvelope, Payload as MsgPayload, RejectContext, SignedIngress,
         SignedIngressContent, UserQuery, EXPECTED_MESSAGE_ID_LENGTH,
     },
@@ -118,7 +118,7 @@ use ic_types::{
 };
 pub use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{HttpRequestError, MessageId},
+    messages::{CallbackId, HttpRequestError, MessageId},
     time::Time,
     CanisterId, CryptoHashOfState, Cycles, PrincipalId, SubnetId, UserId,
 };
@@ -591,7 +591,7 @@ pub struct StateMachine {
     checkpoints_enabled: std::sync::atomic::AtomicBool,
     nonce: std::sync::atomic::AtomicU64,
     time: std::sync::atomic::AtomicU64,
-    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
     replica_logger: ReplicaLogger,
     pub nodes: Vec<StateMachineNode>,
 }
@@ -631,6 +631,7 @@ pub struct StateMachineBuilder {
     is_root_subnet: bool,
     seq_no: u8,
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
+    dts: bool,
 }
 
 impl StateMachineBuilder {
@@ -661,6 +662,7 @@ impl StateMachineBuilder {
             is_root_subnet: false,
             seq_no: 0,
             with_extra_canister_range: None,
+            dts: true,
         }
     }
 
@@ -679,7 +681,7 @@ impl StateMachineBuilder {
         Self { nonce, ..self }
     }
 
-    fn with_time(self, time: Time) -> Self {
+    pub fn with_time(self, time: Time) -> Self {
         Self { time, ..self }
     }
 
@@ -800,6 +802,11 @@ impl StateMachineBuilder {
         }
     }
 
+    /// Only use from pocket-ic-server binary.
+    pub fn no_dts(self) -> Self {
+        Self { dts: false, ..self }
+    }
+
     pub fn build_internal(self) -> StateMachine {
         StateMachine::setup_from_dir(
             self.state_dir,
@@ -823,6 +830,7 @@ impl StateMachineBuilder {
             self.lsmt_override,
             self.is_root_subnet,
             self.seq_no,
+            self.dts,
         )
     }
 
@@ -1005,14 +1013,10 @@ impl StateMachine {
 
             let reply = SignWithECDSAReply { signature };
 
-            payload.consensus_responses.push(ConsensusResponse {
+            payload.consensus_responses.push(ConsensusResponse::new(
                 callback,
-                payload: MsgPayload::Data(reply.encode()),
-                originator: Some(CanisterId::ic_00()),
-                respondent: Some(CanisterId::ic_00()),
-                refund: Some(Cycles::zero()),
-                deadline: Some(NO_DEADLINE),
-            });
+                MsgPayload::Data(reply.encode()),
+            ));
         }
 
         // Finally execute the payload.
@@ -1046,6 +1050,7 @@ impl StateMachine {
         lsmt_override: Option<LsmtConfig>,
         is_root_subnet: bool,
         seq_no: u8,
+        dts: bool,
     ) -> Self {
         let replica_logger = replica_logger();
 
@@ -1083,10 +1088,7 @@ impl StateMachine {
             sm_config.lsmt_config = lsmt_override;
         }
 
-        if !(std::env::var("SANDBOX_BINARY").is_ok()
-            && std::env::var("LAUNCHER_BINARY").is_ok()
-            && std::env::var("COMPILER_BINARY").is_ok())
-        {
+        if !dts {
             hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;
             hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;
         }
@@ -1170,7 +1172,7 @@ impl StateMachine {
         for ecdsa_key in ecdsa_keys {
             ecdsa_subnet_public_keys.insert(
                 ecdsa_key,
-                MasterEcdsaPublicKey {
+                MasterPublicKey {
                     algorithm_id: AlgorithmId::EcdsaSecp256k1,
                     public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
                 },
@@ -1182,7 +1184,7 @@ impl StateMachine {
                 curve: EcdsaCurve::Secp256k1,
                 name: "master_ecdsa_public_key".to_string(),
             },
-            MasterEcdsaPublicKey {
+            MasterPublicKey {
                 algorithm_id: AlgorithmId::EcdsaSecp256k1,
                 public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
             },
@@ -1208,7 +1210,7 @@ impl StateMachine {
             state_manager.clone(),
             cycles_account_manager,
             malicious_flags,
-            CustomRandomState::Deterministic,
+            RandomStateKind::Deterministic,
         ));
 
         Self {
@@ -1523,14 +1525,10 @@ impl StateMachine {
 
             let reply = SignWithECDSAReply { signature };
 
-            payload.consensus_responses.push(ConsensusResponse {
+            payload.consensus_responses.push(ConsensusResponse::new(
                 callback,
-                payload: MsgPayload::Data(reply.encode()),
-                originator: Some(CanisterId::ic_00()),
-                respondent: Some(CanisterId::ic_00()),
-                refund: Some(Cycles::zero()),
-                deadline: Some(NO_DEADLINE),
-            });
+                MsgPayload::Data(reply.encode()),
+            ));
         }
         self.execute_payload(payload);
     }
@@ -1565,8 +1563,23 @@ impl StateMachine {
         }
     }
 
-    /// Triggers a single round of execution with block payload as an input.
+    /// Checks critical error counters and panics if a critical error occurred.
+    /// We ignore `execution_environment_unfiltered_ingress` for now.
+    pub fn check_critical_errors(&self) {
+        let error_counter_vec = fetch_counter_vec(&self.metrics_registry, "critical_errors");
+        if let Some((metric, _)) = error_counter_vec.into_iter().find(|(_, v)| *v != 0.0) {
+            let err: String = metric.get("error").unwrap().to_string();
+            if err != *"execution_environment_unfiltered_ingress" {
+                panic!("Critical error {} occurred.", err);
+            }
+        }
+    }
+
+    /// Advances time by 1ns (to make sure time is strictly monotone)
+    /// and triggers a single round of execution with block payload as an input.
     pub fn execute_payload(&self, payload: PayloadBuilder) -> Height {
+        self.advance_time(Duration::from_nanos(1));
+
         let batch_number = self.message_routing.expected_batch_height();
 
         let mut seed = [0u8; 32];
@@ -1604,6 +1617,8 @@ impl StateMachine {
                 .0,
             batch_number
         );
+
+        self.check_critical_errors();
 
         batch_number
     }
@@ -1680,9 +1695,26 @@ impl StateMachine {
     pub fn time(&self) -> SystemTime {
         SystemTime::UNIX_EPOCH + Duration::from_nanos(self.time.load(Ordering::Relaxed))
     }
+
+    /// Returns the state machine time at the beginning of next round.
+    pub fn time_of_next_round(&self) -> SystemTime {
+        self.time() + Duration::from_nanos(1)
+    }
+
+    /// Returns the current state machine time.
     pub fn get_time(&self) -> Time {
         Time::from_nanos_since_unix_epoch(
             self.time()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64,
+        )
+    }
+
+    /// Returns the state machine time at the beginning of next round.
+    pub fn get_time_of_next_round(&self) -> Time {
+        Time::from_nanos_since_unix_epoch(
+            self.time_of_next_round()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos() as u64,
@@ -2249,7 +2281,18 @@ impl StateMachine {
 
     /// Starts the canister with the specified ID.
     pub fn start_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
-        self.execute_ingress(
+        self.start_canister_as(PrincipalId::new_anonymous(), canister_id)
+    }
+
+    /// Starts the canister with the specified ID.
+    /// Use this if the `canister_id`` is controlled by `sender``.
+    pub fn start_canister_as(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+    ) -> Result<WasmResult, UserError> {
+        self.execute_ingress_as(
+            sender,
             CanisterId::ic_00(),
             "start_canister",
             (CanisterIdRecord::from(canister_id)).encode(),
@@ -2258,7 +2301,18 @@ impl StateMachine {
 
     /// Stops the canister with the specified ID.
     pub fn stop_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
-        self.execute_ingress(
+        self.stop_canister_as(PrincipalId::new_anonymous(), canister_id)
+    }
+
+    /// Stops the canister with the specified ID.
+    /// Use this if the `canister_id`` is controlled by `sender``.
+    pub fn stop_canister_as(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+    ) -> Result<WasmResult, UserError> {
+        self.execute_ingress_as(
+            sender,
             CanisterId::ic_00(),
             "stop_canister",
             (CanisterIdRecord::from(canister_id)).encode(),
@@ -2617,6 +2671,12 @@ impl StateMachine {
             .clone()
     }
 
+    /// Returns the size estimate of canisters heap delta in bytes.
+    pub fn heap_delta_estimate_bytes(&self) -> u64 {
+        let state = self.state_manager.get_latest_state().take();
+        state.metadata.heap_delta_estimate.get()
+    }
+
     pub fn deliver_query_stats(&self, query_stats: QueryStatsPayload) -> Height {
         self.execute_payload(PayloadBuilder::new().with_query_stats(Some(query_stats)))
     }
@@ -2813,14 +2873,10 @@ impl PayloadBuilder {
         callback: CallbackId,
         payload: &CanisterHttpResponsePayload,
     ) -> Self {
-        self.consensus_responses.push(ConsensusResponse {
+        self.consensus_responses.push(ConsensusResponse::new(
             callback,
-            payload: MsgPayload::Data(payload.encode()),
-            originator: Some(CanisterId::ic_00()),
-            respondent: Some(CanisterId::ic_00()),
-            refund: Some(Cycles::zero()),
-            deadline: Some(NO_DEADLINE),
-        });
+            MsgPayload::Data(payload.encode()),
+        ));
         self
     }
 
@@ -2830,18 +2886,25 @@ impl PayloadBuilder {
         code: RejectCode,
         message: impl ToString,
     ) -> Self {
-        self.consensus_responses.push(ConsensusResponse {
+        self.consensus_responses.push(ConsensusResponse::new(
             callback,
-            payload: MsgPayload::Reject(RejectContext::new(code, message)),
-            originator: Some(CanisterId::ic_00()),
-            respondent: Some(CanisterId::ic_00()),
-            refund: Some(Cycles::zero()),
-            deadline: Some(NO_DEADLINE),
-        });
+            MsgPayload::Reject(RejectContext::new(code, message)),
+        ));
         self
     }
 
     pub fn ingress_ids(&self) -> Vec<MessageId> {
         self.ingress_messages.iter().map(|i| i.id()).collect()
     }
+}
+
+// This test should panic on a critical error due to non-monotone timestamps.
+#[should_panic]
+#[test]
+fn critical_error_test() {
+    let sm = StateMachineBuilder::new().build();
+    sm.set_time(SystemTime::UNIX_EPOCH);
+    sm.tick();
+    sm.set_time(SystemTime::UNIX_EPOCH);
+    sm.tick();
 }

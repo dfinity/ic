@@ -39,7 +39,6 @@ rust_test(
     name = "neurons_fund_test",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate = ":neurons_fund",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -1,5 +1,30 @@
 use serde::{Deserialize, Serialize};
 
+pub enum ErrorHelp {
+    UserError {
+        suggestion: String,
+        doc_link: String,
+    },
+    ToolchainError,
+    InternalError,
+}
+
+impl std::fmt::Display for ErrorHelp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorHelp::UserError { suggestion, doc_link } => { if !suggestion.is_empty() {
+                write!(f, "{} See documentation: {}", suggestion, doc_link)
+            } else { Ok(())}             },
+            ErrorHelp::ToolchainError => write!(f, "This is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister."),
+            ErrorHelp::InternalError => write!(f, "This is an internal error on the IC. Please report it to IC devs on the forum: https://forum.dfinity.org"),
+        }
+    }
+}
+
+pub trait AsErrorHelp {
+    fn error_help(&self) -> ErrorHelp;
+}
+
 /// Represents an error that can happen when parsing or encoding a Wasm module
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WasmError(String);
@@ -112,9 +137,33 @@ impl std::fmt::Display for WasmValidationError {
             ),
             Self::CodeSectionTooLarge{size, allowed} => write!(
                 f,
-                "Wasm model code section size of {} exceeds the maximum allowed size of {}",
+                "Wasm module code section size of {} exceeds the maximum allowed size of {}",
                 size, allowed,
             ),
+        }
+    }
+}
+
+impl AsErrorHelp for WasmValidationError {
+    fn error_help(&self) -> ErrorHelp {
+        match self {
+            WasmValidationError::WasmtimeValidation(_)
+            | WasmValidationError::InvalidFunctionSignature(_)
+            | WasmValidationError::InvalidImportSection(_)
+            | WasmValidationError::InvalidDataSection(_)
+            | WasmValidationError::InvalidCustomSection(_)
+            | WasmValidationError::InvalidGlobalSection(_)
+            | WasmValidationError::TooManyGlobals { .. }
+            | WasmValidationError::TooManyCustomSections { .. } => ErrorHelp::ToolchainError,
+            WasmValidationError::DecodingError(_)
+            | WasmValidationError::InvalidExportSection(_)
+            | WasmValidationError::TooManyFunctions { .. }
+            | WasmValidationError::FunctionComplexityTooHigh { .. }
+            | WasmValidationError::FunctionTooLarge { .. }
+            | WasmValidationError::CodeSectionTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
         }
     }
 }
@@ -158,6 +207,18 @@ impl std::fmt::Display for WasmInstrumentationError {
                 len, offset
             ),
             Self::InvalidFunctionType(err) => write!(f, "Invalid function type: {}", err),
+        }
+    }
+}
+
+impl AsErrorHelp for WasmInstrumentationError {
+    fn error_help(&self) -> ErrorHelp {
+        match self {
+            WasmInstrumentationError::WasmDeserializeError(_)
+            | WasmInstrumentationError::WasmSerializeError(_) => ErrorHelp::InternalError,
+            WasmInstrumentationError::IncorrectNumberMemorySections { .. }
+            | WasmInstrumentationError::InvalidDataSegment { .. }
+            | WasmInstrumentationError::InvalidFunctionType(_) => ErrorHelp::ToolchainError,
         }
     }
 }

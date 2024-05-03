@@ -65,3 +65,99 @@ pub struct UpdateUnassignedNodesConfigPayload {
     pub ssh_readonly_access: Option<Vec<String>>,
     pub replica_version: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use ic_protobuf::registry::replica_version::v1::{
+        BlessedReplicaVersions, ReplicaVersionRecord,
+    };
+    use ic_registry_keys::{make_blessed_replica_versions_key, make_replica_version_key};
+    use ic_registry_transport::{insert, upsert};
+
+    use crate::{
+        common::test_helpers::invariant_compliant_registry,
+        mutations::common::{decode_registry_value, encode_or_panic, get_unassigned_nodes_record},
+    };
+
+    use super::UpdateUnassignedNodesConfigPayload;
+
+    #[test]
+    #[should_panic(expected = "version is NOT blessed")]
+    fn should_panic_if_version_not_blessed() {
+        let mut registry = invariant_compliant_registry(0);
+
+        // Make a proposal to upgrade all unassigned nodes to a new version
+        let payload = UpdateUnassignedNodesConfigPayload {
+            ssh_readonly_access: None,
+            replica_version: Some("version".into()),
+        };
+
+        registry.do_update_unassigned_nodes_config(payload);
+    }
+
+    #[test]
+    fn should_succeed_if_payload_is_valid() {
+        let mut registry = invariant_compliant_registry(0);
+
+        // Create and bless version
+        let blessed_versions: BlessedReplicaVersions = registry
+            .get(
+                make_blessed_replica_versions_key().as_bytes(), // key
+                registry.latest_version(),                      // version
+            )
+            .map(|v| decode_registry_value(v.value.clone()))
+            .expect("failed to decode blessed versions");
+        let blessed_versions = blessed_versions.blessed_version_ids;
+
+        registry.maybe_apply_mutation_internal(vec![
+            // Mutation to insert new replica version
+            insert(
+                make_replica_version_key("version"), // key
+                encode_or_panic(&ReplicaVersionRecord {
+                    release_package_sha256_hex: "".into(),
+                    release_package_urls: vec![],
+                    guest_launch_measurement_sha256_hex: None,
+                }),
+            ),
+            // Mutation to insert BlessedReplicaVersions
+            upsert(
+                make_blessed_replica_versions_key(), // key
+                encode_or_panic(&BlessedReplicaVersions {
+                    blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
+                }),
+            ),
+        ]);
+
+        let public_keys = vec!["keyX".into(), "keyY".into()];
+
+        // Make a proposal to upgrade all unassigned nodes to a new blessed version
+        // and add readonly SSH keys
+        let payload = UpdateUnassignedNodesConfigPayload {
+            ssh_readonly_access: Some(public_keys.clone()),
+            replica_version: Some("version".into()),
+        };
+
+        registry.do_update_unassigned_nodes_config(payload);
+
+        let unassigned_nodes_record = get_unassigned_nodes_record(&registry)
+            .expect("failed to get unassigned nodes config record");
+        assert_eq!(unassigned_nodes_record.replica_version, "version");
+        assert_eq!(unassigned_nodes_record.ssh_readonly_access, public_keys);
+
+        // Make a proposal to remove all SSH keys
+        let payload = UpdateUnassignedNodesConfigPayload {
+            ssh_readonly_access: Some(Vec::<String>::new()),
+            replica_version: None,
+        };
+
+        registry.do_update_unassigned_nodes_config(payload);
+
+        let unassigned_nodes_record = get_unassigned_nodes_record(&registry)
+            .expect("failed to get unassigned nodes config record");
+        assert_eq!(unassigned_nodes_record.replica_version, "version");
+        assert_eq!(
+            unassigned_nodes_record.ssh_readonly_access,
+            Vec::<String>::new()
+        );
+    }
+}

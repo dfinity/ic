@@ -6,9 +6,9 @@
 ///
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
-    AddCycles, CallRequest, ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetSubnet,
-    GetTime, PubKey, Query, QueryRequest, ReadStateRequest, SetStableMemory, SetTime,
-    StatusRequest, Tick,
+    AddCycles, AwaitIngressMessage, CallRequest, ExecuteIngressMessage, GetCyclesBalance,
+    GetStableMemory, GetSubnet, GetTime, PubKey, Query, QueryRequest, ReadStateRequest,
+    SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, Tick,
 };
 use crate::OpId;
 use crate::{pocket_ic::PocketIc, BlobStore, InstanceId, Operation};
@@ -34,9 +34,9 @@ use hyper::header;
 use ic_http_endpoints_public::cors_layer;
 use ic_types::CanisterId;
 use pocket_ic::common::rest::{
-    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, RawAddCycles, RawCanisterCall,
-    RawCanisterId, RawCanisterResult, RawCycles, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTime, RawWasmResult,
+    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayInfo, RawAddCycles,
+    RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId, RawSetStableMemory,
+    RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime, RawWasmResult,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
@@ -79,6 +79,14 @@ where
     AppState: extract::FromRef<S>,
 {
     ApiRouter::new()
+        .directory_route(
+            "/submit_ingress_message",
+            post(handler_submit_ingress_message),
+        )
+        .directory_route(
+            "/await_ingress_message",
+            post(handler_await_ingress_message),
+        )
         .directory_route(
             "/execute_ingress_message",
             post(handler_execute_ingress_message),
@@ -390,6 +398,22 @@ impl TryFrom<OpOut> for Vec<u8> {
     }
 }
 
+impl TryFrom<OpOut> for RawSubmitIngressResult {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::MessageId((effective_principal, message_id)) => {
+                Ok(RawSubmitIngressResult::Ok(RawMessageId {
+                    effective_principal: effective_principal.into(),
+                    message_id,
+                }))
+            }
+            OpOut::CanisterResult(Err(user_error)) => Ok(RawSubmitIngressResult::Err(user_error)),
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct ApiV2Error(String);
 
@@ -625,6 +649,11 @@ fn op_out_to_response(op_out: OpOut) -> Response {
             .into_response(),
         )
             .into_response(),
+        opout @ OpOut::MessageId(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(Vec::<u8>::try_from(opout).unwrap())),
+        )
+            .into_response(),
         OpOut::NoOutput => (
             StatusCode::OK,
             Json(ApiResponse::Success(())).into_response(),
@@ -734,6 +763,50 @@ pub async fn handler_read_graph(
 
 // ----------------------------------------------------------------------------------------------------------------- //
 // Update handlers
+
+pub async fn handler_submit_ingress_message(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+    extract::Json(raw_canister_call): extract::Json<RawCanisterCall>,
+) -> (StatusCode, Json<ApiResponse<RawSubmitIngressResult>>) {
+    let timeout = timeout_or_default(headers);
+    match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
+        Ok(canister_call) => {
+            let ingress_op = SubmitIngressMessage(canister_call);
+            let (code, response) = run_operation(api_state, instance_id, timeout, ingress_op).await;
+            (code, Json(response))
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("{:?}", e),
+            }),
+        ),
+    }
+}
+
+pub async fn handler_await_ingress_message(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+    extract::Json(raw_message_id): extract::Json<RawMessageId>,
+) -> (StatusCode, Json<ApiResponse<RawCanisterResult>>) {
+    let timeout = timeout_or_default(headers);
+    match crate::pocket_ic::MessageId::try_from(raw_message_id) {
+        Ok(message_id) => {
+            let ingress_op = AwaitIngressMessage(message_id);
+            let (code, response) = run_operation(api_state, instance_id, timeout, ingress_op).await;
+            (code, Json(response))
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error {
+                message: format!("{:?}", e),
+            }),
+        ),
+    }
+}
 
 pub async fn handler_execute_ingress_message(
     State(AppState { api_state, .. }): State<AppState>,
@@ -920,7 +993,10 @@ pub async fn create_http_gateway(
     let (instance_id, port) = api_state.create_http_gateway(http_gateway_config).await;
     (
         StatusCode::CREATED,
-        Json(rest::CreateHttpGatewayResponse::Created { instance_id, port }),
+        Json(rest::CreateHttpGatewayResponse::Created(HttpGatewayInfo {
+            instance_id,
+            port,
+        })),
     )
 }
 

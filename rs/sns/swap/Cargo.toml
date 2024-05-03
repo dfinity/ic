@@ -20,7 +20,7 @@ path = "tests/swap.rs"
 [dependencies]
 build-info = { workspace = true }
 
-async-trait = "0.1.42"
+async-trait = { workspace = true }
 candid = { workspace = true }
 comparable = { version = "0.5.1", features = ["derive"] }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
@@ -38,6 +38,7 @@ ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
 ic-stable-structures = { workspace = true }
 ic-sns-governance = { path = "../governance" }
+ic-utils = { path = "../../utils" }
 # TODO(NNS1-1589): Delete hack, and uncomment this.
 # ic-sns-root = { path = "../root" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
@@ -49,6 +50,7 @@ prost = { workspace = true }
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 
 [build-dependencies]
 build-info-build = { workspace = true }

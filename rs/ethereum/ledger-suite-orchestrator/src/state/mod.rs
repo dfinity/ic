@@ -426,6 +426,10 @@ impl State {
         &self.cycles_management
     }
 
+    pub fn cycles_management_mut(&mut self) -> &mut CyclesManagement {
+        &mut self.cycles_management
+    }
+
     pub fn managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Token, &Canisters)> {
         self.managed_canisters.canisters.iter()
     }

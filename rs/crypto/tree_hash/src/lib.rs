@@ -721,7 +721,7 @@ impl TryFrom<MixedHashTree> for LabeledTree<Vec<u8>> {
 
 impl Serialize for MixedHashTree {
     // Serialize a `MixedHashTree` per the CDDL of the public spec.
-    // See https://sdk.dfinity.org/docs/interface-spec/index.html#_encoding_of_certificates
+    // See https://internetcomputer.org/docs/current/references/ic-interface-spec#certification-encoding
     #[inline]
     fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
     where

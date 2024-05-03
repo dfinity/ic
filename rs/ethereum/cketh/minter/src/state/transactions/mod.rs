@@ -11,10 +11,11 @@ use crate::numeric::{
     CkTokenAmount, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
     TransactionNonce, Wei,
 };
+use crate::state::event::EventType;
 use crate::tx::{
-    Eip1559TransactionRequest, FinalizedEip1559Transaction, ResubmissionStrategy,
+    Eip1559TransactionRequest, FinalizedEip1559Transaction, GasFeeEstimate, ResubmissionStrategy,
     SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionPrice,
-    TransactionPriceEstimate, TransactionRequest,
+    TransactionRequest,
 };
 use candid::Principal;
 use ic_ethereum_types::Address;
@@ -71,6 +72,15 @@ impl WithdrawalRequest {
         match self {
             WithdrawalRequest::CkEth(request) => &request.from_subaccount,
             WithdrawalRequest::CkErc20(request) => &request.from_subaccount,
+        }
+    }
+
+    pub fn into_accepted_withdrawal_request_event(self) -> EventType {
+        match self {
+            WithdrawalRequest::CkEth(request) => EventType::AcceptedEthWithdrawalRequest(request),
+            WithdrawalRequest::CkErc20(request) => {
+                EventType::AcceptedErc20WithdrawalRequest(request)
+            }
         }
     }
 }
@@ -145,20 +155,40 @@ pub struct Erc20WithdrawalRequest {
     pub created_at: u64,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Encode, Decode)]
 pub enum ReimbursementIndex {
+    #[n(0)]
     CkEth {
         /// Burn index on the ckETH ledger
+        #[cbor(n(0), with = "crate::cbor::id")]
         ledger_burn_index: LedgerBurnIndex,
     },
-
+    #[n(1)]
     CkErc20 {
+        #[cbor(n(0), with = "crate::cbor::id")]
         cketh_ledger_burn_index: LedgerBurnIndex,
         /// The ckERC20 ledger canister ID identifying the ledger on which the burn to be reimbursed was made.
+        #[cbor(n(1), with = "crate::cbor::principal")]
         ledger_id: Principal,
         /// Burn index on the ckERC20 ledger
+        #[cbor(n(2), with = "crate::cbor::id")]
         ckerc20_ledger_burn_index: LedgerBurnIndex,
     },
+}
+
+impl From<&WithdrawalRequest> for ReimbursementIndex {
+    fn from(value: &WithdrawalRequest) -> Self {
+        match value {
+            WithdrawalRequest::CkEth(request) => ReimbursementIndex::CkEth {
+                ledger_burn_index: request.ledger_burn_index,
+            },
+            WithdrawalRequest::CkErc20(request) => ReimbursementIndex::CkErc20 {
+                cketh_ledger_burn_index: request.cketh_ledger_burn_index,
+                ledger_id: request.ckerc20_ledger_id,
+                ckerc20_ledger_burn_index: request.ckerc20_ledger_burn_index,
+            },
+        }
+    }
 }
 
 impl ReimbursementIndex {
@@ -212,6 +242,17 @@ pub struct Reimbursed {
     pub reimbursed_amount: CkTokenAmount,
     #[n(3)]
     pub transaction_hash: Option<Hash>,
+}
+
+pub type ReimbursedResult = Result<Reimbursed, ReimbursedError>;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum ReimbursedError {
+    /// Whether reimbursement was minted or not is unknown,
+    /// most likely because there was an unexpected panic in the callback.
+    /// The reimbursement request is quarantined to avoid any double minting and
+    /// will not be further processed without manual intervention.
+    Quarantined,
 }
 
 #[derive(Clone, Eq, PartialEq, Encode, Decode)]
@@ -309,7 +350,7 @@ pub struct EthTransactions {
 
     pub(in crate::state) maybe_reimburse: BTreeMap<LedgerBurnIndex, WithdrawalRequest>,
     pub(in crate::state) reimbursement_requests: BTreeMap<ReimbursementIndex, ReimbursementRequest>,
-    pub(in crate::state) reimbursed: BTreeMap<ReimbursementIndex, Reimbursed>,
+    pub(in crate::state) reimbursed: BTreeMap<ReimbursementIndex, ReimbursedResult>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -323,10 +364,10 @@ pub enum CreateTransactionError {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ResubmitTransactionError {
-    InsufficientTransactionAmount {
+    InsufficientTransactionFee {
         ledger_burn_index: LedgerBurnIndex,
         transaction_nonce: TransactionNonce,
-        transaction_amount: Wei,
+        allowed_max_transaction_fee: Wei,
         max_transaction_fee: Wei,
     },
 }
@@ -359,8 +400,30 @@ impl EthTransactions {
         self.reimbursement_requests.iter()
     }
 
-    pub fn get_reimbursed_transactions(&self) -> Vec<Reimbursed> {
-        self.reimbursed.values().cloned().collect()
+    pub fn reimbursed_transactions_iter(
+        &self,
+    ) -> impl Iterator<Item = (&ReimbursementIndex, &ReimbursedResult)> {
+        self.reimbursed.iter()
+    }
+
+    fn find_reimbursed_transaction_by_cketh_ledger_burn_index(
+        &self,
+        searched_burn_index: &LedgerBurnIndex,
+    ) -> Option<&ReimbursedResult> {
+        self.reimbursed
+            .iter()
+            .find_map(|(index, value)| match index {
+                ReimbursementIndex::CkEth { ledger_burn_index }
+                    if ledger_burn_index == searched_burn_index =>
+                {
+                    Some(value)
+                }
+                ReimbursementIndex::CkErc20 {
+                    cketh_ledger_burn_index,
+                    ..
+                } if cketh_ledger_burn_index == searched_burn_index => Some(value),
+                _ => None,
+            })
     }
 
     pub fn record_withdrawal_request<R: Into<WithdrawalRequest>>(&mut self, request: R) {
@@ -500,7 +563,7 @@ impl EthTransactions {
     pub fn create_resubmit_transactions(
         &self,
         latest_transaction_count: TransactionCount,
-        current_gas_fee: TransactionPriceEstimate,
+        current_gas_fee: GasFeeEstimate,
     ) -> Vec<Result<(LedgerBurnIndex, Eip1559TransactionRequest), ResubmitTransactionError>> {
         // If transaction count at block height H is c > 0, then transactions with nonces
         // 0, 1, ..., c - 1 were mined. If transaction count is 0, then no transactions were mined.
@@ -527,10 +590,10 @@ impl EthTransactions {
                     actual_max_transaction_fee,
                 }) => {
                     transactions_to_resubmit.push(Err(
-                        ResubmitTransactionError::InsufficientTransactionAmount {
+                        ResubmitTransactionError::InsufficientTransactionFee {
                             ledger_burn_index: *burn_index,
                             transaction_nonce: *nonce,
-                            transaction_amount: allowed_max_transaction_fee,
+                            allowed_max_transaction_fee,
                             max_transaction_fee: actual_max_transaction_fee,
                         },
                     ));
@@ -610,11 +673,12 @@ impl EthTransactions {
         let maybe_reimburse = self.maybe_reimburse.remove(&ledger_burn_index).expect(
             "failed to remove entry from maybe_reimburse map with block index: {ledger_burn_index}",
         );
+        let index = ReimbursementIndex::from(&maybe_reimburse);
         match &maybe_reimburse {
             WithdrawalRequest::CkEth(request) => {
                 if receipt.status == TransactionStatus::Failure {
                     self.record_reimbursement_request(
-                        ReimbursementIndex::CkEth { ledger_burn_index },
+                        index,
                         ReimbursementRequest {
                             ledger_burn_index,
                             to: request.from,
@@ -626,30 +690,9 @@ impl EthTransactions {
                 }
             }
             WithdrawalRequest::CkErc20(request) => {
-                if let Some(unused_tx_fee) = request
-                    .max_transaction_fee
-                    .checked_sub(finalized_tx.transaction_price().max_transaction_fee())
-                {
-                    if unused_tx_fee > Wei::ZERO {
-                        self.record_reimbursement_request(
-                            ReimbursementIndex::CkEth { ledger_burn_index },
-                            ReimbursementRequest {
-                                ledger_burn_index,
-                                to: request.from,
-                                to_subaccount: request.from_subaccount.clone(),
-                                reimbursed_amount: unused_tx_fee.change_units(),
-                                transaction_hash: Some(receipt.transaction_hash),
-                            },
-                        );
-                    }
-                }
                 if receipt.status == TransactionStatus::Failure {
                     self.record_reimbursement_request(
-                        ReimbursementIndex::CkErc20 {
-                            cketh_ledger_burn_index: ledger_burn_index,
-                            ledger_id: request.ckerc20_ledger_id,
-                            ckerc20_ledger_burn_index: request.ckerc20_ledger_burn_index,
-                        },
+                        index,
                         ReimbursementRequest {
                             ledger_burn_index: request.ckerc20_ledger_burn_index,
                             reimbursed_amount: request.withdrawal_amount.change_units(),
@@ -669,10 +712,29 @@ impl EthTransactions {
         request: ReimbursementRequest,
     ) {
         assert_eq!(
+            self.maybe_reimburse.get(&index.withdrawal_id()),
+            None,
+            "BUG: withdrawal request still in maybe_reimburse could lead to double minting!"
+        );
+        assert_eq!(
+            self.reimbursed.get(&index),
+            None,
+            "BUG: reimbursement request was already processed"
+        );
+        assert_eq!(
             self.reimbursement_requests.insert(index.clone(), request),
             None,
             "BUG: reimbursement request for withdrawal {index:?} already exists"
         );
+    }
+
+    /// Quarantine the reimbursement request identified by its index to prevent double minting.
+    /// WARNING!: It's crucial that this method does not panic,
+    /// since it's called inside the clean-up callback, when an unexpected panic did occur before.
+    pub fn record_quarantined_reimbursement(&mut self, index: ReimbursementIndex) {
+        self.reimbursement_requests.remove(&index);
+        self.reimbursed
+            .insert(index, Err(ReimbursedError::Quarantined));
     }
 
     pub fn record_finalized_reimbursement(
@@ -683,17 +745,17 @@ impl EthTransactions {
         let reimbursement_request = self
             .reimbursement_requests
             .remove(&index)
-            .expect("BUG: missing reimbursement request");
+            .unwrap_or_else(|| panic!("BUG: missing reimbursement request with index {index:?}"));
         let burn_in_block = index.burn_in_block();
         assert_eq!(
             self.reimbursed.insert(
                 index,
-                Reimbursed {
+                Ok(Reimbursed {
                     burn_in_block,
                     reimbursed_in_block,
                     reimbursed_amount: reimbursement_request.reimbursed_amount,
                     transaction_hash: reimbursement_request.transaction_hash,
-                },
+                }),
             ),
             None
         );
@@ -717,16 +779,15 @@ impl EthTransactions {
         }
 
         if let Some(tx) = self.finalized_tx.get_alt(burn_index) {
-            if let Some(reimbursed) = self.reimbursed.get(&ReimbursementIndex::CkEth {
-                ledger_burn_index: *burn_index,
-            }) {
+            if let Some(Ok(reimbursed)) =
+                self.find_reimbursed_transaction_by_cketh_ledger_burn_index(burn_index)
+            {
                 return RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
                     reimbursed_in_block: reimbursed.reimbursed_in_block.get().into(),
                     transaction_hash: tx.transaction_hash().to_string(),
                     reimbursed_amount: reimbursed.reimbursed_amount.into(),
                 });
             }
-            //TODO XC-78: status for pending transactioon fee reimbursement for ckERC20?
             if tx.transaction_status() == &TransactionStatus::Failure {
                 return RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
                     EthTransaction {
@@ -967,7 +1028,11 @@ pub fn create_transaction(
                 gas_limit: transaction_price.gas_limit,
                 destination: request.erc20_contract_address,
                 amount: Wei::ZERO,
-                data: create_transaction_data(request),
+                data: TransactionCallData::Erc20Transfer {
+                    to: request.destination,
+                    value: request.withdrawal_amount,
+                }
+                .encode(),
                 access_list: Default::default(),
             })
         }
@@ -976,12 +1041,49 @@ pub fn create_transaction(
 
 // First 4 bytes of keccak256(transfer(address,uint256))
 const ERC_20_TRANSFER_FUNCTION_SELECTOR: [u8; 4] = hex_literal::hex!("a9059cbb");
-fn create_transaction_data(withdrawal_request: &Erc20WithdrawalRequest) -> Vec<u8> {
-    let mut data = Vec::with_capacity(68);
-    data.extend(ERC_20_TRANSFER_FUNCTION_SELECTOR);
-    data.extend(<[u8; 32]>::from(&withdrawal_request.destination));
-    data.extend(withdrawal_request.withdrawal_amount.to_be_bytes());
-    data
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TransactionCallData {
+    Erc20Transfer { to: Address, value: Erc20Value },
+}
+
+impl TransactionCallData {
+    /// Encode the transaction call data to interact with an Ethereum smart contract.
+    /// See the [Contract ABI Specification](https://docs.soliditylang.org/en/develop/abi-spec.html#contract-abi-specification).
+    pub fn encode(&self) -> Vec<u8> {
+        match self {
+            TransactionCallData::Erc20Transfer { to, value } => {
+                let mut data = Vec::with_capacity(68);
+                data.extend(ERC_20_TRANSFER_FUNCTION_SELECTOR);
+                data.extend(<[u8; 32]>::from(to));
+                data.extend(value.to_be_bytes());
+                data
+            }
+        }
+    }
+
+    pub fn decode<T: AsRef<[u8]>>(data: T) -> Result<Self, String> {
+        let data = data.as_ref();
+        match data.get(0..4) {
+            Some(selector) if selector == ERC_20_TRANSFER_FUNCTION_SELECTOR => {
+                if data.len() != 68 {
+                    return Err("Invalid data length".to_string());
+                }
+                let address = <[u8; 32]>::try_from(&data[4..36]).unwrap();
+                let to = Address::try_from(&address).unwrap();
+
+                let value = <[u8; 32]>::try_from(&data[36..]).unwrap();
+                let value = Erc20Value::from_be_bytes(value);
+
+                Ok(TransactionCallData::Erc20Transfer { to, value })
+            }
+            Some(selector) => Err(format!(
+                "Unknown function selector 0x{:?}",
+                hex::encode(selector)
+            )),
+            None => Err("missing function selector".to_string()),
+        }
+    }
 }
 
 /// Returns true if the two transactions are equal ignoring the transaction fee and amount.

@@ -4,13 +4,17 @@
 //
 // Run the test using:
 //
-//   rm -rf test_tmpdir; ict test nns_upgrade_test --set-required-host-features=dc=zh1 -- --test_tmpdir=test_tmpdir --flaky_test_attempts=1
+//   test_tmpdir="/tmp/$(whoami)/test_tmpdir"; echo "test_tmpdir=$test_tmpdir"; rm -rf "$test_tmpdir"; ict test nns_upgrade_test --set-required-host-features=dc=zh1 -- --test_tmpdir="$test_tmpdir" --flaky_test_attempts=1
 //
 // Make sure to pick a DC in --set-required-host-features=dc=zh1 which is close to
 // where you are running the test from. Shipping state across the Atlantic can double the
 // time it takes to setup the IC with the recovered NNS.
 //
-// It will take between 10 to 20 minutes to setup the recovered NNS.
+// If you're running this on a devenv VM make sure to point --test_tmpdir to
+// host-backed storage like /tmp/$(whoami) to avoid the >7GB backup being downloaded to
+// and procecessed on CEPH-backed storage.
+//
+// It will take a bit over 20 minutes to setup the recovered NNS.
 // Wait for a message like the following before interacting with the recovered NNS:
 //
 //   2023-08-21 18:03:06.784 INFO[setup:rs/tests/nns/nns_upgrade_test.rs:516:0]

@@ -5,35 +5,7 @@ package types.v1;
 import "google/protobuf/empty.proto";
 import "registry/subnet/v1/subnet.proto";
 import "types/v1/canister_http.proto";
-import "types/v1/ecdsa.proto";
-
-message ArtifactAttribute {
-  oneof kind {
-    ConsensusMessageAttribute consensus_message = 1;
-    EcdsaMessageAttribute ecdsa_message = 3;
-    google.protobuf.Empty empty = 5;
-  }
-  reserved 2, 4;
-}
-
-message ConsensusMessageAttribute {
-  oneof kind {
-    FinalizationAttribute finalization = 2;
-    NotarizationAttribute notarization = 3;
-    google.protobuf.Empty empty = 12;
-  }
-  reserved 1, 4, 5, 6, 7, 8, 9, 10, 11;
-}
-
-message FinalizationAttribute {
-  bytes block_hash = 1;
-  reserved 2;
-}
-
-message NotarizationAttribute {
-  bytes block_hash = 1;
-  reserved 2;
-}
+import "types/v1/idkg.proto";
 
 message EcdsaMessageAttribute {
   oneof kind {
@@ -43,19 +15,6 @@ message EcdsaMessageAttribute {
     registry.subnet.v1.IDkgTranscriptId complaint = 4;
     registry.subnet.v1.IDkgTranscriptId opening = 5;
   }
-}
-
-message ArtifactId {
-  oneof kind {
-    ConsensusMessageId consensus = 1;
-    IngressMessageId ingress = 2;
-    CertificationMessageId certification = 3;
-    types.v1.CanisterHttpShare canister_http = 11;
-    DkgMessageId dkg_message = 10;
-    types.v1.EcdsaArtifactId ecdsa = 6;
-    string file_tree_sync = 7;
-  }
-  reserved 4, 5, 9;
 }
 
 message DkgMessageId {

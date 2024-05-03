@@ -16,7 +16,7 @@ use tokio::{
     sync::{mpsc, watch},
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 use url::Url;
 
 use crate::{
@@ -504,10 +504,10 @@ impl Run for Runner {
     async fn run(&mut self) -> Result<(), Error> {
         // Watch for snapshot updates and restart global actor
         while self.channel_snapshot.changed().await.is_ok() {
-            info!("New registry snapshot - restarting health check actors");
+            warn!("New registry snapshot - restarting health check actors");
             self.stop().await;
             self.start();
-            info!("Health check actors restarted");
+            warn!("Health check actors restarted");
         }
 
         Ok(())

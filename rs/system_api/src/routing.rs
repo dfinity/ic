@@ -181,11 +181,10 @@ pub(super) fn resolve_destination(
             Ok(NodeMetricsHistoryArgs::decode(payload)?.subnet_id)
         }
         Ok(Ic00Method::FetchCanisterLogs) => {
-            // TODO(IC-272).
             Err(ResolveDestinationError::UserError(UserError::new(
                 ic_error_types::ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} API is not yet implemented",
+                    "{} API is only accessible to end users in non-replicated mode",
                     Ic00Method::FetchCanisterLogs
                 ),
             )))

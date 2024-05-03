@@ -8,10 +8,12 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_interfaces::crypto::{
     BasicSigner, IDkgProtocol, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_types::crypto::canister_threshold_sig::idkg::InitialIDkgDealings;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgComplaint, IDkgDealers, IDkgDealing,
     IDkgMaskedTranscriptOrigin, IDkgOpening, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
@@ -19,13 +21,11 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    EcdsaPreSignatureQuadruple, ExtendedDerivationPath, ThresholdEcdsaSigShare,
+    EcdsaPreSignatureQuadruple, ExtendedDerivationPath, SchnorrPreSignatureTranscript,
+    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
+    ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
 };
-use ic_types::crypto::canister_threshold_sig::{
-    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-};
-use ic_types::crypto::{AlgorithmId, KeyPurpose, Signed};
-use ic_types::crypto::{BasicSig, BasicSigOf};
+use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, Signed};
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::prelude::*;
@@ -309,7 +309,8 @@ pub mod node {
     use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
     use ic_interfaces::crypto::{
         BasicSigVerifier, BasicSigner, CurrentNodePublicKeysError, IDkgProtocol, KeyManager,
-        ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+        ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier,
+        ThresholdSchnorrSigner,
     };
     use ic_logger::ReplicaLogger;
     use ic_protobuf::log::log_entry::v1::LogEntry;
@@ -323,6 +324,8 @@ pub mod node {
         IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
         ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
         ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+        ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
+        ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{
         BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgComplaint, IDkgDealers, IDkgOpening,
@@ -331,6 +334,7 @@ pub mod node {
     };
     use ic_types::crypto::canister_threshold_sig::{
         ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
+        ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
     };
     use ic_types::crypto::{BasicSigOf, CryptoResult, CurrentNodePublicKeys, Signable};
     use ic_types::signature::BasicSignatureBatch;
@@ -415,11 +419,16 @@ pub mod node {
                 });
         }
 
-        pub fn load_input_transcripts(&self, inputs: &ThresholdEcdsaSigInputs) {
+        pub fn load_tecdsa_sig_transcripts(&self, inputs: &ThresholdEcdsaSigInputs) {
             self.load_transcript_or_panic(inputs.presig_quadruple().kappa_unmasked());
             self.load_transcript_or_panic(inputs.presig_quadruple().lambda_masked());
             self.load_transcript_or_panic(inputs.presig_quadruple().kappa_times_lambda());
             self.load_transcript_or_panic(inputs.presig_quadruple().key_times_lambda());
+            self.load_transcript_or_panic(inputs.key_transcript());
+        }
+
+        pub fn load_tschnorr_sig_transcripts(&self, inputs: &ThresholdSchnorrSigInputs) {
+            self.load_transcript_or_panic(inputs.presig_transcript().blinder_unmasked());
             self.load_transcript_or_panic(inputs.key_transcript());
         }
 
@@ -569,7 +578,7 @@ pub mod node {
             &self,
             inputs: &ThresholdEcdsaSigInputs,
         ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
-            self.crypto_component.sign_share(inputs)
+            ThresholdEcdsaSigner::sign_share(self.crypto_component.as_ref(), inputs)
         }
     }
 
@@ -580,8 +589,12 @@ pub mod node {
             inputs: &ThresholdEcdsaSigInputs,
             share: &ThresholdEcdsaSigShare,
         ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
-            self.crypto_component
-                .verify_sig_share(signer, inputs, share)
+            ThresholdEcdsaSigVerifier::verify_sig_share(
+                self.crypto_component.as_ref(),
+                signer,
+                inputs,
+                share,
+            )
         }
 
         fn combine_sig_shares(
@@ -589,7 +602,11 @@ pub mod node {
             inputs: &ThresholdEcdsaSigInputs,
             shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
         ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
-            self.crypto_component.combine_sig_shares(inputs, shares)
+            ThresholdEcdsaSigVerifier::combine_sig_shares(
+                self.crypto_component.as_ref(),
+                inputs,
+                shares,
+            )
         }
 
         fn verify_combined_sig(
@@ -597,7 +614,61 @@ pub mod node {
             inputs: &ThresholdEcdsaSigInputs,
             signature: &ThresholdEcdsaCombinedSignature,
         ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
-            self.crypto_component.verify_combined_sig(inputs, signature)
+            ThresholdEcdsaSigVerifier::verify_combined_sig(
+                self.crypto_component.as_ref(),
+                inputs,
+                signature,
+            )
+        }
+    }
+
+    impl ThresholdSchnorrSigner for Node {
+        fn create_sig_share(
+            &self,
+            inputs: &ThresholdSchnorrSigInputs,
+        ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
+            ThresholdSchnorrSigner::create_sig_share(self.crypto_component.as_ref(), inputs)
+        }
+    }
+
+    impl ThresholdSchnorrSigVerifier for Node {
+        fn verify_sig_share(
+            &self,
+            signer: NodeId,
+            inputs: &ThresholdSchnorrSigInputs,
+            share: &ThresholdSchnorrSigShare,
+        ) -> Result<(), ThresholdSchnorrVerifySigShareError> {
+            ThresholdSchnorrSigVerifier::verify_sig_share(
+                self.crypto_component.as_ref(),
+                signer,
+                inputs,
+                share,
+            )
+        }
+
+        fn combine_sig_shares(
+            &self,
+            inputs: &ThresholdSchnorrSigInputs,
+            shares: &BTreeMap<NodeId, ThresholdSchnorrSigShare>,
+        ) -> Result<ThresholdSchnorrCombinedSignature, ThresholdSchnorrCombineSigSharesError>
+        {
+            ThresholdSchnorrSigVerifier::combine_sig_shares(
+                self.crypto_component.as_ref(),
+                inputs,
+                shares,
+            )
+        }
+
+        fn verify_combined_sig(
+            &self,
+            inputs: &ThresholdSchnorrSigInputs,
+            signature: &ThresholdSchnorrCombinedSignature,
+        ) -> Result<(), ThresholdSchnorrVerifyCombinedSigError> {
+            ThresholdSchnorrSigVerifier::verify_combined_sig(
+                self.crypto_component.as_ref(),
+                inputs,
+                signature,
+            )
         }
     }
 
@@ -1265,12 +1336,11 @@ impl CanisterThresholdSigTestEnvironment {
     }
 }
 
-pub fn random_receiver_for_inputs<R: RngCore + CryptoRng>(
-    inputs: &ThresholdEcdsaSigInputs,
+pub fn random_receiver_id<R: RngCore + CryptoRng>(
+    receivers: &IDkgReceivers,
     rng: &mut R,
 ) -> NodeId {
-    *inputs
-        .receivers()
+    *receivers
         .get()
         .iter()
         .choose(rng)
@@ -1345,14 +1415,6 @@ fn random_node_id<R: RngCore + CryptoRng>(rng: &mut R) -> NodeId {
     node_id(rng.gen())
 }
 
-pub fn random_receiver_id<R: RngCore + CryptoRng>(
-    params: &IDkgTranscriptParams,
-    rng: &mut R,
-) -> NodeId {
-    *random_receiver_id_excluding_set(params.receivers(), &BTreeSet::new(), rng)
-        .expect("receivers is empty")
-}
-
 pub fn random_receiver_id_excluding<R: RngCore + CryptoRng>(
     receivers: &IDkgReceivers,
     exclusion: NodeId,
@@ -1423,6 +1485,7 @@ pub fn n_random_dealer_indexes<R: RngCore + CryptoRng>(
         .choose_multiple(rng, n)
 }
 
+/// Creates a crypto component with a new, randomly generated node ID that is not in `receivers`.
 pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     receivers: &IDkgReceivers,
@@ -1865,7 +1928,7 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
     sig_inputs: &ThresholdEcdsaSigInputs,
     rng: &mut R,
 ) -> ThresholdEcdsaCombinedSignature {
-    let sig_shares = sig_share_from_each_receiver(env, sig_inputs);
+    let sig_shares = ecdsa_sig_share_from_each_receiver(env, sig_inputs);
     // Verify that each signature share can be verified
     let verifier_id = random_node_id_excluding(sig_inputs.receivers().get(), rng);
     let verifier_crypto_component = TempCryptoComponent::builder()
@@ -1874,9 +1937,13 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
         .with_rng(ChaCha20Rng::from_seed(rng.gen()))
         .build();
     for (signer_id, sig_share) in sig_shares.iter() {
-        assert!(verifier_crypto_component
-            .verify_sig_share(*signer_id, sig_inputs, sig_share)
-            .is_ok());
+        ThresholdEcdsaSigVerifier::verify_sig_share(
+            &verifier_crypto_component,
+            *signer_id,
+            sig_inputs,
+            sig_share,
+        )
+        .expect("failed to verify signature share");
     }
 
     let combiner_crypto_component = TempCryptoComponent::builder()
@@ -1884,12 +1951,81 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
         .with_node_id(verifier_id)
         .with_rng(ChaCha20Rng::from_seed(rng.gen()))
         .build();
-    combiner_crypto_component
-        .combine_sig_shares(sig_inputs, &sig_shares)
-        .expect("Failed to generate signature")
+    ThresholdEcdsaSigVerifier::combine_sig_shares(
+        &combiner_crypto_component,
+        sig_inputs,
+        &sig_shares,
+    )
+    .expect("Failed to generate signature")
 }
 
-pub fn sig_share_from_each_receiver(
+pub fn generate_tschnorr_protocol_inputs<R: RngCore + CryptoRng>(
+    env: &CanisterThresholdSigTestEnvironment,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
+    key_transcript: &IDkgTranscript,
+    message: &[u8],
+    nonce: Randomness,
+    derivation_path: &ExtendedDerivationPath,
+    alg: AlgorithmId,
+    rng: &mut R,
+) -> ThresholdSchnorrSigInputs {
+    let blinder_unmasked_params = setup_unmasked_random_params(env, alg, dealers, receivers, rng);
+    let blinder_unmasked_transcript = env
+        .nodes
+        .run_idkg_and_create_and_verify_transcript(&blinder_unmasked_params, rng);
+
+    let presig = SchnorrPreSignatureTranscript::new(blinder_unmasked_transcript)
+        .expect("failed to create Schnorr pre-signature transcript");
+
+    ThresholdSchnorrSigInputs::new(
+        derivation_path,
+        message,
+        nonce,
+        presig,
+        key_transcript.clone(),
+    )
+    .expect("failed to create signature inputs")
+}
+
+pub fn run_tschnorr_protocol<R: RngCore + CryptoRng + Sync + Send>(
+    env: &CanisterThresholdSigTestEnvironment,
+    sig_inputs: &ThresholdSchnorrSigInputs,
+    rng: &mut R,
+) -> ThresholdSchnorrCombinedSignature {
+    let sig_shares = schnorr_sig_share_from_each_receiver(env, sig_inputs);
+
+    // Verify each signature share
+    let verifier_id = random_node_id_excluding(sig_inputs.receivers().get(), rng);
+    let verifier_crypto_component = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(verifier_id)
+        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .build();
+    for (signer_id, sig_share) in sig_shares.iter() {
+        ThresholdSchnorrSigVerifier::verify_sig_share(
+            &verifier_crypto_component,
+            *signer_id,
+            sig_inputs,
+            sig_share,
+        )
+        .expect("failed to verify signature share");
+    }
+
+    let combiner_crypto_component = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(verifier_id)
+        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .build();
+    ThresholdSchnorrSigVerifier::combine_sig_shares(
+        &combiner_crypto_component,
+        sig_inputs,
+        &sig_shares,
+    )
+    .expect("Failed to generate signature")
+}
+
+pub fn ecdsa_sig_share_from_each_receiver(
     env: &CanisterThresholdSigTestEnvironment,
     inputs: &ThresholdEcdsaSigInputs,
 ) -> BTreeMap<NodeId, ThresholdEcdsaSigShare> {
@@ -1897,9 +2033,25 @@ pub fn sig_share_from_each_receiver(
         .nodes
         .filter_by_receivers(&inputs)
         .map(|receiver| {
-            receiver.load_input_transcripts(inputs);
-            let sig_share = receiver
-                .sign_share(inputs)
+            receiver.load_tecdsa_sig_transcripts(inputs);
+            let sig_share = ThresholdEcdsaSigner::sign_share(receiver, inputs)
+                .expect("failed to create sig share");
+            (receiver.id(), sig_share)
+        })
+        .collect();
+    sig_shares
+}
+
+pub fn schnorr_sig_share_from_each_receiver(
+    env: &CanisterThresholdSigTestEnvironment,
+    inputs: &ThresholdSchnorrSigInputs,
+) -> BTreeMap<NodeId, ThresholdSchnorrSigShare> {
+    let sig_shares: BTreeMap<_, _> = env
+        .nodes
+        .filter_by_receivers(&inputs)
+        .map(|receiver| {
+            receiver.load_tschnorr_sig_transcripts(inputs);
+            let sig_share = ThresholdSchnorrSigner::create_sig_share(receiver, inputs)
                 .expect("failed to create sig share");
             (receiver.id(), sig_share)
         })
@@ -2003,11 +2155,31 @@ impl CorruptBytes for ThresholdEcdsaSigShare {
     }
 }
 
+impl CorruptBytes for ThresholdSchnorrSigShare {
+    type Type = Self;
+
+    fn clone_with_bit_flipped(&self) -> Self::Type {
+        Self {
+            sig_share_raw: self.sig_share_raw.clone_with_bit_flipped(),
+        }
+    }
+}
+
 impl CorruptBytes for ThresholdEcdsaCombinedSignature {
     type Type = Self;
 
     fn clone_with_bit_flipped(&self) -> Self::Type {
         ThresholdEcdsaCombinedSignature {
+            signature: self.signature.clone_with_bit_flipped(),
+        }
+    }
+}
+
+impl CorruptBytes for ThresholdSchnorrCombinedSignature {
+    type Type = Self;
+
+    fn clone_with_bit_flipped(&self) -> Self {
+        Self {
             signature: self.signature.clone_with_bit_flipped(),
         }
     }
@@ -2304,6 +2476,51 @@ impl IntoBuilder for ThresholdEcdsaSigInputs {
             hashed_message: Vec::from(self.hashed_message()),
             nonce: *self.nonce(),
             presig_quadruple: self.presig_quadruple().clone(),
+            key_transcript: self.key_transcript().clone(),
+        }
+    }
+}
+
+pub struct ThresholdSchnorrSigInputsBuilder {
+    derivation_path: ExtendedDerivationPath,
+    message: Vec<u8>,
+    nonce: Randomness,
+    presig_transcript: SchnorrPreSignatureTranscript,
+    key_transcript: IDkgTranscript,
+}
+
+impl ThresholdSchnorrSigInputsBuilder {
+    pub fn build(self) -> ThresholdSchnorrSigInputs {
+        ThresholdSchnorrSigInputs::new(
+            &self.derivation_path,
+            &self.message,
+            self.nonce,
+            self.presig_transcript,
+            self.key_transcript,
+        )
+        .expect("invalid threshold Schnorr sig inputs")
+    }
+
+    pub fn corrupt_message(mut self) -> Self {
+        self.message = self.message.clone_with_bit_flipped();
+        self
+    }
+
+    pub fn corrupt_nonce(mut self) -> Self {
+        self.nonce = self.nonce.clone_with_bit_flipped();
+        self
+    }
+}
+
+impl IntoBuilder for ThresholdSchnorrSigInputs {
+    type BuilderType = ThresholdSchnorrSigInputsBuilder;
+
+    fn into_builder(self) -> Self::BuilderType {
+        ThresholdSchnorrSigInputsBuilder {
+            derivation_path: self.derivation_path().clone(),
+            message: Vec::from(self.message()),
+            nonce: *self.nonce(),
+            presig_transcript: self.presig_transcript().clone(),
             key_transcript: self.key_transcript().clone(),
         }
     }
@@ -2614,4 +2831,182 @@ fn corrupt_signed_dealing_for_one_receiver<R: Rng + CryptoRng>(
             .expect("failed to serialize internal dealing")
     };
     signed_dealing.content.content.internal_dealing_raw = invalidated_internal_dealing_raw;
+}
+
+pub fn generate_initial_dealings<R: RngCore + CryptoRng>(
+    alg: AlgorithmId,
+    registry_version: RegistryVersion,
+    source_subnet_nodes: Nodes,
+    target_subnet_nodes: Nodes,
+    corrupt_first_dealing: bool,
+    rng: &mut R,
+) -> (InitialIDkgDealings, IDkgTranscriptParams) {
+    let (source_dealers, source_receivers) = source_subnet_nodes
+        .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+    let source_key_transcript = {
+        let masked_key_params = IDkgTranscriptParams::new(
+            random_transcript_id(rng),
+            source_dealers.get().clone(),
+            source_receivers.get().clone(),
+            registry_version,
+            alg,
+            IDkgTranscriptOperation::Random,
+        )
+        .expect("failed to create random IDkgTranscriptParams");
+        let masked_key_transcript =
+            source_subnet_nodes.run_idkg_and_create_and_verify_transcript(&masked_key_params, rng);
+        let unmasked_params = build_params_from_previous(
+            masked_key_params,
+            IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
+            rng,
+        );
+        source_subnet_nodes.run_idkg_and_create_and_verify_transcript(&unmasked_params, rng)
+    };
+
+    let reshare_params = IDkgTranscriptParams::new(
+        random_transcript_id(rng),
+        source_receivers.get().clone(),
+        target_subnet_nodes.ids(),
+        source_key_transcript.registry_version,
+        source_key_transcript.algorithm_id,
+        IDkgTranscriptOperation::ReshareOfUnmasked(source_key_transcript),
+    )
+    .expect("invalid reshare of unmasked parameters");
+
+    let nodes_involved_in_resharing: Nodes = source_subnet_nodes
+        .into_filtered_by_receivers(&source_receivers)
+        .chain(target_subnet_nodes)
+        .collect();
+    let initial_dealings = {
+        let signed_dealings = nodes_involved_in_resharing
+            .load_previous_transcripts_and_create_signed_dealings(&reshare_params);
+        let mut signed_dealings_vec = signed_dealings.into_values().collect::<Vec<_>>();
+        if corrupt_first_dealing {
+            signed_dealings_vec
+                .first_mut()
+                .map(|sd| *sd = sd.clone().into_builder().corrupt_signature().build())
+                .expect("no dealings");
+        }
+
+        InitialIDkgDealings::new(reshare_params.clone(), signed_dealings_vec)
+            .expect("should create initial dealings")
+    };
+    (initial_dealings, reshare_params)
+}
+
+pub mod ecdsa {
+    use super::{
+        generate_key_transcript, generate_tecdsa_protocol_inputs,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    };
+    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
+    use ic_types::crypto::canister_threshold_sig::{
+        ExtendedDerivationPath, ThresholdEcdsaSigInputs,
+    };
+    use ic_types::crypto::AlgorithmId;
+    use ic_types::PrincipalId;
+    use ic_types::Randomness;
+    use rand::distributions::uniform::SampleRange;
+    use rand::prelude::*;
+
+    pub fn environment_with_sig_inputs<R, S>(
+        subnet_size_range: S,
+        alg: AlgorithmId,
+        use_random_unmasked_kappa: bool,
+        rng: &mut R,
+    ) -> (
+        CanisterThresholdSigTestEnvironment,
+        ThresholdEcdsaSigInputs,
+        IDkgDealers,
+        IDkgReceivers,
+    )
+    where
+        R: RngCore + CryptoRng,
+        S: SampleRange<usize>,
+    {
+        let subnet_size = rng.gen_range(subnet_size_range);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+        let derivation_path = ExtendedDerivationPath {
+            caller: PrincipalId::new_user_test_id(1),
+            derivation_path: vec![],
+        };
+        let seed = Randomness::from(rng.gen::<[u8; 32]>());
+        let message = rng.gen::<[u8; 32]>();
+
+        let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+        let inputs = generate_tecdsa_protocol_inputs(
+            &env,
+            &dealers,
+            &receivers,
+            &key_transcript,
+            &message,
+            seed,
+            &derivation_path,
+            alg,
+            use_random_unmasked_kappa,
+            rng,
+        );
+        (env, inputs, dealers, receivers)
+    }
+}
+
+pub mod schnorr {
+    use super::{
+        generate_key_transcript, generate_tschnorr_protocol_inputs,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    };
+    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
+    use ic_types::crypto::canister_threshold_sig::{
+        ExtendedDerivationPath, ThresholdSchnorrSigInputs,
+    };
+    use ic_types::crypto::AlgorithmId;
+    use ic_types::PrincipalId;
+    use ic_types::Randomness;
+    use rand::distributions::uniform::SampleRange;
+    use rand::prelude::*;
+
+    pub fn environment_with_sig_inputs<R, S>(
+        subnet_size_range: S,
+        alg: AlgorithmId,
+        rng: &mut R,
+    ) -> (
+        CanisterThresholdSigTestEnvironment,
+        ThresholdSchnorrSigInputs,
+        IDkgDealers,
+        IDkgReceivers,
+    )
+    where
+        R: RngCore + CryptoRng,
+        S: SampleRange<usize>,
+    {
+        let subnet_size = rng.gen_range(subnet_size_range);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+        let derivation_path = ExtendedDerivationPath {
+            caller: PrincipalId::new_user_test_id(1),
+            derivation_path: vec![],
+        };
+
+        let message_length = rng.gen_range(0..2_000_000);
+        let mut message = vec![0; message_length];
+        rng.fill_bytes(&mut message);
+        let seed = Randomness::from(rng.gen::<[u8; 32]>());
+
+        let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+        let tsig_inputs = generate_tschnorr_protocol_inputs(
+            &env,
+            &dealers,
+            &receivers,
+            &key_transcript,
+            &message,
+            seed,
+            &derivation_path,
+            alg,
+            rng,
+        );
+        (env, tsig_inputs, dealers, receivers)
+    }
 }

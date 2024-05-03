@@ -16,14 +16,13 @@ use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
 
-use ic_types::NodeId;
 use ic_types::{
     p2p::{
         MAX_ARTIFACT_STREAMS_PER_PEER, MAX_CHUNK_SIZE, MAX_CHUNK_WAIT_MS, MAX_DUPLICITY,
         PFN_EVALUATION_PERIOD_MS, RECEIVE_CHECK_PEER_SET_SIZE, REGISTRY_POLL_PERIOD_MS,
         RETRANSMISSION_REQUEST_MS,
     },
-    ReplicaVersion,
+    NodeId, ReplicaVersion,
 };
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::do_create_subnet::CreateSubnetPayload,
@@ -38,8 +37,10 @@ use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
-use registry_canister::mutations::common::decode_registry_value;
-use registry_canister::mutations::do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest};
+use registry_canister::mutations::{
+    common::decode_registry_value,
+    do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest},
+};
 
 mod common;
 
@@ -148,8 +149,10 @@ fn test_a_canister_other_than_the_governance_canister_cannot_create_a_subnet() {
 fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
     local_test_on_nns_subnet(|runtime| async move {
         let (data_provider, fake_client) = match runtime {
-            Runtime::Remote(_) => {
-                panic!("Cannot run this test on Runtime::Remote at this time");
+            Runtime::Remote(_) | Runtime::StateMachine(_) => {
+                panic!(
+                    "Cannot run this test on Runtime::Remote or Runtime::StateMachine at this time"
+                );
             }
             Runtime::Local(ref r) => (r.registry_data_provider.clone(), r.registry_client.clone()),
         };

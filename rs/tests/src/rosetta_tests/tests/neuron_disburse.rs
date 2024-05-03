@@ -131,7 +131,7 @@ async fn test_disburse(
 ) -> Result<(), ic_rosetta_api::models::Error> {
     let neuron = &neuron_info.neuron;
     let acc = neuron_info.account_id;
-    let key_pair = Arc::new(neuron_info.key_pair);
+    let key_pair = Arc::new(neuron_info.key_pair.clone());
     let neuron_index = neuron_info.neuron_subaccount_identifier;
 
     let pre_disburse = ledger_client.get_account_balance(acc).await;
@@ -202,7 +202,7 @@ async fn test_disburse_raw(
 ) -> Result<(), ic_rosetta_api::models::Error> {
     let neuron = &neuron_info.neuron;
     let acc = neuron_info.account_id;
-    let key_pair = Arc::new(neuron_info.key_pair);
+    let key_pair = Arc::new(neuron_info.key_pair.clone());
     let neuron_index = neuron_info.neuron_subaccount_identifier;
 
     let pre_disburse = ledger_client.get_account_balance(acc).await;

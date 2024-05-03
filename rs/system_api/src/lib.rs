@@ -53,6 +53,10 @@ const WASM_NATIVE_STABLE_MEMORY_ERROR: &str = "Stable memory cannot be accessed 
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: u64 = 64 * 1024; // 4GiB
 
+/// Upper bound on `timeout` when using calls with
+/// best-effort responses represented in seconds.
+pub const MAX_CALL_TIMEOUT_SECONDS: u32 = 300;
+
 // This macro is used in system calls for tracing.
 macro_rules! trace_syscall {
     ($self:ident, $name:ident, $result:expr $( , $args:expr )*) => {{
@@ -160,6 +164,8 @@ impl InstructionLimits {
 pub struct ExecutionParameters {
     pub instruction_limits: InstructionLimits,
     pub canister_memory_limit: NumBytes,
+    // The limit on the Wasm memory set by the developer in canister settings.
+    pub wasm_memory_limit: Option<NumBytes>,
     pub memory_allocation: MemoryAllocation,
     pub compute_allocation: ComputeAllocation,
     pub subnet_type: SubnetType,
@@ -346,7 +352,7 @@ pub enum ApiType {
     /// The `call_on_cleanup` callback is executed iff the `reply` or the
     /// `reject` callback was executed and trapped (for any reason).
     ///
-    /// See https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-call
+    /// See https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-call
     Cleanup {
         caller: PrincipalId,
         time: Time,
@@ -622,6 +628,9 @@ struct MemoryUsage {
     /// Upper limit on how much the memory the canister could use.
     limit: NumBytes,
 
+    /// The Wasm memory limit set by the developer in canister settings.
+    wasm_memory_limit: Option<NumBytes>,
+
     /// The current amount of execution memory that the canister is using.
     current_usage: NumBytes,
 
@@ -648,6 +657,7 @@ impl MemoryUsage {
         log: ReplicaLogger,
         canister_id: CanisterId,
         limit: NumBytes,
+        wasm_memory_limit: Option<NumBytes>,
         current_usage: NumBytes,
         current_message_usage: NumBytes,
         subnet_available_memory: SubnetAvailableMemory,
@@ -668,12 +678,57 @@ impl MemoryUsage {
         }
         Self {
             limit,
+            wasm_memory_limit,
             current_usage,
             current_message_usage,
             subnet_available_memory,
             allocated_execution_memory: NumBytes::from(0),
             allocated_message_memory: NumBytes::from(0),
             memory_allocation,
+        }
+    }
+
+    /// Returns the effective Wasm memory limit depending on the message type.
+    /// If the result is `None`, then this means that the limit is not enforced
+    /// for this message type even if the corresponding field in canister
+    /// settings is not empty.
+    fn effective_wasm_memory_limit(&self, api_type: &ApiType) -> Option<NumBytes> {
+        match api_type {
+            ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => {
+                // The Wasm memory limit is not enforced on query in order to
+                // allow developers to download data from the canister via the
+                // query endpoints.
+                None
+            }
+            ApiType::ReplyCallback { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::RejectCallback { .. } => {
+                // The Wasm memory limit is not enforced in response execution.
+                // The canister has already made a call to another canister, so
+                // introducing a new failure mode here might break canister
+                // invariants for existing canisters that were implemented before
+                // the Wasm memory limit was introduced.
+                None
+            }
+            ApiType::SystemTask { .. } => {
+                // The Wasm memory limit is not enforced in system tasks (timers
+                // and heartbeats) until canister logging is implemented.
+                // Without canister logging developers do not get error messages
+                // from system tasks.
+                // TODO(RUN-957): Enforce the limit after canister logging ships.
+                None
+            }
+            ApiType::PreUpgrade { .. } => {
+                // The Wasm memory limit is not enforced in pre-upgrade
+                // execution in order to allow the developer to upgrade a
+                // canister to a new version that uses less memory.
+                None
+            }
+            ApiType::Init { .. } | ApiType::Start { .. } | ApiType::Update { .. } => {
+                self.wasm_memory_limit
+            }
         }
     }
 
@@ -895,6 +950,7 @@ impl SystemApiImpl {
             log.clone(),
             sandbox_safe_system_state.canister_id,
             execution_parameters.canister_memory_limit,
+            execution_parameters.wasm_memory_limit,
             canister_current_memory_usage,
             canister_current_message_memory_usage,
             subnet_available_memory,
@@ -1012,10 +1068,14 @@ impl SystemApiImpl {
     }
 
     fn error_for(&self, method_name: &str) -> HypervisorError {
-        HypervisorError::ContractViolation(format!(
-            "\"{}\" cannot be executed in {} mode",
-            method_name, self.api_type
-        ))
+        HypervisorError::ContractViolation {
+            error: format!(
+                "\"{}\" cannot be executed in {} mode",
+                method_name, self.api_type
+            ),
+            suggestion: "".to_string(),
+            doc_link: "".to_string(),
+        }
     }
 
     fn get_msg_caller_id(&self, method_name: &str) -> Result<PrincipalId, HypervisorError> {
@@ -1139,10 +1199,14 @@ impl SystemApiImpl {
                 }
 
                 match outgoing_request {
-                    None => Err(HypervisorError::ContractViolation(format!(
-                        "{} called when no call is under construction.",
-                        method_name
-                    ))),
+                    None => Err(HypervisorError::ContractViolation {
+                        error: format!(
+                            "{} called when no call is under construction.",
+                            method_name
+                        ),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    }),
                     Some(request) => {
                         self.sandbox_safe_system_state
                             .withdraw_cycles_for_transfer(
@@ -1369,8 +1433,9 @@ impl SystemApiImpl {
     }
 
     /// Appends the specified bytes on the heap as a string to the canister's logs.
-    pub fn save_log_message(&mut self, src: u32, size: u32, heap: &[u8]) {
+    pub fn save_log_message(&mut self, is_enabled: bool, src: u32, size: u32, heap: &[u8]) {
         self.sandbox_safe_system_state.append_canister_log(
+            is_enabled,
             self.api_type.time(),
             valid_subslice("save_log_message", src, size, heap).unwrap_or(
                 // Do not trap here!
@@ -1677,9 +1742,11 @@ impl SystemApi for SystemApiImpl {
                 message_accepted, ..
             } => {
                 if *message_accepted {
-                    Err(ContractViolation(
-                        "ic0.accept_message: the function was already called.".to_string(),
-                    ))
+                    Err(ContractViolation {
+                        error: "ic0.accept_message: the function was already called.".to_string(),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    })
                 } else {
                     *message_accepted = true;
                     Ok(())
@@ -1700,9 +1767,13 @@ impl SystemApi for SystemApiImpl {
                     )));
                     Ok(())
                 }
-                ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => Err(
-                    ContractViolation("ic0.msg_reply: the call is already replied".to_string()),
-                ),
+                ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => {
+                    Err(ContractViolation {
+                        error: "ic0.msg_reply: the call is already replied".to_string(),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    })
+                }
             },
         };
         trace_syscall!(self, MsgReply, result);
@@ -1726,15 +1797,21 @@ impl SystemApi for SystemApiImpl {
                             payload_size,
                             max_reply_size,
                         );
-                        return Err(ContractViolation(string));
+                        return Err(ContractViolation {
+                            error: string,
+                            suggestion: "".to_string(),
+                            doc_link: "".to_string(),
+                        });
                     }
                     data.extend_from_slice(valid_subslice("msg.reply", src, size, heap)?);
                     Ok(())
                 }
                 ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => {
-                    Err(ContractViolation(
-                        "ic0.msg_reply_data_append: the call is already replied".to_string(),
-                    ))
+                    Err(ContractViolation {
+                        error: "ic0.msg_reply_data_append: the call is already replied".to_string(),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    })
                 }
             },
         };
@@ -1759,21 +1836,30 @@ impl SystemApi for SystemApiImpl {
                         "ic0.msg_reject: application payload size ({}) cannot be larger than {}",
                         size, max_reply_size
                     );
-                        return Err(ContractViolation(string));
+                        return Err(ContractViolation {
+                            error: string,
+                            suggestion: "".to_string(),
+                            doc_link: "".to_string(),
+                        });
                     }
                     let msg_bytes = valid_subslice("ic0.msg_reject", src, size, heap)?;
-                    let msg = String::from_utf8(msg_bytes.to_vec()).map_err(|_| {
-                        ContractViolation(
-                            "ic0.msg_reject: invalid UTF-8 string provided".to_string(),
-                        )
-                    })?;
+                    let msg =
+                        String::from_utf8(msg_bytes.to_vec()).map_err(|_| ContractViolation {
+                            error: "ic0.msg_reject: invalid UTF-8 string provided".to_string(),
+                            suggestion: "".to_string(),
+                            doc_link: "".to_string(),
+                        })?;
                     *response_status =
                         ResponseStatus::JustRepliedWith(Some(WasmResult::Reject(msg)));
                     Ok(())
                 }
-                ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => Err(
-                    ContractViolation("ic0.msg_reject: the call is already replied".to_string()),
-                ),
+                ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => {
+                    Err(ContractViolation {
+                        error: "ic0.msg_reject: the call is already replied".to_string(),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    })
+                }
             },
         };
         trace_syscall!(
@@ -2012,9 +2098,12 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback {
                 outgoing_request, ..
             } => match outgoing_request {
-                None => Err(HypervisorError::ContractViolation(
-                    "ic0.call_data_append called when no call is under construction.".to_string(),
-                )),
+                None => Err(HypervisorError::ContractViolation {
+                    error: "ic0.call_data_append called when no call is under construction."
+                        .to_string(),
+                    suggestion: "".to_string(),
+                    doc_link: "".to_string(),
+                }),
                 Some(request) => request.extend_method_payload(src, size, heap),
             },
         };
@@ -2053,9 +2142,12 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback {
                 outgoing_request, ..
             } => match outgoing_request {
-                None => Err(HypervisorError::ContractViolation(
-                    "ic0.call_on_cleanup called when no call is under construction.".to_string(),
-                )),
+                None => Err(HypervisorError::ContractViolation {
+                    error: "ic0.call_on_cleanup called when no call is under construction."
+                        .to_string(),
+                    suggestion: "".to_string(),
+                    doc_link: "".to_string(),
+                }),
                 Some(request) => request.set_on_cleanup(WasmClosure::new(fun, env)),
             },
         };
@@ -2097,26 +2189,31 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_perform")),
             ApiType::Update {
+                time,
                 call_context_id,
                 outgoing_request,
                 ..
             }
             | ApiType::SystemTask {
+                time,
                 call_context_id,
                 outgoing_request,
                 ..
             }
             | ApiType::ReplyCallback {
+                time,
                 call_context_id,
                 outgoing_request,
                 ..
             }
             | ApiType::RejectCallback {
+                time,
                 call_context_id,
                 outgoing_request,
                 ..
             }
             | ApiType::NonReplicatedQuery {
+                time,
                 query_kind:
                     NonReplicatedQueryKind::Stateful {
                         call_context_id,
@@ -2124,10 +2221,11 @@ impl SystemApi for SystemApiImpl {
                     },
                 ..
             } => {
-                let req_in_prep = outgoing_request.take().ok_or_else(|| {
-                    ContractViolation(
-                        "ic0.call_perform called when no call is under construction.".to_string(),
-                    )
+                let req_in_prep = outgoing_request.take().ok_or_else(|| ContractViolation {
+                    error: "ic0.call_perform called when no call is under construction."
+                        .to_string(),
+                    suggestion: "".to_string(),
+                    doc_link: "".to_string(),
                 })?;
 
                 let req = into_request(
@@ -2135,6 +2233,7 @@ impl SystemApi for SystemApiImpl {
                     *call_context_id,
                     &mut self.sandbox_safe_system_state,
                     &self.log,
+                    *time,
                 )?;
 
                 self.push_output_request(
@@ -2453,23 +2552,43 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn update_available_memory(
+    fn try_grow_wasm_memory(
         &mut self,
         native_memory_grow_res: i64,
-        additional_elements: u64,
-        element_size: u64,
+        additional_wasm_pages: u64,
     ) -> HypervisorResult<()> {
         let result = {
             if native_memory_grow_res == -1 {
                 return Ok(());
             }
-            let bytes = additional_elements
-                .checked_mul(element_size)
+            let new_bytes = additional_wasm_pages
+                .checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
                 .map(NumBytes::new)
                 .ok_or(HypervisorError::OutOfMemory)?;
 
+            // The `memory.grow` instruction returns the previous size of the
+            // Wasm memory in pages.
+            let old_bytes = (native_memory_grow_res as u64)
+                .checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
+                .map(NumBytes::new)
+                .ok_or(HypervisorError::OutOfMemory)?;
+
+            if let Some(wasm_memory_limit) = self
+                .memory_usage
+                .effective_wasm_memory_limit(&self.api_type)
+            {
+                let wasm_memory_usage =
+                    NumBytes::new(new_bytes.get().saturating_add(old_bytes.get()));
+                if wasm_memory_usage > wasm_memory_limit {
+                    return Err(HypervisorError::WasmMemoryLimitExceeded {
+                        bytes: wasm_memory_usage,
+                        limit: wasm_memory_limit,
+                    });
+                }
+            }
+
             match self.memory_usage.allocate_execution_memory(
-                bytes,
+                new_bytes,
                 &self.api_type,
                 &mut self.sandbox_safe_system_state,
                 &self.execution_parameters.subnet_memory_saturation,
@@ -2488,11 +2607,10 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            UpdateAvailableMemory,
+            TryGrowWasmMemory,
             result,
             native_memory_grow_res,
-            additional_elements,
-            element_size
+            additional_wasm_pages
         );
         result
     }
@@ -2729,43 +2847,44 @@ impl SystemApi for SystemApiImpl {
             }
             | ApiType::NonReplicatedQuery {
                 data_certificate, ..
-            } => match data_certificate {
-                Some(data_certificate) => {
-                    let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+            } => {
+                match data_certificate {
+                    Some(data_certificate) => {
+                        let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
 
-                    let (upper_bound, overflow) = offset.overflowing_add(size);
-                    if overflow || upper_bound > data_certificate.len() {
-                        return Err(ContractViolation(format!(
-                            "ic0_data_certificate_copy failed because offset + size is out \
-                                 of bounds. Found offset = {} and size = {} while offset + size \
-                                 must be <= {}",
-                            offset,
-                            size,
-                            data_certificate.len(),
-                        )));
+                        let (upper_bound, overflow) = offset.overflowing_add(size);
+                        if overflow || upper_bound > data_certificate.len() {
+                            return Err(ContractViolation{error: format!( "ic0_data_certificate_copy failed because offset + size is out \
+                        of bounds. Found offset = {} and size = {} while offset + size \
+                        must be <= {}", offset, size, data_certificate.len()), suggestion: "".to_string(), doc_link: "".to_string()});
+                        }
+
+                        let (upper_bound, overflow) = dst.overflowing_add(size);
+                        if overflow || upper_bound > heap.len() {
+                            return Err(ContractViolation {
+                                error: format!(
+                                    "ic0_data_certificate_copy failed because dst + size is out \
+                        of bounds. Found dst = {} and size = {} while dst + size \
+                        must be <= {}",
+                                    dst,
+                                    size,
+                                    heap.len()
+                                ),
+                                suggestion: "".to_string(),
+                                doc_link: "".to_string(),
+                            });
+                        }
+
+                        // Copy the certificate into the canister.
+                        deterministic_copy_from_slice(
+                            &mut heap[dst..dst + size],
+                            &data_certificate[offset..offset + size],
+                        );
+                        Ok(())
                     }
-
-                    let (upper_bound, overflow) = dst.overflowing_add(size);
-                    if overflow || upper_bound > heap.len() {
-                        return Err(ContractViolation(format!(
-                            "ic0_data_certificate_copy failed because dst + size is out \
-                                 of bounds. Found dst = {} and size = {} while dst + size \
-                                 must be <= {}",
-                            dst,
-                            size,
-                            heap.len(),
-                        )));
-                    }
-
-                    // Copy the certificate into the canister.
-                    deterministic_copy_from_slice(
-                        &mut heap[dst..dst + size],
-                        &data_certificate[offset..offset + size],
-                    );
-                    Ok(())
+                    None => Err(self.error_for("ic0_data_certificate_size")),
                 }
-                None => Err(self.error_for("ic0_data_certificate_size")),
-            },
+            }
         };
         trace_syscall!(
             self,
@@ -2798,24 +2917,32 @@ impl SystemApi for SystemApiImpl {
                 }
 
                 if size > CERTIFIED_DATA_MAX_LENGTH {
-                    return Err(ContractViolation(format!(
-                        "ic0_certified_data_set failed because the passed data must be \
-                        no larger than 32 bytes. Found {} bytes",
-                        size
-                    )));
+                    return Err(ContractViolation {
+                        error: format!(
+                            "ic0_certified_data_set failed because the passed data must be \
+                    no larger than 32 bytes. Found {} bytes",
+                            size
+                        ),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    });
                 }
 
                 let (src, size) = (src as usize, size as usize);
                 let (upper_bound, overflow) = src.overflowing_add(size);
                 if overflow || upper_bound > heap.len() {
-                    return Err(ContractViolation(format!(
-                        "ic0_certified_data_set failed because src + size is out \
-                                 of bounds. Found src = {} and size = {} while src + size \
-                                 must be <= {}",
-                        src,
-                        size,
-                        heap.len(),
-                    )));
+                    return Err(ContractViolation {
+                        error: format!(
+                            "ic0_certified_data_set failed because src + size is out \
+                    of bounds. Found src = {} and size = {} while src + size \
+                    must be <= {}",
+                            src,
+                            size,
+                            heap.len()
+                        ),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    });
                 }
 
                 // Update the certified data.
@@ -2959,6 +3086,69 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
+    /// Sets `timeout_seconds` to the provided value if not yet set, making this a best-effort call.
+    /// The timeout is bounded from above by `MAX_CALL_TIMEOUT_SECONDS`.
+    ///
+    /// Fails and returns an error if `set_timeout()` was already called.
+    fn ic0_call_with_best_effort_response(&mut self, timeout_seconds: u32) -> HypervisorResult<()> {
+        let result = match &mut self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery {
+                query_kind: NonReplicatedQueryKind::Pure,
+                ..
+            }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::InspectMessage { .. } => {
+                Err(self.error_for("ic0_call_with_best_effort_response"))
+            }
+            ApiType::Update {
+                outgoing_request, ..
+            }
+            | ApiType::NonReplicatedQuery {
+                query_kind:
+                    NonReplicatedQueryKind::Stateful {
+                        outgoing_request, ..
+                    },
+                ..
+            }
+            | ApiType::SystemTask {
+                outgoing_request, ..
+            }
+            | ApiType::ReplyCallback {
+                outgoing_request, ..
+            }
+            | ApiType::RejectCallback {
+                outgoing_request, ..
+            } => match outgoing_request {
+                None => Err(HypervisorError::ContractViolation{
+                    error: "ic0.call_with_best_effort_response called when no call is under construction."
+                    .to_string(),
+                    suggestion: "".to_string(),
+                    doc_link: "".to_string(),
+                }),
+                Some(request) => {
+                    if request.is_timeout_set() {
+                        Err(HypervisorError::ContractViolation{
+                            error: "ic0_call_with_best_effort_response failed because a timeout is already set.".to_string(),
+                            suggestion: "".to_string(),
+                            doc_link: "".to_string(),
+                        })
+                    } else {
+                        let bounded_timeout =
+                            std::cmp::min(timeout_seconds, MAX_CALL_TIMEOUT_SECONDS);
+                        request.set_timeout(bounded_timeout);
+                        Ok(())
+                    }
+                }
+            },
+        };
+        trace_syscall!(self, CallWithBestEffortResponse, result, timeout_seconds);
+        result
+    }
+
     fn ic0_in_replicated_execution(&self) -> HypervisorResult<i32> {
         let result = match &self.api_type {
             ApiType::Start { .. }
@@ -3047,14 +3237,18 @@ pub(crate) fn copy_cycles_to_heap(
     let dst = dst as usize;
     let (upper_bound, overflow) = dst.overflowing_add(size);
     if overflow || upper_bound > heap.len() {
-        return Err(ContractViolation(format!(
-            "{} failed because dst + size is out of bounds.\
-                Found dst = {} and size = {} while must be <= {}",
-            method_name,
-            dst,
-            size,
-            heap.len(),
-        )));
+        return Err(ContractViolation {
+            error: format!(
+                "{} failed because dst + size is out of bounds.\
+        Found dst = {} and size = {} while must be <= {}",
+                method_name,
+                dst,
+                size,
+                heap.len()
+            ),
+            suggestion: "".to_string(),
+            doc_link: "".to_string(),
+        });
     }
     deterministic_copy_from_slice(&mut heap[dst..dst + size], &bytes);
     Ok(())
@@ -3069,13 +3263,17 @@ pub(crate) fn valid_subslice<'a>(
     let len = len as usize;
     let src = src as usize;
     if slice.len() < src + len {
-        return Err(ContractViolation(format!(
-            "{}: src={} + length={} exceeds the slice size={}",
-            ctx,
-            src,
-            len,
-            slice.len()
-        )));
+        return Err(ContractViolation {
+            error: format!(
+                "{}: src={} + length={} exceeds the slice size={}",
+                ctx,
+                src,
+                len,
+                slice.len()
+            ),
+            suggestion: "".to_string(),
+            doc_link: "".to_string(),
+        });
     }
     Ok(&slice[src..src + len])
 }
