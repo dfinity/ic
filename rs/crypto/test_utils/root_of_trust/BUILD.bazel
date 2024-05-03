@@ -14,6 +14,7 @@ ALIASES = {}
 
 rust_library(
     name = "root_of_trust",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_test_utils_root_of_trust",
