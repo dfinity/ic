@@ -204,6 +204,15 @@ struct StubOnce {
 }
 
 impl StubOnce {
+    fn expect_no_matching_rpc_call(self, env: &StateMachine) {
+        if let Some((id, _)) = self.matcher.find_rpc_call(env) {
+            panic!(
+                "expect no request matching the stub {:?} but found one {}",
+                self, id
+            );
+        }
+    }
+
     fn expect_rpc_call(self, env: &StateMachine, canister_id_cleanup_response: CanisterId) {
         let (id, context) = self.matcher.find_rpc_call(env).unwrap_or_else(|| {
             panic!(
@@ -328,6 +337,13 @@ impl MockJsonRpcProviders {
         let cketh = cketh.as_ref();
         for stub in self.stubs {
             stub.expect_rpc_call(&cketh.env, cketh.minter_id);
+        }
+    }
+
+    pub fn expect_no_rpc_calls<T: AsRef<CkEthSetup>>(self, cketh: T) {
+        let cketh = cketh.as_ref();
+        for stub in self.stubs {
+            stub.expect_no_matching_rpc_call(&cketh.env);
         }
     }
 }
