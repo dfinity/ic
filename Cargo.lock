@@ -12109,10 +12109,8 @@ dependencies = [
  "rustc-demangle",
  "serde",
  "serde_json",
- "tempfile",
  "thiserror",
  "walrus 0.20.3",
- "wasm-opt",
 ]
 
 [[package]]
@@ -19905,46 +19903,6 @@ checksum = "b9c7d2731df60006819b013f64ccc2019691deccf6e11a1804bc850cd6748f1a"
 dependencies = [
  "leb128",
  "wasmparser 0.201.0",
-]
-
-[[package]]
-name = "wasm-opt"
-version = "0.113.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65a2799e08026234b07b44da6363703974e75be21430cef00756bbc438c8ff8a"
-dependencies = [
- "anyhow",
- "libc",
- "strum 0.24.1",
- "strum_macros 0.24.3",
- "tempfile",
- "thiserror",
- "wasm-opt-cxx-sys",
- "wasm-opt-sys",
-]
-
-[[package]]
-name = "wasm-opt-cxx-sys"
-version = "0.113.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8d26f86d1132245e8bcea8fac7f02b10fb885b6696799969c94d7d3c14db5e1"
-dependencies = [
- "anyhow",
- "cxx",
- "cxx-build",
- "wasm-opt-sys",
-]
-
-[[package]]
-name = "wasm-opt-sys"
-version = "0.113.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "497d069cd3420cdd52154a320b901114a20946878e2de62c670f9d906e472370"
-dependencies = [
- "anyhow",
- "cc",
- "cxx",
- "cxx-build",
 ]
 
 [[package]]
