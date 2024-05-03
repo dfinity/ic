@@ -15,14 +15,15 @@ use ic_base_types::{
 };
 use ic_management_canister_types::{
     ComputeInitialEcdsaDealingsArgs, ComputeInitialEcdsaDealingsResponse, EcdsaKeyId,
+    MasterPublicKeyId,
 };
 use ic_protobuf::registry::{
-    crypto::v1::EcdsaSigningSubnetList,
+    crypto::v1::{ChainKeySigningSubnetList, EcdsaSigningSubnetList},
     subnet::v1::{CatchUpPackageContents, EcdsaInitialization, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_ecdsa_signing_subnet_list_key,
-    make_subnet_list_record_key, make_subnet_record_key,
+    make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
+    make_ecdsa_signing_subnet_list_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_transport::{
     pb::v1::{RegistryMutation, RegistryValue},
@@ -271,7 +272,23 @@ impl Registry {
         })
     }
 
+    /// Get the list of subnets that can sign for a given MasterPublicKeyId.
+    pub fn get_chain_key_signing_subnet_list(
+        &self,
+        key_id: &MasterPublicKeyId,
+    ) -> Option<ChainKeySigningSubnetList> {
+        let chain_key_signing_subnet_list_key_id = make_chain_key_signing_subnet_list_key(key_id);
+        self.get(
+            chain_key_signing_subnet_list_key_id.as_bytes(),
+            self.latest_version(),
+        )
+        .map(|registry_value| {
+            decode_registry_value::<ChainKeySigningSubnetList>(registry_value.value.to_vec())
+        })
+    }
+
     /// Create the mutations that disable subnet signing for a single subnet and set of EcdsaKeyId's.
+    /// TODO(NNS1-3037): Replicate changes to chain key signing list
     pub fn mutations_to_disable_subnet_signing(
         &self,
         subnet_id: SubnetId,

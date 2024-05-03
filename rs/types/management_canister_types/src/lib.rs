@@ -2050,6 +2050,24 @@ impl From<SchnorrAlgorithm> for pb_registry_crypto::SchnorrAlgorithm {
     }
 }
 
+impl std::fmt::Display for SchnorrAlgorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl FromStr for SchnorrAlgorithm {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Bip340Secp256k1" => Ok(Self::Bip340Secp256k1),
+            "Ed25519" => Ok(Self::Ed25519),
+            _ => Err(format!("{} is not a recognized Schnorr algorithm", s)),
+        }
+    }
+}
+
 /// Unique identifier for a key that can be used for Schnorr signatures. The name
 /// is just a identifier, but it may be used to convey some information about
 /// the key (e.g. that the key is meant to be used for testing purposes).
@@ -2086,6 +2104,25 @@ impl From<SchnorrKeyId> for pb_registry_crypto::SchnorrKeyId {
             algorithm: pb_registry_crypto::SchnorrAlgorithm::from(item.algorithm) as i32,
             name: item.name,
         }
+    }
+}
+
+impl std::fmt::Display for SchnorrKeyId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.algorithm, self.name)
+    }
+}
+
+impl FromStr for SchnorrKeyId {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (algorithm, name) = s
+            .split_once(':')
+            .ok_or_else(|| format!("Schnorr key id {} does not contain a ':'", s))?;
+        Ok(SchnorrKeyId {
+            algorithm: algorithm.parse::<SchnorrAlgorithm>()?,
+            name: name.to_string(),
+        })
     }
 }
 
@@ -2137,6 +2174,38 @@ impl From<MasterPublicKeyId> for pb_registry_crypto::MasterPublicKeyId {
         };
         Self {
             key_id: Some(key_id),
+        }
+    }
+}
+
+impl std::fmt::Display for MasterPublicKeyId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ecdsa(esdsa_key_id) => {
+                write!(f, "ecdsa:")?;
+                esdsa_key_id.fmt(f)
+            }
+            Self::Schnorr(schnorr_key_id) => {
+                write!(f, "schnorr:")?;
+                schnorr_key_id.fmt(f)
+            }
+        }
+    }
+}
+
+impl FromStr for MasterPublicKeyId {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (scheme, key_id) = s
+            .split_once(':')
+            .ok_or_else(|| format!("Master public key id {} does not contain a ':'", s))?;
+        match scheme {
+            "ecdsa" => Ok(Self::Ecdsa(EcdsaKeyId::from_str(key_id)?)),
+            "schnorr" => Ok(Self::Schnorr(SchnorrKeyId::from_str(key_id)?)),
+            other => Err(format!(
+                "Scheme {} in master public key id {} is not supported.",
+                other, s
+            )),
         }
     }
 }
@@ -3088,22 +3157,75 @@ mod tests {
 
     #[test]
     fn ecdsa_curve_round_trip() {
-        assert_eq!(
-            format!("{}", EcdsaCurve::Secp256k1)
-                .parse::<EcdsaCurve>()
-                .unwrap(),
-            EcdsaCurve::Secp256k1
-        );
+        for curve in EcdsaCurve::iter() {
+            assert_eq!(format!("{}", curve).parse::<EcdsaCurve>().unwrap(), curve);
+        }
     }
 
     #[test]
     fn ecdsa_key_id_round_trip() {
-        for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
-            let key = EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: name.to_string(),
-            };
-            assert_eq!(format!("{}", key).parse::<EcdsaKeyId>().unwrap(), key);
+        for curve in EcdsaCurve::iter() {
+            for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
+                let key = EcdsaKeyId {
+                    curve,
+                    name: name.to_string(),
+                };
+                assert_eq!(format!("{}", key).parse::<EcdsaKeyId>().unwrap(), key);
+            }
+        }
+    }
+
+    #[test]
+    fn schnorr_algorithm_round_trip() {
+        for algorithm in SchnorrAlgorithm::iter() {
+            assert_eq!(
+                format!("{}", algorithm)
+                    .parse::<SchnorrAlgorithm>()
+                    .unwrap(),
+                algorithm
+            );
+        }
+    }
+
+    #[test]
+    fn schnorr_key_id_round_trip() {
+        for algorithm in SchnorrAlgorithm::iter() {
+            for name in ["Ed25519", "", "other_key", "other key", "other:key"] {
+                let key = SchnorrKeyId {
+                    algorithm,
+                    name: name.to_string(),
+                };
+                assert_eq!(format!("{}", key).parse::<SchnorrKeyId>().unwrap(), key);
+            }
+        }
+    }
+
+    #[test]
+    fn master_public_key_id_round_trip() {
+        for algorithm in SchnorrAlgorithm::iter() {
+            for name in ["Ed25519", "", "other_key", "other key", "other:key"] {
+                let key = MasterPublicKeyId::Schnorr(SchnorrKeyId {
+                    algorithm,
+                    name: name.to_string(),
+                });
+                assert_eq!(
+                    format!("{}", key).parse::<MasterPublicKeyId>().unwrap(),
+                    key
+                );
+            }
+        }
+
+        for curve in EcdsaCurve::iter() {
+            for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
+                let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                    curve,
+                    name: name.to_string(),
+                });
+                assert_eq!(
+                    format!("{}", key).parse::<MasterPublicKeyId>().unwrap(),
+                    key
+                );
+            }
         }
     }
 

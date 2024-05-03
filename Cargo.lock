@@ -10078,6 +10078,8 @@ dependencies = [
  "ic-types",
  "rand 0.8.5",
  "serde",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
 ]
 
 [[package]]

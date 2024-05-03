@@ -36,6 +36,12 @@ message ECDSASigningSubnetList {
   repeated types.v1.SubnetId subnets = 2;
 }
 
+// A list of subnets that can sign with a given chain key.
+// This allows replicas to route their signing requests to the right subnets.
+message ChainKeySigningSubnetList {
+  repeated types.v1.SubnetId subnets = 1;
+}
+
 // A public key. Described by its `AlgorithmId`, the key's value and proof data holding, e.g., a proof of possession (PoP).
 message PublicKey {
   uint32 version = 1;
