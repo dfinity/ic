@@ -3,7 +3,7 @@
 
 pub mod batch_delivery;
 pub(crate) mod block_maker;
-mod bounds;
+pub mod bounds;
 mod catchup_package_maker;
 pub mod dkg_key_manager;
 mod finalizer;
