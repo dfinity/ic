@@ -572,6 +572,7 @@ fn write_overlays_and_verify_with_tempdir(
                         Height::from(round as u64),
                         num_pages,
                         lsmt_config,
+                        &metrics,
                     )
                     .unwrap()
                 };
@@ -907,6 +908,7 @@ fn wrong_shard_pages_is_an_error() {
             lsmt_status: FlagStatus::Enabled,
             shard_num_pages: 3,
         },
+        &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
     assert!(!merge_candidates.is_empty());
@@ -1014,6 +1016,7 @@ fn test_make_merge_candidates_on_empty_dir() {
         Height::from(0),
         0, /* num_pages */
         &lsmt_config_unsharded(),
+        &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
     assert!(merge_candidates.is_empty());
@@ -1039,6 +1042,7 @@ fn test_make_none_merge_candidate() {
         Height::from(0),
         10, /* num_pages */
         &lsmt_config_unsharded(),
+        &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
     assert!(merge_candidates.is_empty());
@@ -1076,6 +1080,7 @@ fn test_make_merge_candidates_to_overlay() {
         Height::from(3),
         40, /* num_pages */
         &lsmt_config,
+        &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
     assert_eq!(merge_candidates.len(), 1);
@@ -1165,6 +1170,7 @@ fn test_two_same_length_files_are_a_pyramid() {
         Height::from(0),
         2, /* num_pages */
         &lsmt_config_unsharded(),
+        &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
     assert!(merge_candidates.is_empty());
