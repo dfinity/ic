@@ -167,19 +167,7 @@ impl HasHeight for ConsensusMessageId {
 
 impl HasHash for ConsensusMessageId {
     fn hash(&self) -> &CryptoHash {
-        match &self.hash {
-            ConsensusMessageHash::RandomBeacon(hash) => hash.get_ref(),
-            ConsensusMessageHash::Finalization(hash) => hash.get_ref(),
-            ConsensusMessageHash::Notarization(hash) => hash.get_ref(),
-            ConsensusMessageHash::BlockProposal(hash) => hash.get_ref(),
-            ConsensusMessageHash::RandomBeaconShare(hash) => hash.get_ref(),
-            ConsensusMessageHash::NotarizationShare(hash) => hash.get_ref(),
-            ConsensusMessageHash::FinalizationShare(hash) => hash.get_ref(),
-            ConsensusMessageHash::RandomTape(hash) => hash.get_ref(),
-            ConsensusMessageHash::RandomTapeShare(hash) => hash.get_ref(),
-            ConsensusMessageHash::CatchUpPackage(hash) => hash.get_ref(),
-            ConsensusMessageHash::CatchUpPackageShare(hash) => hash.get_ref(),
-        }
+        self.hash.digest()
     }
 }
 
