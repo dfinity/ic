@@ -21,5 +21,6 @@ rust_test(
     crate = ":keys",
     deps = [
         "@crate_index//:rand",
+        "@crate_index//:strum",
     ],
 )
