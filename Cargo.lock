@@ -17096,6 +17096,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdk-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-registry-subnet-type",
+ "reqwest 0.12.3",
+ "serde_json",
+ "slog",
+ "tests",
+]
+
+[[package]]
 name = "seahash"
 version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

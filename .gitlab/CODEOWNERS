@@ -247,6 +247,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/tests/nns/                                          @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/nns-team @dfinity-lab/teams/idx
 /rs/tests/node/                                         @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/node-team @dfinity-lab/teams/idx
 /rs/tests/query_stats/                                  @dfinity-lab/teams/execution-owners @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/idx
+/rs/tests/sdk/                                          @dfinity-lab/teams/sdk-team @dfinity-lab/teams/idx
 /rs/tests/src/basic_health_test.rs                      @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/idx
 /rs/tests/src/boundary_nodes/                           @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/idx
 /rs/tests/src/btc_integration/                          @dfinity-lab/teams/execution-owners @dfinity-lab/teams/idx
