@@ -54,6 +54,8 @@ def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_f
         "-Clink-arg=/usr/lib/llvm-17/lib/clang/17/lib/linux/libclang_rt.fuzzer-x86_64.a",
     ]
 
+    kwargs.setdefault("testonly", True)
+
     rust_binary(
         name = name,
         srcs = srcs,
@@ -90,6 +92,8 @@ def rust_fuzz_test_binary_afl(name, srcs, rustc_flags = [], crate_features = [],
         "-Clink-arg=-fsanitize=fuzzer",
         "-Clink-arg=-fsanitize=address",
     ]
+
+    kwargs.setdefault("testonly", True)
 
     rust_binary(
         name = name,

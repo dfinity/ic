@@ -17,6 +17,7 @@ DEV_DEPENDENCIES = [
 
 rust_library(
     name = "test_utils",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_tree_hash_test_utils",
     rustc_flags = select({
