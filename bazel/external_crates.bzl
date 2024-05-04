@@ -23,6 +23,9 @@ BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
 
 def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enabled):
     CRATE_ANNOTATIONS = {
+        "canbench": [crate.annotation(
+            gen_binaries = True,
+        )],
         "ic_bls12_381": [crate.annotation(
             rustc_flags = [
                 "-C",
@@ -265,6 +268,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "cached": crate.spec(
                 version = "^0.49",
                 default_features = False,
+            ),
+            "canbench": crate.spec(
+                version = "^0.1.3",
+            ),
+            "canbench-rs": crate.spec(
+                version = "^0.1.1",
             ),
             "candid": crate.spec(
                 version = "^0.10.6",
