@@ -1675,6 +1675,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "canbench-rs"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe5d551419a1547b5064111df7bfa6e87818750e7f6df611067a02e63a9cbb31"
+dependencies = [
+ "canbench-rs-macros",
+ "candid",
+ "ic-cdk 0.12.1",
+ "serde",
+]
+
+[[package]]
+name = "canbench-rs-macros"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5acd4a41fd2e7018508f7442d7ae90957a913c6fa0e4b767e5be9a8cc5848c8"
+dependencies = [
+ "proc-macro2 1.0.75",
+ "quote 1.0.35",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "candid"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1932,7 +1955,7 @@ dependencies = [
  "certificate_orchestrator_interface",
  "cfg-if 1.0.0",
  "hex",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
  "ic-certified-map",
@@ -3360,7 +3383,7 @@ dependencies = [
  "candid",
  "dfn_core",
  "ic-base-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "serde",
 ]
@@ -3416,7 +3439,7 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "dfn_core",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-management-canister-types",
  "serde",
@@ -4736,7 +4759,7 @@ name = "http_counter"
 version = "0.9.0"
 dependencies = [
  "candid",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-certified-map",
  "serde",
@@ -5322,7 +5345,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-btc-interface",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-ckbtc-minter",
  "ic-config",
@@ -5703,7 +5726,7 @@ version = "0.9.0"
 dependencies = [
  "by_address",
  "ic-canister-log 0.2.0",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-metrics-encoder",
  "maplit",
  "priority-queue",
@@ -5801,6 +5824,19 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f3d204af0b11c45715169c997858edb58fa8407d08f4fae78a6b415dd39a362"
+dependencies = [
+ "candid",
+ "ic-cdk-macros 0.8.4",
+ "ic0 0.21.1",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
+name = "ic-cdk"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8859bc2b863a77750acf199e1fb7e3fc403e1b475855ba13f59cb4e4036d238"
@@ -5810,6 +5846,20 @@ dependencies = [
  "ic0 0.21.1",
  "serde",
  "serde_bytes",
+]
+
+[[package]]
+name = "ic-cdk-macros"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5a618e4020cea88e933d8d2f8c7f86d570ec06213506a80d4f2c520a9bba512"
+dependencies = [
+ "candid",
+ "proc-macro2 1.0.75",
+ "quote 1.0.35",
+ "serde",
+ "serde_tokenstream",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -5847,7 +5897,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "054727a3a1c486528b96349817d54290ff70df6addf417def456ea708a16f7fb"
 dependencies = [
  "futures",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic0 0.21.1",
  "serde",
  "serde_bytes",
@@ -5965,7 +6015,7 @@ dependencies = [
  "ciborium",
  "hex",
  "ic-canisters-http-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-metrics-encoder",
  "ic-stable-structures",
@@ -5996,7 +6046,7 @@ dependencies = [
  "ic-btc-interface",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-ckbtc-kyt",
  "ic-config",
@@ -6046,7 +6096,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-canisters-http-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
  "ic-cketh-test-utils",
@@ -6096,7 +6146,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-canisters-http-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cketh-minter",
  "ic-ethereum-types",
  "ic-icrc1-ledger",
@@ -8047,7 +8097,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
  "ic-icrc1-index-ng",
@@ -8204,7 +8254,7 @@ dependencies = [
  "ciborium",
  "ic-base-types",
  "ic-canisters-http-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-icrc1",
  "ic-icrc1-tokens-u256",
@@ -8230,7 +8280,7 @@ dependencies = [
  "getrandom 0.2.12",
  "hex",
  "ic-base-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-crypto-tree-hash",
  "ic-icrc1",
@@ -8263,7 +8313,7 @@ dependencies = [
  "getrandom 0.2.12",
  "hex",
  "ic-base-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-crypto-tree-hash",
  "ic-icrc1",
@@ -8294,7 +8344,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-profiler",
  "ic-canisters-http-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
  "ic-icrc1",
@@ -8326,7 +8376,7 @@ dependencies = [
  "ic-canister-log 0.2.0",
  "ic-canister-profiler",
  "ic-canisters-http-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
  "ic-crypto-sha2",
@@ -8364,7 +8414,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-crypto-tree-hash",
  "ic-icrc1",
@@ -8652,7 +8702,7 @@ name = "ic-ledger-canister-blocks-synchronizer-test-utils"
 version = "0.9.0"
 dependencies = [
  "ic-canister-client-sender",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-ledger-canister-blocks-synchronizer",
  "ic-ledger-core",
  "ic-types",
@@ -8719,7 +8769,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-canisters-http-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-crypto-sha2",
  "ic-ethereum-types",
@@ -8876,7 +8926,7 @@ dependencies = [
  "candid",
  "dfn_candid",
  "dfn_core",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "serde",
 ]
@@ -9208,7 +9258,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "dfn_core",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-crypto-sha2",
  "ic-management-canister-types",
  "ic-nervous-system-clients",
@@ -9226,7 +9276,7 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "ic-base-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
 ]
 
 [[package]]
@@ -9316,6 +9366,7 @@ dependencies = [
  "build-info",
  "build-info-build",
  "bytes",
+ "canbench-rs",
  "candid",
  "comparable",
  "criterion",
@@ -9328,6 +9379,7 @@ dependencies = [
  "dyn-clone",
  "futures",
  "ic-base-types",
+ "ic-cdk 0.13.2",
  "ic-config",
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha2",
@@ -9582,7 +9634,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-canisters-http-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
  "ic-config",
@@ -10832,7 +10884,7 @@ dependencies = [
  "cycles-minting-canister",
  "futures",
  "ic-base-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-nervous-system-common",
  "ic-nervous-system-runtime",
  "ic-nervous-system-string",
@@ -10959,7 +11011,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-management-canister-types",
  "ic-metrics-encoder",
@@ -11117,7 +11169,7 @@ dependencies = [
  "futures",
  "hex",
  "ic-base-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-crypto-sha2",
  "ic-icrc1",
  "ic-icrc1-ledger",
@@ -11839,7 +11891,7 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-canisters-http-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
  "ic-metrics-encoder",
@@ -12058,7 +12110,7 @@ dependencies = [
  "build-info-build",
  "candid",
  "canister-test",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-state-machine-tests",
  "ic-types",
@@ -12428,7 +12480,7 @@ version = "0.1.2"
 dependencies = [
  "async-trait",
  "candid",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "icrc-ledger-client",
 ]
 
@@ -13110,7 +13162,7 @@ dependencies = [
  "base64 0.13.1",
  "candid",
  "flate2",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-certified-map",
  "serde",
@@ -13207,7 +13259,7 @@ dependencies = [
  "dfn_http_metrics",
  "dfn_protobuf",
  "ic-base-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-test-utils",
@@ -15264,7 +15316,7 @@ dependencies = [
  "flate2",
  "hex",
  "ic-base-types",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-universal-canister",
  "icp-ledger",
  "reqwest 0.12.3",
@@ -15298,7 +15350,7 @@ dependencies = [
  "ic-agent",
  "ic-boundary",
  "ic-canister-sandbox-backend-lib",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-config",
  "ic-crypto-iccsa",
  "ic-crypto-sha2",
@@ -15745,7 +15797,7 @@ name = "proxy_canister"
 version = "0.1.0"
 dependencies = [
  "candid",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-management-canister-types",
  "serde",
@@ -16303,7 +16355,7 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-canister-client-sender",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-certified-map",
  "ic-config",
  "ic-crypto-node-key-generation",
@@ -17930,7 +17982,7 @@ name = "stable_structures"
 version = "0.9.0"
 dependencies = [
  "candid",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-stable-structures",
  "serde",
@@ -18494,7 +18546,7 @@ dependencies = [
  "ic-btc-interface",
  "ic-canister-client",
  "ic-canister-client-sender",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-certification 0.9.0",
  "ic-ckbtc-agent",
  "ic-ckbtc-kyt",
@@ -20655,7 +20707,7 @@ name = "xrc-mock"
 version = "0.9.0"
 dependencies = [
  "candid",
- "ic-cdk",
+ "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-xrc-types",
  "serde",
