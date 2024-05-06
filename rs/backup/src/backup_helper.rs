@@ -28,7 +28,7 @@ const RETRIES_BINARY_DOWNLOAD: u64 = 3;
 const BUCKET_SIZE: u64 = 10000;
 /// For how many days should we keep the states in the hot storage. States older than this number
 /// will be moved to the cold storage.
-const DAYS_TO_KEEP_STATES_IN_HOT_STORAGE: usize = 3;
+const DAYS_TO_KEEP_STATES_IN_HOT_STORAGE: usize = 1;
 
 pub(crate) struct BackupHelper {
     pub(crate) subnet_id: SubnetId,
@@ -1202,19 +1202,19 @@ mod tests {
                 .join("states"),
         );
 
-        assert_eq!(cold_storage_dirs, vec!["10".to_string(), "30".to_string()]);
+        assert_eq!(
+            cold_storage_dirs,
+            vec![
+                "10".to_string(),
+                "30".to_string(),
+                "50".to_string(),
+                "70".to_string()
+            ]
+        );
 
         assert_eq!(
             collect_and_sort_dir_entries(&backup_helper.archive_dir()),
-            vec![
-                "100".to_string(),
-                "40".to_string(),
-                "50".to_string(),
-                "60".to_string(),
-                "70".to_string(),
-                "80".to_string(),
-                "90".to_string(),
-            ]
+            vec!["100".to_string(), "80".to_string(), "90".to_string(),]
         );
     }
 
@@ -1228,7 +1228,7 @@ mod tests {
             /*daily_replays=*/ 2,
         );
 
-        for height in [0, 10, 20, 30, 40, 50, 60] {
+        for height in [0, 10, 20] {
             create_dir_all(backup_helper.archive_dir().join(height.to_string())).unwrap();
         }
 
@@ -1238,18 +1238,10 @@ mod tests {
 
         assert!(!cold_stored_states);
 
-        // Assert that old the states remain in the hot storage
+        // Assert that all the states remain in the hot storage
         assert_eq!(
             collect_and_sort_dir_entries(&backup_helper.archive_dir()),
-            vec![
-                "0".to_string(),
-                "10".to_string(),
-                "20".to_string(),
-                "30".to_string(),
-                "40".to_string(),
-                "50".to_string(),
-                "60".to_string(),
-            ]
+            vec!["0".to_string(), "10".to_string(), "20".to_string(),]
         );
     }
 
