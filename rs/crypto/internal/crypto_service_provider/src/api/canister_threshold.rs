@@ -5,10 +5,10 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     ThresholdEcdsaSigShareInternal,
 };
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
-    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaVerifyCombinedSignatureError,
+    ThresholdEcdsaVerifySigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
+use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
 use std::collections::BTreeMap;
@@ -39,16 +39,6 @@ pub trait CspIDkgProtocol {
     /// * [`CspCreateMEGaKeyError::InternalError`]: if the key ID for the secret key cannot be
     ///   derived from the generated public key.
     fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
-}
-
-/// Crypto service provider (CSP) client for threshold ECDSA signature share
-/// generation.
-pub trait CspThresholdEcdsaSigner {
-    /// Generate a signature share.
-    fn ecdsa_sign_share(
-        &self,
-        inputs: &ThresholdEcdsaSigInputs,
-    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
 }
 
 /// Crypto service provider (CSP) client for threshold ECDSA signature

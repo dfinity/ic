@@ -7,10 +7,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::api::{
-    CspCreateMEGaKeyError, CspIDkgProtocol, CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner,
-};
-use crate::vault::api::IDkgTranscriptInternalBytes;
+use crate::api::{CspCreateMEGaKeyError, CspIDkgProtocol, CspThresholdEcdsaSigVerifier};
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     combine_ecdsa_signature_shares, verify_ecdsa_signature_share, verify_ecdsa_threshold_signature,
@@ -21,10 +18,10 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 use ic_crypto_internal_types::scope::{ConstScope, Scope};
 use ic_logger::debug;
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
-    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaVerifyCombinedSignatureError,
+    ThresholdEcdsaVerifySigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
+use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
 
@@ -41,38 +38,6 @@ impl CspIDkgProtocol for Csp {
         debug!(self.logger; crypto.method_name => "idkg_gen_dealing_encryption_key_pair");
 
         self.csp_vault.idkg_gen_dealing_encryption_key_pair()
-    }
-}
-
-/// Threshold-ECDSA signature share generation client.
-///
-/// Please see the trait definition for full documentation.
-impl CspThresholdEcdsaSigner for Csp {
-    fn ecdsa_sign_share(
-        &self,
-        inputs: &ThresholdEcdsaSigInputs,
-    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
-        debug!(self.logger; crypto.method_name => "ecdsa_sign_share");
-
-        let key = inputs.key_transcript().transcript_to_bytes();
-
-        let q = inputs.presig_quadruple();
-        let kappa_unmasked = q.kappa_unmasked().transcript_to_bytes();
-        let lambda_masked = q.lambda_masked().transcript_to_bytes();
-        let kappa_times_lambda = q.kappa_times_lambda().transcript_to_bytes();
-        let key_times_lambda = q.key_times_lambda().transcript_to_bytes();
-
-        self.csp_vault.ecdsa_sign_share(
-            inputs.derivation_path().clone(),
-            inputs.hashed_message().to_vec(),
-            *inputs.nonce(),
-            IDkgTranscriptInternalBytes::from(key),
-            IDkgTranscriptInternalBytes::from(kappa_unmasked),
-            IDkgTranscriptInternalBytes::from(lambda_masked),
-            IDkgTranscriptInternalBytes::from(kappa_times_lambda),
-            IDkgTranscriptInternalBytes::from(key_times_lambda),
-            inputs.algorithm_id(),
-        )
     }
 }
 

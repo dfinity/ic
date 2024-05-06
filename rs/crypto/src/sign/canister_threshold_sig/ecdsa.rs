@@ -1,6 +1,7 @@
 //! Implementations of ThresholdEcdsaSigner
 use super::MasterPublicKeyExtractionError;
-use ic_crypto_internal_csp::api::{CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner};
+use ic_crypto_internal_csp::api::CspThresholdEcdsaSigVerifier;
+use ic_crypto_internal_csp::vault::api::{CspVault, IDkgTranscriptInternalBytes};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     EccCurveType, IDkgTranscriptInternal, ThresholdEcdsaCombinedSigInternal,
     ThresholdEcdsaSerializationError, ThresholdEcdsaSigShareInternal,
@@ -40,14 +41,32 @@ pub(crate) fn get_tecdsa_master_public_key_from_internal_transcript(
     })
 }
 
-pub fn sign_share<C: CspThresholdEcdsaSigner>(
-    csp_client: &C,
+pub fn sign_share(
+    vault: &dyn CspVault,
     self_node_id: &NodeId,
     inputs: &ThresholdEcdsaSigInputs,
 ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
     ensure_self_was_receiver(self_node_id, inputs.receivers())?;
 
-    let internal_sig_share = csp_client.ecdsa_sign_share(inputs)?;
+    let key = inputs.key_transcript().transcript_to_bytes();
+
+    let q = inputs.presig_quadruple();
+    let kappa_unmasked = q.kappa_unmasked().transcript_to_bytes();
+    let lambda_masked = q.lambda_masked().transcript_to_bytes();
+    let kappa_times_lambda = q.kappa_times_lambda().transcript_to_bytes();
+    let key_times_lambda = q.key_times_lambda().transcript_to_bytes();
+
+    let internal_sig_share = vault.ecdsa_sign_share(
+        inputs.derivation_path().clone(),
+        inputs.hashed_message().to_vec(),
+        *inputs.nonce(),
+        IDkgTranscriptInternalBytes::from(key),
+        IDkgTranscriptInternalBytes::from(kappa_unmasked),
+        IDkgTranscriptInternalBytes::from(lambda_masked),
+        IDkgTranscriptInternalBytes::from(kappa_times_lambda),
+        IDkgTranscriptInternalBytes::from(key_times_lambda),
+        inputs.algorithm_id(),
+    )?;
 
     let sig_share_raw = internal_sig_share.serialize().map_err(|e| {
         ThresholdEcdsaSignShareError::SerializationError {
