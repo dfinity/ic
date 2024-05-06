@@ -33,7 +33,7 @@ detail in the xref:ic-policy-structure[IC security policy structure] section.
 == Policy modules
 
 This section gives an overview of the organisation of
-security policy modules (to be found in +ic/ic-os/guestos/rootfs/prep+).
+security policy modules (to be found in +prep+).
 
 === +systemd-fixes+ and +misc-fixes+
 

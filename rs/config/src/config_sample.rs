@@ -367,7 +367,7 @@ pub const SAMPLE_CONFIG: &str = r#"
         bitcoin_testnet_uds_path: "/tmp/bitcoin_uds",
         // IPC socket path for canister http adapter. This UDS path has to be the same as
         // specified in the systemd socket file.
-        // The canister http adapter socket file is: /ic-os/guestos/rootfs/systemd/system/ic-https-outcalls-adapter.socket
+        // The canister http adapter socket file is: ic-https-outcalls-adapter.socket
         https_outcalls_uds_path: "/run/ic-node/https-outcalls-adapter/socket",
     },
     bitcoin_payload_builder_config: {
