@@ -1,7 +1,7 @@
 use ic_crypto_internal_csp::api::{
     CspCreateMEGaKeyError, CspIDkgProtocol, CspKeyGenerator, CspPublicAndSecretKeyStoreChecker,
     CspPublicKeyStore, CspSigVerifier, CspSigner, CspThresholdEcdsaSigVerifier,
-    CspThresholdEcdsaSigner, CspThresholdSignError, CspTlsHandshakeSignerProvider, NiDkgCspClient,
+    CspThresholdSignError, CspTlsHandshakeSignerProvider, NiDkgCspClient,
     ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::key_id::KeyId;
@@ -31,10 +31,10 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPu
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
-    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaVerifyCombinedSignatureError,
+    ThresholdEcdsaVerifySigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
+use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::{AlgorithmId, CryptoResult, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
@@ -259,13 +259,6 @@ mock! {
 
     impl CspIDkgProtocol for AllCryptoServiceProvider {
         fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
-    }
-
-    impl CspThresholdEcdsaSigner for AllCryptoServiceProvider {
-        fn ecdsa_sign_share(
-            &self,
-            inputs: &ThresholdEcdsaSigInputs,
-        ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
     }
 
     impl CspThresholdEcdsaSigVerifier for AllCryptoServiceProvider {
