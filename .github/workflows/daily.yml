@@ -54,6 +54,7 @@ jobs:
     container:
       image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     timeout-minutes: 30
+    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,6 +80,7 @@ jobs:
     container:
       image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     timeout-minutes: 120
+    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
