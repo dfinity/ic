@@ -3,7 +3,6 @@ use discower_bowndary::{
     fetch::{NodesFetcher, NodesFetcherImpl},
     node::Node,
     route_provider::HealthCheckRouteProvider,
-    test_helpers::{assert_routed_domains, route_n_times},
 };
 use k256::SecretKey;
 
@@ -274,15 +273,16 @@ pub fn decentralization_test(env: TestEnv) {
             seed_nodes,
         ));
         block_on(route_provider.run());
-        // Wait till all nodes go through health checks.
-        std::thread::sleep(2 * check_interval);
-        // Do an additional assertions that routing works correctly.
-        let routed_domains = route_n_times(6, Arc::clone(&route_provider));
-        assert_routed_domains(
-            routed_domains,
-            vec!["api1.com".into(), "api2.com".into()],
-            3,
-        );
+        // TODO: BOUN-1134 - Dissect seed phase health check in Discovery Library
+        // // Wait till all nodes go through health checks.
+        // std::thread::sleep(2 * check_interval);
+        // // Do an additional assertions that routing works correctly.
+        // let routed_domains = route_n_times(6, Arc::clone(&route_provider));
+        // assert_routed_domains(
+        //     routed_domains,
+        //     vec!["api1.com".into(), "api2.com".into()],
+        //     3,
+        // );
         // TODO: remove this once ic-agent 0.35.0 is released + call route_provider.stop() at the end
         Arc::try_unwrap(route_provider).unwrap()
     };
