@@ -63,7 +63,7 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
-use ic_types::{ingress::WasmResult, time::GENESIS, Cycles};
+use ic_types::{ingress::WasmResult, Cycles};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, Memo, SendArgs, Tokens};
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -75,14 +75,14 @@ use prost::Message;
 use serde::Serialize;
 use std::{convert::TryInto, env, time::Duration};
 
-/// A `StateMachine` builder setting the IC time to the GENESIS time
+/// A `StateMachine` builder setting the IC time to the current time
 /// and using the canister ranges of both the NNS and II subnets.
 /// Note. The last canister ID in the canister range of the II subnet
 /// is omitted so that the canister range of the II subnet is not used
 /// for automatic generation of new canister IDs.
 pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
     StateMachineBuilder::new()
-        .with_time(GENESIS)
+        .with_current_time()
         .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
             CanisterId::from_u64(0x2100000),
             CanisterId::from_u64(0x21FFFFE),
