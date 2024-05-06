@@ -47,6 +47,7 @@ impl OrchestratorMetrics {
                 Task::InstallLedgerSuite(_) => "install_ledger_suite",
                 Task::MaybeTopUp => "maybe_top_up",
                 Task::NotifyErc20Added { .. } => "notify_erc20_added",
+                Task::DiscoverArchives => "discover_archives",
             }
             .to_string(),
             result: match result {

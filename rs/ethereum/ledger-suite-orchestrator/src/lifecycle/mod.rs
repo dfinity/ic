@@ -74,5 +74,6 @@ pub fn add_erc20(token: AddErc20Arg) {
 }
 
 pub fn setup_tasks_and_timers() {
+    schedule_now(Task::DiscoverArchives);
     schedule_now(Task::MaybeTopUp);
 }

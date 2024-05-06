@@ -15,6 +15,7 @@ rust_library(
     deps = [
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
+        "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",

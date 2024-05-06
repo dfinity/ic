@@ -25,12 +25,14 @@ use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
 use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
+use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 pub use metrics::encode_orchestrator_metrics;
 use metrics::observe_task_duration;
 use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::fmt::{Debug, Display};
 use std::str::FromStr;
 use std::time::Duration;
@@ -50,6 +52,7 @@ thread_local! {
 pub enum Task {
     InstallLedgerSuite(InstallLedgerSuiteArgs),
     MaybeTopUp,
+    DiscoverArchives,
     NotifyErc20Added {
         erc20_token: Erc20Token,
         minter_id: Principal,
@@ -62,6 +65,7 @@ impl Task {
             Task::InstallLedgerSuite(_) => false,
             Task::MaybeTopUp => true,
             Task::NotifyErc20Added { .. } => false,
+            Task::DiscoverArchives => true,
         }
     }
 }
@@ -351,6 +355,7 @@ impl TaskExecution {
                 erc20_token,
                 minter_id,
             } => notify_erc20_added(erc20_token, minter_id, runtime).await,
+            Task::DiscoverArchives => discover_archives(runtime).await,
         }
     }
 }
@@ -762,6 +767,67 @@ async fn notify_erc20_added<R: CanisterRuntime>(
         }
         _ => Err(TaskError::LedgerNotFound(token.clone())),
     }
+}
+
+async fn discover_archives<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> {
+    let ledgers: BTreeMap<_, _> = read_state(|s| {
+        s.managed_canisters_iter()
+            .filter_map(|(token, canisters)| {
+                canisters
+                    .ledger_canister_id()
+                    .cloned()
+                    .map(|ledger_id| (token.clone(), ledger_id))
+            })
+            .collect()
+    });
+    if ledgers.is_empty() {
+        return Ok(());
+    }
+    log!(
+        INFO,
+        "[discover_archives]: discovering archives for {:?}",
+        ledgers
+    );
+    let results =
+        future::join_all(ledgers.values().map(|p| call_ledger_archives(*p, runtime))).await;
+    let mut errors: Vec<(Erc20Token, Principal, TaskError)> = Vec::new();
+    for ((token, ledger), result) in ledgers.into_iter().zip(results) {
+        match result {
+            Ok(archives) => {
+                let archives: Vec<_> = archives.into_iter().map(|a| a.canister_id).collect();
+                log!(
+                    DEBUG,
+                    "[discover_archives]: archives for ERC-20 token {:?} with ledger {}: {}",
+                    token,
+                    ledger,
+                    display_vec(&archives)
+                );
+                mutate_state(|s| s.record_archives(&token, archives));
+            }
+            Err(e) => errors.push((token, ledger, e)),
+        }
+    }
+    if !errors.is_empty() {
+        log!(
+            INFO,
+            "[discover_archives]: {} errors. Failed to discover archives for {:?}",
+            errors.len(),
+            errors
+        );
+        let first_error = errors.swap_remove(0);
+        return Err(first_error.2);
+    }
+    Ok(())
+}
+
+async fn call_ledger_archives<R: CanisterRuntime>(
+    ledger_id: Principal,
+    runtime: &R,
+) -> Result<Vec<ArchiveInfo>, TaskError> {
+    runtime
+        .call_canister(ledger_id, "archives", ())
+        .await
+        .map_err(TaskError::InterCanisterCallError)
 }
 
 #[derive(Debug, PartialEq, Clone, Ord, PartialOrd, Eq, Serialize, Deserialize)]
