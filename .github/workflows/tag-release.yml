@@ -1,4 +1,4 @@
-name: Make Release
+name: Publish Release
 
 permissions:
   contents: write

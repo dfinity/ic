@@ -1,4 +1,4 @@
-name: Hourly CI
+name: Schedule Hourly
 
 on:
   schedule:
@@ -36,7 +36,7 @@ anchors:
 
 jobs:
   bazel-system-test-hourly:
-    name: Bazel-System-Test-Hourly
+    name: Bazel System Tests Hourly
     <<: *bazel-large-setup
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -55,10 +55,8 @@ jobs:
           bazel clean
 
   bazel-test-coverage:
+    name: Bazel Test Coverage
     <<: *bazel-large-setup
-    name: Bazel-Test-Coverage
-    permissions:
-      contents: write
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - <<: *checkout

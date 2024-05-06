@@ -1,15 +1,16 @@
-name: Generate-CI
+name: CI Generate CI
 
 on:
   pull_request:
     paths:
-      - '.github/**'
+      - '.github/workflows-source/*.yml'
 
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
 
 jobs:
   generate-ci:
+    name: Generate CI
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -18,7 +19,7 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ secrets.PUSH_TO_PR }}
-      - name: Generate CI
+      - name: Run Generate CI
         id: generate-ci
         run: |
           python $CI_PROJECT_DIR/.github/scripts/generate-ci.py

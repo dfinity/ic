@@ -1,4 +1,4 @@
-name: Hourly CI
+name: Schedule Hourly
 on:
   schedule:
     - cron: "0 * * * *"
@@ -18,7 +18,7 @@ env:
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
 jobs:
   bazel-system-test-hourly:
-    name: Bazel-System-Test-Hourly
+    name: Bazel System Tests Hourly
     runs-on:
       labels: bazel-runner-large
     container:
@@ -40,14 +40,12 @@ jobs:
         run: |
           bazel clean
   bazel-test-coverage:
+    name: Bazel Test Coverage
     runs-on:
       labels: bazel-runner-large
     container:
       image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     timeout-minutes: 120
-    name: Bazel-Test-Coverage
-    permissions:
-      contents: write
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
