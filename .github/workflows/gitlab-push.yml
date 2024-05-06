@@ -1,5 +1,6 @@
-name: Push To Gitlab
 # This workflow pushes new commits to GitLab, but only for merged pull requests
+
+name: GitLab Push
 
 on:
   pull_request:
@@ -13,6 +14,7 @@ env:
 
 jobs:
   push_to_gitlab:
+    name: Push To GitLab
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:

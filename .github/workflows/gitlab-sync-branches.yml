@@ -1,5 +1,6 @@
-name: Sync-Branches
 # This workfow makes sure the gitlab-mirror branch is always in sync with the master branch
+
+name: GitLab Sync Branches
 
 on:
   push:
@@ -10,7 +11,7 @@ on:
 jobs:
   sync-branches:
     runs-on: ubuntu-latest
-    if: ${{ vars.RUN_CI == 'true' }} 
+    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3

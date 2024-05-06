@@ -1,4 +1,4 @@
-name: Daily Scheduled CI
+name: Schedule Daily
 
 on:
   schedule:
