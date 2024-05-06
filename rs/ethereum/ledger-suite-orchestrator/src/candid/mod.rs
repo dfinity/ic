@@ -147,7 +147,7 @@ impl Default for CyclesManagement {
         const HUNDRED_TRILLIONS: u64 = 100_000_000_000_000;
 
         Self {
-            cycles_for_ledger_creation: Nat::from(HUNDRED_TRILLIONS),
+            cycles_for_ledger_creation: Nat::from(2 * HUNDRED_TRILLIONS),
             cycles_for_archive_creation: Nat::from(HUNDRED_TRILLIONS),
             cycles_for_index_creation: Nat::from(HUNDRED_TRILLIONS),
             cycles_top_up_increment: Nat::from(TEN_TRILLIONS),
