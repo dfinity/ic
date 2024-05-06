@@ -11,7 +11,7 @@ use ic_interfaces::p2p::state_sync::{
     Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient,
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{fatal, info, warn, ReplicaLogger};
 use ic_types::{CryptoHashOfState, Height};
 use std::sync::{Arc, Mutex};
 
@@ -86,6 +86,15 @@ impl StateSync {
             self.state_manager.get_fd_factory(),
         )
         .expect("failed to recover checkpoint");
+
+        if let Err(err) = ro_layout.remove_unverified_checkpoint_marker() {
+            fatal!(
+                self.log,
+                "Failed to remove the unverified checkpoint marker @height {}: {}",
+                height,
+                err
+            );
+        }
 
         self.state_manager
             .on_synced_checkpoint(state, height, manifest, meta_manifest, root_hash);

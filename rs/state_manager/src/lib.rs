@@ -1411,6 +1411,24 @@ impl StateManagerImpl {
         info!(log, "Loading metadata took {:?}", starting_time.elapsed());
 
         let starting_time = Instant::now();
+
+        // Archive unverified checkpoints.
+        let checkpoint_heights = state_layout
+            .checkpoint_heights()
+            .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve checkpoint heights: {:?}", err));
+
+        for h in checkpoint_heights {
+            let cp_layout = state_layout.checkpoint(h).unwrap_or_else(|err| {
+                fatal!(log, "Failed to create checkpoint layout @{}: {}", h, err)
+            });
+            if cp_layout.is_marked_as_unverified() {
+                info!(log, "Archiving unverified checkpoint {} ", h);
+                state_layout
+                    .archive_checkpoint(h)
+                    .unwrap_or_else(|err| fatal!(&log, "{:?}", err));
+            }
+        }
+
         let mut checkpoint_heights = state_layout
             .checkpoint_heights()
             .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve checkpoint heights: {:?}", err));

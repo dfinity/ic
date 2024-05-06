@@ -799,36 +799,28 @@ impl IncompleteState {
             "state sync: start to make a checkpoint from the scratchpad"
         );
 
-        let ro_layout = CheckpointLayout::<ReadOnly>::new_untracked(root.to_path_buf(), height)
-            .expect("failed to create checkpoint layout");
-
-        // Recover the state to make sure it's usable
-        if let Err(err) = crate::checkpoint::load_checkpoint(
-            &ro_layout,
-            own_subnet_type,
-            &metrics.checkpoint_metrics,
-            Some(thread_pool),
-            Arc::clone(&fd_factory),
-        ) {
-            let elapsed = started_at.elapsed();
-            metrics
-                .state_sync_metrics
-                .duration
-                .with_label_values(&["unrecoverable"])
-                .observe(elapsed.as_secs_f64());
-
-            fatal!(
-                log,
-                "Failed to recover synced state {} after {:?}: {}",
-                height,
-                elapsed,
-                err
-            )
-        }
-
         let scratchpad_layout =
             CheckpointLayout::<RwPolicy<()>>::new_untracked(root.to_path_buf(), height)
                 .expect("failed to create checkpoint layout");
+
+        match scratchpad_layout.create_unverified_checkpoint_marker() {
+            Ok(_) => {
+                info!(
+                    log,
+                    "Successfully created a checkpoint marker for state {} at path {}",
+                    height,
+                    scratchpad_layout.raw_path().display()
+                );
+            }
+            Err(err) => {
+                fatal!(
+                    log,
+                    "Failed to created a checkpoint marker for state {} at path {}",
+                    height,
+                    scratchpad_layout.raw_path().display()
+                );
+            }
+        }
 
         match state_layout.scratchpad_to_checkpoint(scratchpad_layout, height, Some(thread_pool)) {
             Ok(_) => {

@@ -606,6 +606,16 @@ impl StateLayout {
         }
     }
 
+    pub fn mark_scratchpad_unverified_and_move_to_checkpoint<T>(
+        &self,
+        layout: CheckpointLayout<RwPolicy<'_, T>>,
+        height: Height,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        layout.create_unverified_checkpoint_marker()?;
+        self.scratchpad_to_checkpoint(layout, height, thread_pool)
+    }
+
     pub fn scratchpad_to_checkpoint<T>(
         &self,
         layout: CheckpointLayout<RwPolicy<'_, T>>,
@@ -1393,6 +1403,48 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     pub fn raw_path(&self) -> &Path {
         &self.root
+    }
+
+    pub fn is_marked_as_unverified(&self) -> bool {
+        self.unverified_checkpoint_marker().exists()
+    }
+
+    /// Path of unverified checkpoint marker for the given height.
+    pub fn unverified_checkpoint_marker(&self) -> PathBuf {
+        self.root.join("unverified_checkpoint_marker")
+    }
+
+    /// Creates the unverified checkpoint marker.
+    pub fn create_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
+        open_for_write(&self.unverified_checkpoint_marker())?;
+        sync_path(&self.root).map_err(|err| LayoutError::IoError {
+            path: self.root.clone(),
+            message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
+            io_err: err,
+        })
+    }
+
+    /// Removes the unverified checkpoint marker.
+    pub fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
+        let path = self.unverified_checkpoint_marker();
+        match std::fs::remove_file(&path) {
+            Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
+                return Err(LayoutError::IoError {
+                    path: path.to_path_buf(),
+                    message: "failed to remove file from disk".to_string(),
+                    io_err: err,
+                });
+            }
+            _ => {}
+        }
+
+        // Sync the directory to make sure the marker is removed from disk.
+        // This is strict prerequisite for the manifest computation.
+        sync_path(&self.root).map_err(|err| LayoutError::IoError {
+            path: self.root.clone(),
+            message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
+            io_err: err,
+        })
     }
 }
 

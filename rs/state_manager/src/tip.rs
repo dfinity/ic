@@ -194,6 +194,13 @@ pub(crate) fn spawn_tip_thread(
                                     continue;
                                 }
                                 Ok(tip) => {
+                                    if let Err(err) = tip.create_unverified_checkpoint_marker() {
+                                        sender
+                                            .send(Err(err))
+                                            .expect("Failed to return TipToCheckpoint error");
+                                        continue;
+                                    }
+
                                     let cp_or_err = state_layout.scratchpad_to_checkpoint(
                                         tip,
                                         height,

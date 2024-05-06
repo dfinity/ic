@@ -131,6 +131,8 @@ pub(crate) fn make_checkpoint(
         )?
     };
 
+    cp.remove_unverified_checkpoint_marker()?;
+
     Ok((cp, state, has_downgrade))
 }
 
