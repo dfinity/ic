@@ -2,7 +2,7 @@
 /// socket (UDS) between two processes managed by systemd.
 ///
 /// Existing socket systemd configurations can be found
-/// ic-os/guestos/rootfs/etc/systemd/system/*.socket.
+/// in *.socket files.
 use async_stream::__private::AsyncStream;
 use futures::TryFutureExt;
 use std::{

@@ -13,18 +13,18 @@ In production, configuration is propagated from a partition on the USB installer
 
 === SetupOS -> HostOS
 
-SetupOS validates, sanitizes, and copies all of its configuration files to the HostOS config partition. Refer to link:../setupos/rootfs/opt/ic/bin/config.sh[config.sh] link:../setupos/rootfs/opt/ic/bin/devices.sh[devices.sh]
+SetupOS validates, sanitizes, and copies all of its configuration files to the HostOS config partition. Refer to link:../rootfs/setupos/opt/ic/bin/config.sh[config.sh] link:../rootfs/setupos/opt/ic/bin/devices.sh[devices.sh]
 
 === HostOS -> GuestOS
 
 HostOS builds the "bootstrap config image". Refer to link:../scripts/build-bootstrap-config-image.sh[build-bootstrap-config-image.sh]
 
 The bootstrap config image contains a tar file with the GuestOS configuration files.
-When the HostOS launches the GuestOS, the bootstrap config image is attached to the GuestOS as a virtual USB. Refer to link:../hostos/rootfs/opt/ic/share/guestos.xml.template[guestos.xml.template]
+When the HostOS launches the GuestOS, the bootstrap config image is attached to the GuestOS as a virtual USB. Refer to link:../rootfs/hostos/opt/ic/share/guestos.xml.template[guestos.xml.template]
 
 When the GuestOS boots, it checks for available removable media devices (i.e. the bootstrap config image). If such a device is found, the media must contain a VFAT filesystem and a single file called `ic-bootstrap.tar`.
 
-GuestOS then reads from `ic-bootstrap.tar` (link:../guestos/rootfs/opt/ic/bin/bootstrap-ic-node.sh[see bootstrap-ic-node.sh]), and the contents are unpacked and distributed in one of two places:
+GuestOS then reads from `ic-bootstrap.tar` (link:../rootfs/guestos/opt/ic/bin/bootstrap-ic-node.sh[see bootstrap-ic-node.sh]), and the contents are unpacked and distributed in one of two places:
 
 * *System state:* Node initialization material (initial registry & keys) is copied directly into target directories for replica use.
 * *Config partition:* All other contents of the injected config are copied into the `/boot/config` directory. These configurations need to be available on subsequent boots (not just the first boot of the system), and need to be preserved across upgrades.

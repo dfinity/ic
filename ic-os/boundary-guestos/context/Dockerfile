@@ -35,7 +35,7 @@ USER root:root
 
 # Bake the nns public key into the image
 # For the dev image the public key will come from the usb stick
-# See get_nns_pem_path in ic-os/boundary-guestos/rootfs/opt/ic/bin/helpers.shlib
+# See get_nns_pem_path in helpers.shlib
 RUN printf '%s\n' >/etc/nns_public_key.pem \
     '-----BEGIN PUBLIC KEY-----' \
     'MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9' \

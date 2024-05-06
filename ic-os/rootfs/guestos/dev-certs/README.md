@@ -3,7 +3,7 @@ This README file documents how to (re-)generate DFINITY DEV environment root CA 
 well as where to apply these files and when to apply these files to make use of them.
 
 ## How to (re-)generate new root CA and signing key
-`cd ic-os/guestos/rootfs/dev-certs`
+`cd dev-certs`
 `sh root_cert_gen.sh`
 
 ## How to apply root CA and signing key to VMs
@@ -13,7 +13,7 @@ Copy `minica.pem` to `/usr/local/share/ca-certificates/` folder of Linux VM, and
 to the `ca-certificates.crt` bundle file sitting under `/etc/ssl/certs` folder, where
 processes running on the VM will be able to treat `/etc/ssl/certs` directory as trusted CAs.
 
-IC-OS reads `/ic-os/guestos/rootfs/dev-certs/` to update its `/etc/ssl/certs/ca-certificates.crt`
+IC-OS reads `dev-certs/` to update its `/etc/ssl/certs/ca-certificates.crt`
 bundle in: `/ic-os/guestos/context/Dockerfile`
 
 ### VM as HTTPS server

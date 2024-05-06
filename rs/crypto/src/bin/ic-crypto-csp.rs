@@ -9,7 +9,7 @@ use std::os::unix::io::FromRawFd;
 use std::path::PathBuf;
 
 // This corresponds to the name of the file where the sockets are defined, i.e.,
-// /ic-os/guestos/rootfs/etc/systemd/system/ic-crypto-csp.socket
+// ic-crypto-csp.socket
 const IC_CRYPTO_CSP_SOCKET_FILENAME: &str = "ic-crypto-csp.socket";
 
 #[derive(Parser)]
@@ -70,8 +70,8 @@ fn main() {
     // `incoming_from_nth_systemd_socket` starts from FD(3) if the passed `socket_num` is 1, and
     // for the case of the metrics socket, FD(4) corresponds to `socket_num` = 2.
     // The `incoming_from_nth_systemd_socket` function shall only be called once per socket.
-    // Systemd Socket config: ic-os/guestos/rootfs/etc/systemd/system/ic-crypto-csp.socket
-    // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-crypto-csp.service
+    // Systemd Socket config: ic-crypto-csp.socket
+    // Systemd Service config: ic-crypto-csp.service
     {
         const METRICS_SOCKET_NUM: i32 = 2;
         let _enter_guard = rt.handle().enter();
