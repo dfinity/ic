@@ -435,6 +435,21 @@ impl State {
         );
     }
 
+    pub fn erc20_balances_by_token_symbol(&self) -> BTreeMap<&CkTokenSymbol, &Erc20Value> {
+        self.erc20_balances
+            .balance_by_erc20_contract
+            .iter()
+            .map(|(erc20_contract, balance)| {
+                let symbol = self
+                    .ckerc20_token_symbol(erc20_contract)
+                    .unwrap_or_else(|| {
+                        panic!("BUG: missing symbol for ERC-20 contract {}", erc20_contract)
+                    });
+                (symbol, balance)
+            })
+            .collect()
+    }
+
     pub const fn ethereum_network(&self) -> EthereumNetwork {
         self.ethereum_network
     }
@@ -674,6 +689,7 @@ impl EthBalance {
     pub fn eth_balance(&self) -> Wei {
         self.eth_balance
     }
+
     pub fn total_effective_tx_fees(&self) -> Wei {
         self.total_effective_tx_fees
     }
