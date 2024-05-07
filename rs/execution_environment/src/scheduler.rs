@@ -1699,7 +1699,6 @@ impl Scheduler for SchedulerImpl {
                 let mut total_canister_reserved_balance = Cycles::zero();
                 let mut total_canister_history_memory_usage = NumBytes::new(0);
                 let mut total_canister_memory_usage = NumBytes::new(0);
-                let mut total_canister_log_memory_usage = 0;
                 for canister in state.canisters_iter_mut() {
                     let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
                     self.metrics
@@ -1726,15 +1725,13 @@ impl Scheduler for SchedulerImpl {
                             ),
                             FlagStatus::Disabled => NumInstructions::from(0),
                         };
-                    let canister_log_memory_usage = canister.system_state.canister_log.used_space();
                     self.metrics
                         .canister_log_memory_usage
-                        .observe(canister_log_memory_usage as f64);
+                        .observe(canister.system_state.canister_log.used_space() as f64);
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_usage += canister.memory_usage();
                     total_canister_balance += canister.system_state.balance();
                     total_canister_reserved_balance += canister.system_state.reserved_balance();
-                    total_canister_log_memory_usage += canister_log_memory_usage;
 
                     // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
                     // cycles_out_sum += canister.system_state.queues().output_queue_cycles();
@@ -1749,10 +1746,6 @@ impl Scheduler for SchedulerImpl {
                 self.metrics
                     .total_canister_reserved_balance
                     .set(total_canister_reserved_balance.get() as f64);
-
-                self.metrics
-                    .total_canister_log_memory_usage
-                    .set(total_canister_log_memory_usage as f64);
 
                 // TODO(EXC-1124): Re-enable the check below once it's fixed.
                 //

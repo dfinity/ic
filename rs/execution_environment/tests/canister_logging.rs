@@ -13,7 +13,7 @@ use ic_state_machine_tests::{
     SubmitIngressError, UserError,
 };
 use ic_test_utilities_execution_environment::{get_reply, wat_canister, wat_fn};
-use ic_test_utilities_metrics::{fetch_gauge, fetch_histogram_stats};
+use ic_test_utilities_metrics::fetch_histogram_stats;
 use ic_types::{ingress::WasmResult, CanisterId, Cycles, NumInstructions};
 use more_asserts::{assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
@@ -1316,28 +1316,4 @@ fn test_canister_log_memory_usage_bytes() {
     let stats = fetch_histogram_stats(env.metrics_registry(), metric).unwrap();
     assert_le!(PAYLOAD_SIZE as f64, stats.sum);
     assert_le!(stats.sum, 1.05 * (PAYLOAD_SIZE as f64));
-}
-
-#[test]
-fn test_total_canister_log_memory_usage_bytes() {
-    // Test canister logging metrics record the size of the log.
-    let metric = "total_canister_log_memory_usage_bytes";
-    const PAYLOAD_SIZE: usize = 1_000;
-    let (env, canister_id, _controller) = setup_with_controller(
-        FlagStatus::Enabled,
-        wat_canister()
-            .update("test", wat_fn().debug_print(&[37; PAYLOAD_SIZE]))
-            .build(),
-    );
-    // Assert canister log size metric is zero initially.
-    let gauge = fetch_gauge(env.metrics_registry(), metric).unwrap();
-    assert_eq!(gauge, 0.0);
-
-    // Add log message.
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-
-    // Assert canister log size metric is within the expected range.
-    let gauge = fetch_gauge(env.metrics_registry(), metric).unwrap();
-    assert_le!(PAYLOAD_SIZE as f64, gauge);
-    assert_le!(gauge, 1.05 * (PAYLOAD_SIZE as f64));
 }
