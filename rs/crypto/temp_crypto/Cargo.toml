@@ -27,9 +27,9 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-types = { path = "../../types/types" }
 rand = "0.8"
+rustls = { workspace = true }
 tempfile = "3.1.0"
 tokio = { workspace = true }
-tokio-rustls = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

@@ -97,13 +97,13 @@ pub mod internal {
     use ic_types::signature::BasicSignatureBatch;
     use ic_types::{NodeId, RegistryVersion, SubnetId};
     use rand::rngs::OsRng;
+    use rustls::{ClientConfig, ServerConfig};
     use std::collections::{BTreeMap, BTreeSet, HashSet};
     use std::ops::Deref;
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use tempfile::TempDir;
     use tokio::net::TcpStream;
-    use tokio_rustls::rustls::{ClientConfig, ServerConfig};
 
     /// This struct combines the following two items:
     /// * a crypto component whose state lives in a temporary directory

@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_tls_interfaces::{MalformedPeerCertificateError, TlsPublicKeyCert};
-use tokio_rustls::rustls::{Certificate, CertificateError, Error};
+use rustls::{Certificate, CertificateError, Error};
 use x509_parser::certificate::X509Certificate;
 use x509_parser::x509::X509Name;
 

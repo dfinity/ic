@@ -24,13 +24,13 @@ ic-metrics = { path = "../../monitoring/metrics" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 quinn = { workspace = true }
+rustls = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
 socket2 = { workspace = true }
 tokio = { workspace = true }
 tokio-metrics = { workspace = true }
-tokio-rustls = { workspace = true }
 tokio-util = { workspace = true }
 tower = { workspace = true }
 

@@ -617,7 +617,7 @@ impl ConnectionManager {
             let certs = &established
                 .peer_identity()
                 .ok_or(ConnectionEstablishError::MissingPeerIdentity)?
-                .downcast::<Vec<tokio_rustls::rustls::Certificate>>()
+                .downcast::<Vec<rustls::Certificate>>()
                 .map_err(|_| {
                     ConnectionEstablishError::MalformedPeerIdentity(MalformedPeerCertificateError {
                         internal_error: "can't downcast peer identity".to_string(),

@@ -1,5 +1,5 @@
 {
-  "checksum": "75045ed3afdd266db7264baf47597f6d2bbaf4fd776bebcc0d5e0c364d593a86",
+  "checksum": "be48864e2f17aac6ff7b4fad13b2ccb02d9970020edbff50f019b0fd960d8e73",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5003,7 +5003,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -5113,7 +5113,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -17742,7 +17742,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -26702,7 +26702,7 @@
               "target": "log"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -26997,7 +26997,7 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls",
               "alias": "rusttls"
             },
@@ -32872,7 +32872,7 @@
               "target": "rand"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -37251,7 +37251,7 @@
               "target": "reqwest"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -48440,7 +48440,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -48527,7 +48527,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -51296,7 +51296,7 @@
                 "target": "pin_project_lite"
               },
               {
-                "id": "rustls 0.21.10",
+                "id": "rustls 0.21.12",
                 "target": "rustls"
               },
               {
@@ -53805,14 +53805,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustls 0.21.10": {
+    "rustls 0.21.12": {
       "name": "rustls",
-      "version": "0.21.10",
+      "version": "0.21.12",
       "package_url": "https://github.com/rustls/rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls/0.21.10/download",
-          "sha256": "f9d5a6813c0759e4609cd494e8e725babae6a2ca7b62a5536a13daaec6fcb7ba"
+          "url": "https://static.crates.io/crates/rustls/0.21.12/download",
+          "sha256": "3f56a14d1f48b391359b22f731fd4bd7e43c97f3c50eee276f3aa09c94784d3e"
         }
       },
       "targets": [
@@ -53868,7 +53868,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "build_script_build"
             },
             {
@@ -53883,7 +53883,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.21.10"
+        "version": "0.21.12"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -63884,7 +63884,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -76862,7 +76862,7 @@
     "rust_decimal 1.30.0",
     "rust_decimal_macros 1.30.0",
     "rustc-hash 1.1.0",
-    "rustls 0.21.10",
+    "rustls 0.21.12",
     "rustls 0.22.2",
     "rustls-native-certs 0.7.0",
     "rustls-pemfile 1.0.3",
