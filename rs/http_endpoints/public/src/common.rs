@@ -140,7 +140,7 @@ fn cbor_content_type(headers: &HeaderMap) -> bool {
         return false;
     };
 
-    content_type.to_lowercase() == "application/cbor"
+    content_type.to_lowercase() == CONTENT_TYPE_CBOR
 }
 
 #[async_trait::async_trait]
