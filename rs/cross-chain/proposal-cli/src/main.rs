@@ -6,8 +6,7 @@ mod proposal;
 use crate::candid::encode_upgrade_args;
 use crate::canister::TargetCanister;
 use crate::git::{GitCommitHash, GitRepository};
-use crate::proposal::UpgradeProposalTemplate;
-use askama::Template;
+use crate::proposal::{InstallProposalTemplate, ProposalTemplate, UpgradeProposalTemplate};
 use clap::{Parser, Subcommand};
 use std::fs;
 use std::io::Write;
@@ -38,6 +37,24 @@ enum Commands {
         to: GitCommitHash,
 
         /// Override default empty upgrade args.
+        #[arg(long)]
+        args: Option<String>,
+
+        /// Output directory where generated files will be written
+        #[arg(short, long)]
+        output_dir: PathBuf,
+    },
+    /// install a canister
+    #[command(arg_required_else_help = true)]
+    Install {
+        /// The canister to install
+        canister: TargetCanister,
+
+        /// The git commit hash at which the canister should be installed
+        #[arg(long)]
+        at: GitCommitHash,
+
+        /// Override default empty initialization args.
         #[arg(long)]
         args: Option<String>,
 
@@ -81,10 +98,42 @@ fn main() {
 
             write_to_disk(output_dir, proposal, &ic_repo);
         }
+        Commands::Install {
+            canister,
+            at,
+            args,
+            output_dir,
+        } => {
+            let mut ic_repo = GitRepository::clone_ic();
+
+            ic_repo.checkout(&at);
+            let install_args = encode_upgrade_args(
+                &ic_repo.candid_file(&canister),
+                args.unwrap_or(canister.default_upgrade_args()),
+            );
+            let canister_id = ic_repo.parse_canister_id(&canister);
+            let compressed_wasm_hash = ic_repo.build_canister_artifact(&canister);
+            let output_dir = output_dir.join(canister.to_string()).join(at.to_string());
+
+            let proposal = InstallProposalTemplate {
+                canister,
+                at,
+                compressed_wasm_hash,
+                canister_id,
+                install_args,
+            };
+
+            write_to_disk(output_dir, proposal, &ic_repo);
+        }
     }
 }
 
-fn write_to_disk(output_dir: PathBuf, proposal: UpgradeProposalTemplate, ic_repo: &GitRepository) {
+fn write_to_disk<P: Into<ProposalTemplate>>(
+    output_dir: PathBuf,
+    proposal: P,
+    ic_repo: &GitRepository,
+) {
+    let proposal = proposal.into();
     if output_dir.exists() {
         fs::remove_dir_all(&output_dir)
             .unwrap_or_else(|_| panic!("failed to remove {:?}", output_dir));
@@ -94,9 +143,7 @@ fn write_to_disk(output_dir: PathBuf, proposal: UpgradeProposalTemplate, ic_repo
     let args_file_path = output_dir.join("args.bin");
     let mut args_file = fs::File::create(&args_file_path)
         .unwrap_or_else(|_| panic!("failed to create {:?}", args_file_path));
-    args_file
-        .write_all(proposal.upgrade_args.upgrade_args_bin())
-        .unwrap();
+    proposal.write_bin_args(&mut args_file);
     println!(
         "Binary upgrade args written to '{}'",
         args_file_path.display()
@@ -105,19 +152,17 @@ fn write_to_disk(output_dir: PathBuf, proposal: UpgradeProposalTemplate, ic_repo
     let args_file_path = output_dir.join("args.hex");
     let mut args_file = fs::File::create(&args_file_path)
         .unwrap_or_else(|_| panic!("failed to create {:?}", args_file_path));
-    args_file
-        .write_all(proposal.upgrade_args.upgrade_args_hex().as_bytes())
-        .unwrap();
+    proposal.write_hex_args(&mut args_file);
     println!(
         "Hexadecimal upgrade args written to '{}'",
         args_file_path.display()
     );
 
-    let artifact = output_dir.join(proposal.canister.artifact_file_name());
-    ic_repo.copy_file(&proposal.canister.artifact(), &artifact);
+    let artifact = output_dir.join(proposal.target_canister().artifact_file_name());
+    ic_repo.copy_file(&proposal.target_canister().artifact(), &artifact);
     println!("Artifact written to '{}'", artifact.display());
 
-    let proposal = proposal.render().expect("failed to render proposal");
+    let proposal = proposal.render();
     let proposal_summary = output_dir.join("summary.md");
     let mut summary_file = fs::File::create(&proposal_summary)
         .unwrap_or_else(|_| panic!("failed to create {:?}", proposal_summary));

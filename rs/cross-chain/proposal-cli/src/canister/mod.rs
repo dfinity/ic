@@ -18,6 +18,7 @@ pub enum TargetCanister {
     CkEthIndex,
     CkEthLedger,
     CkEthMinter,
+    LedgerSuiteOrchestrator,
 }
 
 impl TargetCanister {
@@ -28,6 +29,7 @@ impl TargetCanister {
             TargetCanister::CkBtcKyt => "kyt",
             TargetCanister::CkBtcLedger | TargetCanister::CkEthLedger => "ledger",
             TargetCanister::CkBtcMinter | TargetCanister::CkEthMinter => "minter",
+            TargetCanister::LedgerSuiteOrchestrator => "orchestrator",
         }
     }
 
@@ -48,6 +50,9 @@ impl TargetCanister {
             }
             TargetCanister::CkEthMinter => {
                 PathBuf::from("rs/ethereum/cketh/minter/cketh_minter.did")
+            }
+            TargetCanister::LedgerSuiteOrchestrator => {
+                PathBuf::from("rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator.did")
             }
         }
     }
@@ -71,6 +76,9 @@ impl TargetCanister {
             TargetCanister::CkEthIndex => "ic-icrc1-index-ng-u256.wasm.gz",
             TargetCanister::CkEthLedger => "ic-icrc1-ledger-u256.wasm.gz",
             TargetCanister::CkEthMinter => "ic-cketh-minter.wasm.gz",
+            TargetCanister::LedgerSuiteOrchestrator => {
+                "ic-ledger-suite-orchestrator-canister.wasm.gz"
+            }
         }
     }
 
@@ -86,7 +94,8 @@ impl TargetCanister {
             TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
-            | TargetCanister::CkEthMinter => {
+            | TargetCanister::CkEthMinter
+            | TargetCanister::LedgerSuiteOrchestrator => {
                 PathBuf::from("rs/ethereum/cketh/mainnet/canister_ids.json")
             }
         }
@@ -114,6 +123,7 @@ impl FromStr for TargetCanister {
             ["cketh", "index"] => Ok(TargetCanister::CkEthIndex),
             ["cketh", "ledger"] => Ok(TargetCanister::CkEthLedger),
             ["cketh", "minter"] => Ok(TargetCanister::CkEthMinter),
+            ["ckerc20", "orchestrator"] => Ok(TargetCanister::LedgerSuiteOrchestrator),
             _ => Err(format!("Unknown canister name: {}", canister)),
         }
     }
@@ -131,6 +141,7 @@ impl Display for TargetCanister {
             TargetCanister::CkEthIndex => write!(f, "ckETH index"),
             TargetCanister::CkEthLedger => write!(f, "ckETH ledger"),
             TargetCanister::CkEthMinter => write!(f, "ckETH minter"),
+            TargetCanister::LedgerSuiteOrchestrator => write!(f, "ledger suite orchestrator"),
         }
     }
 }
