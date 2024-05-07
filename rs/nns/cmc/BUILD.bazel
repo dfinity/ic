@@ -7,6 +7,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/tree_hash",
+    "//rs/nervous_system/common",
     "//rs/nervous_system/governance",
     "//rs/nns/common",
     "//rs/nns/constants",
