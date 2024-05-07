@@ -3,7 +3,7 @@ name: CI PR Only
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened]
+    types: [opened, synchronize, reopened]
 
 permissions: read-all
 

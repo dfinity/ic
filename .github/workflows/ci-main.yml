@@ -124,7 +124,7 @@ jobs:
           bazel clean
         #  rm -rf "${CI_PROJECT_DIR}/" # this doesn't work, TODO: figure out if and where data gets stored
   bazel-test-darwin-x86-64:
-    name: Bazel Test Darwin X86-64
+    name: Bazel Test Darwin x86-64
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' && github.event_name != 'pull_request' && github.event_name != 'merge_group' }} # disable until we have more macos runners
     runs-on:
@@ -154,7 +154,7 @@ jobs:
           if which docker-bin 2>/dev/null; then
               docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
           fi
-      - name: Run Bazel Test Darwin X86-64
+      - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
         if: steps.filter.outputs.bazel-test-darwin-x86-64 != 'false'
         uses: ./.github/actions/bazel-test-all/
