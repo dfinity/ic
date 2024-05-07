@@ -769,27 +769,8 @@ impl Neuron {
     /// WhenDissolvedTimestampSeconds(now()), but we didn't. This could be changed for new Neurons,
     /// but there is no intention to do that (yet).
     pub fn dissolved_at_timestamp_seconds(&self) -> Option<u64> {
-        use DissolveState::{DissolveDelaySeconds, WhenDissolvedTimestampSeconds};
-        match self.dissolve_state {
-            None => None,
-            Some(WhenDissolvedTimestampSeconds(result)) => Some(result),
-            Some(DissolveDelaySeconds(_)) => None,
-        }
-    }
-
-    /// Returns an enum representing the dissolve state and age of a neuron.
-    pub fn dissolve_state_and_age(&self) -> DissolveStateAndAge {
-        DissolveStateAndAge::from(StoredDissolvedStateAndAge {
-            dissolve_state: self.dissolve_state.clone(),
-            aging_since_timestamp_seconds: self.aging_since_timestamp_seconds,
-        })
-    }
-
-    /// Sets a neuron's dissolve state and age.
-    pub fn set_dissolve_state_and_age(&mut self, state_and_age: DissolveStateAndAge) {
-        let stored = StoredDissolvedStateAndAge::from(state_and_age);
-        self.dissolve_state = stored.dissolve_state;
-        self.aging_since_timestamp_seconds = stored.aging_since_timestamp_seconds;
+        self.dissolve_state_and_age()
+            .dissolved_at_timestamp_seconds()
     }
 
     pub fn subtract_staked_maturity(&mut self, amount_e8s: u64) {
