@@ -293,7 +293,7 @@ impl From<ThresholdEcdsaError> for IdkgCreateDealingInternalError {
     }
 }
 
-/// Create a dealing for threshold ECDSA
+/// Create an IDKG dealing
 pub fn create_dealing(
     algorithm_id: ic_types::crypto::AlgorithmId,
     associated_data: &[u8],
