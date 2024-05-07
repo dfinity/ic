@@ -10,6 +10,7 @@ documentation.workspace = true
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
+axum-server = { version = "^0.6.0", features = ["tls-rustls"] }
 bytes = { workspace = true }
 byte-unit = "4.0.14"
 cfg-if = "1.0.0"
@@ -50,9 +51,7 @@ rand = "0.8.3"
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
-strum = { workspace = true }
 tempfile = "3.1.0"
-thiserror = { workspace = true }
 threadpool = "1.8.1"
 tokio = { workspace = true }
 tokio-io-timeout = "1.2.0"
