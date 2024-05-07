@@ -3,6 +3,7 @@ use discower_bowndary::{
     fetch::{NodesFetcher, NodesFetcherImpl},
     node::Node,
     route_provider::HealthCheckRouteProvider,
+    snapshot_health_based::HealthBasedSnapshot,
 };
 use k256::SecretKey;
 
@@ -265,7 +266,9 @@ pub fn decentralization_test(env: TestEnv) {
         let check_interval = Duration::from_secs(1);
         let checker = Arc::new(HealthCheckImpl::new(http_client.clone(), health_timeout));
         let seed_nodes = vec![Node::new("api1.com"), Node::new("api2.com")];
+        let snapshot = HealthBasedSnapshot::new();
         let route_provider = Arc::new(HealthCheckRouteProvider::new(
+            snapshot,
             Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
             fetch_interval,
             Arc::clone(&checker) as Arc<dyn HealthCheck>,

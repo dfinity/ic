@@ -6,6 +6,7 @@ use discower_bowndary::{
     node::Node,
     route_provider::HealthCheckRouteProvider,
     snapshot::IC0_SEED_DOMAIN,
+    snapshot_health_based::HealthBasedSnapshot,
 };
 use ic_agent::{
     agent::http_transport::{reqwest_transport::reqwest::Client, ReqwestTransport},
@@ -34,7 +35,9 @@ async fn main() {
         let health_timeout = Duration::from_secs(3);
         let checker = Arc::new(HealthCheckImpl::new(client.clone(), health_timeout));
         let check_interval = Duration::from_secs(1); // periodicity of checking node's health
+        let snapshot = HealthBasedSnapshot::new();
         HealthCheckRouteProvider::new(
+            snapshot,
             Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
             fetch_interval,
             Arc::clone(&checker) as Arc<dyn HealthCheck>,

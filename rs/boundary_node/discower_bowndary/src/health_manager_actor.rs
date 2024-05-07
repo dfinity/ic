@@ -17,10 +17,10 @@ const SERVICE_NAME: &str = "HealthManagerActor";
 
 const CHANNEL_BUFFER: usize = 128;
 
-pub struct HealthManagerActor {
+pub struct HealthManagerActor<S> {
     checker: Arc<dyn HealthCheck>,
     check_period: Duration,
-    snapshot: GlobalShared<Snapshot>,
+    snapshot: GlobalShared<S>,
     fetch_receiver: ReceiverWatch<FetchedNodes>,
     check_sender: SenderMpsc<NodeHealthChanged>,
     check_receiver: ReceiverMpsc<NodeHealthChanged>,
@@ -29,11 +29,14 @@ pub struct HealthManagerActor {
     nodes_tracker: TaskTracker,
 }
 
-impl HealthManagerActor {
+impl<S> HealthManagerActor<S>
+where
+    S: Snapshot,
+{
     pub fn new(
         checker: Arc<dyn HealthCheck>,
         check_period: Duration,
-        snapshot: GlobalShared<Snapshot>,
+        snapshot: GlobalShared<S>,
         fetch_receiver: ReceiverWatch<FetchedNodes>,
         token: CancellationToken,
     ) -> Self {
@@ -80,7 +83,7 @@ impl HealthManagerActor {
 
     async fn handle_health_changed(&mut self, msg: NodeHealthChanged) {
         let current_snapshot = self.snapshot.load_full();
-        let mut new_snapshot: Snapshot = (*current_snapshot).clone();
+        let mut new_snapshot = (*current_snapshot).clone();
         if let Err(err) = new_snapshot.update_node_health(&msg.node, msg.health) {
             error!("{SERVICE_NAME}: failed to update snapshot: {err:?}");
             return;
@@ -103,7 +106,7 @@ impl HealthManagerActor {
         }
         debug!("{SERVICE_NAME}: fetched nodes received {:?}", nodes);
         let current_snapshot = self.snapshot.load_full();
-        let mut new_snapshot: Snapshot = (*current_snapshot).clone();
+        let mut new_snapshot = (*current_snapshot).clone();
         let sync_result = new_snapshot.sync_with(&nodes);
         if let Ok(NodesChanged(true)) = sync_result {
             self.snapshot.store(Arc::new(new_snapshot));

@@ -2,9 +2,10 @@ use std::time::Instant;
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use crate::messages::FetchedNodes;
+use crate::snapshot::Snapshot;
 use crate::{
     check::HealthCheck, fetch::NodesFetcher, fetch_actor::NodesFetchActor,
-    health_manager_actor::HealthManagerActor, node::Node, snapshot::Snapshot, types::GlobalShared,
+    health_manager_actor::HealthManagerActor, node::Node, types::GlobalShared,
 };
 use arc_swap::ArcSwap;
 use ic_agent::{agent::http_transport::route_provider::RouteProvider, AgentError};
@@ -20,29 +21,36 @@ const HEALTHY_SEED_CHECK_TIMEOUT: Duration = Duration::from_millis(1000);
 
 /// Main orchestrator.
 #[derive(Debug)]
-pub struct HealthCheckRouteProvider {
+pub struct HealthCheckRouteProvider<S> {
     fetcher: Arc<dyn NodesFetcher>,
     fetch_period: Duration,
     checker: Arc<dyn HealthCheck>,
     check_period: Duration,
-    snapshot: GlobalShared<Snapshot>,
+    snapshot: GlobalShared<S>,
     tracker: TaskTracker,
     token: CancellationToken,
     seeds: Vec<Node>,
 }
 
-impl RouteProvider for HealthCheckRouteProvider {
+impl<S> RouteProvider for HealthCheckRouteProvider<S>
+where
+    S: Snapshot + 'static,
+{
     fn route(&self) -> Result<Url, AgentError> {
         let snapshot = self.snapshot.load();
         let node = snapshot.next().ok_or_else(|| {
             AgentError::RouteProviderError("No healthy API domains found for routing.".to_string())
         })?;
-        Ok(node.into())
+        Ok(node.to_routing_url())
     }
 }
 
-impl HealthCheckRouteProvider {
+impl<S> HealthCheckRouteProvider<S>
+where
+    S: Snapshot + 'static,
+{
     pub fn new(
+        snapshot: S,
         fetcher: Arc<dyn NodesFetcher>,
         fetch_period: Duration,
         checker: Arc<dyn HealthCheck>,
@@ -55,7 +63,7 @@ impl HealthCheckRouteProvider {
             checker,
             check_period,
             seeds,
-            snapshot: Arc::new(ArcSwap::from_pointee(Snapshot::new())),
+            snapshot: Arc::new(ArcSwap::from_pointee(snapshot)),
             tracker: TaskTracker::new(),
             token: CancellationToken::new(),
         }
@@ -107,6 +115,8 @@ impl HealthCheckRouteProvider {
         info!("{SERVICE_NAME}: NodesFetchActor and HealthManagerActor started successfully");
     }
 
+    // TODO: active polling is not optimal, it's better to await for notification.
+    // However, since this phase lasts for only a short transitional period (HEALTHY_SEED_CHECK_TIMEOUT) this could be acceptable.
     async fn try_await_first_healthy_seed(&self) {
         let now = Instant::now();
         while now.elapsed() < HEALTHY_SEED_CHECK_TIMEOUT {
@@ -147,6 +157,7 @@ mod tests {
     use crate::fetch::NodesFetcher;
     use crate::fetcher_mock::NodesFetchMock;
     use crate::snapshot::IC0_SEED_DOMAIN;
+    use crate::snapshot_health_based::HealthBasedSnapshot;
     use crate::test_helpers::{assert_routed_domains, route_n_times};
 
     static TRACING_INIT: Once = Once::new();
@@ -168,7 +179,9 @@ mod tests {
         let checker = Arc::new(NodeHealthCheckerMock::new());
         checker.modify_domains_health(vec![(IC0_SEED_DOMAIN, true)]);
         let check_interval = Duration::from_secs(1); // periodicity of checking node's health
+        let snapshot = HealthBasedSnapshot::new();
         let route_provider = Arc::new(HealthCheckRouteProvider::new(
+            snapshot,
             Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
             fetch_interval,
             Arc::clone(&checker) as Arc<dyn HealthCheck>,
@@ -249,7 +262,9 @@ mod tests {
         let checker = Arc::new(NodeHealthCheckerMock::new());
         checker.modify_domains_health(vec![(IC0_SEED_DOMAIN, true)]);
         let check_interval = Duration::from_secs(1); // periodicity of checking node's health
+        let snapshot = HealthBasedSnapshot::new();
         let route_provider = Arc::new(HealthCheckRouteProvider::new(
+            snapshot,
             Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
             fetch_interval,
             Arc::clone(&checker) as Arc<dyn HealthCheck>,
@@ -288,7 +303,9 @@ mod tests {
         // No healthy seed nodes present, this should lead to errors.
         checker.modify_domains_health(vec![]);
         let check_interval = Duration::from_secs(1); // periodicity of checking node's health
+        let snapshot = HealthBasedSnapshot::new();
         let route_provider = Arc::new(HealthCheckRouteProvider::new(
+            snapshot,
             Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
             fetch_interval,
             Arc::clone(&checker) as Arc<dyn HealthCheck>,
@@ -322,7 +339,9 @@ mod tests {
         // No healthy seeds present, this should lead to errors.
         checker.modify_domains_health(vec![(IC0_SEED_DOMAIN, false), ("api1.com", false)]);
         let check_interval = Duration::from_secs(1); // periodicity of checking node's health
+        let snapshot = HealthBasedSnapshot::new();
         let route_provider = Arc::new(HealthCheckRouteProvider::new(
+            snapshot,
             Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
             fetch_interval,
             Arc::clone(&checker) as Arc<dyn HealthCheck>,
@@ -363,7 +382,9 @@ mod tests {
         // One healthy seed is present, it should be discovered during the transient time.
         checker.modify_domains_health(vec![(IC0_SEED_DOMAIN, true), ("api1.com", false)]);
         let check_interval = Duration::from_secs(1); // periodicity of checking node's health
+        let snapshot = HealthBasedSnapshot::new();
         let route_provider = Arc::new(HealthCheckRouteProvider::new(
+            snapshot,
             Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
             fetch_interval,
             Arc::clone(&checker) as Arc<dyn HealthCheck>,
@@ -397,7 +418,9 @@ mod tests {
         let checker = Arc::new(NodeHealthCheckerMock::new());
         checker.modify_domains_health(vec![(IC0_SEED_DOMAIN, true)]);
         let check_interval = Duration::from_secs(1); // periodicity of checking node's health
+        let snapshot = HealthBasedSnapshot::new();
         let route_provider = Arc::new(HealthCheckRouteProvider::new(
+            snapshot,
             Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
             fetch_interval,
             Arc::clone(&checker) as Arc<dyn HealthCheck>,
