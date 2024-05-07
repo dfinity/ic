@@ -8,16 +8,17 @@ use crate::response::{
 use crate::{
     assert_reply, CkEthSetup, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_NUMBER,
     DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
-    DEFAULT_PRINCIPAL_ID, EXPECTED_BALANCE, MAX_TICKS, MINTER_ADDRESS,
+    DEFAULT_PRINCIPAL_ID, EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED, MAX_TICKS,
+    MINTER_ADDRESS,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ethers_core::utils::{hex, rlp};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cketh_minter::endpoints::ckerc20::RetrieveErc20Request;
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, EventSource};
-use ic_cketh_minter::endpoints::RetrieveEthStatus::Pending;
 use ic_cketh_minter::endpoints::{
     EthTransaction, RetrieveEthRequest, RetrieveEthStatus, TxFinalizedStatus, WithdrawalError,
+    WithdrawalSearchParameter, WithdrawalStatus,
 };
 use ic_cketh_minter::{
     PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
@@ -27,6 +28,7 @@ use ic_ethereum_types::Address;
 use ic_state_machine_tests::{MessageId, StateMachine};
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint, Transaction as LedgerTransaction};
+use num_traits::ToPrimitive;
 use serde_json::json;
 use std::convert::identity;
 use std::str::FromStr;
@@ -392,13 +394,34 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
         self.withdrawal_request.withdrawal_id()
     }
 
-    pub fn start_processing_withdrawals(self) -> FeeHistoryProcessWithdrawal<T, Req> {
+    fn assert_retrieve_eth_status(&self, status: RetrieveEthStatus) {
         assert_eq!(
             self.setup
                 .as_ref()
                 .retrieve_eth_status(self.withdrawal_id()),
-            Pending
+            status,
+            "BUG: unexpected retrieve_eth_status while processing withdrawal"
         );
+    }
+
+    fn assert_withdrawal_status(&self, withdrawal_status: WithdrawalStatus) {
+        assert_eq!(
+            self.setup
+                .as_ref()
+                .withdrawal_status(&WithdrawalSearchParameter::ByWithdrawalId(
+                    self.withdrawal_request.withdrawal_id().0.to_u64().unwrap()
+                ))
+                .into_iter()
+                .map(|x| x.status)
+                .collect::<Vec<_>>(),
+            vec![withdrawal_status],
+            "BUG: unexpected withdrawal_status while processing withdrawal"
+        );
+    }
+
+    pub fn start_processing_withdrawals(self) -> FeeHistoryProcessWithdrawal<T, Req> {
+        self.assert_retrieve_eth_status(RetrieveEthStatus::Pending);
+        self.assert_withdrawal_status(WithdrawalStatus::Pending);
         self.setup
             .as_ref()
             .env
@@ -426,7 +449,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
     ) -> TransactionReceiptProcessWithdrawal<T, Req> {
         self.start_processing_withdrawals()
             .retrieve_fee_history(params.override_rpc_eth_fee_history)
-            .expect_status(RetrieveEthStatus::Pending)
+            .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending)
             .retrieve_latest_transaction_count(params.override_rpc_latest_eth_get_transaction_count)
             .expect_status(RetrieveEthStatus::TxCreated)
             .send_raw_transaction(params.override_rpc_eth_send_raw_transaction)
@@ -449,7 +472,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
         };
         self.start_processing_withdrawals()
             .retrieve_fee_history(identity)
-            .expect_status(RetrieveEthStatus::Pending)
+            .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending)
             .retrieve_latest_transaction_count(identity)
             .expect_status(RetrieveEthStatus::TxCreated)
             .send_raw_transaction_expecting(&sent_tx)
@@ -462,7 +485,10 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
             .expect_pending_transaction()
             .retry_processing_withdrawals()
             .retrieve_fee_history(identity)
-            .expect_status(RetrieveEthStatus::TxSent(transaction.clone()))
+            .expect_status(
+                RetrieveEthStatus::TxSent(transaction.clone()),
+                WithdrawalStatus::TxSent(transaction.clone()),
+            )
             .retrieve_latest_transaction_count(|mock| {
                 mock.modify_response_for_all(&mut |count: &mut String| {
                     *count = transaction_count_response(0)
@@ -478,7 +504,10 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
             })
             .expect_finalized_transaction()
             .retrieve_transaction_receipt(identity)
-            .expect_finalized_status(TxFinalizedStatus::Success(transaction))
+            .expect_finalized_status(TxFinalizedStatus::Success {
+                transaction_hash: transaction.transaction_hash.clone(),
+                effective_transaction_fee: Some((GAS_USED * EFFECTIVE_GAS_PRICE).into()),
+            })
     }
 
     pub fn process_withdrawal_with_resubmission_and_increased_price<
@@ -504,7 +533,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
 
         self.start_processing_withdrawals()
             .retrieve_fee_history(identity)
-            .expect_status(RetrieveEthStatus::Pending)
+            .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending)
             .retrieve_latest_transaction_count(identity)
             .expect_status(RetrieveEthStatus::TxCreated)
             .send_raw_transaction_expecting(&first_sent_tx)
@@ -517,7 +546,10 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
             .expect_pending_transaction()
             .retry_processing_withdrawals()
             .retrieve_fee_history(|mock| mock.modify_response_for_all(change_fee_history))
-            .expect_status(RetrieveEthStatus::TxSent(transaction))
+            .expect_status(
+                RetrieveEthStatus::TxSent(transaction.clone()),
+                WithdrawalStatus::TxSent(transaction),
+            )
             .retrieve_latest_transaction_count(|mock| {
                 mock.modify_response_for_all(&mut |count: &mut String| {
                     *count = transaction_count_response(0)
@@ -540,7 +572,10 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
                 mock.with_request_params(json!([resubmitted_tx_hash]))
                     .respond_for_all_with(transaction_receipt(format!("{:?}", resubmitted_tx_hash)))
             })
-            .expect_finalized_status(TxFinalizedStatus::Success(resubmitted_transaction))
+            .expect_finalized_status(TxFinalizedStatus::Success {
+                transaction_hash: resubmitted_transaction.transaction_hash.clone(),
+                effective_transaction_fee: Some((GAS_USED * EFFECTIVE_GAS_PRICE).into()),
+            })
     }
 }
 
@@ -566,14 +601,25 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> FeeHistoryProcessWithdrawal<T, 
 
     pub fn expect_status(
         self,
-        status: RetrieveEthStatus,
+        retrieve_eth_status: RetrieveEthStatus,
+        withdrawal_status: WithdrawalStatus,
     ) -> LatestTransactionCountProcessWithdrawal<T, Req> {
         assert_eq!(
             self.setup
                 .as_ref()
                 .retrieve_eth_status(self.withdrawal_request.withdrawal_id()),
-            status,
-            "BUG: unexpected status while processing withdrawal"
+            retrieve_eth_status,
+        );
+        assert_eq!(
+            self.setup
+                .as_ref()
+                .withdrawal_status(&WithdrawalSearchParameter::ByWithdrawalId(
+                    self.withdrawal_request.withdrawal_id().0.to_u64().unwrap()
+                ))
+                .into_iter()
+                .map(|x| x.status)
+                .collect::<Vec<_>>(),
+            vec![withdrawal_status],
         );
         LatestTransactionCountProcessWithdrawal {
             setup: self.setup,

@@ -369,8 +369,7 @@ impl State {
         let tx_fee = receipt.effective_transaction_fee();
         let tx = self
             .eth_transactions
-            .finalized_tx
-            .get_alt(withdrawal_id)
+            .get_finalized_transaction(withdrawal_id)
             .expect("BUG: missing finalized transaction");
         let charged_tx_fee = tx.transaction_price().max_transaction_fee();
         let unspent_tx_fee = charged_tx_fee.checked_sub(tx_fee).expect(

@@ -7,7 +7,7 @@ use ic_cketh_minter::endpoints::events::{
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
 use ic_cketh_minter::endpoints::{
     CandidBlockTag, EthTransaction, GasFeeEstimate, MinterInfo, RetrieveEthStatus,
-    TxFinalizedStatus, WithdrawalError,
+    TxFinalizedStatus, WithdrawalError, WithdrawalStatus,
 };
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::memo::{BurnMemo, MintMemo};
@@ -27,8 +27,9 @@ use ic_cketh_test_utils::{
     DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS,
     DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
     DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, DEFAULT_WITHDRAWAL_TRANSACTION_HASH,
-    ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL,
-    MAX_ETH_LOGS_BLOCK_RANGE, MINTER_ADDRESS, RECEIVED_ETH_EVENT_TOPIC,
+    EFFECTIVE_GAS_PRICE, ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE, GAS_USED,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_ETH_LOGS_BLOCK_RANGE, MINTER_ADDRESS,
+    RECEIVED_ETH_EVENT_TOPIC,
 };
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -77,9 +78,10 @@ fn should_deposit_and_withdraw() {
 
     let cketh = cketh
         .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
-        .expect_finalized_status(TxFinalizedStatus::Success(EthTransaction {
+        .expect_finalized_status(TxFinalizedStatus::Success {
             transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
-        }))
+            effective_transaction_fee: Some((GAS_USED * EFFECTIVE_GAS_PRICE).into()),
+        })
         .call_ledger_get_transaction(withdrawal_id.clone())
         .expect_burn(Burn {
             amount: withdrawal_amount.clone(),
@@ -368,7 +370,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
                 },
             )
         })
-        .expect_status(RetrieveEthStatus::Pending);
+        .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending);
 }
 
 #[test]
