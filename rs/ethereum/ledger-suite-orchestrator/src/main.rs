@@ -2,7 +2,9 @@ use ic_cdk_macros::{init, post_upgrade, query};
 use ic_ledger_suite_orchestrator::candid::Erc20Contract as CandidErc20Contract;
 use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg, OrchestratorInfo};
 use ic_ledger_suite_orchestrator::lifecycle;
-use ic_ledger_suite_orchestrator::scheduler::{encode_orchestrator_metrics, Erc20Token};
+use ic_ledger_suite_orchestrator::scheduler::{
+    encode_orchestrator_metrics, Erc20Token, IC_CANISTER_RUNTIME,
+};
 use ic_ledger_suite_orchestrator::state::read_state;
 use ic_ledger_suite_orchestrator::storage::read_wasm_store;
 use ic_ledger_suite_orchestrator::storage::TASKS;
@@ -31,7 +33,7 @@ fn get_orchestrator_info() -> OrchestratorInfo {
 
 #[export_name = "canister_global_timer"]
 fn timer() {
-    ic_ledger_suite_orchestrator::scheduler::timer();
+    ic_ledger_suite_orchestrator::scheduler::timer(IC_CANISTER_RUNTIME);
 }
 
 #[init]

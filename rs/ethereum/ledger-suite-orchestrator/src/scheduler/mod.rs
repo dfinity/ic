@@ -19,7 +19,6 @@ use crate::storage::{
 };
 use candid::{CandidType, Encode, Nat, Principal};
 use futures::future;
-use ic0;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
@@ -41,7 +40,7 @@ const SEC_NANOS: u64 = 1_000_000_000;
 
 const THREE_GIGA_BYTES: u64 = 3_221_225_472;
 
-const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime {};
+pub const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime {};
 
 thread_local! {
     static LAST_GLOBAL_TIMER: Cell<u64> = Cell::default();
@@ -76,14 +75,9 @@ pub struct TaskExecution {
     pub task_type: Task,
 }
 
-fn set_global_timer(ts: u64) {
+fn set_global_timer<R: CanisterRuntime>(ts: u64, runtime: &R) {
     LAST_GLOBAL_TIMER.with(|v| v.set(ts));
-
-    // SAFETY: setting the global timer is always safe; it does not
-    // mutate any canister memory.
-    unsafe {
-        ic0::global_timer_set(ts as i64);
-    }
+    runtime.global_timer_set(ts);
 }
 
 impl TaskQueue {
@@ -149,25 +143,25 @@ impl TaskQueue {
 }
 
 /// Schedules a task for execution after the given delay.
-pub fn schedule_after(delay: Duration, work: Task) {
-    let now_nanos = ic_cdk::api::time();
+pub fn schedule_after<R: CanisterRuntime>(delay: Duration, work: Task, runtime: &R) {
+    let now_nanos = runtime.time();
     let execute_at_ns = now_nanos.saturating_add(delay.as_secs().saturating_mul(SEC_NANOS));
 
     let execution_time = TASKS.with(|t| t.borrow_mut().schedule_at(execute_at_ns, work));
-    set_global_timer(execution_time);
+    set_global_timer(execution_time, runtime);
 }
 
 /// Schedules a task for immediate execution.
-pub fn schedule_now(work: Task) {
-    schedule_after(Duration::from_secs(0), work)
+pub fn schedule_now<R: CanisterRuntime>(work: Task, runtime: &R) {
+    schedule_after(Duration::from_secs(0), work, runtime)
 }
 
 /// Dequeues the next task ready for execution from the minter task queue.
-pub fn pop_if_ready() -> Option<TaskExecution> {
-    let now = ic_cdk::api::time();
+pub fn pop_if_ready<R: CanisterRuntime>(runtime: &R) -> Option<TaskExecution> {
+    let now = runtime.time();
     let task = TASKS.with(|t| t.borrow_mut().pop_if_ready(now));
     if let Some(next_execution) = TASKS.with(|t| t.borrow().next_execution_timestamp()) {
-        set_global_timer(next_execution);
+        set_global_timer(next_execution, runtime);
     }
     task
 }
@@ -177,38 +171,45 @@ pub fn global_timer() -> u64 {
     LAST_GLOBAL_TIMER.with(|v| v.get())
 }
 
-pub fn timer() {
+pub fn timer<R: CanisterRuntime + 'static>(runtime: R) {
+    if let Some(task) = pop_if_ready(&runtime) {
+        ic_cdk::spawn(run_task(task, runtime));
+    }
+}
+
+async fn run_task<R: CanisterRuntime>(task: TaskExecution, runtime: R) {
     const RETRY_FREQUENCY: Duration = Duration::from_secs(5);
     const ONE_HOUR: Duration = Duration::from_secs(60 * 60);
 
-    if let Some(task) = pop_if_ready() {
-        ic_cdk::spawn(async {
-            let _guard = match crate::guard::TimerGuard::new(task.task_type.clone()) {
-                Some(guard) => guard,
-                None => return,
-            };
-            if task.task_type.is_periodic() {
-                schedule_after(ONE_HOUR, task.task_type.clone());
-            }
-            let start = ic_cdk::api::time();
-            let result = task.execute(&IC_CANISTER_RUNTIME).await;
-            let end = ic_cdk::api::time();
-            observe_task_duration(&task.task_type, &result, start, end);
+    if task.task_type.is_periodic() {
+        schedule_after(ONE_HOUR, task.task_type.clone(), &runtime);
+    }
+    let _guard = match crate::guard::TimerGuard::new(task.task_type.clone()) {
+        Some(guard) => guard,
+        None => return,
+    };
+    let start = runtime.time();
+    let result = task.execute(&runtime).await;
+    let end = runtime.time();
+    observe_task_duration(&task.task_type, &result, start, end);
 
-            match result {
-                Ok(()) => {
-                    log!(INFO, "task {:?} accomplished", task.task_type);
-                }
-                Err(e) => {
-                    if e.is_recoverable() {
-                        log!(INFO, "task {:?} failed: {:?}. Will retry later.", task, e);
-                        schedule_after(RETRY_FREQUENCY, task.task_type);
-                    } else {
-                        log!(INFO, "ERROR: task {:?} failed with unrecoverable error: {:?}. Task is discarded.", task, e);
-                    }
-                }
+    match result {
+        Ok(()) => {
+            log!(INFO, "task {:?} accomplished", task.task_type);
+        }
+        Err(e) => {
+            if e.is_recoverable() {
+                log!(INFO, "task {:?} failed: {:?}. Will retry later.", task, e);
+                schedule_after(RETRY_FREQUENCY, task.task_type, &runtime);
+            } else {
+                log!(
+                    INFO,
+                    "ERROR: task {:?} failed with unrecoverable error: {:?}. Task is discarded.",
+                    task,
+                    e
+                );
             }
-        });
+        }
     }
 }
 
@@ -524,10 +525,13 @@ async fn install_ledger_suite<R: CanisterRuntime>(
     read_state(|s| {
         let erc20_token = args.erc20_contract().clone();
         if let Some(&minter_id) = s.minter_id() {
-            schedule_now(Task::NotifyErc20Added {
-                erc20_token,
-                minter_id,
-            });
+            schedule_now(
+                Task::NotifyErc20Added {
+                    erc20_token,
+                    minter_id,
+                },
+                runtime,
+            );
         }
     });
     Ok(())

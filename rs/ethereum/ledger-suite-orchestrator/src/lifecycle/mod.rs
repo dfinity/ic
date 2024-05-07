@@ -1,6 +1,8 @@
 use crate::candid::{AddErc20Arg, InitArg, UpgradeArg};
 use crate::logs::INFO;
-use crate::scheduler::{schedule_now, InstallLedgerSuiteArgs, Task, UpgradeOrchestratorArgs};
+use crate::scheduler::{
+    schedule_now, InstallLedgerSuiteArgs, Task, UpgradeOrchestratorArgs, IC_CANISTER_RUNTIME,
+};
 use crate::state::{init_state, mutate_state, read_state, GitCommitHash, State};
 use crate::storage::{mutate_wasm_store, read_wasm_store, record_icrc1_ledger_suite_wasms};
 use ic_canister_log::log;
@@ -60,7 +62,7 @@ pub fn add_erc20(token: AddErc20Arg) {
         read_wasm_store(|w| InstallLedgerSuiteArgs::validate_add_erc20(s, w, token.clone()))
     }) {
         Ok(args) => {
-            schedule_now(Task::InstallLedgerSuite(args));
+            schedule_now(Task::InstallLedgerSuite(args), &IC_CANISTER_RUNTIME);
         }
         Err(e) => {
             ic_cdk::trap(&format!(
@@ -74,6 +76,6 @@ pub fn add_erc20(token: AddErc20Arg) {
 }
 
 pub fn setup_tasks_and_timers() {
-    schedule_now(Task::DiscoverArchives);
-    schedule_now(Task::MaybeTopUp);
+    schedule_now(Task::DiscoverArchives, &IC_CANISTER_RUNTIME);
+    schedule_now(Task::MaybeTopUp, &IC_CANISTER_RUNTIME);
 }
