@@ -408,6 +408,8 @@ async fn add_wasm_to_sns_wasm(
     let sns_wasm = SnsWasm {
         wasm: wasm.bytes(),
         canister_type: canister_type.into(),
+        // Will be automatically filled in by SNS Governance
+        proposal_id: None,
     };
     let sns_wasm = ensure_sns_wasm_gzipped(sns_wasm);
     let wasm_hash = sns_wasm.sha256_hash();

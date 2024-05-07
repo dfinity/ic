@@ -76,6 +76,7 @@ message SnsSpecificSnsUpgrade {
 message SnsWasm {
   bytes wasm = 1;
   SnsCanisterType canister_type = 2;
+  optional uint64 proposal_id = 3;
 }
 
 // The error response returned in response objects on failed or partially failed operations.
