@@ -483,6 +483,8 @@ pub struct EcdsaPayload {
     pub available_quadruples: ::prost::alloc::vec::Vec<AvailableQuadruple>,
     #[prost(message, repeated, tag = "4")]
     pub quadruples_in_creation: ::prost::alloc::vec::Vec<QuadrupleInProgress>,
+    #[prost(bool, tag = "16")]
+    pub generalized_pre_signatures: bool,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

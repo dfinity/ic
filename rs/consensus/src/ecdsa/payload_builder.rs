@@ -20,6 +20,7 @@ use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
+use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -203,10 +204,6 @@ fn create_summary_payload_helper(
     let mut new_key_transcripts = BTreeSet::new();
 
     for (key_id, key_transcript) in &ecdsa_payload.key_transcripts {
-        let MasterPublicKeyId::Ecdsa(key_id) = key_id else {
-            continue;
-        };
-
         let current_key_transcript = key_transcript.current.as_ref();
 
         let created_key_transcript =
@@ -270,7 +267,7 @@ fn create_summary_payload_helper(
         };
 
         key_transcripts.insert(
-            MasterPublicKeyId::Ecdsa(key_id.clone()),
+            key_id.clone(),
             key_transcript.update(created_key_transcript, next_in_creation),
         );
         if is_new_key_transcript {
@@ -282,18 +279,18 @@ fn create_summary_payload_helper(
     ecdsa_summary.key_transcripts = key_transcripts;
     ecdsa_summary.idkg_transcripts.clear();
 
-    // We keep available quadruples for now, even if the key transcript changed, as we don't know if
+    // We keep available pre-signatures for now, even if the key transcript changed, as we don't know if
     // they are part of ongoing signature requests. Instead we will purge them once the certified
     // state height catches up with the height of this summary block.
-    // We do purge the quadruples in creation, though.
+    // We do purge the pre-signatures in creation, though.
     ecdsa_summary
-        .quadruples_in_creation
-        .retain(|_, quadruple| !new_key_transcripts.contains(&quadruple.key_id));
+        .pre_signatures_in_creation
+        .retain(|_, pre_sig| !new_key_transcripts.contains(&pre_sig.key_id()));
     // This will clear the current ongoing reshares, and the execution requests will be restarted
     // with the new key and different transcript IDs.
-    ecdsa_summary
-        .ongoing_xnet_reshares
-        .retain(|request, _| !new_key_transcripts.contains(&request.key_id));
+    ecdsa_summary.ongoing_xnet_reshares.retain(|request, _| {
+        !new_key_transcripts.contains(&MasterPublicKeyId::Ecdsa(request.key_id.clone()))
+    });
 
     ecdsa_summary.uid_generator.update_height(height)?;
     update_summary_refs(height, &mut ecdsa_summary, block_reader)?;
@@ -612,10 +609,10 @@ pub(crate) fn create_data_payload_helper_2(
         if context
             .matched_quadruple
             .as_ref()
-            .is_some_and(|(qid, _)| ecdsa_payload.available_quadruples.contains_key(qid))
+            .is_some_and(|(qid, _)| ecdsa_payload.available_pre_signatures.contains_key(qid))
         {
             *matched_quadruples_per_key_id
-                .entry(context.key_id.clone())
+                .entry(MasterPublicKeyId::Ecdsa(context.key_id.clone()))
                 .or_insert(0) += 1;
         }
     }
@@ -690,6 +687,7 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
     use ic_types::batch::BatchPayload;
     use ic_types::consensus::dkg::{Dealings, Summary};
+    use ic_types::consensus::idkg::common::PreSignatureRef;
     use ic_types::consensus::idkg::EcdsaPayload;
     use ic_types::consensus::idkg::QuadrupleId;
     use ic_types::consensus::idkg::ReshareOfUnmaskedParams;
@@ -871,8 +869,8 @@ mod tests {
             ..EcdsaConfig::default()
         };
 
-        assert_eq!(ecdsa_payload.quadruples_in_creation.len(), 0);
-        assert_eq!(ecdsa_payload.available_quadruples.len(), 2);
+        assert_eq!(ecdsa_payload.pre_signatures_in_creation.len(), 0);
+        assert_eq!(ecdsa_payload.available_pre_signatures.len(), 2);
 
         create_data_payload_helper_2(
             &mut ecdsa_payload,
@@ -893,8 +891,8 @@ mod tests {
         )
         .unwrap();
 
-        let num_quadruples_in_creation = ecdsa_payload.quadruples_in_creation.len() as u32;
-        let num_available_quadruples = ecdsa_payload.available_quadruples.len() as u32;
+        let num_quadruples_in_creation = ecdsa_payload.pre_signatures_in_creation.len() as u32;
+        let num_available_quadruples = ecdsa_payload.available_pre_signatures.len() as u32;
         // The two matched quadruples remain
         // in available_quadruples.
         assert_eq!(num_available_quadruples, 2);
@@ -941,7 +939,7 @@ mod tests {
         ]);
 
         assert_eq!(ecdsa_payload.signature_agreements.len(), 0);
-        assert_eq!(ecdsa_payload.available_quadruples.len(), 2);
+        assert_eq!(ecdsa_payload.available_pre_signatures.len(), 2);
 
         let signature_builder = TestEcdsaSignatureBuilder::new();
         signatures::update_signature_agreements(
@@ -967,9 +965,13 @@ mod tests {
         );
 
         // The quadruple matched with the expired context should be deleted
-        assert_eq!(ecdsa_payload.available_quadruples.len(), 1);
+        assert_eq!(ecdsa_payload.available_pre_signatures.len(), 1);
         assert_eq!(
-            ecdsa_payload.available_quadruples.keys().next().unwrap(),
+            ecdsa_payload
+                .available_pre_signatures
+                .keys()
+                .next()
+                .unwrap(),
             &matched_quadruple_id
         );
     }
@@ -999,7 +1001,7 @@ mod tests {
         ]);
 
         assert_eq!(ecdsa_payload.signature_agreements.len(), 0);
-        assert_eq!(ecdsa_payload.available_quadruples.len(), 2);
+        assert_eq!(ecdsa_payload.available_pre_signatures.len(), 2);
 
         let signature_builder = TestEcdsaSignatureBuilder::new();
         signatures::update_signature_agreements(
@@ -1036,7 +1038,7 @@ mod tests {
         );
 
         // The quadruple matched with the expired context should not be deleted
-        assert_eq!(ecdsa_payload.available_quadruples.len(), 2);
+        assert_eq!(ecdsa_payload.available_pre_signatures.len(), 2);
     }
 
     #[test]
@@ -1191,11 +1193,11 @@ mod tests {
                 ecdsa_payload.uid_generator.next_quadruple_id(),
             );
             ecdsa_payload
-                .available_quadruples
-                .insert(quadruple_id_1, quad_1.clone());
+                .available_pre_signatures
+                .insert(quadruple_id_1, PreSignatureRef::Ecdsa(quad_1.clone()));
             ecdsa_payload
-                .available_quadruples
-                .insert(quadruple_id_2, quad_2.clone());
+                .available_pre_signatures
+                .insert(quadruple_id_2, PreSignatureRef::Ecdsa(quad_2.clone()));
 
             let req_1 = create_reshare_request(1, 1);
             ecdsa_payload
@@ -1215,7 +1217,7 @@ mod tests {
                     env.newest_registry_version,
                     &mut ecdsa_payload.uid_generator,
                     key_id.clone(),
-                    &mut ecdsa_payload.quadruples_in_creation,
+                    &mut ecdsa_payload.pre_signatures_in_creation,
                 );
             let kappa_transcript = {
                 let param = kappa_config_ref.as_ref();
@@ -1242,7 +1244,7 @@ mod tests {
             assert_eq!(result.len(), 1);
             add_expected_transcripts(
                 ecdsa_payload
-                    .quadruples_in_creation
+                    .pre_signatures_in_creation
                     .values()
                     .next()
                     .unwrap()
@@ -1280,12 +1282,12 @@ mod tests {
                     .height,
                 new_summary_height
             );
-            for available_quadruple in summary.available_quadruples.values() {
+            for available_quadruple in summary.available_pre_signatures.values() {
                 for transcript_ref in available_quadruple.get_refs() {
                     assert_ne!(transcript_ref.height, new_summary_height);
                 }
             }
-            for quadruple_in_creation in summary.quadruples_in_creation.values() {
+            for quadruple_in_creation in summary.pre_signatures_in_creation.values() {
                 for transcript_ref in quadruple_in_creation.get_refs() {
                     assert_ne!(transcript_ref.height, new_summary_height);
                 }
@@ -1325,12 +1327,12 @@ mod tests {
                     .height,
                 new_summary_height
             );
-            for available_quadruple in summary.available_quadruples.values() {
+            for available_quadruple in summary.available_pre_signatures.values() {
                 for transcript_ref in available_quadruple.get_refs() {
                     assert_eq!(transcript_ref.height, new_summary_height);
                 }
             }
-            for quadruple_in_creation in summary.quadruples_in_creation.values() {
+            for quadruple_in_creation in summary.pre_signatures_in_creation.values() {
                 for transcript_ref in quadruple_in_creation.get_refs() {
                     assert_eq!(transcript_ref.height, new_summary_height);
                 }
@@ -1429,11 +1431,11 @@ mod tests {
             ecdsa_payload.single_key_transcript_mut().current =
                 Some(current_key_transcript.clone());
             ecdsa_payload
-                .available_quadruples
-                .insert(quadruple_id_1, quad_1);
+                .available_pre_signatures
+                .insert(quadruple_id_1, PreSignatureRef::Ecdsa(quad_1));
             ecdsa_payload
-                .available_quadruples
-                .insert(quadruple_id_2, quad_2);
+                .available_pre_signatures
+                .insert(quadruple_id_2, PreSignatureRef::Ecdsa(quad_2));
 
             let req_1 = create_reshare_request(1, 1);
             ecdsa_payload
@@ -1453,7 +1455,7 @@ mod tests {
                     env.newest_registry_version,
                     &mut ecdsa_payload.uid_generator,
                     key_id.clone(),
-                    &mut ecdsa_payload.quadruples_in_creation,
+                    &mut ecdsa_payload.pre_signatures_in_creation,
                 );
             let kappa_transcript = {
                 let param = kappa_config_ref.as_ref();
@@ -1546,8 +1548,8 @@ mod tests {
             assert!(!summary.signature_agreements.is_empty());
             assert!(reported > 0);
             assert!(unreported > 0);
-            assert!(!summary.available_quadruples.is_empty());
-            assert!(!summary.quadruples_in_creation.is_empty());
+            assert!(!summary.available_pre_signatures.is_empty());
+            assert!(!summary.pre_signatures_in_creation.is_empty());
             assert!(!summary.idkg_transcripts.is_empty());
             assert!(!summary.ongoing_xnet_reshares.is_empty());
             let (reported, unreported) = {
@@ -1847,9 +1849,9 @@ mod tests {
                 &mut rng,
             );
             let test_inputs = TestSigInputs::from(&sig_inputs);
-            payload_0.available_quadruples.insert(
+            payload_0.available_pre_signatures.insert(
                 payload_0.uid_generator.next_quadruple_id(),
-                test_inputs.sig_inputs_ref.presig_quadruple_ref.clone(),
+                PreSignatureRef::Ecdsa(test_inputs.sig_inputs_ref.presig_quadruple_ref.clone()),
             );
             for (transcript_ref, transcript) in test_inputs.idkg_transcripts {
                 block_reader.add_transcript(transcript_ref, transcript);
@@ -1859,7 +1861,7 @@ mod tests {
                 env.newest_registry_version,
                 &mut payload_0.uid_generator,
                 key_id.clone(),
-                &mut payload_0.quadruples_in_creation,
+                &mut payload_0.pre_signatures_in_creation,
             );
             payload_0.ongoing_xnet_reshares.insert(
                 create_reshare_request(1, 1),
@@ -1898,12 +1900,12 @@ mod tests {
             assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 0);
             // Quadruples and xnet reshares should still be unchanged:
             assert_eq!(
-                payload_0.available_quadruples.len(),
-                payload_1.available_quadruples.len()
+                payload_0.available_pre_signatures.len(),
+                payload_1.available_pre_signatures.len()
             );
             assert_eq!(
-                payload_0.quadruples_in_creation.len(),
-                payload_1.quadruples_in_creation.len()
+                payload_0.pre_signatures_in_creation.len(),
+                payload_1.pre_signatures_in_creation.len()
             );
             assert_eq!(
                 payload_0.ongoing_xnet_reshares.len(),
@@ -1948,12 +1950,12 @@ mod tests {
             assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 1);
             // Quadruples and xnet reshares should still be unchanged:
             assert_eq!(
-                payload_2.available_quadruples.len(),
-                payload_1.available_quadruples.len()
+                payload_2.available_pre_signatures.len(),
+                payload_1.available_pre_signatures.len()
             );
             assert_eq!(
-                payload_2.quadruples_in_creation.len(),
-                payload_1.quadruples_in_creation.len()
+                payload_2.pre_signatures_in_creation.len(),
+                payload_1.pre_signatures_in_creation.len()
             );
             assert_eq!(
                 payload_2.ongoing_xnet_reshares.len(),
@@ -2006,13 +2008,13 @@ mod tests {
             assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 1);
 
             // Now, quadruples and xnet reshares should be purged
-            assert!(payload_4.quadruples_in_creation.is_empty());
+            assert!(payload_4.pre_signatures_in_creation.is_empty());
             assert!(payload_4.ongoing_xnet_reshares.is_empty());
             // Available quadruples cannot be purged yet,
             // as we don't know if they are matched to ongoing signature requests.
             assert_eq!(
-                payload_4.available_quadruples.len(),
-                payload_3.available_quadruples.len()
+                payload_4.available_pre_signatures.len(),
+                payload_3.available_pre_signatures.len()
             );
 
             let transcript_builder = TestEcdsaTranscriptBuilder::new();
@@ -2048,8 +2050,8 @@ mod tests {
             // Quadruples still cannot be deleted, as we haven't seen the state
             // at the summary height yet
             assert_eq!(
-                payload_4.available_quadruples.len(),
-                payload_5.available_quadruples.len()
+                payload_4.available_pre_signatures.len(),
+                payload_5.available_pre_signatures.len()
             );
 
             // Create another data payload, this time the referenced certified height
@@ -2074,7 +2076,7 @@ mod tests {
             )
             .unwrap();
             // Now, available quadruples referencing the old key transcript are deleted.
-            assert!(payload_6.available_quadruples.is_empty());
+            assert!(payload_6.available_pre_signatures.is_empty());
         })
     }
 

@@ -586,7 +586,9 @@ mod test {
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
-        consensus::idkg::{ecdsa::PreSignatureQuadrupleRef, CompletedSignature},
+        consensus::idkg::{
+            common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef, CompletedSignature,
+        },
         crypto::AlgorithmId,
         messages::CallbackId,
         Height,
@@ -1084,16 +1086,16 @@ mod test {
         for i in 0..NUM_MALICIOUS_REFS {
             let malicious_transcript_ref =
                 idkg::UnmaskedTranscript::try_from((Height::new(i as u64), &transcript_0)).unwrap();
-            curr_payload.available_quadruples.insert(
+            curr_payload.available_pre_signatures.insert(
                 curr_payload.uid_generator.next_quadruple_id(),
-                PreSignatureQuadrupleRef {
+                PreSignatureRef::Ecdsa(PreSignatureQuadrupleRef {
                     key_id: key_id.clone(),
                     kappa_unmasked_ref: malicious_transcript_ref,
                     lambda_masked_ref: masked_transcript_1,
                     kappa_times_lambda_ref: masked_transcript_1,
                     key_times_lambda_ref: masked_transcript_1,
                     key_unmasked_ref: transcript_ref_0,
-                },
+                }),
             );
         }
 

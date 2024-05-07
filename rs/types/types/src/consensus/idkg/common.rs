@@ -641,11 +641,11 @@ pub trait EcdsaBlockReader: Send + Sync {
     /// Returns the transcripts requested by the tip.
     fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
 
-    /// Returns the IDs of quadruples in creation by the tip.
-    fn quadruples_in_creation(&self) -> Box<dyn Iterator<Item = &QuadrupleId> + '_>;
+    /// Returns the IDs of pre-signatures in creation by the tip.
+    fn pre_signatures_in_creation(&self) -> Box<dyn Iterator<Item = &QuadrupleId> + '_>;
 
-    /// For the given quadruple ID, returns the quadruple ref if available.
-    fn available_quadruple(&self, id: &QuadrupleId) -> Option<&PreSignatureQuadrupleRef>;
+    /// For the given pre-signature ID, returns the pre-signature ref if available.
+    fn available_pre_signature(&self, id: &QuadrupleId) -> Option<&PreSignatureRef>;
 
     /// Returns the set of all the active references.
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef>;
@@ -1040,6 +1040,13 @@ impl PreSignatureRef {
         match self {
             Self::Schnorr(x) => x.update(height),
             Self::Ecdsa(x) => x.update(height),
+        }
+    }
+
+    pub fn key_unmasked(&self) -> UnmaskedTranscript {
+        match self {
+            Self::Schnorr(x) => x.key_unmasked_ref,
+            Self::Ecdsa(x) => x.key_unmasked_ref,
         }
     }
 }

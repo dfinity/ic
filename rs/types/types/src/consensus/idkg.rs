@@ -93,11 +93,11 @@ pub struct EcdsaPayload {
     /// DEPRECATED: The `RequestIds` for which we are currently generating signatures.
     pub(crate) deprecated_ongoing_signatures: BTreeMap<RequestId, ThresholdEcdsaSigInputsRef>,
 
-    /// ECDSA transcript quadruples that we can use to create ECDSA signatures.
-    pub available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadrupleRef>,
+    /// IDKG transcript Pre-Signatures that we can use to create threshold signatures.
+    pub available_pre_signatures: BTreeMap<QuadrupleId, PreSignatureRef>,
 
-    /// Ecdsa Quadruple in creation.
-    pub quadruples_in_creation: BTreeMap<QuadrupleId, QuadrupleInCreation>,
+    /// Pre-Signature in creation.
+    pub pre_signatures_in_creation: BTreeMap<QuadrupleId, PreSignatureInCreation>,
 
     /// Generator of unique ids.
     pub uid_generator: EcdsaUIDGenerator,
@@ -117,14 +117,47 @@ pub struct EcdsaPayload {
     /// Temporary field.
     /// Once all ecdsa payload have been using the new proto style, this field should be dropped.
     pub(crate) layout: EcdsaPayloadLayout,
+
+    /// Temporary field.
+    /// Once all payloads are using generalized pre-signatures, this field should be dropped.
+    pub(crate) generalized_pre_signatures: bool,
 }
 
 impl Hash for EcdsaPayload {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.signature_agreements.hash(state);
-        self.deprecated_ongoing_signatures.hash(state);
-        self.available_quadruples.hash(state);
-        self.quadruples_in_creation.hash(state);
+        if !self.generalized_pre_signatures {
+            self.deprecated_ongoing_signatures.hash(state);
+
+            let available_quadruples = self
+                .available_pre_signatures
+                .iter()
+                .filter_map(|(id, pre_sig)| {
+                    if let PreSignatureRef::Ecdsa(quadruple) = pre_sig {
+                        Some((id, quadruple))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<BTreeMap<_, _>>();
+            available_quadruples.hash(state);
+
+            let quadruples_in_creation = self
+                .pre_signatures_in_creation
+                .iter()
+                .filter_map(|(id, pre_sig)| {
+                    if let PreSignatureInCreation::Ecdsa(quadruple) = pre_sig {
+                        Some((id, quadruple))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<BTreeMap<_, _>>();
+            quadruples_in_creation.hash(state);
+        } else {
+            self.available_pre_signatures.hash(state);
+            self.pre_signatures_in_creation.hash(state);
+        }
         self.uid_generator.hash(state);
         self.idkg_transcripts.hash(state);
         self.ongoing_xnet_reshares.hash(state);
@@ -139,6 +172,7 @@ impl Hash for EcdsaPayload {
             }
         }
         // ignoring the [`EcdsaPayload::layout`] field on purpose
+        // ignoring the [`EcdsaPayload::generalized_pre_signatures`] field on purpose
     }
 }
 
@@ -157,12 +191,13 @@ impl EcdsaPayload {
             uid_generator: EcdsaUIDGenerator::new(subnet_id, height),
             signature_agreements: BTreeMap::new(),
             deprecated_ongoing_signatures: BTreeMap::new(),
-            available_quadruples: BTreeMap::new(),
-            quadruples_in_creation: BTreeMap::new(),
+            available_pre_signatures: BTreeMap::new(),
+            pre_signatures_in_creation: BTreeMap::new(),
             idkg_transcripts: BTreeMap::new(),
             ongoing_xnet_reshares: BTreeMap::new(),
             xnet_reshare_agreements: BTreeMap::new(),
             layout: EcdsaPayloadLayout::SingleKeyTranscript,
+            generalized_pre_signatures: false,
         }
     }
 
@@ -187,9 +222,9 @@ impl EcdsaPayload {
             .values()
             .flat_map(EcdsaKeyTranscript::transcript_config_in_creation);
 
-        self.quadruples_in_creation
+        self.pre_signatures_in_creation
             .iter()
-            .flat_map(|(_, quadruple)| quadruple.iter_transcript_configs_in_creation())
+            .flat_map(|(_, pre_sig)| pre_sig.iter_transcript_configs_in_creation())
             .chain(key_transcripts)
             .chain(xnet_reshares_transcripts)
     }
@@ -216,35 +251,35 @@ impl EcdsaPayload {
         })
     }
 
-    /// Return an iterator of all ids of quadruples in the payload.
-    pub fn iter_quadruple_ids<'a>(
+    /// Return an iterator of all ids of pre-signatures for the given key in the payload.
+    pub fn iter_pre_signature_ids<'a>(
         &'a self,
-        key_id: &'a EcdsaKeyId,
+        key_id: &'a MasterPublicKeyId,
     ) -> impl Iterator<Item = QuadrupleId> + '_ {
-        let available_quadruple_ids = self
-            .available_quadruples
+        let available_pre_signature_ids = self
+            .available_pre_signatures
             .iter()
-            .filter(|(_, quadruple)| quadruple.key_id == *key_id)
+            .filter(|(_, pre_sig)| pre_sig.key_id() == *key_id)
             .map(|(key, _)| key);
 
-        let in_creation_quadruple_ids = self
-            .quadruples_in_creation
+        let in_creation_pre_signature_ids = self
+            .pre_signatures_in_creation
             .iter()
-            .filter(|(_, quadruple)| quadruple.key_id == *key_id)
+            .filter(|(_, pre_sig)| pre_sig.key_id() == *key_id)
             .map(|(key, _)| key);
 
-        available_quadruple_ids
-            .chain(in_creation_quadruple_ids)
+        available_pre_signature_ids
+            .chain(in_creation_pre_signature_ids)
             .cloned()
     }
 
     /// Return active transcript references in the  payload.
     pub fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
         let mut active_refs = BTreeSet::new();
-        for obj in self.available_quadruples.values() {
+        for obj in self.available_pre_signatures.values() {
             active_refs.extend(obj.get_refs());
         }
-        for obj in self.quadruples_in_creation.values() {
+        for obj in self.pre_signatures_in_creation.values() {
             active_refs.extend(obj.get_refs());
         }
         for obj in self.ongoing_xnet_reshares.values() {
@@ -259,10 +294,10 @@ impl EcdsaPayload {
 
     /// Updates the height of all the transcript refs to the given height.
     pub fn update_refs(&mut self, height: Height) {
-        for obj in self.available_quadruples.values_mut() {
+        for obj in self.available_pre_signatures.values_mut() {
             obj.update(height);
         }
-        for obj in self.quadruples_in_creation.values_mut() {
+        for obj in self.pre_signatures_in_creation.values_mut() {
             obj.update(height);
         }
         for obj in self.ongoing_xnet_reshares.values_mut() {
@@ -1591,22 +1626,47 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
             })
         }
 
-        // available_quadruples
+        let mut available_pre_signatures = Vec::new();
+        let mut pre_signatures_in_creation = Vec::new();
         let mut available_quadruples = Vec::new();
-        for (quadruple_id, quadruple) in &payload.available_quadruples {
-            available_quadruples.push(pb::AvailableQuadruple {
-                quadruple_id: quadruple_id.id(),
-                quadruple: Some(quadruple.into()),
-            });
-        }
-
-        // quadruples_in_creation
         let mut quadruples_in_creation = Vec::new();
-        for (quadruple_id, quadruple) in &payload.quadruples_in_creation {
-            quadruples_in_creation.push(pb::QuadrupleInProgress {
-                quadruple_id: quadruple_id.id(),
-                quadruple: Some(quadruple.into()),
-            });
+
+        if payload.generalized_pre_signatures {
+            // available_pre_signatures
+            for (pre_sig_id, pre_sig) in &payload.available_pre_signatures {
+                available_pre_signatures.push(pb::AvailablePreSignature {
+                    pre_signature_id: pre_sig_id.id(),
+                    pre_signature: Some(pre_sig.into()),
+                });
+            }
+            // pre_signatures_in_creation
+            for (pre_sig_id, pre_sig) in &payload.pre_signatures_in_creation {
+                pre_signatures_in_creation.push(pb::PreSignatureInProgress {
+                    pre_signature_id: pre_sig_id.id(),
+                    pre_signature: Some(pre_sig.into()),
+                });
+            }
+        } else {
+            // available_quadruples
+            for (pre_sig_id, pre_sig) in &payload.available_pre_signatures {
+                let PreSignatureRef::Ecdsa(quadruple) = pre_sig else {
+                    continue;
+                };
+                available_quadruples.push(pb::AvailableQuadruple {
+                    quadruple_id: pre_sig_id.id(),
+                    quadruple: Some(quadruple.into()),
+                });
+            }
+            // quadruples_in_creation
+            for (pre_sig_id, pre_sig) in &payload.pre_signatures_in_creation {
+                let PreSignatureInCreation::Ecdsa(quadruple) = pre_sig else {
+                    continue;
+                };
+                quadruples_in_creation.push(pb::QuadrupleInProgress {
+                    quadruple_id: pre_sig_id.id(),
+                    quadruple: Some(quadruple.into()),
+                });
+            }
         }
 
         let next_unused_transcript_id: Option<subnet_pb::IDkgTranscriptId> =
@@ -1676,9 +1736,9 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
             signature_agreements,
             ongoing_signatures,
             available_quadruples,
-            available_pre_signatures: vec![],
+            available_pre_signatures,
             quadruples_in_creation,
-            pre_signatures_in_creation: vec![],
+            pre_signatures_in_creation,
             next_unused_transcript_id,
             next_unused_quadruple_id: payload.uid_generator.next_unused_quadruple_id,
             idkg_transcripts,
@@ -1689,6 +1749,7 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
             current_key_transcript,
             next_key_in_creation,
             key_id,
+            generalized_pre_signatures: payload.generalized_pre_signatures,
         }
     }
 }
@@ -1769,15 +1830,15 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
             deprecated_ongoing_signatures.insert(request_id, sig_inputs);
         }
 
-        // available_quadruples
-        let mut available_quadruples = BTreeMap::new();
+        // available_pre_signatures
+        let mut available_pre_signatures = BTreeMap::new();
         for available_quadruple in &payload.available_quadruples {
             let quadruple_id = QuadrupleId(available_quadruple.quadruple_id);
             let quadruple: PreSignatureQuadrupleRef = try_from_option_field(
                 available_quadruple.quadruple.as_ref(),
                 "EcdsaPayload::available_quadruple::quadruple",
             )?;
-            available_quadruples.insert(quadruple_id, quadruple);
+            available_pre_signatures.insert(quadruple_id, PreSignatureRef::Ecdsa(quadruple));
         }
         for available_pre_signature in &payload.available_pre_signatures {
             let pre_signature_id = QuadrupleId(available_pre_signature.pre_signature_id);
@@ -1785,23 +1846,19 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
                 available_pre_signature.pre_signature.as_ref(),
                 "EcdsaPayload::available_pre_signature::pre_signature",
             )?;
-            let PreSignatureRef::Ecdsa(quadruple) = pre_signature else {
-                return Err(ProxyDecodeError::Other(
-                    "EcdsaPayload:: Schnorr pre-signatures are not supported yet".into(),
-                ));
-            };
-            available_quadruples.insert(pre_signature_id, quadruple);
+            available_pre_signatures.insert(pre_signature_id, pre_signature);
         }
 
-        // quadruples_in_creation
-        let mut quadruples_in_creation = BTreeMap::new();
+        // pre_signatures_in_creation
+        let mut pre_signatures_in_creation = BTreeMap::new();
         for quadruple_in_creation in &payload.quadruples_in_creation {
             let quadruple_id = QuadrupleId(quadruple_in_creation.quadruple_id);
             let quadruple: QuadrupleInCreation = try_from_option_field(
                 quadruple_in_creation.quadruple.as_ref(),
                 "EcdsaPayload::quadruple_in_creation::quadruple",
             )?;
-            quadruples_in_creation.insert(quadruple_id, quadruple);
+            pre_signatures_in_creation
+                .insert(quadruple_id, PreSignatureInCreation::Ecdsa(quadruple));
         }
         for pre_signature_in_creation in &payload.pre_signatures_in_creation {
             let pre_signature_id = QuadrupleId(pre_signature_in_creation.pre_signature_id);
@@ -1809,12 +1866,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
                 pre_signature_in_creation.pre_signature.as_ref(),
                 "EcdsaPayload::pre_signature_in_creation::pre_signature",
             )?;
-            let PreSignatureInCreation::Ecdsa(quadruple) = pre_signature else {
-                return Err(ProxyDecodeError::Other(
-                    "EcdsaPayload:: Schnorr pre-signature in creation not supported yet".into(),
-                ));
-            };
-            quadruples_in_creation.insert(pre_signature_id, quadruple);
+            pre_signatures_in_creation.insert(pre_signature_id, pre_signature);
         }
 
         let next_unused_transcript_id: IDkgTranscriptId = try_from_option_field(
@@ -1879,14 +1931,15 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         Ok(Self {
             signature_agreements,
             deprecated_ongoing_signatures,
-            available_quadruples,
-            quadruples_in_creation,
+            available_pre_signatures,
+            pre_signatures_in_creation,
             idkg_transcripts,
             ongoing_xnet_reshares,
             xnet_reshare_agreements,
             uid_generator,
             key_transcripts,
             layout,
+            generalized_pre_signatures: payload.generalized_pre_signatures,
         })
     }
 }
@@ -2032,6 +2085,30 @@ impl HasMasterPublicKeyId for QuadrupleInCreation {
 impl HasMasterPublicKeyId for PreSignatureQuadrupleRef {
     fn key_id(&self) -> MasterPublicKeyId {
         MasterPublicKeyId::Ecdsa(self.key_id.clone())
+    }
+}
+
+impl HasMasterPublicKeyId for PreSignatureInCreation {
+    fn key_id(&self) -> MasterPublicKeyId {
+        match self {
+            PreSignatureInCreation::Ecdsa(quadruple) => {
+                MasterPublicKeyId::Ecdsa(quadruple.key_id.clone())
+            }
+            PreSignatureInCreation::Schnorr(transcript) => {
+                MasterPublicKeyId::Schnorr(transcript.key_id.clone())
+            }
+        }
+    }
+}
+
+impl HasMasterPublicKeyId for PreSignatureRef {
+    fn key_id(&self) -> MasterPublicKeyId {
+        match self {
+            PreSignatureRef::Ecdsa(quadruple) => MasterPublicKeyId::Ecdsa(quadruple.key_id.clone()),
+            PreSignatureRef::Schnorr(transcript) => {
+                MasterPublicKeyId::Schnorr(transcript.key_id.clone())
+            }
+        }
     }
 }
 

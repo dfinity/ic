@@ -578,7 +578,7 @@ pub fn get_oldest_ecdsa_state_registry_version(
         .sign_with_ecdsa_contexts()
         .values()
         .flat_map(|context| context.matched_quadruple.as_ref())
-        .flat_map(|(quadruple_id, _)| ecdsa.available_quadruples.get(quadruple_id))
+        .flat_map(|(quadruple_id, _)| ecdsa.available_pre_signatures.get(quadruple_id))
         .flat_map(|quadruple| quadruple.get_refs())
         .flat_map(|transcript_ref| ecdsa.idkg_transcripts.get(&transcript_ref.transcript_id))
         .map(|transcript| transcript.registry_version)
@@ -602,8 +602,8 @@ mod tests {
     };
     use ic_types::{
         consensus::idkg::{
-            ecdsa::PreSignatureQuadrupleRef, EcdsaKeyTranscript, KeyTranscriptCreation,
-            MaskedTranscript, QuadrupleId, UnmaskedTranscript,
+            common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef, EcdsaKeyTranscript,
+            KeyTranscriptCreation, MaskedTranscript, QuadrupleId, UnmaskedTranscript,
         },
         crypto::{
             canister_threshold_sig::idkg::{
@@ -878,9 +878,10 @@ mod tests {
                     .idkg_transcripts
                     .insert(r.transcript_id, fake_transcript(r.transcript_id, rv));
             }
-            ecdsa
-                .available_quadruples
-                .insert(QuadrupleId::new(i as u64), quadruple);
+            ecdsa.available_pre_signatures.insert(
+                QuadrupleId::new(i as u64),
+                PreSignatureRef::Ecdsa(quadruple),
+            );
         }
         ecdsa
     }
@@ -912,9 +913,12 @@ mod tests {
         // quadruples with registry version >= 3 (not 2!). Thus the oldest
         // registry version referenced by the state should be 3.
         let contexts = ecdsa
-            .available_quadruples
+            .available_pre_signatures
             .iter()
-            .map(|(id, quad)| {
+            .map(|(id, pre_sig)| {
+                let PreSignatureRef::Ecdsa(quad) = pre_sig else {
+                    panic!("Expected ECDSA pre-signature");
+                };
                 let t_id = quad.lambda_masked_ref.as_ref().transcript_id;
                 let transcript = ecdsa.idkg_transcripts.get(&t_id).unwrap();
                 (transcript.registry_version.get() >= 3).then_some(id.clone())
@@ -935,7 +939,7 @@ mod tests {
         );
 
         let mut ecdsa_without_quadruples = ecdsa.clone();
-        ecdsa_without_quadruples.available_quadruples = BTreeMap::new();
+        ecdsa_without_quadruples.available_pre_signatures = BTreeMap::new();
         assert_eq!(
             None,
             get_oldest_ecdsa_state_registry_version(&ecdsa_without_quadruples, &state)
