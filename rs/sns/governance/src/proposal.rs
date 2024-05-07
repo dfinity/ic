@@ -4529,4 +4529,74 @@ Version {
             }
         );
     }
+
+    #[test]
+    fn limited_proposal_data_for_list_proposals_limited_manage_sns_metadata() {
+        let original_proposal_data = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::ManageSnsMetadata(ManageSnsMetadata {
+                    logo: Some("some logo".to_string()),
+                    url: Some("some url".to_string()),
+                    name: Some("some name".to_string()),
+                    description: Some("some description".to_string()),
+                })),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let limited_proposal_data =
+            original_proposal_data.limited_for_list_proposals(&HashSet::new());
+
+        assert_eq!(
+            limited_proposal_data,
+            ProposalData {
+                proposal: Some(Proposal {
+                    action: Some(Action::ManageSnsMetadata(ManageSnsMetadata {
+                        logo: None,
+                        url: Some("some url".to_string()),
+                        name: Some("some name".to_string()),
+                        description: Some("some description".to_string()),
+                    },)),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn limited_proposal_data_for_list_proposals_limited_manage_ledger_parameters() {
+        let original_proposal_data = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                    transfer_fee: Some(100),
+                    token_name: Some("some name".to_string()),
+                    token_symbol: Some("some symbol".to_string()),
+                    token_logo: Some("some logo".to_string()),
+                })),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let limited_proposal_data =
+            original_proposal_data.limited_for_list_proposals(&HashSet::new());
+
+        assert_eq!(
+            limited_proposal_data,
+            ProposalData {
+                proposal: Some(Proposal {
+                    action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                        transfer_fee: Some(100),
+                        token_name: Some("some name".to_string()),
+                        token_symbol: Some("some symbol".to_string()),
+                        token_logo: None,
+                    },)),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        );
+    }
 }
