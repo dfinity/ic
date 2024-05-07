@@ -13,6 +13,7 @@ use dfn_candid::candid_one;
 use dfn_http::types::{HttpRequest, HttpResponse};
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_management_canister_types::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     UpdateSettingsArgs,
@@ -48,6 +49,7 @@ use ic_nns_governance::pb::v1::{
     RewardNodeProviders, Vote,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayload;
+use ic_registry_subnet_type::SubnetType;
 use ic_sns_governance::{
     pb::v1::{
         self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
@@ -59,11 +61,11 @@ use ic_sns_wasm::{
     init::SnsWasmCanisterInitPayload,
     pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse},
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
-use ic_types::{ingress::WasmResult, Cycles};
+use ic_types::{ingress::WasmResult, Cycles, NumInstructions};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, Memo, SendArgs, Tokens};
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -81,12 +83,23 @@ use std::{convert::TryInto, env, time::Duration};
 /// is omitted so that the canister range of the II subnet is not used
 /// for automatic generation of new canister IDs.
 pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
+    // TODO, remove when this is the value set in the normal IC build
+    // This is to uncover issues in testing that might affect performance in production
+    const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2_000_000_000); // 2 Billion is the value used in app subnets
+
+    let mut subnet_config = SubnetConfig::new(SubnetType::System);
+    subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
+
     StateMachineBuilder::new()
         .with_current_time()
         .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
             CanisterId::from_u64(0x2100000),
             CanisterId::from_u64(0x21FFFFE),
         ))
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            Config::default(),
+        )))
 }
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
