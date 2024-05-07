@@ -24,9 +24,8 @@ Success::
 end::catalog[] */
 use anyhow::Result;
 use ic_backup::{
-    backup_helper::{last_checkpoint, ls_path},
+    backup_helper::last_checkpoint,
     config::{ColdStorage, Config, SubnetConfig},
-    util::sleep_secs,
 };
 use ic_base_types::SubnetId;
 use ic_recovery::file_sync_helper::{download_binary, write_file};
@@ -266,7 +265,7 @@ pub fn test(env: TestEnv) {
             info!(log, "A checkpoint has been archived");
             break;
         }
-        sleep_secs(5);
+        std::thread::sleep(std::time::Duration::from_secs(5));
     }
 
     info!(log, "Proposal to upgrade the subnet replica version");
@@ -316,7 +315,7 @@ pub fn test(env: TestEnv) {
             info!(log, "New version was successfully backed up and archived");
             break;
         }
-        sleep_secs(5);
+        std::thread::sleep(std::time::Duration::from_secs(5));
     }
 
     info!(
@@ -384,7 +383,7 @@ pub fn test(env: TestEnv) {
         if hash_mismatch {
             break;
         }
-        sleep_secs(10);
+        std::thread::sleep(std::time::Duration::from_secs(10));
     }
 
     info!(log, "Kill child process");
@@ -430,13 +429,12 @@ fn modify_byte_in_file(file_path: PathBuf) -> std::io::Result<()> {
 
 fn cold_storage_exists(log: &Logger, cold_storage_dir: PathBuf) -> bool {
     for _ in 0..12 {
-        _ = ls_path(log, &cold_storage_dir);
         if dir_exists_and_have_file(log, &cold_storage_dir.join("states"))
             && dir_exists_and_have_file(log, &cold_storage_dir.join("artifacts"))
         {
             return true;
         }
-        sleep_secs(10);
+        std::thread::sleep(std::time::Duration::from_secs(10));
     }
     false
 }
@@ -448,7 +446,6 @@ fn dir_exists_and_have_file(log: &Logger, dir: &PathBuf) -> bool {
         return false;
     }
     debug!(log, "Directory exists!");
-    _ = ls_path(log, dir);
     let have_file = fs::read_dir(dir)
         .expect("Should be able to read existing directory")
         .next()
