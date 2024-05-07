@@ -329,27 +329,32 @@ impl EcdsaPoolImpl {
 
     // Populates the validated pool with the initial dealings from the CUP.
     pub fn add_initial_dealings(&mut self, catch_up_package: &CatchUpPackage) {
-        let block = catch_up_package.content.block.get_value().clone();
-        let mut initial_dealings = None;
+        let block = catch_up_package.content.block.get_value();
+
+        let mut initial_dealings = Vec::new();
         if block.payload.is_summary() {
             let block_payload = block.payload.as_ref();
             if let Some(ecdsa_summary) = &block_payload.as_summary().ecdsa {
-                initial_dealings = ecdsa_summary.initial_dkg_dealings();
+                initial_dealings = ecdsa_summary.initial_dkg_dealings().collect();
             }
         }
-        if initial_dealings.is_none() {
+
+        if initial_dealings.is_empty() {
             return;
         }
-        let initial_dealings = initial_dealings.as_ref().unwrap();
 
         let mut change_set = Vec::new();
-        for signed_dealing in initial_dealings.dealings().iter() {
+        for signed_dealing in initial_dealings
+            .iter()
+            .flat_map(|initial_dealings| initial_dealings.dealings())
+        {
             info!(
                 self.log,
                 "add_initial_dealings(): dealer: {:?}, transcript_id = {:?}",
                 signed_dealing.dealer_id(),
                 signed_dealing.idkg_dealing().transcript_id,
             );
+
             change_set.push(EcdsaChangeAction::AddToValidated(
                 EcdsaMessage::EcdsaSignedDealing(signed_dealing.clone()),
             ));

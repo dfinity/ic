@@ -8,13 +8,14 @@ use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::ecdsa_keys::EcdsaKeysRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_types::consensus::idkg::ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef};
+use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::consensus::Block;
 use ic_types::consensus::{
     idkg::{
@@ -69,7 +70,7 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             .as_ref()
             .as_ecdsa()
             .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
-                ecdsa_payload.iter_transcript_configs_in_creation()
+                Box::new(ecdsa_payload.iter_transcript_configs_in_creation())
             })
     }
 
@@ -105,28 +106,26 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
     fn source_subnet_xnet_transcripts(
         &self,
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
-        // TODO: chain iters for multiple key_id support
         self.chain
             .tip()
             .payload
             .as_ref()
             .as_ecdsa()
             .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
-                ecdsa_payload.iter_xnet_transcripts_source_subnet()
+                Box::new(ecdsa_payload.iter_xnet_transcripts_source_subnet())
             })
     }
 
     fn target_subnet_xnet_transcripts(
         &self,
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
-        // TODO: chain iters for multiple key_id support
         self.chain
             .tip()
             .payload
             .as_ref()
             .as_ecdsa()
             .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
-                ecdsa_payload.iter_xnet_transcripts_target_subnet()
+                Box::new(ecdsa_payload.iter_xnet_transcripts_target_subnet())
             })
     }
 
@@ -406,24 +405,32 @@ pub(crate) fn get_quadruple_ids_to_deliver(
     let Some(ecdsa) = block.payload.as_ref().as_ecdsa() else {
         return BTreeMap::new();
     };
-    let Some(unmasked_transcript) = ecdsa.key_transcript.current.as_ref() else {
-        return BTreeMap::new();
-    };
-    let current_key_transcript_id = unmasked_transcript.transcript_id();
 
     let mut quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>> = BTreeMap::new();
-    quadruple_ids.insert(ecdsa.key_transcript.key_id.clone(), BTreeSet::new());
+
+    for key_id in ecdsa.key_transcripts.keys() {
+        let MasterPublicKeyId::Ecdsa(key_id) = key_id else {
+            continue;
+        };
+
+        quadruple_ids.insert(key_id.clone(), BTreeSet::default());
+    }
 
     for (quadruple_id, quadruple) in &ecdsa.available_quadruples {
-        if current_key_transcript_id != quadruple.key_unmasked_ref.as_ref().transcript_id {
+        if !ecdsa
+            .current_key_transcript(&quadruple.key_id())
+            .is_some_and(|current_key_transcript| {
+                current_key_transcript.transcript_id()
+                    == quadruple.key_unmasked_ref.as_ref().transcript_id
+            })
+        {
             continue;
         }
 
         quadruple_ids
-            .entry(ecdsa.key_transcript.key_id.clone())
-            .and_modify(|s| {
-                s.insert(quadruple_id.clone());
-            });
+            .entry(quadruple.key_id.clone())
+            .or_default()
+            .insert(quadruple_id.clone());
     }
 
     quadruple_ids
@@ -458,31 +465,34 @@ pub(crate) fn get_ecdsa_subnet_public_key(
 
     let mut public_keys = BTreeMap::new();
 
-    // TODO(CON-1053): add a support for multiple keys
-    let key_id = ecdsa_payload.key_transcript.key_id.clone();
-    let Some(transcript_ref) = ecdsa_payload
-        .key_transcript
-        .current
-        .as_ref()
-        .map(|unmasked| *unmasked.as_ref())
-    else {
-        return Ok(BTreeMap::new());
-    };
+    for (key_id, key_transcript) in &ecdsa_payload.key_transcripts {
+        let MasterPublicKeyId::Ecdsa(key_id) = key_id else {
+            continue;
+        };
 
-    let ecdsa_subnet_public_key = match block_reader.transcript(&transcript_ref) {
-        Ok(transcript) => get_ecdsa_subnet_public_key_(&transcript, log),
-        Err(err) => {
-            warn!(
-                log,
-                "Failed to translate transcript ref {:?}: {:?}", transcript_ref, err
-            );
+        let Some(transcript_ref) = key_transcript
+            .current
+            .as_ref()
+            .map(|unmasked| *unmasked.as_ref())
+        else {
+            continue;
+        };
 
-            None
+        let ecdsa_subnet_public_key = match block_reader.transcript(&transcript_ref) {
+            Ok(transcript) => get_ecdsa_subnet_public_key_(&transcript, log),
+            Err(err) => {
+                warn!(
+                    log,
+                    "Failed to translate transcript ref {:?}: {:?}", transcript_ref, err
+                );
+
+                None
+            }
+        };
+
+        if let Some(public_key) = ecdsa_subnet_public_key {
+            public_keys.insert(key_id.clone(), public_key);
         }
-    };
-
-    if let Some(public_key) = ecdsa_subnet_public_key {
-        public_keys.insert(key_id, public_key);
     }
 
     Ok(public_keys)
@@ -541,7 +551,9 @@ mod tests {
         time::UNIX_EPOCH,
     };
 
-    use crate::ecdsa::test_utils::{create_sig_inputs, fake_ecdsa_key_id, set_up_ecdsa_payload};
+    use crate::ecdsa::test_utils::{
+        create_sig_inputs, fake_ecdsa_key_id, set_up_ecdsa_payload, EcdsaPayloadTestHelper,
+    };
 
     use super::*;
 
@@ -810,7 +822,11 @@ mod tests {
             vec![key_id.clone()],
             /*should_create_key_transcript=*/ true,
         );
-        let current_key_transcript = ecdsa_payload.key_transcript.current.clone().unwrap();
+        let current_key_transcript = ecdsa_payload
+            .single_key_transcript()
+            .current
+            .clone()
+            .unwrap();
 
         let quadruple_ids_to_be_delivered = add_available_quadruples_with_key_transcript(
             &mut ecdsa_payload,
@@ -894,6 +910,6 @@ mod tests {
         let block = make_block(Some(ecdsa_payload));
         let delivered_ids = get_quadruple_ids_to_deliver(&block);
 
-        assert!(delivered_ids.is_empty());
+        assert_eq!(delivered_ids.get(&key_id), Some(&BTreeSet::default()));
     }
 }

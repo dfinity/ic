@@ -4,7 +4,7 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::EcdsaDealingsContext;
 use ic_types::{
-    consensus::idkg::{self, EcdsaBlockReader, EcdsaReshareRequest},
+    consensus::idkg::{self, EcdsaBlockReader, EcdsaReshareRequest, HasMasterPublicKeyId},
     crypto::canister_threshold_sig::{
         error::InitialIDkgDealingsValidationError, idkg::InitialIDkgDealings,
     },
@@ -15,17 +15,19 @@ use crate::ecdsa::pre_signer::EcdsaTranscriptBuilder;
 
 /// Checks for new reshare requests from execution and initiates the processing
 /// by adding a new [`idkg::ReshareOfUnmaskedParams`] config to ongoing xnet reshares.
-// TODO: in future, we may need to maintain a key transcript per supported key_id,
-// and reshare the one specified by reshare_request.key_id.
 pub(crate) fn initiate_reshare_requests(
     payload: &mut idkg::EcdsaPayload,
     reshare_requests: BTreeSet<idkg::EcdsaReshareRequest>,
 ) {
-    let Some(key_transcript) = &payload.key_transcript.current else {
-        return;
-    };
-
     for request in reshare_requests {
+        let Some(key_transcript) = payload
+            .key_transcripts
+            .get(&request.key_id())
+            .and_then(|key_transcript| key_transcript.current.as_ref())
+        else {
+            continue;
+        };
+
         // Ignore requests we already know about
         if payload.ongoing_xnet_reshares.contains_key(&request)
             || payload.xnet_reshare_agreements.contains_key(&request)
@@ -86,12 +88,12 @@ pub(crate) fn update_completed_reshare_requests(
     transcript_builder: &dyn EcdsaTranscriptBuilder,
     log: &ReplicaLogger,
 ) {
-    if payload.key_transcript.current.is_none() {
-        return;
-    }
-
     let mut completed_reshares = BTreeMap::new();
     for (request, reshare_param) in &payload.ongoing_xnet_reshares {
+        if payload.current_key_transcript(&request.key_id()).is_none() {
+            continue;
+        }
+
         // Get the verified dealings for this transcript
         let transcript_id = reshare_param.as_ref().transcript_id;
         let dealings = transcript_builder.get_validated_dealings(transcript_id);

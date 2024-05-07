@@ -602,8 +602,8 @@ mod tests {
     };
     use ic_types::{
         consensus::idkg::{
-            ecdsa::PreSignatureQuadrupleRef, EcdsaKeyTranscript, EcdsaUIDGenerator,
-            KeyTranscriptCreation, MaskedTranscript, QuadrupleId, UnmaskedTranscript,
+            ecdsa::PreSignatureQuadrupleRef, EcdsaKeyTranscript, KeyTranscriptCreation,
+            MaskedTranscript, QuadrupleId, UnmaskedTranscript,
         },
         crypto::{
             canister_threshold_sig::idkg::{
@@ -780,22 +780,14 @@ mod tests {
     }
 
     fn empty_ecdsa_payload() -> EcdsaPayload {
-        EcdsaPayload {
-            signature_agreements: BTreeMap::new(),
-            available_quadruples: BTreeMap::new(),
-            deprecated_ongoing_signatures: BTreeMap::new(),
-            quadruples_in_creation: BTreeMap::new(),
-            uid_generator: EcdsaUIDGenerator::new(subnet_test_id(0), Height::new(0)),
-            idkg_transcripts: BTreeMap::new(),
-            ongoing_xnet_reshares: BTreeMap::new(),
-            xnet_reshare_agreements: BTreeMap::new(),
-            key_transcript: EcdsaKeyTranscript {
-                current: None,
-                next_in_creation: KeyTranscriptCreation::Begin,
-                key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
-                master_key_id: None,
-            },
-        }
+        EcdsaPayload::empty(
+            Height::new(0),
+            subnet_test_id(0),
+            vec![EcdsaKeyTranscript::new(
+                EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                KeyTranscriptCreation::Begin,
+            )],
+        )
     }
 
     fn fake_transcript(id: IDkgTranscriptId, registry_version: RegistryVersion) -> IDkgTranscript {
