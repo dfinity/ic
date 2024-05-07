@@ -171,10 +171,10 @@ fn test_initial_wasmtime_config() {
             "tail calls support is not enabled",
         ),
         (
-            "simd",
+            "relaxed_simd",
             "https://github.com/WebAssembly/relaxed-simd/",
-            "(module (func $f (drop (v128.const i64x2 0 0))))",
-            "SIMD support is not enabled",
+            "(module (func $f (param v128) (drop (f64x2.relaxed_madd (local.get 0) (local.get 0) (local.get 0)))))",
+            "relaxed SIMD support is not enabled",
         ),
         (
             "threads",
@@ -216,10 +216,9 @@ fn test_initial_wasmtime_config() {
         // Memory control
         // GC
     ] {
-        let wasm_binary = BinaryEncodedWasm::new(
-            wat::parse_str(wat)
-                .unwrap_or_else(|_| panic!("Error parsing proposal `{proposal}` code snippet")),
-        );
+        let wasm_binary = BinaryEncodedWasm::new(wat::parse_str(wat).unwrap_or_else(|err| {
+            panic!("Error parsing proposal `{proposal}` code snippet: {err}")
+        }));
         let err = validate_and_instrument_for_testing(
             &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),
             &wasm_binary,
