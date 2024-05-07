@@ -26,6 +26,7 @@ rust_binary(
     srcs = glob(["src/**/*.rs"]),
     compile_data = [
         "templates/upgrade.md",
+        "templates/install.md",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
@@ -38,6 +39,7 @@ rust_test(
         "//rs/bitcoin/ckbtc/kyt:kyt.did",
         "//rs/bitcoin/ckbtc/minter:ckbtc_minter.did",
         "//rs/ethereum/cketh/minter:cketh_minter.did",
+        "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator.did",
         "//rs/rosetta-api/icrc1/archive:archive.did",
         "//rs/rosetta-api/icrc1/index-ng:index-ng.did",
         "//rs/rosetta-api/icrc1/ledger:ledger.did",
