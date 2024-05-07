@@ -1,6 +1,7 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
 use crate::consensus::hashed::Hashed;
+use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::{
     PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsRef,
 };
@@ -774,14 +775,23 @@ impl ExhaustiveSet for EcdsaPayload {
             .map(|payload| EcdsaPayload {
                 signature_agreements: payload.signature_agreements,
                 deprecated_ongoing_signatures: BTreeMap::default(),
-                available_quadruples: payload.available_quadruples,
-                quadruples_in_creation: payload.quadruples_in_creation,
+                available_pre_signatures: payload
+                    .available_quadruples
+                    .into_iter()
+                    .map(|(id, quad)| (id, PreSignatureRef::Ecdsa(quad)))
+                    .collect(),
+                pre_signatures_in_creation: payload
+                    .quadruples_in_creation
+                    .into_iter()
+                    .map(|(id, quad)| (id, PreSignatureInCreation::Ecdsa(quad)))
+                    .collect(),
                 uid_generator: payload.uid_generator,
                 idkg_transcripts: payload.idkg_transcripts,
                 ongoing_xnet_reshares: payload.ongoing_xnet_reshares,
                 xnet_reshare_agreements: payload.xnet_reshare_agreements,
                 key_transcripts: replace_by_singleton_if_empty(payload.key_transcripts, rng),
                 layout: EcdsaPayloadLayout::SingleKeyTranscript,
+                generalized_pre_signatures: false,
             })
             .collect()
     }

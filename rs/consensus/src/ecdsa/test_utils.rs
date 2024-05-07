@@ -31,6 +31,7 @@ use ic_test_utilities_types::ids::{node_test_id, NODE_1, NODE_2};
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::certification::Certification;
+use ic_types::consensus::idkg::common::PreSignatureRef;
 use ic_types::consensus::idkg::{
     self,
     ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
@@ -183,9 +184,9 @@ pub fn insert_test_sig_inputs<T>(
             .for_each(|(transcript_ref, transcript)| {
                 block_reader.add_transcript(*transcript_ref, transcript.clone())
             });
-        ecdsa_payload.available_quadruples.insert(
+        ecdsa_payload.available_pre_signatures.insert(
             quadruple_id.clone(),
-            inputs.sig_inputs_ref.presig_quadruple_ref.clone(),
+            PreSignatureRef::Ecdsa(inputs.sig_inputs_ref.presig_quadruple_ref.clone()),
         );
         block_reader
             .add_available_quadruple(quadruple_id, inputs.sig_inputs_ref.presig_quadruple_ref);
@@ -294,7 +295,7 @@ pub(crate) struct TestEcdsaBlockReader {
     source_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     target_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     requested_signatures: Vec<(RequestId, ThresholdEcdsaSigInputsRef)>,
-    available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadrupleRef>,
+    available_pre_signatures: BTreeMap<QuadrupleId, PreSignatureRef>,
     idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
     fail_to_resolve: bool,
 }
@@ -331,14 +332,14 @@ impl TestEcdsaBlockReader {
     ) -> Self {
         let mut idkg_transcripts = BTreeMap::new();
         let mut requested_signatures = Vec::new();
-        let mut available_quadruples = BTreeMap::new();
+        let mut available_pre_signatures = BTreeMap::new();
         for (request_id, sig_inputs) in sig_inputs {
             for (transcript_ref, transcript) in sig_inputs.idkg_transcripts {
                 idkg_transcripts.insert(transcript_ref, transcript);
             }
-            available_quadruples.insert(
+            available_pre_signatures.insert(
                 request_id.quadruple_id.clone(),
-                sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone(),
+                PreSignatureRef::Ecdsa(sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone()),
             );
             requested_signatures.push((request_id, sig_inputs.sig_inputs_ref));
         }
@@ -346,7 +347,7 @@ impl TestEcdsaBlockReader {
         Self {
             height,
             requested_signatures,
-            available_quadruples,
+            available_pre_signatures,
             idkg_transcripts,
             ..Default::default()
         }
@@ -402,7 +403,8 @@ impl TestEcdsaBlockReader {
         quadruple_id: QuadrupleId,
         quadruple: PreSignatureQuadrupleRef,
     ) {
-        self.available_quadruples.insert(quadruple_id, quadruple);
+        self.available_pre_signatures
+            .insert(quadruple_id, PreSignatureRef::Ecdsa(quadruple));
     }
 
     pub(crate) fn requested_signatures(
@@ -428,12 +430,12 @@ impl EcdsaBlockReader for TestEcdsaBlockReader {
         Box::new(self.requested_transcripts.iter())
     }
 
-    fn quadruples_in_creation(&self) -> Box<dyn Iterator<Item = &QuadrupleId> + '_> {
+    fn pre_signatures_in_creation(&self) -> Box<dyn Iterator<Item = &QuadrupleId> + '_> {
         Box::new(std::iter::empty())
     }
 
-    fn available_quadruple(&self, id: &QuadrupleId) -> Option<&PreSignatureQuadrupleRef> {
-        self.available_quadruples.get(id)
+    fn available_pre_signature(&self, id: &QuadrupleId) -> Option<&PreSignatureRef> {
+        self.available_pre_signatures.get(id)
     }
 
     fn source_subnet_xnet_transcripts(
@@ -1498,8 +1500,8 @@ pub(crate) fn add_available_quadruple_to_payload(
     let sig_inputs = create_sig_inputs(quadruple_id.id() as u8);
     let quadruple_ref = sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone();
     ecdsa_payload
-        .available_quadruples
-        .insert(quadruple_id, quadruple_ref.clone());
+        .available_pre_signatures
+        .insert(quadruple_id, PreSignatureRef::Ecdsa(quadruple_ref.clone()));
     for (t_ref, mut transcript) in sig_inputs.idkg_transcripts {
         transcript.registry_version = registry_version;
         ecdsa_payload

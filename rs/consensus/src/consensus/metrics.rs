@@ -199,11 +199,11 @@ impl From<&EcdsaPayload> for EcdsaStats {
                 .filter(|status| matches!(status, CompletedSignature::Unreported(_)))
                 .count(),
             available_quadruples: count_by_master_public_key_id(
-                payload.available_quadruples.values(),
+                payload.available_pre_signatures.values(),
                 &keys,
             ),
             quadruples_in_creation: count_by_master_public_key_id(
-                payload.quadruples_in_creation.values(),
+                payload.pre_signatures_in_creation.values(),
                 &keys,
             ),
             ongoing_xnet_reshares: count_by_master_public_key_id(
@@ -810,11 +810,17 @@ impl EcdsaPayloadMetrics {
         );
         self.payload_metrics_set(
             "available_quadruples",
-            count_by_master_public_key_id(payload.available_quadruples.values(), &expected_keys),
+            count_by_master_public_key_id(
+                payload.available_pre_signatures.values(),
+                &expected_keys,
+            ),
         );
         self.payload_metrics_set(
             "quadruples_in_creation",
-            count_by_master_public_key_id(payload.quadruples_in_creation.values(), &expected_keys),
+            count_by_master_public_key_id(
+                payload.pre_signatures_in_creation.values(),
+                &expected_keys,
+            ),
         );
         self.payload_metrics_set(
             "ongoing_xnet_reshares",
