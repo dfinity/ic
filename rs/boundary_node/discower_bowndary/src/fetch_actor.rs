@@ -13,20 +13,23 @@ use crate::{
 
 const SERVICE_NAME: &str = "NodesFetchActor";
 
-pub struct NodesFetchActor {
+pub struct NodesFetchActor<S> {
     fetcher: Arc<dyn NodesFetcher>,
     period: Duration,
     fetched_nodes_sender: SenderWatch<FetchedNodes>,
-    snapshot: GlobalShared<Snapshot>,
+    snapshot: GlobalShared<S>,
     token: CancellationToken,
 }
 
-impl NodesFetchActor {
+impl<S> NodesFetchActor<S>
+where
+    S: Snapshot,
+{
     pub fn new(
         fetcher: Arc<dyn NodesFetcher>,
         period: Duration,
         fetched_nodes_sender: SenderWatch<FetchedNodes>,
-        snapshot: GlobalShared<Snapshot>,
+        snapshot: GlobalShared<S>,
         token: CancellationToken,
     ) -> Self {
         Self {
