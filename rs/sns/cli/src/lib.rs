@@ -269,6 +269,8 @@ pub fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) {
         wasm: Some(SnsWasm {
             wasm: sns_wasm_bytes,
             canister_type: sns_canister_type as i32,
+            // Will be filled in by SNS Governance
+            proposal_id: None,
         }),
         hash: sns_wasm_hash.to_vec(),
     };

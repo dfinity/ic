@@ -2192,6 +2192,8 @@ impl ProposalPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
         let sns_wasm = SnsWasm {
             wasm,
             canister_type,
+            // Will be automatically set by NNS Governance
+            proposal_id: None,
         };
 
         AddWasmRequest {

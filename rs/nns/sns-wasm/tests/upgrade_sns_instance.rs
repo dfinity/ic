@@ -85,8 +85,9 @@ fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
     let unstoppable_sns_wasm = SnsWasm {
         wasm: unstoppable_canister_wasm,
         canister_type: canister_type.into(),
+        ..SnsWasm::default()
     };
-    sns_wasm::add_wasm_via_proposal(&machine, unstoppable_sns_wasm.clone());
+    let unstoppable_sns_wasm = sns_wasm::add_wasm_via_proposal(&machine, unstoppable_sns_wasm);
 
     // To get an SNS neuron, we airdrop our new tokens to this user.
     let user = PrincipalId::new_user_test_id(0);
@@ -943,7 +944,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
         wasm_map.get(&SnsCanisterType::Governance).unwrap(),
         Some("Preserve behavior 509_230_111."),
     );
-    sns_wasm::add_wasm_via_proposal(&machine, modified_governance.clone());
+    let modified_governance = sns_wasm::add_wasm_via_proposal(&machine, modified_governance);
 
     // Make a proposal to upgrade (that is auto-executed) with the neuron for our user.
     let neuron_id =

@@ -83,6 +83,8 @@ pub struct SnsWasm {
     pub wasm: ::prost::alloc::vec::Vec<u8>,
     #[prost(enumeration = "SnsCanisterType", tag = "2")]
     pub canister_type: i32,
+    #[prost(uint64, optional, tag = "3")]
+    pub proposal_id: ::core::option::Option<u64>,
 }
 /// The error response returned in response objects on failed or partially failed operations.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]

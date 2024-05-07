@@ -177,6 +177,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
     let bad_wasm = SnsWasm {
         wasm: Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes(),
         canister_type: SnsCanisterType::Governance.into(),
+        ..SnsWasm::default()
     };
     sns_wasm::add_wasm_via_proposal(&machine, bad_wasm);
 

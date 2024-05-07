@@ -185,7 +185,11 @@ type SnsVersion = record {
   governance_wasm_hash : blob;
   index_wasm_hash : blob;
 };
-type SnsWasm = record { wasm : blob; canister_type : int32 };
+type SnsWasm = record {
+  wasm : blob;
+  proposal_id : opt nat64;
+  canister_type : int32;
+};
 type SnsWasmCanisterInitPayload = record {
   allowed_principals : vec principal;
   access_controls_enabled : bool;
