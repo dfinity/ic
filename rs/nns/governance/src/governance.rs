@@ -5028,7 +5028,7 @@ impl Governance {
 
         // Must be unique.
         #[allow(unused_variables)]
-        let other_proposal_ids = self.select_open_proposal_ids(|action| {
+        let other_proposal_ids = self.select_nonfinal_proposal_ids(|action| {
             matches!(action, Action::CreateServiceNervousSystem(_))
         });
 
@@ -5047,15 +5047,27 @@ impl Governance {
         Ok(())
     }
 
-    fn select_open_proposal_ids(&self, action_predicate: impl Fn(&Action) -> bool) -> Vec<u64> {
+    fn select_nonfinal_proposal_ids(&self, action_predicate: impl Fn(&Action) -> bool) -> Vec<u64> {
         self.heap_data
             .proposals
             .values()
             .filter_map(|proposal_data| {
-                // Disregard non-Open proposals.
-                if proposal_data.status() != ProposalStatus::Open {
-                    return None;
-                }
+                // Disregard proposals that are in a final (or Unspecified) state.
+                match proposal_data.status() {
+                    ProposalStatus::Open | ProposalStatus::Adopted => (),
+                    ProposalStatus::Rejected
+                    | ProposalStatus::Executed
+                    | ProposalStatus::Failed => {
+                        return None;
+                    }
+                    ProposalStatus::Unspecified => {
+                        println!(
+                            "{}ERROR: ProposalData had Unspecified status: {:#?}",
+                            LOG_PREFIX, proposal_data
+                        );
+                        return None;
+                    }
+                };
 
                 // Unpack proposal.
                 let action = match &proposal_data.proposal {
@@ -5064,7 +5076,7 @@ impl Governance {
                         ..
                     }) => action,
 
-                    // Ignore proposals not of the same type.
+                    // Ignore proposals with no action.
                     _ => {
                         println!(
                             "{}ERROR: ProposalData had no action: {:#?}",
