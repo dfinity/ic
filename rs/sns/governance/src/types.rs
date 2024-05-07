@@ -26,7 +26,7 @@ use crate::{
             ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
             DefaultFollowees, DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction,
             GovernanceError, ManageDappCanisterSettings, ManageLedgerParameters,
-            ManageNeuronResponse, MintSnsTokens, Motion, NervousSystemFunction,
+            ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
             NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
             NeuronPermissionType, ProposalId, RegisterDappCanisters, RewardEvent,
             TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
@@ -1517,6 +1517,12 @@ impl Action {
             Action::ExecuteGenericNervousSystemFunction(action) => {
                 Action::ExecuteGenericNervousSystemFunction(action.limited_for_list_proposals())
             }
+            Action::ManageSnsMetadata(action) => {
+                Action::ManageSnsMetadata(action.limited_for_list_proposals())
+            }
+            Action::ManageLedgerParameters(action) => {
+                Action::ManageLedgerParameters(action.limited_for_list_proposals())
+            }
             action => action.clone(),
         }
     }
@@ -1670,6 +1676,30 @@ impl ExecuteGenericNervousSystemFunction {
         Self {
             function_id: self.function_id,
             payload: Vec::new(),
+        }
+    }
+}
+
+impl ManageSnsMetadata {
+    /// Returns a clone of self, except that the logo is cleared because it can be large.
+    pub(crate) fn limited_for_list_proposals(&self) -> Self {
+        Self {
+            url: self.url.clone(),
+            name: self.name.clone(),
+            description: self.description.clone(),
+            logo: None,
+        }
+    }
+}
+
+impl ManageLedgerParameters {
+    /// Returns a clone of self, except that the logo is cleared because it can be large.
+    pub(crate) fn limited_for_list_proposals(&self) -> Self {
+        Self {
+            transfer_fee: self.transfer_fee,
+            token_name: self.token_name.clone(),
+            token_symbol: self.token_symbol.clone(),
+            token_logo: None,
         }
     }
 }
