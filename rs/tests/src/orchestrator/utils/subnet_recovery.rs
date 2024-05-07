@@ -269,7 +269,7 @@ pub(crate) fn print_app_and_unassigned_nodes(env: &TestEnv, logger: &Logger) {
 }
 
 /// Enable ECDSA key and signing on the subnet using the given NNS node.
-pub(crate) fn enable_ecdsa_on_subnet(
+pub fn enable_ecdsa_on_subnet(
     nns_node: &IcNodeSnapshot,
     canister: &MessageCanister,
     subnet_id: SubnetId,
@@ -446,7 +446,7 @@ pub(crate) fn get_ecdsa_pub_key(canister: &MessageCanister, logger: &Logger) -> 
 
 /// The signature test consists of getting the given canister's ECDSA key, comparing it to the existing key
 /// to ensure it hasn't changed, sending a sign request, and verifying the signature
-pub(crate) fn run_ecdsa_signature_test(
+pub fn run_ecdsa_signature_test(
     canister: &MessageCanister,
     logger: &Logger,
     existing_key: VerifyingKey,
