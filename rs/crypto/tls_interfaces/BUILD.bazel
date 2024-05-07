@@ -28,10 +28,10 @@ rust_library(
     deps = [
         "//rs/protobuf",
         "//rs/types/types",
+        "@crate_index//:rustls",
         "@crate_index//:serde",
         "@crate_index//:thiserror",
         "@crate_index//:tokio",
-        "@crate_index//:tokio-rustls",
         "@crate_index//:x509-parser",
     ],
 )
