@@ -32,6 +32,7 @@ use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::certification::Certification;
 use ic_types::consensus::idkg::common::PreSignatureRef;
+use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::consensus::idkg::{
     self,
     ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
@@ -66,9 +67,12 @@ use super::utils::get_context_request_id;
 pub(crate) fn dealings_context_from_reshare_request(
     request: idkg::EcdsaReshareRequest,
 ) -> EcdsaDealingsContext {
+    let MasterPublicKeyId::Ecdsa(key_id) = request.key_id() else {
+        panic!("Expected ECDSA key Id");
+    };
     EcdsaDealingsContext {
         request: RequestBuilder::new().build(),
-        key_id: request.key_id,
+        key_id,
         nodes: request.receiving_node_ids.into_iter().collect(),
         registry_version: request.registry_version,
         time: time::UNIX_EPOCH,
@@ -1481,8 +1485,8 @@ pub(crate) fn fake_ecdsa_key_id() -> EcdsaKeyId {
 pub(crate) fn create_reshare_request(num_nodes: u64, registry_version: u64) -> EcdsaReshareRequest {
     let key_id = fake_ecdsa_key_id();
     EcdsaReshareRequest {
-        key_id: key_id.clone(),
-        master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
+        key_id: Some(key_id.clone()),
+        master_key_id: MasterPublicKeyId::Ecdsa(key_id),
         receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
         registry_version: RegistryVersion::from(registry_version),
     }
