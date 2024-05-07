@@ -4693,11 +4693,12 @@ fn test_claim_or_refresh_neuron_does_not_overflow() {
     // some age.
     driver.advance_time_by(12 * ic_nns_governance::governance::ONE_MONTH_SECONDS);
 
+    let neuron_info = gov.get_neuron_info(&nid).unwrap();
     assert_eq!(
-        gov.with_neuron(&nid, |neuron| neuron.aging_since_timestamp_seconds)
-            .unwrap(),
-        driver.now() - 12 * ic_nns_governance::governance::ONE_MONTH_SECONDS,
+        neuron_info.age_seconds,
+        12 * ic_nns_governance::governance::ONE_MONTH_SECONDS,
     );
+    let previous_stake_e8s = neuron_info.stake_e8s;
 
     let _block_height = 543212234;
     // Note that the nonce must match the nonce chosen in the original
@@ -4724,9 +4725,8 @@ fn test_claim_or_refresh_neuron_does_not_overflow() {
 
     assert_eq!(nid_result, nid);
     assert_eq!(
-        gov.with_neuron(&nid, |neuron| neuron.cached_neuron_stake_e8s)
-            .unwrap(),
-        100_000_100_000_000
+        gov.get_neuron_info(&nid).unwrap().stake_e8s,
+        previous_stake_e8s + 100_000_000_000_000
     );
 }
 
@@ -8845,7 +8845,7 @@ fn fixture_for_dissolving_neuron_tests(id: u64, dissolve_state: DissolveState) -
 /// appropriately in both states.
 #[test]
 fn test_start_dissolving() {
-    let fake_driver = fake::FakeDriver::default();
+    let mut fake_driver = fake::FakeDriver::default();
     let id: u64 = 1;
     let fixture: GovernanceProto = fixture_for_dissolving_neuron_tests(
         id,
@@ -8857,23 +8857,18 @@ fn test_start_dissolving() {
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
     );
+
+    // Advance time so that the neuron has age.
+    fake_driver.advance_time_by(1);
+
+    let neuron_info = gov.get_neuron_info(&NeuronId { id }).unwrap();
     assert_eq!(
-        gov.neuron_store
-            .with_neuron(&NeuronId { id }, |n| n.clone())
-            .unwrap()
-            .dissolve_state,
-        Some(DissolveState::DissolveDelaySeconds(
-            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
-        ),)
+        neuron_info.dissolve_delay_seconds,
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
     );
-    // Assert that in one second the age of the neuron will be one second.
-    assert_eq!(
-        gov.neuron_store
-            .with_neuron(&NeuronId { id }, |n| n.clone())
-            .unwrap()
-            .age_seconds(DEFAULT_TEST_START_TIMESTAMP_SECONDS + 1),
-        1
-    );
+    assert_eq!(neuron_info.state, NeuronState::NotDissolving as i32);
+    assert_eq!(neuron_info.age_seconds, 1);
+
     gov.manage_neuron(
         &principal(id),
         &ManageNeuron {
@@ -8891,29 +8886,18 @@ fn test_start_dissolving() {
     .now_or_never()
     .unwrap()
     .expect("Manage neuron failed");
-    assert_eq!(
-        gov.neuron_store
-            .with_neuron(&NeuronId { id }, |n| n.clone())
-            .unwrap()
-            .dissolve_state,
-        Some(DissolveState::WhenDissolvedTimestampSeconds(
-            DEFAULT_TEST_START_TIMESTAMP_SECONDS + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
-        ),)
-    );
-    // Assert that in one second the age of the neuron will be zero.
-    assert_eq!(
-        gov.neuron_store
-            .with_neuron(&NeuronId { id }, |n| n.clone())
-            .unwrap()
-            .age_seconds(DEFAULT_TEST_START_TIMESTAMP_SECONDS + 1),
-        0
-    );
+
+    let neuron_info = gov.get_neuron_info(&NeuronId { id }).unwrap();
+    assert_eq!(neuron_info.state, NeuronState::Dissolving as i32);
+    assert_eq!(neuron_info.age_seconds, 0);
 }
 
 /// Tests that a neuron in a dissolving state will panic if a "start_dissolving"
 /// command is issued.
 #[test]
-#[should_panic]
+#[should_panic(
+    expected = "Manage neuron failed: GovernanceError { error_type: RequiresNotDissolving, error_message: \"\" }"
+)]
 fn test_start_dissolving_panics() {
     let fake_driver = fake::FakeDriver::default();
     let id: u64 = 1;
@@ -8927,15 +8911,10 @@ fn test_start_dissolving_panics() {
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
     );
-    assert_eq!(
-        gov.neuron_store
-            .with_neuron(&NeuronId { id }, |n| n.clone())
-            .unwrap()
-            .dissolve_state,
-        Some(DissolveState::DissolveDelaySeconds(
-            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
-        ))
-    );
+
+    let neuron_info = gov.get_neuron_info(&NeuronId { id }).unwrap();
+    assert_eq!(neuron_info.state, NeuronState::Dissolved as i32);
+
     gov.manage_neuron(
         &principal(id),
         &ManageNeuron {
@@ -8960,7 +8939,7 @@ fn test_start_dissolving_panics() {
 /// dissolving.
 #[test]
 fn test_stop_dissolving() {
-    let fake_driver = fake::FakeDriver::default();
+    let mut fake_driver = fake::FakeDriver::default();
     let id: u64 = 1;
     let fixture: GovernanceProto = fixture_for_dissolving_neuron_tests(
         id,
@@ -8974,15 +8953,14 @@ fn test_stop_dissolving() {
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
     );
+
+    let neuron_info = gov.get_neuron_info(&NeuronId { id }).unwrap();
+    assert_eq!(neuron_info.state, NeuronState::Dissolving as i32);
     assert_eq!(
-        gov.neuron_store
-            .with_neuron(&NeuronId { id }, |n| n.clone())
-            .unwrap()
-            .dissolve_state,
-        Some(DissolveState::WhenDissolvedTimestampSeconds(
-            DEFAULT_TEST_START_TIMESTAMP_SECONDS + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
-        ),)
+        neuron_info.dissolve_delay_seconds,
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
     );
+
     gov.manage_neuron(
         &principal(id),
         &ManageNeuron {
@@ -9000,29 +8978,25 @@ fn test_stop_dissolving() {
     .now_or_never()
     .unwrap()
     .expect("Manage neuron failed");
+
+    // Advance time so that the neuron has age.
+    fake_driver.advance_time_by(1);
+
+    let neuron_info = gov.get_neuron_info(&NeuronId { id }).unwrap();
+    assert_eq!(neuron_info.state, NeuronState::NotDissolving as i32);
     assert_eq!(
-        gov.neuron_store
-            .with_neuron(&NeuronId { id }, |n| n.clone())
-            .unwrap()
-            .dissolve_state,
-        Some(DissolveState::DissolveDelaySeconds(
-            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
-        ),)
+        neuron_info.dissolve_delay_seconds,
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
     );
-    // Assert that in one second the age of the neuron will be one second.
-    assert_eq!(
-        gov.neuron_store
-            .with_neuron(&NeuronId { id }, |n| n.clone())
-            .unwrap()
-            .age_seconds(DEFAULT_TEST_START_TIMESTAMP_SECONDS + 1),
-        1
-    );
+    assert_eq!(neuron_info.age_seconds, 1);
 }
 
 /// Tests that a neuron in a non-dissolving state will panic if a
 /// "stop_dissolving" command is issued.
 #[test]
-#[should_panic]
+#[should_panic(
+    expected = "Manage neuron failed: GovernanceError { error_type: RequiresDissolving, error_message: \"\" }"
+)]
 fn test_stop_dissolving_panics() {
     let fake_driver = fake::FakeDriver::default();
     let id: u64 = 1;
@@ -9036,15 +9010,14 @@ fn test_stop_dissolving_panics() {
         fake_driver.get_fake_ledger(),
         fake_driver.get_fake_cmc(),
     );
+
+    let neuron_info = gov.get_neuron_info(&NeuronId { id }).unwrap();
+    assert_eq!(neuron_info.state, NeuronState::NotDissolving as i32);
     assert_eq!(
-        gov.neuron_store
-            .with_neuron(&NeuronId { id }, |n| n.clone())
-            .unwrap()
-            .dissolve_state,
-        Some(DissolveState::DissolveDelaySeconds(
-            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
-        ))
+        neuron_info.dissolve_delay_seconds,
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
     );
+
     gov.manage_neuron(
         &principal(id),
         &ManageNeuron {
@@ -9203,15 +9176,14 @@ fn test_increase_dissolve_delay() {
     );
     // Tests for neuron 1. Non-dissolving.
     increase_dissolve_delay(&mut gov, principal_id, 1, 1);
+
+    let neuron_info = gov.get_neuron_info(&NeuronId { id: 1 }).unwrap();
+    assert_eq!(neuron_info.state, NeuronState::NotDissolving as i32);
     assert_eq!(
-        gov.neuron_store
-            .with_neuron(&NeuronId { id: 1 }, |n| n.clone())
-            .unwrap()
-            .dissolve_state,
-        Some(DissolveState::DissolveDelaySeconds(
-            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1
-        ),)
+        neuron_info.dissolve_delay_seconds,
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1
     );
+
     increase_dissolve_delay(
         &mut gov,
         principal_id,
@@ -9219,28 +9191,22 @@ fn test_increase_dissolve_delay() {
         u32::try_from(MAX_DISSOLVE_DELAY_SECONDS + 1)
             .expect("MAX_DISSOLVE_DELAY_SECONDS larger than u32"),
     );
+    let neuron_info = gov.get_neuron_info(&NeuronId { id: 1 }).unwrap();
+    assert_eq!(neuron_info.state, NeuronState::NotDissolving as i32);
     assert_eq!(
-        gov.neuron_store
-            .with_neuron(&NeuronId { id: 1 }, |n| n.clone())
-            .unwrap()
-            .dissolve_state,
-        Some(DissolveState::DissolveDelaySeconds(
-            MAX_DISSOLVE_DELAY_SECONDS
-        ),)
+        neuron_info.dissolve_delay_seconds,
+        MAX_DISSOLVE_DELAY_SECONDS
     );
+
     // Tests for neuron 2. Dissolving.
     increase_dissolve_delay(&mut gov, principal_id, 2, 1);
+    let neuron_info = gov.get_neuron_info(&NeuronId { id: 2 }).unwrap();
+    assert_eq!(neuron_info.state, NeuronState::Dissolving as i32);
     assert_eq!(
-        gov.neuron_store
-            .with_neuron(&NeuronId { id: 2 }, |n| n.clone())
-            .unwrap()
-            .dissolve_state,
-        Some(DissolveState::WhenDissolvedTimestampSeconds(
-            DEFAULT_TEST_START_TIMESTAMP_SECONDS
-                + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
-                + 1,
-        ))
+        neuron_info.dissolve_delay_seconds,
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1
     );
+
     increase_dissolve_delay(
         &mut gov,
         principal_id,
@@ -9248,15 +9214,13 @@ fn test_increase_dissolve_delay() {
         u32::try_from(MAX_DISSOLVE_DELAY_SECONDS + 1)
             .expect("MAX_DISSOLVE_DELAY_SECONDS larger than u32"),
     );
+    let neuron_info = gov.get_neuron_info(&NeuronId { id: 2 }).unwrap();
+    assert_eq!(neuron_info.state, NeuronState::Dissolving as i32);
     assert_eq!(
-        gov.neuron_store
-            .with_neuron(&NeuronId { id: 2 }, |n| n.clone())
-            .unwrap()
-            .dissolve_state,
-        Some(DissolveState::WhenDissolvedTimestampSeconds(
-            DEFAULT_TEST_START_TIMESTAMP_SECONDS + MAX_DISSOLVE_DELAY_SECONDS,
-        ))
+        neuron_info.dissolve_delay_seconds,
+        MAX_DISSOLVE_DELAY_SECONDS
     );
+
     // Tests for neuron 3. Dissolved.
     increase_dissolve_delay(
         &mut gov,
@@ -9265,14 +9229,11 @@ fn test_increase_dissolve_delay() {
         u32::try_from(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
             .expect("MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS larger than u32"),
     );
+    let neuron_info = gov.get_neuron_info(&NeuronId { id: 3 }).unwrap();
+    assert_eq!(neuron_info.state, NeuronState::NotDissolving as i32);
     assert_eq!(
-        gov.neuron_store
-            .with_neuron(&NeuronId { id: 3 }, |n| n.clone())
-            .unwrap()
-            .dissolve_state,
-        Some(DissolveState::DissolveDelaySeconds(
-            MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
-        ),)
+        neuron_info.dissolve_delay_seconds,
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
     );
 }
 

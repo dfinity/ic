@@ -60,7 +60,7 @@ pub struct Neuron {
     /// This value is meaningless when the neuron is dissolving, since a
     /// dissolving neurons always has age zero. The canonical value of
     /// this field for a dissolving neuron is `u64::MAX`.
-    pub aging_since_timestamp_seconds: u64,
+    aging_since_timestamp_seconds: u64,
     /// The timestamp, in seconds from the Unix epoch, at which this
     /// neuron should be spawned and its maturity converted to ICP
     /// according to <https://wiki.internetcomputer.org/wiki/Maturity_modulation.>
@@ -120,7 +120,7 @@ pub struct Neuron {
     /// (b) `dissolve_delay` is set to zero, (c) neither value is set.
     ///
     /// Cf. \[Neuron::stop_dissolving\] and \[Neuron::start_dissolving\].
-    pub dissolve_state: Option<NeuronDissolveState>,
+    dissolve_state: Option<NeuronDissolveState>,
 }
 
 impl Neuron {
@@ -142,6 +142,21 @@ impl Neuron {
     /// Replace the controller of the neuron. Only GTC neurons can change their controller.
     pub fn set_controller(&mut self, new_controller: PrincipalId) {
         self.controller = new_controller;
+    }
+
+    /// Returns an enum representing the dissolve state and age of a neuron.
+    pub fn dissolve_state_and_age(&self) -> DissolveStateAndAge {
+        DissolveStateAndAge::from(StoredDissolvedStateAndAge {
+            dissolve_state: self.dissolve_state.clone(),
+            aging_since_timestamp_seconds: self.aging_since_timestamp_seconds,
+        })
+    }
+
+    /// Sets a neuron's dissolve state and age.
+    pub fn set_dissolve_state_and_age(&mut self, state_and_age: DissolveStateAndAge) {
+        let stored = StoredDissolvedStateAndAge::from(state_and_age);
+        self.dissolve_state = stored.dissolve_state;
+        self.aging_since_timestamp_seconds = stored.aging_since_timestamp_seconds;
     }
 
     /// Returns the dissolve state. Deprecated and only used by the old merge neurons flow and will

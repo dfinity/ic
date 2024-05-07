@@ -113,6 +113,28 @@ impl DissolveStateAndAge {
         }
     }
 
+    /// Returns the timestamp when the neuron will be dissolved. If the neuron is not dissolving, it
+    /// returns None. Note that when self == LegacyDissolved {..}, even though the Neuron is
+    /// dissolved, we do not know when that happened. This tends to happen when Neurons are first
+    /// created. We will clean up this case soon.
+    pub fn dissolved_at_timestamp_seconds(self) -> Option<u64> {
+        match self {
+            Self::NotDissolving { .. } => None,
+            Self::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds,
+            } => Some(when_dissolved_timestamp_seconds),
+            Self::LegacyDissolvingOrDissolved {
+                when_dissolved_timestamp_seconds,
+                ..
+            } => Some(when_dissolved_timestamp_seconds),
+            // The dissolved neurons in this case have DissolveDelaySeconds(0), which are created
+            // when the neurons are first claimed. We don't know exactly when they are dissolved
+            // from their dissolve state.
+            Self::LegacyDissolved { .. } => None,
+            Self::LegacyNoneDissolveState { .. } => None,
+        }
+    }
+
     /// Increases the dissolve delay of the neuron by the given number of seconds. If the neuron is
     /// already dissolved, it transitions to a non-dissolving state with the new dissolve delay. If
     /// the neuron is dissolving, the dissolve timestamp is increased by the given number of
