@@ -36,10 +36,9 @@ use ic_types::consensus::idkg::{
     ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
     EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript,
     EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaReshareRequest,
-    EcdsaSigShare, EcdsaUIDGenerator, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
-    IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript, QuadrupleId, RequestId,
-    ReshareOfMaskedParams, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
-    UnmaskedTranscript,
+    EcdsaSigShare, IDkgTranscriptAttributes, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef,
+    KeyTranscriptCreation, MaskedTranscript, QuadrupleId, RequestId, ReshareOfMaskedParams,
+    TranscriptAttributes, TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin, IDkgOpening,
@@ -1463,25 +1462,14 @@ pub(crate) fn empty_ecdsa_payload_with_key_ids(
     subnet_id: SubnetId,
     key_ids: Vec<EcdsaKeyId>,
 ) -> EcdsaPayload {
-    assert_eq!(key_ids.len(), 1, "Multiple key ids not support yet");
-    let key_id = key_ids.first().unwrap().clone();
-
-    EcdsaPayload {
-        signature_agreements: BTreeMap::new(),
-        deprecated_ongoing_signatures: BTreeMap::new(),
-        available_quadruples: BTreeMap::new(),
-        quadruples_in_creation: BTreeMap::new(),
-        uid_generator: EcdsaUIDGenerator::new(subnet_id, Height::new(0)),
-        idkg_transcripts: BTreeMap::new(),
-        ongoing_xnet_reshares: BTreeMap::new(),
-        xnet_reshare_agreements: BTreeMap::new(),
-        key_transcript: EcdsaKeyTranscript {
-            current: None,
-            next_in_creation: KeyTranscriptCreation::Begin,
-            key_id,
-            master_key_id: None,
-        },
-    }
+    EcdsaPayload::empty(
+        Height::new(0),
+        subnet_id,
+        key_ids
+            .into_iter()
+            .map(|key_id| EcdsaKeyTranscript::new(key_id, KeyTranscriptCreation::Begin))
+            .collect(),
+    )
 }
 
 pub(crate) fn fake_ecdsa_key_id() -> EcdsaKeyId {
@@ -1533,13 +1521,16 @@ pub(crate) fn set_up_ecdsa_payload(
 ) {
     let env = CanisterThresholdSigTestEnvironment::new(nodes_count, rng);
 
-    let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(subnet_id, ecdsa_key_ids);
+    let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(subnet_id, ecdsa_key_ids.clone());
     let mut block_reader = TestEcdsaBlockReader::new();
 
     if should_create_key_transcript {
-        let (key_transcript, key_transcript_ref) = ecdsa_payload.generate_current_key(&env, rng);
+        for key_id in ecdsa_key_ids {
+            let (key_transcript, key_transcript_ref) =
+                ecdsa_payload.generate_current_key(&key_id, &env, rng);
 
-        block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
+            block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
+        }
     }
 
     (ecdsa_payload, env, block_reader)
@@ -1581,6 +1572,7 @@ pub(crate) trait EcdsaPayloadTestHelper {
 
     fn generate_current_key(
         &mut self,
+        ecdsa_key_id: &EcdsaKeyId,
         env: &CanisterThresholdSigTestEnvironment,
         rng: &mut ReproducibleRng,
     ) -> (IDkgTranscript, idkg::UnmaskedTranscript);
@@ -1589,6 +1581,11 @@ pub(crate) trait EcdsaPayloadTestHelper {
     ///
     /// Panics if there are multiple or no keys.
     fn single_key_transcript(&self) -> &EcdsaKeyTranscript;
+
+    /// Retrieves the only key transcript in the ecdsa payload.
+    ///
+    /// Panics if there are multiple or no keys.
+    fn single_key_transcript_mut(&mut self) -> &mut EcdsaKeyTranscript;
 }
 
 impl EcdsaPayloadTestHelper for EcdsaPayload {
@@ -1601,18 +1598,34 @@ impl EcdsaPayloadTestHelper for EcdsaPayload {
     }
 
     fn single_key_transcript(&self) -> &EcdsaKeyTranscript {
-        &self.key_transcript
+        match self.key_transcripts.len() {
+            0 => panic!("There are no key transcripts in the payload"),
+            1 => self.key_transcripts.values().next().unwrap(),
+            n => panic!("There are multiple ({}) key transcripts in the payload", n),
+        }
+    }
+
+    fn single_key_transcript_mut(&mut self) -> &mut EcdsaKeyTranscript {
+        match self.key_transcripts.len() {
+            0 => panic!("There are no key transcripts in the payload"),
+            1 => self.key_transcripts.values_mut().next().unwrap(),
+            n => panic!("There are multiple ({}) key transcripts in the payload", n),
+        }
     }
 
     fn generate_current_key(
         &mut self,
+        ecdsa_key_id: &EcdsaKeyId,
         env: &CanisterThresholdSigTestEnvironment,
         rng: &mut ReproducibleRng,
     ) -> (IDkgTranscript, idkg::UnmaskedTranscript) {
         let (key_transcript, key_transcript_ref, current) =
             generate_key_transcript(env, rng, Height::new(100));
 
-        self.key_transcript.current = Some(current);
+        self.key_transcripts
+            .get_mut(&MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone()))
+            .unwrap()
+            .current = Some(current);
 
         (key_transcript, key_transcript_ref)
     }

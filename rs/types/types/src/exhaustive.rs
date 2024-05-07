@@ -5,8 +5,9 @@ use crate::consensus::idkg::ecdsa::{
     PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsRef,
 };
 use crate::consensus::idkg::{
-    CompletedReshareRequest, CompletedSignature, EcdsaKeyTranscript, EcdsaReshareRequest,
-    KeyTranscriptCreation, MaskedTranscript, PseudoRandomId, QuadrupleId, RandomTranscriptParams,
+    CompletedReshareRequest, CompletedSignature, EcdsaKeyTranscript, EcdsaPayload,
+    EcdsaPayloadLayout, EcdsaReshareRequest, EcdsaUIDGenerator, KeyTranscriptCreation,
+    MaskedTranscript, PseudoRandomId, QuadrupleId, RandomTranscriptParams,
     RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
     UnmaskedTimesMaskedParams, UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
 };
@@ -365,6 +366,19 @@ impl ExhaustiveSet for SchnorrKeyId {
                 algorithm: elem.0,
                 name: elem.1,
             })
+            .collect()
+    }
+}
+
+impl ExhaustiveSet for MasterPublicKeyId {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let ecdsa_key_ids = EcdsaKeyId::exhaustive_set(rng);
+        let schnorr_key_ids = SchnorrKeyId::exhaustive_set(rng);
+
+        ecdsa_key_ids
+            .into_iter()
+            .map(MasterPublicKeyId::Ecdsa)
+            .chain(schnorr_key_ids.into_iter().map(MasterPublicKeyId::Schnorr))
             .collect()
     }
 }
@@ -742,6 +756,39 @@ impl ExhaustiveSet for EcdsaReshareRequest {
 
 #[derive(Clone)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct DerivedEcdsaPayload {
+    pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
+    pub available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadrupleRef>,
+    pub quadruples_in_creation: BTreeMap<QuadrupleId, QuadrupleInCreation>,
+    pub uid_generator: EcdsaUIDGenerator,
+    pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
+    pub ongoing_xnet_reshares: BTreeMap<EcdsaReshareRequest, ReshareOfUnmaskedParams>,
+    pub xnet_reshare_agreements: BTreeMap<EcdsaReshareRequest, CompletedReshareRequest>,
+    pub key_transcripts: BTreeMap<MasterPublicKeyId, EcdsaKeyTranscript>,
+}
+
+impl ExhaustiveSet for EcdsaPayload {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        DerivedEcdsaPayload::exhaustive_set(rng)
+            .into_iter()
+            .map(|payload| EcdsaPayload {
+                signature_agreements: payload.signature_agreements,
+                deprecated_ongoing_signatures: BTreeMap::default(),
+                available_quadruples: payload.available_quadruples,
+                quadruples_in_creation: payload.quadruples_in_creation,
+                uid_generator: payload.uid_generator,
+                idkg_transcripts: payload.idkg_transcripts,
+                ongoing_xnet_reshares: payload.ongoing_xnet_reshares,
+                xnet_reshare_agreements: payload.xnet_reshare_agreements,
+                key_transcripts: replace_by_singleton_if_empty(payload.key_transcripts, rng),
+                layout: EcdsaPayloadLayout::SingleKeyTranscript,
+            })
+            .collect()
+    }
+}
+
+#[derive(Clone)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DerivedEcdsaKeyTranscript {
     pub current: Option<UnmaskedTranscriptWithAttributes>,
     pub next_in_creation: KeyTranscriptCreation,
@@ -785,6 +832,33 @@ fn dummy_dealings(
     dealings
 }
 
+/// If the map is empty generates a single key-value pair and returns it.
+fn replace_by_singleton_if_empty<
+    K: ExhaustiveSet + std::cmp::Ord,
+    V: ExhaustiveSet + HasId<K>,
+    R: RngCore + CryptoRng,
+>(
+    collection: BTreeMap<K, V>,
+    rng: &mut R,
+) -> BTreeMap<K, V> {
+    if !collection.is_empty() {
+        return collection;
+    }
+
+    let value = V::exhaustive_set(rng)
+        .first()
+        .expect("There should be at least one element")
+        .clone();
+    let key = value.get_id().unwrap_or_else(|| {
+        K::exhaustive_set(rng)
+            .first()
+            .expect("There should be at least one element")
+            .clone()
+    });
+
+    BTreeMap::from([(key, value)])
+}
+
 /// Some maps of the form Map<Id, (Id, Data)> are serialized as vectors of their values, throwing
 /// all keys away. During deserialization, the key is then re-extracted from the value. By default,
 /// `Exhaustive` will generate different keys independent of values, meaning a serialization round-
@@ -815,6 +889,12 @@ impl HasId<NiDkgTargetId> for u32 {}
 impl HasId<RequestId> for ThresholdEcdsaSigInputsRef {}
 impl HasId<QuadrupleId> for QuadrupleInCreation {}
 impl HasId<QuadrupleId> for PreSignatureQuadrupleRef {}
+
+impl HasId<MasterPublicKeyId> for EcdsaKeyTranscript {
+    fn get_id(&self) -> Option<MasterPublicKeyId> {
+        Some(self.get_master_public_key_id())
+    }
+}
 
 #[cfg(test)]
 mod tests {
