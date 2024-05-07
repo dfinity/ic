@@ -4,6 +4,8 @@ use crate::messages::{
 };
 
 use super::*;
+use crate::exhaustive::ExhaustiveSet;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types_test_utils::ids::canister_test_id;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
@@ -117,4 +119,24 @@ fn max_response_count_bytes() {
     );
     // And its total size must be exactly `MAX_RESPONSE_COUNT_BYTES`.
     assert_eq!(MAX_RESPONSE_COUNT_BYTES, reject.count_bytes());
+}
+
+#[test]
+fn response_payload_proto_round_trip() {
+    for payload in Payload::exhaustive_set(&mut reproducible_rng()) {
+        let encoded = pb_queues::response::ResponsePayload::from(&payload);
+        let round_trip = Payload::try_from(encoded).unwrap();
+
+        assert_eq!(payload, round_trip);
+    }
+}
+
+#[test]
+fn request_or_response_proto_round_trip() {
+    for r in RequestOrResponse::exhaustive_set(&mut reproducible_rng()) {
+        let encoded = pb_queues::RequestOrResponse::from(&r);
+        let round_trip = RequestOrResponse::try_from(encoded).unwrap();
+
+        assert_eq!(r, round_trip);
+    }
 }
