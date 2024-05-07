@@ -864,8 +864,8 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Known amount of ERC-20 on the minter's address",
                 )?;
                 for (token, balance) in s.erc20_balances_by_token_symbol().iter() {
-                    erc20_balances =
-                        erc20_balances.value(&[("token", &token.to_string())], balance.as_f64())?;
+                    erc20_balances = erc20_balances
+                        .value(&[("erc20_token", &token.to_string())], balance.as_f64())?;
                 }
                 w.encode_gauge(
                     "cketh_minter_total_effective_tx_fees",
