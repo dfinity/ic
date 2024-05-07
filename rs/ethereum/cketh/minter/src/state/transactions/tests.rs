@@ -1422,7 +1422,7 @@ mod eth_transactions {
         use crate::test_fixtures::expect_panic_with_message;
         use crate::tx::{GasFeeEstimate, SignedEip1559TransactionRequest};
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-        use maplit::btreemap;
+        use maplit::{btreemap, btreeset};
 
         #[test]
         fn should_fail_when_sent_transaction_not_found() {
@@ -1484,8 +1484,8 @@ mod eth_transactions {
             );
             let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
             let maybe_reimburse_request = transactions
-                .maybe_reimburse
-                .get(&cketh_ledger_burn_index)
+                .maybe_reimburse_requests_iter()
+                .find(|r| r.cketh_ledger_burn_index() == cketh_ledger_burn_index)
                 .expect("maybe reimburse request not found");
             assert_eq!(maybe_reimburse_request, &withdrawal_request);
             assert!(!transactions.maybe_reimburse.is_empty());
@@ -1524,7 +1524,7 @@ mod eth_transactions {
             );
             transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
 
-            assert_eq!(transactions.maybe_reimburse, btreemap! {});
+            assert_eq!(transactions.maybe_reimburse, btreeset! {});
             assert_eq!(transactions.reimbursement_requests, btreemap! {});
         }
 
@@ -1561,7 +1561,7 @@ mod eth_transactions {
             );
             transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
 
-            assert_eq!(transactions.maybe_reimburse, btreemap! {});
+            assert_eq!(transactions.maybe_reimburse, btreeset! {});
             assert_eq!(transactions.reimbursement_requests, btreemap! {});
         }
 
@@ -1593,7 +1593,7 @@ mod eth_transactions {
             transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
             let expected_ckerc20_reimbursed_amount = withdrawal_request.withdrawal_amount;
 
-            assert_eq!(transactions.maybe_reimburse, btreemap! {});
+            assert_eq!(transactions.maybe_reimburse, btreeset! {});
             assert_eq!(
                 transactions.reimbursement_requests,
                 btreemap! {
@@ -1626,8 +1626,8 @@ mod eth_transactions {
             );
             let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
             let maybe_reimburse_request = transactions
-                .maybe_reimburse
-                .get(&cketh_ledger_burn_index)
+                .maybe_reimburse_requests_iter()
+                .find(|r| r.cketh_ledger_burn_index() == cketh_ledger_burn_index)
                 .expect("maybe reimburse request not found");
             assert_eq!(maybe_reimburse_request, &withdrawal_request.clone().into());
 
@@ -1635,8 +1635,7 @@ mod eth_transactions {
             transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
 
             let finalized_transaction = transactions
-                .finalized_tx
-                .get_alt(&cketh_ledger_burn_index)
+                .get_finalized_transaction(&cketh_ledger_burn_index)
                 .expect("finalized tx not found");
 
             assert!(transactions.maybe_reimburse.is_empty());
@@ -1737,7 +1736,7 @@ mod eth_transactions {
         use crate::state::transactions::tests::eth_transactions::withdrawal_flow;
         use crate::state::transactions::{EthTransactions, ReimbursedError, ReimbursementIndex};
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-        use maplit::btreemap;
+        use maplit::{btreemap, btreeset};
 
         #[test]
         fn should_quarantine_reimbursement() {
@@ -1753,7 +1752,7 @@ mod eth_transactions {
 
             transactions.record_quarantined_reimbursement(reimbursement_index.clone());
 
-            assert_eq!(transactions.maybe_reimburse, btreemap! {});
+            assert_eq!(transactions.maybe_reimburse, btreeset! {});
             assert_eq!(transactions.reimbursement_requests, btreemap! {});
             assert_eq!(
                 transactions.reimbursed,
@@ -1771,8 +1770,56 @@ mod eth_transactions {
             ckerc20_withdrawal_request_with_index, cketh_withdrawal_request_with_index,
             create_ck_withdrawal_requests, eth_transactions::withdrawal_flow,
         };
-        use crate::state::transactions::{EthTransactions, ReimbursementIndex, TransactionStatus};
+        use crate::state::transactions::{
+            EthTransactions, ReimbursementIndex, TransactionStatus, WithdrawalRequest,
+            WithdrawalSearchParameter, WithdrawalStatus,
+        };
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+
+        pub fn assert_withdrawal_status(
+            transactions: &EthTransactions,
+            request: &WithdrawalRequest,
+            withdrawal_status: Vec<WithdrawalStatus>,
+        ) {
+            let result = withdrawal_status
+                .iter()
+                .map(|status| (request, status.clone()))
+                .collect::<Vec<_>>();
+
+            assert_eq!(
+                transactions
+                    .withdrawal_status(&WithdrawalSearchParameter::ByWithdrawalId(
+                        request.cketh_ledger_burn_index()
+                    ))
+                    .into_iter()
+                    .map(|(r, s, _)| (r, s))
+                    .collect::<Vec<_>>(),
+                result
+            );
+
+            assert_eq!(
+                transactions
+                    .withdrawal_status(&WithdrawalSearchParameter::ByRecipient(request.payee()))
+                    .into_iter()
+                    .map(|(r, s, _)| (r, s))
+                    .collect::<Vec<_>>(),
+                result
+            );
+
+            assert_eq!(
+                transactions
+                    .withdrawal_status(&WithdrawalSearchParameter::BySenderAccount(
+                        icrc_ledger_types::icrc1::account::Account {
+                            owner: request.from(),
+                            subaccount: request.from_subaccount().as_ref().map(|x| x.0)
+                        }
+                    ))
+                    .into_iter()
+                    .map(|(r, s, _)| (r, s))
+                    .collect::<Vec<_>>(),
+                result
+            );
+        }
 
         #[test]
         fn should_have_finalized_success_status() {
@@ -1781,15 +1828,24 @@ mod eth_transactions {
             let [withdrawal_request] = create_ck_withdrawal_requests(&mut rng);
             let cketh_ledger_burn_index = withdrawal_request.cketh_ledger_burn_index();
 
-            let eth_transaction = withdrawal_flow(
+            let receipt = withdrawal_flow(
                 &mut transactions,
-                withdrawal_request,
+                withdrawal_request.clone(),
                 TransactionStatus::Success,
             );
 
+            let success = TxFinalizedStatus::Success {
+                transaction_hash: receipt.transaction_hash.to_string(),
+                effective_transaction_fee: Some(receipt.effective_transaction_fee().into()),
+            };
             assert_eq!(
                 transactions.transaction_status(&cketh_ledger_burn_index),
-                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Success(eth_transaction))
+                RetrieveEthStatus::TxFinalized(success.clone())
+            );
+            assert_withdrawal_status(
+                &transactions,
+                &withdrawal_request,
+                vec![WithdrawalStatus::TxFinalized(success)],
             );
         }
 
@@ -1798,17 +1854,21 @@ mod eth_transactions {
             let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
             let withdrawal_request = cketh_withdrawal_request_with_index(LedgerBurnIndex::new(15));
             let cketh_ledger_burn_index = withdrawal_request.ledger_burn_index;
-            let eth_transaction = withdrawal_flow(
+            let receipt = withdrawal_flow(
                 &mut transactions,
                 withdrawal_request.clone(),
                 TransactionStatus::Failure,
             );
 
+            let pending_reimbursedment = TxFinalizedStatus::PendingReimbursement((&receipt).into());
             assert_eq!(
                 transactions.transaction_status(&cketh_ledger_burn_index),
-                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
-                    eth_transaction.clone()
-                ))
+                RetrieveEthStatus::TxFinalized(pending_reimbursedment.clone())
+            );
+            assert_withdrawal_status(
+                &transactions,
+                &withdrawal_request.clone().into(),
+                vec![WithdrawalStatus::TxFinalized(pending_reimbursedment)],
             );
 
             let cketh_reimbursement_index = ReimbursementIndex::CkEth {
@@ -1820,22 +1880,27 @@ mod eth_transactions {
             );
 
             let finalized_transaction = transactions
-                .finalized_tx
-                .get_alt(&cketh_ledger_burn_index)
+                .get_finalized_transaction(&cketh_ledger_burn_index)
                 .expect("finalized tx not found");
             let effective_fee_paid = finalized_transaction.effective_transaction_fee();
 
+            let reimbursed = TxFinalizedStatus::Reimbursed {
+                reimbursed_in_block: candid::Nat::from(16_u8),
+                transaction_hash: receipt.transaction_hash.to_string(),
+                reimbursed_amount: withdrawal_request
+                    .withdrawal_amount
+                    .checked_sub(effective_fee_paid)
+                    .unwrap()
+                    .into(),
+            };
             assert_eq!(
                 transactions.transaction_status(&cketh_ledger_burn_index),
-                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
-                    reimbursed_in_block: candid::Nat::from(16_u8),
-                    transaction_hash: eth_transaction.transaction_hash,
-                    reimbursed_amount: withdrawal_request
-                        .withdrawal_amount
-                        .checked_sub(effective_fee_paid)
-                        .unwrap()
-                        .into(),
-                })
+                RetrieveEthStatus::TxFinalized(reimbursed.clone())
+            );
+            assert_withdrawal_status(
+                &transactions,
+                &withdrawal_request.clone().into(),
+                vec![WithdrawalStatus::TxFinalized(reimbursed)],
             );
         }
 
@@ -1847,17 +1912,21 @@ mod eth_transactions {
                 LedgerBurnIndex::new(7),
             );
             let cketh_ledger_burn_index = withdrawal_request.cketh_ledger_burn_index;
-            let eth_transaction = withdrawal_flow(
+            let receipt = withdrawal_flow(
                 &mut transactions,
                 withdrawal_request.clone(),
                 TransactionStatus::Failure,
             );
 
+            let pending_reimbursement = TxFinalizedStatus::PendingReimbursement((&receipt).into());
             assert_eq!(
                 transactions.transaction_status(&cketh_ledger_burn_index),
-                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
-                    eth_transaction.clone()
-                ))
+                RetrieveEthStatus::TxFinalized(pending_reimbursement.clone())
+            );
+            assert_withdrawal_status(
+                &transactions,
+                &withdrawal_request.clone().into(),
+                vec![WithdrawalStatus::TxFinalized(pending_reimbursement)],
             );
 
             let ckerc20_reimbursement_index = ReimbursementIndex::CkErc20 {
@@ -1870,13 +1939,19 @@ mod eth_transactions {
                 LedgerMintIndex::new(16),
             );
 
+            let reimbursed = TxFinalizedStatus::Reimbursed {
+                reimbursed_in_block: candid::Nat::from(16_u8),
+                transaction_hash: receipt.transaction_hash.to_string(),
+                reimbursed_amount: withdrawal_request.withdrawal_amount.into(),
+            };
             assert_eq!(
                 transactions.transaction_status(&cketh_ledger_burn_index),
-                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
-                    reimbursed_in_block: candid::Nat::from(16_u8),
-                    transaction_hash: eth_transaction.transaction_hash,
-                    reimbursed_amount: withdrawal_request.withdrawal_amount.into(),
-                })
+                RetrieveEthStatus::TxFinalized(reimbursed.clone())
+            );
+            assert_withdrawal_status(
+                &transactions,
+                &withdrawal_request.clone().into(),
+                vec![WithdrawalStatus::TxFinalized(reimbursed)],
             );
         }
 
@@ -1886,7 +1961,7 @@ mod eth_transactions {
             let mut rng = reproducible_rng();
             let [withdrawal_request] = create_ck_withdrawal_requests(&mut rng);
             let reimbursement_index = ReimbursementIndex::from(&withdrawal_request);
-            let eth_transaction = withdrawal_flow(
+            let receipt = withdrawal_flow(
                 &mut transactions,
                 withdrawal_request,
                 TransactionStatus::Failure,
@@ -1896,7 +1971,7 @@ mod eth_transactions {
             assert_eq!(
                 transactions.transaction_status(&reimbursement_index.withdrawal_id()),
                 RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
-                    eth_transaction.clone()
+                    (&receipt).into()
                 ))
             );
         }
@@ -1906,7 +1981,10 @@ mod eth_transactions {
         transactions: &mut EthTransactions,
         withdrawal_request: T,
         status: TransactionStatus,
-    ) -> EthTransaction {
+    ) -> super::TransactionReceipt {
+        use crate::state::transactions::WithdrawalStatus;
+        use transaction_status::assert_withdrawal_status;
+
         let withdrawal_request = withdrawal_request.into();
         let cketh_ledger_burn_index = withdrawal_request.cketh_ledger_burn_index();
 
@@ -1914,17 +1992,31 @@ mod eth_transactions {
             transactions.transaction_status(&cketh_ledger_burn_index),
             RetrieveEthStatus::NotFound
         );
+        assert_withdrawal_status(transactions, &withdrawal_request.clone(), vec![]);
         transactions.record_withdrawal_request(withdrawal_request.clone());
         assert_eq!(
             transactions.transaction_status(&cketh_ledger_burn_index),
             RetrieveEthStatus::Pending
         );
+        assert_withdrawal_status(
+            transactions,
+            &withdrawal_request.clone(),
+            vec![WithdrawalStatus::Pending],
+        );
 
-        let created_tx =
-            create_and_record_transaction(transactions, withdrawal_request, gas_fee_estimate());
+        let created_tx = create_and_record_transaction(
+            transactions,
+            withdrawal_request.clone(),
+            gas_fee_estimate(),
+        );
         assert_eq!(
             transactions.transaction_status(&cketh_ledger_burn_index),
             RetrieveEthStatus::TxCreated
+        );
+        assert_withdrawal_status(
+            transactions,
+            &withdrawal_request.clone(),
+            vec![WithdrawalStatus::TxCreated],
         );
 
         let signed_tx = sign_transaction(created_tx);
@@ -1936,11 +2028,15 @@ mod eth_transactions {
             transactions.transaction_status(&cketh_ledger_burn_index),
             RetrieveEthStatus::TxSent(eth_transaction.clone())
         );
-        transactions.record_finalized_transaction(
-            cketh_ledger_burn_index,
-            transaction_receipt(&signed_tx, status),
+        assert_withdrawal_status(
+            transactions,
+            &withdrawal_request.clone(),
+            vec![WithdrawalStatus::TxSent(eth_transaction.clone())],
         );
-        eth_transaction
+
+        let receipt = transaction_receipt(&signed_tx, status);
+        transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
+        receipt
     }
 }
 
