@@ -684,6 +684,44 @@ mod discover_archives {
     }
 }
 
+mod run_task {
+    use crate::guard::TimerGuard;
+    use crate::scheduler::tests::init_state;
+    use crate::scheduler::tests::mock::MockCanisterRuntime;
+    use crate::scheduler::{run_task, Task, TaskExecution};
+    use crate::storage::TASKS;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn should_reschedule_task_when_previous_one_still_running() {
+        init_state();
+        let task = Task::MaybeTopUp;
+        let mut runtime = MockCanisterRuntime::new();
+        runtime.expect_time().return_const(0_u64);
+        runtime.expect_global_timer_set().return_const(());
+        let _guard_mocking_already_running_task =
+            TimerGuard::new(task.clone()).expect("no previous task running");
+
+        run_task(
+            TaskExecution {
+                execute_at_ns: 0,
+                task_type: task.clone(),
+            },
+            runtime,
+        )
+        .await;
+
+        assert_eq!(
+            task_deadline_from_state(&task),
+            Some(Duration::from_secs(3_600).as_nanos() as u64)
+        );
+    }
+
+    fn task_deadline_from_state(task: &Task) -> Option<u64> {
+        TASKS.with(|t| t.borrow().deadline_by_task.get(task))
+    }
+}
+
 fn init_state() {
     crate::state::init_state(new_state());
     register_embedded_wasms();
@@ -899,12 +937,16 @@ mod mock {
     use std::marker::Send;
 
     mock! {
-       pub CanisterRuntime{}
+        pub CanisterRuntime{}
 
         #[async_trait]
         impl CanisterRuntime for CanisterRuntime {
 
             fn id(&self) -> Principal;
+
+            fn time(&self) -> u64;
+
+            fn global_timer_set(&self, timestamp: u64);
 
             async fn create_canister(
                 &self,
