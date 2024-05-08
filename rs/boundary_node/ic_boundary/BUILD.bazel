@@ -55,6 +55,7 @@ DEPENDENCIES = [
     "@crate_index//:maxminddb",
     "@crate_index//:mockall",
     "@crate_index//:moka",
+    "@crate_index//:nftables",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:ratelimit",
