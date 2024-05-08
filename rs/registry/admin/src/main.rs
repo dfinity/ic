@@ -121,7 +121,7 @@ use prost::Message;
 use registry_canister::mutations::{
     common::decode_registry_value,
     complete_canister_migration::CompleteCanisterMigrationPayload,
-    do_add_api_boundary_node::AddApiBoundaryNodePayload,
+    do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     do_add_node_operator::AddNodeOperatorPayload,
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
@@ -466,7 +466,7 @@ enum SubCommand {
     /// Get current list of elected HostOS versions
     GetElectedHostosVersions,
     /// Propose to add an API Boundary Node
-    ProposeToAddApiBoundaryNode(ProposeToAddApiBoundaryNodeCmd),
+    ProposeToAddApiBoundaryNodes(ProposeToAddApiBoundaryNodesCmd),
     /// Propose to remove a set of API Boundary Nodes
     ProposeToRemoveApiBoundaryNodes(ProposeToRemoveApiBoundaryNodesCmd),
     /// Propose to update the version of a set of API Boundary Nodes. This subcommand is obsolete; please use
@@ -4107,30 +4107,37 @@ impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToDeployHostosT
 
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToAddApiBoundaryNodeCmd {
+struct ProposeToAddApiBoundaryNodesCmd {
     #[clap(long, required = true, alias = "node-id")]
-    /// The node to assign as an API Boundary Node
-    node: PrincipalId,
+    /// The nodes to assign as an API Boundary Node
+    nodes: Vec<PrincipalId>,
 
     #[clap(long, required = true, alias = "version-id")]
     /// The version the API Boundary Node will use
     version: String,
 }
 
-impl ProposalTitle for ProposeToAddApiBoundaryNodeCmd {
+impl ProposalTitle for ProposeToAddApiBoundaryNodesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
-            None => format!("Add API Boundary Node {}", self.node),
+            None => format!(
+                "Add API Boundary Nodes {}",
+                self.nodes
+                    .iter()
+                    .map(|id| format!("{id}"))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
         }
     }
 }
 
 #[async_trait]
-impl ProposalPayload<AddApiBoundaryNodePayload> for ProposeToAddApiBoundaryNodeCmd {
-    async fn payload(&self, _: &Agent) -> AddApiBoundaryNodePayload {
-        AddApiBoundaryNodePayload {
-            node_id: NodeId::from(self.node),
+impl ProposalPayload<AddApiBoundaryNodesPayload> for ProposeToAddApiBoundaryNodesCmd {
+    async fn payload(&self, _: &Agent) -> AddApiBoundaryNodesPayload {
+        AddApiBoundaryNodesPayload {
+            node_ids: self.nodes.iter().cloned().map(NodeId::from).collect(),
             version: self.version.clone(),
         }
     }
@@ -4440,7 +4447,7 @@ async fn main() {
             SubCommand::ProposeToDeployHostosToSomeNodes(_) => (),
             SubCommand::ProposeToCreateServiceNervousSystem(_) => (),
             SubCommand::ProposeToSetBitcoinConfig(_) => (),
-            SubCommand::ProposeToAddApiBoundaryNode(_) => (),
+            SubCommand::ProposeToAddApiBoundaryNodes(_) => (),
             SubCommand::ProposeToRemoveApiBoundaryNodes(_) => (),
             SubCommand::ProposeToUpdateApiBoundaryNodesVersion(_) => panic!(
                 "Subcommand ProposeToUpdateApiBoundaryNodesVersion is obsolete; please use \
@@ -5620,11 +5627,11 @@ async fn main() {
                 }
             }
         }
-        SubCommand::ProposeToAddApiBoundaryNode(cmd) => {
+        SubCommand::ProposeToAddApiBoundaryNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::AddApiBoundaryNode,
+                NnsFunction::AddApiBoundaryNodes,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,
