@@ -1,5 +1,8 @@
 use super::*;
-use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
+use ic_test_utilities_types::{
+    ids::{canister_test_id, message_test_id, user_test_id},
+    messages::{RequestBuilder, ResponseBuilder},
+};
 use ic_types::{messages::RequestMetadata, methods::WasmClosure, time::UNIX_EPOCH};
 use maplit::btreemap;
 
@@ -425,16 +428,77 @@ fn callback_stats() {
         NO_DEADLINE,
     );
 
-    assert_eq!(&btreemap! {}, ccm.callback_count());
-    assert_eq!(0, ccm.guaranteed_response_callback_count());
+    fn calculate_callback_counts(
+        ccm: &CallContextManager,
+        aborted_or_paused_response: Option<&Response>,
+    ) -> BTreeMap<CanisterId, usize> {
+        CallContextManagerStats::calculate_callbacks_per_respondent(
+            ccm.callbacks(),
+            aborted_or_paused_response,
+        )
+    }
 
+    assert_eq!(0, ccm.callback_count(None));
+    assert_eq!(btreemap! {}, calculate_callback_counts(&ccm, None));
+    assert_eq!(0, ccm.guaranteed_response_callback_count(None));
+
+    //
+    // Register a best-effort callback.
+    //
     let best_effort_callback_id = ccm.register_callback(best_effort_callback);
-    assert_eq!(&btreemap! { respondent => 1 }, ccm.callback_count());
-    assert_eq!(0, ccm.guaranteed_response_callback_count());
+    let best_effort_callback_response = ResponseBuilder::new()
+        .originator(originator)
+        .respondent(respondent)
+        .originator_reply_callback(best_effort_callback_id)
+        .deadline(CoarseTime::from_secs_since_unix_epoch(14))
+        .build();
+    assert_eq!(1, ccm.callback_count(None));
+    assert_eq!(
+        btreemap! { respondent => 1 },
+        calculate_callback_counts(&ccm, None)
+    );
+    assert_eq!(0, ccm.guaranteed_response_callback_count(None));
 
+    //
+    // Register a guaranteed response callback.
+    //
     let guaranteed_response_callback_id = ccm.register_callback(guaranteed_response_callback);
-    assert_eq!(&btreemap! { respondent => 2 }, ccm.callback_count());
-    assert_eq!(1, ccm.guaranteed_response_callback_count());
+    let guaranteed_response_callback_response = ResponseBuilder::new()
+        .originator(originator)
+        .respondent(respondent)
+        .originator_reply_callback(guaranteed_response_callback_id)
+        .deadline(NO_DEADLINE)
+        .build();
+    // 2 pending callbacks, one guaranteed response.
+    assert_eq!(2, ccm.callback_count(None));
+    assert_eq!(
+        btreemap! { respondent => 2 },
+        calculate_callback_counts(&ccm, None)
+    );
+    assert_eq!(1, ccm.guaranteed_response_callback_count(None));
+
+    // But only 1 if either response is in DTS execution.
+    assert_eq!(
+        1,
+        ccm.callback_count(Some(&guaranteed_response_callback_response))
+    );
+    assert_eq!(
+        btreemap! { respondent => 1 },
+        calculate_callback_counts(&ccm, Some(&guaranteed_response_callback_response))
+    );
+    assert_eq!(
+        0,
+        ccm.guaranteed_response_callback_count(Some(&guaranteed_response_callback_response))
+    );
+    assert_eq!(1, ccm.callback_count(Some(&best_effort_callback_response)));
+    assert_eq!(
+        btreemap! { respondent => 1 },
+        calculate_callback_counts(&ccm, Some(&best_effort_callback_response))
+    );
+    assert_eq!(
+        1,
+        ccm.guaranteed_response_callback_count(Some(&best_effort_callback_response))
+    );
 
     // Also test an encode-decode roundtrip, to ensure that the count is preserved.
     let call_context_manager_proto: pb::CallContextManager = (&ccm).into();
@@ -443,13 +507,24 @@ fn callback_stats() {
         CallContextManager::try_from(call_context_manager_proto).unwrap(),
     );
 
+    //
+    // Unreguster the best-effort callback.
+    //
     ccm.unregister_callback(best_effort_callback_id);
-    assert_eq!(&btreemap! { respondent => 1 }, ccm.callback_count());
-    assert_eq!(1, ccm.guaranteed_response_callback_count());
+    assert_eq!(1, ccm.callback_count(None));
+    assert_eq!(
+        btreemap! { respondent => 1 },
+        calculate_callback_counts(&ccm, None)
+    );
+    assert_eq!(1, ccm.guaranteed_response_callback_count(None));
 
+    //
+    // Unregister the guaranteed response callback.
+    //
     ccm.unregister_callback(guaranteed_response_callback_id);
-    assert_eq!(&btreemap! {}, ccm.callback_count());
-    assert_eq!(0, ccm.guaranteed_response_callback_count());
+    assert_eq!(0, ccm.callback_count(None));
+    assert_eq!(btreemap! {}, calculate_callback_counts(&ccm, None));
+    assert_eq!(0, ccm.guaranteed_response_callback_count(None));
 }
 
 #[test]
@@ -465,41 +540,54 @@ fn call_context_stats() {
 
     let mut ccm = CallContextManager::default();
 
-    assert_eq!(
-        &btreemap! {},
-        ccm.unresponded_canister_update_call_contexts()
-    );
-    assert_eq!(0, ccm.unresponded_guaranteed_response_call_contexts());
+    fn calculate_call_context_counts(
+        ccm: &CallContextManager,
+        aborted_or_paused_request: Option<&Request>,
+    ) -> BTreeMap<CanisterId, usize> {
+        CallContextManagerStats::calculate_unresponded_call_contexts_per_originator(
+            ccm.call_contexts(),
+            aborted_or_paused_request,
+        )
+    }
 
+    assert_eq!(0, ccm.unresponded_canister_update_call_contexts(None));
+    assert_eq!(btreemap! {}, calculate_call_context_counts(&ccm, None));
+    assert_eq!(0, ccm.unresponded_guaranteed_response_call_contexts(None));
+
+    //
+    // Create a new call context with ingress origin.
+    //
     let ingress_id = new_call_context(
         &mut ccm,
         CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
     );
 
     // Not a canister update, no stats updated.
-    assert_eq!(
-        &btreemap! {},
-        ccm.unresponded_canister_update_call_contexts()
-    );
-    assert_eq!(0, ccm.unresponded_guaranteed_response_call_contexts());
+    assert_eq!(0, ccm.unresponded_canister_update_call_contexts(None));
+    assert_eq!(btreemap! {}, calculate_call_context_counts(&ccm, None));
+    assert_eq!(0, ccm.unresponded_guaranteed_response_call_contexts(None));
 
+    //
+    // Create a new best-effort call context.
+    //
     let be_originator = canister_test_id(3);
+    let be_deadline = CoarseTime::from_secs_since_unix_epoch(5);
     let best_effort_id = new_call_context(
         &mut ccm,
-        CallOrigin::CanisterUpdate(
-            be_originator,
-            CallbackId::from(4),
-            CoarseTime::from_secs_since_unix_epoch(5),
-        ),
+        CallOrigin::CanisterUpdate(be_originator, CallbackId::from(4), be_deadline),
     );
 
     // One unresponded call context, but not a guaranteed response one.
+    assert_eq!(1, ccm.unresponded_canister_update_call_contexts(None));
     assert_eq!(
-        &btreemap! { be_originator => 1 },
-        ccm.unresponded_canister_update_call_contexts()
+        btreemap! { be_originator => 1 },
+        calculate_call_context_counts(&ccm, None)
     );
-    assert_eq!(0, ccm.unresponded_guaranteed_response_call_contexts());
+    assert_eq!(0, ccm.unresponded_guaranteed_response_call_contexts(None));
 
+    //
+    // Create a new guaranteed response call context.
+    //
     let gr_originator = canister_test_id(6);
     let guaranteed_response_id = new_call_context(
         &mut ccm,
@@ -508,47 +596,95 @@ fn call_context_stats() {
 
     // Two unresponded call contexts, a best-effort one and a guaranteed response
     // one.
+    assert_eq!(2, ccm.unresponded_canister_update_call_contexts(None));
     assert_eq!(
-        &btreemap! { be_originator => 1, gr_originator => 1 },
-        ccm.unresponded_canister_update_call_contexts()
+        btreemap! { be_originator => 1, gr_originator => 1 },
+        calculate_call_context_counts(&ccm, None)
     );
-    assert_eq!(1, ccm.unresponded_guaranteed_response_call_contexts());
+    assert_eq!(1, ccm.unresponded_guaranteed_response_call_contexts(None));
 
+    // But one more call context if we have another request in DTS execution.
+    let other_be_request = RequestBuilder::new()
+        .sender(be_originator)
+        .sender_reply_callback(CallbackId::from(8))
+        .deadline(be_deadline)
+        .build();
+    assert_eq!(
+        3,
+        ccm.unresponded_canister_update_call_contexts(Some(&other_be_request))
+    );
+    assert_eq!(
+        btreemap! { be_originator => 2, gr_originator => 1 },
+        calculate_call_context_counts(&ccm, Some(&other_be_request))
+    );
+    assert_eq!(
+        1,
+        ccm.unresponded_guaranteed_response_call_contexts(Some(&other_be_request))
+    );
+
+    // Same with a guaranteed response request in DTS execution.
+    let other_gr_request = RequestBuilder::new()
+        .sender(gr_originator)
+        .sender_reply_callback(CallbackId::from(9))
+        .deadline(NO_DEADLINE)
+        .build();
+    assert_eq!(
+        3,
+        ccm.unresponded_canister_update_call_contexts(Some(&other_gr_request))
+    );
+    assert_eq!(
+        btreemap! { be_originator => 1, gr_originator => 2 },
+        calculate_call_context_counts(&ccm, Some(&other_gr_request))
+    );
+    assert_eq!(
+        2,
+        ccm.unresponded_guaranteed_response_call_contexts(Some(&other_gr_request))
+    );
+
+    //
     // Respond to the ingress call context. No effect on the stats.
+    //
     ccm.mark_responded(ingress_id).unwrap();
     assert_eq!(3, ccm.call_contexts.len());
+    assert_eq!(2, ccm.unresponded_canister_update_call_contexts(None));
     assert_eq!(
-        &btreemap! { be_originator => 1, gr_originator => 1 },
-        ccm.unresponded_canister_update_call_contexts()
+        btreemap! { be_originator => 1, gr_originator => 1 },
+        calculate_call_context_counts(&ccm, None)
     );
-    assert_eq!(1, ccm.unresponded_guaranteed_response_call_contexts());
+    assert_eq!(1, ccm.unresponded_guaranteed_response_call_contexts(None));
 
+    //
     // Mark the best effort call context as responded.
+    //
     ccm.mark_responded(best_effort_id).unwrap();
     assert_eq!(3, ccm.call_contexts.len());
+    assert_eq!(1, ccm.unresponded_canister_update_call_contexts(None));
     assert_eq!(
-        &btreemap! { gr_originator => 1 },
-        ccm.unresponded_canister_update_call_contexts()
+        btreemap! { gr_originator => 1 },
+        calculate_call_context_counts(&ccm, None)
     );
-    assert_eq!(1, ccm.unresponded_guaranteed_response_call_contexts());
+    assert_eq!(1, ccm.unresponded_guaranteed_response_call_contexts(None));
 
+    //
     // Non-response result on the best effort call context. Call context is
     // consumed, but no effect on the stats.
+    //
     ccm.on_canister_result(best_effort_id, None, Ok(None), 0.into());
     assert_eq!(2, ccm.call_contexts.len());
+    assert_eq!(1, ccm.unresponded_canister_update_call_contexts(None));
     assert_eq!(
-        &btreemap! { gr_originator => 1 },
-        ccm.unresponded_canister_update_call_contexts()
+        btreemap! { gr_originator => 1 },
+        calculate_call_context_counts(&ccm, None)
     );
-    assert_eq!(1, ccm.unresponded_guaranteed_response_call_contexts());
+    assert_eq!(1, ccm.unresponded_guaranteed_response_call_contexts(None));
 
+    //
     // A no response result to the guaranteed response call context.
+    //
     ccm.on_canister_result(guaranteed_response_id, None, Ok(None), 1.into());
     assert_eq!(1, ccm.call_contexts.len());
     // No more unresponded call contexts.
-    assert_eq!(
-        &btreemap! {},
-        ccm.unresponded_canister_update_call_contexts()
-    );
-    assert_eq!(0, ccm.unresponded_guaranteed_response_call_contexts());
+    assert_eq!(0, ccm.unresponded_canister_update_call_contexts(None));
+    assert_eq!(btreemap! {}, calculate_call_context_counts(&ccm, None));
+    assert_eq!(0, ccm.unresponded_guaranteed_response_call_contexts(None));
 }

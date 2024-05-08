@@ -7,14 +7,14 @@ use ic_management_canister_types::IC_00;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
+use ic_types::ingress::WasmResult;
+use ic_types::messages::{
+    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Request,
+    RequestMetadata, Response, NO_DEADLINE,
+};
+use ic_types::methods::Callback;
+use ic_types::time::CoarseTime;
 use ic_types::{
-    ingress::WasmResult,
-    messages::{
-        CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, RequestMetadata,
-        Response, NO_DEADLINE,
-    },
-    methods::Callback,
-    time::CoarseTime,
     user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, NumInstructions,
     PrincipalId, Time, UserId,
 };
@@ -208,25 +208,20 @@ pub enum CallContextAction {
     AlreadyResponded,
 }
 
-/// Call context and callback stats for guaranteed response memory reservation
-/// calculations and queue capacity checks.
+/// Call context and callback stats to initialize and validate `CanisterQueues`
+/// guaranteed response memory reservation and queue capacity stats.
 #[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
-struct CallContextManagerStats {
+pub(crate) struct CallContextManagerStats {
     /// The number of canister update call contexts that have not yet been responded
-    /// to, by originator. Used for constant time queue capacity checks.
-    unresponded_canister_update_call_contexts: BTreeMap<CanisterId, usize>,
+    /// to.
+    unresponded_canister_update_call_contexts: usize,
 
     /// The number of guaranteed response (i.e. `deadline == NO_DEADLINE`) call
-    /// contexts that have not yet been responded to. Used for constant time memory
-    /// usage calculations.
+    /// contexts that have not yet been responded to.
     unresponded_guaranteed_response_call_contexts: usize,
 
-    /// The number of callbacks by respondent. Used for constant time queue capacity
-    /// checks.
-    callback_counts: BTreeMap<CanisterId, usize>,
-
     /// The number of guaranteed response (i.e. `deadline == NO_DEADLINE`)
-    /// callbacks. Used for constant time memory usage calculations.
+    /// callbacks.
     guaranteed_response_callback_count: usize,
 }
 
@@ -234,11 +229,8 @@ impl CallContextManagerStats {
     /// Updates the stats following the creation of a new call context.
     fn on_new_call_context(&mut self, call_origin: &CallOrigin) {
         match call_origin {
-            CallOrigin::CanisterUpdate(originator, _, deadline) => {
-                *self
-                    .unresponded_canister_update_call_contexts
-                    .entry(*originator)
-                    .or_default() += 1;
+            CallOrigin::CanisterUpdate(_, _, deadline) => {
+                self.unresponded_canister_update_call_contexts += 1;
                 if *deadline == NO_DEADLINE {
                     self.unresponded_guaranteed_response_call_contexts += 1;
                 }
@@ -254,11 +246,8 @@ impl CallContextManagerStats {
     /// origin.
     fn on_call_context_response(&mut self, call_origin: &CallOrigin) {
         match call_origin {
-            CallOrigin::CanisterUpdate(originator, _, deadline) => {
-                Self::decrement_canister_stat(
-                    &mut self.unresponded_canister_update_call_contexts,
-                    *originator,
-                );
+            CallOrigin::CanisterUpdate(_, _, deadline) => {
+                self.unresponded_canister_update_call_contexts -= 1;
                 if *deadline == NO_DEADLINE {
                     self.unresponded_guaranteed_response_call_contexts -= 1;
                 }
@@ -272,7 +261,6 @@ impl CallContextManagerStats {
 
     /// Updates the stats following the registration of a new callback.
     fn on_register_callback(&mut self, callback: &Callback) {
-        *self.callback_counts.entry(callback.respondent).or_default() += 1;
         if callback.deadline == NO_DEADLINE {
             self.guaranteed_response_callback_count += 1;
         }
@@ -280,43 +268,104 @@ impl CallContextManagerStats {
 
     /// Updates the stats following the invocation of a callback.
     fn on_unregister_callback(&mut self, callback: &Callback) {
-        Self::decrement_canister_stat(&mut self.callback_counts, callback.respondent);
         if callback.deadline == NO_DEADLINE {
             self.guaranteed_response_callback_count -= 1;
         }
     }
 
-    /// Decrements `stat` for the given `canister_id`, removing the entry if the
-    /// count reaches zero.
-    fn decrement_canister_stat(stat: &mut BTreeMap<CanisterId, usize>, canister_id: CanisterId) {
-        match stat.entry(canister_id) {
-            Entry::Occupied(mut entry) => {
-                let count = entry.get_mut();
-                debug_assert!(
-                    *count > 0,
-                    "Stats entry for {} is already zero",
-                    canister_id
-                );
-                if *count > 1 {
-                    *count -= 1;
-                } else {
-                    entry.remove();
-                }
-            }
-            Entry::Vacant(_) => {
-                debug_assert!(false, "No stats entry for {}", canister_id)
-            }
-        }
-    }
-
-    /// Calculates the stats of the given call contexts and callbacks.
+    /// Calculates the stats for the given call contexts and callbacks.
     ///
     /// Time complexity: `O(N)`.
-    fn calculate_stats(
+    pub(crate) fn calculate_stats(
         call_contexts: &BTreeMap<CallContextId, CallContext>,
         callbacks: &BTreeMap<CallbackId, Callback>,
     ) -> CallContextManagerStats {
         let unresponded_canister_update_call_contexts = call_contexts
+            .values()
+            .filter(|call_context| !call_context.responded)
+            .filter_map(|call_context| match call_context.call_origin {
+                CallOrigin::CanisterUpdate(originator, _, _) => Some(originator),
+                _ => None,
+            })
+            .count();
+        let unresponded_guaranteed_response_call_contexts = call_contexts
+            .values()
+            .filter(|call_context| !call_context.responded)
+            .filter(|call_context| {
+                matches!(
+                    call_context.call_origin,
+                    CallOrigin::CanisterUpdate(_, _, deadline) if deadline == NO_DEADLINE
+                )
+            })
+            .count();
+        let guaranteed_response_callback_count = callbacks
+            .values()
+            .filter(|callback| callback.deadline == NO_DEADLINE)
+            .count();
+
+        CallContextManagerStats {
+            unresponded_canister_update_call_contexts,
+            unresponded_guaranteed_response_call_contexts,
+            guaranteed_response_callback_count,
+        }
+    }
+
+    /// Calculates the number of response slots (responses plus reservations) per
+    /// input queue, as the count of callbacks per respondent, also taking into
+    /// account a potential paused or aborted canister response execution (meaning
+    /// that the corresponding callback was already responded to).
+    ///
+    /// Time complexity: `O(N)`.
+    #[allow(dead_code)]
+    pub(crate) fn calculate_callbacks_per_respondent(
+        callbacks: &BTreeMap<CallbackId, Callback>,
+        aborted_or_paused_response: Option<&Response>,
+    ) -> BTreeMap<CanisterId, usize> {
+        let mut callback_counts = callbacks.values().fold(
+            BTreeMap::<CanisterId, usize>::new(),
+            |mut counts, callback| {
+                *counts.entry(callback.respondent).or_default() += 1;
+                counts
+            },
+        );
+
+        // An aborted or paused response execution means one less callback (since the
+        // response was already consumed).
+        if let Some(response) = aborted_or_paused_response {
+            match callback_counts.entry(response.respondent) {
+                Entry::Occupied(mut entry) => {
+                    let count = entry.get_mut();
+                    if *count > 1 {
+                        *count -= 1;
+                    } else {
+                        entry.remove();
+                    }
+                }
+                Entry::Vacant(_) => {
+                    debug_assert!(
+                        false,
+                        "Aborted or paused DTS response with no matching callback: {:?}",
+                        response
+                    )
+                }
+            }
+        }
+
+        callback_counts
+    }
+
+    /// Calculates the number of response slots (responses plus reservations) per
+    /// output queue, as the count of unresponded call contexts per originator, also
+    /// taking into account a potential paused or aborted canister request execution
+    /// (equivalent to one more call context).
+    ///
+    /// Time complexity: `O(N)`.
+    #[allow(dead_code)]
+    pub(crate) fn calculate_unresponded_call_contexts_per_originator(
+        call_contexts: &BTreeMap<CallContextId, CallContext>,
+        aborted_or_paused_request: Option<&Request>,
+    ) -> BTreeMap<CanisterId, usize> {
+        let mut unresponded_canister_update_call_contexts = call_contexts
             .values()
             .filter(|call_context| !call_context.responded)
             .filter_map(|call_context| match call_context.call_origin {
@@ -330,34 +379,16 @@ impl CallContextManagerStats {
                     counts
                 },
             );
-        let unresponded_guaranteed_response_call_contexts = call_contexts
-            .values()
-            .filter(|call_context| !call_context.responded)
-            .filter(|call_context| {
-                matches!(
-                    call_context.call_origin,
-                    CallOrigin::CanisterUpdate(_, _, deadline) if deadline == NO_DEADLINE
-                )
-            })
-            .count();
-        let callback_count = callbacks.values().fold(
-            BTreeMap::<CanisterId, usize>::new(),
-            |mut counts, callback| {
-                *counts.entry(callback.respondent).or_default() += 1;
-                counts
-            },
-        );
-        let guaranteed_response_callback_count = callbacks
-            .values()
-            .filter(|callback| callback.deadline == NO_DEADLINE)
-            .count();
 
-        CallContextManagerStats {
-            unresponded_canister_update_call_contexts,
-            unresponded_guaranteed_response_call_contexts,
-            callback_counts: callback_count,
-            guaranteed_response_callback_count,
+        // An aborted or paused request execution means one extra (not yet applied)
+        // unresponded call context.
+        if let Some(request) = aborted_or_paused_request {
+            *unresponded_canister_update_call_contexts
+                .entry(request.sender)
+                .or_default() += 1;
         }
+
+        unresponded_canister_update_call_contexts
     }
 }
 
@@ -637,7 +668,7 @@ impl CallContextManager {
 
         // This is one big match instead of a few if statements because we want
         // the compiler to tell us if we handled all the possible cases.
-        match (result, responded, outstanding_calls) {
+        let (action, call_context) = match (result, responded, outstanding_calls) {
             (Ok(None), Responded::No, OutstandingCalls::Yes)
             | (Err(_), Responded::No, OutstandingCalls::Yes) => {
                 (CallContextAction::NotYetResponded, None)
@@ -711,7 +742,10 @@ impl CallContextManager {
                 "Canister replied twice on the same request, call_context_id = {}",
                 call_context_id
             ),
-        }
+        };
+        debug_assert!(self.stats_ok());
+
+        (action, call_context)
     }
 
     /// Marks the call context with the given ID as responded.
@@ -812,32 +846,65 @@ impl CallContextManager {
             .collect()
     }
 
-    /// Returns the number of unresponded canister update call contexts, by originator.
+    /// Returns the number of unresponded canister update call contexts, also taking
+    /// into account a potential paused or aborted canister request execution
+    /// (equivalent to one more call context).
     ///
     /// Time complexity: `O(1)`.
-    pub fn unresponded_canister_update_call_contexts(&self) -> &BTreeMap<CanisterId, usize> {
-        &self.stats.unresponded_canister_update_call_contexts
+    pub fn unresponded_canister_update_call_contexts(
+        &self,
+        aborted_or_paused_request: Option<&Request>,
+    ) -> usize {
+        self.stats.unresponded_canister_update_call_contexts
+            + match aborted_or_paused_request {
+                Some(_) => 1,
+                None => 0,
+            }
     }
 
-    /// Returns the number of unresponded guaranteed response call contexts.
+    /// Returns the number of unresponded guaranteed response call contexts, also
+    /// taking into account a potential paused or aborted canister request execution
+    /// (equivalent to one more call context).
     ///
     /// Time complexity: `O(1)`.
-    pub fn unresponded_guaranteed_response_call_contexts(&self) -> usize {
+    pub fn unresponded_guaranteed_response_call_contexts(
+        &self,
+        aborted_or_paused_request: Option<&Request>,
+    ) -> usize {
         self.stats.unresponded_guaranteed_response_call_contexts
+            + match aborted_or_paused_request {
+                Some(request) if request.deadline == NO_DEADLINE => 1,
+                _ => 0,
+            }
     }
 
-    /// Returns the number of callbacks, by respondent.
+    /// Returns the number of callbacks, also taking into account a potential paused
+    /// or aborted canister response execution (meaning that the corresponding
+    /// callback was already responded to).
     ///
     /// Time complexity: `O(1)`.
-    pub fn callback_count(&self) -> &BTreeMap<CanisterId, usize> {
-        &self.stats.callback_counts
+    pub fn callback_count(&self, aborted_or_paused_response: Option<&Response>) -> usize {
+        self.callbacks.len()
+            - match aborted_or_paused_response {
+                Some(_) => 1,
+                None => 0,
+            }
     }
 
-    /// Returns the number of guaranteed response callbacks.
+    /// Returns the number of guaranteed response callbacks, also taking into
+    /// account a potential paused or aborted canister response execution (meaning
+    /// that the corresponding callback was already responded to).
     ///
     /// Time complexity: `O(1)`.
-    pub fn guaranteed_response_callback_count(&self) -> usize {
+    pub fn guaranteed_response_callback_count(
+        &self,
+        aborted_or_paused_response: Option<&Response>,
+    ) -> usize {
         self.stats.guaranteed_response_callback_count
+            - match aborted_or_paused_response {
+                Some(response) if response.deadline == NO_DEADLINE => 1,
+                _ => 0,
+            }
     }
 
     /// Helper function to concisely validate stats adjustments in debug builds,

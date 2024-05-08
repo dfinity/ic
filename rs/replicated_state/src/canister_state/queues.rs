@@ -754,6 +754,10 @@ impl CanisterQueues {
         self.input_queues_stats.size_bytes
     }
 
+    pub fn input_queues_request_count(&self) -> usize {
+        self.input_queues_stats.message_count - self.input_queues_stats.response_count
+    }
+
     pub fn input_queues_response_count(&self) -> usize {
         self.input_queues_stats.response_count
     }
