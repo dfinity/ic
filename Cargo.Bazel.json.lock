@@ -1,5 +1,5 @@
 {
-  "checksum": "f5fad52382dfa105aff5a83a600d032bc15caf24da955c33bb99e2eed72b231f",
+  "checksum": "350cc5a616cffbf58714ed6603b2a74bcf2f7bf06e73e15a2fda56ccc8cb79ec",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17232,9 +17232,9 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "hyper-rustls 0.26.0",
+              "id": "hyper-rustls 0.27.1",
               "target": "hyper_rustls",
-              "alias": "hyper_rustls_0_26_0"
+              "alias": "hyper_rustls_0_27_x"
             },
             {
               "id": "hyper-socks2 0.8.0",
@@ -17746,9 +17746,9 @@
               "target": "rustls"
             },
             {
-              "id": "rustls 0.22.2",
+              "id": "rustls 0.23.5",
               "target": "rustls",
-              "alias": "rustls_0_22_2"
+              "alias": "rustls_0_23_x"
             },
             {
               "id": "rustls-native-certs 0.7.0",
@@ -26774,106 +26774,10 @@
             "native-tokio",
             "ring",
             "rustls-native-certs",
-            "tls12"
+            "tls12",
+            "webpki-roots"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "webpki-roots"
-            ],
-            "aarch64-apple-ios": [
-              "webpki-roots"
-            ],
-            "aarch64-apple-ios-sim": [
-              "webpki-roots"
-            ],
-            "aarch64-fuchsia": [
-              "webpki-roots"
-            ],
-            "aarch64-linux-android": [
-              "webpki-roots"
-            ],
-            "aarch64-pc-windows-msvc": [
-              "webpki-roots"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "webpki-roots"
-            ],
-            "aarch64-unknown-nixos-gnu": [
-              "webpki-roots"
-            ],
-            "aarch64-unknown-nto-qnx710": [
-              "webpki-roots"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "webpki-roots"
-            ],
-            "armv7-linux-androideabi": [
-              "webpki-roots"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "webpki-roots"
-            ],
-            "i686-apple-darwin": [
-              "webpki-roots"
-            ],
-            "i686-linux-android": [
-              "webpki-roots"
-            ],
-            "i686-pc-windows-msvc": [
-              "webpki-roots"
-            ],
-            "i686-unknown-freebsd": [
-              "webpki-roots"
-            ],
-            "i686-unknown-linux-gnu": [
-              "webpki-roots"
-            ],
-            "powerpc-unknown-linux-gnu": [
-              "webpki-roots"
-            ],
-            "riscv32imc-unknown-none-elf": [
-              "webpki-roots"
-            ],
-            "riscv64gc-unknown-none-elf": [
-              "webpki-roots"
-            ],
-            "s390x-unknown-linux-gnu": [
-              "webpki-roots"
-            ],
-            "thumbv7em-none-eabi": [
-              "webpki-roots"
-            ],
-            "thumbv8m.main-none-eabi": [
-              "webpki-roots"
-            ],
-            "x86_64-apple-darwin": [
-              "webpki-roots"
-            ],
-            "x86_64-apple-ios": [
-              "webpki-roots"
-            ],
-            "x86_64-fuchsia": [
-              "webpki-roots"
-            ],
-            "x86_64-linux-android": [
-              "webpki-roots"
-            ],
-            "x86_64-pc-windows-msvc": [
-              "webpki-roots"
-            ],
-            "x86_64-unknown-freebsd": [
-              "webpki-roots"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "webpki-roots"
-            ],
-            "x86_64-unknown-nixos-gnu": [
-              "webpki-roots"
-            ],
-            "x86_64-unknown-none": [
-              "webpki-roots"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -26931,6 +26835,103 @@
         },
         "edition": "2021",
         "version": "0.26.0"
+      },
+      "license": "Apache-2.0 OR ISC OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "ISC",
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "hyper-rustls 0.27.1": {
+      "name": "hyper-rustls",
+      "version": "0.27.1",
+      "package_url": "https://github.com/rustls/hyper-rustls",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hyper-rustls/0.27.1/download",
+          "sha256": "908bb38696d7a037a01ebcc68a00634112ac2bbf8ca74e30a2c3d2f4f021302b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hyper_rustls",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hyper_rustls",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "http1",
+            "http2",
+            "native-tokio",
+            "ring",
+            "rustls-native-certs",
+            "tls12"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures-util 0.3.30",
+              "target": "futures_util"
+            },
+            {
+              "id": "http 1.0.0",
+              "target": "http"
+            },
+            {
+              "id": "hyper 1.2.0",
+              "target": "hyper"
+            },
+            {
+              "id": "hyper-util 0.1.3",
+              "target": "hyper_util"
+            },
+            {
+              "id": "rustls 0.23.5",
+              "target": "rustls"
+            },
+            {
+              "id": "rustls-native-certs 0.7.0",
+              "target": "rustls_native_certs"
+            },
+            {
+              "id": "rustls-pki-types 1.3.1",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            },
+            {
+              "id": "tokio 1.37.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-rustls 0.26.0",
+              "target": "tokio_rustls"
+            },
+            {
+              "id": "tower-service 0.3.2",
+              "target": "tower_service"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.27.1"
       },
       "license": "Apache-2.0 OR ISC OR MIT",
       "license_ids": [
@@ -54030,6 +54031,114 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "rustls 0.23.5": {
+      "name": "rustls",
+      "version": "0.23.5",
+      "package_url": "https://github.com/rustls/rustls",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rustls/0.23.5/download",
+          "sha256": "afabcee0551bd1aa3e18e5adbf2c0544722014b899adb31bd186ec638d3da97e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustls",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rustls",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "ring",
+            "std",
+            "tls12"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "ring 0.17.7",
+              "target": "ring"
+            },
+            {
+              "id": "rustls 0.23.5",
+              "target": "build_script_build"
+            },
+            {
+              "id": "rustls-pki-types 1.3.1",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            },
+            {
+              "id": "rustls-webpki 0.102.2",
+              "target": "webpki"
+            },
+            {
+              "id": "subtle 2.5.0",
+              "target": "subtle"
+            },
+            {
+              "id": "zeroize 1.7.0",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.23.5"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "ring 0.17.7",
+              "target": "ring"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "Apache-2.0 OR ISC OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "ISC",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "rustls-native-certs 0.6.3": {
       "name": "rustls-native-certs",
       "version": "0.6.3",
@@ -63986,139 +64095,12 @@
         ],
         "crate_features": {
           "common": [
+            "default",
             "logging",
+            "ring",
             "tls12"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "default",
-              "ring"
-            ],
-            "aarch64-apple-ios": [
-              "default",
-              "ring"
-            ],
-            "aarch64-apple-ios-sim": [
-              "default",
-              "ring"
-            ],
-            "aarch64-fuchsia": [
-              "default",
-              "ring"
-            ],
-            "aarch64-linux-android": [
-              "default",
-              "ring"
-            ],
-            "aarch64-pc-windows-msvc": [
-              "default",
-              "ring"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "default",
-              "ring"
-            ],
-            "aarch64-unknown-nixos-gnu": [
-              "default",
-              "ring"
-            ],
-            "aarch64-unknown-nto-qnx710": [
-              "default",
-              "ring"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "default",
-              "ring"
-            ],
-            "armv7-linux-androideabi": [
-              "default",
-              "ring"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "default",
-              "ring"
-            ],
-            "i686-apple-darwin": [
-              "default",
-              "ring"
-            ],
-            "i686-linux-android": [
-              "default",
-              "ring"
-            ],
-            "i686-pc-windows-msvc": [
-              "default",
-              "ring"
-            ],
-            "i686-unknown-freebsd": [
-              "default",
-              "ring"
-            ],
-            "i686-unknown-linux-gnu": [
-              "default",
-              "ring"
-            ],
-            "powerpc-unknown-linux-gnu": [
-              "default",
-              "ring"
-            ],
-            "riscv32imc-unknown-none-elf": [
-              "default",
-              "ring"
-            ],
-            "riscv64gc-unknown-none-elf": [
-              "default",
-              "ring"
-            ],
-            "s390x-unknown-linux-gnu": [
-              "default",
-              "ring"
-            ],
-            "thumbv7em-none-eabi": [
-              "default",
-              "ring"
-            ],
-            "thumbv8m.main-none-eabi": [
-              "default",
-              "ring"
-            ],
-            "x86_64-apple-darwin": [
-              "default",
-              "ring"
-            ],
-            "x86_64-apple-ios": [
-              "default",
-              "ring"
-            ],
-            "x86_64-fuchsia": [
-              "default",
-              "ring"
-            ],
-            "x86_64-linux-android": [
-              "default",
-              "ring"
-            ],
-            "x86_64-pc-windows-msvc": [
-              "default",
-              "ring"
-            ],
-            "x86_64-unknown-freebsd": [
-              "default",
-              "ring"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "default",
-              "ring"
-            ],
-            "x86_64-unknown-nixos-gnu": [
-              "default",
-              "ring"
-            ],
-            "x86_64-unknown-none": [
-              "default",
-              "ring"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -64140,6 +64122,69 @@
         },
         "edition": "2021",
         "version": "0.25.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "tokio-rustls 0.26.0": {
+      "name": "tokio-rustls",
+      "version": "0.26.0",
+      "package_url": "https://github.com/rustls/tokio-rustls",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tokio-rustls/0.26.0/download",
+          "sha256": "0c7bc40d0e5a97695bb96e27995cd3a08538541b0a846f65bba7a359f36700d4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tokio_rustls",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tokio_rustls",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "tls12"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "rustls 0.23.5",
+              "target": "rustls"
+            },
+            {
+              "id": "rustls-pki-types 1.3.1",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            },
+            {
+              "id": "tokio 1.37.0",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.26.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -76779,7 +76824,7 @@
     "hyper 0.14.27",
     "hyper 1.2.0",
     "hyper-rustls 0.24.2",
-    "hyper-rustls 0.26.0",
+    "hyper-rustls 0.27.1",
     "hyper-socks2 0.8.0",
     "hyper-util 0.1.3",
     "hyperlocal-next 0.9.0",
@@ -76914,7 +76959,7 @@
     "rust_decimal_macros 1.30.0",
     "rustc-hash 1.1.0",
     "rustls 0.21.12",
-    "rustls 0.22.2",
+    "rustls 0.23.5",
     "rustls-native-certs 0.7.0",
     "rustls-pemfile 1.0.3",
     "rustversion 1.0.14",
