@@ -699,12 +699,9 @@ impl ExhaustiveSet for QuadrupleInCreation {
             .into_iter()
             .map(|q| QuadrupleInCreation {
                 key_id: q.key_id,
-                kappa_masked_config: None,
-                kappa_masked: None,
                 lambda_config: q.random_config.clone(),
                 lambda_masked: Some(q.masked),
-                kappa_unmasked_config: Some(q.random_unmasked_config.clone()),
-                unmask_kappa_config: Some(q.reshare_config.clone()),
+                kappa_unmasked_config: q.random_unmasked_config.clone(),
                 kappa_unmasked: Some(q.unmasked),
                 key_times_lambda_config: Some(q.times_config.clone()),
                 key_times_lambda: Some(q.masked),
@@ -715,14 +712,9 @@ impl ExhaustiveSet for QuadrupleInCreation {
 
         result.push(QuadrupleInCreation {
             key_id: EcdsaKeyId::exhaustive_set(rng)[0].clone(),
-            kappa_masked_config: None,
-            kappa_masked: None,
             lambda_config: RandomTranscriptParams::exhaustive_set(rng)[0].clone(),
             lambda_masked: None,
-            kappa_unmasked_config: Some(
-                RandomUnmaskedTranscriptParams::exhaustive_set(rng)[0].clone(),
-            ),
-            unmask_kappa_config: None,
+            kappa_unmasked_config: RandomUnmaskedTranscriptParams::exhaustive_set(rng)[0].clone(),
             kappa_unmasked: None,
             key_times_lambda_config: None,
             key_times_lambda: None,

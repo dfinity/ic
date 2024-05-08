@@ -168,14 +168,12 @@ message PreSignatureRef {
 }
 
 message QuadrupleInCreation {
-  RandomTranscriptParams kappa_masked_config = 1;
-  MaskedTranscript kappa_masked = 2;
+  reserved 1, 2, 5;
 
   RandomTranscriptParams lambda_config = 3;
   MaskedTranscript lambda_masked = 4;
 
   RandomUnmaskedTranscriptParams kappa_unmasked_config = 11;
-  ReshareOfMaskedParams unmask_kappa_config = 5;
   UnmaskedTranscript kappa_unmasked = 6;
 
   UnmaskedTimesMaskedParams key_times_lambda_config = 7;
