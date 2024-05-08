@@ -660,7 +660,7 @@ impl NnsFunction {
                     ),
                 ));
             }
-            NnsFunction::AddApiBoundaryNode => (REGISTRY_CANISTER_ID, "add_api_boundary_node"),
+            NnsFunction::AddApiBoundaryNodes => (REGISTRY_CANISTER_ID, "add_api_boundary_nodes"),
             NnsFunction::RemoveApiBoundaryNodes => {
                 (REGISTRY_CANISTER_ID, "remove_api_boundary_nodes")
             }
@@ -802,7 +802,7 @@ impl Proposal {
                             // Retired NnsFunctions
                             NnsFunction::BlessReplicaVersion
                             | NnsFunction::RetireReplicaVersion => Topic::IcOsVersionElection,
-                            NnsFunction::AddApiBoundaryNode
+                            NnsFunction::AddApiBoundaryNodes
                             | NnsFunction::RemoveApiBoundaryNodes
                             | NnsFunction::UpdateApiBoundaryNodesVersion => {
                                 Topic::ApiBoundaryNodeManagement

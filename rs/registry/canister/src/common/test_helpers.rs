@@ -116,7 +116,7 @@ pub fn prepare_registry_with_nodes(
                 }),
                 node_operator_id: PrincipalId::new_user_test_id(999).into_vec(),
                 // Preset this field to Some(), in order to allow seamless creation of ApiBoundaryNodeRecord if needed.
-                domain: Some("node-example.com".into()),
+                domain: Some(format!("node{effective_id}.example.com")),
                 ..Default::default()
             };
             mutations.append(&mut make_add_node_registry_mutations(

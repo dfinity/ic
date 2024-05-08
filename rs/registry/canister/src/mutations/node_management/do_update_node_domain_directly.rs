@@ -77,7 +77,7 @@ mod tests {
         common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
         mutations::{
             common::{decode_registry_value, encode_or_panic, test::TEST_NODE_ID},
-            do_add_api_boundary_node::AddApiBoundaryNodePayload,
+            do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
         },
     };
     use ic_base_types::{NodeId, PrincipalId};
@@ -270,11 +270,11 @@ mod tests {
             .expect("no node ids found")
             .to_owned();
 
-        let payload = AddApiBoundaryNodePayload {
-            node_id,
+        let payload = AddApiBoundaryNodesPayload {
+            node_ids: vec![node_id],
             version: "version".into(),
         };
-        registry.do_add_api_boundary_node(payload);
+        registry.do_add_api_boundary_nodes(payload);
 
         // try to change the domain name of this node
         let new_domain = Some("sample.io".to_string());

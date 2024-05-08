@@ -3770,7 +3770,7 @@ pub enum NnsFunction {
     /// the Root canister is preventing root or another canister from upgrading (in the case of proxied calls).
     HardResetNnsRootToVersion = 42,
     /// A proposal to add a new API Boundary Node using an assigned node
-    AddApiBoundaryNode = 43,
+    AddApiBoundaryNodes = 43,
     /// A proposal to remove a set of API Boundary Nodes, which will designate them as unassigned nodes
     RemoveApiBoundaryNodes = 44,
     /// (obsolete) A proposal to update the version of a set of API Boundary Nodes
@@ -3852,7 +3852,7 @@ impl NnsFunction {
             }
             NnsFunction::UpdateNodesHostosVersion => "NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION",
             NnsFunction::HardResetNnsRootToVersion => "NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION",
-            NnsFunction::AddApiBoundaryNode => "NNS_FUNCTION_ADD_API_BOUNDARY_NODE",
+            NnsFunction::AddApiBoundaryNodes => "NNS_FUNCTION_ADD_API_BOUNDARY_NODES",
             NnsFunction::RemoveApiBoundaryNodes => "NNS_FUNCTION_REMOVE_API_BOUNDARY_NODES",
             NnsFunction::UpdateApiBoundaryNodesVersion => {
                 "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION"
@@ -3928,7 +3928,7 @@ impl NnsFunction {
             }
             "NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION" => Some(Self::UpdateNodesHostosVersion),
             "NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION" => Some(Self::HardResetNnsRootToVersion),
-            "NNS_FUNCTION_ADD_API_BOUNDARY_NODE" => Some(Self::AddApiBoundaryNode),
+            "NNS_FUNCTION_ADD_API_BOUNDARY_NODES" => Some(Self::AddApiBoundaryNodes),
             "NNS_FUNCTION_REMOVE_API_BOUNDARY_NODES" => Some(Self::RemoveApiBoundaryNodes),
             "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION" => {
                 Some(Self::UpdateApiBoundaryNodesVersion)

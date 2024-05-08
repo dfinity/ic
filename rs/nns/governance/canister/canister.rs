@@ -1033,7 +1033,7 @@ fn get_effective_payload(
         | NnsFunction::UpdateAllowedPrincipals
         | NnsFunction::UpdateSnsWasmSnsSubnetIds
         | NnsFunction::InsertSnsWasmUpgradePathEntries
-        | NnsFunction::AddApiBoundaryNode
+        | NnsFunction::AddApiBoundaryNodes
         | NnsFunction::RemoveApiBoundaryNodes
         | NnsFunction::UpdateApiBoundaryNodesVersion // obsolete
         | NnsFunction::DeployGuestosToAllUnassignedNodes
