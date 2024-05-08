@@ -745,18 +745,12 @@ pub mod pre_signature_ref {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QuadrupleInCreation {
-    #[prost(message, optional, tag = "1")]
-    pub kappa_masked_config: ::core::option::Option<RandomTranscriptParams>,
-    #[prost(message, optional, tag = "2")]
-    pub kappa_masked: ::core::option::Option<MaskedTranscript>,
     #[prost(message, optional, tag = "3")]
     pub lambda_config: ::core::option::Option<RandomTranscriptParams>,
     #[prost(message, optional, tag = "4")]
     pub lambda_masked: ::core::option::Option<MaskedTranscript>,
     #[prost(message, optional, tag = "11")]
     pub kappa_unmasked_config: ::core::option::Option<RandomUnmaskedTranscriptParams>,
-    #[prost(message, optional, tag = "5")]
-    pub unmask_kappa_config: ::core::option::Option<ReshareOfMaskedParams>,
     #[prost(message, optional, tag = "6")]
     pub kappa_unmasked: ::core::option::Option<UnmaskedTranscript>,
     #[prost(message, optional, tag = "7")]
