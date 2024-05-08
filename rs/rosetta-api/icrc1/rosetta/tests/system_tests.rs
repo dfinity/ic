@@ -542,14 +542,14 @@ proptest! {
         .await
         .expect("Failed to find block in Rosetta");
         assert_eq!(expected_block_response,actual_block_response);
-
-        // If no hash was provided rosetta should return an error
-        assert!(env.rosetta_client.block(env.network_identifier.clone(), PartialBlockIdentifier{
-            hash:None,
-            index:None
-        })
-        .await.is_err());
     }}
+
+    // If no hash or index was provided rosetta should return the last block
+    let last_block = env.rosetta_client.block(env.network_identifier.clone(), PartialBlockIdentifier{
+        hash:None,
+        index:None
+    }).await.expect("failed to get last block");
+    assert_eq!(last_block.block.unwrap().block_identifier.index as usize, args_with_caller.len());
   });
  }
 }
