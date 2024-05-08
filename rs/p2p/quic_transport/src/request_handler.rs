@@ -17,6 +17,7 @@ use ic_base_types::NodeId;
 use ic_logger::{info, ReplicaLogger};
 use quinn::{Connection, RecvStream, SendStream};
 use tower::ServiceExt;
+use tracing::instrument;
 
 use crate::{
     metrics::{
@@ -124,6 +125,7 @@ pub(crate) async fn run_stream_acceptor(
     inflight_requests.shutdown().await;
 }
 
+#[instrument(skip(log, metrics, router, bi_tx, bi_rx))]
 async fn handle_bi_stream(
     log: ReplicaLogger,
     peer_id: NodeId,
@@ -184,6 +186,7 @@ async fn handle_bi_stream(
     }
 }
 
+#[instrument(skip(log, metrics, router, uni_rx))]
 async fn handle_uni_stream(
     log: ReplicaLogger,
     peer_id: NodeId,

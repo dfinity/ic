@@ -6276,6 +6276,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tower",
+ "tracing",
  "turmoil",
 ]
 
@@ -9974,6 +9975,7 @@ dependencies = [
  "tokio-metrics",
  "tokio-util",
  "tower",
+ "tracing",
  "turmoil",
 ]
 
