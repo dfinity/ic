@@ -38,10 +38,10 @@ use ic_management_canister_types::{
     CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType, ClearChunkStoreArgs,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs,
     ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, ListCanisterSnapshotArgs, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SetupInitialDKGArgs, SignWithECDSAArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method as Ic00Method,
+    NodeMetricsHistoryArgs, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs, SignWithECDSAArgs, StoredChunksArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1273,12 +1273,15 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::LoadCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
-                    // TODO(EXC-1530): Implement load_canister_snapshot.
+                    let res = LoadCanisterSnapshotArgs::decode(payload).and_then(|_| {
+                        // TODO(EXC-1530): Implement load_canister_snapshot.
+                        Err(UserError::new(
+                            ErrorCode::CanisterContractViolation,
+                            "This API is not enabled on this subnet".to_string(),
+                        ))
+                    });
                     ExecuteSubnetMessageResult::Finished {
-                        response: Err(UserError::new(
-                            ErrorCode::CanisterRejectedMessage,
-                            "Canister snapshotting API is not yet implemented.",
-                        )),
+                        response: res,
                         refund: msg.take_cycles(),
                     }
                 }
