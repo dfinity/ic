@@ -2926,6 +2926,60 @@ impl<'a> Payload<'a> for TakeCanisterSnapshotArgs {
     }
 }
 
+/// Struct used for encoding/decoding
+/// `(record {
+///     canister_id: principal;
+///     snapshot_id: blob;
+///     sender_canister_version: opt nat64;
+/// })`
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub struct LoadCanisterSnapshotArgs {
+    canister_id: PrincipalId,
+    #[serde(with = "serde_bytes")]
+    snapshot_id: Vec<u8>,
+    sender_canister_version: Option<u64>,
+}
+
+impl LoadCanisterSnapshotArgs {
+    pub fn new(
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+        sender_canister_version: Option<u64>,
+    ) -> Self {
+        Self {
+            canister_id: canister_id.get(),
+            snapshot_id: snapshot_id.to_vec(),
+            sender_canister_version,
+        }
+    }
+
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
+    }
+
+    pub fn sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
+    }
+}
+
+impl<'a> Payload<'a> for LoadCanisterSnapshotArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+        // Verify that snapshot ID has the correct format.
+        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
+            return Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: {err:?}"),
+            ));
+        }
+        Ok(args)
+    }
+}
+
 /// Struct to be returned when taking a canister snapshot.
 /// `(record {
 ///      id: blob;
