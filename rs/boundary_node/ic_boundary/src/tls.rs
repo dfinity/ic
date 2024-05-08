@@ -18,7 +18,6 @@ use axum::{
 use axum_server::{accept::Accept, tls_rustls::RustlsAcceptor};
 use futures_util::future::BoxFuture;
 use instant_acme::{Account, AccountCredentials, LetsEncrypt, NewAccount};
-use lazy_static::lazy_static;
 use mockall::automock;
 use prometheus::Registry;
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
@@ -45,11 +44,6 @@ use crate::{
 };
 
 const DAY: Duration = Duration::from_secs(24 * 3600);
-
-lazy_static! {
-    pub static ref HOSTNAME_REGEX: Regex =
-        Regex::new(r"^([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*$").unwrap();
-}
 
 // Public + Private key pair
 #[derive(Clone, Debug, PartialEq)]
@@ -528,14 +522,21 @@ pub async fn prepare_tls(
     let token_owner = Arc::new(TokenOwner::new());
 
     // Use the ACME provisioner if the credentials file was specified.
-    // Otherwise use static provisioner that just uses the certificates from files on disk.
+    // Otherwise use static provisioner that just uses the certificates from the files on disk.
     let tls_provisioner = if let Some(v) = &cli.tls.acme_credentials_path {
-        if fs::metadata(v)?.len() == 0 {
-            // If the file is empty - then use static provisioner also.
-            // This is needed to run integration tests where we can't manipulate arguments easily
-            prepare_static_provisioner(tls_loader)?
+        let meta = fs::metadata(v);
+
+        // If the file exists and is empty - then use static provisioner also.
+        // This is needed to run integration tests where we can't manipulate arguments easily.
+        if meta.is_ok() && meta.unwrap().len() == 0 {
+            prepare_static_provisioner(tls_loader)
+                .context("unable to prepare static provisioner")?
         } else {
-            if !HOSTNAME_REGEX.is_match(&cli.tls.hostname) {
+            let hostname_regex = Regex::new(
+                r"^([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*$",
+            )?;
+
+            if !hostname_regex.is_match(&cli.tls.hostname) {
                 return Err(anyhow!(
                     "'{}' does not look like a valid hostname",
                     cli.tls.hostname,
@@ -548,10 +549,11 @@ pub async fn prepare_tls(
                 tls_loader,
                 token_owner.clone(),
             )
-            .await?
+            .await
+            .context("unable to prepare ACME provisioner")?
         }
     } else {
-        prepare_static_provisioner(tls_loader)?
+        prepare_static_provisioner(tls_loader).context("unable to prepare static provisioner")?
     };
 
     // TLS (Ingress) Configurator
@@ -571,10 +573,7 @@ pub async fn prepare_tls(
     };
 
     // Configuration
-    let configuration_runner = ConfigurationRunner::new(
-        cli.tls.hostname.clone(),
-        svc_configurator, // configurator
-    );
+    let configuration_runner = ConfigurationRunner::new(cli.tls.hostname.clone(), svc_configurator);
     let configuration_runner = WithMetrics(
         configuration_runner,
         MetricParams::new(registry, "run_configuration"),
