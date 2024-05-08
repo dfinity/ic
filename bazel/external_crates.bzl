@@ -993,6 +993,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "json",
                     "rustls-tls",
                     "rustls-tls-native-roots",
+                    "stream",
                 ],
             ),
             "ring": crate.spec(
@@ -1193,6 +1194,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "fold",
                     "full",
                 ],
+            ),
+            "sync_wrapper": crate.spec(
+                version = "^1.0.1",
             ),
             "tar": crate.spec(
                 version = "^0.4.38",
