@@ -1995,13 +1995,11 @@ checksum = "702fc72eb24e5a1e48ce58027a675bc24edd52096d5397d4aea7c6dd9eca0bd1"
 
 [[package]]
 name = "clocksource"
-version = "0.6.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b90cc4cec392a6d97223f008b5da7a3c2c71aa6d5ffdf0e3e14d8b2432738387"
+checksum = "129026dd5a8a9592d96916258f3a5379589e513ea5e86aeb0bd2530286e44e9e"
 dependencies = [
- "lazy_static",
  "libc",
- "mach",
  "time",
  "winapi 0.3.9",
 ]
@@ -3049,6 +3047,7 @@ dependencies = [
  "mockito",
  "moka",
  "more-asserts",
+ "nftables",
  "nix 0.24.3",
  "notify",
  "num",
@@ -6711,6 +6710,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4a24736216ec316047a1fc4252e27dabb04218aa4a3f37c6e7ddbf1f9782b54"
 
 [[package]]
+name = "nftables"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e689b44b33fc8c2894b6f609701f785a0c1816b7fcf43d05797bd25a513028d1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
+ "thiserror",
+]
+
+[[package]]
 name = "nix"
 version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8559,9 +8572,9 @@ checksum = "977b1e897f9d764566891689e642653e5ed90c6895106acd005eb4c1d0203991"
 
 [[package]]
 name = "ratelimit"
-version = "0.7.1"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf5bcfab8fa35f78da44c3ebb3437381c0ae11e9fab355b7a27f581d8d2028a2"
+checksum = "6c1bb13e2dcfa2232ac6887157aad8d9b3fe4ca57f7c8d4938ff5ea9be742300"
 dependencies = [
  "clocksource",
  "parking_lot 0.12.1",

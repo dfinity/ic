@@ -250,6 +250,7 @@ pub fn setup_test_router(
         registry_snapshot,
         routing_table,
         http_client,
+        None,
         &cli,
         &metrics_registry,
         enable_cache.then_some(Arc::new(

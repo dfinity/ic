@@ -776,10 +776,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12",
                 features = [
                     "future",
+                    "sync",
                 ],
             ),
             "more-asserts": crate.spec(
                 version = "^0.3.1",
+            ),
+            "nftables": crate.spec(
+                version = "^0.4",
             ),
             "nix": crate.spec(
                 version = "^0.24.3",
@@ -959,7 +963,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.1",
             ),
             "ratelimit": crate.spec(
-                version = "^0.7.1",
+                version = "^0.9.1",
             ),
             "rayon": crate.spec(
                 version = "^1.5.1",
