@@ -573,16 +573,6 @@ pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
 
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
 
-pub fn are_errors_consistent<T: PartialEq>(
-    left: &HttpOutcallResult<JsonRpcResult<T>>,
-    right: &HttpOutcallResult<JsonRpcResult<T>>,
-) -> bool {
-    match (left, right) {
-        (Ok(JsonRpcResult::Result(_)), _) | (_, Ok(JsonRpcResult::Result(_))) => true,
-        _ => left == right,
-    }
-}
-
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ResponseSizeEstimate(u64);
 
