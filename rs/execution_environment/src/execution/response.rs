@@ -747,6 +747,10 @@ impl PausedExecution for PausedResponseExecution {
         // No cycles were prepaid for execution during this DTS execution.
         (CanisterMessageOrTask::Message(message), Cycles::zero())
     }
+
+    fn input(&self) -> CanisterMessageOrTask {
+        CanisterMessageOrTask::Message(CanisterMessage::Response(self.original.message.clone()))
+    }
 }
 
 /// Struct used to hold necessary information for the
@@ -840,6 +844,10 @@ impl PausedExecution for PausedCleanupExecution {
         let message = CanisterMessage::Response(self.original.message);
         // No cycles were prepaid for execution during this DTS execution.
         (CanisterMessageOrTask::Message(message), Cycles::zero())
+    }
+
+    fn input(&self) -> CanisterMessageOrTask {
+        CanisterMessageOrTask::Message(CanisterMessage::Response(self.original.message.clone()))
     }
 }
 

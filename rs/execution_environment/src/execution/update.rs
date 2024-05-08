@@ -607,15 +607,23 @@ impl PausedExecution for PausedCallExecution {
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        let message_or_task = match self.original.call_or_task {
-            CanisterCallOrTask::Call(CanisterCall::Request(r)) => {
-                CanisterMessageOrTask::Message(CanisterMessage::Request(r))
-            }
-            CanisterCallOrTask::Call(CanisterCall::Ingress(i)) => {
-                CanisterMessageOrTask::Message(CanisterMessage::Ingress(i))
-            }
-            CanisterCallOrTask::Task(task) => CanisterMessageOrTask::Task(task),
-        };
+        let message_or_task = into_message_or_task(self.original.call_or_task);
         (message_or_task, self.original.prepaid_execution_cycles)
+    }
+
+    fn input(&self) -> CanisterMessageOrTask {
+        into_message_or_task(self.original.call_or_task.clone())
+    }
+}
+
+fn into_message_or_task(call_or_task: CanisterCallOrTask) -> CanisterMessageOrTask {
+    match call_or_task {
+        CanisterCallOrTask::Call(CanisterCall::Request(r)) => {
+            CanisterMessageOrTask::Message(CanisterMessage::Request(r))
+        }
+        CanisterCallOrTask::Call(CanisterCall::Ingress(i)) => {
+            CanisterMessageOrTask::Message(CanisterMessage::Ingress(i))
+        }
+        CanisterCallOrTask::Task(task) => CanisterMessageOrTask::Task(task),
     }
 }

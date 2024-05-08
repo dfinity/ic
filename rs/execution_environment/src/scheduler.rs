@@ -819,7 +819,7 @@ impl SchedulerImpl {
                 let canister = state.canister_state_mut(canister_id).unwrap();
                 canister.system_state.task_queue.retain(|task| match task {
                     ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
-                    ExecutionTask::PausedExecution(..)
+                    ExecutionTask::PausedExecution { .. }
                     | ExecutionTask::PausedInstallCode(..)
                     | ExecutionTask::AbortedExecution { .. }
                     | ExecutionTask::AbortedInstallCode { .. } => true,
@@ -1369,7 +1369,7 @@ impl SchedulerImpl {
                             id
                         );
                     }
-                    ExecutionTask::PausedExecution(_) | ExecutionTask::PausedInstallCode(_) => {
+                    ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
                         assert_eq!(
                             self.deterministic_time_slicing,
                             FlagStatus::Enabled,
@@ -2092,7 +2092,7 @@ fn observe_replicated_state_metrics(
             CanisterStatus::Stopped { .. } => num_stopped_canisters += 1,
         }
         match canister.next_task() {
-            Some(&ExecutionTask::PausedExecution(_)) => {
+            Some(&ExecutionTask::PausedExecution { .. }) => {
                 num_paused_exec += 1;
             }
             Some(&ExecutionTask::PausedInstallCode(_)) => {
