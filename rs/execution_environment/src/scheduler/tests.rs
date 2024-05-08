@@ -33,7 +33,10 @@ use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_st
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
     batch::ConsensusResponse,
-    messages::{CallbackId, Payload, RejectContext, StopCanisterCallId, MAX_RESPONSE_COUNT_BYTES},
+    messages::{
+        CallbackId, CanisterMessageOrTask, CanisterTask, Payload, RejectContext,
+        StopCanisterCallId, MAX_RESPONSE_COUNT_BYTES,
+    },
     methods::SystemMethod,
     time::{expiry_time_from_now, UNIX_EPOCH},
     ComputeAllocation, Cycles, Height, NumBytes,
@@ -999,7 +1002,10 @@ fn dont_charge_allocations_for_long_running_canisters() {
     test.canister_state_mut(paused_canister)
         .system_state
         .task_queue
-        .push_front(ExecutionTask::PausedExecution(PausedExecutionId(0)));
+        .push_front(ExecutionTask::PausedExecution {
+            id: PausedExecutionId(0),
+            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+        });
 
     assert!(test.canister_state(paused_canister).has_paused_execution());
     assert!(!test.canister_state(canister).has_paused_execution());
@@ -4747,9 +4753,10 @@ fn test_is_next_method_added_to_task_queue() {
     test.canister_state_mut(canister)
         .system_state
         .task_queue
-        .push_front(ExecutionTask::PausedExecution(
-            ic_replicated_state::canister_state::system_state::PausedExecutionId(1),
-        ));
+        .push_front(ExecutionTask::PausedExecution {
+            id: PausedExecutionId(1),
+            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+        });
 
     while test
         .canister_state_mut(canister)
