@@ -137,10 +137,11 @@ fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
         generate_custom_sections: true,
         bulk_memory_enabled: true,
         reference_types_enabled: true,
+        simd_enabled: true,
 
         memory64_enabled: false,
         threads_enabled: false,
-        simd_enabled: false,
+        relaxed_simd_enabled: false,
         canonicalize_nans: false,
         exceptions_enabled: false,
 
