@@ -35,6 +35,7 @@ DEPENDENCIES = [
     "@crate_index//:tokio-metrics",
     "@crate_index//:tokio-util",
     "@crate_index//:tower",
+    "@crate_index//:tracing",
 ]
 
 DEV_DEPENDENCIES = [
