@@ -2098,7 +2098,7 @@ impl ProposalData {
             failure_reason,
             reward_event_round,
             wait_for_quiet_state,
-            payload_text_rendering,
+            payload_text_rendering: _,
             is_eligible_for_rewards,
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
@@ -2128,7 +2128,6 @@ impl ProposalData {
             failure_reason: failure_reason.clone(),
             reward_event_round: *reward_event_round,
             wait_for_quiet_state: wait_for_quiet_state.clone(),
-            payload_text_rendering: payload_text_rendering.clone(),
             is_eligible_for_rewards: *is_eligible_for_rewards,
             initial_voting_period_seconds: *initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds: *wait_for_quiet_deadline_increase_seconds,
@@ -2138,6 +2137,7 @@ impl ProposalData {
             action_auxiliary: action_auxiliary.clone(),
 
             // The following fields are truncated:
+            payload_text_rendering: None,
             proposal: proposal.as_ref().map(Proposal::limited_for_list_proposals),
             ballots: limited_ballots,
         }
@@ -4409,7 +4409,7 @@ Version {
     }
 
     #[test]
-    fn limited_proposal_data_for_list_proposals_truncate_ballots() {
+    fn limited_proposal_data_for_list_proposals_truncate_ballots_and_text_rendering() {
         let ballots = (100..300)
             .map(|i| {
                 (
@@ -4429,6 +4429,9 @@ Version {
                 ..Default::default()
             }),
             ballots,
+            payload_text_rendering: Some(
+                "# Motion Proposal: ## Motion Text: some motion text".to_string(),
+            ),
             ..Default::default()
         };
         let caller_neurons = (0..1000).map(|i| i.to_string()).collect::<HashSet<_>>();
@@ -4451,6 +4454,7 @@ Version {
             limited_proposal_data,
             ProposalData {
                 ballots: expected_ballots,
+                payload_text_rendering: None,
                 ..original_proposal_data
             }
         );
