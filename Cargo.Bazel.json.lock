@@ -1,5 +1,5 @@
 {
-  "checksum": "be48864e2f17aac6ff7b4fad13b2ccb02d9970020edbff50f019b0fd960d8e73",
+  "checksum": "f5fad52382dfa105aff5a83a600d032bc15caf24da955c33bb99e2eed72b231f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17890,6 +17890,10 @@
             {
               "id": "syn 1.0.109",
               "target": "syn"
+            },
+            {
+              "id": "sync_wrapper 1.0.1",
+              "target": "sync_wrapper"
             },
             {
               "id": "tar 0.4.39",
@@ -51410,7 +51414,8 @@
             "rustls-pki-types",
             "rustls-tls",
             "rustls-tls-native-roots",
-            "rustls-tls-webpki-roots"
+            "rustls-tls-webpki-roots",
+            "stream"
           ],
           "selects": {
             "aarch64-apple-darwin": [
@@ -51637,6 +51642,10 @@
                 "target": "tokio_rustls"
               },
               {
+                "id": "tokio-util 0.7.10",
+                "target": "tokio_util"
+              },
+              {
                 "id": "webpki-roots 0.26.1",
                 "target": "webpki_roots"
               }
@@ -51653,6 +51662,10 @@
               {
                 "id": "wasm-bindgen-futures 0.4.37",
                 "target": "wasm_bindgen_futures"
+              },
+              {
+                "id": "wasm-streams 0.4.0",
+                "target": "wasm_streams"
               },
               {
                 "id": "web-sys 0.3.64",
@@ -61523,6 +61536,44 @@
         ],
         "edition": "2018",
         "version": "0.1.2"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "sync_wrapper 1.0.1": {
+      "name": "sync_wrapper",
+      "version": "1.0.1",
+      "package_url": "https://github.com/Actyx/sync_wrapper",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/sync_wrapper/1.0.1/download",
+          "sha256": "a7065abeca94b6a8a577f9bd45aa0867a2238b74e8eb67cf10d492bc39351394"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "sync_wrapper",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "sync_wrapper",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "1.0.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -76902,6 +76953,7 @@
     "substring 1.4.5",
     "subtle 2.5.0",
     "syn 1.0.109",
+    "sync_wrapper 1.0.1",
     "tar 0.4.39",
     "tarpc 0.34.0",
     "tempfile 3.6.0",
