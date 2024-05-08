@@ -8,7 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 ### Added
 ### Changed
-- `/block` endpoint is changed to return the latest block if no index or hash is provided.
 
 ## [1.0.2] - 2024-05-08
 ### Fixes
