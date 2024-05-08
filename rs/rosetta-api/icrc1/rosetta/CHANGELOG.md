@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `ic_crypto_ecdsa_secp256k1`.
 ### Added
 ### Changed
+- `/block` endpoint is changed to return the latest block if no index or hash is provided.
 
 ## [0.1.0] - 2024-26-03
 ### Added
