@@ -8,6 +8,5 @@ documentation.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../../types/base_types" }
-ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
 rustls = { workspace = true }
 x509-parser = { workspace = true }

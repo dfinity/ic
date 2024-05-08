@@ -41,9 +41,7 @@ use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::{
     MalformedPeerCertificateError, SomeOrAllNodes, TlsConfig, TlsConfigError,
 };
-use ic_crypto_utils_tls::{
-    node_id_from_cert_subject_common_name, tls_pubkey_cert_from_rustls_certs,
-};
+use ic_crypto_utils_tls::node_id_from_rustls_certs;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -614,22 +612,24 @@ impl ConnectionManager {
                         cause,
                     })?;
 
-            let certs = &established
+            let rustls_certs = established
                 .peer_identity()
                 .ok_or(ConnectionEstablishError::MissingPeerIdentity)?
                 .downcast::<Vec<rustls::Certificate>>()
-                .map_err(|_| {
-                    ConnectionEstablishError::MalformedPeerIdentity(MalformedPeerCertificateError {
-                        internal_error: "can't downcast peer identity".to_string(),
-                    })
-                })?;
-            let tls_pub_key = tls_pubkey_cert_from_rustls_certs(certs).map_err(|e| {
+                .unwrap();
+            let rustls_cert =
+                rustls_certs
+                    .first()
+                    .ok_or(ConnectionEstablishError::MalformedPeerIdentity(
+                        MalformedPeerCertificateError {
+                            internal_error: "a single cert must be present".to_string(),
+                        },
+                    ))?;
+            let peer_id = node_id_from_rustls_certs(rustls_cert).map_err(|err| {
                 ConnectionEstablishError::MalformedPeerIdentity(MalformedPeerCertificateError {
-                    internal_error: e.to_string(),
+                    internal_error: format!("{:?}", err),
                 })
             })?;
-            let peer_id = node_id_from_cert_subject_common_name(&tls_pub_key)
-                .map_err(ConnectionEstablishError::MalformedPeerIdentity)?;
 
             // Lower ID is dialer. So we reject if this nodes id is higher.
             if peer_id > node_id {
