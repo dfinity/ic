@@ -1510,7 +1510,7 @@ impl SystemState {
             | Some(ExecutionTask::PausedExecution {
                 input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
                 ..
-            }) => Some(&response),
+            }) => Some(response),
             _ => None,
         }
     }
@@ -1526,7 +1526,7 @@ impl SystemState {
             | Some(ExecutionTask::PausedExecution {
                 input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
                 ..
-            }) => Some(&request),
+            }) => Some(request),
             _ => None,
         }
     }
