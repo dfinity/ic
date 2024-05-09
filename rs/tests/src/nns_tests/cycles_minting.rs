@@ -45,8 +45,8 @@ use ic_types::{CanisterId, Cycles, PrincipalId};
 use icp_ledger::protobuf::TipOfChainRequest;
 use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockIndex,
-    BlockRes, CyclesResponse, NotifyCanisterArgs, Operation, Subaccount, TipOfChainRes, Tokens,
-    DEFAULT_TRANSFER_FEE,
+    BlockRes, CyclesResponse, Memo, NotifyCanisterArgs, Operation, Subaccount, TipOfChainRes,
+    Tokens, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::{FromWire, IntoWire};
 use rand::rngs::StdRng;
@@ -276,13 +276,24 @@ pub fn test(env: TestEnv) {
         /* Check that the funds for the failed creation attempt are returned to use
          * (minus the fees). */
         let refund_block = refund_block.unwrap();
-        tst.check_refund(refund_block, send_amount, CREATE_CANISTER_REFUND_FEE)
-            .await;
+        tst.check_refund(
+            refund_block,
+            send_amount,
+            CREATE_CANISTER_REFUND_FEE,
+            *TEST_USER1_PRINCIPAL,
+        )
+        .await;
 
         // remove when ledger notify goes away
         {
-            let (err, refund_block) = user1
-                .create_canister_ledger(send_amount, None, &controller_pid)
+            user1
+                .transfer(
+                    Tokens::from_e8s(send_amount.get_e8s() + 2 * DEFAULT_TRANSFER_FEE.get_e8s()),
+                    controller_user.principal_id(),
+                )
+                .await;
+            let (err, refund_block) = controller_user
+                .create_canister_ledger(send_amount)
                 .await
                 .unwrap_err();
 
@@ -292,8 +303,13 @@ pub fn test(env: TestEnv) {
             /* Check that the funds for the failed creation attempt are returned to use
              * (minus the fees). */
             let refund_block = refund_block.unwrap();
-            tst.check_refund(refund_block, send_amount, CREATE_CANISTER_REFUND_FEE)
-                .await;
+            tst.check_refund(
+                refund_block,
+                send_amount,
+                CREATE_CANISTER_REFUND_FEE,
+                controller_user.principal_id(),
+            )
+            .await;
         }
 
         /* Register a subnet. */
@@ -320,13 +336,24 @@ pub fn test(env: TestEnv) {
         assert!(err.contains("Creating a canister requires a fee of"));
 
         let refund_block = refund_block.unwrap();
-        tst.check_refund(refund_block, small_amount, CREATE_CANISTER_REFUND_FEE)
-            .await;
+        tst.check_refund(
+            refund_block,
+            small_amount,
+            CREATE_CANISTER_REFUND_FEE,
+            *TEST_USER1_PRINCIPAL,
+        )
+        .await;
 
         // remove when ledger notify goes away
         {
-            let (err, refund_block) = user1
-                .create_canister_ledger(small_amount, None, &controller_pid)
+            user1
+                .transfer(
+                    Tokens::from_e8s(small_amount.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()),
+                    controller_user.principal_id(),
+                )
+                .await;
+            let (err, refund_block) = controller_user
+                .create_canister_ledger(small_amount)
                 .await
                 .unwrap_err();
 
@@ -334,8 +361,13 @@ pub fn test(env: TestEnv) {
             assert!(err.contains("Creating a canister requires a fee of"));
 
             let refund_block = refund_block.unwrap();
-            tst.check_refund(refund_block, small_amount, CREATE_CANISTER_REFUND_FEE)
-                .await;
+            tst.check_refund(
+                refund_block,
+                small_amount,
+                CREATE_CANISTER_REFUND_FEE,
+                controller_user.principal_id(),
+            )
+            .await;
         }
 
         /* Create with funds < the refund fee. */
@@ -374,8 +406,14 @@ pub fn test(env: TestEnv) {
 
         // remove when ledger notify goes away
         {
-            let (err, no_refund_block) = user1
-                .create_canister_ledger(tiny_amount, None, &controller_pid)
+            user1
+                .transfer(
+                    Tokens::from_e8s(tiny_amount.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()),
+                    controller_user.principal_id(),
+                )
+                .await;
+            let (err, no_refund_block) = controller_user
+                .create_canister_ledger(tiny_amount)
                 .await
                 .unwrap_err();
 
@@ -575,8 +613,14 @@ pub fn test(env: TestEnv) {
 
         // remove when ledger notify goes away
         {
-            let new_canister_id = user1
-                .create_canister_ledger(initial_amount, None, &controller_pid)
+            user1
+                .transfer(
+                    Tokens::from_e8s(initial_amount.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()),
+                    controller_user.principal_id(),
+                )
+                .await;
+            let new_canister_id = controller_user
+                .create_canister_ledger(initial_amount)
                 .await
                 .unwrap();
 
@@ -698,9 +742,14 @@ pub fn test(env: TestEnv) {
         // remove when ledger notify goes away
         {
             let nns_amount = Tokens::new(2, 0).unwrap();
-
-            let new_canister_id = user1
-                .create_canister_ledger(nns_amount, None, &controller_pid)
+            user1
+                .transfer(
+                    Tokens::from_e8s(nns_amount.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()),
+                    controller_user.principal_id(),
+                )
+                .await;
+            let new_canister_id = controller_user
+                .create_canister_ledger(nns_amount)
                 .await
                 .unwrap();
 
@@ -813,7 +862,13 @@ pub fn test(env: TestEnv) {
 
         // remove when ledger notify goes away
         user1
-            .create_canister_ledger(nns_amount, None, &controller_pid)
+            .transfer(
+                Tokens::from_e8s(nns_amount.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()),
+                controller_user.principal_id(),
+            )
+            .await;
+        controller_user
+            .create_canister_ledger(nns_amount)
             .await
             .unwrap();
 
@@ -832,15 +887,25 @@ pub fn test(env: TestEnv) {
             .contains("cycles have been minted in the last 3600 seconds, please try again later"));
 
         let refund_block = refund_block.unwrap();
-        tst.check_refund(refund_block, amount, CREATE_CANISTER_REFUND_FEE)
-            .await;
+        tst.check_refund(
+            refund_block,
+            amount,
+            CREATE_CANISTER_REFUND_FEE,
+            *TEST_USER1_PRINCIPAL,
+        )
+        .await;
 
         // remove when ledger notify goes away
         {
             let amount = Tokens::new(100_000, 0).unwrap();
-
-            let (err, refund_block) = user1
-                .create_canister_ledger(amount, None, &controller_pid)
+            user1
+                .transfer(
+                    Tokens::from_e8s(amount.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()),
+                    controller_user.principal_id(),
+                )
+                .await;
+            let (err, refund_block) = controller_user
+                .create_canister_ledger(amount)
                 .await
                 .unwrap_err();
 
@@ -850,8 +915,13 @@ pub fn test(env: TestEnv) {
             ));
 
             let refund_block = refund_block.unwrap();
-            tst.check_refund(refund_block, amount, CREATE_CANISTER_REFUND_FEE)
-                .await;
+            tst.check_refund(
+                refund_block,
+                amount,
+                CREATE_CANISTER_REFUND_FEE,
+                controller_user.principal_id(),
+            )
+            .await;
         }
 
         /* Test getting the total number of cycles minted. */
@@ -937,8 +1007,13 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
         // Check that the funds for the failed creation attempt are returned to use
         // (minus the fees).
         let refund_block = refund_block.unwrap();
-        tst.check_refund(refund_block, send_amount, CREATE_CANISTER_REFUND_FEE)
-            .await;
+        tst.check_refund(
+            refund_block,
+            send_amount,
+            CREATE_CANISTER_REFUND_FEE,
+            *TEST_USER1_PRINCIPAL,
+        )
+        .await;
 
         // Register an authorized subnet and additionally assign a subnet to a type.
         info!(logger, "registering subnets");
@@ -1187,6 +1262,7 @@ impl TestAgent {
         refund_block: BlockIndex,
         send_amount: Tokens,
         refund_fee: Tokens,
+        expected_destination_principal_id: PrincipalId,
     ) {
         let block = self.get_block(refund_block).await.unwrap().unwrap();
         let txn = block.transaction();
@@ -1201,7 +1277,10 @@ impl TestAgent {
                         .unwrap(),
                     send_amount
                 );
-                assert_eq!(to, (*TEST_USER1_PRINCIPAL).into());
+                assert_eq!(
+                    to,
+                    AccountIdentifier::new(expected_destination_principal_id, None)
+                );
             }
             _ => panic!("unexpected block {:?}", txn),
         }
@@ -1297,19 +1376,24 @@ impl UserHandle {
         CandidOne::from_bytes(bytes).map(|c| c.0)
     }
 
-    pub async fn create_canister_ledger(
-        &self,
-        amount: Tokens,
-        sender_subaccount: Option<Subaccount>,
-        controller_id: &PrincipalId,
-    ) -> CreateCanisterResult {
+    /// Creates a canister via the deprecated ledger.notify flow. That is,
+    ///
+    ///     1. Send ICP to the CMC.
+    ///
+    ///     2. Call ledger.noitfy.
+    pub async fn create_canister_ledger(&self, amount: Tokens) -> CreateCanisterResult {
         let block = self
-            .pay_for_canister(amount, sender_subaccount, controller_id)
+            .pay_for_canister(amount, None, &self.principal_id())
             .await;
-        self.notify_canister_create_ledger(block, sender_subaccount, controller_id)
+        self.notify_canister_create_ledger(block, None, &self.principal_id())
             .await
     }
 
+    /// Creates a canister using the notify_create_canister flow. That is,
+    ///
+    ///     1. Send ICP to the CMC.
+    ///
+    ///     2. Call CMC.notify_create_canister.
     pub async fn create_canister_cmc(
         &self,
         amount: Tokens,
@@ -1366,6 +1450,24 @@ impl UserHandle {
 
     fn acc_for_top_up(&self, target_canister_id: &CanisterId) -> AccountIdentifier {
         AccountIdentifier::new(self.cmc_id.into(), Some(target_canister_id.into()))
+    }
+
+    async fn transfer(&self, amount: Tokens, destination_principal_id: PrincipalId) {
+        let transfer_args = TransferArgs {
+            amount,
+            to: AccountIdentifier::new(destination_principal_id, None).to_address(),
+
+            fee: DEFAULT_TRANSFER_FEE,
+            memo: Memo(0),
+            from_subaccount: None,
+            created_at_time: None,
+        };
+
+        let result: Result</* block index */ u64, TransferError> = self
+            .update_did(&self.ledger_id, "transfer", transfer_args)
+            .await
+            .unwrap();
+        result.unwrap();
     }
 
     pub async fn pay_for_canister(
