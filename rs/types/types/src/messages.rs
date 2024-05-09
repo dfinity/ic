@@ -21,6 +21,8 @@ use crate::time::CoarseTime;
 use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
 pub use blob::Blob;
 use ic_base_types::{CanisterId, PrincipalId};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::CanisterChangeOrigin;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
@@ -100,6 +102,7 @@ pub type StopCanisterCallId = Id<StopCanisterCallIdTag, u64>;
 /// Stores info needed for processing and tracking requests to
 /// stop canisters.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum StopCanisterContext {
     Ingress {
         sender: UserId,
@@ -534,8 +537,10 @@ impl CanisterCallOrTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::exhaustive::ExhaustiveSet;
     use crate::{time::expiry_time_from_now, Time};
     use assert_matches::assert_matches;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use maplit::btreemap;
     use serde_cbor::Value;
     use std::{convert::TryFrom, io::Cursor};
@@ -829,5 +834,15 @@ mod tests {
             CanisterTask::iter().map(|x| x as i32).collect::<Vec<i32>>(),
             [1, 2]
         );
+    }
+
+    #[test]
+    fn stop_canister_context_proto_round_trip() {
+        for initial in StopCanisterContext::exhaustive_set(&mut reproducible_rng()) {
+            let encoded = pb::StopCanisterContext::from(&initial);
+            let round_trip = StopCanisterContext::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
     }
 }
