@@ -21,6 +21,7 @@ use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
+use ic_nervous_system_clients::ledger_client::LedgerCanister;
 use ic_nervous_system_common::{
     cmc::CMCCanister,
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
@@ -38,7 +39,6 @@ use ic_sns_governance::{
     governance::{
         log_prefix, Governance, TimeWarp, ValidGovernanceProto, MATURITY_DISBURSEMENT_DELAY_SECONDS,
     },
-    ledger::LedgerCanister,
     logs::{ERROR, INFO},
     pb::v1::{
         ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,

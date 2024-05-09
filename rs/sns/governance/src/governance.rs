@@ -8,7 +8,6 @@ use crate::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
     },
-    ledger::ICRC1Ledger,
     logs::{ERROR, INFO},
     neuron::{
         NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
@@ -84,6 +83,7 @@ use ic_ledger_core::Tokens;
 use ic_management_canister_types::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
+use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
     cmc::CMC,
