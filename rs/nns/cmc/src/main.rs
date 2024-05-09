@@ -1689,11 +1689,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
     let from = AccountIdentifier::new(tn.from, tn.from_subaccount);
 
     let (cycles_response, notification_status) = if tn.memo == MEMO_CREATE_CANISTER {
-        let controller = (&tn
-            .to_subaccount
-            .ok_or_else(|| "Reserving requires a principal.".to_string())?)
-            .try_into()
-            .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
+        let controller = authorize_sender_to_create_canister_via_ledger_notify(&tn)?;
         match process_create_canister(controller, from, tn.amount, None, None).await {
             Ok(canister_id) => (
                 Ok(CyclesResponse::CanisterCreated(canister_id)),
@@ -1756,6 +1752,52 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
     });
 
     cycles_response.map_err(|e| e.to_string())
+}
+
+/// Returns Ok(controller/creator/sender) if sender == creator (aka controller).
+///
+/// That is, we disallow sending ICP on behalf of someone else; whereas, we used to allow it.
+///
+/// The reason for this restriction is that the creator might be authorized to create canisters on
+/// restricted subnets.
+///
+/// The only fields used are
+///     * from: This is taken as the sender.
+///     * to_subaccount: This is used to infer the creator/controller.
+///
+/// It is assumed that memo == MEMO_CREATE_CANISTER. (However, behavior is the same if that
+/// assumption does not hold.)
+fn authorize_sender_to_create_canister_via_ledger_notify(
+    transaction_notification: &TransactionNotification,
+) -> Result<PrincipalId, String> {
+    let sender = transaction_notification.from;
+
+    let creator = {
+        let to_subaccount = transaction_notification.to_subaccount.ok_or_else(|| {
+            format!(
+                "Transfer has no destination subaccount:\n{:#?}",
+                transaction_notification,
+            )
+        })?;
+
+        PrincipalId::try_from(&to_subaccount).map_err(|err| {
+            format!(
+                "Cannot determine creator principal from ICP transfer to Cycles \
+                 Minting Canister destination subaccount {}: {}",
+                to_subaccount, err,
+            )
+        })?
+    };
+
+    if sender == creator {
+        return Ok(creator);
+    }
+
+    Err(format!(
+        "Principal {} sent ICP to the Cycles Minting Canister on behalf of {} \
+         in order to create a canister, but this is not allowed (anymore).",
+        sender, creator,
+    ))
 }
 
 // If conversion fails, log and return an error
@@ -2453,7 +2495,7 @@ mod tests {
     }
 
     #[test]
-    fn test_authorize_notify_create_canister() {
+    fn test_authorize_caller_to_call_notify_create_canister_on_behalf_of_creator() {
         let creator = PrincipalId::new_user_test_id(519_167_122);
         let authorize = |caller| {
             authorize_caller_to_call_notify_create_canister_on_behalf_of_creator(caller, creator)
@@ -2506,6 +2548,106 @@ mod tests {
             "{:#?}",
             caller_is_nns_dapp_result,
         );
+    }
+
+    #[test]
+    fn test_authorize_sender_to_create_canister_via_ledger_notify() {
+        // Happy case.
+        let creator = PrincipalId::new_user_test_id(777);
+        let ok_transaction_notification = TransactionNotification {
+            from: creator,
+            to_subaccount: Some(Subaccount::from(&creator)),
+
+            // These are not used.
+            memo: MEMO_CREATE_CANISTER, // Just for realism.
+            from_subaccount: None,
+            to: CanisterId::from_u64(111),
+            block_height: 222,
+            amount: Tokens::from_e8s(333),
+        };
+
+        // Evil case.
+        assert_eq!(
+            authorize_sender_to_create_canister_via_ledger_notify(&ok_transaction_notification,),
+            Ok(creator),
+        );
+
+        let evil = PrincipalId::new_user_test_id(666);
+        let evil_transaction_notification = TransactionNotification {
+            from: evil,
+            ..ok_transaction_notification.clone()
+        };
+
+        let evil_result =
+            authorize_sender_to_create_canister_via_ledger_notify(&evil_transaction_notification);
+
+        let evil_result = match evil_result {
+            Err(err) => err.to_lowercase(),
+            wrong => panic!("Evil result is supposed to be Err, but was {:?}", wrong),
+        };
+        for key_word in ["create", "canister", "on behalf of", "not allowed"] {
+            assert!(
+                evil_result.contains(key_word),
+                "{} not in {:?}",
+                key_word,
+                evil_result
+            );
+        }
+
+        // Invalid transfer case 1: no destination subaccount.
+        let no_destination_subaccount_transaction_notification = TransactionNotification {
+            to_subaccount: None,
+            ..ok_transaction_notification.clone()
+        };
+
+        let no_destination_subaccount_result =
+            authorize_sender_to_create_canister_via_ledger_notify(
+                &no_destination_subaccount_transaction_notification,
+            );
+
+        let no_destination_subaccount_result = match no_destination_subaccount_result {
+            Err(err) => err.to_lowercase(),
+            wrong => panic!(
+                "No destination subaccount result is supposed to be Err, but was {:?}",
+                wrong,
+            ),
+        };
+        for key_word in ["has no", "destination", "subaccount"] {
+            assert!(
+                no_destination_subaccount_result.contains(key_word),
+                "{} not in {:?}",
+                key_word,
+                no_destination_subaccount_result,
+            );
+        }
+
+        // Invalid transfer case 2: destination subaccount present, but does not map to (creator)
+        // principal.
+        let garbage_subaccount = [42_u8; 32];
+        let no_creator_transaction_notification = TransactionNotification {
+            to_subaccount: Some(Subaccount(garbage_subaccount)),
+            ..ok_transaction_notification
+        };
+
+        let no_creator_result = authorize_sender_to_create_canister_via_ledger_notify(
+            &no_creator_transaction_notification,
+        );
+
+        let no_creator_result = match no_creator_result {
+            Err(err) => err.to_lowercase(),
+            wrong => panic!(
+                "No destination subaccount result is supposed to be Err, but was {:?}",
+                wrong,
+            ),
+        };
+        for key_word in ["determine", "creator", "subaccount"] {
+            assert!(
+                no_creator_result.contains(key_word),
+                "{} not in {:?}",
+                key_word,
+                no_creator_result,
+            );
+        }
     }
 
     #[test]
