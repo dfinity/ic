@@ -795,21 +795,23 @@ impl TryFrom<pb::EcdsaMessage> for EcdsaMessage {
 pub struct EcdsaPrefix {
     group_tag: u64,
     meta_hash: u64,
+    height: Height,
 }
 
 impl EcdsaPrefix {
-    pub fn new(group_tag: u64, hash: [u8; 32]) -> Self {
+    pub fn new(group_tag: u64, hash: [u8; 32], height: Height) -> Self {
         let w1 = u64::from_be_bytes((&hash[0..8]).try_into().unwrap());
         let w2 = u64::from_be_bytes((&hash[8..16]).try_into().unwrap());
         let w3 = u64::from_be_bytes((&hash[16..24]).try_into().unwrap());
         let w4 = u64::from_be_bytes((&hash[24..]).try_into().unwrap());
-        Self::new_with_meta_hash(group_tag, w1 ^ w2 ^ w3 ^ w4)
+        Self::new_with_meta_hash(group_tag, w1 ^ w2 ^ w3 ^ w4, height)
     }
 
-    pub fn new_with_meta_hash(group_tag: u64, meta_hash: u64) -> Self {
+    pub fn new_with_meta_hash(group_tag: u64, meta_hash: u64, height: Height) -> Self {
         Self {
             group_tag,
             meta_hash,
+            height,
         }
     }
 
@@ -820,6 +822,10 @@ impl EcdsaPrefix {
     pub fn meta_hash(&self) -> u64 {
         self.meta_hash
     }
+
+    pub fn height(&self) -> Height {
+        self.height
+    }
 }
 
 impl From<&EcdsaPrefix> for pb::EcdsaPrefix {
@@ -827,6 +833,7 @@ impl From<&EcdsaPrefix> for pb::EcdsaPrefix {
         Self {
             group_tag: value.group_tag,
             meta_hash: value.meta_hash,
+            height: value.height.get(),
         }
     }
 }
@@ -836,6 +843,7 @@ impl From<&pb::EcdsaPrefix> for EcdsaPrefix {
         Self {
             group_tag: value.group_tag,
             meta_hash: value.meta_hash,
+            height: Height::from(value.height),
         }
     }
 }
@@ -850,7 +858,11 @@ pub fn dealing_prefix(
     let mut hasher = Sha256::new();
     dealer_id.hash(&mut hasher);
 
-    EcdsaPrefixOf::new(EcdsaPrefix::new(transcript_id.id(), hasher.finish()))
+    EcdsaPrefixOf::new(EcdsaPrefix::new(
+        transcript_id.id(),
+        hasher.finish(),
+        transcript_id.source_height(),
+    ))
 }
 
 pub fn dealing_support_prefix(
@@ -863,7 +875,11 @@ pub fn dealing_support_prefix(
     dealer_id.hash(&mut hasher);
     support_node_id.hash(&mut hasher);
 
-    EcdsaPrefixOf::new(EcdsaPrefix::new(transcript_id.id(), hasher.finish()))
+    EcdsaPrefixOf::new(EcdsaPrefix::new(
+        transcript_id.id(),
+        hasher.finish(),
+        transcript_id.source_height(),
+    ))
 }
 
 pub fn sig_share_prefix(
@@ -877,6 +893,7 @@ pub fn sig_share_prefix(
     EcdsaPrefixOf::new(EcdsaPrefix::new(
         request_id.quadruple_id.id(),
         hasher.finish(),
+        request_id.height,
     ))
 }
 
@@ -890,7 +907,11 @@ pub fn complaint_prefix(
     dealer_id.hash(&mut hasher);
     complainer_id.hash(&mut hasher);
 
-    EcdsaPrefixOf::new(EcdsaPrefix::new(transcript_id.id(), hasher.finish()))
+    EcdsaPrefixOf::new(EcdsaPrefix::new(
+        transcript_id.id(),
+        hasher.finish(),
+        transcript_id.source_height(),
+    ))
 }
 
 pub fn opening_prefix(
@@ -903,7 +924,11 @@ pub fn opening_prefix(
     dealer_id.hash(&mut hasher);
     opener_id.hash(&mut hasher);
 
-    EcdsaPrefixOf::new(EcdsaPrefix::new(transcript_id.id(), hasher.finish()))
+    EcdsaPrefixOf::new(EcdsaPrefix::new(
+        transcript_id.id(),
+        hasher.finish(),
+        transcript_id.source_height(),
+    ))
 }
 
 /// The identifier for artifacts/messages.
@@ -941,6 +966,10 @@ impl EcdsaArtifactId {
             EcdsaArtifactId::Complaint(_, hash) => hash.as_ref().clone(),
             EcdsaArtifactId::Opening(_, hash) => hash.as_ref().clone(),
         }
+    }
+
+    pub fn height(&self) -> Height {
+        self.prefix().height()
     }
 
     pub fn dealing_hash(&self) -> Option<CryptoHashOf<SignedIDkgDealing>> {

@@ -920,6 +920,8 @@ pub struct EcdsaPrefix {
     pub group_tag: u64,
     #[prost(uint64, tag = "2")]
     pub meta_hash: u64,
+    #[prost(uint64, tag = "3")]
+    pub height: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
