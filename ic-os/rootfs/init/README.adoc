@@ -1,66 +1,18 @@
-= Ubuntu base OS development
-
-The Ubuntu-based IC OS is built by:
-
-* creating a root filesystem image using docker -- this is based on the
-  official Ubuntu docker image and simply adds the OS kernel plus our
-  required services to it.
-
-* converting this root filesystem into filesystem images for +/+ and +/boot+
-  via +mke2fs+
-
-The build instructions in the Dockerfile itself should be straight-forward
-to read; required additional steps can simply be amended.
-
-The following template directories are simply copied verbatim onto the target
-system:
-
-* +etc+
-* +opt+
-* +boot+
-
-If you need to add files to the system, drop them into the
-appropriate target directory, and add the file to +rootfs/BUILD.bazel+.
-At present, all dfinity-specific binaries and scripts go to +/opt/ic/bin+.
-
-If you install new systemd services, drop an appropriate unit file into
-/etc/systemd/system and add an activation to the Dockerfile (maybe the
-last step could be automated based on the contents of the directory).
-
-Various more detailed implementation aspects of the system are documented
-below.
-
-== Dynamic file system mounts
-
-The exact partitions used for the +/boot+ and +/var+ filesystems depends on
-what root partition the system is running from:
-
-* A: +/dev/vda4+ -> +/boot+, +/dev/vda5+ -> +/+, +/dev/vda6+ -> +/var+
-* B: +/dev/vda7+ -> +/boot+, +/dev/vda8+ -> +/+, +/dev/vda9+ -> +/var+
-
-The system will be informed via bootloader command line whether it is
-running as A or B. Since the root filesystem is conceptually supposed to
-be immutable, the dynamic mappings cannot be stored in +/etc/fstab+.
-
-This is addressed using a generator in +/etc/systemd/system-generator/mount-generator+:
-Systemd runs these during early boot, and it will dynamically generate an
-appropriate +boot.mount+ unit based on the boot command-line.
-
-== First boot actions
+= First boot actions
 
 Several preparatory operations are performed when the system boots for the
 first time. This documents what actions are performed presently and might
 serve as a guide on how to add further actions.
 
-=== ssh key generation
+== ssh key generation
 
-The +setup-ssh-keys+ (and corresponding shell script) service performs one of
+The +ssh/setup-ssh-keys+ (and corresponding shell script) service performs one of
 two things: If this is the first boot ever (on a newly installed system), it
 generates ssh keys and stashes them away in a location that is preserved across
 upgrades. On first boot after an upgrade, it integrates the keys from their
 storage location into the running system.
 
-=== Encrypted data store setup
+== Encrypted data store setup
 The partition number 10 is used as encrypted LVM containing at least the
 +shared-data+ LV to serve as backing store for +/var/lib/ic/data+. The
 sequence to set it up is in principle not complicated, but due to the
@@ -94,7 +46,7 @@ units and scripts:
 All of the above actions are chained using appropriate +Before+/+RequiredBy+
 and +After+/+Requires+ dependencies expressed in the service definitions.
 
-=== /var filesystem setup
+== /var filesystem setup
 
 Partition numbers 6 or 9 (for system A and system B, respectively) are used
 for the /var filesystem hierarchy. It is set up as an encrypted filesystem
@@ -123,7 +75,7 @@ When an upgrade is installed into either system slot A or B, it is ensured
 that the corresponding /var partition is wiped such that the newly booted
 system will set up its own /var filesystem correctly again.
 
-=== IC bootstrap
+== IC bootstrap
 
 The +bootstrap-ic-node+ service (and its corresponding) shell script performs
 customization of the installation using node-specific information. This includes:
@@ -134,12 +86,3 @@ customization of the installation using node-specific information. This includes
 
 For all of the above, the system expects a file +ic-bootstrap.tar+ supplied on a removable storage medium (e.g.
 a USB stick or an optical medium).
-
-==== Filebeat configuration
-
-The Filebeat configuration is performed using a file +filebeat.conf+ in
-the bootstrap tarball. It must contain lines of "key=value= statements,
-with the following keys supported:
-
-* elasticsearch_hosts:    space-separated list of logging hosts
-* elasticsearch_tags:     space-separated list of tags
