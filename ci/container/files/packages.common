@@ -36,7 +36,6 @@ gcc
 lld
 pkg-config
 libssl-dev
-libunwind-dev
 libusb-1.0-0-dev
 libsqlite3-dev
 zlib1g-dev

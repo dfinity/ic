@@ -63,6 +63,17 @@ RUN mkdir libtinfo && \
     cd .. && \
     rm -rf libtinfo
 
+# Build libunwind from source. The packaged version breaks linking
+RUN apt -yqq install libtool && \
+    git clone --branch v1.8.1 --depth 1 "https://github.com/libunwind/libunwind" && \
+    cd libunwind && \
+    autoreconf -i && \
+    ./configure --libdir=/lib/x86_64-linux-gnu --includedir=/usr/include/x86_64-linux-gnu --disable-tests && \
+    make && \
+    make install && \
+    cd .. && \
+    rm -rf libunwind
+
 ARG sdk_version=0.12.0
 ARG sdk_sha=40da56ad27774d5e1b2cbc35f94c17368be8c8da557aca19878940264bd82a0a
 RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/download/${sdk_version}/dfx-${sdk_version}-x86_64-linux.tar.gz -o /tmp/sdk/dfx.tar.gz && \
