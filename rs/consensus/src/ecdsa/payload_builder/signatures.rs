@@ -98,7 +98,7 @@ pub(crate) fn update_signature_agreements(
                     "Signature request expired",
                 )),
             );
-            payload.available_quadruples.remove(quadruple_id);
+            payload.available_pre_signatures.remove(quadruple_id);
 
             if let Some(metrics) = ecdsa_payload_metrics {
                 metrics.payload_errors_inc("expired_requests");
@@ -110,7 +110,7 @@ pub(crate) fn update_signature_agreements(
         // In case of subnet recoveries, available quadruples are purged.
         // This means that pre-existing requests that were already matched
         // cannot be completed, and we should reject them.
-        if !payload.available_quadruples.contains_key(quadruple_id) {
+        if !payload.available_pre_signatures.contains_key(quadruple_id) {
             payload.signature_agreements.insert(
                 context.pseudo_random_id,
                 idkg::CompletedSignature::Unreported(reject_response(
@@ -144,7 +144,7 @@ pub(crate) fn update_signature_agreements(
             context.pseudo_random_id,
             idkg::CompletedSignature::Unreported(response),
         );
-        payload.available_quadruples.remove(quadruple_id);
+        payload.available_pre_signatures.remove(quadruple_id);
     }
 }
 
@@ -299,9 +299,9 @@ mod tests {
         );
 
         // Only the quadruple for the completed request should be removed
-        assert_eq!(ecdsa_payload.available_quadruples.len(), 3);
+        assert_eq!(ecdsa_payload.available_pre_signatures.len(), 3);
         assert!(!ecdsa_payload
-            .available_quadruples
+            .available_pre_signatures
             .contains_key(&quadruple_ids[1]));
 
         assert_eq!(ecdsa_payload.signature_agreements.len(), 3);

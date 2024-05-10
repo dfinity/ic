@@ -350,6 +350,9 @@ message TransferSnsTreasuryFunds {
 // Fields with None values will remain unchanged.
 message ManageLedgerParameters {
   optional uint64 transfer_fee = 1;
+  optional string token_name = 2;
+  optional string token_symbol = 3;
+  optional string token_logo = 4;
 }
 
 // A proposal to mint SNS tokens to (optionally a Subaccount of) the
@@ -415,19 +418,20 @@ enum LogVisibility {
   LOG_VISIBILITY_PUBLIC = 2;
 }
 
+// A proposal to manage the settings of one or more dapp canisters.
 message ManageDappCanisterSettings {
   // The canister IDs of the dapp canisters to be modified.
   repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
 
+  // Below are fields under CanisterSettings defined at
+  // https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.
   optional uint64 compute_allocation = 2;
-
   optional uint64 memory_allocation = 3;
-
   optional uint64 freezing_threshold = 4;
-
   optional uint64 reserved_cycles_limit = 5;
-
   optional LogVisibility log_visibility = 6;
+
+  optional uint64 wasm_memory_limit = 7;
 }
 
 // A proposal is the immutable input of a proposal submission.

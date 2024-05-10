@@ -9,6 +9,9 @@ DEPENDENCIES = [
     "@crate_index//:url",
     "@crate_index//:ic-agent",
     "@crate_index//:http",
+    "@crate_index//:thiserror",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
 ]
 
 VERSION = "0.1.0"

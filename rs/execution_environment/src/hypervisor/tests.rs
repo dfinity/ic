@@ -1,6 +1,8 @@
+use crate::hypervisor::tests::WasmResult::Reply;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
+use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
@@ -13,11 +15,13 @@ use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
 use ic_replicated_state::testing::CanisterQueuesTesting;
+use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     canister_state::execution_state::CustomSectionType, ExportedFunctions, Global, PageIndex,
 };
 use ic_replicated_state::{CanisterStatus, NumWasmPages, PageMap};
 use ic_sys::PAGE_SIZE;
+use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, get_reply, wasm_compilation_cost,
@@ -25,6 +29,9 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_metrics::{fetch_histogram_stats, HistogramStats};
+use ic_types::messages::CanisterMessage;
+use ic_types::time::CoarseTime;
+use ic_types::Time;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CanisterTask,
@@ -5048,6 +5055,122 @@ fn cycles_correct_if_update_fails() {
     );
 }
 
+#[test]
+fn call_with_best_effort_response_succeeds() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_best_effort_responses(FlagStatus::Enabled)
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm()
+                .call_new(canister_id, "update", call_args())
+                .call_with_cycles_and_best_effort_response(10)
+                .call_perform()
+                .reply()
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(result, Reply(vec![]));
+}
+
+#[test]
+fn call_with_best_effort_response_fails_when_timeout_is_set() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_best_effort_responses(FlagStatus::Enabled)
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+
+    let err = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm()
+                .call_new(canister_id, "update", call_args())
+                .call_with_cycles_and_best_effort_response(10)
+                .call_with_cycles_and_best_effort_response(10)
+                .build(),
+        )
+        .unwrap_err();
+
+    assert!(
+        err.description().contains("Canister violated contract: ic0_call_with_best_effort_response failed because a timeout is already set.")
+    );
+
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+}
+
+fn call_with_best_effort_response_test_helper(
+    start_time_seconds: u32,
+    timeout_seconds: u32,
+) -> CoarseTime {
+    let mut test = ExecutionTestBuilder::new()
+        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_manual_execution()
+        .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
+        .build();
+
+    let canister_sender = test.universal_canister().unwrap();
+    let canister_receiver = test.universal_canister().unwrap();
+
+    let call_with_best_effort_response = wasm()
+        .call_simple_with_cycles_and_best_effort_response(
+            canister_receiver,
+            "update",
+            call_args(),
+            Cycles::new(0),
+            timeout_seconds,
+        )
+        .reply()
+        .build();
+
+    let _ = test.ingress_raw(canister_sender, "update", call_with_best_effort_response);
+
+    // Execute Ingress message on `canister_sender`.
+    test.execute_message(canister_sender);
+    // Induct request from `canister_sender` to input queue of `canister_receiver`.
+    test.induct_messages();
+
+    match test
+        .canister_state_mut(canister_receiver)
+        .system_state
+        .queues_mut()
+        .pop_input()
+        .unwrap()
+    {
+        CanisterMessage::Request(request) => request.deadline,
+        _ => panic!("Unexpected result."),
+    }
+}
+
+#[test]
+fn call_with_best_effort_response_timeout_is_set_properly() {
+    let start_time_seconds = 200;
+    let timeout_seconds = 100;
+    assert_eq!(
+        call_with_best_effort_response_test_helper(start_time_seconds, timeout_seconds),
+        CoarseTime::from_secs_since_unix_epoch(start_time_seconds + timeout_seconds)
+    );
+}
+
+#[test]
+fn call_with_best_effort_response_timeout_is_bounded() {
+    let start_time_seconds = 200;
+    let requested_timeout_seconds = MAX_CALL_TIMEOUT_SECONDS + 100;
+    let bounded_timeout_seconds = MAX_CALL_TIMEOUT_SECONDS;
+    // Verify that timeout is silently bounded by the `MAX_CALL_TIMEOUT_SECONDS`.
+    assert_eq!(
+        call_with_best_effort_response_test_helper(start_time_seconds, requested_timeout_seconds),
+        CoarseTime::from_secs_since_unix_epoch(start_time_seconds + bounded_timeout_seconds)
+    );
+}
+
 fn display_page_map(page_map: PageMap, page_range: std::ops::Range<u64>) -> String {
     let mut contents = Vec::new();
     for page in page_range {
@@ -6312,6 +6435,7 @@ fn upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
         wat::parse_str(wat.clone()).unwrap(),
         CanisterUpgradeOptions {
             skip_pre_upgrade: Some(true),
+            wasm_memory_persistence: None,
         },
     )
     .unwrap();
@@ -6323,6 +6447,7 @@ fn upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
             wat::parse_str(wat).unwrap(),
             CanisterUpgradeOptions {
                 skip_pre_upgrade: Some(false),
+                wasm_memory_persistence: None,
             },
         )
         .unwrap_err();

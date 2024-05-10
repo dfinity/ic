@@ -4,6 +4,8 @@
 pub struct CanisterUpgradeOptions {
     #[prost(bool, optional, tag = "1")]
     pub skip_pre_upgrade: ::core::option::Option<bool>,
+    #[prost(enumeration = "WasmMemoryPersistence", optional, tag = "2")]
+    pub wasm_memory_persistence: ::core::option::Option<i32>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -68,6 +70,47 @@ impl CanisterInstallMode {
             "CANISTER_INSTALL_MODE_INSTALL" => Some(Self::Install),
             "CANISTER_INSTALL_MODE_REINSTALL" => Some(Self::Reinstall),
             "CANISTER_INSTALL_MODE_UPGRADE" => Some(Self::Upgrade),
+            _ => None,
+        }
+    }
+}
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum WasmMemoryPersistence {
+    Unspecified = 0,
+    Keep = 1,
+    Replace = 2,
+}
+impl WasmMemoryPersistence {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            WasmMemoryPersistence::Unspecified => "WASM_MEMORY_PERSISTENCE_UNSPECIFIED",
+            WasmMemoryPersistence::Keep => "WASM_MEMORY_PERSISTENCE_KEEP",
+            WasmMemoryPersistence::Replace => "WASM_MEMORY_PERSISTENCE_REPLACE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "WASM_MEMORY_PERSISTENCE_UNSPECIFIED" => Some(Self::Unspecified),
+            "WASM_MEMORY_PERSISTENCE_KEEP" => Some(Self::Keep),
+            "WASM_MEMORY_PERSISTENCE_REPLACE" => Some(Self::Replace),
             _ => None,
         }
     }
@@ -440,6 +483,8 @@ pub struct EcdsaPayload {
     pub available_quadruples: ::prost::alloc::vec::Vec<AvailableQuadruple>,
     #[prost(message, repeated, tag = "4")]
     pub quadruples_in_creation: ::prost::alloc::vec::Vec<QuadrupleInProgress>,
+    #[prost(bool, tag = "16")]
+    pub generalized_pre_signatures: bool,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -493,9 +538,6 @@ pub struct AvailableQuadruple {
     pub quadruple_id: u64,
     #[prost(message, optional, tag = "2")]
     pub quadruple: ::core::option::Option<PreSignatureQuadrupleRef>,
-    /// Deprecated. Use `quadruple.key_id` instead.
-    #[prost(message, optional, tag = "3")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -505,9 +547,6 @@ pub struct QuadrupleInProgress {
     pub quadruple_id: u64,
     #[prost(message, optional, tag = "2")]
     pub quadruple: ::core::option::Option<QuadrupleInCreation>,
-    /// Deprecated. Use `quadruple.key_id` instead.
-    #[prost(message, optional, tag = "3")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -555,8 +594,6 @@ pub struct RequestId {
     pub quadruple_id: u64,
     #[prost(uint64, tag = "3")]
     pub height: u64,
-    #[prost(message, optional, tag = "4")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -708,18 +745,12 @@ pub mod pre_signature_ref {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QuadrupleInCreation {
-    #[prost(message, optional, tag = "1")]
-    pub kappa_masked_config: ::core::option::Option<RandomTranscriptParams>,
-    #[prost(message, optional, tag = "2")]
-    pub kappa_masked: ::core::option::Option<MaskedTranscript>,
     #[prost(message, optional, tag = "3")]
     pub lambda_config: ::core::option::Option<RandomTranscriptParams>,
     #[prost(message, optional, tag = "4")]
     pub lambda_masked: ::core::option::Option<MaskedTranscript>,
     #[prost(message, optional, tag = "11")]
     pub kappa_unmasked_config: ::core::option::Option<RandomUnmaskedTranscriptParams>,
-    #[prost(message, optional, tag = "5")]
-    pub unmask_kappa_config: ::core::option::Option<ReshareOfMaskedParams>,
     #[prost(message, optional, tag = "6")]
     pub kappa_unmasked: ::core::option::Option<UnmaskedTranscript>,
     #[prost(message, optional, tag = "7")]

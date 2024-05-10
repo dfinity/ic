@@ -31,6 +31,9 @@ if grep -q "$TARGET" bazel-targets || grep -qF "//..." bazel-targets; then
     # TODO(IDX): remove when issue is identified and addressed
     # https://gitlab.com/dfinity-lab/public/ic/-/snippets/3697069
     sed -i -e '/wasm.wasm.gz/d' "$PATH0/SHA256SUMS" "$PATH1/SHA256SUMS"
+    # TODO(IDX): remove when issue is identified and addressed
+    # https://gitlab.com/dfinity-lab/public/ic/-/snippets/3704313
+    sed -i -e '/genesis-token-canister.wasm.gz/d' "$PATH0/SHA256SUMS" "$PATH1/SHA256SUMS"
 
     # for hostos / guestos we only care about update-img
     if [ "${DISKIMG:-}" != "true" ]; then

@@ -440,7 +440,7 @@ impl PriorityFnAndFilterProducer<IngressArtifact, IngressPoolImpl> for IngressPr
             let start = time_source.get_relative_time();
             let range = start..=start + MAX_INGRESS_TTL;
             if range.contains(&ingress_id.expiry()) {
-                Priority::Later
+                Priority::FetchNow
             } else {
                 Priority::Drop
             }

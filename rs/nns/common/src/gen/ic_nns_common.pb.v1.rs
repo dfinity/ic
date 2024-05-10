@@ -1,13 +1,3 @@
-/// A PB container for a CanisterId, which uniquely identifies
-/// a principal.
-#[derive(serde::Serialize, candid::CandidType, candid::Deserialize, comparable::Comparable, Eq)]
-#[self_describing]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterId {
-    #[prost(bytes = "vec", tag = "1")]
-    pub serialized_id: ::prost::alloc::vec::Vec<u8>,
-}
 /// A container for a NeuronId blob, which uniquely identifies
 /// a Neuron.
 #[derive(serde::Serialize, candid::CandidType, candid::Deserialize, comparable::Comparable, Eq)]

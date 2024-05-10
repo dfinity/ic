@@ -1,9 +1,7 @@
-use ic_interfaces_registry::{
-    LocalStoreCertifiedTimeReader, RegistryDataProvider, RegistryTransportRecord,
-};
+use ic_interfaces_registry::{RegistryDataProvider, RegistryTransportRecord};
 use ic_registry_common_proto::pb::local_store::v1::{
-    CertifiedTime as PbCertifiedTime, ChangelogEntry as PbChangelogEntry, Delta as PbDelta,
-    KeyMutation as PbKeyMutation, MutationType,
+    ChangelogEntry as PbChangelogEntry, Delta as PbDelta, KeyMutation as PbKeyMutation,
+    MutationType,
 };
 use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::registry::RegistryDataProviderError;
@@ -12,10 +10,8 @@ use prost::Message;
 use std::{
     io::{self},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
 };
-pub trait LocalStore: LocalStoreWriter + LocalStoreReader + LocalStoreCertifiedTimeReader {}
+pub trait LocalStore: LocalStoreWriter + LocalStoreReader {}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct KeyMutation {
@@ -55,31 +51,20 @@ pub trait LocalStoreWriter: Send + Sync {
 
     /// Clears the Local Store.
     ///
-    /// Note: This clears registry versions, stored in directories, but not the
-    /// certified timestamp file in the root of the local store.
+    /// Note: This clears registry versions, stored in directories.
     fn clear(&self) -> io::Result<()>;
-
-    /// Update the locally stored certified time to `unix_epoch_nanos`.
-    fn update_certified_time(&self, unix_epoch_nanos: u64) -> io::Result<()>;
 }
 
 #[derive(Clone, Debug)]
 pub struct LocalStoreImpl {
     /// Directory with one .pb file per registry version.
     path: PathBuf,
-
-    /// Cached certified local store time, indicating instant at which the cache
-    /// was last updated and the last time value. A time value of `0` indicates
-    /// that no value was read thus far.
-    certified_time: Arc<Mutex<(Instant, u64)>>,
 }
 
 impl LocalStoreImpl {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
-        let now = Instant::now();
         Self {
             path: PathBuf::from(path.as_ref()),
-            certified_time: Arc::new(Mutex::new((now, 0))),
         }
     }
 
@@ -128,28 +113,8 @@ impl LocalStoreImpl {
         f(path.as_path(), pb)
     }
 
-    fn certified_time_path(&self) -> PathBuf {
-        let fname = "time.local_store.v1.CertificationTime.pb";
-        self.path.join(fname)
-    }
-
     fn write_changelog_entry(&self, version: u64, pb: PbChangelogEntry) -> io::Result<()> {
         self.write_changelog_entry_(version, pb, |p, m| write_protobuf_using_tmp_file(p, &m))
-    }
-
-    /// This method *omits* fsync operations. It is intended to be used in
-    /// controlled environments (like testing) when writing large number of
-    /// versions/files in sequence.
-    pub fn write_changelog_entry_unsafe(&self, version: u64, ce: ChangelogEntry) -> io::Result<()> {
-        let pb = changelog_entry_to_protobuf(ce);
-        self.write_changelog_entry_(version, pb, |p, m| Self::write_protobuf_unsafe(p, &m))
-    }
-
-    fn write_protobuf_unsafe(p: &Path, m: &PbChangelogEntry) -> io::Result<()> {
-        let mut buf = Vec::<u8>::new();
-        m.encode(&mut buf)
-            .expect("Protobuf serialization failed in write_protobuf");
-        std::fs::write(p, buf)
     }
 }
 
@@ -186,13 +151,6 @@ impl LocalStoreWriter for LocalStoreImpl {
                 Ok(())
             }
         })
-    }
-
-    // Store the certified time
-    fn update_certified_time(&self, unix_epoch_nanos: u64) -> io::Result<()> {
-        let path = self.certified_time_path();
-        let pb = PbCertifiedTime { unix_epoch_nanos };
-        write_protobuf_using_tmp_file(path, &pb)
     }
 }
 
@@ -271,30 +229,6 @@ fn key_mutation_try_from_proto(value: &PbKeyMutation) -> Result<KeyMutation, io:
         },
     };
     Ok(res)
-}
-
-impl LocalStoreCertifiedTimeReader for LocalStoreImpl {
-    fn read_certified_time(&self) -> ic_types::time::Time {
-        let mut lock_guard = self.certified_time.lock().expect("can't fail");
-
-        let now = Instant::now();
-        let delta = now.duration_since(lock_guard.0);
-        // Only check every second or if no value was provided so far (ts = 0).
-        if delta > Duration::from_secs(1) || lock_guard.1 == 0 {
-            let path = self.certified_time_path();
-            if !path.exists() {
-                return ic_types::time::Time::from_nanos_since_unix_epoch(0);
-            }
-            let bytes = std::fs::read(&path)
-                .unwrap_or_else(|e| panic!("Could not read content of file `{:?}`: {:?}", path, e));
-            let pb_certified_time = PbCertifiedTime::decode(bytes.as_slice())
-                .expect("Could not decode CertifiedTime protobuf.");
-            *lock_guard = (now, pb_certified_time.unix_epoch_nanos);
-            ic_types::time::Time::from_nanos_since_unix_epoch(pb_certified_time.unix_epoch_nanos)
-        } else {
-            ic_types::time::Time::from_nanos_since_unix_epoch(lock_guard.1)
-        }
-    }
 }
 
 /// Translate a compact protobuf message to a changelog.
@@ -454,22 +388,6 @@ mod tests {
                 .unwrap();
             assert_eq!(&changelog[i..], cl.as_slice());
         }
-    }
-
-    #[test]
-    fn can_store_and_read_certified_time() {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
-        let expected_time = ic_types::Time::from_nanos_since_unix_epoch(now);
-
-        let tempdir = TempDir::new().unwrap();
-        let store = LocalStoreImpl::new(tempdir.path());
-        store.update_certified_time(now).unwrap();
-        let actual_time = store.read_certified_time();
-        assert_eq!(expected_time, actual_time);
     }
 
     fn get_random_changelog(n: usize, rng: &mut ThreadRng) -> Changelog {

@@ -71,7 +71,7 @@ impl<Pool: CanisterHttpPool> PriorityFnAndFilterProducer<CanisterHttpArtifact, P
             //    Receiving an callback Id higher is possible because the priority fn is updated periodically (every 3s) with the latest state
             //    and can therefore store stale `known_request_ids` and stale `next_callback_id`.
             if known_request_ids.contains(&id.content.id) || id.content.id >= next_callback_id {
-                Priority::Fetch
+                Priority::FetchNow
             } else {
                 Priority::Drop
             }

@@ -451,11 +451,18 @@ enum SubCommand {
     ProposeToOpenSnsTokenSwap(ProposeToOpenSnsTokenSwap),
     /// Propose to set the Bitcoin configuration
     ProposeToSetBitcoinConfig(ProposeToSetBitcoinConfig),
-    /// Submits a proposal to update currently elected HostOS versions, by electing
-    /// a new version and/or unelecting multiple versions.
+    /// Submits a proposal to change the set of currently elected HostOS versions, by electing
+    /// a new version and/or unelecting multiple versions. This subcommand is obsolete; please use
+    /// `ProposeToReviseElectedHostosVersions` instead.
     ProposeToUpdateElectedHostosVersions(ProposeToUpdateElectedHostosVersionsCmd),
-    /// Set or remove a HostOS version on Nodes
+    /// Submits a proposal to change the set of currently elected HostOS versions, by electing
+    /// a new version and/or unelecting multiple versions.
+    ProposeToReviseElectedHostosVersions(ProposeToReviseElectedHostosVersionsCmd),
+    /// Set or remove a HostOS version on Nodes. This subcommand is obsolete; please use
+    /// `ProposeToDeployHostosToSomeNodes` instead.
     ProposeToUpdateNodesHostosVersion(ProposeToUpdateNodesHostosVersionCmd),
+    /// Propose to deploy a HostOS version to some nodes.
+    ProposeToDeployHostosToSomeNodes(ProposeToDeployHostosToSomeNodesCmd),
     /// Get current list of elected HostOS versions
     GetElectedHostosVersions,
     /// Propose to add an API Boundary Node
@@ -2185,6 +2192,8 @@ impl ProposalPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
         let sns_wasm = SnsWasm {
             wasm,
             canister_type,
+            // Will be automatically set by NNS Governance
+            proposal_id: None,
         };
 
         AddWasmRequest {
@@ -3963,10 +3972,14 @@ async fn propose_to_create_service_nervous_system(
     }
 }
 
-/// Sub-command to submit a proposal to update elected HostOS versions.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateElectedHostosVersionsCmd {
+struct ProposeToUpdateElectedHostosVersionsCmd {}
+
+/// Sub-command to change the set of currently elected HostOS versions.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToReviseElectedHostosVersionsCmd {
     #[clap(long)]
     /// The HostOS version ID to elect.
     pub hostos_version_to_elect: Option<String>,
@@ -3986,7 +3999,7 @@ struct ProposeToUpdateElectedHostosVersionsCmd {
     pub hostos_versions_to_unelect: Vec<String>,
 }
 
-impl ProposalTitle for ProposeToUpdateElectedHostosVersionsCmd {
+impl ProposalTitle for ProposeToReviseElectedHostosVersionsCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -4000,7 +4013,7 @@ impl ProposalTitle for ProposeToUpdateElectedHostosVersionsCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateElectedHostosVersionsPayload>
-    for ProposeToUpdateElectedHostosVersionsCmd
+    for ProposeToReviseElectedHostosVersionsCmd
 {
     async fn payload(&self, _: &Agent) -> UpdateElectedHostosVersionsPayload {
         let payload = UpdateElectedHostosVersionsPayload {
@@ -4014,10 +4027,15 @@ impl ProposalPayload<UpdateElectedHostosVersionsPayload>
     }
 }
 
-/// Sub-command to set HostOS version on a set of Nodes.
+/// Obsolete; please use `ProposeToDeployHostosToSomeNodes` instead.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateNodesHostosVersionCmd {
+struct ProposeToUpdateNodesHostosVersionCmd {}
+
+/// Sub-command to deploy a HostOS version to a set of nodes.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToDeployHostosToSomeNodesCmd {
     /// The list of nodes on which to set the given HostosVersion
     #[clap(name = "NODE_ID", multiple_values(true), required = true)]
     pub node_ids: Vec<PrincipalId>,
@@ -4051,7 +4069,7 @@ impl HostosVersionFlag {
     }
 }
 
-impl ProposalTitle for ProposeToUpdateNodesHostosVersionCmd {
+impl ProposalTitle for ProposeToDeployHostosToSomeNodesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -4071,7 +4089,7 @@ impl ProposalTitle for ProposeToUpdateNodesHostosVersionCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToUpdateNodesHostosVersionCmd {
+impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToDeployHostosToSomeNodesCmd {
     async fn payload(&self, _: &Agent) -> UpdateNodesHostosVersionPayload {
         let node_ids = self
             .node_ids
@@ -4093,10 +4111,6 @@ struct ProposeToAddApiBoundaryNodeCmd {
     #[clap(long, required = true, alias = "node-id")]
     /// The node to assign as an API Boundary Node
     node: PrincipalId,
-
-    #[clap(long, required = true)]
-    /// The domain name the API Boundary Node will use
-    domain: String,
 
     #[clap(long, required = true, alias = "version-id")]
     /// The version the API Boundary Node will use
@@ -4414,8 +4428,16 @@ async fn main() {
             SubCommand::ProposeToUpdateSnsSubnetIdsInSnsWasm(_) => (),
             SubCommand::ProposeToUpdateSnsDeployWhitelist(_) => (),
             SubCommand::ProposeToInsertSnsWasmUpgradePathEntries(_) => (),
-            SubCommand::ProposeToUpdateElectedHostosVersions(_) => (),
-            SubCommand::ProposeToUpdateNodesHostosVersion(_) => (),
+            SubCommand::ProposeToUpdateElectedHostosVersions(_) => panic!(
+                "Subcommand ProposeToUpdateElectedHostosVersions is obsolete; please use \
+                ProposeToReviseElectedHostosVersions instead"
+            ),
+            SubCommand::ProposeToReviseElectedHostosVersions(_) => (),
+            SubCommand::ProposeToUpdateNodesHostosVersion(_) => panic!(
+                "Subcommand ProposeToUpdateNodesHostosVersion is obsolete; please use \
+                ProposeToDeployHostosToSomeNodes instead"
+            ),
+            SubCommand::ProposeToDeployHostosToSomeNodes(_) => (),
             SubCommand::ProposeToCreateServiceNervousSystem(_) => (),
             SubCommand::ProposeToSetBitcoinConfig(_) => (),
             SubCommand::ProposeToAddApiBoundaryNode(_) => (),
@@ -5544,11 +5566,11 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToUpdateElectedHostosVersions(cmd) => {
+        SubCommand::ProposeToReviseElectedHostosVersions(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::UpdateElectedHostosVersions,
+                NnsFunction::ReviseElectedHostosVersions,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,
@@ -5559,11 +5581,11 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToUpdateNodesHostosVersion(cmd) => {
+        SubCommand::ProposeToDeployHostosToSomeNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::UpdateNodesHostosVersion,
+                NnsFunction::DeployHostosToSomeNodes,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,

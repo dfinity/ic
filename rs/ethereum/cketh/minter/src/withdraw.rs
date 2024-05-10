@@ -20,6 +20,7 @@ use ic_canister_log::log;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use num_traits::ToPrimitive;
+use scopeguard::ScopeGuard;
 use std::collections::{BTreeMap, BTreeSet};
 use std::iter::zip;
 
@@ -52,6 +53,11 @@ pub async fn process_reimbursement() {
     let mut error_count = 0;
 
     for (index, reimbursement_request) in reimbursements {
+        // Ensure that even if we were to panic in the callback, after having contacted the ledger to mint the tokens,
+        // this reimbursement request will not be processed again.
+        let prevent_double_minting_guard = scopeguard::guard(index.clone(), |index| {
+            mutate_state(|s| process_event(s, EventType::QuarantinedReimbursement { index }));
+        });
         let ledger_canister_id = match index {
             ReimbursementIndex::CkEth { .. } => read_state(|s| s.ledger_id),
             ReimbursementIndex::CkErc20 { ledger_id, .. } => ledger_id,
@@ -82,6 +88,8 @@ pub async fn process_reimbursement() {
             Ok(Err(err)) => {
                 log!(INFO, "[process_reimbursement] Failed to mint ckETH {err}");
                 error_count += 1;
+                // minting failed, defuse guard
+                ScopeGuard::into_inner(prevent_double_minting_guard);
                 continue;
             }
             Err(err) => {
@@ -90,6 +98,8 @@ pub async fn process_reimbursement() {
                     "[process_reimbursement] Failed to send a message to the ledger ({ledger_canister_id}): {err:?}"
                 );
                 error_count += 1;
+                // minting failed, defuse guard
+                ScopeGuard::into_inner(prevent_double_minting_guard);
                 continue;
             }
         };
@@ -114,6 +124,8 @@ pub async fn process_reimbursement() {
             },
         };
         mutate_state(|s| process_event(s, event));
+        // minting succeeded, defuse guard
+        ScopeGuard::into_inner(prevent_double_minting_guard);
     }
     if error_count > 0 {
         log!(

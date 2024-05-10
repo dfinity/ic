@@ -11,22 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 4.0.0 - 2024-04-30
+
 ### Added
 - New endpoints `/instances/<instance_id>/auto_progress` and `/instances/<instance_id>/stop_progress` to make IC instances
   progress (updating time and executing rounds) automatically.
 - New endpoints `/instances/<instance_id>/api/v2/...` supporting the HTTP interface of the IC as described
   by the [Interface Specification](https://internetcomputer.org/docs/current/references/ic-interface-spec).
-- New subnet specification allowing to set very high instruction limits for (asymptotic) benchmarking canister code.
-- New endpoint `/read_graph/:state_label/:op_id` for polling on a long-running operation. The state_label and op_id are returned by `ApiResponse::Started{state_label, op_id}`. 
+- Breaking: New subnet specification allowing to set very high instruction limits for (asymptotic) benchmarking canister code.
+- New endpoint `/read_graph/:state_label/:op_id` for polling on a long-running operation. The `state_label` and `op_id` are returned by `ApiResponse::Started{state_label, op_id}`.
 - New CLI option `--port-file` to specify a file to which the PocketIC server port should be written.
 - New endpoints `/http_gateway` and `/http_gateway/:id/stop` to start and stop an HTTP gateway.
-- DTS is enabled on a subnet based on a new field `dts_flag` in `SubnetSpec`.
+- Breaking: DTS is enabled on a subnet based on a new field `dts_flag` in `SubnetSpec`.
 - New endpoints `submit_ingress_message` (submit an ingress message without executing it) and `await_ingress_message` (execute rounds on the PocketIc instance until the message is executed).
 
 ### Fixed
 
-- Subnet IDs are derived from the subnets' public keys by default.
-- The time of every subnet advances by 1ns before every round execution to make sure the subnet time is strictly increasing in every round.
+- Potentially breaking: Subnet IDs are derived from the subnets' public keys by default.
+- Potentially breaking: The time of every subnet advances by 1ns before every round execution to make sure the subnet time is strictly increasing in every round.
 
 
 ## 3.0.1 - 2024-02-14

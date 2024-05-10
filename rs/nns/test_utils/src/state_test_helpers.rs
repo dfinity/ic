@@ -13,6 +13,7 @@ use dfn_candid::candid_one;
 use dfn_http::types::{HttpRequest, HttpResponse};
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_management_canister_types::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     UpdateSettingsArgs,
@@ -48,6 +49,7 @@ use ic_nns_governance::pb::v1::{
     RewardNodeProviders, Vote,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayload;
+use ic_registry_subnet_type::SubnetType;
 use ic_sns_governance::{
     pb::v1::{
         self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
@@ -59,11 +61,11 @@ use ic_sns_wasm::{
     init::SnsWasmCanisterInitPayload,
     pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse},
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
-use ic_types::{ingress::WasmResult, Cycles};
+use ic_types::{ingress::WasmResult, Cycles, NumInstructions};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, Memo, SendArgs, Tokens};
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -75,8 +77,29 @@ use prost::Message;
 use serde::Serialize;
 use std::{convert::TryInto, env, time::Duration};
 
+/// A `StateMachine` builder setting the IC time to the current time
+/// and using the canister ranges of both the NNS and II subnets.
+/// Note. The last canister ID in the canister range of the II subnet
+/// is omitted so that the canister range of the II subnet is not used
+/// for automatic generation of new canister IDs.
 pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
-    StateMachineBuilder::new().with_current_time()
+    // TODO, remove when this is the value set in the normal IC build
+    // This is to uncover issues in testing that might affect performance in production
+    const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2_000_000_000); // 2 Billion is the value used in app subnets
+
+    let mut subnet_config = SubnetConfig::new(SubnetType::System);
+    subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
+
+    StateMachineBuilder::new()
+        .with_current_time()
+        .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
+            CanisterId::from_u64(0x2100000),
+            CanisterId::from_u64(0x21FFFFE),
+        ))
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            Config::default(),
+        )))
 }
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
@@ -101,6 +124,33 @@ pub fn create_canister(
             canister_settings,
         )
         .unwrap()
+}
+
+/// Creates a canister with a specified canister ID, wasm, payload, and optionally settings on a StateMachine
+/// DO NOT USE this function for specified canister IDs within the main (NNS) subnet canister range:
+/// `CanisterId::from_u64(0x00000)` until `CanisterId::from_u64(0xFFFFF)`.
+/// Use the function `create_canister_id_at_position` for that canister range instead.
+pub fn create_canister_at_specified_id(
+    machine: &StateMachine,
+    specified_id: u64,
+    wasm: Wasm,
+    initial_payload: Option<Vec<u8>>,
+    canister_settings: Option<CanisterSettingsArgs>,
+) {
+    assert!(specified_id >= 0x100000);
+    let canister_id = CanisterId::from_u64(specified_id);
+    machine.create_canister_with_cycles(
+        Some(canister_id.into()),
+        Cycles::zero(),
+        canister_settings,
+    );
+    machine
+        .install_existing_canister(
+            canister_id,
+            wasm.bytes(),
+            initial_payload.unwrap_or_default(),
+        )
+        .unwrap();
 }
 
 /// Creates a canister with cycles, wasm, payload, and optionally settings on a StateMachine
@@ -1432,6 +1482,29 @@ pub fn icrc1_transfer(
         Ok(n) => Ok(n.0.to_u64().unwrap()),
         Err(e) => Err(format!("{:?}", e)),
     }
+}
+
+pub fn icrc1_token_name(machine: &StateMachine, ledger_id: CanisterId) -> String {
+    let result = query(machine, ledger_id, "icrc1_name", Encode!(&()).unwrap()).unwrap();
+    Decode!(&result, String).unwrap()
+}
+
+pub fn icrc1_token_symbol(machine: &StateMachine, ledger_id: CanisterId) -> String {
+    let result = query(machine, ledger_id, "icrc1_symbol", Encode!(&()).unwrap()).unwrap();
+    Decode!(&result, String).unwrap()
+}
+
+pub fn icrc1_token_logo(machine: &StateMachine, ledger_id: CanisterId) -> Option<String> {
+    let result = query(machine, ledger_id, "icrc1_metadata", Encode!(&()).unwrap()).unwrap();
+    use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
+    Decode!(&result, Vec<(String, MetadataValue)>)
+        .unwrap()
+        .into_iter()
+        .find(|(key, _)| key == "icrc1:logo")
+        .map(|(_key, value)| match value {
+            MetadataValue::Text(s) => s,
+            m => panic!("Unexpected metadata value {m:?}"),
+        })
 }
 
 /// Claim a staked neuron for an SNS StateMachine test

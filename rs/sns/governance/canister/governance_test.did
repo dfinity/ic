@@ -243,10 +243,16 @@ type ManageDappCanisterSettings = record {
   canister_ids : vec principal;
   reserved_cycles_limit : opt nat64;
   log_visibility : opt int32;
+  wasm_memory_limit : opt nat64;
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
 };
-type ManageLedgerParameters = record { transfer_fee : opt nat64 };
+type ManageLedgerParameters = record {
+  token_symbol : opt text;
+  transfer_fee : opt nat64;
+  token_logo : opt text;
+  token_name : opt text;
+};
 type ManageNeuron = record { subaccount : blob; command : opt Command };
 type ManageNeuronResponse = record { command : opt Command_1 };
 type ManageSnsMetadata = record {

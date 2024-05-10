@@ -6,7 +6,6 @@ members = [
     "packages/icrc-ledger-client-cdk",
     "packages/icrc-ledger-types",
     "packages/ic-ledger-hash-of",
-    "packages/ic-starter-tests",
     "packages/pocket-ic",
     "packages/ic-vetkd-utils",
     "rs/artifact_manager",
@@ -178,6 +177,7 @@ members = [
     "rs/nervous_system/root",
     "rs/nervous_system/runtime",
     "rs/nervous_system/string",
+    "rs/nervous_system/tools/sync-with-released-nevous-system-wasms",
     "rs/nns/constants",
     "rs/nns/common",
     "rs/nns/common/protobuf_generator",
@@ -341,6 +341,7 @@ members = [
     "rs/tests/nested",
     "rs/tests/nns/sns",
     "rs/tests/nns/ic_mainnet_nns_recovery",
+    "rs/tests/sdk",
     "rs/tests/test_canisters/http_counter",
     "rs/tests/test_canisters/kv_store",
     "rs/tests/test_canisters/message",
@@ -405,6 +406,9 @@ debug = false
 lto = true
 opt-level = 'z'
 
+[profile.dev.package.curve25519-dalek]
+opt-level = 3
+
 [profile.dev.package.ic_bls12_381]
 opt-level = 3
 
@@ -455,6 +459,9 @@ futures-util = "0.3.30"
 hex = { version = "0.4.3", features = ["serde"] }
 hyper = { version = "1.2.0", features = ["full"] }
 hyper-rustls = { version = "0.24.2", features = ["http2"] }
+hyper-socks2 = { version = "0.8.0", default_features = false, features = [
+    "rustls",
+] }
 ic-agent = { version = "0.34.0", features = ["hyper"] }
 ic-cdk = "0.13.2"
 ic-cdk-macros = "0.9.0"
@@ -512,7 +519,7 @@ reqwest = { version = "0.12.3", default-features = false, features = [
     "socks",
     "stream",
 ] }
-rustls = { version = "0.21.10", features = ["dangerous_configuration"] }
+rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
 serde_cbor = "0.11.2"
@@ -532,6 +539,8 @@ socket2 = { version = "0.5.6", features = ["all"] }
 strum = { version = "0.26.2", features = ["derive"] }
 strum_macros = "0.26.2"
 syn = { version = "1.0.109", features = ["fold", "full"] }
+sync_wrapper = "^1.0.1"
+tempfile = "^3.1.0"
 thiserror = "1.0.57"
 time = { version = "0.3.20", features = ["formatting"] }
 tokio = { version = "1.37.0", features = ["full"] }
@@ -551,3 +560,8 @@ tracing-subscriber = { version = "0.3.18", features = [
 turmoil = "0.6.0"
 x509-cert = { version = "0.2.4", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.15.1" }
+
+[workspace.dependencies.ic-wasm]
+version = "^0.7.1"
+default-features = false
+features = ["exe"]

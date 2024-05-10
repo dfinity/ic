@@ -12,6 +12,7 @@ use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
 #[cfg(feature = "test")]
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
+use ic_protobuf::registry::dc::v1::DataCenterRecord;
 #[cfg(feature = "test")]
 use ic_sns_init::pb::v1::SnsInitPayload;
 #[cfg(feature = "test")]
@@ -1328,6 +1329,224 @@ fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
 
     // Work to do, no lock, should say yes.
     assert!(governance.can_spawn_neurons());
+}
+
+#[test]
+fn test_validate_execute_nns_function() {
+    let governance = Governance::new(
+        GovernanceProto {
+            economics: Some(NetworkEconomics::with_default_values()),
+            node_providers: vec![NodeProvider {
+                id: Some(PrincipalId::new_node_test_id(1)),
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+        Box::new(MockEnvironment::new(vec![], 100)),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+
+    let test_execute_nns_function_error =
+        |execute_nns_function: ExecuteNnsFunction, error_message: String| {
+            let actual_result = governance.validate_execute_nns_function(&execute_nns_function);
+            let expected_result = Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                error_message,
+            ));
+            assert_eq!(actual_result, expected_result);
+        };
+
+    let error_test_cases = vec![
+        (
+            ExecuteNnsFunction {
+                nns_function: i32::MAX,
+                payload: vec![],
+            },
+            "Invalid NnsFunction id: 2147483647".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::CreateSubnet as i32,
+                payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX + 1],
+            },
+            format!(
+                "The maximum NNS function payload size in a proposal action is {} bytes, \
+                 this payload is: {} bytes",
+                PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX,
+                PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX + 1,
+            ),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::IcpXdrConversionRate as i32,
+                payload: vec![],
+            },
+            "The payload could not be decoded into a UpdateIcpXdrConversionRatePayload: \
+             Cannot parse header "
+                .to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::IcpXdrConversionRate as i32,
+                payload: Encode!(&UpdateIcpXdrConversionRatePayload {
+                    xdr_permyriad_per_icp: 0,
+                    ..Default::default()
+                })
+                .unwrap(),
+            },
+            "The proposed rate 0 is below the minimum allowable rate".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::AssignNoid as i32,
+                payload: vec![],
+            },
+            "The payload could not be decoded into a AddNodeOperatorPayload: \
+             Cannot parse header "
+                .to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::AssignNoid as i32,
+                payload: Encode!(&AddNodeOperatorPayload {
+                    node_provider_principal_id: None,
+                    ..Default::default()
+                })
+                .unwrap(),
+            },
+            "The payload's node_provider_principal_id field was None".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::AssignNoid as i32,
+                payload: Encode!(&AddNodeOperatorPayload {
+                    node_provider_principal_id: Some(PrincipalId::new_node_test_id(2)),
+                    ..Default::default()
+                })
+                .unwrap(),
+            },
+            "The node provider specified in the payload is not registered".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::AddOrRemoveDataCenters as i32,
+                payload: Encode!(&AddOrRemoveDataCentersProposalPayload {
+                    data_centers_to_add: vec![DataCenterRecord {
+                        id: "a".repeat(1000),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                })
+                .unwrap(),
+            },
+            "The given AddOrRemoveDataCentersProposalPayload is invalid: id must not be longer \
+             than 255 characters"
+                .to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::UpdateAllowedPrincipals as i32,
+                payload: vec![],
+            },
+            "NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS proposal is obsolete".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::UpdateApiBoundaryNodesVersion as i32,
+                payload: vec![],
+            },
+            "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION proposal is obsolete".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::UpdateUnassignedNodesConfig as i32,
+                payload: vec![],
+            },
+            "NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG proposal is obsolete".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::UpdateElectedHostosVersions as i32,
+                payload: vec![],
+            },
+            "NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS proposal is obsolete".to_string(),
+        ),
+        (
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::UpdateNodesHostosVersion as i32,
+                payload: vec![],
+            },
+            "NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION proposal is obsolete".to_string(),
+        ),
+    ];
+
+    for (execute_nns_function, error_message) in error_test_cases {
+        test_execute_nns_function_error(execute_nns_function, error_message);
+    }
+
+    let ok_test_cases = vec![
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::CreateSubnet as i32,
+            payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX],
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::NnsCanisterUpgrade as i32,
+            payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX + 1],
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::IcpXdrConversionRate as i32,
+            payload: Encode!(&UpdateIcpXdrConversionRatePayload {
+                xdr_permyriad_per_icp: 101,
+                ..Default::default()
+            })
+            .unwrap(),
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::AssignNoid as i32,
+            payload: Encode!(&AddNodeOperatorPayload {
+                node_provider_principal_id: Some(PrincipalId::new_node_test_id(1)),
+                ..Default::default()
+            })
+            .unwrap(),
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::AddOrRemoveDataCenters as i32,
+            payload: Encode!(&AddOrRemoveDataCentersProposalPayload {
+                data_centers_to_add: vec![DataCenterRecord {
+                    id: "a".to_string(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })
+            .unwrap(),
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::DeployGuestosToSomeApiBoundaryNodes as i32,
+            payload: vec![],
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::DeployGuestosToAllUnassignedNodes as i32,
+            payload: vec![],
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes as i32,
+            payload: vec![],
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::ReviseElectedHostosVersions as i32,
+            payload: vec![],
+        },
+        ExecuteNnsFunction {
+            nns_function: NnsFunction::DeployHostosToSomeNodes as i32,
+            payload: vec![],
+        },
+    ];
+
+    for execute_nns_function in ok_test_cases {
+        let actual_result = governance.validate_execute_nns_function(&execute_nns_function);
+        assert_eq!(actual_result, Ok(()));
+    }
 }
 
 #[test]

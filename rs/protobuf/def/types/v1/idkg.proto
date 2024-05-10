@@ -26,6 +26,7 @@ message EcdsaPayload {
   // TODO: retire these fields, once we start using `pre_signatures`.
   repeated AvailableQuadruple available_quadruples = 3;
   repeated QuadrupleInProgress quadruples_in_creation = 4;
+  bool generalized_pre_signatures = 16;
 }
 
 message ConsensusResponse {
@@ -50,17 +51,17 @@ message OngoingSignature {
 }
 
 message AvailableQuadruple {
+  reserved 3;
+  reserved "key_id";
   uint64 quadruple_id = 1;
   PreSignatureQuadrupleRef quadruple = 2;
-  // Deprecated. Use `quadruple.key_id` instead.
-  registry.crypto.v1.EcdsaKeyId key_id = 3;
 }
 
 message QuadrupleInProgress {
+  reserved 3;
+  reserved "key_id";
   uint64 quadruple_id = 1;
   QuadrupleInCreation quadruple = 2;
-  // Deprecated. Use `quadruple.key_id` instead.
-  registry.crypto.v1.EcdsaKeyId key_id = 3;
 }
 
 message AvailablePreSignature {
@@ -86,10 +87,11 @@ message XnetReshareAgreement {
 }
 
 message RequestId {
+  reserved 4;
+  reserved "key_id";
   bytes pseudo_random_id = 1;
   uint64 quadruple_id = 2;
   uint64 height = 3;
-  registry.crypto.v1.EcdsaKeyId key_id = 4;
 }
 
 message TranscriptRef {
@@ -166,14 +168,12 @@ message PreSignatureRef {
 }
 
 message QuadrupleInCreation {
-  RandomTranscriptParams kappa_masked_config = 1;
-  MaskedTranscript kappa_masked = 2;
+  reserved 1, 2, 5;
 
   RandomTranscriptParams lambda_config = 3;
   MaskedTranscript lambda_masked = 4;
 
   RandomUnmaskedTranscriptParams kappa_unmasked_config = 11;
-  ReshareOfMaskedParams unmask_kappa_config = 5;
   UnmaskedTranscript kappa_unmasked = 6;
 
   UnmaskedTimesMaskedParams key_times_lambda_config = 7;

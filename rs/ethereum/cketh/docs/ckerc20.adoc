@@ -37,7 +37,7 @@ You can use one of the numerous link:https://sepoliafaucet.com/[Sepolia Faucet] 
 | `ic/rs/ethereum/cketh/mainnet`
 
 |link:https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-11155111.json[Ethereum Testnet Sepolia]
-|link:https://sepolia.etherscan.io/address/0xE1788E4834c896F1932188645cc36c54d1b80AC1[0xE1788E4834c896F1932188645cc36c54d1b80AC1]
+|link:https://sepolia.etherscan.io/address/0x674Cdbe64Df412DA9bAb1596e00c1520979B5A23[0x674Cdbe64Df412DA9bAb1596e00c1520979B5A23]
 |link:https://jzenf-aiaaa-aaaar-qaa7q-cai.raw.icp0.io/dashboard[ckSepoliaETH minter]
 |link:https://dashboard.internetcomputer.org/canister/apia6-jaaaa-aaaar-qabma-cai[ckSepoliaETH ledger]
 | `ic/rs/ethereum/cketh/testnet`
@@ -117,7 +117,7 @@ Refer to xref:cketh.adoc#deposit_eth_to_cketh[Deposit: ETH to ckETH] to see othe
 The ERC-20 -> ckERC-20 flow involves the following steps:
 
 . The user submits an Ethereum transaction calling the `approve` function of the ERC-20 smart contract to allow the helper smart contract address to use some of the user’s funds. Depending on the amount specified, additional deposits may not need to be approved beforehand. The `approve` function can be invoked directly on the contract's Etherscan page after connecting any of Web3-capable wallets.
-. The user calls the link:https://sepolia.etherscan.io/address/0xE1788E4834c896F1932188645cc36c54d1b80AC1#writeContract[minter helper contract] `deposit` method of the helper smart contract (just as `approve` this method can be called from contract's Etherscan page) specifying
+. The user calls the link:https://sepolia.etherscan.io/address/0x674Cdbe64Df412DA9bAb1596e00c1520979B5A23#writeContract[minter helper contract] `deposit` method of the helper smart contract (just as `approve` this method can be called from contract's Etherscan page) specifying
 .. The ERC-20 smart contract address. This identifies the ERC-20 token being deposited.
 .. The amount of ERC-20 tokens being deposited.
 .. The IC principal to which the amount of ckERC-20 should be minted.

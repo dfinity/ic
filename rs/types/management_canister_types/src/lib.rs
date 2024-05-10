@@ -23,6 +23,7 @@ use ic_protobuf::types::v1::CanisterInstallModeV2 as CanisterInstallModeV2Proto;
 use ic_protobuf::types::v1::{
     CanisterInstallMode as CanisterInstallModeProto,
     CanisterUpgradeOptions as CanisterUpgradeOptionsProto,
+    WasmMemoryPersistence as WasmMemoryPersistenceProto,
 };
 use ic_protobuf::{proxy::ProxyDecodeError, registry::crypto::v1 as pb_registry_crypto};
 use num_traits::cast::ToPrimitive;
@@ -1052,16 +1053,42 @@ pub enum CanisterInstallMode {
     Upgrade = 3,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, Hash, CandidType, Copy)]
+/// Wasm main memory retention on upgrades.
+/// Currently used to specify the persistence of Wasm main memory.
+pub enum WasmMemoryPersistence {
+    /// Retain the main memory across upgrades.
+    /// Used for enhanced orthogonal persistence, as implemented in Motoko
+    Keep,
+    /// Reinitialize the main memory on upgrade.
+    /// Default behavior without enhanced orthogonal persistence.
+    Replace,
+}
+
+impl WasmMemoryPersistence {
+    pub fn iter() -> Iter<'static, WasmMemoryPersistence> {
+        static MODES: [WasmMemoryPersistence; 2] =
+            [WasmMemoryPersistence::Keep, WasmMemoryPersistence::Replace];
+        MODES.iter()
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, Hash, CandidType, Copy, Default)]
 /// Struct used for encoding/decoding:
 /// `record {
-///    skip_pre_upgrade: opt bool
+///    skip_pre_upgrade: opt bool;
+///    wasm_memory_persistence : opt variant {
+///      keep;
+///      replace;
+///    };
 /// }`
 /// Extendibility for the future: Adding new optional fields ensures both backwards- and
 /// forwards-compatibility in Candid.
 pub struct CanisterUpgradeOptions {
     /// Determine whether the pre-upgrade hook should be skipped during upgrade.
     pub skip_pre_upgrade: Option<bool>,
+    /// Support for enhanced orthogonal persistence: Retain the main memory on upgrade.
+    pub wasm_memory_persistence: Option<WasmMemoryPersistence>,
 }
 
 /// The mode with which a canister is installed.
@@ -1088,18 +1115,45 @@ pub enum CanisterInstallModeV2 {
 
 impl CanisterInstallModeV2 {
     pub fn iter() -> Iter<'static, CanisterInstallModeV2> {
-        static MODES: [CanisterInstallModeV2; 6] = [
+        static MODES: [CanisterInstallModeV2; 12] = [
             CanisterInstallModeV2::Install,
             CanisterInstallModeV2::Reinstall,
             CanisterInstallModeV2::Upgrade(None),
             CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
                 skip_pre_upgrade: None,
+                wasm_memory_persistence: None,
+            })),
+            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+            })),
+            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Replace),
             })),
             CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
                 skip_pre_upgrade: Some(false),
+                wasm_memory_persistence: None,
+            })),
+            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(false),
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+            })),
+            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(false),
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Replace),
             })),
             CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
                 skip_pre_upgrade: Some(true),
+                wasm_memory_persistence: None,
+            })),
+            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(true),
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+            })),
+            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(true),
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Replace),
             })),
         ];
         MODES.iter()
@@ -1179,11 +1233,22 @@ impl TryFrom<CanisterInstallModeV2Proto> for CanisterInstallModeV2 {
             ) => Ok(CanisterInstallModeV2::Upgrade(Some(
                 CanisterUpgradeOptions {
                     skip_pre_upgrade: upgrade_mode.skip_pre_upgrade,
+                    wasm_memory_persistence: match upgrade_mode.wasm_memory_persistence {
+                        None => None,
+                        Some(mode) => Some(match WasmMemoryPersistenceProto::try_from(mode).ok() {
+                            Some(persistence) => WasmMemoryPersistence::try_from(persistence),
+                            None => Err(CanisterInstallModeError(
+                                format!("Invalid `WasmMemoryPersistence` value: {mode}")
+                                    .to_string(),
+                            )),
+                        }?),
+                    },
                 },
             ))),
         }
     }
 }
+
 impl From<CanisterInstallMode> for String {
     fn from(mode: CanisterInstallMode) -> Self {
         let result = match mode {
@@ -1228,6 +1293,12 @@ impl From<&CanisterInstallModeV2> for CanisterInstallModeV2Proto {
                     ic_protobuf::types::v1::canister_install_mode_v2::CanisterInstallModeV2::Mode2(
                         CanisterUpgradeOptionsProto {
                             skip_pre_upgrade: upgrade_options.skip_pre_upgrade,
+                            wasm_memory_persistence: upgrade_options.wasm_memory_persistence.map(
+                                |mode| {
+                                    let proto: WasmMemoryPersistenceProto = mode.into();
+                                    proto.into()
+                                },
+                            ),
                         },
                     )
                 }
@@ -1244,6 +1315,29 @@ impl From<CanisterInstallModeV2> for CanisterInstallMode {
             CanisterInstallModeV2::Install => CanisterInstallMode::Install,
             CanisterInstallModeV2::Reinstall => CanisterInstallMode::Reinstall,
             CanisterInstallModeV2::Upgrade(_) => CanisterInstallMode::Upgrade,
+        }
+    }
+}
+
+impl TryFrom<WasmMemoryPersistenceProto> for WasmMemoryPersistence {
+    type Error = CanisterInstallModeError;
+
+    fn try_from(item: WasmMemoryPersistenceProto) -> Result<Self, Self::Error> {
+        match item {
+            WasmMemoryPersistenceProto::Keep => Ok(WasmMemoryPersistence::Keep),
+            WasmMemoryPersistenceProto::Replace => Ok(WasmMemoryPersistence::Replace),
+            WasmMemoryPersistenceProto::Unspecified => Err(CanisterInstallModeError(
+                format!("Invalid `WasmMemoryPersistence` value: {item:?}").to_string(),
+            )),
+        }
+    }
+}
+
+impl From<WasmMemoryPersistence> for WasmMemoryPersistenceProto {
+    fn from(item: WasmMemoryPersistence) -> Self {
+        match item {
+            WasmMemoryPersistence::Keep => WasmMemoryPersistenceProto::Keep,
+            WasmMemoryPersistence::Replace => WasmMemoryPersistenceProto::Replace,
         }
     }
 }
@@ -1956,6 +2050,24 @@ impl From<SchnorrAlgorithm> for pb_registry_crypto::SchnorrAlgorithm {
     }
 }
 
+impl std::fmt::Display for SchnorrAlgorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl FromStr for SchnorrAlgorithm {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Bip340Secp256k1" => Ok(Self::Bip340Secp256k1),
+            "Ed25519" => Ok(Self::Ed25519),
+            _ => Err(format!("{} is not a recognized Schnorr algorithm", s)),
+        }
+    }
+}
+
 /// Unique identifier for a key that can be used for Schnorr signatures. The name
 /// is just a identifier, but it may be used to convey some information about
 /// the key (e.g. that the key is meant to be used for testing purposes).
@@ -1992,6 +2104,25 @@ impl From<SchnorrKeyId> for pb_registry_crypto::SchnorrKeyId {
             algorithm: pb_registry_crypto::SchnorrAlgorithm::from(item.algorithm) as i32,
             name: item.name,
         }
+    }
+}
+
+impl std::fmt::Display for SchnorrKeyId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.algorithm, self.name)
+    }
+}
+
+impl FromStr for SchnorrKeyId {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (algorithm, name) = s
+            .split_once(':')
+            .ok_or_else(|| format!("Schnorr key id {} does not contain a ':'", s))?;
+        Ok(SchnorrKeyId {
+            algorithm: algorithm.parse::<SchnorrAlgorithm>()?,
+            name: name.to_string(),
+        })
     }
 }
 
@@ -2043,6 +2174,38 @@ impl From<MasterPublicKeyId> for pb_registry_crypto::MasterPublicKeyId {
         };
         Self {
             key_id: Some(key_id),
+        }
+    }
+}
+
+impl std::fmt::Display for MasterPublicKeyId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ecdsa(esdsa_key_id) => {
+                write!(f, "ecdsa:")?;
+                esdsa_key_id.fmt(f)
+            }
+            Self::Schnorr(schnorr_key_id) => {
+                write!(f, "schnorr:")?;
+                schnorr_key_id.fmt(f)
+            }
+        }
+    }
+}
+
+impl FromStr for MasterPublicKeyId {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (scheme, key_id) = s
+            .split_once(':')
+            .ok_or_else(|| format!("Master public key id {} does not contain a ':'", s))?;
+        match scheme {
+            "ecdsa" => Ok(Self::Ecdsa(EcdsaKeyId::from_str(key_id)?)),
+            "schnorr" => Ok(Self::Schnorr(SchnorrKeyId::from_str(key_id)?)),
+            other => Err(format!(
+                "Scheme {} in master public key id {} is not supported.",
+                other, s
+            )),
         }
     }
 }
@@ -2763,6 +2926,60 @@ impl<'a> Payload<'a> for TakeCanisterSnapshotArgs {
     }
 }
 
+/// Struct used for encoding/decoding
+/// `(record {
+///     canister_id: principal;
+///     snapshot_id: blob;
+///     sender_canister_version: opt nat64;
+/// })`
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub struct LoadCanisterSnapshotArgs {
+    canister_id: PrincipalId,
+    #[serde(with = "serde_bytes")]
+    snapshot_id: Vec<u8>,
+    sender_canister_version: Option<u64>,
+}
+
+impl LoadCanisterSnapshotArgs {
+    pub fn new(
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+        sender_canister_version: Option<u64>,
+    ) -> Self {
+        Self {
+            canister_id: canister_id.get(),
+            snapshot_id: snapshot_id.to_vec(),
+            sender_canister_version,
+        }
+    }
+
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
+    }
+
+    pub fn sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
+    }
+}
+
+impl<'a> Payload<'a> for LoadCanisterSnapshotArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+        // Verify that snapshot ID has the correct format.
+        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
+            return Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: {err:?}"),
+            ));
+        }
+        Ok(args)
+    }
+}
+
 /// Struct to be returned when taking a canister snapshot.
 /// `(record {
 ///      id: blob;
@@ -2895,6 +3112,26 @@ mod tests {
     }
 
     #[test]
+    fn wasm_persistence_round_trip() {
+        for persistence in WasmMemoryPersistence::iter() {
+            let encoded: WasmMemoryPersistenceProto = (*persistence).into();
+            let decoded = WasmMemoryPersistence::try_from(encoded).unwrap();
+            assert_eq!(*persistence, decoded);
+        }
+
+        WasmMemoryPersistence::try_from(WasmMemoryPersistenceProto::Unspecified).unwrap_err();
+    }
+
+    #[test]
+    fn canister_install_mode_v2_round_trip() {
+        for mode in CanisterInstallModeV2::iter() {
+            let encoded: CanisterInstallModeV2Proto = mode.into();
+            let decoded = CanisterInstallModeV2::try_from(encoded).unwrap();
+            assert_eq!(*mode, decoded);
+        }
+    }
+
+    #[test]
     fn verify_max_bounded_controllers_length() {
         const TEST_START: usize = 5;
         const THRESHOLD: usize = 10;
@@ -2974,22 +3211,75 @@ mod tests {
 
     #[test]
     fn ecdsa_curve_round_trip() {
-        assert_eq!(
-            format!("{}", EcdsaCurve::Secp256k1)
-                .parse::<EcdsaCurve>()
-                .unwrap(),
-            EcdsaCurve::Secp256k1
-        );
+        for curve in EcdsaCurve::iter() {
+            assert_eq!(format!("{}", curve).parse::<EcdsaCurve>().unwrap(), curve);
+        }
     }
 
     #[test]
     fn ecdsa_key_id_round_trip() {
-        for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
-            let key = EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: name.to_string(),
-            };
-            assert_eq!(format!("{}", key).parse::<EcdsaKeyId>().unwrap(), key);
+        for curve in EcdsaCurve::iter() {
+            for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
+                let key = EcdsaKeyId {
+                    curve,
+                    name: name.to_string(),
+                };
+                assert_eq!(format!("{}", key).parse::<EcdsaKeyId>().unwrap(), key);
+            }
+        }
+    }
+
+    #[test]
+    fn schnorr_algorithm_round_trip() {
+        for algorithm in SchnorrAlgorithm::iter() {
+            assert_eq!(
+                format!("{}", algorithm)
+                    .parse::<SchnorrAlgorithm>()
+                    .unwrap(),
+                algorithm
+            );
+        }
+    }
+
+    #[test]
+    fn schnorr_key_id_round_trip() {
+        for algorithm in SchnorrAlgorithm::iter() {
+            for name in ["Ed25519", "", "other_key", "other key", "other:key"] {
+                let key = SchnorrKeyId {
+                    algorithm,
+                    name: name.to_string(),
+                };
+                assert_eq!(format!("{}", key).parse::<SchnorrKeyId>().unwrap(), key);
+            }
+        }
+    }
+
+    #[test]
+    fn master_public_key_id_round_trip() {
+        for algorithm in SchnorrAlgorithm::iter() {
+            for name in ["Ed25519", "", "other_key", "other key", "other:key"] {
+                let key = MasterPublicKeyId::Schnorr(SchnorrKeyId {
+                    algorithm,
+                    name: name.to_string(),
+                });
+                assert_eq!(
+                    format!("{}", key).parse::<MasterPublicKeyId>().unwrap(),
+                    key
+                );
+            }
+        }
+
+        for curve in EcdsaCurve::iter() {
+            for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
+                let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                    curve,
+                    name: name.to_string(),
+                });
+                assert_eq!(
+                    format!("{}", key).parse::<MasterPublicKeyId>().unwrap(),
+                    key
+                );
+            }
         }
     }
 

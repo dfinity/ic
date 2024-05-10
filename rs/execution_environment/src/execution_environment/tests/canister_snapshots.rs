@@ -6,7 +6,8 @@ use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types::{
     self as ic00, CanisterSnapshotResponse, DeleteCanisterSnapshotArgs, ListCanisterSnapshotArgs,
-    Method, Payload as Ic00Payload, TakeCanisterSnapshotArgs, UploadChunkArgs,
+    LoadCanisterSnapshotArgs, Method, Payload as Ic00Payload, TakeCanisterSnapshotArgs,
+    UploadChunkArgs,
 };
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_test_utilities_execution_environment::{
@@ -942,4 +943,16 @@ fn list_canister_snapshot_succeeds() {
         assert_eq!(snapshots.len(), 1);
         assert_eq!(snapshots[0].snapshot_id(), snapshot_id);
     }
+}
+
+#[test]
+fn load_canister_snapshot_decode_round_trip() {
+    let canister_id = canister_test_id(4);
+    let snapshot_id = SnapshotId::from((canister_id, 6));
+    let args = ic00::LoadCanisterSnapshotArgs::new(canister_test_id(4), snapshot_id, Some(5u64));
+    let encoded_args = args.encode();
+    assert_eq!(
+        args,
+        LoadCanisterSnapshotArgs::decode(encoded_args.as_slice()).unwrap()
+    );
 }

@@ -219,7 +219,7 @@ impl CanisterState {
             (Some(ExecutionTask::Heartbeat), _) => NextExecution::StartNew,
             (Some(ExecutionTask::GlobalTimer), _) => NextExecution::StartNew,
             (Some(ExecutionTask::AbortedExecution { .. }), _)
-            | (Some(ExecutionTask::PausedExecution(..)), _) => NextExecution::ContinueLong,
+            | (Some(ExecutionTask::PausedExecution { .. }), _) => NextExecution::ContinueLong,
             (Some(ExecutionTask::AbortedInstallCode { .. }), _)
             | (Some(ExecutionTask::PausedInstallCode(..)), _) => NextExecution::ContinueInstallCode,
         }
@@ -237,7 +237,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::PausedExecution(..))
+            | Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
         }
@@ -246,7 +246,7 @@ impl CanisterState {
     /// Returns true if the canister has a paused execution.
     pub fn has_paused_execution(&self) -> bool {
         match self.system_state.task_queue.front() {
-            Some(ExecutionTask::PausedExecution(..)) => true,
+            Some(ExecutionTask::PausedExecution { .. }) => true,
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
@@ -263,7 +263,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::PausedExecution(..))
+            | Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::AbortedExecution { .. })
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
         }
@@ -276,7 +276,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::PausedExecution(..))
+            | Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedExecution { .. }) => false,
         }
@@ -359,33 +359,7 @@ impl CanisterState {
             )));
         }
 
-        let num_callbacks = self
-            .system_state
-            .call_context_manager()
-            .map(|ccm| ccm.callbacks().len())
-            .unwrap_or(0);
-        let num_responses = self.system_state.queues().input_queues_response_count();
-        let reserved_slots = self.system_state.queues().input_queues_reserved_slots();
-        let is_callback_invariant_broken = if num_callbacks == reserved_slots + num_responses {
-            false
-        } else if !self.has_paused_execution() && !self.has_aborted_execution() {
-            true
-        } else {
-            // With a pending DTS execution, the response callback is accounted
-            // in `num_callbacks` until the execution finishes. Note that there
-            // can be at most one pending DTS execution per canister.
-            num_callbacks - 1 != reserved_slots + num_responses
-        };
-        if is_callback_invariant_broken {
-            return Err(StateError::InvariantBroken(format!(
-                "Canister {}: Number of callbacks ({}) is different than the accumulated number of reserved slots and responses ({})",
-                self.canister_id(),
-                num_callbacks,
-                reserved_slots + num_responses
-            )));
-        }
-
-        Ok(())
+        self.system_state.check_invariants()
     }
 
     /// The amount of memory currently being used by the canister.
@@ -552,7 +526,7 @@ impl CanisterState {
             ExecutionTask::AbortedInstallCode { .. } => false,
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::PausedExecution(_)
+            | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_)
             | ExecutionTask::AbortedExecution { .. } => true,
         });
@@ -573,12 +547,19 @@ impl CanisterState {
         }
     }
 
+    /// Appends the given log to the canister log.
     pub fn append_log(&mut self, other: &mut CanisterLog) {
         self.system_state.canister_log.append(other);
     }
 
+    /// Clears the canister log.
     pub fn clear_log(&mut self) {
         self.system_state.canister_log.clear();
+    }
+
+    /// Sets the new canister log.
+    pub fn set_log(&mut self, other: CanisterLog) {
+        self.system_state.canister_log = other;
     }
 }
 

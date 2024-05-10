@@ -17,6 +17,7 @@ pub struct NeuronPermission {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronId {
     #[prost(bytes = "vec", tag = "1")]
+    #[serde(with = "serde_bytes")]
     pub id: ::prost::alloc::vec::Vec<u8>,
 }
 /// The id of a specific proposal.
@@ -292,6 +293,7 @@ pub struct ExecuteGenericNervousSystemFunction {
     pub function_id: u64,
     /// The payload of the nervous system function's payload.
     #[prost(bytes = "vec", tag = "2")]
+    #[serde(with = "serde_bytes")]
     pub payload: ::prost::alloc::vec::Vec<u8>,
 }
 /// A proposal function that should guide the future strategy of the SNS's
@@ -316,9 +318,11 @@ pub struct UpgradeSnsControlledCanister {
     pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
     /// The new wasm module that the canister is upgraded to.
     #[prost(bytes = "vec", tag = "2")]
+    #[serde(with = "serde_bytes")]
     pub new_canister_wasm: ::prost::alloc::vec::Vec<u8>,
     /// Arguments passed to the post-upgrade method of the new wasm module.
     #[prost(bytes = "vec", optional, tag = "3")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub canister_upgrade_arg: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     /// Canister install_code mode.
     #[prost(
@@ -404,6 +408,12 @@ pub mod transfer_sns_treasury_funds {
 pub struct ManageLedgerParameters {
     #[prost(uint64, optional, tag = "1")]
     pub transfer_fee: ::core::option::Option<u64>,
+    #[prost(string, optional, tag = "2")]
+    pub token_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "3")]
+    pub token_symbol: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "4")]
+    pub token_logo: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// A proposal to mint SNS tokens to (optionally a Subaccount of) the
 /// target principal.
@@ -475,6 +485,7 @@ pub struct DeregisterDappCanisters {
     #[prost(message, repeated, tag = "2")]
     pub new_controllers: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
 }
+/// A proposal to manage the settings of one or more dapp canisters.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -482,6 +493,8 @@ pub struct ManageDappCanisterSettings {
     /// The canister IDs of the dapp canisters to be modified.
     #[prost(message, repeated, tag = "1")]
     pub canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    /// Below are fields under CanisterSettings defined at
+    /// <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.>
     #[prost(uint64, optional, tag = "2")]
     pub compute_allocation: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "3")]
@@ -492,6 +505,8 @@ pub struct ManageDappCanisterSettings {
     pub reserved_cycles_limit: ::core::option::Option<u64>,
     #[prost(enumeration = "LogVisibility", optional, tag = "6")]
     pub log_visibility: ::core::option::Option<i32>,
+    #[prost(uint64, optional, tag = "7")]
+    pub wasm_memory_limit: ::core::option::Option<u64>,
 }
 /// A proposal is the immutable input of a proposal submission.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -1633,21 +1648,27 @@ pub mod governance {
     pub struct Version {
         /// The hash of the Root canister WASM.
         #[prost(bytes = "vec", tag = "1")]
+        #[serde(with = "serde_bytes")]
         pub root_wasm_hash: ::prost::alloc::vec::Vec<u8>,
         /// The hash of the Governance canister WASM.
         #[prost(bytes = "vec", tag = "2")]
+        #[serde(with = "serde_bytes")]
         pub governance_wasm_hash: ::prost::alloc::vec::Vec<u8>,
         /// The hash of the Ledger canister WASM.
         #[prost(bytes = "vec", tag = "3")]
+        #[serde(with = "serde_bytes")]
         pub ledger_wasm_hash: ::prost::alloc::vec::Vec<u8>,
         /// The hash of the Swap canister WASM.
         #[prost(bytes = "vec", tag = "4")]
+        #[serde(with = "serde_bytes")]
         pub swap_wasm_hash: ::prost::alloc::vec::Vec<u8>,
         /// The hash of the Ledger Archive canister WASM.
         #[prost(bytes = "vec", tag = "5")]
+        #[serde(with = "serde_bytes")]
         pub archive_wasm_hash: ::prost::alloc::vec::Vec<u8>,
         /// The hash of the Index canister WASM.
         #[prost(bytes = "vec", tag = "6")]
+        #[serde(with = "serde_bytes")]
         pub index_wasm_hash: ::prost::alloc::vec::Vec<u8>,
     }
     /// An upgrade in progress, defined as a version target and a time at which it is considered failed.
@@ -1810,6 +1831,7 @@ pub struct Empty {}
 pub struct ManageNeuron {
     /// The modified neuron's subaccount which also serves as the neuron's ID.
     #[prost(bytes = "vec", tag = "1")]
+    #[serde(with = "serde_bytes")]
     pub subaccount: ::prost::alloc::vec::Vec<u8>,
     #[prost(
         oneof = "manage_neuron::Command",
@@ -2653,6 +2675,7 @@ pub struct MintTokensResponse {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Subaccount {
     #[prost(bytes = "vec", tag = "1")]
+    #[serde(with = "serde_bytes")]
     pub subaccount: ::prost::alloc::vec::Vec<u8>,
 }
 /// A Ledger account identified by the owner of the account `of` and

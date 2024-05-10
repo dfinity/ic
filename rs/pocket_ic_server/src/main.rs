@@ -51,7 +51,7 @@ const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 #[derive(Parser)]
-#[clap(version = "3.0.1")]
+#[clap(version = "4.0.0")]
 struct Args {
     /// If you use PocketIC from the command line, you should not use this flag.
     /// Client libraries use this flag to provide a common identifier (the process ID of the test

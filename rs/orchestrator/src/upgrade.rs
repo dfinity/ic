@@ -1,26 +1,33 @@
-use crate::catch_up_package_provider::CatchUpPackageProvider;
-use crate::error::{OrchestratorError, OrchestratorResult};
-use crate::metrics::OrchestratorMetrics;
-use crate::process_manager::{Process, ProcessManager};
-use crate::registry_helper::RegistryHelper;
+use crate::{
+    catch_up_package_provider::CatchUpPackageProvider,
+    error::{OrchestratorError, OrchestratorResult},
+    metrics::OrchestratorMetrics,
+    process_manager::{Process, ProcessManager},
+    registry_helper::RegistryHelper,
+};
 use async_trait::async_trait;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_image_upgrader::error::{UpgradeError, UpgradeResult};
-use ic_image_upgrader::ImageUpgrader;
+use ic_image_upgrader::{
+    error::{UpgradeError, UpgradeResult},
+    ImageUpgrader,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::EcdsaKeyId;
-use ic_registry_client_helpers::node::NodeRegistry;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_management_canister_types::MasterPublicKeyId;
+use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
-use ic_types::consensus::{CatchUpPackage, HasHeight};
-use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
-use ic_types::{Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
-use std::collections::BTreeMap;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use ic_types::{
+    consensus::{CatchUpPackage, HasHeight},
+    crypto::canister_threshold_sig::MasterPublicKey,
+    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+};
+use std::{
+    collections::BTreeMap,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 
@@ -680,39 +687,38 @@ fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
     OrchestratorError::ExecError(PathBuf::new(), error)
 }
 
-/// Return the threshold ECDSA master public key of the given CUP, if it exists.
-fn get_tecdsa_keys(
+/// Return the threshold master public key of the given CUP, if it exists.
+fn get_master_public_keys(
     cup: &CatchUpPackage,
     log: &ReplicaLogger,
-) -> BTreeMap<EcdsaKeyId, MasterPublicKey> {
+) -> BTreeMap<MasterPublicKeyId, MasterPublicKey> {
     let mut public_keys = BTreeMap::new();
 
     let Some(ecdsa) = cup.content.block.get_value().payload.as_ref().as_ecdsa() else {
         return public_keys;
     };
 
-    // TODO(CON-1053): add support for multiple keys
-    let key_id = ecdsa.key_transcript.key_id.clone();
-    let Some(transcript) = ecdsa
-        .key_transcript
-        .current
-        .as_ref()
-        .and_then(|transcript_ref| ecdsa.idkg_transcripts.get(&transcript_ref.transcript_id()))
-    else {
-        return public_keys;
-    };
+    for (key_id, key_transcript) in &ecdsa.key_transcripts {
+        let Some(transcript) = key_transcript
+            .current
+            .as_ref()
+            .and_then(|transcript_ref| ecdsa.idkg_transcripts.get(&transcript_ref.transcript_id()))
+        else {
+            continue;
+        };
 
-    match get_master_public_key_from_transcript(transcript) {
-        Ok(public_key) => {
-            public_keys.insert(key_id, public_key);
-        }
-        Err(err) => {
-            warn!(
-                log,
-                "Failed to get the tecdsa public key for key id {}: {:?}", key_id, err,
-            );
-        }
-    };
+        match get_master_public_key_from_transcript(transcript) {
+            Ok(public_key) => {
+                public_keys.insert(key_id.clone(), public_key);
+            }
+            Err(err) => {
+                warn!(
+                    log,
+                    "Failed to get the master public key for key id {}: {:?}", key_id, err,
+                );
+            }
+        };
+    }
 
     public_keys
 }
@@ -726,20 +732,22 @@ fn compare_tecdsa_public_keys(
     path: PathBuf,
     log: &ReplicaLogger,
 ) {
-    let old_public_keys = get_tecdsa_keys(old_cup, log);
+    let old_public_keys = get_master_public_keys(old_cup, log);
     if old_public_keys.is_empty() {
         return;
     }
 
-    let new_public_keys = get_tecdsa_keys(new_cup, log);
+    let new_public_keys = get_master_public_keys(new_cup, log);
     let mut changes = BTreeMap::new();
 
     for (key_id, old_public_key) in old_public_keys {
+        let key_id_label = key_id.to_string();
+
         // Get the metric here already, which will initialize it with zero
         // even if keys haven't changed.
         let metric = metrics
             .ecdsa_key_changed_errors
-            .get_metric_with_label_values(&[&key_id.name])
+            .get_metric_with_label_values(&[&key_id_label])
             .expect("Failed to get ECDSA key changed metric");
 
         if let Some(new_public_key) = new_public_keys.get(&key_id) {
@@ -752,7 +760,7 @@ fn compare_tecdsa_public_keys(
                     new_public_key,
                 );
                 metric.inc();
-                changes.insert(key_id.name.clone(), metric.get());
+                changes.insert(key_id_label.clone(), metric.get());
             }
         } else {
             error!(
@@ -760,7 +768,7 @@ fn compare_tecdsa_public_keys(
                 "Threshold ECDSA public key for {} has been deleted!", key_id,
             );
             metric.inc();
-            changes.insert(key_id.name.clone(), metric.get());
+            changes.insert(key_id_label, metric.get());
         }
     }
 
@@ -809,7 +817,7 @@ mod tests {
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
-    use ic_management_canister_types::EcdsaCurve;
+    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::fake::{Fake, FakeContent};
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -817,7 +825,7 @@ mod tests {
     use ic_types::{
         batch::ValidationContext,
         consensus::{
-            idkg::{self, EcdsaKeyTranscript, EcdsaUIDGenerator, TranscriptAttributes},
+            idkg::{self, EcdsaKeyTranscript, TranscriptAttributes},
             Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
             RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
         },
@@ -831,7 +839,7 @@ mod tests {
 
     fn make_cup(
         h: Height,
-        key_id: &str,
+        key_id: EcdsaKeyId,
         key_transcript: Option<&IDkgTranscript>,
     ) -> CatchUpPackage {
         let unmasked = key_transcript.map(|t| {
@@ -845,25 +853,17 @@ mod tests {
             .map(|t| BTreeMap::from_iter(vec![(t.transcript_id, t.clone())]))
             .unwrap_or_default();
 
-        let ecdsa = idkg::EcdsaPayload {
-            signature_agreements: BTreeMap::new(),
-            deprecated_ongoing_signatures: BTreeMap::new(),
-            available_quadruples: BTreeMap::new(),
-            quadruples_in_creation: BTreeMap::new(),
-            uid_generator: EcdsaUIDGenerator::new(subnet_test_id(0), h),
-            idkg_transcripts,
-            ongoing_xnet_reshares: BTreeMap::new(),
-            xnet_reshare_agreements: BTreeMap::new(),
-            key_transcript: EcdsaKeyTranscript {
+        let mut ecdsa = idkg::EcdsaPayload::empty(
+            h,
+            subnet_test_id(0),
+            vec![EcdsaKeyTranscript {
                 current: unmasked,
                 next_in_creation: idkg::KeyTranscriptCreation::Begin,
-                key_id: EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: key_id.to_string(),
-                },
                 master_key_id: None,
-            },
-        };
+                key_id,
+            }],
+        );
+        ecdsa.idkg_transcripts = idkg_transcripts;
 
         let block = Block::new(
             CryptoHashOf::from(CryptoHash(Vec::new())),
@@ -900,10 +900,13 @@ mod tests {
         }
     }
 
-    fn get_ecdsa_key_changed_metric(key: &str, metrics: &OrchestratorMetrics) -> u64 {
+    fn get_master_key_changed_metric(
+        key: &MasterPublicKeyId,
+        metrics: &OrchestratorMetrics,
+    ) -> u64 {
         metrics
             .ecdsa_key_changed_errors
-            .get_metric_with_label_values(&[key])
+            .get_metric_with_label_values(&[&key.to_string()])
             .unwrap()
             .get()
     }
@@ -946,22 +949,26 @@ mod tests {
         with_test_replica_logger(|log| {
             let mut setup = Setup::new();
             let key = setup.generate_key_transcript();
-            let key_id = "some_key";
+            let key_id = EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("some_key"),
+            };
 
-            let c1 = make_cup(Height::from(10), key_id, Some(&key));
-            let c2 = make_cup(Height::from(100), key_id, None);
+            let c1 = make_cup(Height::from(10), key_id.clone(), Some(&key));
+            let c2 = make_cup(Height::from(100), key_id.clone(), None);
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
+            let master_public_key_id = MasterPublicKeyId::Ecdsa(key_id);
 
-            let before = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let before = get_master_key_changed_metric(&master_public_key_id, &metrics);
             compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
-            let after = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let after = get_master_key_changed_metric(&master_public_key_id, &metrics);
 
             assert_eq!(before + 1, after);
 
             let metrics_new = OrchestratorMetrics::new(&MetricsRegistry::new());
             report_ecdsa_key_changed_metric(setup.path(), &metrics_new).unwrap();
-            let after_restart = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let after_restart = get_master_key_changed_metric(&master_public_key_id, &metrics);
 
             assert_eq!(after_restart, after);
         });
@@ -973,16 +980,20 @@ mod tests {
             let mut setup = Setup::new();
             let key1 = setup.generate_key_transcript();
             let key2 = setup.generate_key_transcript();
-            let key_id = "some_key";
+            let key_id = EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("some_key"),
+            };
 
-            let c1 = make_cup(Height::from(10), key_id, Some(&key1));
-            let c2 = make_cup(Height::from(100), key_id, Some(&key2));
+            let c1 = make_cup(Height::from(10), key_id.clone(), Some(&key1));
+            let c2 = make_cup(Height::from(100), key_id.clone(), Some(&key2));
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
-            let before = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let master_public_key_id = MasterPublicKeyId::Ecdsa(key_id);
+            let before = get_master_key_changed_metric(&master_public_key_id, &metrics);
             compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
-            let after = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let after = get_master_key_changed_metric(&master_public_key_id, &metrics);
 
             assert_eq!(before + 1, after);
         });
@@ -993,16 +1004,20 @@ mod tests {
         with_test_replica_logger(|log| {
             let mut setup = Setup::new();
             let key = setup.generate_key_transcript();
-            let key_id = "some_key";
+            let key_id = EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("some_key"),
+            };
 
-            let c1 = make_cup(Height::from(10), key_id, Some(&key));
-            let c2 = make_cup(Height::from(100), key_id, Some(&key));
+            let c1 = make_cup(Height::from(10), key_id.clone(), Some(&key));
+            let c2 = make_cup(Height::from(100), key_id.clone(), Some(&key));
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
-            let before = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let master_public_key_id = MasterPublicKeyId::Ecdsa(key_id);
+            let before = get_master_key_changed_metric(&master_public_key_id, &metrics);
             compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
-            let after = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let after = get_master_key_changed_metric(&master_public_key_id, &metrics);
 
             assert_eq!(before, after);
         });
@@ -1013,17 +1028,24 @@ mod tests {
         with_test_replica_logger(|log| {
             let mut setup = Setup::new();
             let key = setup.generate_key_transcript();
-            let key_id1 = "some_key1";
-            let key_id2 = "some_key2";
+            let key_id1 = EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("some_key1"),
+            };
+            let key_id2 = EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("some_key2"),
+            };
 
-            let c1 = make_cup(Height::from(10), key_id1, Some(&key));
+            let c1 = make_cup(Height::from(10), key_id1.clone(), Some(&key));
             let c2 = make_cup(Height::from(100), key_id2, Some(&key));
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
-            let before = get_ecdsa_key_changed_metric(key_id1, &metrics);
+            let master_public_key_id1 = MasterPublicKeyId::Ecdsa(key_id1);
+            let before = get_master_key_changed_metric(&master_public_key_id1, &metrics);
             compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
-            let after = get_ecdsa_key_changed_metric(key_id1, &metrics);
+            let after = get_master_key_changed_metric(&master_public_key_id1, &metrics);
 
             assert_eq!(before + 1, after);
         });
@@ -1034,16 +1056,20 @@ mod tests {
         with_test_replica_logger(|log| {
             let mut setup = Setup::new();
             let key = setup.generate_key_transcript();
-            let key_id = "some_key";
+            let key_id = EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("some_key"),
+            };
 
-            let c1 = make_cup(Height::from(10), key_id, None);
-            let c2 = make_cup(Height::from(100), key_id, Some(&key));
+            let c1 = make_cup(Height::from(10), key_id.clone(), None);
+            let c2 = make_cup(Height::from(100), key_id.clone(), Some(&key));
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
-            let before = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let master_public_key_id = MasterPublicKeyId::Ecdsa(key_id);
+            let before = get_master_key_changed_metric(&master_public_key_id, &metrics);
             compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
-            let after = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let after = get_master_key_changed_metric(&master_public_key_id, &metrics);
 
             assert_eq!(before, after);
         });
@@ -1053,16 +1079,20 @@ mod tests {
     fn test_ecdsa_no_keys_created_does_not_raise_alert() {
         with_test_replica_logger(|log| {
             let setup = Setup::new();
-            let key_id = "some_key";
+            let key_id = EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("some_key"),
+            };
 
-            let c1 = make_cup(Height::from(10), key_id, None);
-            let c2 = make_cup(Height::from(100), key_id, None);
+            let c1 = make_cup(Height::from(10), key_id.clone(), None);
+            let c2 = make_cup(Height::from(100), key_id.clone(), None);
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
-            let before = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let master_public_key_id = MasterPublicKeyId::Ecdsa(key_id);
+            let before = get_master_key_changed_metric(&master_public_key_id, &metrics);
             compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
-            let after = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let after = get_master_key_changed_metric(&master_public_key_id, &metrics);
 
             assert_eq!(before, after);
         });

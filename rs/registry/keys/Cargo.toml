@@ -15,3 +15,5 @@ serde = { workspace = true }
 
 [dev-dependencies]
 rand = "0.8"
+strum = { workspace = true }
+strum_macros = { workspace = true }

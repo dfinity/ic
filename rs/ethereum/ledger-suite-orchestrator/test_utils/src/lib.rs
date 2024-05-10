@@ -1,8 +1,10 @@
 use crate::flow::AddErc20TokenFlow;
+use crate::metrics::MetricsAssert;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::CanisterId;
 use ic_ledger_suite_orchestrator::candid::{
-    AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
+    AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds,
+    OrchestratorArg, OrchestratorInfo,
 };
 use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm, WasmHash};
 use ic_state_machine_tests::{
@@ -15,6 +17,7 @@ use std::sync::Arc;
 
 pub mod arbitrary;
 pub mod flow;
+pub mod metrics;
 
 const MAX_TICKS: usize = 10;
 const GIT_COMMIT_HASH: &str = "6a8e5fca2c6b4e12966638c444e994e204b42989";
@@ -31,18 +34,24 @@ pub struct LedgerSuiteOrchestrator {
 
 impl Default for LedgerSuiteOrchestrator {
     fn default() -> Self {
-        Self::new(
-            Arc::new(new_state_machine()),
-            InitArg {
-                more_controller_ids: vec![NNS_ROOT_PRINCIPAL],
-                minter_id: None,
-                cycles_management: None,
-            },
-        )
+        Self::new(Arc::new(new_state_machine()), default_init_arg())
+    }
+}
+
+impl AsRef<StateMachine> for LedgerSuiteOrchestrator {
+    fn as_ref(&self) -> &StateMachine {
+        &self.env
     }
 }
 
 impl LedgerSuiteOrchestrator {
+    pub fn with_cycles_management(cycles_management: CyclesManagement) -> Self {
+        let init_arg = InitArg {
+            cycles_management: Some(cycles_management),
+            ..default_init_arg()
+        };
+        Self::new(Arc::new(new_state_machine()), init_arg)
+    }
     pub fn new(env: Arc<StateMachine>, init_arg: InitArg) -> Self {
         let ledger_suite_orchestrator_id =
             env.create_canister_with_cycles(None, Cycles::new(u128::MAX), None);
@@ -99,6 +108,17 @@ impl LedgerSuiteOrchestrator {
         .unwrap()
     }
 
+    pub fn advance_time_for_cycles_top_up(&self) {
+        self.env
+            .advance_time(std::time::Duration::from_secs(60 * 60 + 1));
+        self.env.tick();
+        self.env.tick();
+        self.env.tick();
+        self.env.tick();
+        self.env.tick();
+        self.env.tick();
+    }
+
     pub fn canister_status_of(&self, controlled_canister_id: CanisterId) -> CanisterStatusResultV2 {
         self.env
             .canister_status_as(
@@ -107,6 +127,35 @@ impl LedgerSuiteOrchestrator {
             )
             .unwrap()
             .unwrap()
+    }
+
+    pub fn get_orchestrator_info(&self) -> OrchestratorInfo {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query(
+                        self.ledger_suite_orchestrator_id,
+                        "get_orchestrator_info",
+                        Encode!().unwrap()
+                    )
+                    .unwrap()
+            ),
+            OrchestratorInfo
+        )
+        .unwrap()
+    }
+
+    pub fn check_metrics(self) -> MetricsAssert<Self> {
+        let canister_id = self.ledger_suite_orchestrator_id;
+        MetricsAssert::from_querying_metrics(self, canister_id)
+    }
+}
+
+fn default_init_arg() -> InitArg {
+    InitArg {
+        more_controller_ids: vec![NNS_ROOT_PRINCIPAL],
+        minter_id: None,
+        cycles_management: None,
     }
 }
 
@@ -189,7 +238,7 @@ pub fn usdc(
 pub fn usdc_erc20_contract() -> Erc20Contract {
     Erc20Contract {
         chain_id: Nat::from(1_u8),
-        address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string(),
+        address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
     }
 }
 

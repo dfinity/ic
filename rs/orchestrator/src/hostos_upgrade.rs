@@ -1,14 +1,12 @@
-use std::sync::Arc;
-use std::time::Duration;
-
-use crate::error::{OrchestratorError, OrchestratorResult};
-use crate::registry_helper::RegistryHelper;
+use crate::{
+    error::{OrchestratorError, OrchestratorResult},
+    registry_helper::RegistryHelper,
+};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::hostos_version::HostosVersion;
-use ic_types::NodeId;
-
+use ic_types::{hostos_version::HostosVersion, NodeId};
+use std::{sync::Arc, time::Duration};
 use tokio::sync::watch::Receiver;
 
 pub(crate) struct HostosUpgrader {

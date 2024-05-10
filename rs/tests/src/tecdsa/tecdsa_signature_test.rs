@@ -33,6 +33,7 @@ use ic_agent::{
 };
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
@@ -620,7 +621,7 @@ pub fn test_threshold_ecdsa_key_rotation(test_env: TestEnv) {
         let metric_with_label = format!(
             "{}{{key_id=\"{}\"}}",
             ECDSA_KEY_TRANSCRIPT_CREATED,
-            make_key(KEY_ID1)
+            MasterPublicKeyId::Ecdsa(make_key(KEY_ID1))
         );
         let metrics = MetricsFetcher::new(app_subnet.nodes(), vec![metric_with_label.clone()]);
         loop {

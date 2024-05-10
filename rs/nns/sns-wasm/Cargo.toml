@@ -33,16 +33,17 @@ ic-sns-governance = { path = "../../sns/governance" }
 ic-sns-init = { path = "../../sns/init" }
 ic-sns-root = { path = "../../sns/root" }
 ic-types = { path = "../../types/types" }
-ic-wasm = "^0.7.1"
+ic-utils = { path = "../../utils" }
+ic-wasm = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 libflate = "1.1.2"
 maplit = "1.0.2"
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 prost = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-ic-protobuf = { path = "../../protobuf" }
 registry-canister = { path = "../../registry/canister" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }

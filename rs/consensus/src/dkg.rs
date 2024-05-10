@@ -1302,7 +1302,7 @@ impl<Pool: DkgPool> PriorityFnAndFilterProducer<DkgArtifact, Pool> for DkgGossip
         Box::new(move |id, _| {
             use std::cmp::Ordering;
             match id.height.cmp(&start_height) {
-                Ordering::Equal => Priority::Fetch,
+                Ordering::Equal => Priority::FetchNow,
                 Ordering::Greater => Priority::Stash,
                 Ordering::Less => Priority::Drop,
             }
@@ -1565,16 +1565,10 @@ fn bootstrap_ecdsa_summary_from_cup_contents(
         return Ok(None);
     };
 
-    // TODO(kpop): use all dealings
-    let (key_id, dealings) = initial_dealings
-        .first_key_value()
-        .expect("Should not be empty");
-
     make_bootstrap_summary_with_initial_dealings(
         subnet_id,
-        key_id.clone(),
         Height::new(cup_contents.height),
-        dealings.clone(),
+        initial_dealings,
         logger,
     )
     .map_err(|err| format!("Failed to create ECDSA summary block: {:?}", err))
@@ -1598,7 +1592,7 @@ fn bootstrap_ecdsa_summary(
     {
         Some(ecdsa_config) => Ok(make_bootstrap_summary(
             subnet_id,
-            ecdsa_config.key_ids[0].clone(),
+            ecdsa_config.key_ids,
             Height::new(cup_contents.height),
         )),
         None => Ok(None),

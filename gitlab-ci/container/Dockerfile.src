@@ -13,8 +13,9 @@ RUN apt -y update && \
 
 RUN mkdir -p /opt/bin
 
-ARG protoc_version=3.18.1
-RUN cd $(mktemp -d) && curl -fLO https://github.com/protocolbuffers/protobuf/releases/download/v${protoc_version}/protoc-${protoc_version}-linux-x86_64.zip && unzip * -d /opt/protoc && chmod -R 755 /opt/protoc/bin && chmod -R u+rwX,go+rX,go-w /opt/protoc/include
+ARG protoc_version=26.1
+RUN cd $(mktemp -d) && curl -fLO https://github.com/protocolbuffers/protobuf/releases/download/v${protoc_version}/protoc-${protoc_version}-linux-x86_64.zip && unzip * -d /opt/protoc && \
+    chmod -R 755 /opt/protoc/bin && chmod -R u+rwX,go+rX,go-w /opt/protoc/include
 
 ARG buildevents_version=0.6.0
 RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${buildevents_version}/buildevents-linux-amd64 -o /opt/bin/buildevents && \

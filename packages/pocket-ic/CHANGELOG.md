@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 3.1.0 - 2024-05-02
+
+### Added
+- Added `with_benchmarking_system_subnet` builder option to enable benchmarking with high message size limits.
+
+## 3.0.0 - 2024-04-30
+
 ### Added
 - New functions `auto_progress` and `stop_progress` to make IC instances
   progress (updating time and executing rounds) automatically.

@@ -1,7 +1,9 @@
+use crate::metrics::MetricsAssert;
 use crate::{assert_reply, LedgerAccount, LedgerMetadataValue, LedgerSuiteOrchestrator, MAX_TICKS};
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_suite_orchestrator::candid::{AddErc20Arg, ManagedCanisterIds};
+use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use std::collections::BTreeSet;
@@ -44,6 +46,12 @@ pub struct ManagedCanistersAssert {
     pub canister_ids: ManagedCanisterIds,
 }
 
+impl AsRef<StateMachine> for ManagedCanistersAssert {
+    fn as_ref(&self) -> &StateMachine {
+        self.setup.env.as_ref()
+    }
+}
+
 impl ManagedCanistersAssert {
     pub fn assert_all_controlled_by(self, expected_controllers: &[Principal]) -> Self {
         for canister_id in self.all_canister_ids() {
@@ -65,6 +73,11 @@ impl ManagedCanistersAssert {
             );
         }
         self
+    }
+
+    pub fn check_metrics(self) -> MetricsAssert<Self> {
+        let canister_id = self.setup.ledger_suite_orchestrator_id;
+        MetricsAssert::from_querying_metrics(self, canister_id)
     }
 
     pub fn trigger_creation_of_archive(self) -> Self {
@@ -178,6 +191,17 @@ impl ManagedCanistersAssert {
         self
     }
 
+    pub fn assert_all_archives_have_cycles(self, expected: u128) -> Self {
+        assert!(
+            !self.archive_canister_ids().is_empty(),
+            "BUG: no archive canisters"
+        );
+        for archive in self.archive_canister_ids() {
+            assert_eq!(self.setup.canister_status_of(archive).cycles(), expected);
+        }
+        self
+    }
+
     fn call_index_ledger_id(&self) -> Principal {
         Decode!(
             &assert_reply(
@@ -190,15 +214,15 @@ impl ManagedCanistersAssert {
         )
         .unwrap()
     }
-    fn ledger_canister_id(&self) -> CanisterId {
+    pub fn ledger_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(PrincipalId::from(self.canister_ids.ledger.unwrap()))
     }
 
-    fn index_canister_id(&self) -> CanisterId {
+    pub fn index_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(PrincipalId::from(self.canister_ids.index.unwrap()))
     }
 
-    fn archive_canister_ids(&self) -> Vec<CanisterId> {
+    pub fn archive_canister_ids(&self) -> Vec<CanisterId> {
         self.canister_ids
             .archives
             .iter()

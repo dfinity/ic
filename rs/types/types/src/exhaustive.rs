@@ -1,12 +1,14 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
 use crate::consensus::hashed::Hashed;
+use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::{
     PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsRef,
 };
 use crate::consensus::idkg::{
-    CompletedReshareRequest, CompletedSignature, EcdsaKeyTranscript, EcdsaReshareRequest,
-    KeyTranscriptCreation, MaskedTranscript, PseudoRandomId, QuadrupleId, RandomTranscriptParams,
+    CompletedReshareRequest, CompletedSignature, EcdsaKeyTranscript, EcdsaPayload,
+    EcdsaPayloadLayout, EcdsaReshareRequest, EcdsaUIDGenerator, KeyTranscriptCreation,
+    MaskedTranscript, PseudoRandomId, QuadrupleId, RandomTranscriptParams,
     RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
     UnmaskedTimesMaskedParams, UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
 };
@@ -369,6 +371,19 @@ impl ExhaustiveSet for SchnorrKeyId {
     }
 }
 
+impl ExhaustiveSet for MasterPublicKeyId {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let ecdsa_key_ids = EcdsaKeyId::exhaustive_set(rng);
+        let schnorr_key_ids = SchnorrKeyId::exhaustive_set(rng);
+
+        ecdsa_key_ids
+            .into_iter()
+            .map(MasterPublicKeyId::Ecdsa)
+            .chain(schnorr_key_ids.into_iter().map(MasterPublicKeyId::Schnorr))
+            .collect()
+    }
+}
+
 impl<V: ExhaustiveSet + CryptoHashable> ExhaustiveSet for Hashed<CryptoHashOf<V>, V> {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         let mut res = Vec::new();
@@ -683,13 +698,10 @@ impl ExhaustiveSet for QuadrupleInCreation {
         let mut result = DerivedQuadrupleInCreation::exhaustive_set(rng)
             .into_iter()
             .map(|q| QuadrupleInCreation {
-                key_id: Some(q.key_id),
-                kappa_masked_config: None,
-                kappa_masked: None,
+                key_id: q.key_id,
                 lambda_config: q.random_config.clone(),
                 lambda_masked: Some(q.masked),
-                kappa_unmasked_config: Some(q.random_unmasked_config.clone()),
-                unmask_kappa_config: Some(q.reshare_config.clone()),
+                kappa_unmasked_config: q.random_unmasked_config.clone(),
                 kappa_unmasked: Some(q.unmasked),
                 key_times_lambda_config: Some(q.times_config.clone()),
                 key_times_lambda: Some(q.masked),
@@ -699,15 +711,10 @@ impl ExhaustiveSet for QuadrupleInCreation {
             .collect::<Vec<_>>();
 
         result.push(QuadrupleInCreation {
-            key_id: Some(EcdsaKeyId::exhaustive_set(rng)[0].clone()),
-            kappa_masked_config: None,
-            kappa_masked: None,
+            key_id: EcdsaKeyId::exhaustive_set(rng)[0].clone(),
             lambda_config: RandomTranscriptParams::exhaustive_set(rng)[0].clone(),
             lambda_masked: None,
-            kappa_unmasked_config: Some(
-                RandomUnmaskedTranscriptParams::exhaustive_set(rng)[0].clone(),
-            ),
-            unmask_kappa_config: None,
+            kappa_unmasked_config: RandomUnmaskedTranscriptParams::exhaustive_set(rng)[0].clone(),
             kappa_unmasked: None,
             key_times_lambda_config: None,
             key_times_lambda: None,
@@ -715,33 +722,6 @@ impl ExhaustiveSet for QuadrupleInCreation {
             kappa_times_lambda: None,
         });
         result
-    }
-}
-
-#[derive(Clone)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct PreSignatureQuadrupleRefsOnly {
-    pub key_id: EcdsaKeyId,
-    pub kappa_unmasked_ref: UnmaskedTranscript,
-    pub lambda_masked_ref: MaskedTranscript,
-    pub kappa_times_lambda_ref: MaskedTranscript,
-    pub key_times_lambda_ref: MaskedTranscript,
-    pub key_unmasked_ref: UnmaskedTranscript,
-}
-
-impl ExhaustiveSet for PreSignatureQuadrupleRef {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        PreSignatureQuadrupleRefsOnly::exhaustive_set(rng)
-            .into_iter()
-            .map(|q| PreSignatureQuadrupleRef {
-                key_id: Some(q.key_id),
-                kappa_unmasked_ref: q.kappa_unmasked_ref,
-                lambda_masked_ref: q.lambda_masked_ref,
-                kappa_times_lambda_ref: q.kappa_times_lambda_ref,
-                key_times_lambda_ref: q.key_times_lambda_ref,
-                key_unmasked_ref: q.key_unmasked_ref,
-            })
-            .collect()
     }
 }
 
@@ -758,10 +738,52 @@ impl ExhaustiveSet for EcdsaReshareRequest {
         DerivedEcdsaReshareRequest::exhaustive_set(rng)
             .into_iter()
             .map(|r| EcdsaReshareRequest {
-                key_id: r.key_id.clone(),
-                master_key_id: Some(MasterPublicKeyId::Ecdsa(r.key_id)),
+                key_id: Some(r.key_id.clone()),
+                master_key_id: MasterPublicKeyId::Ecdsa(r.key_id),
                 receiving_node_ids: r.receiving_node_ids,
                 registry_version: r.registry_version,
+            })
+            .collect()
+    }
+}
+
+#[derive(Clone)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct DerivedEcdsaPayload {
+    pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
+    pub available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadrupleRef>,
+    pub quadruples_in_creation: BTreeMap<QuadrupleId, QuadrupleInCreation>,
+    pub uid_generator: EcdsaUIDGenerator,
+    pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
+    pub ongoing_xnet_reshares: BTreeMap<EcdsaReshareRequest, ReshareOfUnmaskedParams>,
+    pub xnet_reshare_agreements: BTreeMap<EcdsaReshareRequest, CompletedReshareRequest>,
+    pub key_transcripts: BTreeMap<MasterPublicKeyId, EcdsaKeyTranscript>,
+}
+
+impl ExhaustiveSet for EcdsaPayload {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        DerivedEcdsaPayload::exhaustive_set(rng)
+            .into_iter()
+            .map(|payload| EcdsaPayload {
+                signature_agreements: payload.signature_agreements,
+                deprecated_ongoing_signatures: BTreeMap::default(),
+                available_pre_signatures: payload
+                    .available_quadruples
+                    .into_iter()
+                    .map(|(id, quad)| (id, PreSignatureRef::Ecdsa(quad)))
+                    .collect(),
+                pre_signatures_in_creation: payload
+                    .quadruples_in_creation
+                    .into_iter()
+                    .map(|(id, quad)| (id, PreSignatureInCreation::Ecdsa(quad)))
+                    .collect(),
+                uid_generator: payload.uid_generator,
+                idkg_transcripts: payload.idkg_transcripts,
+                ongoing_xnet_reshares: payload.ongoing_xnet_reshares,
+                xnet_reshare_agreements: payload.xnet_reshare_agreements,
+                key_transcripts: replace_by_singleton_if_empty(payload.key_transcripts, rng),
+                layout: EcdsaPayloadLayout::SingleKeyTranscript,
+                generalized_pre_signatures: false,
             })
             .collect()
     }
@@ -812,6 +834,33 @@ fn dummy_dealings(
     dealings
 }
 
+/// If the map is empty generates a single key-value pair and returns it.
+fn replace_by_singleton_if_empty<
+    K: ExhaustiveSet + std::cmp::Ord,
+    V: ExhaustiveSet + HasId<K>,
+    R: RngCore + CryptoRng,
+>(
+    collection: BTreeMap<K, V>,
+    rng: &mut R,
+) -> BTreeMap<K, V> {
+    if !collection.is_empty() {
+        return collection;
+    }
+
+    let value = V::exhaustive_set(rng)
+        .first()
+        .expect("There should be at least one element")
+        .clone();
+    let key = value.get_id().unwrap_or_else(|| {
+        K::exhaustive_set(rng)
+            .first()
+            .expect("There should be at least one element")
+            .clone()
+    });
+
+    BTreeMap::from([(key, value)])
+}
+
 /// Some maps of the form Map<Id, (Id, Data)> are serialized as vectors of their values, throwing
 /// all keys away. During deserialization, the key is then re-extracted from the value. By default,
 /// `Exhaustive` will generate different keys independent of values, meaning a serialization round-
@@ -842,6 +891,12 @@ impl HasId<NiDkgTargetId> for u32 {}
 impl HasId<RequestId> for ThresholdEcdsaSigInputsRef {}
 impl HasId<QuadrupleId> for QuadrupleInCreation {}
 impl HasId<QuadrupleId> for PreSignatureQuadrupleRef {}
+
+impl HasId<MasterPublicKeyId> for EcdsaKeyTranscript {
+    fn get_id(&self) -> Option<MasterPublicKeyId> {
+        Some(self.get_master_public_key_id())
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -945,5 +1000,37 @@ mod tests {
         assert_eq!(set[0][&Big::Y], Small::B);
         assert_eq!(set[0][&Big::Z], Small::A);
         assert!(set[1].is_empty());
+    }
+
+    /// Check if named enum fields produce correct result
+    #[test]
+    fn derive_named_enum_field() {
+        #[derive(Debug, Clone, PartialEq, Eq, ExhaustiveSet)]
+        enum Enum1 {
+            V1 { first: Enum2, second: Enum2 },
+            V2,
+        }
+        #[derive(Debug, Clone, PartialEq, Eq, ExhaustiveSet)]
+        enum Enum2 {
+            A1,
+            A2,
+        }
+        let set = Enum1::exhaustive_set(&mut rand::thread_rng());
+        assert_eq!(set.len(), 3);
+        assert_eq!(set[0], Enum1::V2);
+        assert_eq!(
+            set[1],
+            Enum1::V1 {
+                first: Enum2::A1,
+                second: Enum2::A1
+            }
+        );
+        assert_eq!(
+            set[2],
+            Enum1::V1 {
+                first: Enum2::A2,
+                second: Enum2::A2
+            }
+        );
     }
 }

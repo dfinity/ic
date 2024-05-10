@@ -30,17 +30,18 @@ use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion,
 use prost::Message;
 use rand::prelude::*;
 use registry_canister::mutations::{
-    common::check_ipv4_config,
+    common::{check_ipv4_config, is_valid_domain},
+    do_update_node_directly::UpdateNodeDirectlyPayload,
     node_management::{
         do_add_node::AddNodePayload, do_update_node_ipv4_config_directly::IPv4Config,
     },
 };
-use registry_canister::mutations::{
-    common::is_valid_domain, do_update_node_directly::UpdateNodeDirectlyPayload,
+use std::{
+    net::IpAddr,
+    str::FromStr,
+    sync::Arc,
+    time::{Duration, SystemTime},
 };
-use std::sync::Arc;
-use std::time::{Duration, SystemTime};
-use std::{net::IpAddr, str::FromStr};
 use url::Url;
 
 /// When calculating Gamma (frequency at which the registry accepts key updates from the subnet as a whole)
@@ -799,17 +800,15 @@ mod tests {
         use super::*;
         use async_trait::async_trait;
         use ic_crypto_temp_crypto::EcdsaSubnetConfig;
-        use ic_crypto_tls_interfaces::AuthenticatedPeer;
-        use ic_crypto_tls_interfaces::SomeOrAllNodes;
-        use ic_crypto_tls_interfaces::TlsClientHandshakeError;
-        use ic_crypto_tls_interfaces::TlsHandshake;
-        use ic_crypto_tls_interfaces::TlsServerHandshakeError;
-        use ic_crypto_tls_interfaces::TlsStream;
-        use ic_interfaces::crypto::IDkgDealingEncryptionKeyRotationError;
-        use ic_interfaces::crypto::KeyManager;
-        use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
-        use ic_interfaces::crypto::{BasicSigner, CheckKeysWithRegistryError};
-        use ic_interfaces::crypto::{CurrentNodePublicKeysError, KeyRotationOutcome};
+        use ic_crypto_tls_interfaces::{
+            AuthenticatedPeer, SomeOrAllNodes, TlsClientHandshakeError, TlsHandshake,
+            TlsServerHandshakeError, TlsStream,
+        };
+        use ic_interfaces::crypto::{
+            BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
+            IDkgDealingEncryptionKeyRotationError, KeyManager, KeyRotationOutcome,
+            ThresholdSigVerifierByPublicKey,
+        };
         use ic_logger::replica_logger::no_op_logger;
         use ic_metrics::MetricsRegistry;
         use ic_protobuf::registry::subnet::v1::SubnetListRecord;
@@ -819,17 +818,19 @@ mod tests {
         };
         use ic_registry_local_store::LocalStoreImpl;
         use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-        use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
-        use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
-        use ic_types::consensus::CatchUpContentProtobufBytes;
-        use ic_types::crypto::CombinedThresholdSigOf;
-        use ic_types::crypto::CryptoResult;
-        use ic_types::crypto::CurrentNodePublicKeys;
-        use ic_types::crypto::{AlgorithmId, BasicSigOf};
-        use ic_types::registry::RegistryClientError;
-        use ic_types::PrincipalId;
-        use mockall::predicate::*;
-        use mockall::*;
+        use ic_test_utilities_in_memory_logger::{
+            assertions::LogEntriesAssert, InMemoryReplicaLogger,
+        };
+        use ic_types::{
+            consensus::CatchUpContentProtobufBytes,
+            crypto::{
+                AlgorithmId, BasicSigOf, CombinedThresholdSigOf, CryptoResult,
+                CurrentNodePublicKeys,
+            },
+            registry::RegistryClientError,
+            PrincipalId,
+        };
+        use mockall::{predicate::*, *};
         use slog::Level;
         use std::time::UNIX_EPOCH;
         use tempfile::TempDir;

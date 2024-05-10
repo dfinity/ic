@@ -998,11 +998,12 @@ impl MergeCandidate {
         height: Height,
         num_pages: u64,
         lsmt_config: &LsmtConfig,
+        metrics: &StorageMetrics,
     ) -> Result<Vec<MergeCandidate>, Box<dyn std::error::Error>> {
         if layout.base().exists() && num_pages > lsmt_config.shard_num_pages {
             Self::split_to_shards(layout, height, num_pages, lsmt_config)
         } else {
-            Self::merge_by_shard(layout, height, num_pages, lsmt_config)
+            Self::merge_by_shard(layout, height, num_pages, lsmt_config, metrics)
         }
     }
 
@@ -1134,9 +1135,18 @@ impl MergeCandidate {
         num_pages: u64,
         lsmt_config: &LsmtConfig,
     ) -> Result<Vec<MergeCandidate>, Box<dyn std::error::Error>> {
-        let dst_overlays = (0..num_shards(num_pages, lsmt_config))
+        let dst_overlays: Vec<_> = (0..num_shards(num_pages, lsmt_config))
             .map(|shard| layout.overlay(height, Shard::new(shard)).to_path_buf())
             .collect();
+        debug_assert!(
+            dst_overlays.len()
+                >= layout
+                    .existing_overlays()?
+                    .iter()
+                    .map(|p| layout.overlay_shard(p).unwrap().get() + 1)
+                    .max()
+                    .unwrap_or(0) as usize
+        );
 
         let base = if layout.base().exists() {
             Some(layout.base().to_path_buf())
@@ -1166,16 +1176,32 @@ impl MergeCandidate {
         height: Height,
         num_pages: u64,
         lsmt_config: &LsmtConfig,
+        metrics: &StorageMetrics,
     ) -> Result<Vec<MergeCandidate>, Box<dyn std::error::Error>> {
         let existing_base = layout.existing_base();
 
         let mut result = Vec::new();
         let num_shards = num_shards(num_pages, lsmt_config);
-        if existing_base.is_some() {
+        if existing_base.is_none() {
+            debug_assert_eq!(
+                num_shards,
+                layout
+                    .existing_overlays()?
+                    .iter()
+                    .map(|p| layout.overlay_shard(p).unwrap().get() + 1)
+                    .max()
+                    .unwrap_or(0)
+            );
+        } else {
             assert!(num_shards <= 1);
         }
         for shard in 0..num_shards {
             let shard = Shard::new(shard);
+
+            let start_page = PageIndex::new(shard.get() * lsmt_config.shard_num_pages);
+            let end_page =
+                PageIndex::new(num_pages.min((shard.get() + 1) * lsmt_config.shard_num_pages));
+
             let existing_files = layout.existing_files_with_shard(shard)?;
             let file_lengths: Vec<u64> = existing_files
                 .iter()
@@ -1190,6 +1216,17 @@ impl MergeCandidate {
                 })
                 .collect::<Result<_, PersistenceError>>()?;
             let existing_overlays = &existing_files[existing_base.iter().len()..];
+
+            metrics
+                .num_files_by_shard
+                .observe(existing_files.len() as f64);
+
+            if end_page.get() > start_page.get() {
+                metrics.storage_overhead_by_shard.observe(
+                    file_lengths.iter().sum::<u64>() as f64
+                        / ((end_page.get() - start_page.get()) * PAGE_SIZE as u64) as f64,
+                );
+            }
 
             let Some(num_files_to_merge) = Self::num_files_to_merge(&file_lengths) else {
                 continue;
@@ -1216,10 +1253,8 @@ impl MergeCandidate {
                 overlays,
                 base,
                 dst: MergeDestination::SingleShardOverlay(layout.overlay(height, shard)),
-                start_page: PageIndex::new(shard.get() * lsmt_config.shard_num_pages),
-                end_page: PageIndex::new(
-                    num_pages.min((shard.get() + 1) * lsmt_config.shard_num_pages),
-                ),
+                start_page,
+                end_page,
                 num_files_before: existing_files.len() as u64,
                 storage_size_bytes_before: file_lengths.iter().sum(),
                 input_size_bytes,

@@ -1,11 +1,8 @@
-use crate::candid::{AddCkErc20Token, InitArg, LedgerInitArg};
+use crate::candid::{AddCkErc20Token, CyclesManagement, InitArg, LedgerInitArg};
 use crate::management::{CallError, Reason};
 use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
 use crate::scheduler::tests::mock::MockCanisterRuntime;
-use crate::scheduler::{
-    InstallLedgerSuiteArgs, Task, TaskError, TaskExecution, MINIMUM_MONITORED_CANISTER_CYCLES,
-    MINIMUM_ORCHESTRATOR_CYCLES,
-};
+use crate::scheduler::{cycles_to_u128, InstallLedgerSuiteArgs, Task, TaskError, TaskExecution};
 use crate::state::test_fixtures::new_state;
 use crate::state::{
     read_state, Canisters, GitCommitHash, IndexCanister, LedgerCanister, ManagedCanisterStatus,
@@ -13,6 +10,7 @@ use crate::state::{
 };
 use crate::storage::{mutate_wasm_store, record_icrc1_ledger_suite_wasms};
 use candid::Principal;
+use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 
 const ORCHESTRATOR_PRINCIPAL: Principal = Principal::from_slice(&[0_u8; 29]);
 const LEDGER_PRINCIPAL: Principal = Principal::from_slice(&[1_u8; 29]);
@@ -59,8 +57,11 @@ async fn should_install_ledger_suite() {
 async fn should_top_up_canister() {
     use mockall::Sequence;
     init_state();
+    let cycles_management = CyclesManagement::default();
+    let orchestrator_cycles = cycles_to_u128(cycles_management.minimum_orchestrator_cycles()) * 2;
+    let low_cycles = cycles_to_u128(cycles_management.minimum_monitored_canister_cycles()) / 2;
+    let enough_cycles = cycles_to_u128(cycles_management.minimum_monitored_canister_cycles());
     let mut runtime = MockCanisterRuntime::new();
-
     runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
     expect_create_canister_returning(
         &mut runtime,
@@ -82,14 +83,14 @@ async fn should_top_up_canister() {
     let mut seq = Sequence::new();
     runtime
         .expect_canister_cycles()
-        .times(2)
-        .in_sequence(&mut seq)
-        .return_const(Ok(MINIMUM_MONITORED_CANISTER_CYCLES as u128 / 2));
-    runtime
-        .expect_canister_cycles()
         .times(1)
         .in_sequence(&mut seq)
-        .return_const(Ok(MINIMUM_ORCHESTRATOR_CYCLES as u128 * 2));
+        .return_const(Ok(orchestrator_cycles));
+    runtime
+        .expect_canister_cycles()
+        .times(2)
+        .in_sequence(&mut seq)
+        .return_const(Ok(low_cycles));
 
     runtime
         .expect_send_cycles()
@@ -103,15 +104,14 @@ async fn should_top_up_canister() {
     let mut seq = Sequence::new();
     runtime
         .expect_canister_cycles()
-        .times(2)
-        .in_sequence(&mut seq)
-        .return_const(Ok(MINIMUM_MONITORED_CANISTER_CYCLES as u128 / 2));
-    runtime
-        .expect_canister_cycles()
         .times(1)
         .in_sequence(&mut seq)
-        .return_const(Ok(MINIMUM_ORCHESTRATOR_CYCLES as u128 * 2));
-
+        .return_const(Ok(orchestrator_cycles));
+    runtime
+        .expect_canister_cycles()
+        .times(2)
+        .in_sequence(&mut seq)
+        .return_const(Ok(low_cycles));
     runtime
         .expect_send_cycles()
         .times(1)
@@ -120,15 +120,20 @@ async fn should_top_up_canister() {
             reason: Reason::OutOfCycles,
         }));
     runtime.expect_send_cycles().times(1).return_const(Ok(()));
-
     assert_eq!(task.execute(&runtime).await, Ok(()));
 
+    let mut seq = Sequence::new();
     runtime
         .expect_canister_cycles()
-        .times(3)
-        .return_const(Ok(MINIMUM_MONITORED_CANISTER_CYCLES as u128));
+        .times(1)
+        .in_sequence(&mut seq)
+        .return_const(Ok(orchestrator_cycles));
+    runtime
+        .expect_canister_cycles()
+        .times(2)
+        .in_sequence(&mut seq)
+        .return_const(Ok(enough_cycles));
     runtime.expect_send_cycles().never();
-
     assert_eq!(task.execute(&runtime).await, Ok(()));
 }
 
@@ -557,6 +562,165 @@ mod notify_erc_20_added {
         }
     }
 }
+mod discover_archives {
+    use crate::management::{CallError, Reason};
+    use crate::scheduler::test_fixtures::{
+        dai, dai_metadata, usdc, usdc_metadata, usdt, usdt_metadata,
+    };
+    use crate::scheduler::tests::mock::MockCanisterRuntime;
+    use crate::scheduler::tests::{expect_call_canister_archives, init_state, LEDGER_PRINCIPAL};
+    use crate::scheduler::{Erc20Token, Task, TaskError, TaskExecution};
+    use crate::state::{mutate_state, read_state, Ledger};
+    use candid::Principal;
+    use icrc_ledger_types::icrc3::archive::ArchiveInfo;
+
+    #[tokio::test]
+    async fn should_discover_multiple_archives() {
+        init_state();
+        let usdc = usdc();
+        mutate_state(|s| {
+            s.record_new_erc20_token(usdc.clone(), usdc_metadata());
+            s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
+        });
+
+        let first_archive = Principal::from_slice(&[4_u8; 29]);
+        let first_archive_info = ArchiveInfo {
+            canister_id: first_archive,
+            block_range_start: 0_u8.into(),
+            block_range_end: 1_u8.into(),
+        };
+        let mut runtime = MockCanisterRuntime::new();
+        expect_call_canister_archives(
+            &mut runtime,
+            LEDGER_PRINCIPAL,
+            Ok(vec![first_archive_info.clone()]),
+        );
+
+        let discover_archives_task = TaskExecution {
+            task_type: Task::DiscoverArchives,
+            execute_at_ns: 0,
+        };
+        assert_eq!(discover_archives_task.execute(&runtime).await, Ok(()));
+        assert_eq!(archives_from_state(&usdc), vec![first_archive]);
+
+        runtime.checkpoint();
+
+        let second_archive = Principal::from_slice(&[5_u8; 29]);
+        let second_archive_info = ArchiveInfo {
+            canister_id: second_archive,
+            block_range_start: 2_u8.into(),
+            block_range_end: 3_u8.into(),
+        };
+        expect_call_canister_archives(
+            &mut runtime,
+            LEDGER_PRINCIPAL,
+            Ok(vec![first_archive_info, second_archive_info]),
+        );
+
+        assert_eq!(discover_archives_task.execute(&runtime).await, Ok(()));
+        assert_eq!(
+            archives_from_state(&usdc),
+            vec![first_archive, second_archive]
+        );
+    }
+
+    #[tokio::test]
+    async fn should_discover_archive_and_return_first_error() {
+        init_state();
+        let (dai, dai_ledger) = (dai(), candid::Principal::from_slice(&[4_u8; 29]));
+        let (usdc, usdc_ledger) = (usdc(), candid::Principal::from_slice(&[5_u8; 29]));
+        let (usdt, usdt_ledger) = (usdt(), candid::Principal::from_slice(&[6_u8; 29]));
+        mutate_state(|s| {
+            s.record_new_erc20_token(dai.clone(), dai_metadata());
+            s.record_created_canister::<Ledger>(&dai, dai_ledger);
+
+            s.record_new_erc20_token(usdc.clone(), usdc_metadata());
+            s.record_created_canister::<Ledger>(&usdc, usdc_ledger);
+
+            s.record_new_erc20_token(usdt.clone(), usdt_metadata());
+            s.record_created_canister::<Ledger>(&usdt, usdt_ledger);
+        });
+
+        let mut runtime = MockCanisterRuntime::new();
+        let first_error = CallError {
+            method: "dai error".to_string(),
+            reason: Reason::OutOfCycles,
+        };
+        expect_call_canister_archives(&mut runtime, dai_ledger, Err(first_error.clone()));
+        let usdc_archive = Principal::from_slice(&[7_u8; 29]);
+        expect_call_canister_archives(
+            &mut runtime,
+            usdc_ledger,
+            Ok(vec![ArchiveInfo {
+                canister_id: usdc_archive,
+                block_range_start: 0_u8.into(),
+                block_range_end: 1_u8.into(),
+            }]),
+        );
+        expect_call_canister_archives(
+            &mut runtime,
+            usdt_ledger,
+            Err(CallError {
+                method: "usdt error".to_string(),
+                reason: Reason::OutOfCycles,
+            }),
+        );
+
+        let discover_archives_task = TaskExecution {
+            task_type: Task::DiscoverArchives,
+            execute_at_ns: 0,
+        };
+        assert_eq!(
+            discover_archives_task.execute(&runtime).await,
+            Err(TaskError::InterCanisterCallError(first_error))
+        );
+        assert_eq!(archives_from_state(&dai), vec![]);
+        assert_eq!(archives_from_state(&usdc), vec![usdc_archive]);
+        assert_eq!(archives_from_state(&usdt), vec![]);
+    }
+
+    fn archives_from_state(contract: &Erc20Token) -> Vec<Principal> {
+        read_state(|s| s.managed_canisters(contract).unwrap().archives.clone())
+    }
+}
+
+mod run_task {
+    use crate::guard::TimerGuard;
+    use crate::scheduler::tests::init_state;
+    use crate::scheduler::tests::mock::MockCanisterRuntime;
+    use crate::scheduler::{run_task, Task, TaskExecution};
+    use crate::storage::TASKS;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn should_reschedule_task_when_previous_one_still_running() {
+        init_state();
+        let task = Task::MaybeTopUp;
+        let mut runtime = MockCanisterRuntime::new();
+        runtime.expect_time().return_const(0_u64);
+        runtime.expect_global_timer_set().return_const(());
+        let _guard_mocking_already_running_task =
+            TimerGuard::new(task.clone()).expect("no previous task running");
+
+        run_task(
+            TaskExecution {
+                execute_at_ns: 0,
+                task_type: task.clone(),
+            },
+            runtime,
+        )
+        .await;
+
+        assert_eq!(
+            task_deadline_from_state(&task),
+            Some(Duration::from_secs(3_600).as_nanos() as u64)
+        );
+    }
+
+    fn task_deadline_from_state(task: &Task) -> Option<u64> {
+        TASKS.with(|t| t.borrow().deadline_by_task.get(task))
+    }
+}
 
 fn init_state() {
     crate::state::init_state(new_state());
@@ -647,6 +811,120 @@ fn expect_call_canister_add_ckerc20_token(
         .return_const(mocked_result);
 }
 
+fn expect_call_canister_archives(
+    runtime: &mut MockCanisterRuntime,
+    expected_canister_id: Principal,
+    mocked_result: Result<Vec<ArchiveInfo>, CallError>,
+) {
+    runtime
+        .expect_call_canister()
+        .withf(move |&canister_id, method, _args: &()| {
+            canister_id == expected_canister_id && method == "archives"
+        })
+        .times(1)
+        .return_const(mocked_result);
+}
+
+mod metrics {
+    use crate::management::CallError;
+    use crate::scheduler::metrics::observe_task_duration;
+    use crate::scheduler::{encode_orchestrator_metrics, Reason, Task, TaskError};
+    use std::time::Duration;
+
+    #[test]
+    fn should_aggregate_task_durations() {
+        observe_task_duration(&Task::MaybeTopUp, &Ok(()), 0, 1);
+        observe_task_duration(
+            &Task::MaybeTopUp,
+            &Ok(()),
+            0,
+            Duration::from_millis(6_500).as_nanos() as u64,
+        );
+        observe_task_duration(
+            &Task::MaybeTopUp,
+            &Err(TaskError::InterCanisterCallError(CallError {
+                method: "error".to_string(),
+                reason: Reason::OutOfCycles,
+            })),
+            0,
+            Duration::from_millis(22_500).as_nanos() as u64,
+        );
+
+        let mut encoder = ic_metrics_encoder::MetricsEncoder::new(Vec::new(), 12346789);
+        encode_orchestrator_metrics(&mut encoder).unwrap();
+        let bytes = encoder.into_inner();
+        let metrics_text = String::from_utf8(bytes).unwrap();
+
+        let actual = metrics_text.trim();
+        let expected = r#"
+# HELP orchestrator_tasks_duration_seconds Histogram of task execution durations in seconds.
+# TYPE orchestrator_tasks_duration_seconds histogram
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="0.1"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="0.5"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="1"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="2"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="3"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="4"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="5"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="6"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="7"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="8"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="9"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="10"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="12"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="14"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="16"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="18"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="20"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="25"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="30"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="35"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="40"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="50"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="100"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="200"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="500"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="ok",le="+Inf"} 2 12346789
+orchestrator_tasks_duration_seconds_sum{task="maybe_top_up",result="ok"} 6.500000001 12346789
+orchestrator_tasks_duration_seconds_count{task="maybe_top_up",result="ok"} 2 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="0.1"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="0.5"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="1"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="2"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="3"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="4"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="5"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="6"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="7"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="8"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="9"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="10"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="12"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="14"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="16"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="18"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="20"} 0 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="25"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="30"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="35"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="40"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="50"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="100"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="200"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="500"} 1 12346789
+orchestrator_tasks_duration_seconds_bucket{task="maybe_top_up",result="err",le="+Inf"} 1 12346789
+orchestrator_tasks_duration_seconds_sum{task="maybe_top_up",result="err"} 22.5 12346789
+orchestrator_tasks_duration_seconds_count{task="maybe_top_up",result="err"} 1 12346789
+"#
+        .trim();
+        assert_eq!(
+            actual, expected,
+            "BUG: Unexpected task durations histogram. Actual:\n{}\nexpected:\n{}",
+            actual, expected
+        );
+    }
+}
+
 mod mock {
     use crate::management::CanisterRuntime;
     use crate::scheduler::CallError;
@@ -659,12 +937,16 @@ mod mock {
     use std::marker::Send;
 
     mock! {
-       pub CanisterRuntime{}
+        pub CanisterRuntime{}
 
         #[async_trait]
         impl CanisterRuntime for CanisterRuntime {
 
             fn id(&self) -> Principal;
+
+            fn time(&self) -> u64;
+
+            fn global_timer_set(&self, timestamp: u64);
 
             async fn create_canister(
                 &self,

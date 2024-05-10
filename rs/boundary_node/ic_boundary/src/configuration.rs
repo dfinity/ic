@@ -5,7 +5,7 @@ use {
     arc_swap::ArcSwapOption,
     async_trait::async_trait,
     axum_server::tls_rustls::{RustlsAcceptor, RustlsConfig},
-    tracing::info,
+    tracing::{debug, error},
 };
 
 use crate::{
@@ -53,7 +53,11 @@ impl<T: Configure> Configure for WithMetrics<T> {
         counter.with_label_values(&[status]).inc();
         recorder.with_label_values(&[status]).observe(duration);
 
-        info!(action, status, duration, error = ?out.as_ref().err());
+        if out.is_err() {
+            error!(action, status, duration, error = ?out.as_ref().err());
+        } else {
+            debug!(action, status, duration, error = ?out.as_ref().err());
+        }
 
         out
     }

@@ -72,7 +72,7 @@ impl Block {
 
     /// Define variables and functions used in the `code` snippet.
     pub fn define_variables_and_functions(mut self, code: &str) -> Self {
-        for name in ["x", "y", "z", "zero", "address"] {
+        for name in ["x", "y", "z", "zero", "address", "one"] {
             for ty in ["i32", "i64", "f32", "f64", "v128"] {
                 if code.contains(&format!("${name}_{ty}")) {
                     self.declare_variable(name, ty);
@@ -102,6 +102,7 @@ impl Block {
             "z" => "2147483647",
             "zero" => "0",
             "address" => "16",
+            "one" => "1",
             _ => panic!("Error getting initial value for variable {name}"),
         };
         let var = format!("${name}_{ty}");

@@ -92,22 +92,6 @@ pub fn get_block_maker_delay(
         .map(|settings| settings.unit_delay * rank.0 as u32)
 }
 
-/// Return true if the given subnet id is the root subnet
-pub fn is_root_subnet(
-    registry_client: &dyn RegistryClient,
-    subnet_id: SubnetId,
-    registry_version: RegistryVersion,
-) -> Result<bool, String> {
-    let root_subnet_id = registry_client
-        .get_root_subnet_id(registry_version)
-        .map_err(|e| format!("Encountered error retrieving root subnet id {:?}", e))?
-        .ok_or(format!(
-            "No value for root subnet id at registry version {:?}",
-            registry_version
-        ))?;
-    Ok(root_subnet_id == subnet_id)
-}
-
 /// Return true if the time since round start is greater than the required block
 /// maker delay for the given rank.
 pub fn is_time_to_make_block(
@@ -119,19 +103,25 @@ pub fn is_time_to_make_block(
     rank: Rank,
     time_source: &dyn TimeSource,
 ) -> bool {
-    let registry_version = match pool.registry_version(height) {
-        Some(rv) => rv,
-        _ => return false,
+    let Some(registry_version) = pool.registry_version(height) else {
+        return false;
     };
-    let block_maker_delay =
-        match get_block_maker_delay(log, registry_client, subnet_id, registry_version, rank) {
-            Some(delay) => delay,
-            _ => return false,
-        };
-    match pool.get_round_start_time(height) {
-        Some(start_time) => time_source.get_relative_time() >= start_time + block_maker_delay,
-        None => false,
-    }
+    let Some(block_maker_delay) =
+        get_block_maker_delay(log, registry_client, subnet_id, registry_version, rank)
+    else {
+        return false;
+    };
+
+    // If the relative time indicates that not enough time has passed, we fall
+    // back to the the monotonic round start time. We do this to safeguard
+    // against a stalled relative clock.
+    pool.get_round_start_time(height)
+        .is_some_and(|start_time| time_source.get_relative_time() >= start_time + block_maker_delay)
+        || pool
+            .get_round_start_instant(height)
+            .is_some_and(|start_instant| {
+                time_source.get_instant() >= start_instant + block_maker_delay
+            })
 }
 
 /// Calculate the required delay for notary based on the rank of block to notarize,
@@ -588,7 +578,7 @@ pub fn get_oldest_ecdsa_state_registry_version(
         .sign_with_ecdsa_contexts()
         .values()
         .flat_map(|context| context.matched_quadruple.as_ref())
-        .flat_map(|(quadruple_id, _)| ecdsa.available_quadruples.get(quadruple_id))
+        .flat_map(|(quadruple_id, _)| ecdsa.available_pre_signatures.get(quadruple_id))
         .flat_map(|quadruple| quadruple.get_refs())
         .flat_map(|transcript_ref| ecdsa.idkg_transcripts.get(&transcript_ref.transcript_id))
         .map(|transcript| transcript.registry_version)
@@ -612,7 +602,7 @@ mod tests {
     };
     use ic_types::{
         consensus::idkg::{
-            ecdsa::PreSignatureQuadrupleRef, EcdsaKeyTranscript, EcdsaUIDGenerator,
+            common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef, EcdsaKeyTranscript,
             KeyTranscriptCreation, MaskedTranscript, QuadrupleId, UnmaskedTranscript,
         },
         crypto::{
@@ -790,22 +780,14 @@ mod tests {
     }
 
     fn empty_ecdsa_payload() -> EcdsaPayload {
-        EcdsaPayload {
-            signature_agreements: BTreeMap::new(),
-            available_quadruples: BTreeMap::new(),
-            deprecated_ongoing_signatures: BTreeMap::new(),
-            quadruples_in_creation: BTreeMap::new(),
-            uid_generator: EcdsaUIDGenerator::new(subnet_test_id(0), Height::new(0)),
-            idkg_transcripts: BTreeMap::new(),
-            ongoing_xnet_reshares: BTreeMap::new(),
-            xnet_reshare_agreements: BTreeMap::new(),
-            key_transcript: EcdsaKeyTranscript {
-                current: None,
-                next_in_creation: KeyTranscriptCreation::Begin,
-                key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
-                master_key_id: None,
-            },
-        }
+        EcdsaPayload::empty(
+            Height::new(0),
+            subnet_test_id(0),
+            vec![EcdsaKeyTranscript::new(
+                EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                KeyTranscriptCreation::Begin,
+            )],
+        )
     }
 
     fn fake_transcript(id: IDkgTranscriptId, registry_version: RegistryVersion) -> IDkgTranscript {
@@ -843,7 +825,7 @@ mod tests {
         key_unmasked.transcript_id = fake_transcript_id(id + 4);
         let h = Height::from(0);
         PreSignatureQuadrupleRef {
-            key_id: Some(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()),
+            key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
             kappa_unmasked_ref: UnmaskedTranscript::try_from((h, &kappa_unmasked)).unwrap(),
             lambda_masked_ref: MaskedTranscript::try_from((h, &lambda_masked)).unwrap(),
             kappa_times_lambda_ref: MaskedTranscript::try_from((h, &kappa_times_lambda)).unwrap(),
@@ -896,9 +878,10 @@ mod tests {
                     .idkg_transcripts
                     .insert(r.transcript_id, fake_transcript(r.transcript_id, rv));
             }
-            ecdsa
-                .available_quadruples
-                .insert(QuadrupleId::new(i as u64), quadruple);
+            ecdsa.available_pre_signatures.insert(
+                QuadrupleId::new(i as u64),
+                PreSignatureRef::Ecdsa(quadruple),
+            );
         }
         ecdsa
     }
@@ -930,9 +913,12 @@ mod tests {
         // quadruples with registry version >= 3 (not 2!). Thus the oldest
         // registry version referenced by the state should be 3.
         let contexts = ecdsa
-            .available_quadruples
+            .available_pre_signatures
             .iter()
-            .map(|(id, quad)| {
+            .map(|(id, pre_sig)| {
+                let PreSignatureRef::Ecdsa(quad) = pre_sig else {
+                    panic!("Expected ECDSA pre-signature");
+                };
                 let t_id = quad.lambda_masked_ref.as_ref().transcript_id;
                 let transcript = ecdsa.idkg_transcripts.get(&t_id).unwrap();
                 (transcript.registry_version.get() >= 3).then_some(id.clone())
@@ -953,7 +939,7 @@ mod tests {
         );
 
         let mut ecdsa_without_quadruples = ecdsa.clone();
-        ecdsa_without_quadruples.available_quadruples = BTreeMap::new();
+        ecdsa_without_quadruples.available_pre_signatures = BTreeMap::new();
         assert_eq!(
             None,
             get_oldest_ecdsa_state_registry_version(&ecdsa_without_quadruples, &state)

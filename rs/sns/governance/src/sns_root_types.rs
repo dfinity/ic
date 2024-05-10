@@ -182,6 +182,8 @@ pub struct ManageDappCanisterSettingsRequest {
     pub reserved_cycles_limit: ::core::option::Option<u64>,
     #[prost(enumeration = "LogVisibility", optional, tag = "6")]
     pub log_visibility: ::core::option::Option<i32>,
+    #[prost(uint64, optional, tag = "7")]
+    pub wasm_memory_limit: ::core::option::Option<u64>,
 }
 
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]

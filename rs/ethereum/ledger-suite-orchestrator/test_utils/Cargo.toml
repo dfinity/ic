@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-ledger-suite-orchestrator = { path = "../../ledger-suite-orchestrator" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }

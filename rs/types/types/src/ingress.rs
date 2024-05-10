@@ -3,6 +3,8 @@
 use crate::artifact::IngressMessageId;
 use crate::{CanisterId, CountBytes, PrincipalId, Time, UserId};
 use ic_error_types::{ErrorCode, UserError};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::ingress::v1 as pb_ingress,
@@ -165,6 +167,7 @@ impl IngressSets {
 /// This struct describes the different types that executing a Wasm function in
 /// a canister can produce
 #[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum WasmResult {
     /// Raw response, returned in a "happy" case
     Reply(#[serde(with = "serde_bytes")] Vec<u8>),
@@ -364,5 +367,22 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                 Status::Unknown(_) => IngressStatus::Unknown,
             },
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::exhaustive::ExhaustiveSet;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+
+    #[test]
+    fn wasm_result_proto_round_trip() {
+        for result in WasmResult::exhaustive_set(&mut reproducible_rng()) {
+            let encoded = pb_ingress::ingress_status_completed::WasmResult::from(&result);
+            let round_trip = WasmResult::from(encoded);
+
+            assert_eq!(result, round_trip);
+        }
     }
 }

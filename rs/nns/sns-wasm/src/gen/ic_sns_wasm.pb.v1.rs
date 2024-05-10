@@ -25,6 +25,7 @@ pub struct StableCanisterState {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SnsWasmStableIndex {
     #[prost(bytes = "vec", tag = "1")]
+    #[serde(with = "serde_bytes")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint32, tag = "2")]
     pub offset: u32,
@@ -78,9 +79,12 @@ pub struct SnsSpecificSnsUpgrade {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SnsWasm {
     #[prost(bytes = "vec", tag = "1")]
+    #[serde(with = "serde_bytes")]
     pub wasm: ::prost::alloc::vec::Vec<u8>,
     #[prost(enumeration = "SnsCanisterType", tag = "2")]
     pub canister_type: i32,
+    #[prost(uint64, optional, tag = "3")]
+    pub proposal_id: ::core::option::Option<u64>,
 }
 /// The error response returned in response objects on failed or partially failed operations.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
@@ -99,6 +103,7 @@ pub struct AddWasmRequest {
     #[prost(message, optional, tag = "1")]
     pub wasm: ::core::option::Option<SnsWasm>,
     #[prost(bytes = "vec", tag = "2")]
+    #[serde(with = "serde_bytes")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
 /// The response from add_wasm, which is either Ok or Error.
@@ -117,6 +122,7 @@ pub mod add_wasm_response {
     pub enum Result {
         /// The hash of the wasm that was added.
         #[prost(bytes, tag = "1")]
+        #[serde(with = "serde_bytes")]
         Hash(::prost::alloc::vec::Vec<u8>),
         /// Error when request fails.
         #[prost(message, tag = "2")]
@@ -187,6 +193,7 @@ pub struct ListUpgradeStep {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetWasmRequest {
     #[prost(bytes = "vec", tag = "1")]
+    #[serde(with = "serde_bytes")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
 /// The response for get_wasm, which returns a WASM if it is found, or None.
@@ -307,21 +314,27 @@ pub struct DeployedSns {
 pub struct SnsVersion {
     /// The hash of the Root canister WASM.
     #[prost(bytes = "vec", tag = "1")]
+    #[serde(with = "serde_bytes")]
     pub root_wasm_hash: ::prost::alloc::vec::Vec<u8>,
     /// The hash of the Governance canister WASM.
     #[prost(bytes = "vec", tag = "2")]
+    #[serde(with = "serde_bytes")]
     pub governance_wasm_hash: ::prost::alloc::vec::Vec<u8>,
     /// The hash of the Ledger canister WASM.
     #[prost(bytes = "vec", tag = "3")]
+    #[serde(with = "serde_bytes")]
     pub ledger_wasm_hash: ::prost::alloc::vec::Vec<u8>,
     /// The hash of the Swap canister WASM.
     #[prost(bytes = "vec", tag = "4")]
+    #[serde(with = "serde_bytes")]
     pub swap_wasm_hash: ::prost::alloc::vec::Vec<u8>,
     /// The hash of the Ledger Archive canister WASM.
     #[prost(bytes = "vec", tag = "5")]
+    #[serde(with = "serde_bytes")]
     pub archive_wasm_hash: ::prost::alloc::vec::Vec<u8>,
     /// The hash of the Index canister WASM.
     #[prost(bytes = "vec", tag = "6")]
+    #[serde(with = "serde_bytes")]
     pub index_wasm_hash: ::prost::alloc::vec::Vec<u8>,
 }
 /// A human readable SnsVersion
@@ -493,6 +506,7 @@ pub mod get_deployed_sns_by_proposal_id_response {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetWasmMetadataRequest {
     #[prost(bytes = "vec", optional, tag = "1")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
@@ -507,6 +521,7 @@ pub struct MetadataSection {
     pub name: ::core::option::Option<::prost::alloc::string::String>,
     /// Last part of the section, containing its raw contents.
     #[prost(bytes = "vec", optional, tag = "3")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub contents: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// The response for get_wasm, which returns a WASM if it is found, or None.

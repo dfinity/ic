@@ -44,12 +44,11 @@ struct SubnetBackup {
 }
 
 pub struct BackupManager {
-    pub root_dir: PathBuf,
-    pub local_store: Arc<LocalStoreImpl>,
-    pub registry_client: Arc<RegistryClientImpl>,
-    pub registry_replicator: Arc<RegistryReplicator>,
+    _local_store: Arc<LocalStoreImpl>,
+    _registry_client: Arc<RegistryClientImpl>,
+    _registry_replicator: Arc<RegistryReplicator>,
     subnet_backups: Vec<SubnetBackup>,
-    pub log: Logger,
+    log: Logger,
 }
 
 impl BackupManager {
@@ -160,10 +159,9 @@ impl BackupManager {
         }
 
         BackupManager {
-            root_dir: config.root_dir,
-            local_store,
-            registry_client,
-            registry_replicator, // it will be used as a background task, so keep it
+            _local_store: local_store,
+            _registry_client: registry_client,
+            _registry_replicator: registry_replicator, // it will be used as a background task, so keep it
             subnet_backups: backups,
             log,
         }
@@ -393,15 +391,20 @@ impl BackupManager {
 
         loop {
             let mut progress = Vec::new();
-            for i in 0..size {
-                let b = &self.subnet_backups[i].backup_helper;
-                let last_block = b.retrieve_spool_top_height();
-                let last_cp = b.last_state_checkpoint();
-                let subnet = &b.subnet_id.to_string()[..5];
+            for backup in &self.subnet_backups {
+                let backup_helper = &backup.backup_helper;
+                let last_block = backup_helper.retrieve_spool_top_height();
+                let last_cp = backup_helper.last_state_checkpoint();
+                let subnet = &backup_helper.subnet_id.to_string()[..5];
                 progress.push(format!("{}: {}/{}", subnet, last_cp, last_block));
 
-                b.notification_client.push_metrics_synced_height(last_block);
-                b.notification_client.push_metrics_restored_height(last_cp);
+                backup_helper
+                    .notification_client
+                    .push_metrics_synced_height(last_block);
+                backup_helper
+                    .notification_client
+                    .push_metrics_restored_height(last_cp);
+                let _ = backup_helper.log_disk_stats();
             }
             info!(self.log, "Replay/Sync - {}", progress.join(", "));
 

@@ -63,6 +63,7 @@ fn test_manage_dapp_canister_settings_successful() {
                 .with_freezing_threshold(100_000)
                 .with_reserved_cycles_limit(1_000_000_000_000)
                 .with_log_visibility(ic_management_canister_types::LogVisibility::Public)
+                .with_wasm_memory_limit(1_000_000_000)
                 .build(),
         ),
     );
@@ -107,7 +108,7 @@ fn test_manage_dapp_canister_settings_successful() {
             100_000,
             Some(1_000_000_000_000),
             ic_management_canister_types::LogVisibility::Public,
-            Some(0),
+            Some(1_000_000_000),
         ),
     );
 
@@ -122,6 +123,7 @@ fn test_manage_dapp_canister_settings_successful() {
                 freezing_threshold: Some(0),
                 reserved_cycles_limit: Some(0),
                 log_visibility: Some(LogVisibility::Controllers as i32),
+                wasm_memory_limit: Some(2_000_000_000),
             },
         )),
         ..Default::default()
@@ -159,7 +161,7 @@ fn test_manage_dapp_canister_settings_successful() {
             0,
             Some(0),
             ic_management_canister_types::LogVisibility::Controllers,
-            Some(0),
+            Some(2_000_000_000),
         ),
     );
 }

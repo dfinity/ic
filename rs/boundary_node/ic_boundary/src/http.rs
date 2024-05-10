@@ -93,7 +93,7 @@ impl HttpClient for ReqwestClient {
     }
 }
 
-fn http_version(v: Version) -> &'static str {
+pub fn http_version(v: Version) -> &'static str {
     match v {
         Version::HTTP_09 => "0.9",
         Version::HTTP_10 => "1.0",

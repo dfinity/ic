@@ -4,7 +4,7 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::EcdsaDealingsContext;
 use ic_types::{
-    consensus::idkg::{self, EcdsaBlockReader, EcdsaReshareRequest},
+    consensus::idkg::{self, EcdsaBlockReader, EcdsaReshareRequest, HasMasterPublicKeyId},
     crypto::canister_threshold_sig::{
         error::InitialIDkgDealingsValidationError, idkg::InitialIDkgDealings,
     },
@@ -15,17 +15,19 @@ use crate::ecdsa::pre_signer::EcdsaTranscriptBuilder;
 
 /// Checks for new reshare requests from execution and initiates the processing
 /// by adding a new [`idkg::ReshareOfUnmaskedParams`] config to ongoing xnet reshares.
-// TODO: in future, we may need to maintain a key transcript per supported key_id,
-// and reshare the one specified by reshare_request.key_id.
 pub(crate) fn initiate_reshare_requests(
     payload: &mut idkg::EcdsaPayload,
     reshare_requests: BTreeSet<idkg::EcdsaReshareRequest>,
 ) {
-    let Some(key_transcript) = &payload.key_transcript.current else {
-        return;
-    };
-
     for request in reshare_requests {
+        let Some(key_transcript) = payload
+            .key_transcripts
+            .get(&request.key_id())
+            .and_then(|key_transcript| key_transcript.current.as_ref())
+        else {
+            continue;
+        };
+
         // Ignore requests we already know about
         if payload.ongoing_xnet_reshares.contains_key(&request)
             || payload.xnet_reshare_agreements.contains_key(&request)
@@ -86,12 +88,12 @@ pub(crate) fn update_completed_reshare_requests(
     transcript_builder: &dyn EcdsaTranscriptBuilder,
     log: &ReplicaLogger,
 ) {
-    if payload.key_transcript.current.is_none() {
-        return;
-    }
-
     let mut completed_reshares = BTreeMap::new();
     for (request, reshare_param) in &payload.ongoing_xnet_reshares {
+        if payload.current_key_transcript(&request.key_id()).is_none() {
+            continue;
+        }
+
         // Get the verified dealings for this transcript
         let transcript_id = reshare_param.as_ref().transcript_id;
         let dealings = transcript_builder.get_validated_dealings(transcript_id);
@@ -157,8 +159,8 @@ fn reshare_request_from_dealings_context(
     context: &EcdsaDealingsContext,
 ) -> idkg::EcdsaReshareRequest {
     idkg::EcdsaReshareRequest {
-        key_id: context.key_id.clone(),
-        master_key_id: Some(MasterPublicKeyId::Ecdsa(context.key_id.clone())),
+        key_id: Some(context.key_id.clone()),
+        master_key_id: MasterPublicKeyId::Ecdsa(context.key_id.clone()),
         receiving_node_ids: context.nodes.iter().copied().collect(),
         registry_version: context.registry_version,
     }
@@ -178,8 +180,8 @@ pub mod test_utils {
         registry_version: u64,
     ) -> idkg::EcdsaReshareRequest {
         idkg::EcdsaReshareRequest {
-            key_id: key_id.clone(),
-            master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
+            key_id: Some(key_id.clone()),
+            master_key_id: MasterPublicKeyId::Ecdsa(key_id),
             receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
             registry_version: RegistryVersion::from(registry_version),
         }
@@ -248,8 +250,8 @@ mod tests {
         let make_key_id =
             |i: u64| EcdsaKeyId::from_str(&format!("Secp256k1:some_key_{i}")).unwrap();
         let make_reshare_request = |i| EcdsaReshareRequest {
-            key_id: make_key_id(i),
-            master_key_id: Some(MasterPublicKeyId::Ecdsa(make_key_id(i))),
+            key_id: Some(make_key_id(i)),
+            master_key_id: MasterPublicKeyId::Ecdsa(make_key_id(i)),
             receiving_node_ids: vec![node_test_id(i)],
             registry_version: RegistryVersion::from(i),
         };

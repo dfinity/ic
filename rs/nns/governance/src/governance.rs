@@ -8,6 +8,7 @@ use crate::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
             validate_merge_neurons_before_commit,
         },
+        split_neuron::{calculate_split_neuron_effect, SplitNeuronEffect},
     },
     heap_governance_data::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
@@ -113,6 +114,7 @@ use std::{
 mod ledger_helper;
 mod manage_neuron_request;
 mod merge_neurons;
+mod split_neuron;
 pub mod test_data;
 #[cfg(test)]
 mod tests;
@@ -385,6 +387,28 @@ impl NnsFunction {
                 | NnsFunction::DeployGuestosToAllSubnetNodes
         )
     }
+
+    fn can_have_large_payload(&self) -> bool {
+        matches!(
+            self,
+            NnsFunction::NnsCanisterUpgrade
+                | NnsFunction::NnsCanisterInstall
+                | NnsFunction::NnsRootUpgrade
+                | NnsFunction::HardResetNnsRootToVersion
+                | NnsFunction::AddSnsWasm
+        )
+    }
+
+    fn is_obsolete(&self) -> bool {
+        matches!(
+            self,
+            NnsFunction::UpdateAllowedPrincipals
+                | NnsFunction::UpdateApiBoundaryNodesVersion
+                | NnsFunction::UpdateUnassignedNodesConfig
+                | NnsFunction::UpdateElectedHostosVersions
+                | NnsFunction::UpdateNodesHostosVersion
+        )
+    }
 }
 
 impl ManageNeuronResponse {
@@ -563,24 +587,10 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "deploy_guestos_to_all_subnet_nodes")
             }
             NnsFunction::UpdateElectedHostosVersions => {
-                // UpdateElectedHostosVersions is deprecated and can no longer be used.
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "NNS function {:?} is obsolete. Use `ReviseElectedHostosVersions` instead.",
-                        self
-                    ),
-                ));
+                (REGISTRY_CANISTER_ID, "update_elected_hostos_versions")
             }
             NnsFunction::UpdateNodesHostosVersion => {
-                // UpdateNodesHostosVersion is deprecated and can no longer be used.
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "{:?} is a deprecated NnsFunction. Use DeployHostosToSomeNodes instead",
-                        self
-                    ),
-                ));
+                (REGISTRY_CANISTER_ID, "update_nodes_hostos_version")
             }
             NnsFunction::ReviseElectedHostosVersions => {
                 // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
@@ -614,12 +624,7 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "add_or_remove_data_centers")
             }
             NnsFunction::UpdateUnassignedNodesConfig => {
-                // Updating unassigned nodes config proposal is obsoleted and
-                // can no longer be used.
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!("{:?} is an obsoleted NnsFunction. Use DeployGuestosToAllUnassignedNodes or UpdateSshReadonlyAccessForAllUnassignedNodes instead", self),
-                ));
+                (REGISTRY_CANISTER_ID, "update_unassigned_nodes_config")
             }
             NnsFunction::RemoveNodeOperators => (REGISTRY_CANISTER_ID, "remove_node_operators"),
             NnsFunction::RerouteCanisterRanges => (REGISTRY_CANISTER_ID, "reroute_canister_ranges"),
@@ -660,12 +665,7 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "remove_api_boundary_nodes")
             }
             NnsFunction::UpdateApiBoundaryNodesVersion => {
-                // Updating API boundary nodes version proposal is obsoleted and
-                // can no longer be used.
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!("{:?} is an obsoleted NnsFunction. Use DeployGuestosToSomeApiBoundaryNodes instead", self),
-                ));
+                (REGISTRY_CANISTER_ID, "update_api_boundary_nodes_version")
             }
             NnsFunction::DeployGuestosToSomeApiBoundaryNodes => {
                 // TODO[NNS1-3000]: Rename Registry API for consistency.
@@ -2466,6 +2466,7 @@ impl Governance {
         // Get the neuron and clone to appease the borrow checker.
         // We'll get a mutable reference when we need to change it later.
         let parent_neuron = self.with_neuron(id, |neuron| neuron.clone())?;
+        let minted_stake_e8s = parent_neuron.minted_stake_e8s();
 
         if parent_neuron.state(self.env.now()) == NeuronState::Spawning {
             return Err(GovernanceError::new_with_message(
@@ -2473,8 +2474,6 @@ impl Governance {
                 "Can't perform operation on neuron: Neuron is spawning.",
             ));
         }
-
-        let parent_nid = parent_neuron.id();
 
         if !parent_neuron.is_controlled_by(caller) {
             return Err(GovernanceError::new(ErrorType::NotAuthorized));
@@ -2495,7 +2494,7 @@ impl Governance {
             ));
         }
 
-        if parent_neuron.minted_stake_e8s() < min_stake + split.amount_e8s {
+        if minted_stake_e8s < min_stake + split.amount_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
@@ -2503,10 +2502,7 @@ impl Governance {
                      This is not allowed, because the parent has stake {} e8s. \
                      If the requested amount was subtracted from it, there would be less than \
                      the minimum allowed stake, which is {} e8s. ",
-                    split.amount_e8s,
-                    parent_nid.id,
-                    parent_neuron.minted_stake_e8s(),
-                    min_stake
+                    split.amount_e8s, id.id, minted_stake_e8s, min_stake
                 ),
             ));
         }
@@ -2535,8 +2531,7 @@ impl Governance {
 
         // Make sure the parent neuron is not already undergoing a ledger
         // update.
-        let _parent_lock =
-            self.lock_neuron_for_command(parent_nid.id, in_flight_command.clone())?;
+        let _parent_lock = self.lock_neuron_for_command(id.id, in_flight_command.clone())?;
 
         // Before we do the transfer, we need to save the neuron in the map
         // otherwise a trap after the transfer is successful but before this
@@ -2571,7 +2566,13 @@ impl Governance {
         // the embryo, it would not be garbage collected.
         self.add_neuron(child_nid.id, child_neuron.clone())?;
 
-        // Do the transfer.
+        // Do the transfer for the parent first, to avoid double spending.
+        self.neuron_store.with_neuron_mut(id, |parent_neuron| {
+            parent_neuron.cached_neuron_stake_e8s = parent_neuron
+                .cached_neuron_stake_e8s
+                .checked_sub(split.amount_e8s)
+                .expect("Subtracting neuron stake underflows");
+        })?;
 
         let now = self.env.now();
         let result: Result<u64, NervousSystemError> = self
@@ -2587,6 +2588,17 @@ impl Governance {
 
         if let Err(error) = result {
             let error = GovernanceError::from(error);
+
+            // Refund the parent neuron if the ledger call somehow failed.
+            self.neuron_store
+                .with_neuron_mut(id, |parent_neuron| {
+                    parent_neuron.cached_neuron_stake_e8s = parent_neuron
+                        .cached_neuron_stake_e8s
+                        .checked_add(split.amount_e8s)
+                        .expect("Neuron stake overflows");
+                })
+                .expect("Expected the parent neuron to exist");
+
             // If we've got an error, we assume the transfer didn't happen for
             // some reason. The only state to cleanup is to delete the child
             // neuron, since we haven't mutated the parent yet.
@@ -2599,16 +2611,69 @@ impl Governance {
             return Err(error);
         }
 
-        // Get the neuron again, but this time a mutable reference.
-        // Expect it to exist, since we acquired a lock above.
-        self.with_neuron_mut(id, |parent_neuron| {
-            // Update the state of the parent and child neurons.
-            parent_neuron.cached_neuron_stake_e8s -= split.amount_e8s;
-        })
-        .expect("Neuron not found");
+        // Read the maturity and staked maturity again after the ledger call, to avoid stale values.
+        let (parent_maturity_e8s, parent_staked_maturity_e8s) = self
+            .neuron_store
+            .with_neuron(id, |neuron| {
+                (
+                    neuron.maturity_e8s_equivalent,
+                    neuron.staked_maturity_e8s_equivalent.unwrap_or(0),
+                )
+            })
+            .expect("Expected the parent neuron to exist");
 
+        // Calculates the maturity and staked maturity to transfer to the child. The parent stake is
+        // the value before the ledger call, which is OK because it's used for calculating the
+        // proportion of the split.
+        let SplitNeuronEffect {
+            transfer_maturity_e8s,
+            transfer_staked_maturity_e8s,
+        } = calculate_split_neuron_effect(
+            split.amount_e8s,
+            minted_stake_e8s,
+            parent_maturity_e8s,
+            parent_staked_maturity_e8s,
+        );
+
+        // Decrease maturity and staked maturity of the parent neuron.
+        self.with_neuron_mut(id, |parent_neuron| {
+            parent_neuron.maturity_e8s_equivalent = parent_neuron
+                .maturity_e8s_equivalent
+                .checked_sub(transfer_maturity_e8s)
+                .expect("Maturity underflows");
+            let new_staked_maturity = parent_neuron
+                .staked_maturity_e8s_equivalent
+                .unwrap_or(0)
+                .checked_sub(transfer_staked_maturity_e8s)
+                .expect("Staked maturity underflows");
+            parent_neuron.staked_maturity_e8s_equivalent = if new_staked_maturity > 0 {
+                Some(new_staked_maturity)
+            } else {
+                None
+            };
+        })
+        .expect("Expected the parent neuron to exist");
+
+        // Increase stake, maturity and staked maturity of the child neuron.
         self.with_neuron_mut(&child_nid, |child_neuron| {
-            child_neuron.cached_neuron_stake_e8s = staked_amount;
+            child_neuron.cached_neuron_stake_e8s = child_neuron
+                .cached_neuron_stake_e8s
+                .checked_add(staked_amount)
+                .expect("Stake overflows");
+            child_neuron.maturity_e8s_equivalent = child_neuron
+                .maturity_e8s_equivalent
+                .checked_add(transfer_maturity_e8s)
+                .expect("Maturity overflows");
+            let new_staked_maturity = child_neuron
+                .staked_maturity_e8s_equivalent
+                .unwrap_or(0)
+                .checked_add(transfer_staked_maturity_e8s)
+                .expect("Staked maturity overflows");
+            child_neuron.staked_maturity_e8s_equivalent = if new_staked_maturity > 0 {
+                Some(new_staked_maturity)
+            } else {
+                None
+            };
         })
         .expect("Expected the child neuron to exist");
 
@@ -2995,7 +3060,7 @@ impl Governance {
 
     /// Returns an error indicating MergeMaturity is no longer a valid action.
     /// Can be removed after October 2024, along with corresponding code.
-    pub fn merge_maturity_removed_error<T>(&mut self) -> Result<T, GovernanceError> {
+    pub fn merge_maturity_removed_error<T>() -> Result<T, GovernanceError> {
         Err(GovernanceError::new_with_message(
             ErrorType::InvalidCommand,
             "The command MergeMaturity is no longer available, as this functionality was \
@@ -4674,7 +4739,7 @@ impl Governance {
     }
 
     fn validate_manage_neuron_proposal(
-        &mut self,
+        &self,
         manage_neuron: &ManageNeuron,
     ) -> Result<(), GovernanceError> {
         let manage_neuron = ManageNeuron::from_proto(manage_neuron.clone()).map_err(|e| {
@@ -4702,7 +4767,7 @@ impl Governance {
 
         // Early exit for deprecated commands.
         if let Command::MergeMaturity(_) = manage_neuron.command.as_ref().unwrap() {
-            return self.merge_maturity_removed_error();
+            return Self::merge_maturity_removed_error();
         }
 
         let is_managed_neuron_not_for_profit = self
@@ -4765,7 +4830,7 @@ impl Governance {
             .map_or(1, |(k, _)| k + 1)
     }
 
-    fn validate_proposal(&mut self, proposal: &Proposal) -> Result<Action, GovernanceError> {
+    fn validate_proposal(&self, proposal: &Proposal) -> Result<Action, GovernanceError> {
         impl From<String> for GovernanceError {
             fn from(message: String) -> Self {
                 Self::new_with_message(ErrorType::InvalidProposal, message)
@@ -4823,92 +4888,129 @@ impl Governance {
         &self,
         update: &ExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
-        let error_str = {
-            if update.nns_function != NnsFunction::NnsCanisterUpgrade as i32
-                && update.nns_function != NnsFunction::NnsCanisterInstall as i32
-                && update.nns_function != NnsFunction::NnsRootUpgrade as i32
-                && update.nns_function != NnsFunction::HardResetNnsRootToVersion as i32
-                && update.nns_function != NnsFunction::AddSnsWasm as i32
-                && update.payload.len() > PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX
-            {
-                format!(
-                    "The maximum NNS function payload size in a proposal action is {} bytes, this payload is: {} bytes",
-                    PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX,
-                    update.payload.len(),
+        let nns_function = NnsFunction::try_from(update.nns_function).map_err(|_| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Invalid NnsFunction id: {}", update.nns_function),
+            )
+        })?;
+
+        let invalid_proposal_error = |error_message: String| -> GovernanceError {
+            GovernanceError::new_with_message(ErrorType::InvalidProposal, error_message)
+        };
+
+        if !nns_function.can_have_large_payload()
+            && update.payload.len() > PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX
+        {
+            return Err(invalid_proposal_error(format!(
+                "The maximum NNS function payload size in a proposal action is {} bytes, this payload is: {} bytes",
+                PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX,
+                update.payload.len(),
+            )));
+        }
+
+        if nns_function.is_obsolete() {
+            return Err(invalid_proposal_error(format!(
+                "{} proposal is obsolete",
+                nns_function.as_str_name()
+            )));
+        }
+
+        match nns_function {
+            NnsFunction::IcpXdrConversionRate => {
+                Self::validate_icp_xdr_conversion_rate_payload(
+                    &update.payload,
+                    self.heap_data
+                        .economics
+                        .as_ref()
+                        .ok_or_else(|| GovernanceError::new(ErrorType::Unavailable))?
+                        .minimum_icp_xdr_rate,
                 )
-            } else if update.nns_function == NnsFunction::IcpXdrConversionRate as i32 {
-                match Decode!([decoder_config()]; &update.payload, UpdateIcpXdrConversionRatePayload) {
-                    Ok(payload) => {
-                        if payload.xdr_permyriad_per_icp
-                            < self.heap_data
-                                .economics
-                                .as_ref()
-                                .ok_or_else(|| GovernanceError::new(ErrorType::Unavailable))?
-                                .minimum_icp_xdr_rate
-                        {
-                            format!(
-                                "The proposed rate {} is below the minimum allowable rate",
-                                payload.xdr_permyriad_per_icp
-                            )
-                        } else {
-                            return Ok(());
-                        }
-                    }
-                    Err(e) => format!(
-                        "The payload could not be decoded into a UpdateIcpXdrConversionRatePayload: {}",
-                        e
-                    ),
-                }
-            } else if update.nns_function == NnsFunction::AssignNoid as i32 {
-                match Decode!([decoder_config()]; &update.payload, AddNodeOperatorPayload) {
-                    Ok(payload) => match payload.node_provider_principal_id {
-                        Some(id) => {
-                            let is_registered = self
-                                .get_node_providers()
-                                .iter()
-                                .any(|np| np.id.unwrap() == id);
-                            if !is_registered {
-                                "The node provider specified in the payload is not registered"
-                                    .to_string()
-                            } else {
-                                return Ok(());
-                            }
-                        }
-                        None => {
-                            "The payload's node_provider_principal_id field was None".to_string()
-                        }
-                    },
-                    Err(e) => format!(
-                        "The payload could not be decoded into a AddNodeOperatorPayload: {}",
-                        e
-                    ),
-                }
-            } else if update.nns_function == NnsFunction::AddOrRemoveDataCenters as i32 {
-                match Decode!([decoder_config()]; &update.payload, AddOrRemoveDataCentersProposalPayload) {
-                    Ok(payload) => match payload.validate() {
-                        Ok(_) => {
-                            return Ok(());
-                        }
-                        Err(e) => {
-                            format!("The given AddOrRemoveDataCentersProposalPayload is invalid: {}", e)
-                        }
-                    },
-                    Err(e) => format!(
-                        "The payload could not be decoded into a AddOrRemoveDataCentersProposalPayload: {}",
-                        e
-                    ),
-                }
-            } else if update.nns_function == NnsFunction::UpdateAllowedPrincipals as i32 {
-                "UpdateAllowedPrincipals proposal is disabled".to_string()
-            } else {
-                return Ok(());
+                .map_err(invalid_proposal_error)?;
+            }
+            NnsFunction::AssignNoid => {
+                Self::validate_assign_noid_payload(&update.payload, &self.heap_data.node_providers)
+                    .map_err(invalid_proposal_error)?;
+            }
+            NnsFunction::AddOrRemoveDataCenters => {
+                Self::validate_add_or_remove_data_centers_payload(&update.payload)
+                    .map_err(invalid_proposal_error)?;
+            }
+
+            _ => {}
+        };
+
+        Ok(())
+    }
+
+    fn validate_icp_xdr_conversion_rate_payload(
+        payload: &[u8],
+        minimum_icp_xdr_rate: u64,
+    ) -> Result<(), String> {
+        let decoded_payload = match Decode!([decoder_config()]; payload, UpdateIcpXdrConversionRatePayload)
+        {
+            Ok(payload) => payload,
+            Err(e) => {
+                return Err(format!(
+                    "The payload could not be decoded into a UpdateIcpXdrConversionRatePayload: {}",
+                    e
+                ));
             }
         };
 
-        Err(GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            error_str,
-        ))
+        if decoded_payload.xdr_permyriad_per_icp < minimum_icp_xdr_rate {
+            return Err(format!(
+                "The proposed rate {} is below the minimum allowable rate",
+                decoded_payload.xdr_permyriad_per_icp
+            ))?;
+        }
+
+        Ok(())
+    }
+
+    fn validate_assign_noid_payload(
+        payload: &[u8],
+        node_providers: &[NodeProvider],
+    ) -> Result<(), String> {
+        let decoded_payload = match Decode!([decoder_config()]; &payload, AddNodeOperatorPayload) {
+            Ok(payload) => payload,
+            Err(e) => {
+                return Err(format!(
+                    "The payload could not be decoded into a AddNodeOperatorPayload: {}",
+                    e
+                ));
+            }
+        };
+
+        if decoded_payload.node_provider_principal_id.is_none() {
+            return Err("The payload's node_provider_principal_id field was None".to_string());
+        }
+
+        let is_registered = node_providers
+            .iter()
+            .any(|np| np.id.unwrap() == decoded_payload.node_provider_principal_id.unwrap());
+        if !is_registered {
+            return Err("The node provider specified in the payload is not registered".to_string());
+        }
+
+        Ok(())
+    }
+
+    fn validate_add_or_remove_data_centers_payload(payload: &[u8]) -> Result<(), String> {
+        let decoded_payload = match Decode!([decoder_config()]; payload, AddOrRemoveDataCentersProposalPayload)
+        {
+            Ok(payload) => payload,
+            Err(e) => {
+                return Err(format!("The payload could not be decoded into a AddOrRemoveDataCentersProposalPayload: {}", e));
+            }
+        };
+
+        decoded_payload.validate().map_err(|e| {
+            format!(
+                "The given AddOrRemoveDataCentersProposalPayload is invalid: {}",
+                e
+            )
+        })
     }
 
     fn validate_create_service_nervous_system(
@@ -4926,7 +5028,7 @@ impl Governance {
 
         // Must be unique.
         #[allow(unused_variables)]
-        let other_proposal_ids = self.select_open_proposal_ids(|action| {
+        let other_proposal_ids = self.select_nonfinal_proposal_ids(|action| {
             matches!(action, Action::CreateServiceNervousSystem(_))
         });
 
@@ -4945,15 +5047,27 @@ impl Governance {
         Ok(())
     }
 
-    fn select_open_proposal_ids(&self, action_predicate: impl Fn(&Action) -> bool) -> Vec<u64> {
+    fn select_nonfinal_proposal_ids(&self, action_predicate: impl Fn(&Action) -> bool) -> Vec<u64> {
         self.heap_data
             .proposals
             .values()
             .filter_map(|proposal_data| {
-                // Disregard non-Open proposals.
-                if proposal_data.status() != ProposalStatus::Open {
-                    return None;
-                }
+                // Disregard proposals that are in a final (or Unspecified) state.
+                match proposal_data.status() {
+                    ProposalStatus::Open | ProposalStatus::Adopted => (),
+                    ProposalStatus::Rejected
+                    | ProposalStatus::Executed
+                    | ProposalStatus::Failed => {
+                        return None;
+                    }
+                    ProposalStatus::Unspecified => {
+                        println!(
+                            "{}ERROR: ProposalData had Unspecified status: {:#?}",
+                            LOG_PREFIX, proposal_data
+                        );
+                        return None;
+                    }
+                };
 
                 // Unpack proposal.
                 let action = match &proposal_data.proposal {
@@ -4962,7 +5076,7 @@ impl Governance {
                         ..
                     }) => action,
 
-                    // Ignore proposals not of the same type.
+                    // Ignore proposals with no action.
                     _ => {
                         println!(
                             "{}ERROR: ProposalData had no action: {:#?}",
@@ -6037,7 +6151,7 @@ impl Governance {
             Some(Command::Spawn(s)) => self
                 .spawn_neuron(&id, caller, s)
                 .map(ManageNeuronResponse::spawn_response),
-            Some(Command::MergeMaturity(_)) => self.merge_maturity_removed_error(),
+            Some(Command::MergeMaturity(_)) => Self::merge_maturity_removed_error(),
             Some(Command::StakeMaturity(s)) => self
                 .stake_maturity_of_neuron(&id, caller, s)
                 .map(|(response, _)| ManageNeuronResponse::stake_maturity_response(response)),

@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ic"
-version = "2.2.0"
+version = "3.1.0"
 license = "Apache-2.0"
 description = "PocketIC: A Canister Smart Contract Testing Platform"
 repository = "https://github.com/dfinity/ic"

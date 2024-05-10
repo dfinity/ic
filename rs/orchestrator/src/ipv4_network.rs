@@ -3,13 +3,11 @@ use crate::{
     metrics::OrchestratorMetrics,
     registry_helper::RegistryHelper,
 };
-
 use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
 use ic_types::RegistryVersion;
 use std::{path::PathBuf, sync::Arc};
-use tokio::process::Command;
-use tokio::sync::RwLock;
+use tokio::{process::Command, sync::RwLock};
 
 /// Provides function to check the registry to determine if there
 /// has been a change in the IPv4 config, and if so, updates the node's

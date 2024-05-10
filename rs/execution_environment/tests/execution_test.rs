@@ -1518,58 +1518,84 @@ fn execution_observes_oversize_messages() {
 #[test]
 fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
     // Test consensus queue invariant for the case of exceeding heap delta limit.
-    // Empirical value that has to be below the limit on tick #1 and above the limit on tick #2.
-    let heap_delta_limit = 61_439;
-    let mut subnet_config = SubnetConfig::new(SubnetType::Application);
-    subnet_config.scheduler_config.subnet_heap_delta_capacity = NumBytes::new(heap_delta_limit);
-    let key_id = EcdsaKeyId::from_str("Secp256k1:valid_key").unwrap();
-    let env = StateMachineBuilder::new()
-        .with_checkpoints_enabled(false)
-        .with_config(Some(StateMachineConfig::new(
-            subnet_config,
-            HypervisorConfig::default(),
-        )))
-        .with_ecdsa_key(key_id.clone())
-        .build();
-    let canister_id = env
-        .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
-            vec![],
-            None,
-            Cycles::new(100_000_000_000),
-        )
-        .unwrap();
 
-    // Send SignWithECDSA message to trigger non-empty consensus queue.
-    let _msg_id = env.send_ingress(
-        PrincipalId::new_anonymous(),
-        canister_id,
-        "update",
-        wasm()
-            .call_with_cycles(
-                IC_00,
-                Method::SignWithECDSA,
-                call_args().other_side(
-                    Encode!(&SignWithECDSAArgs {
-                        message_hash: [0; 32],
-                        derivation_path: DerivationPath::new(Vec::new()),
-                        key_id
-                    })
-                    .unwrap(),
-                ),
-                Cycles::new(2_000_000_000),
+    fn setup_test(heap_delta_limit: Option<u64>) -> StateMachine {
+        // This setup creates an environment with the canister that sends a `SignWithECDSA` message.
+        let mut subnet_config = SubnetConfig::new(SubnetType::Application);
+        if let Some(heap_delta_limit) = heap_delta_limit {
+            subnet_config.scheduler_config.subnet_heap_delta_capacity =
+                NumBytes::new(heap_delta_limit);
+        }
+        let key_id = EcdsaKeyId::from_str("Secp256k1:valid_key").unwrap();
+        let env = StateMachineBuilder::new()
+            .with_checkpoints_enabled(false)
+            .with_config(Some(StateMachineConfig::new(
+                subnet_config,
+                HypervisorConfig::default(),
+            )))
+            .with_ecdsa_key(key_id.clone())
+            .build();
+        let canister_id = env
+            .install_canister_with_cycles(
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                vec![],
+                None,
+                Cycles::new(100_000_000_000),
             )
-            .build(),
-    );
+            .unwrap();
 
-    // Tick #1: heap delta is below the limit, process sign_with_ecdsa message, no response in this round.
-    assert_lt!(env.heap_delta_estimate_bytes(), heap_delta_limit);
-    env.tick();
-    // Tick #2: heap delta is above the limit, the response is added to consensus queue before executing the payload.
-    assert_lt!(heap_delta_limit, env.heap_delta_estimate_bytes());
-    env.tick();
-    // Tick #3: round is executed normally.
-    env.tick();
+        // Send SignWithECDSA message to trigger non-empty consensus queue.
+        let _msg_id = env.send_ingress(
+            PrincipalId::new_anonymous(),
+            canister_id,
+            "update",
+            wasm()
+                .call_with_cycles(
+                    IC_00,
+                    Method::SignWithECDSA,
+                    call_args().other_side(
+                        Encode!(&SignWithECDSAArgs {
+                            message_hash: [0; 32],
+                            derivation_path: DerivationPath::new(Vec::new()),
+                            key_id
+                        })
+                        .unwrap(),
+                    ),
+                    Cycles::new(2_000_000_000),
+                )
+                .build(),
+        );
+        // Expected behavior after the setup:
+        //  - Tick #1: process sign_with_ecdsa message, no response yet in that round
+        //  - Tick #2: the response is added to consensus queue and processed then the round is executed normally
+        //  - Tick #3: consensus queue invariant is checked before executing a regular round
+
+        env
+    }
+
+    // Preparation: find out the heap delta limit.
+    let heap_delta_limit = {
+        let env = setup_test(None);
+        // Tick #1.
+        env.tick();
+        // To trigger the condition heap delta limit must be less than the actual heap delta on tick #2.
+        env.heap_delta_estimate_bytes() - 1
+    };
+
+    // Run the actual test with specific heap delta limit.
+    {
+        let env = setup_test(Some(heap_delta_limit));
+        // Tick #1: heap delta is below the limit, process sign_with_ecdsa message, no response in this round.
+        assert_lt!(env.heap_delta_estimate_bytes(), heap_delta_limit);
+        env.tick();
+
+        // Tick #2: heap delta is above the limit, the response is added to consensus queue before executing the payload.
+        assert_lt!(heap_delta_limit, env.heap_delta_estimate_bytes());
+        env.tick();
+
+        // Tick #3: round is executed normally.
+        env.tick();
+    }
 }
 
 #[test]

@@ -24,17 +24,21 @@ use ic_interfaces::{
     consensus_pool::{ChangeAction, ChangeSet, HeightRange, PurgeableArtifactType},
     messaging::MessageRouting,
 };
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{trace, warn, ReplicaLogger};
+use ic_logger::{error, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::{ConsensusMessage, HasHeight, HashedBlock},
+    replica_config::ReplicaConfig,
     Height,
 };
 use std::{cell::RefCell, sync::Arc};
 
-use super::MINIMUM_CHAIN_LENGTH;
+use super::{bounds::validated_pool_within_bounds, MINIMUM_CHAIN_LENGTH};
+
+pub(crate) const VALIDATED_POOL_BOUNDS_CHECK_FREQUENCY: u64 = 10;
 
 /// The Purger sub-component.
 pub(crate) struct Purger {
@@ -43,16 +47,20 @@ pub(crate) struct Purger {
     prev_finalized_height: RefCell<Height>,
     prev_maximum_cup_height: RefCell<Height>,
     prev_latest_state_height: RefCell<Height>,
+    replica_config: ReplicaConfig,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     message_routing: Arc<dyn MessageRouting>,
+    registry_client: Arc<dyn RegistryClient>,
     log: ReplicaLogger,
     metrics: PurgerMetrics,
 }
 
 impl Purger {
     pub(crate) fn new(
+        replica_config: ReplicaConfig,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         message_routing: Arc<dyn MessageRouting>,
+        registry_client: Arc<dyn RegistryClient>,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
     ) -> Purger {
@@ -62,8 +70,10 @@ impl Purger {
             prev_finalized_height: RefCell::new(Height::from(0)),
             prev_maximum_cup_height: RefCell::new(Height::from(0)),
             prev_latest_state_height: RefCell::new(Height::from(0)),
+            replica_config,
             state_manager,
             message_routing,
+            registry_client,
             log,
             metrics: PurgerMetrics::new(metrics_registry),
         }
@@ -79,7 +89,16 @@ impl Purger {
         let mut changeset = ChangeSet::new();
         self.purge_unvalidated_pool_by_expected_batch_height(pool, &mut changeset);
         let previous_finalized_height = *self.prev_finalized_height.borrow();
+
+        let certified_height_increased = self.update_finalized_certified_height(pool);
+        let cup_height_increased = self.update_cup_height(pool);
+        let latest_state_height_increased = self.update_latest_state_height();
+
         if let Some(new_finalized_height) = self.update_finalized_height(pool) {
+            // Every 10 heights, check the advertised pool bounds
+            if new_finalized_height.get() % VALIDATED_POOL_BOUNDS_CHECK_FREQUENCY == 0 {
+                self.check_advertised_pool_bounds(pool);
+            }
             self.purge_validated_shares_by_finalized_height(new_finalized_height, &mut changeset);
             self.purge_non_finalized_blocks(
                 pool,
@@ -89,10 +108,6 @@ impl Purger {
             );
         }
         self.purge_validated_pool_by_catch_up_package(pool, &mut changeset);
-
-        let certified_height_increased = self.update_finalized_certified_height(pool);
-        let cup_height_increased = self.update_cup_height(pool);
-        let latest_state_height_increased = self.update_latest_state_height();
 
         // During normal operation we need to purge when the finalized tip increases.
         // However, when a number of nodes just restarted and are recomputing the state until
@@ -268,7 +283,7 @@ impl Purger {
         ));
         trace!(
             self.log,
-            "Purge validated shares below {finalized_height:?}"
+            "Purge validated shares at and below {finalized_height:?}"
         );
     }
 
@@ -368,6 +383,23 @@ impl Purger {
             maybe_finalized_block = pool.get_parent(&finalized_block);
         }
     }
+
+    /// Checks if advertised validated pool is within our consensus bounds.
+    fn check_advertised_pool_bounds(&self, pool: &PoolReader<'_>) {
+        if let Some(excess) =
+            validated_pool_within_bounds(pool, self.registry_client.as_ref(), &self.replica_config)
+        {
+            self.metrics.validated_pool_bounds_exceeded.inc();
+            error!(
+                every_n_seconds => 5,
+                self.log,
+                "validated_pool_bounds_exceeded: validated pool exceeded bounds.\
+                 Expected bounds: {:?}, but found {:?}",
+                excess.expected,
+                excess.found
+            );
+        }
+    }
 }
 
 /// Compute the purge height by looking at available CatchUpPackage(s) in the
@@ -411,6 +443,8 @@ mod tests {
             let Dependencies {
                 mut pool,
                 state_manager,
+                replica_config,
+                registry,
                 ..
             } = dependencies(pool_config, 1);
 
@@ -456,8 +490,10 @@ mod tests {
                 .returning(move || *expected_batch_height_clone.read().unwrap());
 
             let purger = Purger::new(
+                replica_config,
                 state_manager,
                 Arc::new(message_routing),
+                registry,
                 no_op_logger(),
                 MetricsRegistry::new(),
             );
@@ -537,6 +573,8 @@ mod tests {
             let Dependencies {
                 mut pool,
                 state_manager,
+                replica_config,
+                registry,
                 ..
             } = dependencies(pool_config, 3);
             state_manager
@@ -544,8 +582,10 @@ mod tests {
                 .expect_latest_state_height()
                 .returning(|| Height::new(0));
             let purger = Purger::new(
+                replica_config,
                 state_manager,
                 Arc::new(FakeMessageRouting::new()),
+                registry,
                 no_op_logger(),
                 MetricsRegistry::new(),
             );
@@ -595,6 +635,8 @@ mod tests {
             let Dependencies {
                 mut pool,
                 state_manager,
+                replica_config,
+                registry,
                 ..
             } = dependencies(pool_config, 1);
             state_manager
@@ -606,8 +648,10 @@ mod tests {
                 .expect_expected_batch_height()
                 .returning(|| Height::new(0));
             let purger = Purger::new(
+                replica_config,
                 state_manager,
                 Arc::new(message_routing),
+                registry,
                 no_op_logger(),
                 MetricsRegistry::new(),
             );

@@ -13,6 +13,7 @@ path = "src/lib.rs"
 [dependencies]
 build-info = { workspace = true }
 
+base64 = { workspace = true }
 bytes = { workspace = true }
 by_address = "1.1.0"
 async-trait = { workspace = true }

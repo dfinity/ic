@@ -416,8 +416,11 @@ impl SystemStateChanges {
             }
         }
 
-        // Verify callback ids and register new callbacks.
+        // Register and unregister callbacks.
         for update in self.callback_updates {
+            // Only retrieve the CCM if there are callbacks to register / unregister.
+            // `apply_changes` also gets called on stopped canisters (with no callbacks to
+            // register / unregister) and the call would fail in that case.
             let call_context_manager = system_state
                 .call_context_manager_mut()
                 .ok_or_else(|| Self::error("Call context manager does not exist"))?;
@@ -432,11 +435,11 @@ impl SystemStateChanges {
                     }
                 }
                 CallbackUpdate::Unregister(callback_id) => {
-                    let _callback = call_context_manager
+                    call_context_manager
                         .unregister_callback(callback_id)
                         .ok_or_else(|| {
-                            Self::error("Tried to unregister callback with an id that isn't in use")
-                        });
+                            Self::error("Tried to unregister callback with an ID that isn't in use")
+                        })?;
                 }
             }
         }

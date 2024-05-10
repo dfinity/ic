@@ -26,10 +26,10 @@ sol_register_toolchains(
 
 http_archive(
     name = "bazel_skylib",
-    sha256 = "66ffd9315665bfaafc96b52278f57c7e2dd09f5ede279ea6d39b2be471e7e3aa",
+    sha256 = "9f38886a40548c6e96c106b752f242130ee11aaa068a56ba7e56f4511f33e4f2",
     urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.4.2/bazel-skylib-1.4.2.tar.gz",
-        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.4.2/bazel-skylib-1.4.2.tar.gz",
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.6.1/bazel-skylib-1.6.1.tar.gz",
+        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.4.2/bazel-skylib-1.6.1.tar.gz",
     ],
 )
 
@@ -489,6 +489,15 @@ http_file(
     downloaded_file_path = "assetstorage.wasm.gz",
     sha256 = "1286960c50eb7a773cfb5fdd77cc238588f39e21f189cc3eb0f35199a99b9c7e",
     url = "https://github.com/dfinity/sdk/raw/0.14.2/src/distributed/assetstorage.wasm.gz",
+)
+
+# Old version of wallet canister
+
+http_file(
+    name = "wallet_canister_0.7.2",
+    downloaded_file_path = "wallet.wasm",
+    sha256 = "1404b28b1c66491689b59e184a9de3c2be0dbdd75d952f29113b516742b7f898",
+    url = "https://github.com/dfinity/sdk/raw/0.7.2/src/distributed/wallet.wasm",
 )
 
 # Bitcoin canister

@@ -549,7 +549,10 @@ fn write_overlays_and_verify_with_tempdir(
             } => {
                 let files_before = storage_files(tempdir.path());
                 let mut page_map = PageMap::new_for_testing();
-                let num_pages = combined_delta.max_page_index().unwrap_or(0.into()).get() + 1;
+                let num_pages = combined_delta
+                    .max_page_index()
+                    .map(|index| index.get() + 1)
+                    .unwrap_or(0);
                 page_map.update(
                     combined_delta
                         .iter()
@@ -569,6 +572,7 @@ fn write_overlays_and_verify_with_tempdir(
                         Height::from(round as u64),
                         num_pages,
                         lsmt_config,
+                        &metrics,
                     )
                     .unwrap()
                 };
@@ -904,6 +908,7 @@ fn wrong_shard_pages_is_an_error() {
             lsmt_status: FlagStatus::Enabled,
             shard_num_pages: 3,
         },
+        &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
     assert!(!merge_candidates.is_empty());
@@ -1011,6 +1016,7 @@ fn test_make_merge_candidates_on_empty_dir() {
         Height::from(0),
         0, /* num_pages */
         &lsmt_config_unsharded(),
+        &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
     assert!(merge_candidates.is_empty());
@@ -1036,6 +1042,7 @@ fn test_make_none_merge_candidate() {
         Height::from(0),
         10, /* num_pages */
         &lsmt_config_unsharded(),
+        &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
     assert!(merge_candidates.is_empty());
@@ -1071,8 +1078,9 @@ fn test_make_merge_candidates_to_overlay() {
             overlay_suffix: "vmemory_0.overlay".to_owned(),
         },
         Height::from(3),
-        15, /* num_pages */
+        40, /* num_pages */
         &lsmt_config,
+        &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
     assert_eq!(merge_candidates.len(), 1);
@@ -1162,6 +1170,7 @@ fn test_two_same_length_files_are_a_pyramid() {
         Height::from(0),
         2, /* num_pages */
         &lsmt_config_unsharded(),
+        &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
     assert!(merge_candidates.is_empty());

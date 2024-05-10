@@ -23,6 +23,9 @@ BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
 
 def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enabled):
     CRATE_ANNOTATIONS = {
+        "canbench": [crate.annotation(
+            gen_binaries = True,
+        )],
         "ic_bls12_381": [crate.annotation(
             rustc_flags = [
                 "-C",
@@ -266,6 +269,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.49",
                 default_features = False,
             ),
+            "canbench": crate.spec(
+                version = "^0.1.3",
+            ),
+            "canbench-rs": crate.spec(
+                version = "^0.1.1",
+            ),
             "candid": crate.spec(
                 version = "^0.10.6",
             ),
@@ -500,6 +509,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "full",
                 ],
             ),
+            "hyper-socks2": crate.spec(
+                version = "^0.8.0",
+                default_features = False,
+                features = [
+                    "rustls",
+                ],
+            ),
             "hyper-util": crate.spec(
                 version = "^0.1.3",
                 features = [
@@ -512,11 +528,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "http2",
                 ],
             ),
-            "hyper-rustls_0_26_0": crate.spec(
+            "hyper-rustls_0_27_x": crate.spec(
+                default_features = False,
                 package = "hyper-rustls",
-                version = "^0.26.0",
+                version = "^0.27.1",
                 features = [
+                    "http1",
                     "http2",
+                    "native-tokio",
+                    "ring",
+                    "tls12",
                 ],
             ),
             "hyperlocal-next": crate.spec(
@@ -977,7 +998,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "json",
                     "rustls-tls",
                     "rustls-tls-native-roots",
-                    "socks",
                     "stream",
                 ],
             ),
@@ -1024,14 +1044,18 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.0",
             ),
             "rustls": crate.spec(
-                version = "^0.21.10",
+                version = "^0.21.12",
                 features = [
                     "dangerous_configuration",
                 ],
             ),
-            "rustls_0_22_2": crate.spec(
+            "rustls_0_23_x": crate.spec(
                 package = "rustls",
-                version = "^0.22.2",
+                default_features = False,
+                version = "^0.23.5",
+                features = [
+                    "ring",
+                ],
             ),
             "rustls-native-certs": crate.spec(
                 version = "^0.7.0",
@@ -1179,6 +1203,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "fold",
                     "full",
                 ],
+            ),
+            "sync_wrapper": crate.spec(
+                version = "^1.0.1",
             ),
             "tar": crate.spec(
                 version = "^0.4.38",

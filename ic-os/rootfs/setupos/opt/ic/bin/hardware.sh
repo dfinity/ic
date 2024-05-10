@@ -30,6 +30,8 @@ GEN2_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 GEN1_MINIMUM_DISK_SIZE=3200000000000
 GEN1_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 
+CONFIG_DIR="/var/ic/config"
+
 function check_generation() {
     echo "* Checking Generation..."
 
@@ -243,6 +245,19 @@ function verify_disks() {
     fi
 }
 
+function verify_deployment_path() {
+    echo "* Verifying deployment path..."
+    if [[ ${GENERATION} == 2 ]] && [[ ! -f "${CONFIG_DIR}/node_operator_private_key.pem" ]]; then
+        echo -e "\n\n\n\n\n\n"
+        echo -e "\033[1;31mWARNING: Gen2 hardware detected but no Node Operator Private Key found\033[0m"
+        echo -e "\033[1;31mGen2 hardware should be onboarded using the Gen2 Node Depolyment method\033[0m"
+        echo -e "\033[1;31mPlease redeploy using the Gen2 Node Depolyment method\033[0m"
+        echo -e "\n\n\n"
+        echo "Pausing for 5 minutes before continuing installation..."
+        sleep 300
+    fi
+}
+
 # Establish run order
 main() {
     source /opt/ic/bin/functions.sh
@@ -251,6 +266,7 @@ main() {
     verify_cpu
     verify_memory
     verify_disks
+    verify_deployment_path
     log_end "$(basename $0)"
 }
 

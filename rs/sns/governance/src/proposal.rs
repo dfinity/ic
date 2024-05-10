@@ -33,8 +33,8 @@ use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
-    denominations_to_tokens, i2d, ledger::compute_distribution_subaccount_bytes, E8,
-    SECONDS_PER_DAY,
+    denominations_to_tokens, i2d, ledger::compute_distribution_subaccount_bytes, ledger_validation,
+    E8, SECONDS_PER_DAY,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_sns_governance_proposals_amount_total_limit::{
@@ -88,6 +88,12 @@ pub const EXECUTED_TRANSFER_SNS_TREASURY_FUNDS_PROPOSAL_RETENTION_DURATION_SECON
 /// Analogous to the previous constant; this one is for MintSnsTokens proposals. The value here is
 /// the same, but we keep separate constants, because we consider this to be a coincidence.
 pub const EXECUTED_MINT_SNS_TOKENS_PROPOSAL_RETENTION_DURATION_SECONDS: u64 = 7 * SECONDS_PER_DAY;
+
+/// The maximum message size for inter-canister calls to a different subnet
+/// is 2MiB and thus we restrict the maximum joint size of the canister WASM
+/// and argument to 2MB (2,000,000B) to leave some slack for Candid overhead
+/// and a few constant-size fields (e.g., compute and memory allocation).
+pub const MAX_INSTALL_CODE_WASM_AND_ARG_SIZE: usize = 2_000_000; // 2MB
 
 impl Proposal {
     /// Returns whether a proposal is allowed to be submitted when
@@ -1015,6 +1021,17 @@ fn validate_and_render_upgrade_sns_controlled_canister(
         defects.push("new_canister_wasm lacks the magic value in its header.".into());
     }
 
+    if upgrade.new_canister_wasm.len()
+        + upgrade
+            .canister_upgrade_arg
+            .as_ref()
+            .map(|arg| arg.len())
+            .unwrap_or_default()
+        >= MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+    {
+        defects.push(format!("the maximum canister WASM and argument size for UpgradeSnsControlledCanister is {} bytes.", MAX_INSTALL_CODE_WASM_AND_ARG_SIZE));
+    }
+
     // Generate final report.
     if !defects.is_empty() {
         return Err(format!(
@@ -1487,16 +1504,35 @@ pub fn validate_and_render_manage_sns_metadata(
 fn validate_and_render_manage_ledger_parameters(
     manage_ledger_parameters: &ManageLedgerParameters,
 ) -> Result<String, String> {
-    let mut no_change = true;
+    let mut change = false;
     let mut render = "# Proposal to change ledger parameters:\n".to_string();
-    if let Some(transfer_fee) = &manage_ledger_parameters.transfer_fee {
-        render += &format!(
-            "# Set token transfer fee: {} token-quantums. \n",
-            transfer_fee
-        );
-        no_change = false;
+    let ManageLedgerParameters {
+        transfer_fee,
+        token_name,
+        token_symbol,
+        token_logo,
+    } = manage_ledger_parameters;
+
+    if let Some(transfer_fee) = transfer_fee {
+        render += &format!("# Set token transfer fee: {transfer_fee} token-quantums. \n",);
+        change = true;
     }
-    if no_change {
+    if let Some(token_name) = token_name {
+        ledger_validation::validate_token_name(token_name)?;
+        render += &format!("# Set token name: {token_name}. \n",);
+        change = true;
+    }
+    if let Some(token_symbol) = token_symbol {
+        ledger_validation::validate_token_symbol(token_symbol)?;
+        render += &format!("# Set token symbol: {token_symbol}. \n",);
+        change = true;
+    }
+    if let Some(token_logo) = token_logo {
+        ledger_validation::validate_token_logo(token_logo)?;
+        render += &format!("# Set token logo: {token_logo}. \n",);
+        change = true;
+    }
+    if !change {
         Err(String::from(
             "ManageLedgerParameters must change at least one value, all values are None",
         ))
@@ -1562,6 +1598,10 @@ fn validate_and_render_manage_dapp_canister_settings(
             "# Set log visibility to: {:?} \n",
             LogVisibility::try_from(*log_visibility).unwrap_or_default()
         );
+        no_change = false;
+    }
+    if let Some(wasm_memory_limit) = &manage_dapp_canister_settings.wasm_memory_limit {
+        render += &format!("# Set Wasm memory limit to: {}\n", wasm_memory_limit);
         no_change = false;
     }
 
@@ -4153,15 +4193,86 @@ Version {
     }
 
     #[test]
-    fn test_validate_and_render_manage_ledger_parameters() {
+    fn test_validate_and_render_manage_ledger_parameters_token_transfer_fee() {
         let new_fee = 751;
         let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
             transfer_fee: Some(new_fee),
+            ..ManageLedgerParameters::default()
         })
         .unwrap();
         assert_eq!(
             render,
-            format!("# Proposal to change ledger parameters:\n# Set token transfer fee: {} token-quantums. \n", new_fee)
+            format!("# Proposal to change ledger parameters:\n# Set token transfer fee: {new_fee} token-quantums. \n")
+        );
+    }
+
+    #[test]
+    fn test_validate_and_render_manage_ledger_parameters_token_symbol() {
+        let new_symbol = "COOL".to_string();
+        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
+            token_symbol: Some(new_symbol.clone()),
+            ..ManageLedgerParameters::default()
+        })
+        .unwrap();
+        assert_eq!(
+            render,
+            format!(
+                "# Proposal to change ledger parameters:\n# Set token symbol: {new_symbol}. \n"
+            )
+        );
+    }
+
+    #[test]
+    fn test_validate_and_render_manage_ledger_parameters_token_name() {
+        let new_name = "coolcoin".to_string();
+        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
+            token_name: Some(new_name.clone()),
+            ..ManageLedgerParameters::default()
+        })
+        .unwrap();
+        assert_eq!(
+            render,
+            format!("# Proposal to change ledger parameters:\n# Set token name: {new_name}. \n")
+        );
+    }
+
+    #[test]
+    fn test_validate_and_render_manage_ledger_parameters_token_logo() {
+        let new_logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string();
+        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
+            token_logo: Some(new_logo.clone()),
+            ..ManageLedgerParameters::default()
+        })
+        .unwrap();
+        assert_eq!(
+            render,
+            format!("# Proposal to change ledger parameters:\n# Set token logo: {new_logo}. \n")
+        );
+    }
+
+    #[test]
+    fn test_validate_and_render_manage_ledger_paramaters() {
+        let new_fee = 751;
+        let new_symbol = "COOL".to_string();
+        let new_name = "coolcoin".to_string();
+        let new_logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string();
+        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
+            transfer_fee: Some(new_fee),
+            token_symbol: Some(new_symbol.clone()),
+            token_name: Some(new_name.clone()),
+            token_logo: Some(new_logo.clone()),
+        })
+        .unwrap();
+        assert_eq!(
+            render,
+            format!(
+                r#"# Proposal to change ledger parameters:
+# Set token transfer fee: {new_fee} token-quantums. 
+# Set token name: {new_name}. 
+# Set token symbol: {new_symbol}. 
+# Set token logo: {new_logo}. 
+"#
+            )
         );
     }
 
@@ -4187,6 +4298,7 @@ Version {
             freezing_threshold: Some(1_000),
             reserved_cycles_limit: Some(1_000_000_000_000),
             log_visibility: Some(LogVisibility::Public as i32),
+            wasm_memory_limit: Some(1_000_000_000),
         })
         .unwrap();
     }
@@ -4230,6 +4342,7 @@ Version {
                 freezing_threshold: Some(1_000),
                 reserved_cycles_limit: Some(1_000_000_000_000),
                 log_visibility: Some(LogVisibility::Public as i32),
+                wasm_memory_limit: Some(1_000_000_000),
             })
             .unwrap();
         assert_eq!(
@@ -4242,7 +4355,8 @@ Version {
              # Set memory allocation to: 1073741824 bytes\n\
              # Set freezing threshold to: 1000 seconds\n\
              # Set reserved cycles limit to: 1000000000000 \n\
-             # Set log visibility to: Public \n"
+             # Set log visibility to: Public \n\
+             # Set Wasm memory limit to: 1000000000\n"
         );
     }
 
@@ -4409,6 +4523,76 @@ Version {
                             mode: Some(1),
                         },
                     )),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn limited_proposal_data_for_list_proposals_limited_manage_sns_metadata() {
+        let original_proposal_data = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::ManageSnsMetadata(ManageSnsMetadata {
+                    logo: Some("some logo".to_string()),
+                    url: Some("some url".to_string()),
+                    name: Some("some name".to_string()),
+                    description: Some("some description".to_string()),
+                })),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let limited_proposal_data =
+            original_proposal_data.limited_for_list_proposals(&HashSet::new());
+
+        assert_eq!(
+            limited_proposal_data,
+            ProposalData {
+                proposal: Some(Proposal {
+                    action: Some(Action::ManageSnsMetadata(ManageSnsMetadata {
+                        logo: None,
+                        url: Some("some url".to_string()),
+                        name: Some("some name".to_string()),
+                        description: Some("some description".to_string()),
+                    },)),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn limited_proposal_data_for_list_proposals_limited_manage_ledger_parameters() {
+        let original_proposal_data = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                    transfer_fee: Some(100),
+                    token_name: Some("some name".to_string()),
+                    token_symbol: Some("some symbol".to_string()),
+                    token_logo: Some("some logo".to_string()),
+                })),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let limited_proposal_data =
+            original_proposal_data.limited_for_list_proposals(&HashSet::new());
+
+        assert_eq!(
+            limited_proposal_data,
+            ProposalData {
+                proposal: Some(Proposal {
+                    action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                        transfer_fee: Some(100),
+                        token_name: Some("some name".to_string()),
+                        token_symbol: Some("some symbol".to_string()),
+                        token_logo: None,
+                    },)),
                     ..Default::default()
                 }),
                 ..Default::default()

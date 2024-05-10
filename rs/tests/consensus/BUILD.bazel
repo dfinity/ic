@@ -19,7 +19,10 @@ system_test(
         NNS_CANISTER_RUNTIME_DEPS +
         MAINNET_REVISION_RUNTIME_DEPS +
         BACKUP_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES + [
+        "//rs/backup",
+        "//rs/tests",
+    ],
 )
 
 system_test(

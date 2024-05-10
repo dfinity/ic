@@ -33,6 +33,7 @@ ALIASES = {}
 
 rust_library(
     name = "csp_proptest_utils",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_internal_csp_proptest_utils",

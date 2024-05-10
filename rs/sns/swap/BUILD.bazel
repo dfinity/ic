@@ -26,6 +26,7 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/http_types",
     "//rs/types/base_types",
+    "//rs/utils",
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:comparable",
@@ -38,6 +39,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
 ]
 
 # Each target declared in this file may choose either these (release-ready)

@@ -819,7 +819,7 @@ impl SchedulerImpl {
                 let canister = state.canister_state_mut(canister_id).unwrap();
                 canister.system_state.task_queue.retain(|task| match task {
                     ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
-                    ExecutionTask::PausedExecution(..)
+                    ExecutionTask::PausedExecution { .. }
                     | ExecutionTask::PausedInstallCode(..)
                     | ExecutionTask::AbortedExecution { .. }
                     | ExecutionTask::AbortedInstallCode { .. } => true,
@@ -1369,7 +1369,7 @@ impl SchedulerImpl {
                             id
                         );
                     }
-                    ExecutionTask::PausedExecution(_) | ExecutionTask::PausedInstallCode(_) => {
+                    ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
                         assert_eq!(
                             self.deterministic_time_slicing,
                             FlagStatus::Enabled,
@@ -1387,6 +1387,13 @@ impl SchedulerImpl {
                     }
                 }
             }
+
+            // There should be at most one paused or aborted task left in the task queue.
+            assert!(
+                canister.system_state.task_queue.len() <= 1,
+                "Unexpected tasks left in the task queue of canister {} after a round in canister {:?}",
+                id, canister.system_state.task_queue
+            );
         }
     }
 }
@@ -1566,7 +1573,7 @@ impl Scheduler for SchedulerImpl {
             if state.metadata.heap_delta_estimate >= self.config.subnet_heap_delta_capacity {
                 warn!(
                     round_log,
-                    "At Round {} @ time {}, current heap delta {} exceeds allowed capacity {}, so not executing any messages.",
+                    "At Round {} @ time {}, current heap delta {} exceeds allowed capacity {}, so finish round early possibly not executing some of the messages.",
                     current_round,
                     state.time(),
                     state.metadata.heap_delta_estimate,
@@ -1718,10 +1725,14 @@ impl Scheduler for SchedulerImpl {
                             ),
                             FlagStatus::Disabled => NumInstructions::from(0),
                         };
+                    self.metrics
+                        .canister_log_memory_usage
+                        .observe(canister.system_state.canister_log.used_space() as f64);
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_usage += canister.memory_usage();
                     total_canister_balance += canister.system_state.balance();
                     total_canister_reserved_balance += canister.system_state.reserved_balance();
+
                     // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
                     // cycles_out_sum += canister.system_state.queues().output_queue_cycles();
                 }
@@ -2085,7 +2096,7 @@ fn observe_replicated_state_metrics(
             CanisterStatus::Stopped { .. } => num_stopped_canisters += 1,
         }
         match canister.next_task() {
-            Some(&ExecutionTask::PausedExecution(_)) => {
+            Some(&ExecutionTask::PausedExecution { .. }) => {
                 num_paused_exec += 1;
             }
             Some(&ExecutionTask::PausedInstallCode(_)) => {

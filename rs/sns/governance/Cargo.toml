@@ -60,6 +60,7 @@ ic-sns-governance-proposal-criticality = { path = "./proposal_criticality" }
 ic-sns-governance-proposals-amount-total-limit = { path = "./proposals_amount_total_limit" }
 ic-sns-governance-token-valuation = { path = "./token_valuation" }
 ic-protobuf = { path = "../../protobuf" }
+ic-utils = { path = "../../utils" }
 lazy_static = "1.4.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
@@ -71,6 +72,7 @@ rand_chacha = "0.3"
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 

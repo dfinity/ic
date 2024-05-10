@@ -638,7 +638,7 @@ def boundary_node_icos_build(
 
     build_container_filesystem(
         name = "rootfs-tree.tar",
-        context_files = ["//ic-os/boundary-guestos/rootfs:context-files"],
+        context_files = ["//ic-os/boundary-guestos/context:context-files"],
         rootfs_files = boundary_rootfs_files,
         config_file = build_container_filesystem_config_file,
         target_compatible_with = ["@platforms//os:linux"],

@@ -84,8 +84,7 @@ proxies:
       url: https://guestos:42372/metrics/guestos_replica
       tolerate_bad_tls: true
     # The GuestOS metrics proxy already does filtering.
-    # See ic-os/guestos/rootfs/etc/metrics-proxy.yaml
-    # for the filters.
+    # See the GuestOS metrics-proxy.yaml for the filters.
     label_filters: []
     # The expectation is that clients will scrape at a
     # maximum rate of 1 per 10 seconds (6 / min).
@@ -101,8 +100,7 @@ proxies:
       url: https://guestos:42372/metrics/guestos_node_exporter
       tolerate_bad_tls: true
     # The GuestOS metrics proxy already does filtering.
-    # See ic-os/guestos/rootfs/etc/metrics-proxy.yaml
-    # for the filters.
+    # See the GuestOS metrics-proxy.yaml for the filters.
     label_filters: []
     # The expectation is that clients will scrape at a
     # maximum rate of 1 per 10 seconds (6 / min).

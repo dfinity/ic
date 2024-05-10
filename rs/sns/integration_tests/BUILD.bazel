@@ -157,7 +157,7 @@ DATA_DEPS = [
     "//rs/rosetta-api/icrc1/index:index_canister",
     "//rs/rosetta-api/icrc1/index-ng:index_ng_canister",
     "//rs/rosetta-api/icrc1/ledger:ledger_canister",
-    "//rs/sns/governance:sns-governance-canister-test",
+    "//rs/sns/governance:sns-governance-canister-test.wasm.gz",
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",
 ]
@@ -176,7 +176,7 @@ ENV = {
     "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
-    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test)",
+    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test.wasm.gz)",
     "SNS_GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/sns/integration_tests:sns-governance-mem-test-canister)",
     "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
     "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",

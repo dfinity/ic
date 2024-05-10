@@ -79,8 +79,15 @@ pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
 }
 
 pub fn network_status(storage_client: &StorageClient) -> Result<NetworkStatusResponse, Error> {
+    let highest_processed_block = storage_client
+        .get_highest_block_idx_in_account_balance_table()
+        .map_err(|e| Error::unable_to_find_block(&e))?
+        .ok_or_else(|| {
+            Error::unable_to_find_block(&"Highest processed block not found".to_owned())
+        })?;
+
     let current_block = storage_client
-        .get_block_with_highest_block_idx()
+        .get_block_at_idx(highest_processed_block)
         .map_err(|e| Error::unable_to_find_block(&e))?
         .ok_or_else(|| Error::unable_to_find_block(&"Current block not found".to_owned()))?;
 
@@ -469,16 +476,23 @@ mod test {
                     fn test_network_status_service(blockchain in valid_blockchain_strategy::<U256>(BLOCKCHAIN_LENGTH)){
                         let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
                         let mut rosetta_blocks = vec![];
-                        for (index,block) in blockchain.clone().into_iter().enumerate(){
-                            rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()),index as u64).unwrap());
+                        let mut added_index = 0;
+                        for block in blockchain.clone().into_iter() {
+                            // We only push Mint blocks since `update_account_balances` will
+                            // complain if we e.g., transfer from an account with no balance.
+                            if let ic_icrc1::Operation::Mint{..} = block.transaction.operation {
+                                rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()), added_index as u64).unwrap());
+                                added_index += 1;
+                            }
                         }
 
                         // If there is no block in the database the service should return an error
                         let network_status_err = network_status(&storage_client_memory).unwrap_err();
                         assert!(network_status_err.0.message.contains("Unable to find block"));
-                        if !blockchain.is_empty() {
+                        if !rosetta_blocks.is_empty() {
 
                         storage_client_memory.store_blocks(rosetta_blocks).unwrap();
+                        storage_client_memory.update_account_balances().unwrap();
                         let block_with_highest_idx = storage_client_memory.get_block_with_highest_block_idx().unwrap().unwrap();
                         let genesis_block = storage_client_memory.get_block_with_lowest_block_idx().unwrap().unwrap();
 
@@ -515,22 +529,17 @@ mod test {
                         };
 
                         let mut block_identifier = PartialBlockIdentifier{
-                            index: None,
-                            hash: None
-                        };
-
-                        // If the neither the index nor the hash is set the service should return an error
-                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
-                        assert!(block_res.unwrap_err().0.description.unwrap().contains("Neither block index nor block hash were provided"));
-
-                        block_identifier = PartialBlockIdentifier{
                             index: Some(invalid_block_idx),
                             hash: None
                         };
 
                         // If the block identifier index does not exist the service should return an error
                         let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
-                        assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
+                        if blockchain.is_empty() {
+                            assert!(block_res.unwrap_err().0.description.unwrap().contains("Could not fetch the block, the database is empty!"));
+                        } else {
+                            assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
+                        }
 
                         block_identifier = PartialBlockIdentifier{
                             index: None,
@@ -539,7 +548,12 @@ mod test {
 
                         // If the block identifier hash does not exist the service should return an error
                         let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
-                        assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block with hash {} could not be found",hex::encode(invalid_block_hash.clone()))));
+
+                        if blockchain.is_empty() {
+                            assert!(block_res.unwrap_err().0.description.unwrap().contains("Could not fetch the block, the database is empty!"));
+                        } else {
+                            assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block with hash {} could not be found",hex::encode(invalid_block_hash.clone()))));
+                        }
 
                         block_identifier = PartialBlockIdentifier{
                             index: None,
@@ -548,7 +562,12 @@ mod test {
 
                         // If the block identifier hash is invalid the service should return an error
                         let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
-                        assert!(block_res.unwrap_err().0.description.unwrap().contains("Invalid block hash provided"));
+
+                        if blockchain.is_empty() {
+                            assert!(block_res.unwrap_err().0.description.unwrap().contains("Could not fetch the block, the database is empty!"));
+                        } else {
+                            assert!(block_res.unwrap_err().0.description.unwrap().contains("Invalid block hash provided"));
+                        }
 
                         if !blockchain.is_empty() {
                             let valid_block_hash = hex::encode(rosetta_blocks[valid_block_idx as usize].clone().get_block_hash());
@@ -584,7 +603,7 @@ mod test {
 
                             // If the block identifier hash is valid the service should return the block
                             let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).unwrap();
-                            compare_blocks(block_res.block.unwrap(),expected_block_res.block.unwrap());
+                            compare_blocks(block_res.block.unwrap(),expected_block_res.clone().block.unwrap());
 
                             block_identifier = PartialBlockIdentifier{
                                 index: Some(valid_block_idx),
@@ -612,6 +631,14 @@ mod test {
                             // If the block identifier index is invalid and the hash is valid the service should return an error
                             let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
                             assert!(block_res.unwrap_err().0.description.unwrap().contains(format!("Block at index {} could not be found",invalid_block_idx).as_str()));
+
+                            block_identifier = PartialBlockIdentifier{
+                                index: None,
+                                hash: None
+                            };
+                            // If neither block index nor hash is provided, the service should return the last block
+                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).unwrap();
+                            compare_blocks(block_res.block.unwrap(),expected_block_res.block.unwrap());
                 }
             }
 
@@ -643,13 +670,18 @@ mod test {
 
                 // If the storage is empty the service should return an error
                 let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
-                assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
+                assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains("Could not fetch the block, the database is empty!"));
 
                 storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
 
                 // If the block identifier index is invalid the service should return an error
                 let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
-                assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
+
+                if blockchain.is_empty() {
+                    assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains("Could not fetch the block, the database is empty!"));
+                } else {
+                    assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
+                }
 
                 if !blockchain.is_empty() {
                     let valid_block_hash = hex::encode(rosetta_blocks[valid_block_idx as usize].clone().get_block_hash());
@@ -1052,5 +1084,84 @@ mod test {
                 },
             )
             .unwrap()
+    }
+
+    #[test]
+    fn test_fetch_block_from_empty_blockchain() {
+        let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
+
+        let metadata = Metadata {
+            symbol: "ICP".to_string(),
+            decimals: 8,
+        };
+
+        let block_identifier = PartialBlockIdentifier {
+            index: None,
+            hash: None,
+        };
+
+        let block_res = block(
+            &storage_client_memory,
+            &block_identifier,
+            metadata.decimals,
+            metadata.symbol.clone(),
+        );
+        assert!(block_res
+            .unwrap_err()
+            .0
+            .description
+            .unwrap()
+            .contains("Could not fetch the block, the database is empty!"));
+
+        let block_identifier = PartialBlockIdentifier {
+            index: Some(0),
+            hash: None,
+        };
+        let block_res = block(
+            &storage_client_memory,
+            &block_identifier,
+            metadata.decimals,
+            metadata.symbol.clone(),
+        );
+        assert!(block_res
+            .unwrap_err()
+            .0
+            .description
+            .unwrap()
+            .contains("Could not fetch the block, the database is empty!"));
+
+        let block_identifier = PartialBlockIdentifier {
+            index: None,
+            hash: Some("AAAA".to_string()),
+        };
+        let block_res = block(
+            &storage_client_memory,
+            &block_identifier,
+            metadata.decimals,
+            metadata.symbol.clone(),
+        );
+        assert!(block_res
+            .unwrap_err()
+            .0
+            .description
+            .unwrap()
+            .contains("Could not fetch the block, the database is empty!"));
+
+        let block_identifier = PartialBlockIdentifier {
+            index: Some(0),
+            hash: Some("AAAA".to_string()),
+        };
+        let block_res = block(
+            &storage_client_memory,
+            &block_identifier,
+            metadata.decimals,
+            metadata.symbol.clone(),
+        );
+        assert!(block_res
+            .unwrap_err()
+            .0
+            .description
+            .unwrap()
+            .contains("Could not fetch the block, the database is empty!"));
     }
 }

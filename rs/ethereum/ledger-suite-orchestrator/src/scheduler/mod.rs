@@ -1,3 +1,4 @@
+mod metrics;
 #[cfg(test)]
 pub mod test_fixtures;
 #[cfg(test)]
@@ -18,33 +19,28 @@ use crate::storage::{
 };
 use candid::{CandidType, Encode, Nat, Principal};
 use futures::future;
-use ic0;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
 use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
+use icrc_ledger_types::icrc3::archive::ArchiveInfo;
+pub use metrics::encode_orchestrator_metrics;
+use metrics::observe_task_duration;
 use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::cmp::Ordering;
-use std::fmt::Debug;
+use std::collections::BTreeMap;
+use std::fmt::{Debug, Display};
 use std::str::FromStr;
 use std::time::Duration;
-
-pub const TEN_TRILLIONS: u64 = 10_000_000_000_000; // 10 TC
-pub const HUNDRED_TRILLIONS: u64 = 100_000_000_000_000; // 100 TC
-
-// We need at least 220 TC to be able to spawn ledger suite (200 TC).
-pub const MINIMUM_ORCHESTRATOR_CYCLES: u64 = 220_000_000_000_000;
-// We need at least 110 TC for ledger to spawn archive.
-pub const MINIMUM_MONITORED_CANISTER_CYCLES: u64 = 110_000_000_000_000;
 
 const SEC_NANOS: u64 = 1_000_000_000;
 
 const THREE_GIGA_BYTES: u64 = 3_221_225_472;
 
-const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime {};
+pub const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime {};
 
 thread_local! {
     static LAST_GLOBAL_TIMER: Cell<u64> = Cell::default();
@@ -55,6 +51,7 @@ thread_local! {
 pub enum Task {
     InstallLedgerSuite(InstallLedgerSuiteArgs),
     MaybeTopUp,
+    DiscoverArchives,
     NotifyErc20Added {
         erc20_token: Erc20Token,
         minter_id: Principal,
@@ -67,6 +64,7 @@ impl Task {
             Task::InstallLedgerSuite(_) => false,
             Task::MaybeTopUp => true,
             Task::NotifyErc20Added { .. } => false,
+            Task::DiscoverArchives => true,
         }
     }
 }
@@ -77,14 +75,9 @@ pub struct TaskExecution {
     pub task_type: Task,
 }
 
-fn set_global_timer(ts: u64) {
+fn set_global_timer<R: CanisterRuntime>(ts: u64, runtime: &R) {
     LAST_GLOBAL_TIMER.with(|v| v.set(ts));
-
-    // SAFETY: setting the global timer is always safe; it does not
-    // mutate any canister memory.
-    unsafe {
-        ic0::global_timer_set(ts as i64);
-    }
+    runtime.global_timer_set(ts);
 }
 
 impl TaskQueue {
@@ -150,25 +143,25 @@ impl TaskQueue {
 }
 
 /// Schedules a task for execution after the given delay.
-pub fn schedule_after(delay: Duration, work: Task) {
-    let now_nanos = ic_cdk::api::time();
+pub fn schedule_after<R: CanisterRuntime>(delay: Duration, work: Task, runtime: &R) {
+    let now_nanos = runtime.time();
     let execute_at_ns = now_nanos.saturating_add(delay.as_secs().saturating_mul(SEC_NANOS));
 
     let execution_time = TASKS.with(|t| t.borrow_mut().schedule_at(execute_at_ns, work));
-    set_global_timer(execution_time);
+    set_global_timer(execution_time, runtime);
 }
 
 /// Schedules a task for immediate execution.
-pub fn schedule_now(work: Task) {
-    schedule_after(Duration::from_secs(0), work)
+pub fn schedule_now<R: CanisterRuntime>(work: Task, runtime: &R) {
+    schedule_after(Duration::from_secs(0), work, runtime)
 }
 
 /// Dequeues the next task ready for execution from the minter task queue.
-pub fn pop_if_ready() -> Option<TaskExecution> {
-    let now = ic_cdk::api::time();
+pub fn pop_if_ready<R: CanisterRuntime>(runtime: &R) -> Option<TaskExecution> {
+    let now = runtime.time();
     let task = TASKS.with(|t| t.borrow_mut().pop_if_ready(now));
     if let Some(next_execution) = TASKS.with(|t| t.borrow().next_execution_timestamp()) {
-        set_global_timer(next_execution);
+        set_global_timer(next_execution, runtime);
     }
     task
 }
@@ -178,33 +171,45 @@ pub fn global_timer() -> u64 {
     LAST_GLOBAL_TIMER.with(|v| v.get())
 }
 
-pub fn timer() {
+pub fn timer<R: CanisterRuntime + 'static>(runtime: R) {
+    if let Some(task) = pop_if_ready(&runtime) {
+        ic_cdk::spawn(run_task(task, runtime));
+    }
+}
+
+async fn run_task<R: CanisterRuntime>(task: TaskExecution, runtime: R) {
     const RETRY_FREQUENCY: Duration = Duration::from_secs(5);
     const ONE_HOUR: Duration = Duration::from_secs(60 * 60);
 
-    if let Some(task) = pop_if_ready() {
-        ic_cdk::spawn(async {
-            let _guard = match crate::guard::TimerGuard::new(task.task_type.clone()) {
-                Some(guard) => guard,
-                None => return,
-            };
-            if task.task_type.is_periodic() {
-                schedule_after(ONE_HOUR, task.task_type.clone());
+    if task.task_type.is_periodic() {
+        schedule_after(ONE_HOUR, task.task_type.clone(), &runtime);
+    }
+    let _guard = match crate::guard::TimerGuard::new(task.task_type.clone()) {
+        Some(guard) => guard,
+        None => return,
+    };
+    let start = runtime.time();
+    let result = task.execute(&runtime).await;
+    let end = runtime.time();
+    observe_task_duration(&task.task_type, &result, start, end);
+
+    match result {
+        Ok(()) => {
+            log!(INFO, "task {:?} accomplished", task.task_type);
+        }
+        Err(e) => {
+            if e.is_recoverable() {
+                log!(INFO, "task {:?} failed: {:?}. Will retry later.", task, e);
+                schedule_after(RETRY_FREQUENCY, task.task_type, &runtime);
+            } else {
+                log!(
+                    INFO,
+                    "ERROR: task {:?} failed with unrecoverable error: {:?}. Task is discarded.",
+                    task,
+                    e
+                );
             }
-            match task.execute(&IC_CANISTER_RUNTIME).await {
-                Ok(()) => {
-                    log!(INFO, "task {:?} accomplished", task.task_type);
-                }
-                Err(e) => {
-                    if e.is_recoverable() {
-                        log!(INFO, "task {:?} failed: {:?}. Will retry later.", task, e);
-                        schedule_after(RETRY_FREQUENCY, task.task_type);
-                    } else {
-                        log!(INFO, "ERROR: task {:?} failed with unrecoverable error: {:?}. Task is discarded.", task, e);
-                    }
-                }
-            }
-        });
+        }
     }
 }
 
@@ -314,6 +319,7 @@ pub enum TaskError {
     WasmStoreError(WasmStoreError),
     LedgerNotFound(Erc20Token),
     InterCanisterCallError(CallError),
+    InsufficientCyclesToTopUp { required: u128, available: u128 },
 }
 
 impl TaskError {
@@ -336,6 +342,7 @@ impl TaskError {
                 Reason::TransientInternalError(_) => true,
                 Reason::InternalError(_) => false,
             },
+            TaskError::InsufficientCyclesToTopUp { .. } => false, //top-up task is periodic, will retry on next interval
         }
     }
 }
@@ -349,29 +356,36 @@ impl TaskExecution {
                 erc20_token,
                 minter_id,
             } => notify_erc20_added(erc20_token, minter_id, runtime).await,
+            Task::DiscoverArchives => discover_archives(runtime).await,
         }
     }
 }
 
 async fn maybe_top_up<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> {
-    let mut principals: Vec<Principal> = read_state(|s| {
+    let managed_principals: Vec<Principal> = read_state(|s| {
         s.managed_canisters_iter()
             .flat_map(|(_, canisters)| canisters.collect_principals())
-            .chain(std::iter::once(runtime.id()))
             .collect()
     });
-    if principals.len() == 1 {
+    if managed_principals.is_empty() {
+        log!(INFO, "[maybe_top_up]: No managed canisters to top-up");
         return Ok(());
     }
+    let cycles_management = read_state(|s| s.cycles_management().clone());
+    let minimum_orchestrator_cycles =
+        cycles_to_u128(cycles_management.minimum_orchestrator_cycles());
+    let minimum_monitored_canister_cycles =
+        cycles_to_u128(cycles_management.minimum_monitored_canister_cycles());
+    let top_up_amount = cycles_to_u128(cycles_management.cycles_top_up_increment.clone());
+    log!(
+        INFO,
+        "[maybe_top_up]: Managed canisters {}. \
+        Cycles management: {cycles_management:?}. \
+    Required amount of cycles for orchestrator to be able to top-up: {minimum_orchestrator_cycles}. \
+    Monitored canister minimum target cycles balance {minimum_monitored_canister_cycles}", display_vec(&managed_principals)
+    );
 
-    let mut results =
-        future::join_all(principals.iter().map(|p| runtime.canister_cycles(*p))).await;
-    assert!(!results.is_empty());
-
-    let mut orchestrator_cycle_balance = match results
-        .pop()
-        .expect("BUG: should at least fetch the orchestrator balance")
-    {
+    let mut orchestrator_cycle_balance = match runtime.canister_cycles(runtime.id()).await {
         Ok(balance) => balance,
         Err(e) => {
             log!(
@@ -382,37 +396,57 @@ async fn maybe_top_up<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> 
             return Err(TaskError::CanisterStatusError(e));
         }
     };
-    principals.pop();
+    if orchestrator_cycle_balance < minimum_orchestrator_cycles {
+        return Err(TaskError::InsufficientCyclesToTopUp {
+            required: minimum_orchestrator_cycles,
+            available: orchestrator_cycle_balance,
+        });
+    }
 
-    let cycles_management = read_state(|s| s.cycles_management().clone());
-    let minimum_orchestrator_cycles =
-        cycles_to_u128(cycles_management.minimum_orchestrator_cycles());
-    let minimum_monitored_canister_cycles =
-        cycles_to_u128(cycles_management.minimum_monitored_canister_cycles());
-    let top_up_amount = cycles_to_u128(cycles_management.cycles_top_up_increment);
+    let results = future::join_all(
+        managed_principals
+            .iter()
+            .map(|p| runtime.canister_cycles(*p)),
+    )
+    .await;
+    assert!(!results.is_empty());
 
-    log!(INFO, "[maybe_top_up] ",);
-    for (canister_id, cycles_result) in principals.iter().zip(results) {
+    for (canister_id, cycles_result) in managed_principals.iter().zip(results) {
         match cycles_result {
             Ok(balance) => {
-                if balance < minimum_monitored_canister_cycles
-                    && orchestrator_cycle_balance > minimum_orchestrator_cycles
-                {
-                    match runtime.send_cycles(*canister_id, top_up_amount) {
-                        Ok(()) => {
-                            orchestrator_cycle_balance -= top_up_amount;
-                            log!(
-                                DEBUG,
-                                "[maybe_top_up] topped up canister {canister_id} with previous balance {balance}"
-                            );
-                        }
-                        Err(e) => {
-                            log!(
-                                INFO,
-                                "[maybe_top_up] failed to send cycles to {}, with error: {:?}",
-                                canister_id,
-                                e
-                            );
+                match (
+                    balance.cmp(&minimum_monitored_canister_cycles),
+                    orchestrator_cycle_balance.cmp(&minimum_orchestrator_cycles),
+                ) {
+                    (Ordering::Greater, _) | (Ordering::Equal, _) => {
+                        log!(
+                            DEBUG,
+                            "[maybe_top_up] canister {canister_id} has enough cycles {balance}"
+                        );
+                    }
+                    (_, Ordering::Less) => {
+                        return Err(TaskError::InsufficientCyclesToTopUp {
+                            required: minimum_orchestrator_cycles,
+                            available: orchestrator_cycle_balance,
+                        });
+                    }
+                    (Ordering::Less, Ordering::Equal) | (Ordering::Less, Ordering::Greater) => {
+                        log!(
+                            DEBUG,
+                            "[maybe_top_up] Sending {top_up_amount} cycles to canister {canister_id} with current balance {balance}"
+                        );
+                        match runtime.send_cycles(*canister_id, top_up_amount) {
+                            Ok(()) => {
+                                orchestrator_cycle_balance -= top_up_amount;
+                            }
+                            Err(e) => {
+                                log!(
+                                    INFO,
+                                    "[maybe_top_up] failed to send cycles to {}, with error: {:?}",
+                                    canister_id,
+                                    e
+                                );
+                            }
                         }
                     }
                 }
@@ -491,10 +525,13 @@ async fn install_ledger_suite<R: CanisterRuntime>(
     read_state(|s| {
         let erc20_token = args.erc20_contract().clone();
         if let Some(&minter_id) = s.minter_id() {
-            schedule_now(Task::NotifyErc20Added {
-                erc20_token,
-                minter_id,
-            });
+            schedule_now(
+                Task::NotifyErc20Added {
+                    erc20_token,
+                    minter_id,
+                },
+                runtime,
+            );
         }
     });
     Ok(())
@@ -736,6 +773,67 @@ async fn notify_erc20_added<R: CanisterRuntime>(
     }
 }
 
+async fn discover_archives<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> {
+    let ledgers: BTreeMap<_, _> = read_state(|s| {
+        s.managed_canisters_iter()
+            .filter_map(|(token, canisters)| {
+                canisters
+                    .ledger_canister_id()
+                    .cloned()
+                    .map(|ledger_id| (token.clone(), ledger_id))
+            })
+            .collect()
+    });
+    if ledgers.is_empty() {
+        return Ok(());
+    }
+    log!(
+        INFO,
+        "[discover_archives]: discovering archives for {:?}",
+        ledgers
+    );
+    let results =
+        future::join_all(ledgers.values().map(|p| call_ledger_archives(*p, runtime))).await;
+    let mut errors: Vec<(Erc20Token, Principal, TaskError)> = Vec::new();
+    for ((token, ledger), result) in ledgers.into_iter().zip(results) {
+        match result {
+            Ok(archives) => {
+                let archives: Vec<_> = archives.into_iter().map(|a| a.canister_id).collect();
+                log!(
+                    DEBUG,
+                    "[discover_archives]: archives for ERC-20 token {:?} with ledger {}: {}",
+                    token,
+                    ledger,
+                    display_vec(&archives)
+                );
+                mutate_state(|s| s.record_archives(&token, archives));
+            }
+            Err(e) => errors.push((token, ledger, e)),
+        }
+    }
+    if !errors.is_empty() {
+        log!(
+            INFO,
+            "[discover_archives]: {} errors. Failed to discover archives for {:?}",
+            errors.len(),
+            errors
+        );
+        let first_error = errors.swap_remove(0);
+        return Err(first_error.2);
+    }
+    Ok(())
+}
+
+async fn call_ledger_archives<R: CanisterRuntime>(
+    ledger_id: Principal,
+    runtime: &R,
+) -> Result<Vec<ArchiveInfo>, TaskError> {
+    runtime
+        .call_canister(ledger_id, "archives", ())
+        .await
+        .map_err(TaskError::InterCanisterCallError)
+}
+
 #[derive(Debug, PartialEq, Clone, Ord, PartialOrd, Eq, Serialize, Deserialize)]
 pub struct Erc20Token(ChainId, Address);
 
@@ -768,4 +866,14 @@ impl TryFrom<crate::candid::Erc20Contract> for Erc20Token {
             Address::from_str(&contract.address)?,
         ))
     }
+}
+
+fn display_vec<T: Display>(v: &[T]) -> String {
+    format!(
+        "[{}]",
+        v.iter()
+            .map(|x| format!("{}", x))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
 }

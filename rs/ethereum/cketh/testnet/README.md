@@ -34,7 +34,7 @@ dfx deploy --network ic minter --argument '(variant {InitArg = record { ethereum
 
 ### Upgrading for ckERC20
 ```shell
-dfx deploy minter --network ic --argument "(variant {UpgradeArg = record {ledger_suite_orchestrator_id = opt principal \"$(dfx canister --network ic id orchestrator)\"; erc20_helper_contract_address = opt \"0xE1788E4834c896F1932188645cc36c54d1b80AC1\"; last_erc20_scraped_block_number = opt 5680659;}})" --wallet mf7xa-laaaa-aaaar-qaaaa-cai
+dfx deploy minter --network ic --argument "(variant {UpgradeArg = record {ledger_suite_orchestrator_id = opt principal \"$(dfx canister --network ic id orchestrator)\"; erc20_helper_contract_address = opt \"0x674Cdbe64Df412DA9bAb1596e00c1520979B5A23\"; last_erc20_scraped_block_number = opt 5680659;}})" --wallet mf7xa-laaaa-aaaar-qaaaa-cai
 ```
 
 Note: you can query the next nonce using:

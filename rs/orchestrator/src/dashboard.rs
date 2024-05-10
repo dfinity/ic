@@ -1,7 +1,7 @@
-use crate::upgrade::ReplicaProcess;
 use crate::{
     catch_up_package_provider::CatchUpPackageProvider, process_manager::ProcessManager,
     registry_helper::RegistryHelper, ssh_access_manager::SshAccessParameters,
+    upgrade::ReplicaProcess,
 };
 use async_trait::async_trait;
 pub use ic_dashboard::Dashboard;
@@ -10,8 +10,10 @@ use ic_types::{
     consensus::HasHeight, hostos_version::HostosVersion, NodeId, RegistryVersion, ReplicaVersion,
     SubnetId,
 };
-use std::process::Command;
-use std::sync::{Arc, Mutex};
+use std::{
+    process::Command,
+    sync::{Arc, Mutex},
+};
 use tokio::sync::RwLock;
 
 const ORCHESTRATOR_DASHBOARD_PORT: u16 = 7070;
@@ -163,16 +165,23 @@ impl OrchestratorDashboard {
     }
 
     fn get_local_cup_info(&self) -> String {
-        let (height, signed) = match self.cup_provider.get_local_cup() {
-            None => (String::from("None"), String::from("None")),
+        let (height, signed, hash) = match self.cup_provider.get_local_cup() {
+            None => (
+                String::from("None"),
+                String::from("None"),
+                String::from("None"),
+            ),
             Some(cup) => {
                 let height = cup.height().to_string();
                 let signed = cup.is_signed();
-                (height, signed.to_string())
+                let hash = cup.content.state_hash.get().0;
+                (height, signed.to_string(), hex::encode(hash))
             }
         };
-
-        format!("cup height: {}\ncup signed: {}", height, signed)
+        format!(
+            "cup height: {}\ncup signed: {}\ncup state hash: {}",
+            height, signed, hash
+        )
     }
 }
 

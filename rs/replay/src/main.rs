@@ -6,8 +6,7 @@ use ic_canister_sandbox_backend_lib::{
     launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
     RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
-use ic_replay::cmd::ReplayToolArgs;
-use ic_replay::replay;
+use ic_replay::{cmd::ReplayToolArgs, replay};
 
 fn main() {
     // Check if `ic-replay` is running in the canister sandbox mode where it waits

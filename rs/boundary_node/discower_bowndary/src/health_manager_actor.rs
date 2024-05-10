@@ -2,22 +2,25 @@ use std::{sync::Arc, time::Duration};
 
 use tokio::sync::mpsc;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tracing::{debug, error, warn};
 
 use crate::{
     check::HealthCheck,
     check_actor::HealthCheckActor,
     messages::{FetchedNodes, NodeHealthChanged},
     node::Node,
-    snapshot::Snapshot,
+    snapshot::{NodesChanged, Snapshot},
     types::{GlobalShared, ReceiverMpsc, ReceiverWatch, SenderMpsc},
 };
 
+const SERVICE_NAME: &str = "HealthManagerActor";
+
 const CHANNEL_BUFFER: usize = 128;
 
-pub struct HealthManagerActor {
+pub struct HealthManagerActor<S> {
     checker: Arc<dyn HealthCheck>,
     check_period: Duration,
-    snapshot: GlobalShared<Snapshot>,
+    snapshot: GlobalShared<S>,
     fetch_receiver: ReceiverWatch<FetchedNodes>,
     check_sender: SenderMpsc<NodeHealthChanged>,
     check_receiver: ReceiverMpsc<NodeHealthChanged>,
@@ -26,11 +29,14 @@ pub struct HealthManagerActor {
     nodes_tracker: TaskTracker,
 }
 
-impl HealthManagerActor {
+impl<S> HealthManagerActor<S>
+where
+    S: Snapshot,
+{
     pub fn new(
         checker: Arc<dyn HealthCheck>,
         check_period: Duration,
-        snapshot: GlobalShared<Snapshot>,
+        snapshot: GlobalShared<S>,
         fetch_receiver: ReceiverWatch<FetchedNodes>,
         token: CancellationToken,
     ) -> Self {
@@ -54,12 +60,12 @@ impl HealthManagerActor {
             tokio::select! {
                 // Read messages from fetch actor
                 result = self.fetch_receiver.changed() => {
-                    if result.is_err() {
-                        // TODO: should terminate
-                        println!("HealthManagerActor: fetch sender has been dropped");
-                    } else {
-                        self.handle_fetch_update().await;
+                    if let Err(err) = result {
+                        error!("{SERVICE_NAME}: nodes fetch sender has been dropped: {err:?}");
+                        self.token.cancel();
+                        continue;
                     }
+                    self.handle_fetch_update().await;
                 }
                 // Read messages from check actors
                 Some(msg) = self.check_receiver.recv() => {
@@ -68,7 +74,7 @@ impl HealthManagerActor {
                 _ = self.token.cancelled() => {
                     self.stop_checks().await;
                     self.check_receiver.close();
-                    println!("HealthManagerActor: gracefully cancelled and stopped all node checks");
+                    warn!("{SERVICE_NAME}: was gracefully cancelled, all node health checks stopped");
                     break;
                 }
             }
@@ -77,10 +83,11 @@ impl HealthManagerActor {
 
     async fn handle_health_changed(&mut self, msg: NodeHealthChanged) {
         let current_snapshot = self.snapshot.load_full();
-        let mut new_snapshot: Snapshot = (*current_snapshot).clone();
-        new_snapshot
-            .update_node_health(&msg.node, msg.health)
-            .unwrap();
+        let mut new_snapshot = (*current_snapshot).clone();
+        if let Err(err) = new_snapshot.update_node_health(&msg.node, msg.health) {
+            error!("{SERVICE_NAME}: failed to update snapshot: {err:?}");
+            return;
+        }
         self.snapshot.store(Arc::new(new_snapshot));
     }
 
@@ -90,25 +97,29 @@ impl HealthManagerActor {
             .borrow_and_update()
             .clone()
             .expect("can't be None as change was detected");
-        println!("HealthManagerActor: fetched nodes received {:?}", nodes);
+        if nodes.is_empty() {
+            error!("{SERVICE_NAME}: list of fetched nodes is empty");
+            // This is a bug in the IC.
+            // Updating snapshot with [], would lead to an irrecoverable error.
+            // We avoid such updates and just wait for a non-empty lists.
+            return;
+        }
+        debug!("{SERVICE_NAME}: fetched nodes received {:?}", nodes);
         let current_snapshot = self.snapshot.load_full();
-        let mut new_snapshot: Snapshot = (*current_snapshot).clone();
-        let _nodes_change = new_snapshot.sync_with(&nodes).unwrap();
-        self.snapshot.store(Arc::new(new_snapshot));
-        // TODO:
-        // 1. Stop only removed_nodes and start only added_nodes => self.stop_checks(nodes_change.removed_nodes).await;
-        // 2. Start nodes uniformly within time period for a better health overview.
-        self.stop_checks().await;
-        self.start_checks(nodes);
+        let mut new_snapshot = (*current_snapshot).clone();
+        let sync_result = new_snapshot.sync_with(&nodes);
+        if let Ok(NodesChanged(true)) = sync_result {
+            self.snapshot.store(Arc::new(new_snapshot));
+            self.stop_checks().await;
+            self.start_checks(nodes);
+        }
     }
 
     fn start_checks(&mut self, nodes: Vec<Node>) {
-        println!(
-            "HealthManagerActor: starting health checks for {} nodes",
-            nodes.len()
-        );
+        // Create a cancellation token for all started checks.
         self.nodes_token = CancellationToken::new();
         for node in nodes {
+            debug!("{SERVICE_NAME}: starting health check for node {node:?}",);
             let actor = HealthCheckActor::new(
                 Arc::clone(&self.checker),
                 self.check_period,
@@ -121,7 +132,7 @@ impl HealthManagerActor {
     }
 
     async fn stop_checks(&self) {
-        println!("HealthManagerActor: cancelling all running health checks");
+        debug!("{SERVICE_NAME}: stopping all running health checks");
         self.nodes_token.cancel();
         self.nodes_tracker.close();
         self.nodes_tracker.wait().await;

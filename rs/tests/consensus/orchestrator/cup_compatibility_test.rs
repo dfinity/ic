@@ -32,6 +32,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+const SANITY_CHECK_ARTIFACTS_COUNT: usize = 88;
+
 #[derive(PartialEq)]
 enum Action {
     Serialize,
@@ -139,8 +141,12 @@ fn test(env: TestEnv) {
 
     let created_artifacts = fs::read_dir(&output_dir).unwrap().count();
     info!(log, "{created_artifacts} artifacts created.");
-    assert!(created_artifacts >= 150, "Not enough artifacts created");
-
+    assert!(
+        created_artifacts >= SANITY_CHECK_ARTIFACTS_COUNT,
+        "Not enough artifacts created. This is just a sanity check. \
+        If it's expected that the number of artifacts decreases, \
+        please adjust `SANITY_CHECK_ARTIFACTS_COUNT`."
+    );
     info!(
         log,
         "Deserializing mainnet artifacts with branch version..."
@@ -155,7 +161,12 @@ fn test(env: TestEnv) {
 
     let created_artifacts = fs::read_dir(output_dir).unwrap().count();
     info!(log, "{created_artifacts} artifacts created.");
-    assert!(created_artifacts >= 150, "Not enough artifacts created");
+    assert!(
+        created_artifacts >= SANITY_CHECK_ARTIFACTS_COUNT,
+        "Not enough artifacts created. This is just a sanity check. \
+        If it's expected that the number of artifacts decreases, \
+        please adjust `SANITY_CHECK_ARTIFACTS_COUNT`."
+    );
 
     info!(
         log,

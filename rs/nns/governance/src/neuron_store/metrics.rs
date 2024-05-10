@@ -80,7 +80,6 @@ impl NeuronStore {
             }
 
             let dissolve_delay_seconds = neuron.dissolve_delay_seconds(now_seconds);
-            println!("Neuron dissolve delay seconds: {}", dissolve_delay_seconds);
 
             if dissolve_delay_seconds < 6 * ONE_MONTH_SECONDS {
                 metrics.neurons_with_less_than_6_months_dissolve_delay_count += 1;

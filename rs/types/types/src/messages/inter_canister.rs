@@ -49,6 +49,7 @@ pub enum CallContextIdTag {}
 pub type CallContextId = Id<CallContextIdTag, u64>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RequestMetadata {
     /// Indicates how many steps down the call tree a request is, starting at 0.
     call_tree_depth: u64,
@@ -87,6 +88,7 @@ impl RequestMetadata {
 
 /// Canister-to-canister request message.
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Request {
     pub receiver: CanisterId,
     pub sender: CanisterId,
@@ -367,6 +369,26 @@ impl From<Result<Option<WasmResult>, UserError>> for Payload {
     }
 }
 
+impl From<&Payload> for pb_queues::response::ResponsePayload {
+    fn from(value: &Payload) -> Self {
+        match value {
+            Payload::Data(d) => pb_queues::response::ResponsePayload::Data(d.clone()),
+            Payload::Reject(r) => pb_queues::response::ResponsePayload::Reject(r.into()),
+        }
+    }
+}
+
+impl TryFrom<pb_queues::response::ResponsePayload> for Payload {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb_queues::response::ResponsePayload) -> Result<Self, Self::Error> {
+        match value {
+            pb_queues::response::ResponsePayload::Data(d) => Ok(Payload::Data(d)),
+            pb_queues::response::ResponsePayload::Reject(r) => Ok(Payload::Reject(r.try_into()?)),
+        }
+    }
+}
+
 /// Canister-to-canister response message.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
@@ -420,6 +442,7 @@ impl Hash for Response {
 /// The underlying request / response is wrapped within an `Arc`, for cheap
 /// cloning.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum RequestOrResponse {
     Request(Arc<Request>),
     Response(Arc<Response>),
@@ -625,16 +648,14 @@ impl TryFrom<pb_queues::RejectContext> for RejectContext {
 
 impl From<&Response> for pb_queues::Response {
     fn from(rep: &Response) -> Self {
-        let p = match &rep.response_payload {
-            Payload::Data(d) => pb_queues::response::ResponsePayload::Data(d.clone()),
-            Payload::Reject(r) => pb_queues::response::ResponsePayload::Reject(r.into()),
-        };
         Self {
             originator: Some(pb_types::CanisterId::from(rep.originator)),
             respondent: Some(pb_types::CanisterId::from(rep.respondent)),
             originator_reply_callback: rep.originator_reply_callback.get(),
             refund: Some((&Funds::new(rep.refund)).into()),
-            response_payload: Some(p),
+            response_payload: Some(pb_queues::response::ResponsePayload::from(
+                &rep.response_payload,
+            )),
             cycles_refund: Some((rep.refund).into()),
             deadline_seconds: rep.deadline.as_secs_since_unix_epoch(),
         }
@@ -645,14 +666,6 @@ impl TryFrom<pb_queues::Response> for Response {
     type Error = ProxyDecodeError;
 
     fn try_from(rep: pb_queues::Response) -> Result<Self, Self::Error> {
-        let response_payload = match rep
-            .response_payload
-            .ok_or(ProxyDecodeError::MissingField("Response::response_payload"))?
-        {
-            pb_queues::response::ResponsePayload::Data(d) => Payload::Data(d),
-            pb_queues::response::ResponsePayload::Reject(r) => Payload::Reject(r.try_into()?),
-        };
-
         // To maintain backwards compatibility we fall back to reading from `refund` if
         // `cycles_refund` is not set.
         let refund = match try_from_option_field(rep.cycles_refund, "Response::cycles_refund") {
@@ -666,7 +679,10 @@ impl TryFrom<pb_queues::Response> for Response {
             respondent: try_from_option_field(rep.respondent, "Response::respondent")?,
             originator_reply_callback: rep.originator_reply_callback.into(),
             refund,
-            response_payload,
+            response_payload: try_from_option_field(
+                rep.response_payload,
+                "Response::response_payload",
+            )?,
             deadline: CoarseTime::from_secs_since_unix_epoch(rep.deadline_seconds),
         })
     }

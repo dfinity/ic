@@ -48,6 +48,30 @@ lazy_static! {
 }
 
 #[test]
+fn test_signals_end_metric_exported() {
+    with_test_replica_logger(|log| {
+        let (stream_builder, mut state, metrics_registry) = new_fixture(&log);
+
+        let stream = Stream::new(
+            StreamIndexedQueue::with_begin(StreamIndex::new(0)),
+            StreamIndex::new(42),
+        );
+
+        state.with_streams(btreemap![LOCAL_SUBNET => stream]);
+
+        stream_builder.build_streams(state);
+
+        assert_eq!(
+            metric_vec(&[(
+                &[(LABEL_REMOTE, &LOCAL_SUBNET.to_string())],
+                StreamIndex::new(42).get()
+            )]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_SIGNALS_END)
+        );
+    });
+}
+
+#[test]
 fn reject_local_request() {
     with_test_replica_logger(|log| {
         let sender = canister_test_id(3);
@@ -221,6 +245,7 @@ fn build_streams_success() {
         );
         let expected_stream_bytes = expected_stream.count_bytes() as u64;
         let expected_stream_begin = expected_stream.messages_begin().get();
+        let expected_signals_end = expected_stream.signals_end().get();
 
         // Set up the provided_canister_states.
         let provided_canister_states = canister_states_with_outputs(msgs);
@@ -273,6 +298,13 @@ fn build_streams_success() {
                 expected_stream_begin
             )]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BEGIN)
+        );
+        assert_eq!(
+            metric_vec(&[(
+                &[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())],
+                expected_signals_end
+            )]),
+            fetch_int_gauge_vec(&metrics_registry, METRIC_SIGNALS_END)
         );
     });
 }
@@ -895,7 +927,7 @@ fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, Metr
     let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
     state.metadata.batch_time = Time::from_nanos_since_unix_epoch(5);
     let metrics_registry = MetricsRegistry::new();
-    let stream_handler = StreamBuilderImpl::new(
+    let stream_builder = StreamBuilderImpl::new(
         LOCAL_SUBNET,
         &metrics_registry,
         Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
@@ -904,7 +936,7 @@ fn new_fixture(log: &ReplicaLogger) -> (StreamBuilderImpl, ReplicatedState, Metr
         log.clone(),
     );
 
-    (stream_handler, state, metrics_registry)
+    (stream_builder, state, metrics_registry)
 }
 
 /// Simulates routing the given requests into a `StreamIndexedQueue` with the
