@@ -7974,7 +7974,6 @@ dependencies = [
  "threadpool",
  "tokio",
  "tokio-io-timeout",
- "tokio-rustls 0.24.1",
  "tower",
  "tower-http 0.5.2",
  "tower-test",
