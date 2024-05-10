@@ -90,6 +90,7 @@ const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
 const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
 const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
 const METRIC_NEXT_CHECKPOINT_HEIGHT: &str = "mr_next_checkpoint_height";
+const METRIC_REMOTE_CERTIFIED_HEIGHTS: &str = "mr_remote_certified_heights";
 
 const METRIC_WASM_CUSTOM_SECTIONS_MEMORY_USAGE_BYTES: &str =
     "mr_wasm_custom_sections_memory_usage_bytes";
@@ -268,17 +269,19 @@ pub(crate) struct MessageRoutingMetrics {
     registry_version: IntGauge,
     /// Batch processing durations.
     process_batch_duration: Histogram,
+    /// Most recently seen certified height, per remote subnet
+    pub(crate) remote_certified_heights: IntGaugeVec,
     /// Batch processing phase durations, by phase.
-    pub process_batch_phase_duration: HistogramVec,
+    pub(crate) process_batch_phase_duration: HistogramVec,
     /// Number of timed out requests.
-    pub timed_out_requests_total: IntCounter,
+    pub(crate) timed_out_requests_total: IntCounter,
     /// Height at which the subnet last split (if during the lifetime of this
     /// replica process; otherwise zero).
-    pub subnet_split_height: IntGaugeVec,
+    pub(crate) subnet_split_height: IntGaugeVec,
     /// Number of blocks proposed.
-    pub blocks_proposed_total: IntCounter,
+    pub(crate) blocks_proposed_total: IntCounter,
     /// Number of blocks not proposed.
-    pub blocks_not_proposed_total: IntCounter,
+    pub(crate) blocks_not_proposed_total: IntCounter,
 
     /// The memory footprint of all the canisters on this subnet. Note that this
     /// counter is from the perspective of the canisters and does not account
@@ -353,6 +356,11 @@ impl MessageRoutingMetrics {
                 // 1ms - 50s
                 decimal_buckets(-3, 1),
                 &["phase"],
+            ),
+            remote_certified_heights: metrics_registry.int_gauge_vec(
+                METRIC_REMOTE_CERTIFIED_HEIGHTS,
+                "Most recently observed remote subnet certified heights.",
+                &[LABEL_REMOTE],
             ),
             timed_out_requests_total: metrics_registry.int_counter(
                 METRIC_TIMED_OUT_REQUESTS_TOTAL,
@@ -559,6 +567,7 @@ impl BatchProcessorImpl {
             vsr,
             stream_handler,
             certified_stream_store,
+            metrics.clone(),
             log.clone(),
         ));
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(

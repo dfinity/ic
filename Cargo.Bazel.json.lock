@@ -1,5 +1,5 @@
 {
-  "checksum": "350cc5a616cffbf58714ed6603b2a74bcf2f7bf06e73e15a2fda56ccc8cb79ec",
+  "checksum": "27300c3ec36ae2ab7c6a967210bbbb7e2dc95cfd580b6abbc58eb8e0907cff41",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11667,14 +11667,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "clocksource 0.6.0": {
+    "clocksource 0.8.1": {
       "name": "clocksource",
-      "version": "0.6.0",
+      "version": "0.8.1",
       "package_url": "https://github.com/pelikan-io/rustcommon",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/clocksource/0.6.0/download",
-          "sha256": "b90cc4cec392a6d97223f008b5da7a3c2c71aa6d5ffdf0e3e14d8b2432738387"
+          "url": "https://static.crates.io/crates/clocksource/0.8.1/download",
+          "sha256": "129026dd5a8a9592d96916258f3a5379589e513ea5e86aeb0bd2530286e44e9e"
         }
       },
       "targets": [
@@ -11708,23 +11708,7 @@
             }
           ],
           "selects": {
-            "cfg(all(not(windows), not(unix), not(target_os = \"macos\"), not(target_os = \"ios\")))": [
-              {
-                "id": "lazy_static 1.4.0",
-                "target": "lazy_static"
-              }
-            ],
-            "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
-              {
-                "id": "mach 0.3.2",
-                "target": "mach"
-              }
-            ],
             "cfg(windows)": [
-              {
-                "id": "lazy_static 1.4.0",
-                "target": "lazy_static"
-              },
               {
                 "id": "winapi 0.3.9",
                 "target": "winapi"
@@ -11733,13 +11717,14 @@
           }
         },
         "edition": "2021",
-        "version": "0.6.0"
+        "version": "0.8.1"
       },
-      "license": "Apache-2.0",
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
-        "Apache-2.0"
+        "Apache-2.0",
+        "MIT"
       ],
-      "license_file": null
+      "license_file": "LICENSE-APACHE"
     },
     "cloudabi 0.0.3": {
       "name": "cloudabi",
@@ -17489,6 +17474,10 @@
               "target": "more_asserts"
             },
             {
+              "id": "nftables 0.4.0",
+              "target": "nftables"
+            },
+            {
               "id": "nix 0.24.3",
               "target": "nix"
             },
@@ -17669,7 +17658,7 @@
               "target": "randomkit"
             },
             {
-              "id": "ratelimit 0.7.1",
+              "id": "ratelimit 0.9.1",
               "target": "ratelimit"
             },
             {
@@ -17981,12 +17970,12 @@
             },
             {
               "id": "tower-http 0.4.4",
-              "target": "tower_http"
+              "target": "tower_http",
+              "alias": "tower_http_0_4_4"
             },
             {
-              "id": "tower-http 0.5.1",
-              "target": "tower_http",
-              "alias": "tower_http_0_5_1"
+              "id": "tower-http 0.5.2",
+              "target": "tower_http"
             },
             {
               "id": "tower-request-id 0.3.0",
@@ -37288,7 +37277,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-http 0.5.1",
+              "id": "tower-http 0.5.2",
               "target": "tower_http"
             },
             {
@@ -38301,7 +38290,8 @@
             "default",
             "future",
             "futures-util",
-            "quanta"
+            "quanta",
+            "sync"
           ],
           "selects": {}
         },
@@ -38840,6 +38830,79 @@
         "MIT"
       ],
       "license_file": "LICENSE-MIT"
+    },
+    "nftables 0.4.0": {
+      "name": "nftables",
+      "version": "0.4.0",
+      "package_url": "https://github.com/namib-project/nftables-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/nftables/0.4.0/download",
+          "sha256": "e689b44b33fc8c2894b6f609701f785a0c1816b7fcf43d05797bd25a513028d1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "nftables",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "nftables",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.195",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.108",
+              "target": "serde_json"
+            },
+            {
+              "id": "serde_path_to_error 0.1.14",
+              "target": "serde_path_to_error"
+            },
+            {
+              "id": "strum 0.26.2",
+              "target": "strum"
+            },
+            {
+              "id": "thiserror 1.0.57",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "strum_macros 0.26.2",
+              "target": "strum_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.4.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "nix 0.24.3": {
       "name": "nix",
@@ -50178,14 +50241,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "ratelimit 0.7.1": {
+    "ratelimit 0.9.1": {
       "name": "ratelimit",
-      "version": "0.7.1",
+      "version": "0.9.1",
       "package_url": "https://github.com/pelikan-io/rustcommon",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ratelimit/0.7.1/download",
-          "sha256": "bf5bcfab8fa35f78da44c3ebb3437381c0ae11e9fab355b7a27f581d8d2028a2"
+          "url": "https://static.crates.io/crates/ratelimit/0.9.1/download",
+          "sha256": "6c1bb13e2dcfa2232ac6887157aad8d9b3fe4ca57f7c8d4938ff5ea9be742300"
         }
       },
       "targets": [
@@ -50210,7 +50273,7 @@
         "deps": {
           "common": [
             {
-              "id": "clocksource 0.6.0",
+              "id": "clocksource 0.8.1",
               "target": "clocksource"
             },
             {
@@ -50225,7 +50288,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.7.1"
+        "version": "0.9.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -65266,14 +65329,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tower-http 0.5.1": {
+    "tower-http 0.5.2": {
       "name": "tower-http",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "package_url": "https://github.com/tower-rs/tower-http",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tower-http/0.5.1/download",
-          "sha256": "0da193277a4e2c33e59e09b5861580c33dd0a637c3883d0fa74ba40c0374af2e"
+          "url": "https://static.crates.io/crates/tower-http/0.5.2/download",
+          "sha256": "1e9cd434a998747dd2c4276bc96ee2e0c7a2eadf3cae88e52be55a05fa9053f5"
         }
       },
       "targets": [
@@ -65385,7 +65448,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.5.1"
+        "version": "0.5.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -75798,15 +75861,6 @@
       "x86_64-unknown-freebsd",
       "x86_64-unknown-none"
     ],
-    "cfg(all(not(windows), not(unix), not(target_os = \"macos\"), not(target_os = \"ios\")))": [
-      "riscv32imc-unknown-none-elf",
-      "riscv64gc-unknown-none-elf",
-      "thumbv7em-none-eabi",
-      "thumbv8m.main-none-eabi",
-      "wasm32-unknown-unknown",
-      "wasm32-wasi",
-      "x86_64-unknown-none"
-    ],
     "cfg(all(target_arch = \"aarch64\", target_env = \"msvc\", not(windows_raw_dylib)))": [
       "aarch64-pc-windows-msvc"
     ],
@@ -76891,6 +76945,7 @@
     "mockito 1.2.0",
     "moka 0.12.1",
     "more-asserts 0.3.1",
+    "nftables 0.4.0",
     "nix 0.24.3",
     "notify 4.0.17",
     "num 0.4.1",
@@ -76939,7 +76994,7 @@
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
     "randomkit 0.1.1",
-    "ratelimit 0.7.1",
+    "ratelimit 0.9.1",
     "rayon 1.7.0",
     "rcgen 0.11.1",
     "regex 1.9.1",
@@ -77022,7 +77077,7 @@
     "tonic-build 0.11.0",
     "tower 0.4.13",
     "tower-http 0.4.4",
-    "tower-http 0.5.1",
+    "tower-http 0.5.2",
     "tower-request-id 0.3.0",
     "tower-test 0.4.0",
     "tower_governor 0.1.0",

@@ -24,7 +24,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
+      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
     timeout-minutes: 120
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     steps:
@@ -54,7 +54,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
+      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
     timeout-minutes: 120
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -78,7 +78,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
+      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
     timeout-minutes: 120
     if: ${{ vars.RUN_CI == 'true' }}
     steps:

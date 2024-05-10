@@ -7,25 +7,11 @@
 #[cfg(test)]
 mod tests;
 
-use crate::api::{CspCreateMEGaKeyError, CspIDkgProtocol, CspThresholdEcdsaSigVerifier};
+use crate::api::{CspCreateMEGaKeyError, CspIDkgProtocol};
 use crate::Csp;
-use ic_crypto_internal_threshold_sig_ecdsa::{
-    combine_ecdsa_signature_shares, verify_ecdsa_signature_share, verify_ecdsa_threshold_signature,
-    DerivationPath, IDkgTranscriptInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
-    ThresholdEcdsaSigShareInternal, ThresholdEcdsaVerifySigShareInternalError,
-    ThresholdEcdsaVerifySignatureInternalError,
-};
+use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
 use ic_crypto_internal_types::scope::{ConstScope, Scope};
 use ic_logger::debug;
-use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaVerifyCombinedSignatureError,
-    ThresholdEcdsaVerifySigShareError,
-};
-use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
-use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeIndex, NumberOfNodes, Randomness};
-
-use std::collections::BTreeMap;
 
 pub const IDKG_MEGA_SCOPE: Scope = Scope::Const(ConstScope::IDkgMEGaEncryptionKeys);
 pub const IDKG_THRESHOLD_KEYS_SCOPE: Scope = Scope::Const(ConstScope::IDkgThresholdKeys);
@@ -38,122 +24,5 @@ impl CspIDkgProtocol for Csp {
         debug!(self.logger; crypto.method_name => "idkg_gen_dealing_encryption_key_pair");
 
         self.csp_vault.idkg_gen_dealing_encryption_key_pair()
-    }
-}
-
-/// Threshold-ECDSA signature verification client.
-///
-/// Please see the trait definition for full documentation.
-impl CspThresholdEcdsaSigVerifier for Csp {
-    fn ecdsa_combine_sig_shares(
-        &self,
-        derivation_path: &ExtendedDerivationPath,
-        hashed_message: &[u8],
-        nonce: &Randomness,
-        key_transcript: &IDkgTranscriptInternal,
-        kappa_unmasked: &IDkgTranscriptInternal,
-        reconstruction_threshold: NumberOfNodes,
-        sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
-        algorithm_id: AlgorithmId,
-    ) -> Result<ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaCombineSigSharesError> {
-        debug!(self.logger; crypto.method_name => "ecdsa_combine_sig_shares");
-
-        combine_ecdsa_signature_shares(
-            &DerivationPath::from(derivation_path),
-            hashed_message,
-            *nonce,
-            key_transcript,
-            kappa_unmasked,
-            reconstruction_threshold,
-            sig_shares,
-            algorithm_id,
-        )
-        .map_err(|e| ThresholdEcdsaCombineSigSharesError::InternalError {
-            internal_error: format!("{:?}", e),
-        })
-    }
-
-    fn ecdsa_verify_sig_share(
-        &self,
-        share: &ThresholdEcdsaSigShareInternal,
-        signer_index: NodeIndex,
-        derivation_path: &ExtendedDerivationPath,
-        hashed_message: &[u8],
-        nonce: &Randomness,
-        key: &IDkgTranscriptInternal,
-        kappa_unmasked: &IDkgTranscriptInternal,
-        lambda_masked: &IDkgTranscriptInternal,
-        kappa_times_lambda: &IDkgTranscriptInternal,
-        key_times_lambda: &IDkgTranscriptInternal,
-        algorithm_id: AlgorithmId,
-    ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
-        debug!(self.logger; crypto.method_name => "ecdsa_verify_sig_share");
-
-        verify_ecdsa_signature_share(
-            share,
-            &DerivationPath::from(derivation_path),
-            hashed_message,
-            *nonce,
-            signer_index,
-            key,
-            kappa_unmasked,
-            lambda_masked,
-            kappa_times_lambda,
-            key_times_lambda,
-            algorithm_id,
-        )
-        .map_err(|e| match e {
-            ThresholdEcdsaVerifySigShareInternalError::InvalidArguments(s) => {
-                ThresholdEcdsaVerifySigShareError::InvalidArguments(s)
-            }
-            ThresholdEcdsaVerifySigShareInternalError::InternalError(s) => {
-                ThresholdEcdsaVerifySigShareError::InternalError { internal_error: s }
-            }
-            ThresholdEcdsaVerifySigShareInternalError::InconsistentCommitments => {
-                ThresholdEcdsaVerifySigShareError::InvalidSignatureShare
-            }
-            ThresholdEcdsaVerifySigShareInternalError::InvalidSignatureShare => {
-                ThresholdEcdsaVerifySigShareError::InvalidSignatureShare
-            }
-        })
-    }
-
-    fn ecdsa_verify_combined_signature(
-        &self,
-        signature: &ThresholdEcdsaCombinedSigInternal,
-        derivation_path: &ExtendedDerivationPath,
-        hashed_message: &[u8],
-        nonce: &Randomness,
-        key: &IDkgTranscriptInternal,
-        kappa_unmasked: &IDkgTranscriptInternal,
-        algorithm_id: AlgorithmId,
-    ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
-        debug!(self.logger; crypto.method_name => "ecdsa_verify_combined_signature");
-
-        verify_ecdsa_threshold_signature(
-            signature,
-            &DerivationPath::from(derivation_path),
-            hashed_message,
-            *nonce,
-            kappa_unmasked,
-            key,
-            algorithm_id,
-        )
-        .map_err(|e| match e {
-            ThresholdEcdsaVerifySignatureInternalError::InvalidSignature => {
-                ThresholdEcdsaVerifyCombinedSignatureError::InvalidSignature
-            }
-            ThresholdEcdsaVerifySignatureInternalError::InvalidArguments(s) => {
-                ThresholdEcdsaVerifyCombinedSignatureError::InvalidArguments(s)
-            }
-            ThresholdEcdsaVerifySignatureInternalError::InternalError(s) => {
-                ThresholdEcdsaVerifyCombinedSignatureError::InternalError { internal_error: s }
-            }
-            ThresholdEcdsaVerifySignatureInternalError::InconsistentCommitments => {
-                ThresholdEcdsaVerifyCombinedSignatureError::InternalError {
-                    internal_error: "Wrong commitment types".to_string(),
-                }
-            }
-        })
     }
 }

@@ -315,11 +315,11 @@ impl CallContextManagerStats {
     ///
     /// This is the count of callbacks per respondent; except for the callback
     /// corresponding to a potential paused or aborted canister response execution
-    /// (since that callback was already responded to).
+    /// (since this response was just delivered).
     ///
     /// Time complexity: `O(N)`.
     #[allow(dead_code)]
-    pub(crate) fn calculate_callbacks_per_respondent(
+    pub(crate) fn calculate_unresponded_callbacks_per_respondent(
         callbacks: &BTreeMap<CallbackId, Callback>,
         aborted_or_paused_response: Option<&Response>,
     ) -> BTreeMap<CanisterId, usize> {
@@ -331,8 +331,8 @@ impl CallContextManagerStats {
             },
         );
 
-        // An aborted or paused response execution means that the
-        // corresponding callback has already been responded to.
+        // Discount the callback corresponding to an aborted or paused response
+        // execution, because this response was already delivered.
         if let Some(response) = aborted_or_paused_response {
             match callback_counts.entry(response.respondent) {
                 Entry::Occupied(mut entry) => {
@@ -357,7 +357,7 @@ impl CallContextManagerStats {
     }
 
     /// Calculates the expected number of response slots (responses plus
-    /// reservations) per output queue.
+    /// reservations) per output queue corresponding to unresponded call contexts.
     ///
     /// This is the count of unresponded call contexts per originator; potentially
     /// plus one for a paused or aborted canister request execution, if any.
@@ -851,7 +851,7 @@ impl CallContextManager {
 
     /// Returns the number of unresponded canister update call contexts, also taking
     /// into account a potential paused or aborted canister request execution
-    /// (equivalent to one more call context).
+    /// (equivalent to one extra call context).
     ///
     /// Time complexity: `O(1)`.
     pub fn unresponded_canister_update_call_contexts(
@@ -867,7 +867,7 @@ impl CallContextManager {
 
     /// Returns the number of unresponded guaranteed response call contexts, also
     /// taking into account a potential paused or aborted canister request execution
-    /// (equivalent to one more call context).
+    /// (equivalent to one extra call context).
     ///
     /// Time complexity: `O(1)`.
     pub fn unresponded_guaranteed_response_call_contexts(
@@ -881,12 +881,15 @@ impl CallContextManager {
             }
     }
 
-    /// Returns the number of callbacks, also taking into account a potential paused
-    /// or aborted canister response execution (meaning that the corresponding
-    /// callback was already responded to).
+    /// Returns the number of unresponded callbacks, ignoring the callback
+    /// corresponding to a potential paused or aborted canister response execution
+    /// (since this response was just delivered).
     ///
     /// Time complexity: `O(1)`.
-    pub fn callback_count(&self, aborted_or_paused_response: Option<&Response>) -> usize {
+    pub fn unresponded_callback_count(
+        &self,
+        aborted_or_paused_response: Option<&Response>,
+    ) -> usize {
         self.callbacks.len()
             - match aborted_or_paused_response {
                 Some(_) => 1,
@@ -894,12 +897,12 @@ impl CallContextManager {
             }
     }
 
-    /// Returns the number of guaranteed response callbacks, also taking into
-    /// account a potential paused or aborted canister response execution (meaning
-    /// that the corresponding callback was already responded to).
+    /// Returns the number of unresponded guaranteed response callbacks, ignoring
+    /// the callback corresponding to a potential paused or aborted canister
+    /// response execution (since this response was just delivered).
     ///
     /// Time complexity: `O(1)`.
-    pub fn guaranteed_response_callback_count(
+    pub fn unresponded_guaranteed_response_callback_count(
         &self,
         aborted_or_paused_response: Option<&Response>,
     ) -> usize {

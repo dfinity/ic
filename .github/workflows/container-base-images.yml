@@ -1,7 +1,7 @@
 # Workflow for building IC Base Container Images
 # On master branch the images are pushed to DockerHub and references updated in automated PR
 
-name: IC Base Container Images
+name: Container IC Base Images
 
 on:
   # TODO: Enable prior to migration

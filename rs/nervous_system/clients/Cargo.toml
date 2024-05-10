@@ -10,12 +10,17 @@ path = "src/lib.rs"
 [dependencies]
 async-trait = { workspace = true }
 candid = { workspace = true }
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 ic-base-types = { path = "../../types/base_types" }
+ic-error-types = { path = "../../types/error_types" }
+ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-proxied-canister-calls-tracker = { path = "../proxied_canister_calls_tracker" }
 ic-nervous-system-runtime = { path = "../runtime" }
-ic-error-types = { path = "../../types/error_types" }
+ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
+icrc-ledger-client = { path = "../../../packages/icrc-ledger-client" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
 serde = { workspace = true }
 

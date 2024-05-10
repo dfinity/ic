@@ -1,7 +1,7 @@
 use crate::eth_rpc::{
-    self, are_errors_consistent, Block, BlockSpec, FeeHistory, FeeHistoryParams, GetLogsParam,
-    Hash, HttpOutcallError, HttpOutcallResult, HttpResponsePayload, JsonRpcResult, LogEntry,
-    ResponseSizeEstimate, SendRawTransactionResult,
+    self, Block, BlockSpec, FeeHistory, FeeHistoryParams, GetLogsParam, Hash, HttpOutcallError,
+    HttpOutcallResult, HttpResponsePayload, JsonRpcResult, LogEntry, ResponseSizeEstimate,
+    SendRawTransactionResult,
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
@@ -213,7 +213,8 @@ impl EthRpcClient {
 /// Guaranteed to be non-empty.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultiCallResults<T> {
-    results: BTreeMap<RpcNodeProvider, HttpOutcallResult<JsonRpcResult<T>>>,
+    ok_results: BTreeMap<RpcNodeProvider, T>,
+    errors: BTreeMap<RpcNodeProvider, SingleCallError>,
 }
 
 impl<T> MultiCallResults<T> {
@@ -226,7 +227,26 @@ impl<T> MultiCallResults<T> {
         if results.is_empty() {
             panic!("BUG: MultiCallResults cannot be empty!")
         }
-        Self { results }
+        let mut ok_results = BTreeMap::new();
+        let mut errors = BTreeMap::new();
+        for (provider, result) in results.into_iter() {
+            match result {
+                Ok(JsonRpcResult::Result(value)) => {
+                    assert!(ok_results.insert(provider, value).is_none());
+                }
+                Ok(JsonRpcResult::Error { code, message }) => {
+                    assert!(errors
+                        .insert(provider, SingleCallError::JsonRpcError { code, message })
+                        .is_none());
+                }
+                Err(error) => {
+                    assert!(errors
+                        .insert(provider, SingleCallError::HttpOutcallError(error))
+                        .is_none());
+                }
+            }
+        }
+        Self { ok_results, errors }
     }
 }
 
@@ -236,49 +256,67 @@ impl<T: PartialEq> MultiCallResults<T> {
     /// * MultiCallError::ConsistentHttpOutcallError: all errors are the same HTTP outcall error.
     /// * MultiCallError::InconsistentResults if there are different errors.
     fn all_ok(self) -> Result<BTreeMap<RpcNodeProvider, T>, MultiCallError<T>> {
-        let mut results = BTreeMap::new();
-        let mut first_error: Option<(RpcNodeProvider, HttpOutcallResult<JsonRpcResult<T>>)> = None;
-        for (provider, result) in self.results.into_iter() {
-            match result {
-                Ok(JsonRpcResult::Result(value)) => {
-                    results.insert(provider, value);
-                }
-                _ => match first_error {
-                    None => {
-                        first_error = Some((provider, result));
-                    }
-                    Some((first_error_provider, error)) => {
-                        if !are_errors_consistent(&error, &result) {
-                            return Err(MultiCallError::InconsistentResults(
-                                MultiCallResults::from_non_empty_iter(vec![
-                                    (first_error_provider, error),
-                                    (provider, result),
-                                ]),
-                            ));
-                        }
-                        first_error = Some((first_error_provider, error));
-                    }
-                },
+        if self.errors.is_empty() {
+            return Ok(self.ok_results);
+        }
+        Err(self.expect_error())
+    }
+
+    /// Expects at least 2 ok results to be ok or return the following error:
+    /// * MultiCallError::ConsistentJsonRpcError: all errors are the same JSON-RPC error.
+    /// * MultiCallError::ConsistentHttpOutcallError: all errors are the same HTTP outcall error.
+    /// * MultiCallError::InconsistentResults if there are different errors or an ok result with some errors.
+    fn at_least_two_ok(self) -> Result<BTreeMap<RpcNodeProvider, T>, MultiCallError<T>> {
+        match self.ok_results.len() {
+            0 => Err(self.expect_error()),
+            1 => Err(MultiCallError::InconsistentResults(self)),
+            _ => Ok(self.ok_results),
+        }
+    }
+
+    fn expect_error(self) -> MultiCallError<T> {
+        let mut errors_iter = self.errors.into_iter();
+        let (first_provider, first_error) = errors_iter
+            .next()
+            .expect("BUG: expect errors should be non-empty");
+        for (provider, error) in errors_iter {
+            if first_error != error {
+                return MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(
+                    vec![
+                        (first_provider, first_error.into()),
+                        (provider, error.into()),
+                    ],
+                ));
             }
         }
         match first_error {
-            None => Ok(results),
-            Some((_provider, Ok(JsonRpcResult::Error { code, message }))) => {
-                Err(MultiCallError::ConsistentJsonRpcError { code, message })
+            SingleCallError::HttpOutcallError(error) => {
+                MultiCallError::ConsistentHttpOutcallError(error)
             }
-            Some((_provider, Err(error))) => Err(MultiCallError::ConsistentHttpOutcallError(error)),
-            Some((_, Ok(JsonRpcResult::Result(_)))) => {
-                panic!("BUG: first_error should be an error type")
+            SingleCallError::JsonRpcError { code, message } => {
+                MultiCallError::ConsistentJsonRpcError { code, message }
             }
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SingleCallError {
     HttpOutcallError(HttpOutcallError),
     JsonRpcError { code: i64, message: String },
 }
+
+impl<T> From<SingleCallError> for HttpOutcallResult<JsonRpcResult<T>> {
+    fn from(value: SingleCallError) -> Self {
+        match value {
+            SingleCallError::HttpOutcallError(error) => Err(error),
+            SingleCallError::JsonRpcError { code, message } => {
+                Ok(JsonRpcResult::Error { code, message })
+            }
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum MultiCallError<T> {
     ConsistentHttpOutcallError(HttpOutcallError),
@@ -295,11 +333,13 @@ impl<T> MultiCallError<T> {
             MultiCallError::ConsistentHttpOutcallError(error) => predicate(error),
             MultiCallError::ConsistentJsonRpcError { .. } => false,
             MultiCallError::InconsistentResults(results) => {
-                results.results.values().any(|result| match result {
-                    Ok(JsonRpcResult::Result(_)) => false,
-                    Ok(JsonRpcResult::Error { .. }) => false,
-                    Err(error) => predicate(error),
-                })
+                results
+                    .errors
+                    .values()
+                    .any(|single_call_error| match single_call_error {
+                        SingleCallError::HttpOutcallError(error) => predicate(error),
+                        SingleCallError::JsonRpcError { .. } => false,
+                    })
             }
         }
     }
@@ -335,7 +375,7 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
         extractor: F,
     ) -> Result<T, MultiCallError<T>> {
         let min = self
-            .all_ok()?
+            .at_least_two_ok()?
             .into_values()
             .min_by_key(extractor)
             .expect("BUG: MultiCallResults is guaranteed to be non-empty");
@@ -347,7 +387,7 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
         extractor: F,
     ) -> Result<T, MultiCallError<T>> {
         let mut votes_by_key: BTreeMap<K, BTreeMap<RpcNodeProvider, T>> = BTreeMap::new();
-        for (provider, result) in self.all_ok()?.into_iter() {
+        for (provider, result) in self.at_least_two_ok()?.into_iter() {
             let key = extractor(&result);
             match votes_by_key.remove(&key) {
                 Some(mut votes_for_same_key) => {

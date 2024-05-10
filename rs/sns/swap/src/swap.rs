@@ -33,16 +33,14 @@ use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ledger_core::Tokens;
+use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_common::{i2d, ledger::compute_neuron_staking_subaccount_bytes};
 use ic_neurons_fund::{MatchedParticipationFunction, PolynomialNeuronsFundParticipation};
-use ic_sns_governance::{
-    ledger::ICRC1Ledger,
-    pb::v1::{
-        claim_swap_neurons_request::NeuronParameters,
-        claim_swap_neurons_response::{ClaimSwapNeuronsResult, SwapNeuron},
-        governance, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus,
-        NeuronId, SetMode, SetModeResponse,
-    },
+use ic_sns_governance::pb::v1::{
+    claim_swap_neurons_request::NeuronParameters,
+    claim_swap_neurons_response::{ClaimSwapNeuronsResult, SwapNeuron},
+    governance, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId,
+    SetMode, SetModeResponse,
 };
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{storable::Blob, GrowFailed, Storable};

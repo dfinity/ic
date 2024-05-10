@@ -36,6 +36,9 @@ pub struct Cli {
 
     #[command(flatten, next_help_heading = "retry")]
     pub retry: RetryConfig,
+
+    #[command(flatten, next_help_heading = "bouncer")]
+    pub bouncer: BouncerConfig,
 }
 
 #[derive(Args)]
@@ -271,4 +274,65 @@ pub struct RetryConfig {
     /// Whether to retry update calls
     #[clap(long, default_value = "false")]
     pub retry_update_call: bool,
+}
+
+#[derive(Args)]
+pub struct BouncerConfig {
+    /// Enable the firewall bouncer
+    #[clap(long)]
+    pub bouncer_enable: bool,
+
+    /// Whether to use sudo to call `nft` executable
+    #[clap(long, default_value = "true")]
+    pub bouncer_sudo: bool,
+
+    /// Path to a sudo binary, defaults to /usr/bin/sudo
+    #[clap(long)]
+    pub bouncer_sudo_path: Option<String>,
+
+    /// Path to an nft binary, defaults to /usr/sbin/nft
+    #[clap(long)]
+    pub bouncer_nft_path: Option<String>,
+
+    /// Number of requests per second that are allowed from a single IP
+    #[clap(long, default_value = "300", value_parser = clap::value_parser!(u32).range(1..))]
+    pub bouncer_ratelimit: u32,
+
+    /// Number of requests in a burst allowed, must be higher than --bouncer-ratelimit
+    #[clap(long, default_value = "600", value_parser = clap::value_parser!(u64).range(1..))]
+    pub bouncer_burst_size: u64,
+
+    /// For how long to ban the IPs
+    #[clap(long, default_value = "600")]
+    pub bouncer_ban_seconds: u64,
+
+    /// Maximum number of IPs to track. This restricts memory usage to store buckets.
+    /// If exceeded - old ones will be removed
+    #[clap(long, default_value = "20000")]
+    pub bouncer_max_buckets: u64,
+
+    /// TTL of a per-IP bucket. If no requests are coming from given IP for this number
+    /// of seconds then the bucket is removed
+    #[clap(long, default_value = "30")]
+    pub bouncer_bucket_ttl: u64,
+
+    /// How frequently to check if updates to the firewall are needed
+    #[clap(long, default_value = "1")]
+    pub bouncer_apply_interval: u64,
+
+    /// NFTables table name for IPv4
+    #[clap(long, default_value = "filter")]
+    pub bouncer_v4_table: String,
+
+    /// NFTables set name for IPv4
+    #[clap(long, default_value = "blackhole")]
+    pub bouncer_v4_set: String,
+
+    /// NFTables table name for IPv6
+    #[clap(long, default_value = "filter")]
+    pub bouncer_v6_table: String,
+
+    /// NFTables set name for IPv6
+    #[clap(long, default_value = "blackhole6")]
+    pub bouncer_v6_set: String,
 }

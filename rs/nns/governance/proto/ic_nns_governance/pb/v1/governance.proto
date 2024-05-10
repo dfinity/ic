@@ -612,8 +612,8 @@ enum NnsFunction {
   // the Root canister is preventing root or another canister from upgrading (in the case of proxied calls).
   NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION = 42;
 
-  // A proposal to add a new API Boundary Node using an assigned node
-  NNS_FUNCTION_ADD_API_BOUNDARY_NODE = 43;
+  // A proposal to add a set of new API Boundary Nodes using unassigned nodes
+  NNS_FUNCTION_ADD_API_BOUNDARY_NODES = 43;
 
   // A proposal to remove a set of API Boundary Nodes, which will designate them as unassigned nodes
   NNS_FUNCTION_REMOVE_API_BOUNDARY_NODES = 44;

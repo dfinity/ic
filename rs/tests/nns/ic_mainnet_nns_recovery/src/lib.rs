@@ -1333,6 +1333,7 @@ fn create_cycles_wallet(
 
     let mut cmd = Command::new(dfx_path);
     cmd.env("HOME", home)
+        .env("DFX_DISABLE_QUERY_VERIFICATION", "1")
         .arg("-q")
         .arg("identity")
         .arg("--network")

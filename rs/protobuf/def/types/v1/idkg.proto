@@ -292,6 +292,7 @@ message IDkgDealingSupport {
 message EcdsaPrefix {
   uint64 group_tag = 1;
   uint64 meta_hash = 2;
+  uint64 height = 3;
 }
 
 message PrefixHashPair {

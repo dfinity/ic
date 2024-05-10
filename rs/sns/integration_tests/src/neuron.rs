@@ -10,6 +10,7 @@ use ic_ledger_core::{
     tokens::{CheckedAdd, TOKEN_SUBDIVIDABLE_BY},
     Tokens,
 };
+use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_common::{cmc::FakeCmc, i2d, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
@@ -20,7 +21,6 @@ use ic_nns_test_utils::{
 };
 use ic_sns_governance::{
     governance::Governance,
-    ledger::ICRC1Ledger,
     neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
     pb::v1::{
         governance::{self, SnsMetadata},

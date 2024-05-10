@@ -432,15 +432,15 @@ fn callback_stats() {
         ccm: &CallContextManager,
         aborted_or_paused_response: Option<&Response>,
     ) -> BTreeMap<CanisterId, usize> {
-        CallContextManagerStats::calculate_callbacks_per_respondent(
+        CallContextManagerStats::calculate_unresponded_callbacks_per_respondent(
             ccm.callbacks(),
             aborted_or_paused_response,
         )
     }
 
-    assert_eq!(0, ccm.callback_count(None));
+    assert_eq!(0, ccm.unresponded_callback_count(None));
     assert_eq!(btreemap! {}, calculate_callback_counts(&ccm, None));
-    assert_eq!(0, ccm.guaranteed_response_callback_count(None));
+    assert_eq!(0, ccm.unresponded_guaranteed_response_callback_count(None));
 
     //
     // Register a best-effort callback.
@@ -452,12 +452,12 @@ fn callback_stats() {
         .originator_reply_callback(best_effort_callback_id)
         .deadline(CoarseTime::from_secs_since_unix_epoch(14))
         .build();
-    assert_eq!(1, ccm.callback_count(None));
+    assert_eq!(1, ccm.unresponded_callback_count(None));
     assert_eq!(
         btreemap! { respondent => 1 },
         calculate_callback_counts(&ccm, None)
     );
-    assert_eq!(0, ccm.guaranteed_response_callback_count(None));
+    assert_eq!(0, ccm.unresponded_guaranteed_response_callback_count(None));
 
     //
     // Register a guaranteed response callback.
@@ -470,17 +470,17 @@ fn callback_stats() {
         .deadline(NO_DEADLINE)
         .build();
     // 2 pending callbacks, one guaranteed response.
-    assert_eq!(2, ccm.callback_count(None));
+    assert_eq!(2, ccm.unresponded_callback_count(None));
     assert_eq!(
         btreemap! { respondent => 2 },
         calculate_callback_counts(&ccm, None)
     );
-    assert_eq!(1, ccm.guaranteed_response_callback_count(None));
+    assert_eq!(1, ccm.unresponded_guaranteed_response_callback_count(None));
 
     // But only 1 if either response is in DTS execution.
     assert_eq!(
         1,
-        ccm.callback_count(Some(&guaranteed_response_callback_response))
+        ccm.unresponded_callback_count(Some(&guaranteed_response_callback_response))
     );
     assert_eq!(
         btreemap! { respondent => 1 },
@@ -488,16 +488,21 @@ fn callback_stats() {
     );
     assert_eq!(
         0,
-        ccm.guaranteed_response_callback_count(Some(&guaranteed_response_callback_response))
+        ccm.unresponded_guaranteed_response_callback_count(Some(
+            &guaranteed_response_callback_response
+        ))
     );
-    assert_eq!(1, ccm.callback_count(Some(&best_effort_callback_response)));
+    assert_eq!(
+        1,
+        ccm.unresponded_callback_count(Some(&best_effort_callback_response))
+    );
     assert_eq!(
         btreemap! { respondent => 1 },
         calculate_callback_counts(&ccm, Some(&best_effort_callback_response))
     );
     assert_eq!(
         1,
-        ccm.guaranteed_response_callback_count(Some(&best_effort_callback_response))
+        ccm.unresponded_guaranteed_response_callback_count(Some(&best_effort_callback_response))
     );
 
     // Also test an encode-decode roundtrip, to ensure that the count is preserved.
@@ -511,20 +516,20 @@ fn callback_stats() {
     // Unreguster the best-effort callback.
     //
     ccm.unregister_callback(best_effort_callback_id);
-    assert_eq!(1, ccm.callback_count(None));
+    assert_eq!(1, ccm.unresponded_callback_count(None));
     assert_eq!(
         btreemap! { respondent => 1 },
         calculate_callback_counts(&ccm, None)
     );
-    assert_eq!(1, ccm.guaranteed_response_callback_count(None));
+    assert_eq!(1, ccm.unresponded_guaranteed_response_callback_count(None));
 
     //
     // Unregister the guaranteed response callback.
     //
     ccm.unregister_callback(guaranteed_response_callback_id);
-    assert_eq!(0, ccm.callback_count(None));
+    assert_eq!(0, ccm.unresponded_callback_count(None));
     assert_eq!(btreemap! {}, calculate_callback_counts(&ccm, None));
-    assert_eq!(0, ccm.guaranteed_response_callback_count(None));
+    assert_eq!(0, ccm.unresponded_guaranteed_response_callback_count(None));
 }
 
 #[test]

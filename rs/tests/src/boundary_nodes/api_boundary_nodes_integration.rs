@@ -35,7 +35,7 @@ use ic_nns_governance::{init::TEST_NEURON_1_ID, pb::v1::NnsFunction};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use itertools::Itertools;
 use registry_canister::mutations::{
-    do_add_api_boundary_node::AddApiBoundaryNodePayload,
+    do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     node_management::do_update_node_domain_directly::UpdateNodeDomainDirectlyPayload,
 };
 use std::{net::Ipv6Addr, sync::Arc};
@@ -137,15 +137,15 @@ pub fn decentralization_test(env: TestEnv) {
             log,
             "Successfully updated domain name of the unassigned node with id={}", node.node_id
         );
-        let proposal_payload = AddApiBoundaryNodePayload {
-            node_id: node.node_id,
+        let proposal_payload = AddApiBoundaryNodesPayload {
+            node_ids: vec![node.node_id],
             version: version.clone().into(),
         };
         let proposal_id = block_on(submit_external_update_proposal(
             &governance,
             Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
             NeuronId(TEST_NEURON_1_ID),
-            NnsFunction::AddApiBoundaryNode,
+            NnsFunction::AddApiBoundaryNodes,
             proposal_payload,
             String::from("Add an API boundary node"),
             "Motivation: API boundary node testing".to_string(),
