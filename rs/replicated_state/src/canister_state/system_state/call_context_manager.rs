@@ -310,10 +310,12 @@ impl CallContextManagerStats {
         }
     }
 
-    /// Calculates the number of response slots (responses plus reservations) per
-    /// input queue, as the count of callbacks per respondent, also taking into
-    /// account a potential paused or aborted canister response execution (meaning
-    /// that the corresponding callback was already responded to).
+    /// Calculates the expected number of response slots (responses plus
+    /// reservations) per input queue.
+    ///
+    /// This is the count of callbacks per respondent; except for the callback
+    /// corresponding to a potential paused or aborted canister response execution
+    /// (since that callback was already responded to).
     ///
     /// Time complexity: `O(N)`.
     #[allow(dead_code)]
@@ -329,8 +331,8 @@ impl CallContextManagerStats {
             },
         );
 
-        // An aborted or paused response execution means one less callback (since the
-        // response was already consumed).
+        // An aborted or paused response execution means that the
+        // corresponding callback has already been responded to.
         if let Some(response) = aborted_or_paused_response {
             match callback_counts.entry(response.respondent) {
                 Entry::Occupied(mut entry) => {
@@ -354,10 +356,11 @@ impl CallContextManagerStats {
         callback_counts
     }
 
-    /// Calculates the number of response slots (responses plus reservations) per
-    /// output queue, as the count of unresponded call contexts per originator, also
-    /// taking into account a potential paused or aborted canister request execution
-    /// (equivalent to one more call context).
+    /// Calculates the expected number of response slots (responses plus
+    /// reservations) per output queue.
+    ///
+    /// This is the count of unresponded call contexts per originator; potentially
+    /// plus one for a paused or aborted canister request execution, if any.
     ///
     /// Time complexity: `O(N)`.
     #[allow(dead_code)]
@@ -380,8 +383,8 @@ impl CallContextManagerStats {
                 },
             );
 
-        // An aborted or paused request execution means one extra (not yet applied)
-        // unresponded call context.
+        // An aborted or paused request execution is equivalent to one extra unresponded
+        // call context.
         if let Some(request) = aborted_or_paused_request {
             *unresponded_canister_update_call_contexts
                 .entry(request.sender)
