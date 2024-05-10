@@ -51,6 +51,45 @@ mock! {
     }
 }
 
+/// Sync wrapper to allow shared modification. See [`RefMockStateManager`].
+#[derive(Default)]
+pub struct RefMockPayloadBuilder {
+    pub mock: RwLock<MockPayloadBuilder>,
+}
+
+impl RefMockPayloadBuilder {
+    pub fn get_mut(&self) -> std::sync::RwLockWriteGuard<'_, MockPayloadBuilder> {
+        self.mock.write().unwrap()
+    }
+}
+
+impl PayloadBuilder for RefMockPayloadBuilder {
+    fn get_payload(
+        &self,
+        height: Height,
+        past_payloads: &[(Height, Time, Payload)],
+        context: &ValidationContext,
+        subnet_records: &SubnetRecords,
+    ) -> BatchPayload {
+        self.mock
+            .read()
+            .unwrap()
+            .get_payload(height, past_payloads, context, subnet_records)
+    }
+    fn validate_payload(
+        &self,
+        height: Height,
+        proposal_context: &ProposalContext,
+        payload: &Payload,
+        past_payloads: &[(Height, Time, Payload)],
+    ) -> ValidationResult<PayloadValidationError> {
+        self.mock
+            .read()
+            .unwrap()
+            .validate_payload(height, proposal_context, payload, past_payloads)
+    }
+}
+
 pub struct Dependencies {
     pub crypto: Arc<CryptoReturningOk>,
     pub registry: Arc<FakeRegistryClient>,

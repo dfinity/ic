@@ -1646,14 +1646,14 @@ pub mod test {
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{
         dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
-        Dependencies, MockPayloadBuilder,
+        Dependencies, RefMockPayloadBuilder,
     };
     use ic_consensus_utils::get_block_maker_delay;
     use ic_interfaces::{
         messaging::XNetTransientValidationError, p2p::consensus::MutablePool,
         time_source::TimeSource,
     };
-    use ic_interfaces_mocks::messaging::MockMessageRouting;
+    use ic_interfaces_mocks::messaging::RefMockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -1699,11 +1699,12 @@ pub mod test {
         };
     }
 
-    pub struct ValidatorDependencies {
-        pub payload_builder: Arc<MockPayloadBuilder>,
+    pub struct ValidatorAndDependencies {
+        pub validator: Validator,
+        pub payload_builder: Arc<RefMockPayloadBuilder>,
         pub membership: Arc<Membership>,
         pub state_manager: Arc<RefMockStateManager>,
-        pub message_routing: Arc<MockMessageRouting>,
+        pub message_routing: Arc<RefMockMessageRouting>,
         pub crypto: Arc<CryptoReturningOk>,
         pub data_provider: Arc<ProtoRegistryDataProvider>,
         pub registry_client: Arc<FakeRegistryClient>,
@@ -1713,32 +1714,36 @@ pub mod test {
         pub replica_config: ReplicaConfig,
     }
 
-    impl ValidatorDependencies {
+    impl ValidatorAndDependencies {
         fn new(dependencies: Dependencies) -> Self {
-            let Dependencies {
-                replica_config,
-                time_source,
-                pool,
-                membership,
-                registry_data_provider,
-                registry,
-                crypto,
-                state_manager,
-                dkg_pool,
-                ..
-            } = dependencies;
+            let payload_builder = Arc::new(RefMockPayloadBuilder::default());
+            let message_routing = Arc::new(RefMockMessageRouting::default());
+            let validator = Validator::new(
+                dependencies.replica_config.clone(),
+                dependencies.membership.clone(),
+                dependencies.registry.clone(),
+                dependencies.crypto.clone(),
+                payload_builder.clone(),
+                dependencies.state_manager.clone(),
+                message_routing.clone(),
+                dependencies.dkg_pool.clone(),
+                no_op_logger(),
+                ValidatorMetrics::new(MetricsRegistry::new()),
+                Arc::clone(&dependencies.time_source) as Arc<_>,
+            );
             Self {
-                payload_builder: Arc::new(MockPayloadBuilder::new()),
-                membership,
-                state_manager,
-                message_routing: Arc::new(MockMessageRouting::new()),
-                crypto,
-                data_provider: registry_data_provider,
-                registry_client: registry,
-                pool,
-                dkg_pool,
-                time_source,
-                replica_config,
+                validator,
+                payload_builder,
+                membership: dependencies.membership,
+                state_manager: dependencies.state_manager,
+                message_routing,
+                crypto: dependencies.crypto,
+                data_provider: dependencies.registry_data_provider,
+                registry_client: dependencies.registry,
+                pool: dependencies.pool,
+                dkg_pool: dependencies.dkg_pool,
+                time_source: dependencies.time_source,
+                replica_config: dependencies.replica_config,
             }
         }
     }
@@ -1746,8 +1751,8 @@ pub mod test {
     fn setup_dependencies(
         pool_config: ic_config::artifact_pool::ArtifactPoolConfig,
         node_ids: &[NodeId],
-    ) -> ValidatorDependencies {
-        ValidatorDependencies::new(dependencies_with_subnet_params(
+    ) -> ValidatorAndDependencies {
+        ValidatorAndDependencies::new(dependencies_with_subnet_params(
             pool_config,
             subnet_test_id(0),
             vec![(
@@ -1762,8 +1767,8 @@ pub mod test {
     fn setup_dependencies_with_raw_state_manager(
         pool_config: ic_config::artifact_pool::ArtifactPoolConfig,
         node_ids: &[NodeId],
-    ) -> ValidatorDependencies {
-        ValidatorDependencies::new(dependencies_with_subnet_records_with_raw_state_manager(
+    ) -> ValidatorAndDependencies {
+        ValidatorAndDependencies::new(dependencies_with_subnet_records_with_raw_state_manager(
             pool_config,
             subnet_test_id(0),
             vec![(
@@ -1778,17 +1783,10 @@ pub mod test {
     #[test]
     fn test_validate_catch_up_package_shares() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorDependencies {
-                payload_builder,
-                membership,
+            let ValidatorAndDependencies {
+                validator,
                 state_manager,
-                message_routing,
-                crypto,
-                registry_client,
                 mut pool,
-                dkg_pool,
-                time_source,
-                replica_config,
                 ..
             } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
 
@@ -1842,20 +1840,6 @@ pub mod test {
                 Some(RegistryVersion::from(1));
             pool.insert_unvalidated(cup_with_registry_version.clone());
 
-            let validator = Validator::new(
-                replica_config,
-                membership,
-                registry_client,
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
-
             let pool_reader = PoolReader::new(&pool);
             let change_set = validator.validate_catch_up_package_shares(&pool_reader);
 
@@ -1880,17 +1864,10 @@ pub mod test {
     #[test]
     fn test_validate_catch_up_package_shares_with_registry_version() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorDependencies {
-                payload_builder,
-                membership,
+            let ValidatorAndDependencies {
+                validator,
                 state_manager,
-                message_routing,
-                crypto,
-                registry_client,
                 mut pool,
-                dkg_pool,
-                time_source,
-                replica_config,
                 ..
             } = setup_dependencies_with_raw_state_manager(
                 pool_config,
@@ -1998,20 +1975,6 @@ pub mod test {
                 make_next_cup_share(proposal, beacon, Some(RegistryVersion::from(2)));
             pool.insert_unvalidated(cup_share_valid.clone());
 
-            let validator = Validator::new(
-                replica_config,
-                membership,
-                registry_client,
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
-
             let pool_reader = PoolReader::new(&pool);
             let change_set = validator.validate_catch_up_package_shares(&pool_reader);
 
@@ -2035,17 +1998,9 @@ pub mod test {
     #[test]
     fn test_finalization_requires_notarization() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorDependencies {
-                payload_builder,
-                membership,
-                state_manager,
-                message_routing,
-                crypto,
-                registry_client,
+            let ValidatorAndDependencies {
+                validator,
                 mut pool,
-                dkg_pool,
-                time_source,
-                replica_config,
                 ..
             } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
             let block = pool.make_next_block();
@@ -2053,20 +2008,6 @@ pub mod test {
             // Insert a Finalization for `block` in the unvalidated pool
             let share = FinalizationShare::fake(block.as_ref(), block.signature.signer);
             pool.insert_unvalidated(Finalization::fake(share.content));
-
-            let validator = Validator::new(
-                replica_config,
-                membership,
-                registry_client,
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
 
             // With no existing Notarization for `block`, the Finalization in the
             // unvalidated pool should not be added to validated
@@ -2128,34 +2069,13 @@ pub mod test {
     #[test]
     fn test_random_beacon_validation() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorDependencies {
-                payload_builder,
-                membership,
-                state_manager,
-                message_routing,
-                crypto,
-                registry_client,
+            let ValidatorAndDependencies {
+                validator,
                 mut pool,
-                dkg_pool,
-                time_source,
                 replica_config,
                 ..
             } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
             pool.advance_round_normal_operation();
-
-            let validator = Validator::new(
-                replica_config.clone(),
-                membership,
-                registry_client,
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
 
             // Put a random tape share in the unvalidated pool
             let pool_reader = PoolReader::new(&pool);
@@ -2204,16 +2124,11 @@ pub mod test {
     #[test]
     fn test_random_tape_validation() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorDependencies {
-                payload_builder,
-                membership,
+            let ValidatorAndDependencies {
+                validator,
                 state_manager,
-                mut message_routing,
-                crypto,
-                registry_client,
+                message_routing,
                 mut pool,
-                dkg_pool,
-                time_source,
                 replica_config,
                 ..
             } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
@@ -2224,31 +2139,16 @@ pub mod test {
                 .dont_add_catch_up_package()
                 .dont_add_random_tape()
                 .advance();
-
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
                 .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
             let expected_batch_height = Arc::new(RwLock::new(Height::from(1)));
             let expected_batch_height_clone = expected_batch_height.clone();
-            Arc::get_mut(&mut message_routing)
-                .unwrap()
+            message_routing
+                .get_mut()
                 .expect_expected_batch_height()
                 .returning(move || *expected_batch_height_clone.read().unwrap());
-
-            let validator = Validator::new(
-                replica_config.clone(),
-                membership,
-                registry_client,
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
 
             // Put a random tape share in the unvalidated pool
             let share_1 = RandomTapeShare::fake(Height::from(1), replica_config.node_id);
@@ -2341,21 +2241,20 @@ pub mod test {
             let prior_height = Height::from(5);
             let certified_height = Height::from(1);
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
-            let ValidatorDependencies {
-                mut payload_builder,
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
                 membership,
                 state_manager,
-                message_routing,
-                crypto,
                 data_provider,
                 registry_client,
                 mut pool,
-                dkg_pool,
                 time_source,
                 replica_config,
+                ..
             } = setup_dependencies(pool_config, &committee);
-            Arc::get_mut(&mut payload_builder)
-                .unwrap()
+            payload_builder
+                .get_mut()
                 .expect_validate_payload()
                 .withf(move |_, _, _, payloads| {
                     // Assert that payloads are from blocks between:
@@ -2407,20 +2306,6 @@ pub mod test {
             pool.finalize(&block_chain[1]);
             pool.finalize(&block_chain[2]);
 
-            let validator = Validator::new(
-                replica_config.clone(),
-                membership,
-                registry_client.clone(),
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
-
             // Ensure that the validator initially does not validate anything, as it is not
             // time for rank 1 yet
             assert!(validator
@@ -2464,21 +2349,20 @@ pub mod test {
             let prior_height = Height::from(5);
             let certified_height = Height::from(1);
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
-            let ValidatorDependencies {
-                mut payload_builder,
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
                 membership,
                 state_manager,
-                message_routing,
-                crypto,
                 data_provider,
                 registry_client,
                 mut pool,
-                dkg_pool,
                 time_source,
                 replica_config,
+                ..
             } = setup_dependencies(pool_config, &committee);
-            Arc::get_mut(&mut payload_builder)
-                .unwrap()
+            payload_builder
+                .get_mut()
                 .expect_validate_payload()
                 .withf(move |_, _, _, payloads| {
                     // Assert that payloads are from blocks between:
@@ -2531,20 +2415,6 @@ pub mod test {
             pool.finalize(&block_chain[1]);
             pool.finalize(&block_chain[2]);
 
-            let validator = Validator::new(
-                replica_config.clone(),
-                membership,
-                registry_client.clone(),
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
-
             // ensure that the validator initially does not validate anything, as it is not
             // time for rank 1 yet
             assert!(validator
@@ -2592,21 +2462,20 @@ pub mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let certified_height = Height::from(1);
             let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorDependencies {
-                mut payload_builder,
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
                 membership,
                 state_manager,
-                message_routing,
-                crypto,
                 data_provider,
                 registry_client,
                 mut pool,
-                dkg_pool,
                 time_source,
                 replica_config,
+                ..
             } = setup_dependencies(pool_config, &committee);
-            Arc::get_mut(&mut payload_builder)
-                .unwrap()
+            payload_builder
+                .get_mut()
                 .expect_validate_payload()
                 .returning(|_, _, _, _| Ok(()));
             state_manager
@@ -2631,20 +2500,6 @@ pub mod test {
             registry_client.update_to_latest_version();
 
             pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(3));
-
-            let validator = Validator::new(
-                replica_config,
-                membership.clone(),
-                registry_client,
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
 
             let mut test_block = pool.make_next_block();
             test_block.signature.signer = get_block_maker_by_rank(
@@ -2698,21 +2553,19 @@ pub mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let certified_height = Height::from(1);
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorDependencies {
-                mut payload_builder,
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
                 membership,
                 state_manager,
-                message_routing,
-                crypto,
                 data_provider,
                 registry_client,
                 mut pool,
-                dkg_pool,
-                time_source,
                 replica_config,
+                ..
             } = setup_dependencies(pool_config, &subnet_members);
-            Arc::get_mut(&mut payload_builder)
-                .unwrap()
+            payload_builder
+                .get_mut()
                 .expect_validate_payload()
                 .returning(|_, _, _, _| Ok(()));
             state_manager
@@ -2735,20 +2588,6 @@ pub mod test {
             );
 
             registry_client.update_to_latest_version();
-
-            let validator = Validator::new(
-                replica_config,
-                membership.clone(),
-                registry_client,
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
 
             let mut parent_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
             parent_block.content.as_mut().context.registry_version = RegistryVersion::from(12);
@@ -2819,22 +2658,18 @@ pub mod test {
     fn test_certified_height_change() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorDependencies {
-                mut payload_builder,
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
                 membership,
                 state_manager,
-                message_routing,
-                crypto,
-                registry_client,
                 mut pool,
-                dkg_pool,
                 time_source,
-                replica_config,
                 ..
             } = setup_dependencies(pool_config, &subnet_members);
 
-            Arc::get_mut(&mut payload_builder)
-                .unwrap()
+            payload_builder
+                .get_mut()
                 .expect_validate_payload()
                 .returning(|_, _, _, _| Ok(()));
             state_manager
@@ -2854,20 +2689,6 @@ pub mod test {
             let block_chain = pool.insert_block_chain(prior_height);
             pool.finalize(&block_chain[3]);
             pool.notarize(&block_chain[4]);
-
-            let validator = Validator::new(
-                replica_config,
-                membership.clone(),
-                registry_client,
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
 
             // Construct a block with certified height 1 (which can't yet be verified
             // because state_manager will return certified height 0 the first time,
@@ -2899,22 +2720,18 @@ pub mod test {
     fn test_block_context_time() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorDependencies {
-                mut payload_builder,
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
                 membership,
                 state_manager,
-                message_routing,
-                crypto,
-                registry_client,
                 mut pool,
-                dkg_pool,
                 time_source,
-                replica_config,
                 ..
             } = setup_dependencies(pool_config, &subnet_members);
 
-            Arc::get_mut(&mut payload_builder)
-                .unwrap()
+            payload_builder
+                .get_mut()
                 .expect_validate_payload()
                 .returning(|_, _, _, _| Ok(()));
             state_manager
@@ -2929,19 +2746,6 @@ pub mod test {
             pool.finalize(&block_chain[3]);
             pool.notarize(&block_chain[4]);
 
-            let validator = Validator::new(
-                replica_config,
-                membership.clone(),
-                registry_client,
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
             // We construct a block with a time greater than the current consensus time.
             // It should not be validated yet.
             let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
@@ -2986,17 +2790,9 @@ pub mod test {
     #[test]
     fn test_notarization_requires_at_least_threshold_signatures() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ValidatorDependencies {
-                payload_builder,
-                membership,
-                state_manager,
-                message_routing,
-                crypto,
-                registry_client,
+            let ValidatorAndDependencies {
+                validator,
                 mut pool,
-                dkg_pool,
-                time_source,
-                replica_config,
                 ..
             } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
             let block = pool.make_next_block();
@@ -3007,20 +2803,6 @@ pub mod test {
             notarization.signature.signers = vec![];
 
             pool.insert_unvalidated(notarization.clone());
-
-            let validator = Validator::new(
-                replica_config,
-                membership,
-                registry_client,
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
 
             // The notarization should be marked invalid
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -3059,17 +2841,9 @@ pub mod test {
     fn test_notarization_deduped_by_content() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             // Setup validator dependencies.
-            let ValidatorDependencies {
-                payload_builder,
-                membership,
-                state_manager,
-                message_routing,
-                crypto,
-                registry_client,
+            let ValidatorAndDependencies {
+                validator,
                 mut pool,
-                dkg_pool,
-                time_source,
-                replica_config,
                 ..
             } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
 
@@ -3091,20 +2865,6 @@ pub mod test {
             assert!(notarization_0 != notarization_1);
             pool.insert_unvalidated(notarization_0);
             pool.insert_unvalidated(notarization_1);
-
-            let validator = Validator::new(
-                replica_config,
-                membership,
-                registry_client,
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
 
             // Only one notarization is emitted in the ChangeSet.
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -3134,17 +2894,9 @@ pub mod test {
     fn test_finalization_deduped_by_content() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             // Setup validator dependencies.
-            let ValidatorDependencies {
-                payload_builder,
-                membership,
-                state_manager,
-                message_routing,
-                crypto,
-                registry_client,
+            let ValidatorAndDependencies {
+                validator,
                 mut pool,
-                dkg_pool,
-                time_source,
-                replica_config,
                 ..
             } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
 
@@ -3167,20 +2919,6 @@ pub mod test {
             assert!(finalization_0 != finalization_1);
             pool.insert_unvalidated(finalization_0);
             pool.insert_unvalidated(finalization_1);
-
-            let validator = Validator::new(
-                replica_config,
-                membership,
-                registry_client,
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
 
             // Only one finalization is emitted in the ChangeSet.
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -3242,17 +2980,11 @@ pub mod test {
     ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             // Setup validator dependencies.
-            let ValidatorDependencies {
-                payload_builder,
-                membership,
+            let ValidatorAndDependencies {
+                validator,
                 state_manager,
-                message_routing,
-                crypto,
-                registry_client,
                 mut pool,
-                dkg_pool,
                 time_source,
-                replica_config,
                 ..
             } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
 
@@ -3272,20 +3004,6 @@ pub mod test {
                 .get_mut()
                 .expect_latest_state_height()
                 .return_const(state_height);
-
-            let validator = Validator::new(
-                replica_config,
-                membership,
-                registry_client,
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
 
             time_source.advance_time(held_back_duration);
 
@@ -3308,17 +3026,10 @@ pub mod test {
     fn test_should_not_validate_catch_up_package_when_wrong_version() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             // Setup validator dependencies.
-            let ValidatorDependencies {
-                payload_builder,
-                membership,
+            let ValidatorAndDependencies {
+                validator,
                 state_manager,
-                message_routing,
-                crypto,
-                registry_client,
                 mut pool,
-                dkg_pool,
-                time_source,
-                replica_config,
                 ..
             } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
 
@@ -3340,20 +3051,6 @@ pub mod test {
                 .expect_latest_state_height()
                 .return_const(Height::new(1));
 
-            let validator = Validator::new(
-                replica_config,
-                membership,
-                registry_client,
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
-
             let mut changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_eq!(changeset.len(), 1);
 
@@ -3370,22 +3067,20 @@ pub mod test {
     fn test_out_of_sync_validation() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorDependencies {
-                mut payload_builder,
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
                 membership,
                 state_manager,
-                message_routing,
-                crypto,
                 registry_client,
                 mut pool,
-                dkg_pool,
                 time_source,
                 replica_config,
                 ..
             } = setup_dependencies(pool_config, &subnet_members);
 
-            Arc::get_mut(&mut payload_builder)
-                .unwrap()
+            payload_builder
+                .get_mut()
                 .expect_validate_payload()
                 .returning(|_, _, _, _| Ok(()));
             state_manager
@@ -3409,20 +3104,6 @@ pub mod test {
                 current = pool.make_next_block_from_parent(current.as_ref(), Rank(0));
                 current_beacon = RandomBeacon::from_parent(&current_beacon);
             }
-
-            let validator = Validator::new(
-                replica_config.clone(),
-                membership.clone(),
-                registry_client.clone(),
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
 
             // The current time is the time at which we inserted, notarized and finalized
             // the current tip of the chain (i.e. the parent of test_block).
@@ -3529,23 +3210,18 @@ pub mod test {
     fn test_block_validated_through_notarization() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let ValidatorDependencies {
-                mut payload_builder,
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
                 membership,
                 state_manager,
-                message_routing,
-                crypto,
-                registry_client,
                 mut pool,
-                dkg_pool,
-                time_source,
-                replica_config,
                 ..
             } = setup_dependencies(pool_config, &subnet_members);
             pool.advance_round_normal_operation();
 
-            Arc::get_mut(&mut payload_builder)
-                .unwrap()
+            payload_builder
+                .get_mut()
                 .expect_validate_payload()
                 .returning(|_, _, _, _| {
                     Err(ValidationError::Transient(
@@ -3558,20 +3234,6 @@ pub mod test {
                 .get_mut()
                 .expect_latest_certified_height()
                 .return_const(Height::from(0));
-
-            let validator = Validator::new(
-                replica_config,
-                membership.clone(),
-                registry_client,
-                crypto,
-                payload_builder,
-                state_manager,
-                message_routing,
-                dkg_pool,
-                no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
-                Arc::clone(&time_source) as Arc<_>,
-            );
 
             // First ensure that we require the parent block
             pool.insert_validated(pool.make_next_beacon());
