@@ -8989,6 +8989,7 @@ dependencies = [
  "ic-registry-transport",
  "ic-replicated-state",
  "ic-state-machine-tests",
+ "ic-state-manager",
  "ic-test-utilities",
  "ic-test-utilities-execution-environment",
  "ic-test-utilities-logger",
