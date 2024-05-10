@@ -1296,8 +1296,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4.13",
                 features = ["full"],
             ),
-            "tower-http": crate.spec(
+            "tower_http_0_4_4": crate.spec(
                 version = "^0.4.4",
+                package = "tower-http",
                 features = [
                     "trace",
                     "request-id",
@@ -1305,9 +1306,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "compression-full",
                 ],
             ),
-            "tower_http_0_5_1": crate.spec(
-                package = "tower-http",
-                version = "^0.5.1",
+            "tower-http": crate.spec(
+                version = "^0.5.2",
                 features = [
                     "cors",
                     "limit",

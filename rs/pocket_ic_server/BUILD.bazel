@@ -47,7 +47,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing-appender",
     "@crate_index//:tower",
-    "@crate_index//:tower_http_0_5_1",
+    "@crate_index//:tower-http",
     "@crate_index//:ic-cdk",
     "@crate_index//:base64",
     "@crate_index//:wat",

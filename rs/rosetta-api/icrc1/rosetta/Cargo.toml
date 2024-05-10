@@ -53,7 +53,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = "3.1.0"
 tokio = { workspace = true }
-tower-http = { version = "^0.5.1", features = ["trace"] }
+tower-http = { version = "^0.5.2", features = ["trace"] }
 tower-request-id = "^0.3.0"
 tracing = { workspace = true }
 tracing-appender = { workspace = true }

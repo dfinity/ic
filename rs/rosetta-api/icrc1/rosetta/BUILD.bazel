@@ -50,7 +50,7 @@ DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:tower-request-id",
-    "@crate_index//:tower_http_0_5_1",
+    "@crate_index//:tower-http",
     "@crate_index//:tracing",
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",

@@ -1,5 +1,5 @@
 {
-  "checksum": "8ecedab2224362d8eeffaa4143283759f7e3e0ba9271a5eb16d6261735b1401f",
+  "checksum": "27300c3ec36ae2ab7c6a967210bbbb7e2dc95cfd580b6abbc58eb8e0907cff41",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17970,12 +17970,12 @@
             },
             {
               "id": "tower-http 0.4.4",
-              "target": "tower_http"
+              "target": "tower_http",
+              "alias": "tower_http_0_4_4"
             },
             {
-              "id": "tower-http 0.5.1",
-              "target": "tower_http",
-              "alias": "tower_http_0_5_1"
+              "id": "tower-http 0.5.2",
+              "target": "tower_http"
             },
             {
               "id": "tower-request-id 0.3.0",
@@ -37277,7 +37277,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-http 0.5.1",
+              "id": "tower-http 0.5.2",
               "target": "tower_http"
             },
             {
@@ -65329,14 +65329,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tower-http 0.5.1": {
+    "tower-http 0.5.2": {
       "name": "tower-http",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "package_url": "https://github.com/tower-rs/tower-http",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tower-http/0.5.1/download",
-          "sha256": "0da193277a4e2c33e59e09b5861580c33dd0a637c3883d0fa74ba40c0374af2e"
+          "url": "https://static.crates.io/crates/tower-http/0.5.2/download",
+          "sha256": "1e9cd434a998747dd2c4276bc96ee2e0c7a2eadf3cae88e52be55a05fa9053f5"
         }
       },
       "targets": [
@@ -65448,7 +65448,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.5.1"
+        "version": "0.5.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -77077,7 +77077,7 @@
     "tonic-build 0.11.0",
     "tower 0.4.13",
     "tower-http 0.4.4",
-    "tower-http 0.5.1",
+    "tower-http 0.5.2",
     "tower-request-id 0.3.0",
     "tower-test 0.4.0",
     "tower_governor 0.1.0",
