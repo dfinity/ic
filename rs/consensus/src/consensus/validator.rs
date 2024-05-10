@@ -1119,7 +1119,7 @@ impl Validator {
             .with_label_values(&["Dkg"])
             .start_timer();
         let dkg_pool = &*self.dkg_pool.read().unwrap();
-        let ret = dkg::validate_payload(
+        let ret = dkg::payload_validator::validate_payload(
             self.replica_config.subnet_id,
             self.registry_client.as_ref(),
             self.crypto.as_ref(),

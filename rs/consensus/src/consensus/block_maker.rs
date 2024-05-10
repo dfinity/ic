@@ -5,7 +5,7 @@ use crate::{
         status::{self, Status},
         ConsensusCrypto,
     },
-    dkg::create_payload as create_dkg_payload,
+    dkg::payload_builder::create_payload as create_dkg_payload,
     ecdsa,
 };
 use ic_consensus_utils::{
