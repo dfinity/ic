@@ -972,6 +972,9 @@ fn state_machine_subnet_splitting_test() {
         .unwrap();
 
     // Tick once on both subnets, to trigger messages slipping into streams.
+    //
+    // FIXME: Breaks because we don't yet load canister queues.
+    //
     new_subnets_proxy.remote_env.tick();
     new_subnets_proxy.local_env.tick();
 
