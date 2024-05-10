@@ -178,6 +178,14 @@ fn get_persisted_global(g: wasmparser::Global) -> Option<Global> {
                 .expect("Failed to parse GlobalType f64")
                 .bits(),
         ))),
+        ValType::V128 => Some(Global::V128(u128::from_le_bytes(
+            g.init_expr
+                .get_binary_reader()
+                .read_bytes(16)
+                .expect("Failed to parse GlobalType v128")[..]
+                .try_into()
+                .unwrap(),
+        ))),
         _ => None,
     }
 }
