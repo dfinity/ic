@@ -1,9 +1,9 @@
 use super::*;
-use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_humanize::{parse_duration, parse_percentage, parse_tokens};
 use pretty_assertions::assert_eq;
 
-const NOMINAL_SECONDS_PER_YEAR: u64 = 365 * SECONDS_PER_DAY + SECONDS_PER_DAY / 4;
+const NOMINAL_SECONDS_PER_YEAR: u64 = 365 * ONE_DAY_SECONDS + ONE_DAY_SECONDS / 4;
 
 #[test]
 fn test_parse() {
@@ -62,10 +62,10 @@ fn test_parse() {
         proposals: Proposals {
             rejection_fee: nervous_system_pb::Tokens { e8s: Some(E8) },
             initial_voting_period: nervous_system_pb::Duration {
-                seconds: Some(4 * SECONDS_PER_DAY),
+                seconds: Some(4 * ONE_DAY_SECONDS),
             },
             maximum_wait_for_quiet_deadline_extension: nervous_system_pb::Duration {
-                seconds: Some(SECONDS_PER_DAY),
+                seconds: Some(ONE_DAY_SECONDS),
             },
         },
 
@@ -75,7 +75,7 @@ fn test_parse() {
 
         voting: Voting {
             minimum_dissolve_delay: nervous_system_pb::Duration {
-                seconds: Some(26 * 7 * SECONDS_PER_DAY),
+                seconds: Some(26 * 7 * ONE_DAY_SECONDS),
             },
 
             maximum_voting_power_bonuses: MaximumVotingPowerBonuses {
@@ -131,10 +131,10 @@ fn test_parse() {
                     },
                     memo: 0, // Not explicitly supplied -> 0 is taken as default.
                     dissolve_delay: nervous_system_pb::Duration {
-                        seconds: Some(52 * 7 * SECONDS_PER_DAY),
+                        seconds: Some(52 * 7 * ONE_DAY_SECONDS),
                     },
                     vesting_period: nervous_system_pb::Duration {
-                        seconds: Some(53 * 7 * SECONDS_PER_DAY),
+                        seconds: Some(53 * 7 * ONE_DAY_SECONDS),
                     },
                 },
             ],

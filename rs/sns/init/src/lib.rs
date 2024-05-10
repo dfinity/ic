@@ -10,7 +10,7 @@ use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger_validation;
-use ic_nervous_system_common::E8;
+use ic_nervous_system_common::{DEFAULT_TRANSFER_FEE, E8};
 use ic_nervous_system_proto::pb::v1::{Canister, Countries};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -25,7 +25,6 @@ use ic_sns_governance::{
         Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
         VotingRewardsParameters,
     },
-    types::DEFAULT_TRANSFER_FEE,
 };
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::{
@@ -2011,9 +2010,10 @@ mod test {
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1_ledger::LedgerArgument;
-    use ic_nervous_system_common::ledger_validation;
-    use ic_nervous_system_common::ledger_validation::{
-        MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH,
+    use ic_nervous_system_common::{
+        ledger_validation,
+        ledger_validation::{MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH},
+        ONE_MONTH_SECONDS,
     };
     use ic_nervous_system_proto::pb::v1::{Canister, Countries};
     use ic_nns_constants::{
@@ -2022,9 +2022,7 @@ mod test {
         LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
         REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
     };
-    use ic_sns_governance::{
-        governance::ValidGovernanceProto, pb::v1::governance::SnsMetadata, types::ONE_MONTH_SECONDS,
-    };
+    use ic_sns_governance::{governance::ValidGovernanceProto, pb::v1::governance::SnsMetadata};
     use ic_sns_swap::pb::v1::{
         IdealMatchedParticipationFunction, LinearScalingCoefficient,
         NeuronBasketConstructionParameters, NeuronsFundParticipationConstraints,

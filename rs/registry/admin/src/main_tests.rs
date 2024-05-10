@@ -1,5 +1,5 @@
 use super::*;
-use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use pretty_assertions::assert_eq;
 
 #[test]
@@ -150,7 +150,7 @@ fn convert_from_flags_to_create_service_nervous_system() {
                     swap_parameters::NeuronBasketConstructionParameters {
                         count: Some(3),
                         dissolve_delay_interval: Some(nervous_system_pb::Duration {
-                            seconds: Some(6 * 7 * SECONDS_PER_DAY),
+                            seconds: Some(6 * 7 * ONE_DAY_SECONDS),
                         }),
                     }
                 ),
@@ -160,7 +160,7 @@ fn convert_from_flags_to_create_service_nervous_system() {
                 }),
                 start_time: nervous_system_pb::GlobalTimeOfDay::from_hh_mm(10, 1).ok(),
                 duration: Some(nervous_system_pb::Duration {
-                    seconds: Some(7 * SECONDS_PER_DAY),
+                    seconds: Some(7 * ONE_DAY_SECONDS),
                 }),
                 neurons_fund_participation: Some(true),
                 // Deprecated fields
@@ -179,7 +179,7 @@ fn convert_from_flags_to_create_service_nervous_system() {
             governance_parameters: Some(GovernanceParameters {
                 proposal_rejection_fee: Some(nervous_system_pb::Tokens { e8s: Some(E8 / 10) }),
                 proposal_initial_voting_period: Some(nervous_system_pb::Duration {
-                    seconds: Some(SECONDS_PER_DAY),
+                    seconds: Some(ONE_DAY_SECONDS),
                 }),
                 proposal_wait_for_quiet_deadline_increase: Some(nervous_system_pb::Duration {
                     seconds: Some(60 * 60),
@@ -187,16 +187,16 @@ fn convert_from_flags_to_create_service_nervous_system() {
 
                 neuron_minimum_stake: Some(nervous_system_pb::Tokens { e8s: Some(E8) }),
                 neuron_minimum_dissolve_delay_to_vote: Some(nervous_system_pb::Duration {
-                    seconds: Some(4 * 7 * SECONDS_PER_DAY),
+                    seconds: Some(4 * 7 * ONE_DAY_SECONDS),
                 }),
                 neuron_maximum_dissolve_delay: Some(nervous_system_pb::Duration {
-                    seconds: Some(1461 * SECONDS_PER_DAY),
+                    seconds: Some(1461 * ONE_DAY_SECONDS),
                 }),
                 neuron_maximum_dissolve_delay_bonus: Some(nervous_system_pb::Percentage {
                     basis_points: Some(50_00),
                 }),
                 neuron_maximum_age_for_age_bonus: Some(nervous_system_pb::Duration {
-                    seconds: Some(2922 * SECONDS_PER_DAY),
+                    seconds: Some(2922 * ONE_DAY_SECONDS),
                 }),
                 neuron_maximum_age_bonus: Some(nervous_system_pb::Percentage {
                     basis_points: Some(10_00),
@@ -210,7 +210,7 @@ fn convert_from_flags_to_create_service_nervous_system() {
                         basis_points: Some(5_25),
                     }),
                     reward_rate_transition_duration: Some(nervous_system_pb::Duration {
-                        seconds: Some(4383 * SECONDS_PER_DAY),
+                        seconds: Some(4383 * ONE_DAY_SECONDS),
                     }),
                 }),
             }),
@@ -227,27 +227,27 @@ fn convert_from_flags_to_create_service_nervous_system() {
                     NeuronDistribution {
                         controller: Some(PrincipalId::new_user_test_id(308_651)),
                         dissolve_delay: Some(nervous_system_pb::Duration {
-                            seconds: Some(52 * 7 * SECONDS_PER_DAY),
+                            seconds: Some(52 * 7 * ONE_DAY_SECONDS),
                         }),
                         memo: Some(0),
                         stake: Some(nervous_system_pb::Tokens {
                             e8s: Some(100 * E8),
                         }),
                         vesting_period: Some(nervous_system_pb::Duration {
-                            seconds: Some(104 * 7 * SECONDS_PER_DAY),
+                            seconds: Some(104 * 7 * ONE_DAY_SECONDS),
                         }),
                     },
                     NeuronDistribution {
                         controller: Some(PrincipalId::new_user_test_id(598_815)),
                         dissolve_delay: Some(nervous_system_pb::Duration {
-                            seconds: Some(26 * 7 * SECONDS_PER_DAY),
+                            seconds: Some(26 * 7 * ONE_DAY_SECONDS),
                         }),
                         memo: Some(1),
                         stake: Some(nervous_system_pb::Tokens {
                             e8s: Some(101 * E8),
                         }),
                         vesting_period: Some(nervous_system_pb::Duration {
-                            seconds: Some(52 * 7 * SECONDS_PER_DAY),
+                            seconds: Some(52 * 7 * ONE_DAY_SECONDS),
                         }),
                     }
                 ],

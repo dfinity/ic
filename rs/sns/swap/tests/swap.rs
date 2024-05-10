@@ -23,7 +23,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
     assert_is_err, assert_is_ok, ledger::compute_neuron_staking_subaccount_bytes,
-    NervousSystemError, E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
+    NervousSystemError, E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
@@ -37,13 +37,10 @@ use ic_neurons_fund::{
     InvertibleFunction, MatchingFunction, NeuronsFundParticipationLimits,
     PolynomialMatchingFunction, SerializableFunction,
 };
-use ic_sns_governance::{
-    pb::v1::{
-        claim_swap_neurons_request::NeuronParameters,
-        claim_swap_neurons_response::ClaimSwapNeuronsResult, governance, ClaimSwapNeuronsRequest,
-        ClaimSwapNeuronsResponse, NeuronId, SetMode, SetModeResponse,
-    },
-    types::ONE_MONTH_SECONDS,
+use ic_sns_governance::pb::v1::{
+    claim_swap_neurons_request::NeuronParameters,
+    claim_swap_neurons_response::ClaimSwapNeuronsResult, governance, ClaimSwapNeuronsRequest,
+    ClaimSwapNeuronsResponse, NeuronId, SetMode, SetModeResponse,
 };
 use ic_sns_swap::{
     environment::CanisterClients,
@@ -90,8 +87,8 @@ pub const SNS_LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(1571);
 
 const OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID: u64 = 746114;
 
-const START_TIMESTAMP_SECONDS: u64 = START_OF_2022_TIMESTAMP_SECONDS + 42 * SECONDS_PER_DAY;
-const END_TIMESTAMP_SECONDS: u64 = START_TIMESTAMP_SECONDS + 7 * SECONDS_PER_DAY;
+const START_TIMESTAMP_SECONDS: u64 = START_OF_2022_TIMESTAMP_SECONDS + 42 * ONE_DAY_SECONDS;
+const END_TIMESTAMP_SECONDS: u64 = START_TIMESTAMP_SECONDS + 7 * ONE_DAY_SECONDS;
 
 fn neurons_fund_participation_limits() -> NeuronsFundParticipationLimits {
     NeuronsFundParticipationLimits {

@@ -1,11 +1,12 @@
 use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
-    governance::{TimeWarp, ONE_DAY_SECONDS},
+    governance::TimeWarp,
     init::TEST_NEURON_2_ID,
     pb::v1::{
         add_or_remove_node_provider::Change,

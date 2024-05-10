@@ -15,7 +15,7 @@ use crate::{
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::SECONDS_PER_DAY;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use std::{
     collections::{BTreeSet, HashMap},
@@ -729,7 +729,7 @@ impl Neuron {
 
         // 3.2: Now, we know when self is "dissolved" (could be in the past, present, or future).
         // Thus, we can evaluate whether that happened sufficiently long ago.
-        let max_dissolved_at_timestamp_seconds_to_be_inactive = now - 2 * 7 * SECONDS_PER_DAY;
+        let max_dissolved_at_timestamp_seconds_to_be_inactive = now - 2 * 7 * ONE_DAY_SECONDS;
         if dissolved_at_timestamp_seconds > max_dissolved_at_timestamp_seconds_to_be_inactive {
             return false;
         }
@@ -828,10 +828,10 @@ impl NeuronInfo {
 mod tests {
     use super::*;
     use crate::{
-        governance::ONE_YEAR_SECONDS,
         neuron::{DissolveStateAndAge, NeuronBuilder},
         pb::v1::manage_neuron::{SetDissolveTimestamp, StartDissolving},
     };
+    use ic_nervous_system_common::ONE_YEAR_SECONDS;
 
     use ic_nervous_system_common::E8;
     use icp_ledger::Subaccount;
@@ -1134,7 +1134,7 @@ mod tests {
         // Test cases
         for current_aging_since_timestamp_seconds in [0, NOW - 1, NOW, NOW + 1, NOW + 2000] {
             for current_dissolve_delay_seconds in
-                [1, 10, 100, NOW, NOW + 1000, (SECONDS_PER_DAY * 365 * 8)]
+                [1, 10, 100, NOW, NOW + 1000, (ONE_DAY_SECONDS * 365 * 8)]
             {
                 test_increase_dissolve_delay_by_1_for_non_dissolving_neuron(
                     current_aging_since_timestamp_seconds,
@@ -1173,7 +1173,7 @@ mod tests {
 
         for current_aging_since_timestamp_seconds in [0, NOW - 1, NOW, NOW + 1, NOW + 2000] {
             for dissolved_at_timestamp_seconds in
-                [NOW + 1, NOW + 1000, NOW + (SECONDS_PER_DAY * 365 * 8)]
+                [NOW + 1, NOW + 1000, NOW + (ONE_DAY_SECONDS * 365 * 8)]
             {
                 test_increase_dissolve_delay_by_1_for_dissolving_neuron(
                     current_aging_since_timestamp_seconds,

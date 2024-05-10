@@ -40,10 +40,11 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
-use ic_ledger_core::tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY};
+use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
 use ic_management_canister_types::CanisterInstallModeError;
 use ic_nervous_system_common::{
-    ledger_validation::MAX_LOGO_LENGTH, validate_proposal_url, NervousSystemError, SECONDS_PER_DAY,
+    ledger_validation::MAX_LOGO_LENGTH, validate_proposal_url, NervousSystemError,
+    DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
 use ic_sns_governance_proposal_criticality::{
@@ -58,12 +59,6 @@ use std::{
     fmt,
 };
 use strum::IntoEnumIterator;
-
-pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
-
-pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
-pub const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
-pub const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
 
 #[allow(dead_code)]
 /// TODO Use to validate the size of the payload 70 KB (for executing
@@ -1559,11 +1554,11 @@ impl Action {
 
                 VotingDurationParameters {
                     initial_voting_period: PbDuration {
-                        seconds: Some(initial_voting_period_seconds.max(5 * SECONDS_PER_DAY)),
+                        seconds: Some(initial_voting_period_seconds.max(5 * ONE_DAY_SECONDS)),
                     },
                     wait_for_quiet_deadline_increase: PbDuration {
                         seconds: Some(wait_for_quiet_deadline_increase_seconds.max(
-                            2 * SECONDS_PER_DAY + SECONDS_PER_DAY / 2, // 2.5 days
+                            2 * ONE_DAY_SECONDS + ONE_DAY_SECONDS / 2, // 2.5 days
                         )),
                     },
                 }
@@ -2566,18 +2561,18 @@ pub(crate) mod tests {
         let critical_action = Action::TransferSnsTreasuryFunds(Default::default());
 
         let normal_nervous_system_parameters = NervousSystemParameters {
-            initial_voting_period_seconds: Some(4 * SECONDS_PER_DAY),
-            wait_for_quiet_deadline_increase_seconds: Some(2 * SECONDS_PER_DAY),
+            initial_voting_period_seconds: Some(4 * ONE_DAY_SECONDS),
+            wait_for_quiet_deadline_increase_seconds: Some(2 * ONE_DAY_SECONDS),
             ..Default::default()
         };
         assert_eq!(
             non_critical_action.voting_duration_parameters(&normal_nervous_system_parameters),
             VotingDurationParameters {
                 initial_voting_period: PbDuration {
-                    seconds: Some(4 * SECONDS_PER_DAY),
+                    seconds: Some(4 * ONE_DAY_SECONDS),
                 },
                 wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(2 * SECONDS_PER_DAY),
+                    seconds: Some(2 * ONE_DAY_SECONDS),
                 }
             },
         );
@@ -2585,10 +2580,10 @@ pub(crate) mod tests {
             critical_action.voting_duration_parameters(&normal_nervous_system_parameters),
             VotingDurationParameters {
                 initial_voting_period: PbDuration {
-                    seconds: Some(5 * SECONDS_PER_DAY),
+                    seconds: Some(5 * ONE_DAY_SECONDS),
                 },
                 wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(2 * SECONDS_PER_DAY + SECONDS_PER_DAY / 2),
+                    seconds: Some(2 * ONE_DAY_SECONDS + ONE_DAY_SECONDS / 2),
                 }
             },
         );
@@ -2597,18 +2592,18 @@ pub(crate) mod tests {
         // quiet) for critical proposals. Therefore, these values are used for both normal and
         // critical proposals.
         let slow_nervous_system_parameters = NervousSystemParameters {
-            initial_voting_period_seconds: Some(7 * SECONDS_PER_DAY),
-            wait_for_quiet_deadline_increase_seconds: Some(4 * SECONDS_PER_DAY),
+            initial_voting_period_seconds: Some(7 * ONE_DAY_SECONDS),
+            wait_for_quiet_deadline_increase_seconds: Some(4 * ONE_DAY_SECONDS),
             ..Default::default()
         };
         assert_eq!(
             non_critical_action.voting_duration_parameters(&slow_nervous_system_parameters),
             VotingDurationParameters {
                 initial_voting_period: PbDuration {
-                    seconds: Some(7 * SECONDS_PER_DAY),
+                    seconds: Some(7 * ONE_DAY_SECONDS),
                 },
                 wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(4 * SECONDS_PER_DAY),
+                    seconds: Some(4 * ONE_DAY_SECONDS),
                 }
             },
         );
@@ -2616,10 +2611,10 @@ pub(crate) mod tests {
             critical_action.voting_duration_parameters(&slow_nervous_system_parameters),
             VotingDurationParameters {
                 initial_voting_period: PbDuration {
-                    seconds: Some(7 * SECONDS_PER_DAY),
+                    seconds: Some(7 * ONE_DAY_SECONDS),
                 },
                 wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(4 * SECONDS_PER_DAY),
+                    seconds: Some(4 * ONE_DAY_SECONDS),
                 }
             },
         );
