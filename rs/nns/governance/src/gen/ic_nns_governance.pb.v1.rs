@@ -3769,7 +3769,7 @@ pub enum NnsFunction {
     /// This function is meant as a Break Glass mechanism for when an open call context in
     /// the Root canister is preventing root or another canister from upgrading (in the case of proxied calls).
     HardResetNnsRootToVersion = 42,
-    /// A proposal to add a new API Boundary Node using an assigned node
+    /// A proposal to add a set of new API Boundary Nodes using unassigned nodes
     AddApiBoundaryNodes = 43,
     /// A proposal to remove a set of API Boundary Nodes, which will designate them as unassigned nodes
     RemoveApiBoundaryNodes = 44,
