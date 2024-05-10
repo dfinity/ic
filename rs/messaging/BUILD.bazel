@@ -56,6 +56,7 @@ rust_test(
         "//rs/registry/local_store/artifacts",
         "//rs/registry/proto_data_provider",
         "//rs/registry/transport",
+        "//rs/state_manager",
         "//rs/test_utilities",
         "//rs/test_utilities/execution_environment",
         "//rs/test_utilities/logger",

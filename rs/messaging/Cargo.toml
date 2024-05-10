@@ -40,6 +40,7 @@ slog = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+ic-state-manager = { path = "../state_manager" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
