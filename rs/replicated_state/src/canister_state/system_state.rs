@@ -1204,6 +1204,7 @@ impl SystemState {
     ///
     ///  + S1: size of responses in output queues
     ///  + S2: size of responses in input queues
+    ///  + S3: oversized requests extra bytes
     pub fn message_memory_usage(&self) -> NumBytes {
         (self.queues.memory_usage() as u64).into()
     }
@@ -1472,27 +1473,10 @@ impl SystemState {
     /// Checks the invariants that should hold at the end of each consensus round.
     pub fn check_invariants(&self) -> Result<(), StateError> {
         // Callbacks still awaiting a (potentially already enqueued) response.
-        let mut pending_callbacks = self
+        let pending_callbacks = self
             .call_context_manager()
-            .map(|ccm| ccm.callbacks().len())
+            .map(|ccm| ccm.callback_count(self.aborted_or_paused_response()))
             .unwrap_or_default();
-        // Subtract one if we have a a paused or aborted response execution.
-        let task_queue_front = self.task_queue.front();
-        match task_queue_front {
-            // An aborted or paused response execution means one fewer pending callback
-            // (since the response was already consumed).
-            Some(ExecutionTask::AbortedExecution {
-                input: CanisterMessageOrTask::Message(CanisterMessage::Response(_)),
-                ..
-            })
-            | Some(ExecutionTask::PausedExecution {
-                input: CanisterMessageOrTask::Message(CanisterMessage::Response(_)),
-                ..
-            }) => {
-                pending_callbacks -= 1;
-            }
-            _ => {}
-        }
 
         let num_responses = self.queues.input_queues_response_count();
         let num_reserved_slots = self.queues.input_queues_reserved_slots();
@@ -1506,7 +1490,59 @@ impl SystemState {
             )));
         }
 
+        let unresponded_call_contexts = self
+            .call_context_manager()
+            .map(|ccm| {
+                ccm.unresponded_canister_update_call_contexts(self.aborted_or_paused_request())
+            })
+            .unwrap_or_default();
+
+        let num_requests = self.queues.input_queues_request_count();
+        let output_queue_reservations =
+            self.queues.reserved_slots() - self.queues.input_queues_reservation_count();
+
+        if num_requests + unresponded_call_contexts != output_queue_reservations {
+            return Err(StateError::InvariantBroken(format!(
+                "Canister {}: Number of output queue reservations ({}) is different from the number of input requests plus unresponded call contexts ({})",
+                self.canister_id(),
+                output_queue_reservations,
+                num_requests + unresponded_call_contexts
+            )));
+        }
+
         Ok(())
+    }
+
+    /// Returns the aborted or paused `Response` at the head of the task queue, if
+    /// any.
+    fn aborted_or_paused_response(&self) -> Option<&Response> {
+        match self.task_queue.front() {
+            Some(ExecutionTask::AbortedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                ..
+            })
+            | Some(ExecutionTask::PausedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                ..
+            }) => Some(response),
+            _ => None,
+        }
+    }
+
+    /// Returns the aborted or paused `Request` at the head of the task queue, if
+    /// any.
+    fn aborted_or_paused_request(&self) -> Option<&Request> {
+        match self.task_queue.front() {
+            Some(ExecutionTask::AbortedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
+                ..
+            })
+            | Some(ExecutionTask::PausedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
+                ..
+            }) => Some(request),
+            _ => None,
+        }
     }
 }
 
