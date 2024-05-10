@@ -35,6 +35,6 @@ rootfs_files = {
     Label("setupos/prep/systemd-fixes/systemd-fixes.te"): "/prep/systemd-fixes/systemd-fixes.te",
 
     # consolidated files:
-    Label("systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("utils/setupos/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",
+    Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
 }
