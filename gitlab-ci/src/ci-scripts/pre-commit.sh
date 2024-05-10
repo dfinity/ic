@@ -3,7 +3,7 @@ set -eEuo pipefail
 rustup default stable
 
 export PATH="$HOME/.local/bin:$PATH"
-pip3 install pre-commit
+PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install pre-commit
 
 # Make sure CI can pull from the private repo.
 if ! SKIP=bazel_rust_format_check,bazel_smoke pre-commit run -a --hook-stage=manual; then
