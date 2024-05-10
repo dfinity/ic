@@ -1498,14 +1498,14 @@ impl SystemState {
             .unwrap_or_default();
 
         let num_requests = self.queues.input_queues_request_count();
-        let output_queue_reservations =
-            self.queues.reserved_slots() - self.queues.input_queues_reservation_count();
+        let output_queue_reserved_slots =
+            self.queues.reserved_slots() - self.queues.input_queues_reserved_slots();
 
-        if num_requests + unresponded_call_contexts != output_queue_reservations {
+        if num_requests + unresponded_call_contexts != output_queue_reserved_slots {
             return Err(StateError::InvariantBroken(format!(
-                "Canister {}: Number of output queue reservations ({}) is different from the number of input requests plus unresponded call contexts ({})",
+                "Canister {}: Number of output queue reserved slots ({}) is different from the number of input requests plus unresponded call contexts ({})",
                 self.canister_id(),
-                output_queue_reservations,
+                output_queue_reserved_slots,
                 num_requests + unresponded_call_contexts
             )));
         }
