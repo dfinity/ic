@@ -21,7 +21,9 @@ use ic_management_canister_types::{
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
-use ic_nervous_system_common::{ledger::compute_neuron_staking_subaccount, SECONDS_PER_DAY};
+use ic_nervous_system_common::{
+    ledger::compute_neuron_staking_subaccount, DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
+};
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
@@ -50,11 +52,8 @@ use ic_nns_governance::pb::v1::{
 };
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_registry_subnet_type::SubnetType;
-use ic_sns_governance::{
-    pb::v1::{
-        self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
-    },
-    types::DEFAULT_TRANSFER_FEE,
+use ic_sns_governance::pb::v1::{
+    self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
 };
 use ic_sns_swap::pb::v1::{GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse};
 use ic_sns_wasm::{
@@ -912,7 +911,7 @@ pub fn nns_create_super_powerful_neuron(
         state_machine,
         controller,
         neuron_id,
-        8 * 365 * SECONDS_PER_DAY,
+        8 * 365 * ONE_DAY_SECONDS,
     );
     // assert ok.
     match increase_dissolve_delay_result {

@@ -1,7 +1,6 @@
 use super::NeuronStore;
-use crate::{
-    governance::ONE_MONTH_SECONDS, pb::v1::NeuronState, storage::with_stable_neuron_store,
-};
+use crate::{pb::v1::NeuronState, storage::with_stable_neuron_store};
+use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use std::collections::HashMap;
 
 /// Metrics calculated based on neurons in the neuron store.
@@ -219,11 +218,11 @@ fn increment_count_bucket(buckets: &mut HashMap<u64, u64>, bucket: u64) {
 mod tests {
     use super::*;
     use crate::{
-        governance::{ONE_DAY_SECONDS, ONE_YEAR_SECONDS},
         neuron::{DissolveStateAndAge, NeuronBuilder},
         pb::v1::NeuronType,
     };
     use ic_base_types::PrincipalId;
+    use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_YEAR_SECONDS};
     use ic_nns_common::pb::v1::NeuronId;
     use icp_ledger::Subaccount;
     use maplit::hashmap;

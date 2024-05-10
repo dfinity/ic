@@ -4,7 +4,7 @@ use crate::{
     pb::v1::neuron::Followees,
     storage::with_stable_neuron_indexes,
 };
-use ic_nervous_system_common::SECONDS_PER_DAY;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use maplit::{btreemap, hashmap, hashset};
 use num_traits::bounds::LowerBounded;
@@ -403,7 +403,7 @@ fn inactive_neuron_builder(id: u64) -> NeuronBuilder {
 fn warp_time_to_make_neuron_inactive(neuron_store: &mut NeuronStore) {
     // Set enough time warp to make sure the active neuron becomes inactive.
     neuron_store.set_time_warp(TimeWarp {
-        delta_s: 15 * SECONDS_PER_DAY as i64,
+        delta_s: 15 * ONE_DAY_SECONDS as i64,
     });
 }
 

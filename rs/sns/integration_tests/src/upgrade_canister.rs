@@ -10,6 +10,7 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
 };
+use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_test_utils::state_test_helpers::{
@@ -17,12 +18,9 @@ use ic_nns_test_utils::state_test_helpers::{
     sns_wait_for_proposal_execution, update,
 };
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
-use ic_sns_governance::{
-    pb::v1::{
-        governance_error::ErrorType, proposal::Action, NervousSystemParameters, NeuronId,
-        NeuronPermissionList, NeuronPermissionType, Proposal, UpgradeSnsControlledCanister,
-    },
-    types::ONE_YEAR_SECONDS,
+use ic_sns_governance::pb::v1::{
+    governance_error::ErrorType, proposal::Action, NervousSystemParameters, NeuronId,
+    NeuronPermissionList, NeuronPermissionType, Proposal, UpgradeSnsControlledCanister,
 };
 use ic_sns_test_utils::{
     itest_helpers::{

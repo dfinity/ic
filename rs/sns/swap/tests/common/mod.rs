@@ -5,14 +5,13 @@ use crate::{
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{ledger::compute_neuron_staking_subaccount_bytes, E8};
+use ic_nervous_system_common::{
+    ledger::compute_neuron_staking_subaccount_bytes, DEFAULT_TRANSFER_FEE, E8, ONE_MONTH_SECONDS,
+};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
-use ic_sns_governance::{
-    pb::v1::{
-        claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
-        ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, NeuronId,
-    },
-    types::{DEFAULT_TRANSFER_FEE, ONE_MONTH_SECONDS},
+use ic_sns_governance::pb::v1::{
+    claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
+    ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, NeuronId,
 };
 use ic_sns_swap::{
     memory,

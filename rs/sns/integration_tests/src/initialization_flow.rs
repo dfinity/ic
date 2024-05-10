@@ -1,5 +1,6 @@
 use candid::Nat;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_common::{ExplosiveTokens, E8, ONE_TRILLION};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_proto::pb::v1::{
@@ -33,12 +34,9 @@ use ic_nns_test_utils::{
         sns_swap_get_auto_finalization_status,
     },
 };
-use ic_sns_governance::{
-    pb::v1::{
-        governance::Mode::{Normal, PreInitializationSwap},
-        ListNeurons,
-    },
-    types::ONE_DAY_SECONDS,
+use ic_sns_governance::pb::v1::{
+    governance::Mode::{Normal, PreInitializationSwap},
+    ListNeurons,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_test_utils::state_test_helpers::{

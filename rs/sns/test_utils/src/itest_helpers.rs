@@ -12,6 +12,7 @@ use ic_icrc1_ledger::{
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
+use ic_nervous_system_common::DEFAULT_TRANSFER_FEE;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
@@ -40,7 +41,6 @@ use ic_sns_governance::{
         NervousSystemParameters, Neuron, NeuronId, NeuronPermissionList, Proposal, ProposalData,
         ProposalId, RegisterDappCanisters, RewardEvent, Subaccount as SubaccountProto, Vote,
     },
-    types::DEFAULT_TRANSFER_FEE,
 };
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_root::{

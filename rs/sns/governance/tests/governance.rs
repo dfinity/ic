@@ -4,7 +4,7 @@ use crate::fixtures::{
 };
 use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
@@ -41,7 +41,7 @@ use ic_sns_governance::{
             ProposalData, ProposalId, RegisterDappCanisters, Vote, WaitForQuietState,
         },
     },
-    types::{native_action_ids, ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
+    types::native_action_ids,
 };
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
@@ -2654,7 +2654,7 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
     let neuron = canister_fixture.get_neuron(&neuron_id);
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
 
-    canister_fixture.advance_time_by(7 * SECONDS_PER_DAY + 1);
+    canister_fixture.advance_time_by(7 * ONE_DAY_SECONDS + 1);
     canister_fixture.heartbeat();
 
     // Assert that the Neuron owner's account balance has increased the expected amount
@@ -2761,7 +2761,7 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
         .unwrap() = time_of_disbursement_maturity_modulation_basis_points;
 
     // Advancing time and triggering a heartbeat should force a query of the new modulation
-    canister_fixture.advance_time_by(2 * SECONDS_PER_DAY);
+    canister_fixture.advance_time_by(2 * ONE_DAY_SECONDS);
     canister_fixture.heartbeat();
     let current_basis_points = canister_fixture
         .get_maturity_modulation()
@@ -2781,7 +2781,7 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
     assert_eq!(account_balance_before_disbursal, 0);
 
     // Advancing time and triggering a heartbeat should trigger the final disbursal
-    canister_fixture.advance_time_by(5 * SECONDS_PER_DAY + 1);
+    canister_fixture.advance_time_by(5 * ONE_DAY_SECONDS + 1);
     canister_fixture.heartbeat();
 
     // Assert that the Neuron owner's account balance has increased the expected amount

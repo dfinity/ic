@@ -18,6 +18,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/gtc_accounts",
+    "//rs/nervous_system/common",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",

@@ -4,7 +4,7 @@ use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
-    assert_is_ok, ledger::compute_distribution_subaccount_bytes, E8, SECONDS_PER_DAY,
+    assert_is_ok, ledger::compute_distribution_subaccount_bytes, E8, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_integration_tests::{
@@ -572,7 +572,7 @@ fn test_sns_lifecycle(
     // 4. Force the swap to reach either Aborted, or Committed. Collect the de facto participants.
     let direct_sns_neuron_recipients = if ensure_swap_timeout_is_reached {
         // Await the end of the swap period.
-        pocket_ic.advance_time(Duration::from_secs(30 * SECONDS_PER_DAY)); // 30 days
+        pocket_ic.advance_time(Duration::from_secs(30 * ONE_DAY_SECONDS)); // 30 days
         sns::swap::await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Aborted).unwrap();
         vec![]
     } else {
@@ -1730,7 +1730,7 @@ fn test_sns_lifecycle_happy_scenario_with_lots_of_dev_neurons() {
     developer_neurons.push(NeuronDistribution {
         controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
         memo: Some(num_neurons - 1),
-        dissolve_delay: Some(DurationPb::from_secs(SECONDS_PER_DAY * 30 * 7)),
+        dissolve_delay: Some(DurationPb::from_secs(ONE_DAY_SECONDS * 30 * 7)),
         // All other neurons together have `num_neurons - 1` e8s, so this one has the majority.
         stake: Some(TokensPb::from_e8s(num_neurons * E8)),
         vesting_period: Some(DurationPb::from_secs(0)),
@@ -1771,7 +1771,7 @@ fn test_sns_lifecycle_swap_timeout_with_lots_of_dev_neurons() {
     developer_neurons.push(NeuronDistribution {
         controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
         memo: Some(num_neurons - 1),
-        dissolve_delay: Some(DurationPb::from_secs(SECONDS_PER_DAY * 30 * 7)),
+        dissolve_delay: Some(DurationPb::from_secs(ONE_DAY_SECONDS * 30 * 7)),
         // All other neurons together have `num_neurons - 1` e8s, so this one has the majority.
         stake: Some(TokensPb::from_e8s(num_neurons * E8)),
         vesting_period: Some(DurationPb::from_secs(0)),

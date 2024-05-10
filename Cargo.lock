@@ -9477,6 +9477,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha2",
+ "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
  "ic-nns-common",
  "ic-nns-constants",

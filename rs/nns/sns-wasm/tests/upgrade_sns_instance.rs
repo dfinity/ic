@@ -6,7 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::LedgerArgument;
 use ic_management_canister_types::{CanisterIdRecord, CanisterInstallMode};
 use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
-use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
+use ic_nervous_system_common::{ledger::compute_neuron_staking_subaccount, DEFAULT_TRANSFER_FEE};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -22,7 +22,7 @@ use ic_sns_governance::{
         GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, Proposal,
         ProposalDecisionStatus, UpgradeSnsToNextVersion,
     },
-    types::{DEFAULT_TRANSFER_FEE, E8S_PER_TOKEN},
+    types::E8S_PER_TOKEN,
 };
 use ic_sns_init::pb::v1::{
     sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
