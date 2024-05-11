@@ -76,15 +76,15 @@ tmux -S release
 
 ./gitlab-ci/container/container-run.sh
 
-test_tmpdir="/tmp/$(whoami)/test_tmpdir"; \
-echo "test_tmpdir=$test_tmpdir"; \
-rm -rf "$test_tmpdir"; \
+TEST_TMPDIR="/tmp/$(whoami)/test_tmpdir"; \
+echo "TEST_TMPDIR=$TEST_TMPDIR"; \
+rm -rf "$TEST_TMPDIR"; \
     ict testnet create recovered_mainnet_nns \
         --lifetime-mins 1440 \
         --set-required-host-features=dc=zh1 \
         --verbose \
         -- \
-        --test_tmpdir="$test_tmpdir"
+        --test_tmpdir="$TEST_TMPDIR"
 ```
 
 Let us explain some of the arguments used above:
@@ -117,6 +117,8 @@ To interact with the testnet using the shell scripts in this directory, you'll n
 
 ```
 ./gitlab-ci/container/container-run.sh
+# you probably don't need this if you're just going to use the SNS and NNS upgrade testing scripts
+# as they call it for you. If that's your plan, just skip this step.
 . ./testnet/tools/nns-tools/cmd.sh set_testnet_env_variables
 ```
 
@@ -294,6 +296,16 @@ The script will test upgrading the canister via proposal, and then upgrading it 
 WASM as well as the un-gzipped WASM, as they will report different hashes in the running canister (allowing us to verify that the proposal succeeded.)
 
 This is essential to ensuring that not only can we upgrade _to_ a particular version, but also _beyond_ that version.
+
+## Troubleshooting
+
+If you see:
+
+```
+NotAuthorized: Caller not authorized to propose
+```
+
+Your environment variables could be set from a previous run of recovered_mainnet_nns. In this case, exit and re-enter your shell to reset them. Rerunning `. ./testnet/tools/nns-tools/cmd.sh set_testnet_env_variables` will not help as that script tries not to overwrite variables you already have.
 
 ## NNS/SNS Canister Upgrade Proposal Process
 

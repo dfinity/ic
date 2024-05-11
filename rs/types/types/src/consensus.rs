@@ -25,9 +25,8 @@ pub mod block_maker;
 pub mod catchup;
 pub mod certification;
 pub mod dkg;
-pub mod ecdsa;
-mod ecdsa_refs;
 pub mod hashed;
+pub mod idkg;
 mod payload;
 pub mod thunk;
 
@@ -812,229 +811,46 @@ impl TryFrom<pb::ConsensusMessage> for ConsensusMessage {
     }
 }
 
-impl TryFrom<ConsensusMessage> for RandomBeacon {
-    type Error = ConsensusMessage;
-    fn try_from(msg: ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::RandomBeacon(x) => Ok(x),
-            _ => Err(msg),
+/// Implements back-and-forth conversion between consensus message and the
+/// individual variants' wrapped type. The wrapped type should have the same
+/// name as its corresponding enum variant.
+macro_rules! impl_cm_conversion {
+    ($type:ident) => {
+        impl TryFrom<ConsensusMessage> for $type {
+            type Error = ConsensusMessage;
+            fn try_from(msg: ConsensusMessage) -> Result<Self, Self::Error> {
+                match msg {
+                    ConsensusMessage::$type(x) => Ok(x),
+                    _ => Err(msg),
+                }
+            }
         }
-    }
+        impl<'a> TryFrom<&'a ConsensusMessage> for &'a $type {
+            type Error = ();
+            fn try_from(msg: &'a ConsensusMessage) -> Result<Self, Self::Error> {
+                match msg {
+                    ConsensusMessage::$type(x) => Ok(x),
+                    _ => Err(()),
+                }
+            }
+        }
+
+    };
+    ($type:ident, $($rest:ident),+) => {
+        impl_cm_conversion!($type);
+        impl_cm_conversion!($($rest),+);
+    };
 }
 
-impl TryFrom<ConsensusMessage> for Finalization {
-    type Error = ConsensusMessage;
-    fn try_from(msg: ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::Finalization(x) => Ok(x),
-            _ => Err(msg),
-        }
-    }
-}
-
-impl TryFrom<ConsensusMessage> for Notarization {
-    type Error = ConsensusMessage;
-    fn try_from(msg: ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::Notarization(x) => Ok(x),
-            _ => Err(msg),
-        }
-    }
-}
-
-impl TryFrom<ConsensusMessage> for BlockProposal {
-    type Error = ConsensusMessage;
-    fn try_from(msg: ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::BlockProposal(x) => Ok(x),
-            _ => Err(msg),
-        }
-    }
-}
-
-impl TryFrom<ConsensusMessage> for RandomBeaconShare {
-    type Error = ConsensusMessage;
-    fn try_from(msg: ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::RandomBeaconShare(x) => Ok(x),
-            _ => Err(msg),
-        }
-    }
-}
-
-impl TryFrom<ConsensusMessage> for NotarizationShare {
-    type Error = ConsensusMessage;
-    fn try_from(msg: ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::NotarizationShare(x) => Ok(x),
-            _ => Err(msg),
-        }
-    }
-}
-
-impl TryFrom<ConsensusMessage> for FinalizationShare {
-    type Error = ConsensusMessage;
-    fn try_from(msg: ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::FinalizationShare(x) => Ok(x),
-            _ => Err(msg),
-        }
-    }
-}
-
-impl TryFrom<ConsensusMessage> for RandomTape {
-    type Error = ConsensusMessage;
-    fn try_from(msg: ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::RandomTape(x) => Ok(x),
-            _ => Err(msg),
-        }
-    }
-}
-
-impl TryFrom<ConsensusMessage> for RandomTapeShare {
-    type Error = ConsensusMessage;
-    fn try_from(msg: ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::RandomTapeShare(x) => Ok(x),
-            _ => Err(msg),
-        }
-    }
-}
-
-impl TryFrom<ConsensusMessage> for CatchUpPackage {
-    type Error = ConsensusMessage;
-    fn try_from(msg: ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::CatchUpPackage(x) => Ok(x),
-            _ => Err(msg),
-        }
-    }
-}
-
-impl TryFrom<ConsensusMessage> for CatchUpPackageShare {
-    type Error = ConsensusMessage;
-    fn try_from(msg: ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::CatchUpPackageShare(x) => Ok(x),
-            _ => Err(msg),
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a ConsensusMessage> for &'a RandomBeacon {
-    type Error = ();
-    fn try_from(msg: &'a ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::RandomBeacon(x) => Ok(x),
-            _ => Err(()),
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a ConsensusMessage> for &'a Finalization {
-    type Error = ();
-    fn try_from(msg: &'a ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::Finalization(x) => Ok(x),
-            _ => Err(()),
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a ConsensusMessage> for &'a Notarization {
-    type Error = ();
-    fn try_from(msg: &'a ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::Notarization(x) => Ok(x),
-            _ => Err(()),
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a ConsensusMessage> for &'a BlockProposal {
-    type Error = ();
-    fn try_from(msg: &'a ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::BlockProposal(x) => Ok(x),
-            _ => Err(()),
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a ConsensusMessage> for &'a RandomBeaconShare {
-    type Error = ();
-    fn try_from(msg: &'a ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::RandomBeaconShare(x) => Ok(x),
-            _ => Err(()),
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a ConsensusMessage> for &'a NotarizationShare {
-    type Error = ();
-    fn try_from(msg: &'a ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::NotarizationShare(x) => Ok(x),
-            _ => Err(()),
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a ConsensusMessage> for &'a FinalizationShare {
-    type Error = ();
-    fn try_from(msg: &'a ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::FinalizationShare(x) => Ok(x),
-            _ => Err(()),
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a ConsensusMessage> for &'a RandomTape {
-    type Error = ();
-    fn try_from(msg: &'a ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::RandomTape(x) => Ok(x),
-            _ => Err(()),
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a ConsensusMessage> for &'a RandomTapeShare {
-    type Error = ();
-    fn try_from(msg: &'a ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::RandomTapeShare(x) => Ok(x),
-            _ => Err(()),
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a ConsensusMessage> for &'a CatchUpPackage {
-    type Error = ();
-    fn try_from(msg: &'a ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::CatchUpPackage(x) => Ok(x),
-            _ => Err(()),
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a ConsensusMessage> for &'a CatchUpPackageShare {
-    type Error = ();
-    fn try_from(msg: &'a ConsensusMessage) -> Result<Self, Self::Error> {
-        match msg {
-            ConsensusMessage::CatchUpPackageShare(x) => Ok(x),
-            _ => Err(()),
-        }
-    }
+impl_cm_conversion! {
+    RandomBeacon, Finalization, Notarization, BlockProposal, RandomBeaconShare,
+    NotarizationShare, FinalizationShare, RandomTape, RandomTapeShare,
+    CatchUpPackage, CatchUpPackageShare
 }
 
 /// ConsensusMessageHash has the same variants as [ConsensusMessage], but
 /// contains only a hash instead of the full message in each variant.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ConsensusMessageHash {
     RandomBeacon(CryptoHashOf<RandomBeacon>),
     Finalization(CryptoHashOf<Finalization>),
@@ -1112,58 +928,6 @@ impl TryFrom<&pb::ConsensusMessageHash> for ConsensusMessageHash {
             Kind::CatchUpPackageShare(x) => {
                 ConsensusMessageHash::CatchUpPackageShare(CryptoHashOf::new(CryptoHash(x)))
             }
-        })
-    }
-}
-
-/// ConsensusMessageAttribute has the same variants as [ConsensusMessage], but
-/// contains only the attributes for each variant. The attributes are the values
-/// that are used in the p2p layer to determine whether an artifact is
-/// interesting to a replica before fetching the full artifact.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum ConsensusMessageAttribute {
-    Finalization(CryptoHashOf<Block>),
-    Notarization(CryptoHashOf<Block>),
-    Empty(()),
-}
-
-impl From<ConsensusMessageAttribute> for pb::ConsensusMessageAttribute {
-    fn from(value: ConsensusMessageAttribute) -> Self {
-        use pb::consensus_message_attribute::Kind;
-        let kind = match value.clone() {
-            ConsensusMessageAttribute::Finalization(hash) => {
-                Kind::Finalization(pb::FinalizationAttribute {
-                    block_hash: hash.get().0,
-                })
-            }
-            ConsensusMessageAttribute::Notarization(hash) => {
-                Kind::Notarization(pb::NotarizationAttribute {
-                    block_hash: hash.get().0,
-                })
-            }
-            ConsensusMessageAttribute::Empty(_) => Kind::Empty(()),
-        };
-        Self { kind: Some(kind) }
-    }
-}
-
-impl TryFrom<pb::ConsensusMessageAttribute> for ConsensusMessageAttribute {
-    type Error = ProxyDecodeError;
-    fn try_from(value: pb::ConsensusMessageAttribute) -> Result<Self, Self::Error> {
-        use pb::consensus_message_attribute::Kind;
-        let Some(kind) = value.kind.clone() else {
-            return Err(ProxyDecodeError::MissingField(
-                "ConsensusMessageAttribute::kind",
-            ));
-        };
-        Ok(match kind {
-            Kind::Finalization(x) => {
-                Self::Finalization(CryptoHashOf::new(CryptoHash(x.block_hash)))
-            }
-            Kind::Notarization(x) => {
-                Self::Notarization(CryptoHashOf::new(CryptoHash(x.block_hash)))
-            }
-            Kind::Empty(()) => Self::Empty(()),
         })
     }
 }
@@ -1305,20 +1069,6 @@ impl ConsensusMessageHash {
             ConsensusMessageHash::RandomTapeShare(hash) => hash.get_ref(),
             ConsensusMessageHash::CatchUpPackage(hash) => hash.get_ref(),
             ConsensusMessageHash::CatchUpPackageShare(hash) => hash.get_ref(),
-        }
-    }
-}
-
-impl From<&ConsensusMessage> for ConsensusMessageAttribute {
-    fn from(msg: &ConsensusMessage) -> ConsensusMessageAttribute {
-        match msg {
-            ConsensusMessage::Finalization(x) => {
-                ConsensusMessageAttribute::Finalization(x.content.block.clone())
-            }
-            ConsensusMessage::Notarization(x) => {
-                ConsensusMessageAttribute::Notarization(x.content.block.clone())
-            }
-            _ => ConsensusMessageAttribute::Empty(()),
         }
     }
 }

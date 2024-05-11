@@ -164,8 +164,9 @@ impl From<&CanisterHttpResponseContent> for pb::CanisterHttpResponseContent {
             }
             CanisterHttpResponseContent::Reject(error) => {
                 pb::canister_http_response_content::Status::Reject(pb::CanisterHttpReject {
-                    reject_code: error.reject_code as u32,
+                    reject_code_old: error.reject_code as u32,
                     message: error.message.clone(),
+                    reject_code: pb::RejectCode::from(error.reject_code).into(),
                 })
             }
         };
@@ -189,8 +190,20 @@ impl TryFrom<pb::CanisterHttpResponseContent> for CanisterHttpResponseContent {
                     CanisterHttpResponseContent::Success(payload)
                 }
                 pb::canister_http_response_content::Status::Reject(error) => {
-                    CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                        reject_code: RejectCode::try_from(error.reject_code as u64).map_err(
+                    // A value of 0 for `reject_code_old` indicates that the field
+                    // was not set, i.e. we are past a replica version that has
+                    // populated the new field `reject_code` and we can use that
+                    // instead. Otherwise, we should still use the old field
+                    // when decoding.
+                    let reject_code = if error.reject_code_old == 0 {
+                        RejectCode::try_from(pb::RejectCode::try_from(error.reject_code).map_err(
+                            |_| ProxyDecodeError::ValueOutOfRange {
+                                typ: "reject_code",
+                                err: format!("value out of range: {}", error.reject_code),
+                            },
+                        )?)?
+                    } else {
+                        RejectCode::try_from(error.reject_code_old as u64).map_err(
                             |err| match err {
                                 TryFromError::ValueOutOfRange(range) => {
                                     ProxyDecodeError::ValueOutOfRange {
@@ -199,7 +212,10 @@ impl TryFrom<pb::CanisterHttpResponseContent> for CanisterHttpResponseContent {
                                     }
                                 }
                             },
-                        )?,
+                        )?
+                    };
+                    CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                        reject_code,
                         message: error.message,
                     })
                 }

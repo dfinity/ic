@@ -7,14 +7,14 @@ use ic_cketh_minter::endpoints::events::{
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
 use ic_cketh_minter::endpoints::{
     CandidBlockTag, EthTransaction, GasFeeEstimate, MinterInfo, RetrieveEthStatus,
-    TxFinalizedStatus, WithdrawalError,
+    TxFinalizedStatus, WithdrawalError, WithdrawalStatus,
 };
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::memo::{BurnMemo, MintMemo};
 use ic_cketh_minter::numeric::BlockNumber;
 use ic_cketh_minter::{PROCESS_REIMBURSEMENT, SCRAPPING_ETH_LOGS_INTERVAL};
 use ic_cketh_test_utils::flow::{
-    increment_base_fee_per_gas, DepositParams, ProcessWithdrawalParams,
+    double_and_increment_base_fee_per_gas, DepositParams, ProcessWithdrawalParams,
 };
 use ic_cketh_test_utils::mock::{JsonRpcMethod, JsonRpcProvider, MockJsonRpcProviders};
 use ic_cketh_test_utils::response::{
@@ -27,8 +27,9 @@ use ic_cketh_test_utils::{
     DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS,
     DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
     DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, DEFAULT_WITHDRAWAL_TRANSACTION_HASH,
-    ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL,
-    MAX_ETH_LOGS_BLOCK_RANGE, MINTER_ADDRESS, RECEIVED_ETH_EVENT_TOPIC,
+    EFFECTIVE_GAS_PRICE, ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE, GAS_USED,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_ETH_LOGS_BLOCK_RANGE, MINTER_ADDRESS,
+    RECEIVED_ETH_EVENT_TOPIC,
 };
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -77,9 +78,10 @@ fn should_deposit_and_withdraw() {
 
     let cketh = cketh
         .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
-        .expect_finalized_status(TxFinalizedStatus::Success(EthTransaction {
+        .expect_finalized_status(TxFinalizedStatus::Success {
             transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
-        }))
+            effective_transaction_fee: Some((GAS_USED * EFFECTIVE_GAS_PRICE).into()),
+        })
         .call_ledger_get_transaction(withdrawal_id.clone())
         .expect_burn(Burn {
             amount: withdrawal_amount.clone(),
@@ -368,7 +370,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
                 },
             )
         })
-        .expect_status(RetrieveEthStatus::Pending);
+        .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending);
 }
 
 #[test]
@@ -565,16 +567,16 @@ fn should_resubmit_new_transaction_when_price_increased() {
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let (expected_tx, expected_sig) = default_signed_eip_1559_transaction();
     let first_tx_hash = hash_transaction(expected_tx.clone(), expected_sig);
-    let resubmitted_sent_tx = "0x02f87301808462590080850873e448ec82520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c088016090159f0c209680c080a0b43ed9d22ba0731a5cb30ca6e8e171982ab0edc5040dfe0aeee2c77e1b89bd9ea01dfb601f4125243a81ce4d2bfe10c60d519f92a3a4eff8b6dc3da69e19382238";
+    let resubmitted_sent_tx = "0x02f87301808462590080850f0de1e14682520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c088015e728d945289c680c001a0537665ebe010409f026674776c6273ef7af3a79bca42492a263ec405c3869c2ca00a238d29dbf894e7cf85b70d5ecd62fc99e375b754c112bcbe1199fc9f00dff2";
     let (resubmitted_tx, resubmitted_tx_sig) = decode_transaction(resubmitted_sent_tx);
     let resubmitted_tx_hash = hash_transaction(resubmitted_tx.clone(), resubmitted_tx_sig);
     assert_eq!(
         resubmitted_tx,
         expected_tx
             .clone()
-            .value(99_237_614_339_235_990_u64)
+            .value(98_642_194_253_121_990_u64)
             .max_priority_fee_per_gas(1_650_000_000_u64)
-            .max_fee_per_gas(36_304_079_084_u64)
+            .max_fee_per_gas(64_657_416_518_u64)
     );
     assert_ne!(first_tx_hash, resubmitted_tx_hash);
 
@@ -596,7 +598,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
         .process_withdrawal_with_resubmission_and_increased_price(
             expected_tx,
             expected_sig,
-            &mut increment_base_fee_per_gas,
+            &mut double_and_increment_base_fee_per_gas,
             resubmitted_tx,
             resubmitted_tx_sig,
         )
@@ -607,10 +609,10 @@ fn should_resubmit_new_transaction_when_price_increased() {
                     chain_id: Nat::from(1_u8),
                     nonce: Nat::from(0_u8),
                     max_priority_fee_per_gas: Nat::from(1_650_000_000_u64),
-                    max_fee_per_gas: Nat::from(36_304_079_084_u64),
+                    max_fee_per_gas: Nat::from(64_657_416_518_u64),
                     gas_limit: Nat::from(21_000_u32),
                     destination: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
-                    value: Nat::from(99_237_614_339_235_990_u64),
+                    value: Nat::from(98_642_194_253_121_990_u64),
                     data: Default::default(),
                     access_list: vec![],
                 },
@@ -990,6 +992,7 @@ fn should_skip_single_block_containing_too_many_events() {
         ]);
 }
 
+#[allow(deprecated)]
 #[test]
 fn should_retrieve_minter_info() {
     let cketh = CkEthSetup::default();
@@ -1002,6 +1005,9 @@ fn should_retrieve_minter_info() {
         info_at_start,
         MinterInfo {
             minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
+            smart_contract_address: Some(format_ethereum_address_to_eip_55(
+                ETH_HELPER_CONTRACT_ADDRESS
+            )),
             eth_helper_contract_address: Some(format_ethereum_address_to_eip_55(
                 ETH_HELPER_CONTRACT_ADDRESS
             )),
@@ -1013,16 +1019,21 @@ fn should_retrieve_minter_info() {
             eth_balance: Some(Nat::from(0_u8)),
             last_gas_fee_estimate: None,
             erc20_balances: None,
+            last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
+            last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
         }
     );
 
     let cketh = cketh.deposit(DepositParams::default()).expect_mint();
     let info_after_deposit = cketh.get_minter_info();
+    let new_eth_scraped_block_number =
+        LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + MAX_ETH_LOGS_BLOCK_RANGE + 1;
     assert_eq!(
         info_after_deposit,
         MinterInfo {
             last_observed_block_number: Some(Nat::from(DEFAULT_BLOCK_NUMBER)),
             eth_balance: Some(Nat::from(EXPECTED_BALANCE)),
+            last_eth_scraped_block_number: Some(new_eth_scraped_block_number.into()),
             ..info_at_start
         }
     );

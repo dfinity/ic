@@ -11,6 +11,7 @@ hex = { workspace = true }
 prost = { workspace = true }
 scoped_threadpool = "0.1.*"
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

@@ -13,7 +13,9 @@ use ic_nns_governance::{
     },
 };
 use ic_nns_test_utils::{
-    common::NnsInitPayloadsBuilder, governance::wait_for_final_state, itest_helpers::NnsCanisters,
+    common::NnsInitPayloadsBuilder,
+    governance::wait_for_final_state,
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
 
 /// Integration test for the known neuron functionality.
@@ -27,7 +29,7 @@ use ic_nns_test_utils::{
 ///   one.
 #[test]
 fn test_known_neurons() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_invariant_compliant_mutations()
             .with_test_neurons()

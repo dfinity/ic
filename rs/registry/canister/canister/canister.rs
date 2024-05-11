@@ -31,27 +31,29 @@ use registry_canister::{
     init::RegistryCanisterInitPayload,
     mutations::{
         complete_canister_migration::CompleteCanisterMigrationPayload,
-        do_add_api_boundary_node::AddApiBoundaryNodePayload,
+        do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
         do_add_node_operator::AddNodeOperatorPayload,
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
         do_bless_replica_version::BlessReplicaVersionPayload,
         do_change_subnet_membership::ChangeSubnetMembershipPayload,
         do_create_subnet::CreateSubnetPayload,
         do_delete_subnet::DeleteSubnetPayload,
+        do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
+        do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
         do_recover_subnet::RecoverSubnetPayload,
         do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_retire_replica_version::RetireReplicaVersionPayload,
+        do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
         do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
         do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
-        do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
         do_update_node_directly::UpdateNodeDirectlyPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
         do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
+        do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
         do_update_subnet::UpdateSubnetPayload,
-        do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
         firewall::{
             AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
@@ -383,6 +385,8 @@ fn retire_replica_version_(_payload: RetireReplicaVersionPayload) {
     );
 }
 
+// TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
+// TODO[NNS1-3000]: `revise_elected_replica_versions` endpoint.
 #[export_name = "canister_update update_elected_replica_versions"]
 fn update_elected_replica_versions() {
     check_caller_is_governance_and_log("update_elected_replica_versions");
@@ -390,31 +394,53 @@ fn update_elected_replica_versions() {
 }
 
 #[candid_method(update, rename = "update_elected_replica_versions")]
-fn update_elected_replica_versions_(payload: UpdateElectedReplicaVersionsPayload) {
-    registry_mut().do_update_elected_replica_versions(payload);
+fn update_elected_replica_versions_(payload: ReviseElectedGuestosVersionsPayload) {
+    registry_mut().do_revise_elected_replica_versions(payload);
     recertify_registry();
 }
 
+// TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
+// TODO[NNS1-3000]: `deploy_guestos_to_all_subnet_nodes` endpoint.
 #[export_name = "canister_update update_subnet_replica_version"]
 fn update_subnet_replica_version() {
     check_caller_is_governance_and_log("update_subnet_replica_version");
-    over(candid_one, |payload: UpdateSubnetReplicaVersionPayload| {
-        update_subnet_replica_version_(payload)
-    });
+    over(candid_one, update_subnet_replica_version_);
 }
 
 #[candid_method(update, rename = "update_subnet_replica_version")]
-fn update_subnet_replica_version_(payload: UpdateSubnetReplicaVersionPayload) {
-    registry_mut().do_update_subnet_replica_version(payload);
+fn update_subnet_replica_version_(payload: DeployGuestosToAllSubnetNodesPayload) {
+    registry_mut().do_deploy_guestos_to_all_subnet_nodes(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update revise_elected_replica_versions"]
+fn revise_elected_replica_versions() {
+    check_caller_is_governance_and_log("revise_elected_replica_versions");
+    over(candid_one, revise_elected_replica_versions_);
+}
+
+#[candid_method(update, rename = "revise_elected_replica_versions")]
+fn revise_elected_replica_versions_(payload: ReviseElectedGuestosVersionsPayload) {
+    registry_mut().do_revise_elected_replica_versions(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update deploy_guestos_to_all_subnet_nodes"]
+fn deploy_guestos_to_all_subnet_nodes() {
+    check_caller_is_governance_and_log("deploy_guestos_to_all_subnet_nodes");
+    over(candid_one, deploy_guestos_to_all_subnet_nodes_);
+}
+
+#[candid_method(update, rename = "deploy_guestos_to_all_subnet_nodes")]
+fn deploy_guestos_to_all_subnet_nodes_(payload: DeployGuestosToAllSubnetNodesPayload) {
+    registry_mut().do_deploy_guestos_to_all_subnet_nodes(payload);
     recertify_registry();
 }
 
 #[export_name = "canister_update update_elected_hostos_versions"]
 fn update_elected_hostos_versions() {
     check_caller_is_governance_and_log("update_elected_hostos_versions");
-    over(candid_one, |payload: UpdateElectedHostosVersionsPayload| {
-        update_elected_hostos_versions_(payload)
-    });
+    over(candid_one, update_elected_hostos_versions_);
 }
 
 #[candid_method(update, rename = "update_elected_hostos_versions")]
@@ -535,17 +561,17 @@ fn change_subnet_membership_(payload: ChangeSubnetMembershipPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update add_api_boundary_node"]
-fn add_api_boundary_node() {
-    check_caller_is_governance_and_log("add_api_boundary_node");
-    over(candid_one, |payload: AddApiBoundaryNodePayload| {
-        add_api_boundary_node_(payload)
+#[export_name = "canister_update add_api_boundary_nodes"]
+fn add_api_boundary_nodes() {
+    check_caller_is_governance_and_log("add_api_boundary_nodes");
+    over(candid_one, |payload: AddApiBoundaryNodesPayload| {
+        add_api_boundary_nodes_(payload)
     });
 }
 
-#[candid_method(update, rename = "add_api_boundary_node")]
-fn add_api_boundary_node_(payload: AddApiBoundaryNodePayload) {
-    registry_mut().do_add_api_boundary_node(payload);
+#[candid_method(update, rename = "add_api_boundary_nodes")]
+fn add_api_boundary_nodes_(payload: AddApiBoundaryNodesPayload) {
+    registry_mut().do_add_api_boundary_nodes(payload);
     recertify_registry();
 }
 
@@ -756,6 +782,42 @@ fn update_unassigned_nodes_config() {
 #[candid_method(update, rename = "update_unassigned_nodes_config")]
 fn update_unassigned_nodes_config_(payload: UpdateUnassignedNodesConfigPayload) {
     registry_mut().do_update_unassigned_nodes_config(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update deploy_guestos_to_all_unassigned_nodes"]
+fn deploy_guestos_to_all_unassigned_nodes() {
+    check_caller_is_governance_and_log("deploy_guestos_to_all_unassigned_nodes");
+    over(
+        candid_one,
+        |payload: DeployGuestosToAllUnassignedNodesPayload| {
+            deploy_guestos_to_all_unassigned_nodes_(payload)
+        },
+    );
+}
+
+#[candid_method(update, rename = "deploy_guestos_to_all_unassigned_nodes")]
+fn deploy_guestos_to_all_unassigned_nodes_(payload: DeployGuestosToAllUnassignedNodesPayload) {
+    registry_mut().do_deploy_guestos_to_all_unassigned_nodes(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update update_ssh_readonly_access_for_all_unassigned_nodes"]
+fn update_ssh_readonly_access_for_all_unassigned_nodes() {
+    check_caller_is_governance_and_log("update_ssh_readonly_access_for_all_unassigned_nodes");
+    over(
+        candid_one,
+        |payload: UpdateSshReadOnlyAccessForAllUnassignedNodesPayload| {
+            update_ssh_readonly_access_for_all_unassigned_nodes_(payload)
+        },
+    );
+}
+
+#[candid_method(update, rename = "update_ssh_readonly_access_for_all_unassigned_nodes")]
+fn update_ssh_readonly_access_for_all_unassigned_nodes_(
+    payload: UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
+) {
+    registry_mut().do_update_ssh_readonly_access_for_all_unassigned_nodes(payload);
     recertify_registry();
 }
 

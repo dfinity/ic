@@ -281,12 +281,13 @@ impl ThresholdBip340CombinedSignatureInternal {
         &self,
     ) -> Result<Vec<u8>, ThresholdBip340SignatureShareInternalSerializationError> {
         let mut v = vec![];
-        v.extend_from_slice(&self.r.serialize_bip340().map_err(|e| {
+        let serialized_p = self.r.serialize_bip340().map_err(|e| {
             ThresholdBip340SignatureShareInternalSerializationError(format!(
                 "Failed to serialize r: {:?}",
                 e
             ))
-        })?);
+        })?;
+        v.extend_from_slice(&serialized_p);
         v.extend_from_slice(&self.s.serialize());
         Ok(v)
     }
@@ -296,18 +297,28 @@ impl ThresholdBip340CombinedSignatureInternal {
         bytes: &[u8],
     ) -> Result<Self, ThresholdBip340SignatureShareInternalSerializationError> {
         const K256: EccCurveType = EccCurveType::K256;
+        const POINT_LEN: usize = match K256.point_bytes_bip340() {
+            Some(point_len) => point_len,
+            None => panic!("const panic!: failed to determine BIP340 point size at compile time"),
+        };
+        const EXPECTED_LEN: usize = K256.scalar_bytes() + POINT_LEN;
 
-        if bytes.len() != K256.scalar_bytes() + K256.point_bytes() {
+        if bytes.len() != EXPECTED_LEN {
             return Err(ThresholdBip340SignatureShareInternalSerializationError(
-                "Bad signature length".to_string(),
+                format!(
+                    "Bad signature length, expected {EXPECTED_LEN} but got {}",
+                    bytes.len()
+                ),
             ));
         }
 
-        let r = EccPoint::deserialize_bip340(K256, &bytes[..K256.scalar_bytes()]).map_err(|e| {
+        let (point_bytes, scalar_bytes) = bytes.split_at(POINT_LEN);
+
+        let r = EccPoint::deserialize_bip340(K256, point_bytes).map_err(|e| {
             ThresholdBip340SignatureShareInternalSerializationError(format!("Invalid r: {:?}", e))
         })?;
 
-        let s = EccScalar::deserialize(K256, &bytes[K256.scalar_bytes()..]).map_err(|e| {
+        let s = EccScalar::deserialize(K256, scalar_bytes).map_err(|e| {
             ThresholdBip340SignatureShareInternalSerializationError(format!("Invalid s: {:?}", e))
         })?;
 
@@ -402,25 +413,4 @@ impl ThresholdBip340CombinedSignatureInternal {
         // accept:
         Ok(())
     }
-}
-
-/// Derive the BIP340 x-coordinate public key from a transcript and path
-pub fn derive_bip340_public_key(
-    key_transcript: &IDkgTranscriptInternal,
-    derivation_path: &DerivationPath,
-) -> ThresholdEcdsaResult<[u8; 32]> {
-    let (key_tweak, _chain_key) = derivation_path.derive_tweak(&key_transcript.constant_term())?;
-
-    let derived_key = key_transcript
-        .constant_term()
-        .add_points(&EccPoint::mul_by_g(&key_tweak))?;
-
-    let (y_fixed_key, _) = fix_to_even_y(&derived_key)?;
-
-    let key_x = y_fixed_key.serialize_bip340()?;
-
-    let mut key_x_arr = [0u8; 32];
-    key_x_arr.copy_from_slice(&key_x);
-
-    Ok(key_x_arr)
 }

@@ -1,11 +1,12 @@
 use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
-    governance::{TimeWarp, ONE_DAY_SECONDS},
+    governance::TimeWarp,
     init::TEST_NEURON_2_ID,
     pb::v1::{
         add_or_remove_node_provider::Change,
@@ -17,11 +18,14 @@ use ic_nns_governance::{
         Proposal, ProposalInfo, Vote,
     },
 };
-use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+};
 
 #[test]
 fn test_deadline_is_extended_with_wait_for_quiet() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
 
         nns_init_payload_builder.with_initial_invariant_compliant_mutations();

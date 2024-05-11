@@ -7,10 +7,7 @@ package(default_visibility = ["//visibility:public"])
 [
     rust_library(
         name = "ledger" + name_suffix,
-        srcs = [
-            "src/cdk_runtime.rs",
-            "src/lib.rs",
-        ],
+        srcs = glob(["src/**/*.rs"]),
         compile_data = [
             "//rs/rosetta-api/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
         ],
@@ -89,6 +86,25 @@ package(default_visibility = ["//visibility:public"])
                 "//rs/rosetta-api/icrc1/tokens_u256",
             ],
         ),
+        (
+            "_getblocksdisabled",
+            ["get-blocks-disabled"],
+            [
+                ":ledger",
+                "//rs/rosetta-api/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256_getblocksdisabled",
+            [
+                "get-blocks-disabled",
+                "u256-tokens",
+            ],
+            [
+                ":ledger_u256",
+                "//rs/rosetta-api/icrc1/tokens_u256",
+            ],
+        ),
     ]
 ]
 
@@ -129,10 +145,10 @@ rust_test(
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/ledger",
-            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm)",
-            "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
-            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
             "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz)",
+            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
+            "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
+            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm)",
         },
         deps = [
             ":ledger",
@@ -172,7 +188,6 @@ rust_test(
 
 rust_test(
     name = "ledger_unit_test",
-    srcs = ["src/tests.rs"],
     compile_data = [
         "//rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz",
     ],

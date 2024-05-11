@@ -416,8 +416,11 @@ impl SystemStateChanges {
             }
         }
 
-        // Verify callback ids and register new callbacks.
+        // Register and unregister callbacks.
         for update in self.callback_updates {
+            // Only retrieve the CCM if there are callbacks to register / unregister.
+            // `apply_changes` also gets called on stopped canisters (with no callbacks to
+            // register / unregister) and the call would fail in that case.
             let call_context_manager = system_state
                 .call_context_manager_mut()
                 .ok_or_else(|| Self::error("Call context manager does not exist"))?;
@@ -432,11 +435,11 @@ impl SystemStateChanges {
                     }
                 }
                 CallbackUpdate::Unregister(callback_id) => {
-                    let _callback = call_context_manager
+                    call_context_manager
                         .unregister_callback(callback_id)
                         .ok_or_else(|| {
-                            Self::error("Tried to unregister callback with an id that isn't in use")
-                        });
+                            Self::error("Tried to unregister callback with an ID that isn't in use")
+                        })?;
                 }
             }
         }
@@ -737,9 +740,12 @@ impl SandboxSafeSystemState {
                     .push(CallbackUpdate::Register(id, callback));
                 Ok(id)
             }
-            None => Err(HypervisorError::ContractViolation(
-                "Tried to register a callback in a context where it isn't allowed.".to_string(),
-            )),
+            None => Err(HypervisorError::ContractViolation {
+                error: "Tried to register a callback in a context where it isn't allowed."
+                    .to_string(),
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            }),
         }
     }
 
@@ -809,7 +815,11 @@ impl SandboxSafeSystemState {
             .cycles_account_manager
             .mint_cycles(self.canister_id, &mut new_balance, amount_to_mint)
             .map_err(|CyclesAccountManagerError::ContractViolation(msg)| {
-                HypervisorError::ContractViolation(msg)
+                HypervisorError::ContractViolation {
+                    error: msg,
+                    suggestion: "".to_string(),
+                    doc_link: "".to_string(),
+                }
             });
         self.update_balance_change(new_balance);
         result
@@ -989,7 +999,7 @@ impl SandboxSafeSystemState {
             .get()
             .overflowing_mul(self.dirty_page_overhead.get());
         if overflow {
-            Err(HypervisorError::ContractViolation(format!("Overflow calculating instruction cost for dirty pages - conversion rate: {}, dirty_pages: {}", self.dirty_page_overhead, dirty_pages)))
+            Err(HypervisorError::ContractViolation{error: format!("Overflow calculating instruction cost for dirty pages - conversion rate: {}, dirty_pages: {}", self.dirty_page_overhead, dirty_pages), suggestion: "".to_string(), doc_link: "".to_string()})
         } else {
             Ok(NumInstructions::from(inst))
         }

@@ -1,22 +1,39 @@
 use ic_cdk_macros::{init, post_upgrade, query};
 use ic_ledger_suite_orchestrator::candid::Erc20Contract as CandidErc20Contract;
-use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg};
+use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg, OrchestratorInfo};
 use ic_ledger_suite_orchestrator::lifecycle;
-use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
+use ic_ledger_suite_orchestrator::scheduler::{
+    encode_orchestrator_metrics, Erc20Token, IC_CANISTER_RUNTIME,
+};
 use ic_ledger_suite_orchestrator::state::read_state;
+use ic_ledger_suite_orchestrator::storage::read_wasm_store;
+use ic_ledger_suite_orchestrator::storage::TASKS;
 
 mod dashboard;
 
 #[query]
-async fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
+fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
     let contract = Erc20Token::try_from(contract)
         .unwrap_or_else(|e| ic_cdk::trap(&format!("Invalid ERC-20 contract: {:?}", e)));
     read_state(|s| s.managed_canisters(&contract).cloned()).map(ManagedCanisterIds::from)
 }
 
+#[query]
+fn get_orchestrator_info() -> OrchestratorInfo {
+    read_state(|s| OrchestratorInfo {
+        managed_canisters: s
+            .managed_canisters_iter()
+            .map(|(token, canisters)| (token.clone(), canisters.clone()).into())
+            .collect(),
+        cycles_management: s.cycles_management().clone(),
+        more_controller_ids: s.more_controller_ids().to_vec(),
+        minter_id: s.minter_id().cloned(),
+    })
+}
+
 #[export_name = "canister_global_timer"]
 fn timer() {
-    ic_ledger_suite_orchestrator::scheduler::timer();
+    ic_ledger_suite_orchestrator::scheduler::timer(IC_CANISTER_RUNTIME);
 }
 
 #[init]
@@ -61,7 +78,9 @@ fn http_request(
 
     match req.path() {
         "/dashboard" => {
-            let dashboard = read_state(DashboardTemplate::from_state);
+            let dashboard = read_wasm_store(|wasm_store| {
+                read_state(|s| DashboardTemplate::from_state(s, wasm_store))
+            });
             HttpResponseBuilder::ok()
                 .header("Content-Type", "text/html; charset=utf-8")
                 .with_body_and_content_length(dashboard.render().unwrap())
@@ -131,6 +150,74 @@ fn http_request(
                 .header("Content-Type", "application/json; charset=utf-8")
                 .with_body_and_content_length(log.serialize_logs(MAX_BODY_SIZE))
                 .build()
+        }
+        "/metrics" => {
+            use ic_metrics_encoder::MetricsEncoder;
+
+            let mut writer = MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
+
+            fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+                const WASM_PAGE_SIZE_IN_BYTES: f64 = 65536.0;
+
+                w.encode_gauge(
+                    "ledger_suite_orchestrator_stable_memory_bytes",
+                    ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
+                    "Size of the stable memory allocated by this canister.",
+                )?;
+
+                w.gauge_vec("cycle_balance", "Cycle balance of this canister.")?
+                    .value(
+                        &[("canister", "ledger-suite-orchestrator")],
+                        ic_cdk::api::canister_balance128() as f64,
+                    )?;
+
+                read_state(|s| {
+                    w.encode_counter(
+                        "ledger_suite_orchestrator_managed_ledgers",
+                        s.managed_canisters_iter()
+                            .filter(|(_erc20, canisters)| canisters.ledger.is_some())
+                            .count() as f64,
+                        "Total count of ckERC20 ledgers managed by the orchestrator.",
+                    )?;
+
+                    w.encode_counter(
+                        "ledger_suite_orchestrator_managed_indexes",
+                        s.managed_canisters_iter()
+                            .filter(|(_erc20, canisters)| canisters.index.is_some())
+                            .count() as f64,
+                        "Total count of ckERC20 indexes managed by the orchestrator.",
+                    )?;
+
+                    w.encode_counter(
+                        "ledger_suite_orchestrator_managed_archives",
+                        s.managed_canisters_iter()
+                            .flat_map(|(_erc20, canisters)| &canisters.archives)
+                            .count() as f64,
+                        "Total count of ckERC20 archives managed by the orchestrator.",
+                    )
+                })?;
+
+                let num_tasks = TASKS.with(|t| t.borrow().queue.len());
+                w.encode_gauge(
+                    "ledger_suite_orchestrator_tasks",
+                    num_tasks as f64,
+                    "Total number of pending tasks.",
+                )?;
+
+                encode_orchestrator_metrics(w)?;
+                Ok(())
+            }
+
+            match encode_metrics(&mut writer) {
+                Ok(()) => HttpResponseBuilder::ok()
+                    .header("Content-Type", "text/plain; version=0.0.4")
+                    .with_body_and_content_length(writer.into_inner())
+                    .build(),
+                Err(err) => {
+                    HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                        .build()
+                }
+            }
         }
         _ => HttpResponseBuilder::not_found().build(),
     }

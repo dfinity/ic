@@ -38,6 +38,7 @@ use tokio::{
     task::JoinSet,
     time::{self, sleep_until, timeout_at, Instant, MissedTickBehavior},
 };
+use tracing::{instrument, span, Instrument, Level};
 
 const MIN_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
@@ -79,7 +80,7 @@ async fn rpc_handler<Artifact: ArtifactKind>(
         let artifact = pool
             .read()
             .unwrap()
-            .get_validated_by_identifier(&id)
+            .get(&id)
             .ok_or(StatusCode::NO_CONTENT)?;
         Ok::<_, StatusCode>(Bytes::from(Artifact::PbMessage::proxy_encode(artifact)))
     });
@@ -302,6 +303,7 @@ where
         if !peer_rx.borrow().is_empty() {
             self.metrics.download_task_restart_after_join_total.inc();
             self.metrics.download_task_started_total.inc();
+            let process_advert_span = span!(Level::INFO, "process_advert");
             self.artifact_processor_tasks.spawn_on(
                 Self::process_advert(
                     self.log.clone(),
@@ -313,7 +315,8 @@ where
                     self.sender.clone(),
                     self.transport.clone(),
                     self.metrics.clone(),
-                ),
+                )
+                .instrument(process_advert_span),
                 &self.rt_handle,
             );
         } else {
@@ -328,6 +331,7 @@ where
         );
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn handle_advert_receive(
         &mut self,
         advert_update: SlotUpdate<Artifact>,
@@ -399,6 +403,7 @@ where
                     tx.send_if_modified(|h| h.insert(peer_id));
                     self.active_downloads.insert(id.clone(), tx);
 
+                    let process_advert_span = span!(Level::INFO, "process_advert");
                     self.artifact_processor_tasks.spawn_on(
                         Self::process_advert(
                             self.log.clone(),
@@ -410,7 +415,8 @@ where
                             self.sender.clone(),
                             self.transport.clone(),
                             self.metrics.clone(),
-                        ),
+                        )
+                        .instrument(process_advert_span),
                         &self.rt_handle,
                     );
                 }
@@ -437,6 +443,7 @@ where
     }
 
     /// Waits until advert resolves to fetch. If all peers are removed or priority becomes drop `DownloadStopped` is returned.
+    #[instrument(skip_all)]
     async fn wait_fetch(
         id: &Artifact::Id,
         attr: &Artifact::Attribute,
@@ -488,6 +495,7 @@ where
     /// - The priority function evaluates the advert to [`Priority::Drop`] -> [`DownloadStopped::PriorityIsDrop`]
     /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`DownloadStopped::AllPeersDeletedTheArtifact`]
     /// and the failure condition is reported in the error variant of the returned result.
+    #[instrument(skip_all)]
     async fn download_artifact(
         log: ReplicaLogger,
         id: &Artifact::Id,
@@ -1228,14 +1236,16 @@ mod tests {
         mock_pfn
             .expect_get_priority_function()
             .times(1)
-            .returning(|_| Box::new(|_, _| Priority::Fetch))
+            .returning(|_| Box::new(|_, _| Priority::FetchNow))
             .in_sequence(&mut seq);
 
         let mut mock_transport = MockTransport::new();
         mock_transport.expect_rpc().returning(|_, _| {
             Ok(Response::builder()
                 .body(Bytes::from(
-                    <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(0_u64),
+                    <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(
+                        U64Artifact::id_to_msg(0, 1024),
+                    ),
                 ))
                 .unwrap())
         });
@@ -1263,7 +1273,7 @@ mod tests {
         // Check that we received downloaded artifact.
         assert_eq!(
             channels.unvalidated_artifact_receiver.recv().await.unwrap(),
-            UnvalidatedArtifactMutation::Insert((0, NODE_1))
+            UnvalidatedArtifactMutation::Insert((U64Artifact::id_to_msg(0, 1024), NODE_1))
         );
     }
 
@@ -1660,7 +1670,7 @@ mod tests {
         }));
 
         let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
-        let priorities = Arc::new(Mutex::new(vec![Priority::Fetch, Priority::Stash]));
+        let priorities = Arc::new(Mutex::new(vec![Priority::FetchNow, Priority::Stash]));
         mock_pfn
             .expect_get_priority_function()
             .times(1)
@@ -1719,7 +1729,9 @@ mod tests {
             .returning(|_, _| {
                 Ok(Response::builder()
                     .body(Bytes::from(
-                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(1_u64),
+                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(
+                            U64Artifact::id_to_msg(1, 1024),
+                        ),
                     ))
                     .unwrap())
             })
@@ -1732,7 +1744,9 @@ mod tests {
                 // Respond with artifact that does correspond to the advertised ID
                 Ok(Response::builder()
                     .body(Bytes::from(
-                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(0_u64),
+                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(
+                            U64Artifact::id_to_msg(0, 1024),
+                        ),
                     ))
                     .unwrap())
             })
@@ -1741,7 +1755,7 @@ mod tests {
         let mut pc = PeerCounter::new();
         pc.insert(NODE_1);
         let (_peer_tx, mut peer_rx) = watch::channel(pc);
-        let pfn = |_: &_, _: &_| Priority::Fetch;
+        let pfn = |_: &_, _: &_| Priority::FetchNow;
         let (_pfn_tx, pfn_rx) = watch::channel(Box::new(pfn) as Box<_>);
 
         rt.block_on(async {
@@ -1761,7 +1775,7 @@ mod tests {
                     ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
                 )
                 .await,
-                Ok((0, NODE_1))
+                Ok((U64Artifact::id_to_msg(0, 1024), NODE_1))
             )
         });
     }
@@ -1780,14 +1794,11 @@ mod tests {
             type PbIdError = Infallible;
             type PbMessageError = Infallible;
             type PbAttributeError = Infallible;
-            type PbFilterError = Infallible;
             type Message = Vec<u8>;
             type PbId = ();
             type Id = ();
             type PbAttribute = ();
             type Attribute = ();
-            type PbFilter = ();
-            type Filter = ();
 
             fn message_to_advert(_: &Self::Message) -> Advert<BigArtifact> {
                 todo!()

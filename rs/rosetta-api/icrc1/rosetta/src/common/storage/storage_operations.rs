@@ -43,19 +43,6 @@ pub fn get_metadata(connection: &Connection) -> anyhow::Result<Vec<MetadataEntry
 }
 
 pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()> {
-    fn get_highest_block_idx_in_account_balance_table(
-        connection: &Connection,
-    ) -> anyhow::Result<Option<u64>> {
-        match connection
-            .prepare("SELECT block_idx FROM account_balances ORDER BY block_idx DESC LIMIT 1")?
-            .query_map(params![], |row| row.get(0))?
-            .next()
-        {
-            None => Ok(None),
-            Some(res) => Ok(res?),
-        }
-    }
-
     // Utility method that tries to fetch the balance from the cache first and, if
     // no balance has been found, fetches it from the database
     fn get_account_balance_with_cache(
@@ -464,6 +451,30 @@ pub fn get_blocks_by_transaction_hash(
     let mut stmt =
         connection.prepare("SELECT idx,serialized_block FROM blocks WHERE tx_hash = ?1")?;
     read_blocks(&mut stmt, params![hash.as_slice().to_vec()])
+}
+
+pub fn get_highest_block_idx_in_account_balance_table(
+    connection: &Connection,
+) -> anyhow::Result<Option<u64>> {
+    match connection
+        .prepare_cached("SELECT block_idx FROM account_balances ORDER BY block_idx DESC LIMIT 1")?
+        .query_map(params![], |row| row.get(0))?
+        .next()
+    {
+        None => Ok(None),
+        Some(res) => Ok(res?),
+    }
+}
+
+pub fn get_block_count(connection: &Connection) -> anyhow::Result<u64> {
+    match connection
+        .prepare_cached("SELECT COUNT(*) FROM blocks")?
+        .query_map(params![], |row| row.get(0))?
+        .next()
+    {
+        None => Ok(0),
+        Some(count) => Ok(count?),
+    }
 }
 
 pub fn get_account_balance_at_highest_block_idx(

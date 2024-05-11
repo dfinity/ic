@@ -7,7 +7,7 @@ Runbook::
 . Set up a test net with a nns subnet and application of 1 node each.
 . Set up a universal vm with default config.
 . Set `max_simultaneous_connections_per_ip_address` to the configured value `max_simultaneous_connections_per_ip_address` in template file
-`ic-os/guestos/rootfs/opt/ic/share/ic.json5.template`.
+`ic.json5.template`.
 . Create `max_simultaneous_connections_per_ip_address` tcp connections from the driver simultaneously to a node and keep the connections alive.
 . Verify that the universal vm can create a tcp connection the node.
 . Verify the driver is unable to create new tcp connections to the node.

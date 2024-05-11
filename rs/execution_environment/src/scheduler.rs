@@ -28,8 +28,8 @@ use ic_replicated_state::{
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
-    consensus::ecdsa::QuadrupleId,
-    crypto::canister_threshold_sig::MasterEcdsaPublicKey,
+    consensus::idkg::QuadrupleId,
+    crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, Response, StopCanisterContext, NO_DEADLINE},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
@@ -44,6 +44,7 @@ use std::{
     str::FromStr,
     sync::Arc,
 };
+use strum::IntoEnumIterator;
 
 mod scheduler_metrics;
 use scheduler_metrics::*;
@@ -478,7 +479,7 @@ impl SchedulerImpl {
         ongoing_long_install_code: bool,
         long_running_canister_ids: BTreeSet<CanisterId>,
         registry_settings: &RegistryExecutionSettings,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterPublicKey>,
     ) -> ReplicatedState {
         loop {
             let mut available_subnet_messages = false;
@@ -537,7 +538,7 @@ impl SchedulerImpl {
         round_limits: &mut RoundLimits,
         registry_settings: &RegistryExecutionSettings,
         measurement_scope: &MeasurementScope,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterPublicKey>,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let instruction_limits = get_instructions_limits_for_subnet_message(
             self.deterministic_time_slicing,
@@ -608,7 +609,7 @@ impl SchedulerImpl {
                     // is pending.
                 }
                 NextExecution::None | NextExecution::StartNew => {
-                    for _ in 0..NextScheduledMethod::NUMBER_OF_VARIANTS {
+                    for _ in 0..NextScheduledMethod::iter().count() {
                         let method_chosen = is_next_method_chosen(
                             canister,
                             &mut heartbeat_and_timer_canister_ids,
@@ -644,7 +645,7 @@ impl SchedulerImpl {
         root_measurement_scope: &MeasurementScope<'a>,
         scheduler_round_limits: &mut SchedulerRoundLimits,
         registry_settings: &RegistryExecutionSettings,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterPublicKey>,
     ) -> (ReplicatedState, BTreeSet<CanisterId>) {
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
@@ -818,7 +819,7 @@ impl SchedulerImpl {
                 let canister = state.canister_state_mut(canister_id).unwrap();
                 canister.system_state.task_queue.retain(|task| match task {
                     ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
-                    ExecutionTask::PausedExecution(..)
+                    ExecutionTask::PausedExecution { .. }
                     | ExecutionTask::PausedInstallCode(..)
                     | ExecutionTask::AbortedExecution { .. }
                     | ExecutionTask::AbortedInstallCode { .. } => true,
@@ -1368,7 +1369,7 @@ impl SchedulerImpl {
                             id
                         );
                     }
-                    ExecutionTask::PausedExecution(_) | ExecutionTask::PausedInstallCode(_) => {
+                    ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
                         assert_eq!(
                             self.deterministic_time_slicing,
                             FlagStatus::Enabled,
@@ -1386,6 +1387,13 @@ impl SchedulerImpl {
                     }
                 }
             }
+
+            // There should be at most one paused or aborted task left in the task queue.
+            assert!(
+                canister.system_state.task_queue.len() <= 1,
+                "Unexpected tasks left in the task queue of canister {} after a round in canister {:?}",
+                id, canister.system_state.task_queue
+            );
         }
     }
 }
@@ -1397,7 +1405,7 @@ impl Scheduler for SchedulerImpl {
         &self,
         mut state: ReplicatedState,
         randomness: Randomness,
-        ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+        ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
         ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
         current_round: ExecutionRound,
         _next_checkpoint_round: Option<ExecutionRound>,
@@ -1409,7 +1417,6 @@ impl Scheduler for SchedulerImpl {
         // The goal is to ensure that we can track the performance of `execute_round` and its individual components.
         let root_measurement_scope = MeasurementScope::root(&self.metrics.round);
 
-        let mut cycles_in_sum = Cycles::zero();
         let round_log;
         let mut csprng;
         let long_running_canister_ids: BTreeSet<_>;
@@ -1472,24 +1479,6 @@ impl Scheduler for SchedulerImpl {
                 self.purge_expired_ingress_messages(&mut state);
             }
 
-            // See documentation around definition of `heap_delta_estimate` for an
-            // explanation.
-            if state.metadata.heap_delta_estimate >= self.config.subnet_heap_delta_capacity {
-                warn!(
-                    round_log,
-                    "At Round {} @ time {}, current heap delta {} exceeds allowed capacity {}, so not executing any messages.",
-                    current_round,
-                    state.time(),
-                    state.metadata.heap_delta_estimate,
-                    self.config.subnet_heap_delta_capacity
-                );
-                self.finish_round(&mut state, current_round_type);
-                self.metrics
-                    .round_skipped_due_to_current_heap_delta_above_limit
-                    .inc();
-                return state;
-            }
-
             // Once the subnet messages are executed in threads, each thread will
             // need its own Csprng instance which is initialized with a distinct
             // "ExecutionThread". Otherwise, two Csprng instances that are
@@ -1501,19 +1490,11 @@ impl Scheduler for SchedulerImpl {
                 &ExecutionThread(self.config.scheduler_cores as u32),
             );
 
-            let default_reserved_balance_limit =
-                self.cycles_account_manager.default_reserved_balance_limit();
-
-            for canister in state.canisters_iter_mut() {
-                cycles_in_sum += canister.system_state.balance();
-                cycles_in_sum += canister.system_state.queues().input_queue_cycles();
-                // TODO(RUN-763): This is needed only for one replica release in
-                // order to initialize the existing canisters. After that it can
-                // be removed.
-                canister
-                    .system_state
-                    .initialize_reserved_balance_limit_if_empty(default_reserved_balance_limit);
-            }
+            // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
+            // for canister in state.canisters_iter_mut() {
+            //     cycles_in_sum += canister.system_state.balance();
+            //     cycles_in_sum += canister.system_state.queues().input_queue_cycles();
+            // }
 
             // Set the round limits used when executing canister messages.
             //
@@ -1587,6 +1568,23 @@ impl Scheduler for SchedulerImpl {
                 }
             }
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
+
+            // See documentation around definition of `heap_delta_estimate` for an explanation.
+            if state.metadata.heap_delta_estimate >= self.config.subnet_heap_delta_capacity {
+                warn!(
+                    round_log,
+                    "At Round {} @ time {}, current heap delta {} exceeds allowed capacity {}, so finish round early possibly not executing some of the messages.",
+                    current_round,
+                    state.time(),
+                    state.metadata.heap_delta_estimate,
+                    self.config.subnet_heap_delta_capacity
+                );
+                self.finish_round(&mut state, current_round_type);
+                self.metrics
+                    .round_skipped_due_to_current_heap_delta_above_limit
+                    .inc();
+                return state;
+            }
         }
 
         // Execute postponed `raw_rand` subnet messages.
@@ -1697,7 +1695,6 @@ impl Scheduler for SchedulerImpl {
 
             let mut final_state;
             {
-                let mut cycles_out_sum = Cycles::zero();
                 let mut total_canister_balance = Cycles::zero();
                 let mut total_canister_reserved_balance = Cycles::zero();
                 let mut total_canister_history_memory_usage = NumBytes::new(0);
@@ -1728,13 +1725,19 @@ impl Scheduler for SchedulerImpl {
                             ),
                             FlagStatus::Disabled => NumInstructions::from(0),
                         };
+                    self.metrics
+                        .canister_log_memory_usage
+                        .observe(canister.system_state.canister_log.used_space() as f64);
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_usage += canister.memory_usage();
                     total_canister_balance += canister.system_state.balance();
                     total_canister_reserved_balance += canister.system_state.reserved_balance();
-                    cycles_out_sum += canister.system_state.queues().output_queue_cycles();
+
+                    // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
+                    // cycles_out_sum += canister.system_state.queues().output_queue_cycles();
                 }
-                cycles_out_sum += total_canister_balance;
+                // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
+                // cycles_out_sum += total_canister_balance;
 
                 self.metrics
                     .total_canister_balance
@@ -2070,7 +2073,7 @@ fn observe_replicated_state_metrics(
     let mut input_queues_message_count = 0;
     let mut input_queues_size_bytes = 0;
     let mut queues_response_bytes = 0;
-    let mut queues_reservations = 0;
+    let mut queues_memory_reservations = 0;
     let mut queues_oversized_requests_extra_bytes = 0;
     let mut canisters_not_in_routing_table = 0;
     let mut canisters_with_old_open_call_contexts = 0;
@@ -2093,7 +2096,7 @@ fn observe_replicated_state_metrics(
             CanisterStatus::Stopped { .. } => num_stopped_canisters += 1,
         }
         match canister.next_task() {
-            Some(&ExecutionTask::PausedExecution(_)) => {
+            Some(&ExecutionTask::PausedExecution { .. }) => {
                 num_paused_exec += 1;
             }
             Some(&ExecutionTask::PausedInstallCode(_)) => {
@@ -2124,7 +2127,7 @@ fn observe_replicated_state_metrics(
         input_queues_message_count += queues.input_queues_message_count();
         input_queues_size_bytes += queues.input_queues_size_bytes();
         queues_response_bytes += queues.responses_size_bytes();
-        queues_reservations += queues.reserved_slots();
+        queues_memory_reservations += queues.reserved_slots();
         queues_oversized_requests_extra_bytes += queues.oversized_requests_extra_bytes();
         if !canister_id_ranges.contains(&canister.canister_id()) {
             canisters_not_in_routing_table += 1;
@@ -2230,7 +2233,7 @@ fn observe_replicated_state_metrics(
     metrics.observe_input_queues_size_bytes(MESSAGE_KIND_CANISTER, input_queues_size_bytes);
 
     metrics.observe_queues_response_bytes(queues_response_bytes);
-    metrics.observe_queues_reservations(queues_reservations);
+    metrics.observe_queues_memory_reservations(queues_memory_reservations);
     metrics.observe_oversized_requests_extra_bytes(queues_oversized_requests_extra_bytes);
     metrics.observe_streams_response_bytes(streams_response_bytes);
 

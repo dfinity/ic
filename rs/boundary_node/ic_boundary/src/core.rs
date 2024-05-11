@@ -32,9 +32,10 @@ use rustls::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use tokio::sync::RwLock;
 use tower::{limit::ConcurrencyLimitLayer, ServiceBuilder};
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
-use tracing::{info, warn};
+use tracing::{debug, error, warn};
 
 use crate::{
+    bouncer,
     cache::{cache_middleware, Cache},
     check::{Checker, Runner as CheckRunner},
     cli::Cli,
@@ -69,7 +70,7 @@ use {
         socket::listen_tcp_backlog,
         tls::{acme_challenge, prepare_tls, redirect_to_https},
     },
-    axum_server::Server,
+    axum_server::{AddrIncomingConfig, Server},
 };
 
 pub const SERVICE_NAME: &str = "ic_boundary";
@@ -107,9 +108,9 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     }
 
     // Metrics
-    let metrics_registry: Registry = Registry::new_custom(Some(SERVICE_NAME.into()), None)?;
+    let metrics_registry = Registry::new_custom(Some(SERVICE_NAME.into()), None)?;
 
-    info!(
+    warn!(
         msg = format!("Starting {SERVICE_NAME}"),
         metrics_addr = cli.monitoring.metrics_addr.to_string().as_str(),
     );
@@ -176,11 +177,19 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         )
     });
 
+    // Bouncer
+    let bouncer = if cli.bouncer.bouncer_enable {
+        Some(bouncer::setup(&cli.bouncer, &metrics_registry).context("unable to setup bouncer")?)
+    } else {
+        None
+    };
+
     // Server / API
     let routers_https = setup_router(
         registry_snapshot.clone(),
         routing_table.clone(),
         http_client.clone(),
+        bouncer,
         &cli,
         &metrics_registry,
         cache.clone(),
@@ -241,6 +250,13 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), cli.listen.https_port),
         cli.listen.backlog,
     )?)
+    .addr_incoming_config({
+        let mut cfg = AddrIncomingConfig::default();
+        cfg.tcp_keepalive(Some(Duration::from_secs(cli.listen.http_keepalive)));
+        cfg.tcp_keepalive_retries(Some(2));
+        cfg.tcp_nodelay(true);
+        cfg
+    })
     .acceptor(tls_acceptor.clone())
     .serve(
         routers_https
@@ -488,6 +504,7 @@ pub fn setup_router(
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     routing_table: Arc<ArcSwapOption<Routes>>,
     http_client: Arc<dyn HttpClient>,
+    bouncer: Option<Arc<bouncer::Bouncer>>,
     cli: &Cli,
     metrics_registry: &Registry,
     cache: Option<Arc<Cache>>,
@@ -559,7 +576,7 @@ pub fn setup_router(
         middleware::from_fn_with_state(
             HttpMetricParams::new(
                 metrics_registry,
-                "http_request_in",
+                "http_request",
                 cli.monitoring.log_failed_requests_only,
             ),
             metrics::metrics_middleware,
@@ -607,11 +624,15 @@ pub fn setup_router(
             )
         }));
 
+    let middlware_bouncer =
+        option_layer(bouncer.map(|x| middleware::from_fn_with_state(x, bouncer::middleware)));
+
     let middleware_subnet_lookup = middleware::from_fn_with_state(lookup, routes::lookup_subnet);
 
     // Layers under ServiceBuilder are executed top-down (opposite to that under Router)
     // 1st layer wraps 2nd layer and so on
     let common_service_layers = ServiceBuilder::new()
+        .layer(middlware_bouncer)
         .layer(middleware_geoip)
         .set_x_request_id(MakeRequestUuid)
         .layer(middleware_metrics)
@@ -679,7 +700,11 @@ impl<T: Run> Run for WithMetrics<T> {
         counter.with_label_values(&[status]).inc();
         recorder.with_label_values(&[status]).observe(duration);
 
-        info!(action, status, duration, error = ?out.as_ref().err());
+        if out.is_err() {
+            error!(action, status, duration, error = ?out.as_ref().err());
+        } else {
+            debug!(action, status, duration, error = ?out.as_ref().err());
+        }
 
         out
     }

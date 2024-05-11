@@ -26,76 +26,6 @@ use maplit::btreeset;
 use std::collections::BTreeSet;
 
 #[tokio::test]
-async fn test_change_canister_controllers_authentication() {
-    // Setup test subjects
-    let target_canister_id = CanisterId::from_u64(42).get();
-    let unauthorized_caller = CanisterId::from_u64(1000).get();
-
-    // Create a shared MockManagementCanisterClient, and load it with the one reply
-    // the test expects to be served.
-    let mut client =
-        MockManagementCanisterClient::new(vec![MockManagementCanisterClientReply::UpdateSettings(
-            Ok(()),
-        )]);
-
-    let response = change_canister_controllers(
-        ChangeCanisterControllersRequest {
-            target_canister_id,
-            new_controllers: vec![],
-        },
-        unauthorized_caller,
-        &mut client,
-    )
-    .await;
-
-    match response.change_canister_controllers_result {
-        ChangeCanisterControllersResult::Ok(_) => {
-            panic!("Expected change_canister_controllers to fail if not called by SNS-W")
-        }
-        ChangeCanisterControllersResult::Err(error) => {
-            assert!(error
-                .description
-                .contains("change_canister_controllers is only callable by the SNS-W canister"))
-        }
-    }
-    // The calls issued to the ManagementCanisterClient should be zero, as the request was rejected.
-    let client_calls = client.get_calls_snapshot();
-    assert!(client_calls.is_empty());
-
-    let response = change_canister_controllers(
-        ChangeCanisterControllersRequest {
-            target_canister_id,
-            new_controllers: vec![ROOT_CANISTER_ID.get()],
-        },
-        SNS_WASM_CANISTER_ID.get(),
-        &mut client,
-    )
-    .await;
-
-    match response.change_canister_controllers_result {
-        ChangeCanisterControllersResult::Ok(_) => (),
-        ChangeCanisterControllersResult::Err(error) => {
-            panic!("Expected change_canister_controllers to return a successful response. Instead found {:?}", error);
-        }
-    }
-
-    // There should be one call to the ManagementCanisterClient now
-    let mut client_calls = client.get_calls_snapshot();
-    assert_eq!(client_calls.len(), 1);
-    assert_eq!(
-        client_calls.pop().unwrap(),
-        MockManagementCanisterClientCall::UpdateSettings(UpdateSettings {
-            canister_id: target_canister_id,
-            settings: CanisterSettings {
-                controllers: Some(vec![ROOT_CANISTER_ID.get()]),
-                ..Default::default()
-            },
-            sender_canister_version: None,
-        })
-    )
-}
-
-#[tokio::test]
 async fn test_change_canister_controllers_handles_replica_errors() {
     let target_canister_id = CanisterId::from_u64(42).get();
     let expected_replica_error_code = 1_i32;
@@ -116,7 +46,6 @@ async fn test_change_canister_controllers_handles_replica_errors() {
             target_canister_id,
             new_controllers: vec![ROOT_CANISTER_ID.get()],
         },
-        SNS_WASM_CANISTER_ID.get(),
         &mut client,
     )
     .await;
@@ -180,6 +109,23 @@ fn test_change_canister_controllers_integrates_with_management_canister() {
     // Create a test canister id to add as a controller
     let test_canister_id = CanisterId::from_u64(1);
 
+    // calls to change_canister_controllers from unauthorized callers should fail
+    let unauthorized_caller = CanisterId::from_u64(1000).get();
+    let err = update_with_sender(
+        &machine,
+        ROOT_CANISTER_ID,
+        "change_canister_controllers",
+        candid_one::<ChangeCanisterControllersRequest, _>,
+        ChangeCanisterControllersRequest {
+            target_canister_id: universal.get(),
+            new_controllers: vec![ROOT_CANISTER_ID.get(), test_canister_id.get()],
+        },
+        unauthorized_caller,
+    )
+    .unwrap_err();
+    assert!(err.contains("Only the SNS-W canister is allowed to call this method"));
+
+    // calls to change_canister_controllers from SNS-W should succeed
     let response: ChangeCanisterControllersResponse = update_with_sender(
         &machine,
         ROOT_CANISTER_ID,

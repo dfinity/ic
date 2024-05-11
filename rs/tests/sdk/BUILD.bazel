@@ -1,0 +1,57 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "NNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "sdk-system-tests",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = [
+        "canisters/counter.mo",
+    ],
+    crate_name = "sdk_system_tests",
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = [
+        "//rs/tests",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+    ],
+)
+
+RUNNER_DEPENDENCIES = [
+    "sdk-system-tests",
+    "//rs/registry/subnet_type",
+    "//rs/tests",
+    "@crate_index//:anyhow",
+    "@crate_index//:slog",
+]
+
+RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + [
+    "@dfx",
+]
+
+BOUNDARY_NODE_RUNTIME_DEPS = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
+    "@nns_dapp_canister//file",
+]
+
+system_test(
+    name = "dfx_smoke_test",
+    flaky = False,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = RUNTIME_DEPS + BOUNDARY_NODE_RUNTIME_DEPS,
+    deps = RUNNER_DEPENDENCIES,
+)
+
+system_test(
+    name = "dfx_check_old_wallet_version_test",
+    flaky = False,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = RUNTIME_DEPS + [
+        "@wallet_canister_0.7.2//file",
+    ],
+    deps = RUNNER_DEPENDENCIES,
+)

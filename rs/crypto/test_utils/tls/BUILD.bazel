@@ -33,6 +33,7 @@ ALIASES = {}
 
 rust_library(
     name = "tls",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_test_utils_tls",

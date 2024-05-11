@@ -754,6 +754,10 @@ impl CanisterQueues {
         self.input_queues_stats.size_bytes
     }
 
+    pub fn input_queues_request_count(&self) -> usize {
+        self.input_queues_stats.message_count - self.input_queues_stats.response_count
+    }
+
     pub fn input_queues_response_count(&self) -> usize {
         self.input_queues_stats.response_count
     }
@@ -1136,13 +1140,7 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
                 .collect(),
             // TODO: input_schedule is deprecated and should be removed next release
             input_schedule: [].into(),
-            next_input_queue: match item.next_input_queue {
-                // Encode `LocalSubnet` as `Unspecified` because it is decoded as such (and it
-                // serializes to zero bytes).
-                NextInputQueue::LocalSubnet => ProtoNextInputQueue::Unspecified,
-                NextInputQueue::Ingress => ProtoNextInputQueue::Ingress,
-                NextInputQueue::RemoteSubnet => ProtoNextInputQueue::RemoteSubnet,
-            } as i32,
+            next_input_queue: ProtoNextInputQueue::from(&item.next_input_queue).into(),
             local_subnet_input_schedule: item
                 .local_subnet_input_schedule
                 .iter()
@@ -1189,14 +1187,9 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
         let memory_usage_stats = Self::calculate_memory_usage_stats(&canister_queues);
         let output_queues_stats = Self::calculate_output_queues_stats(&canister_queues);
 
-        let next_input_queue =
-            match ProtoNextInputQueue::try_from(item.next_input_queue).unwrap_or_default() {
-                ProtoNextInputQueue::Unspecified | ProtoNextInputQueue::LocalSubnet => {
-                    NextInputQueue::LocalSubnet
-                }
-                ProtoNextInputQueue::Ingress => NextInputQueue::Ingress,
-                ProtoNextInputQueue::RemoteSubnet => NextInputQueue::RemoteSubnet,
-            };
+        let next_input_queue = NextInputQueue::from(
+            ProtoNextInputQueue::try_from(item.next_input_queue).unwrap_or_default(),
+        );
 
         let mut local_subnet_input_schedule = VecDeque::new();
         // Upgrade: input_schedule is mapped to local_subnet_input_schedule

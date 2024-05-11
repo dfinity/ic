@@ -3,6 +3,8 @@
 
 use crate::{messages::CallContextId, time::CoarseTime, Cycles};
 use ic_base_types::{CanisterId, PrincipalId};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
 use ic_protobuf::types::v1 as pb_types;
@@ -11,9 +13,11 @@ use std::{
     convert::{From, TryFrom},
     fmt,
 };
+use strum_macros::EnumIter;
 
 /// Represents the types of methods that a Wasm module can export.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum WasmMethod {
     /// An exported update method along with its name.
     ///
@@ -98,15 +102,7 @@ impl From<&WasmMethod> for pb::WasmMethod {
                 wasm_method: Some(PbWasmMethod::CompositeQuery(value.clone())),
             },
             WasmMethod::System(value) => Self {
-                wasm_method: Some(PbWasmMethod::System(match value {
-                    SystemMethod::CanisterStart => PbSystemMethod::CanisterStart,
-                    SystemMethod::CanisterInit => PbSystemMethod::CanisterInit,
-                    SystemMethod::CanisterPreUpgrade => PbSystemMethod::CanisterPreUpgrade,
-                    SystemMethod::CanisterPostUpgrade => PbSystemMethod::CanisterPostUpgrade,
-                    SystemMethod::CanisterInspectMessage => PbSystemMethod::CanisterInspectMessage,
-                    SystemMethod::CanisterHeartbeat => PbSystemMethod::CanisterHeartbeat,
-                    SystemMethod::CanisterGlobalTimer => PbSystemMethod::CanisterGlobalTimer,
-                } as i32)),
+                wasm_method: Some(PbWasmMethod::System(PbSystemMethod::from(value).into())),
             },
         }
     }
@@ -126,44 +122,31 @@ impl TryFrom<pb::WasmMethod> for WasmMethod {
                 let method =
                     PbSystemMethod::try_from(system).unwrap_or(PbSystemMethod::Unspecified);
 
-                Ok(Self::System(match method {
-                    PbSystemMethod::Unspecified => {
-                        return Err(ProxyDecodeError::ValueOutOfRange {
-                            typ: "WasmMethod::System",
-                            err: system.to_string(),
-                        })
-                    }
-                    PbSystemMethod::CanisterStart => SystemMethod::CanisterStart,
-                    PbSystemMethod::CanisterInit => SystemMethod::CanisterInit,
-                    PbSystemMethod::CanisterPreUpgrade => SystemMethod::CanisterPreUpgrade,
-                    PbSystemMethod::CanisterPostUpgrade => SystemMethod::CanisterPostUpgrade,
-                    PbSystemMethod::CanisterInspectMessage => SystemMethod::CanisterInspectMessage,
-                    PbSystemMethod::CanisterHeartbeat => SystemMethod::CanisterHeartbeat,
-                    PbSystemMethod::CanisterGlobalTimer => SystemMethod::CanisterGlobalTimer,
-                }))
+                Ok(Self::System(SystemMethod::try_from(method)?))
             }
         }
     }
 }
 
 /// The various system methods available to canisters.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, EnumIter, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum SystemMethod {
     /// A system method for initializing a Wasm module.
-    CanisterStart,
+    CanisterStart = 1,
     /// A system method that is run when initializing a canister.
-    CanisterInit,
+    CanisterInit = 2,
     /// A system method that is run at the beginning of a canister upgrade.
-    CanisterPreUpgrade,
+    CanisterPreUpgrade = 3,
     /// A system method that is run at the end of a canister upgrade.
-    CanisterPostUpgrade,
+    CanisterPostUpgrade = 4,
     /// A system method that is run pre-consensus to ask the canister if it
     /// wants to accept an ingress message.
-    CanisterInspectMessage,
+    CanisterInspectMessage = 5,
     /// A system method that is run at regular intervals for cron support.
-    CanisterHeartbeat,
+    CanisterHeartbeat = 6,
     /// A system method that is run after a specified time.
-    CanisterGlobalTimer,
+    CanisterGlobalTimer = 7,
 }
 
 impl TryFrom<&str> for SystemMethod {
@@ -193,6 +176,44 @@ impl fmt::Display for SystemMethod {
             Self::CanisterInspectMessage => write!(f, "canister_inspect_message"),
             Self::CanisterHeartbeat => write!(f, "canister_heartbeat"),
             Self::CanisterGlobalTimer => write!(f, "canister_global_timer"),
+        }
+    }
+}
+
+impl From<&SystemMethod> for pb::wasm_method::SystemMethod {
+    fn from(method: &SystemMethod) -> Self {
+        use pb::wasm_method::SystemMethod as PbSystemMethod;
+
+        match method {
+            SystemMethod::CanisterStart => PbSystemMethod::CanisterStart,
+            SystemMethod::CanisterInit => PbSystemMethod::CanisterInit,
+            SystemMethod::CanisterPreUpgrade => PbSystemMethod::CanisterPreUpgrade,
+            SystemMethod::CanisterPostUpgrade => PbSystemMethod::CanisterPostUpgrade,
+            SystemMethod::CanisterInspectMessage => PbSystemMethod::CanisterInspectMessage,
+            SystemMethod::CanisterHeartbeat => PbSystemMethod::CanisterHeartbeat,
+            SystemMethod::CanisterGlobalTimer => PbSystemMethod::CanisterGlobalTimer,
+        }
+    }
+}
+
+impl TryFrom<pb::wasm_method::SystemMethod> for SystemMethod {
+    type Error = ProxyDecodeError;
+
+    fn try_from(method: pb::wasm_method::SystemMethod) -> Result<Self, Self::Error> {
+        use pb::wasm_method::SystemMethod as PbSystemMethod;
+
+        match method {
+            PbSystemMethod::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "SystemMethod",
+                err: format!("Unknown value for system method {:?}", method),
+            }),
+            PbSystemMethod::CanisterStart => Ok(SystemMethod::CanisterStart),
+            PbSystemMethod::CanisterInit => Ok(SystemMethod::CanisterInit),
+            PbSystemMethod::CanisterPreUpgrade => Ok(SystemMethod::CanisterPreUpgrade),
+            PbSystemMethod::CanisterPostUpgrade => Ok(SystemMethod::CanisterPostUpgrade),
+            PbSystemMethod::CanisterInspectMessage => Ok(SystemMethod::CanisterInspectMessage),
+            PbSystemMethod::CanisterHeartbeat => Ok(SystemMethod::CanisterHeartbeat),
+            PbSystemMethod::CanisterGlobalTimer => Ok(SystemMethod::CanisterGlobalTimer),
         }
     }
 }
@@ -359,4 +380,43 @@ pub enum FuncRef {
     UpdateClosure(WasmClosure),
 
     QueryClosure(WasmClosure),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::exhaustive::ExhaustiveSet;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+    use strum::IntoEnumIterator;
+
+    #[test]
+    fn system_method_proto_round_trip() {
+        for initial in SystemMethod::iter() {
+            let encoded = pb::wasm_method::SystemMethod::from(&initial);
+            let round_trip = SystemMethod::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn compatibility_for_system_method() {
+        // If this fails, you are making a potentially incompatible change to `SystemMethod`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            SystemMethod::iter().map(|x| x as i32).collect::<Vec<i32>>(),
+            [1, 2, 3, 4, 5, 6, 7]
+        );
+    }
+
+    #[test]
+    fn wasm_method_proto_round_trip() {
+        for method in WasmMethod::exhaustive_set(&mut reproducible_rng()) {
+            let encoded = pb::WasmMethod::from(&method);
+            let round_trip = WasmMethod::try_from(encoded).unwrap();
+
+            assert_eq!(method, round_trip);
+        }
+    }
 }

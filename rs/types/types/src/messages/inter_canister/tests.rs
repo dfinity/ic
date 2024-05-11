@@ -1,12 +1,11 @@
-use crate::{
-    batch::ConsensusResponse,
-    messages::{
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
-        MAX_RESPONSE_COUNT_BYTES,
-    },
+use crate::messages::{
+    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+    MAX_RESPONSE_COUNT_BYTES,
 };
 
 use super::*;
+use crate::exhaustive::ExhaustiveSet;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types_test_utils::ids::canister_test_id;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
@@ -70,75 +69,6 @@ fn hash<T: Hash>(value: &T) -> u64 {
     hasher.finish()
 }
 
-/// Ensures that a proto-encoded `Response` can be correctly decoded as a
-/// `ConsensusResponse`.
-#[test]
-fn response_to_temp_consensus_response_encoding_roundtrip() {
-    use prost::Message;
-
-    let reply = Response {
-        originator: canister_test_id(1),
-        respondent: canister_test_id(2),
-        originator_reply_callback: CallbackId::new(3),
-        refund: Cycles::new(4),
-        response_payload: Payload::Data(vec![5]),
-        deadline: CoarseTime::from_secs_since_unix_epoch(6),
-    };
-    let reject_response = Response {
-        originator: canister_test_id(1),
-        respondent: canister_test_id(2),
-        originator_reply_callback: CallbackId::new(3),
-        refund: Cycles::new(4),
-        response_payload: Payload::Reject(RejectContext {
-            code: RejectCode::CanisterError,
-            message: "Oops".into(),
-        }),
-        deadline: NO_DEADLINE,
-    };
-
-    for response in &[reply, reject_response] {
-        // Encode `Response`.
-        let mut buf = Vec::new();
-        pb_queues::Response::from(response)
-            .encode(&mut buf)
-            .unwrap();
-
-        // Decode as `ConsensusResponse`.
-        let consensus_response: ConsensusResponse =
-            pb_types::ConsensusResponse::decode(buf.as_slice())
-                .unwrap()
-                .try_into()
-                .unwrap();
-
-        assert_eq!(
-            consensus_response.callback,
-            response.originator_reply_callback
-        );
-        assert_eq!(consensus_response.payload, response.response_payload);
-        assert_eq!(consensus_response.originator.unwrap(), response.originator);
-        assert_eq!(consensus_response.respondent.unwrap(), response.respondent);
-        assert_eq!(consensus_response.refund.unwrap(), response.refund);
-        assert_eq!(
-            consensus_response.deadline.unwrap_or(NO_DEADLINE),
-            response.deadline
-        );
-
-        // Encode `ConsensusResponse`
-        let mut buf = Vec::new();
-        pb_types::ConsensusResponse::from(&consensus_response)
-            .encode(&mut buf)
-            .unwrap();
-
-        // Decode as `Response`.
-        let response_after_roundtrip: Response = pb_queues::Response::decode(buf.as_slice())
-            .unwrap()
-            .try_into()
-            .unwrap();
-
-        assert_eq!(*response, response_after_roundtrip);
-    }
-}
-
 /// Checks that a response with a maximum size payload (reply or reject) has
 /// exactly `MAX_RESPONSE_COUNT_BYTES`.
 #[test]
@@ -189,4 +119,24 @@ fn max_response_count_bytes() {
     );
     // And its total size must be exactly `MAX_RESPONSE_COUNT_BYTES`.
     assert_eq!(MAX_RESPONSE_COUNT_BYTES, reject.count_bytes());
+}
+
+#[test]
+fn response_payload_proto_round_trip() {
+    for payload in Payload::exhaustive_set(&mut reproducible_rng()) {
+        let encoded = pb_queues::response::ResponsePayload::from(&payload);
+        let round_trip = Payload::try_from(encoded).unwrap();
+
+        assert_eq!(payload, round_trip);
+    }
+}
+
+#[test]
+fn request_or_response_proto_round_trip() {
+    for r in RequestOrResponse::exhaustive_set(&mut reproducible_rng()) {
+        let encoded = pb_queues::RequestOrResponse::from(&r);
+        let round_trip = RequestOrResponse::try_from(encoded).unwrap();
+
+        assert_eq!(r, round_trip);
+    }
 }

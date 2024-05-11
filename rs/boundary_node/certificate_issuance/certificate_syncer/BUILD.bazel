@@ -13,7 +13,7 @@ DEPENDENCIES = [
     "@crate_index//:opentelemetry",
     "@crate_index//:opentelemetry-prometheus",
     "@crate_index//:prometheus",
-    "@crate_index//:reqwest_0_12_0",
+    "@crate_index//:reqwest",
     "@crate_index//:serde_json",
     "@crate_index//:serde",
     "@crate_index//:tempfile",

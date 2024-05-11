@@ -6,7 +6,6 @@ members = [
     "packages/icrc-ledger-client-cdk",
     "packages/icrc-ledger-types",
     "packages/ic-ledger-hash-of",
-    "packages/ic-starter-tests",
     "packages/pocket-ic",
     "packages/ic-vetkd-utils",
     "rs/artifact_manager",
@@ -151,8 +150,6 @@ members = [
     "rs/interfaces/registry/mocks",
     "rs/interfaces/state_manager",
     "rs/interfaces/state_manager/mocks",
-    "rs/interfaces/transport",
-    "rs/interfaces/transport/mocks",
     "rs/memory_tracker",
     "rs/messaging",
     "rs/monitoring/adapter_metrics",
@@ -180,6 +177,7 @@ members = [
     "rs/nervous_system/root",
     "rs/nervous_system/runtime",
     "rs/nervous_system/string",
+    "rs/nervous_system/tools/sync-with-released-nevous-system-wasms",
     "rs/nns/constants",
     "rs/nns/common",
     "rs/nns/common/protobuf_generator",
@@ -207,7 +205,6 @@ members = [
     "rs/orchestrator",
     "rs/orchestrator/dashboard",
     "rs/orchestrator/registry_replicator",
-    "rs/p2p",
     "rs/p2p/consensus_manager",
     "rs/p2p/peer_manager",
     "rs/p2p/memory_transport",
@@ -253,6 +250,7 @@ members = [
     "rs/rosetta-api/icp_ledger/ledger",
     "rs/rosetta-api/icp_ledger/protobuf_generator",
     "rs/rosetta-api/icp_ledger/index",
+    "rs/rosetta-api/icp_ledger/rosetta-integration-tests",
     "rs/rosetta-api/icp_ledger/test_utils",
     "rs/rosetta-api/ledger_core",
     "rs/rosetta-api/ledger_canister_core",
@@ -343,6 +341,7 @@ members = [
     "rs/tests/nested",
     "rs/tests/nns/sns",
     "rs/tests/nns/ic_mainnet_nns_recovery",
+    "rs/tests/sdk",
     "rs/tests/test_canisters/http_counter",
     "rs/tests/test_canisters/kv_store",
     "rs/tests/test_canisters/message",
@@ -350,8 +349,6 @@ members = [
     "rs/tests/testing_verification/wabt-tests",
     "rs/tests/testing_verification/spec_compliance",
     "rs/tests/testing_verification/testnets",
-    "rs/transport",
-    "rs/transport/test_utils",
     "rs/tree_deserializer",
     "rs/types/types",
     "rs/types/types_test_utils",
@@ -409,6 +406,9 @@ debug = false
 lto = true
 opt-level = 'z'
 
+[profile.dev.package.curve25519-dalek]
+opt-level = 3
+
 [profile.dev.package.ic_bls12_381]
 opt-level = 3
 
@@ -437,7 +437,7 @@ base64 = { version = "0.13.1" }
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default_features = false }
-bytes = "1.5.0"
+bytes = "1.6.0"
 candid = { version = "0.10.6" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.31", default-features = false, features = [
@@ -457,12 +457,13 @@ flate2 = "1.0.28"
 futures = "0.3.30"
 futures-util = "0.3.30"
 hex = { version = "0.4.3", features = ["serde"] }
+hyper = { version = "1.2.0", features = ["full"] }
 hyper-rustls = { version = "0.24.2", features = ["http2"] }
 hyper-socks2 = { version = "0.8.0", default_features = false, features = [
     "rustls",
 ] }
 ic-agent = { version = "0.34.0", features = ["hyper"] }
-ic-cdk = "0.13.1"
+ic-cdk = "0.13.2"
 ic-cdk-macros = "0.9.0"
 ic-cdk-timers = "0.7.0"
 ic_principal = { version = "0.1.1", default-features = false }
@@ -470,7 +471,7 @@ ic-response-verification = "2.3.0"
 ic-http-certification = "2.3.0"
 ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
-ic-stable-structures = "0.6.2"
+ic-stable-structures = "0.6.4"
 ic-utils = { version = "0.34.0", features = ["raw"] }
 ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "62a71e47c491fb842ccc257b1c675651501f4b82" }
 ic-btc-validation = { git = "https://github.com/dfinity/bitcoin-canister", rev = "0e996988693f2d55fc9533c44dc20ae5310a1894" }
@@ -509,15 +510,16 @@ prost-build = "0.12.3"
 quinn = { version = "0.10.2", features = ["ring"] }
 rand = "0.8.5"
 rcgen = { version = "0.11.1", features = ["zeroize"] }
-reqwest = { version = "0.11.22", default-features = false, features = [
+reqwest = { version = "0.12.3", default-features = false, features = [
     "blocking",
+    "http2",
     "json",
-    "multipart",
     "rustls-tls",
-    "rustls-tls-webpki-roots",
+    "rustls-tls-native-roots",
+    "socks",
     "stream",
 ] }
-rustls = { version = "0.21.10", features = ["dangerous_configuration"] }
+rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
 serde_cbor = "0.11.2"
@@ -537,9 +539,11 @@ socket2 = { version = "0.5.6", features = ["all"] }
 strum = { version = "0.26.2", features = ["derive"] }
 strum_macros = "0.26.2"
 syn = { version = "1.0.109", features = ["fold", "full"] }
+sync_wrapper = "^1.0.1"
+tempfile = "^3.1.0"
 thiserror = "1.0.57"
 time = { version = "0.3.20", features = ["formatting"] }
-tokio = { version = "1.36.0", features = ["full"] }
+tokio = { version = "1.37.0", features = ["full"] }
 tokio-metrics = "0.3.0"
 tokio-rustls = { version = "0.24.1", features = ["dangerous_configuration"] }
 tokio-util = { version = "0.7.10", features = ["full"] }
@@ -556,3 +560,8 @@ tracing-subscriber = { version = "0.3.18", features = [
 turmoil = "0.6.0"
 x509-cert = { version = "0.2.4", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.15.1" }
+
+[workspace.dependencies.ic-wasm]
+version = "^0.7.1"
+default-features = false
+features = ["exe"]

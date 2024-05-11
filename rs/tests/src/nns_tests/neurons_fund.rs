@@ -88,7 +88,7 @@ impl Identity for NnsNfNeuron {
     fn sign_arbitrary(&self, msg: &[u8]) -> Result<Signature, String> {
         let signature = self.controller_identity.sign(msg.as_ref());
         Ok(Signature {
-            signature: Some(signature.as_ref().to_vec()),
+            signature: Some(signature),
             public_key: self.public_key(),
             delegations: None,
         })

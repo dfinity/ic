@@ -2,6 +2,7 @@ use candid::{Decode, Encode};
 use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
+use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
     TEST_USER4_PRINCIPAL, TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
@@ -9,7 +10,6 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::{pb::v1::NeuronId as ProtoNeuronId, types::UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_governance::{
-    governance::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
     init::TEST_NEURON_1_ID,
     pb::v1::{
         add_or_remove_node_provider::Change,
@@ -26,7 +26,8 @@ use ic_nns_test_utils::{
         get_pending_proposals, ledger_account_balance, nns_get_monthly_node_provider_rewards,
         nns_get_most_recent_monthly_node_provider_rewards, nns_get_network_economics_parameters,
         nns_governance_get_proposal_info, nns_governance_make_proposal,
-        nns_wait_for_proposal_execution, query, setup_nns_canisters, update_with_sender,
+        nns_wait_for_proposal_execution, query, setup_nns_canisters,
+        state_machine_builder_for_nns_tests, update_with_sender,
     },
 };
 use ic_protobuf::registry::{
@@ -71,7 +72,7 @@ impl NodeInfo {
 
 #[test]
 fn test_automated_node_provider_remuneration() {
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()

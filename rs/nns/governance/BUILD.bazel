@@ -1,5 +1,6 @@
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -57,6 +58,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:rand_chacha",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
     "@crate_index//:strum",
 ] + select({
@@ -156,6 +158,40 @@ rust_library(
     ],
 )
 
+rust_library(
+    name = "governance--canbench_feature",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["**/*tests.rs"],
+    ),
+    aliases = ALIASES,
+    crate_features = ["canbench-rs"],
+    crate_name = "ic_nns_governance",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + [
+        "@crate_index//:canbench-rs",
+        "@crate_index//:ic-cdk",
+    ],
+)
+
+# Usage:
+# bazel run //rs/nns/governance:governance-canbench for benchmarking
+# bazel run //rs/nns/governance:governance-canbench_update for updating the results file.
+# Currently, updating the results file is not automated, and there are no tests to avoid
+# regression. For now, we can use it as an example for benchmarking as part of an
+# investigation of potential performance issues, or when we make a change that can affect
+# the performance measured in this benchmark (currently the benchmark only measures adding a
+# neuron).
+rust_canbench(
+    name = "governance-canbench",
+    srcs = ["canbench/main.rs"],
+    results_file = "canbench/canbench_results.yml",
+    deps = [
+        ":governance--canbench_feature",
+    ],
+)
+
 rust_binary(
     name = "generate_did",
     srcs = ["canister/canister.rs"],
@@ -251,7 +287,6 @@ rust_test(
     name = "governance_test",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    crate = ":governance",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
@@ -259,10 +294,9 @@ rust_test(
 )
 
 rust_test(
-    name = "governance_test--test_feature",
+    name = "governance_test-test_feature",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    crate = ":governance--test_feature",
     crate_features = ["test"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [

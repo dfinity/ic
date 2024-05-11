@@ -2,12 +2,12 @@ use dfn_candid::candid_one;
 use ic_nns_governance::pb::v1::NetworkEconomics;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
 
 #[test]
 fn test_get_network_economics() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let network_economics = NetworkEconomics {
             neuron_minimum_stake_e8s: 100 * 100_000_000,
             ..Default::default()

@@ -31,8 +31,6 @@ fn main() -> Result<()> {
             .to_string_lossy()
             .into_owned();
 
-        println!("Adding {file_name}");
-
         let state = scan_file_for_holes(&mut source, file_name)?;
         add_file_to_archive(&mut source, &mut dest, state)?;
     }

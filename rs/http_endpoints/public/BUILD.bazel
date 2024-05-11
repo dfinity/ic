@@ -1,4 +1,4 @@
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
@@ -33,6 +33,7 @@ DEPENDENCIES = [
     "//rs/validator",
     "@crate_index//:askama",
     "@crate_index//:axum",
+    "@crate_index//:axum_server_0_6_0",
     "@crate_index//:bytes",
     "@crate_index//:byte-unit",
     "@crate_index//:cfg-if",
@@ -42,8 +43,8 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:http_1_0_0",
     "@crate_index//:http_body_1_0_0",
-    "@crate_index//:http_body_util_0_1_0",
-    "@crate_index//:hyper_1_0_0",
+    "@crate_index//:http-body-util",
+    "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:inferno",
     "@crate_index//:mockall",
@@ -53,15 +54,12 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:slog",
-    "@crate_index//:strum",
     "@crate_index//:tempfile",
-    "@crate_index//:thiserror",
     "@crate_index//:threadpool",
     "@crate_index//:tokio",
     "@crate_index//:tokio-io-timeout",
-    "@crate_index//:tokio-rustls",
     "@crate_index//:tower",
-    "@crate_index//:tower_http_0_5_1",
+    "@crate_index//:tower-http",
     "@crate_index//:url",
     "@crate_index//:tracing",
     "@crate_index//:tracing-flame",

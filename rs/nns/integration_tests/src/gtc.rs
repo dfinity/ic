@@ -20,7 +20,7 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
         get_neuron_ids, ledger_account_balance, nns_governance_get_full_neuron,
-        nns_governance_get_neuron_info, setup_nns_canisters,
+        nns_governance_get_neuron_info, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -51,7 +51,7 @@ const TEST_ECT_ACCOUNTS: &[(&str, u32); 2] = &[
 /// `account_has_claimed_neurons` and `permanently_lock_account`)
 #[test]
 pub fn test_claim_neurons() {
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = state_machine_builder_for_nns_tests().build();
 
     let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
     add_test_gtc_neurons(&mut nns_init_payload_builder);
@@ -126,7 +126,7 @@ pub fn test_claim_neurons() {
 /// they are able to be called.
 #[test]
 pub fn test_gtc_at_genesis() {
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = state_machine_builder_for_nns_tests().build();
 
     let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
     add_test_gtc_neurons(&mut nns_init_payload_builder);

@@ -11,6 +11,7 @@ use hex_literal::hex;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
+use scopeguard::ScopeGuard;
 use std::cmp::{min, Ordering};
 use std::time::Duration;
 
@@ -33,6 +34,18 @@ async fn mint() {
     let mut error_count = 0;
 
     for event in events {
+        // Ensure that even if we were to panic in the callback, after having contacted the ledger to mint the tokens,
+        // this event will not be processed again.
+        let prevent_double_minting_guard = scopeguard::guard(event.clone(), |event| {
+            mutate_state(|s| {
+                process_event(
+                    s,
+                    EventType::QuarantinedDeposit {
+                        event_source: event.source(),
+                    },
+                )
+            });
+        });
         let (token_symbol, ledger_canister_id) = match &event {
             ReceivedEvent::Eth(_) => ("ckETH".to_string(), eth_ledger_canister_id),
             ReceivedEvent::Erc20(event) => {
@@ -68,6 +81,8 @@ async fn mint() {
             Ok(Err(err)) => {
                 log!(INFO, "Failed to mint {token_symbol}: {event:?} {err}");
                 error_count += 1;
+                // minting failed, defuse guard
+                ScopeGuard::into_inner(prevent_double_minting_guard);
                 continue;
             }
             Err(err) => {
@@ -76,6 +91,8 @@ async fn mint() {
                     "Failed to send a message to the ledger ({ledger_canister_id}): {err:?}"
                 );
                 error_count += 1;
+                // minting failed, defuse guard
+                ScopeGuard::into_inner(prevent_double_minting_guard);
                 continue;
             }
         };
@@ -103,6 +120,8 @@ async fn mint() {
             event.value(),
             event.principal()
         );
+        // minting succeeded, defuse guard
+        ScopeGuard::into_inner(prevent_double_minting_guard);
     }
 
     if error_count > 0 {
@@ -303,11 +322,20 @@ async fn scrape_eth_logs(last_block_number: BlockNumber) {
 }
 
 async fn scrape_erc20_logs(last_block_number: BlockNumber) {
+    let token_contract_addresses =
+        read_state(|s| s.ckerc20_tokens.alt_keys().cloned().collect::<Vec<_>>());
+    if token_contract_addresses.is_empty() {
+        log!(
+            DEBUG,
+            "[scrape_contract_logs]: skipping scrapping ERC-20 logs: no token contract address"
+        );
+        return;
+    }
     scrape_contract_logs(
         &RECEIVED_ERC20_EVENT_TOPIC,
         "ERC-20",
         read_state(|s| s.erc20_helper_contract_address),
-        &read_state(|s| s.ckerc20_tokens.alt_keys().cloned().collect::<Vec<_>>()),
+        &token_contract_addresses,
         last_block_number,
         read_state(|s| s.last_erc20_scraped_block_number),
         &|last_block_number| {

@@ -18,7 +18,7 @@ use ic_config::{
 };
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
-use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
+use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
@@ -28,6 +28,7 @@ use ic_management_canister_types::{
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
     ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method, Payload,
     StoredChunksArgs, StoredChunksReply, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
+    WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -73,6 +74,7 @@ use ic_types::{
 use ic_wasm_types::{CanisterModule, WasmValidationError};
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
+use more_asserts::{assert_ge, assert_lt};
 use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, sync::Arc};
 
 use super::InstallCodeResult;
@@ -115,14 +117,13 @@ lazy_static! {
         execution_mode: ExecutionMode::Replicated,
         subnet_memory_saturation: ResourceSaturation::default(),
     };
-    static ref DROP_MEMORY_GROW_CONST_COST: u64 =
-        instruction_to_cost_new(&wasmparser::Operator::Drop)
-            + instruction_to_cost_new(&wasmparser::Operator::MemoryGrow {
-                mem: 0,
-                mem_byte: 0,
-            })
-            + instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 0 });
-    static ref UNREACHABLE_COST: u64 = instruction_to_cost_new(&wasmparser::Operator::Unreachable);
+    static ref DROP_MEMORY_GROW_CONST_COST: u64 = instruction_to_cost(&wasmparser::Operator::Drop)
+        + instruction_to_cost(&wasmparser::Operator::MemoryGrow {
+            mem: 0,
+            mem_byte: 0,
+        })
+        + instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 });
+    static ref UNREACHABLE_COST: u64 = instruction_to_cost(&wasmparser::Operator::Unreachable);
 }
 
 fn canister_change_origin_from_canister(sender: &CanisterId) -> CanisterChangeOrigin {
@@ -4226,7 +4227,7 @@ fn canister_version_changes_are_visible() {
 
     // Change controllers to bump canister version.
     let new_controller = PrincipalId::try_from(&[1, 2, 3][..]).unwrap();
-    assert!(new_controller != test.user_id().get());
+    assert_ne!(new_controller, test.user_id().get());
     test.set_controller(canister_id, new_controller).unwrap();
 
     let result = test.ingress(canister_id, "version", vec![]);
@@ -4277,6 +4278,227 @@ fn test_upgrade_preserves_stable_memory() {
     let result = test.ingress(canister_id, "query", query);
     let reply = get_reply(result);
     assert_eq!(reply, data);
+}
+
+#[test]
+fn test_enhanced_orthogonal_persistence_upgrade_preserves_main_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let version1_wat = r#"
+        (module
+            (func $start
+                call $initialize
+                call $check
+            )
+            (func $initialize
+                global.get 0
+                i32.const 1234
+                i32.store
+                global.get 1
+                i32.const 5678
+                i32.store
+            )
+            (func $check_word (param i32) (param i32)
+                block
+                    local.get 0
+                    i32.load
+                    local.get 1
+                    i32.eq
+                    br_if 0
+                    unreachable
+                end
+            )
+            (func $check
+                global.get 0
+                i32.const 1234
+                call $check_word
+                global.get 1
+                i32.const 5678
+                call $check_word
+            )
+            (start $start)
+            (memory 160)
+            (global (mut i32) (i32.const 8500000))
+            (global (mut i32) (i32.const 9000000))
+            (@custom "icp:private enhanced-orthogonal-persistence" "")
+        )
+        "#;
+    let version1_wasm = wat::parse_str(version1_wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    test.install_canister(canister_id, version1_wasm).unwrap();
+
+    let version2_wat = r#"
+        (module
+            (func $check_word (param i32) (param i32)
+                block
+                    local.get 0
+                    i32.load
+                    local.get 1
+                    i32.eq
+                    br_if 0
+                    unreachable
+                end
+            )
+            (func $check
+                global.get 0
+                i32.const 1234
+                call $check_word
+                global.get 1
+                i32.const 5678
+                call $check_word
+            )
+            (start $check)
+            (memory 160)
+            (global (mut i32) (i32.const 8500000))
+            (global (mut i32) (i32.const 9000000))
+            (@custom "icp:private enhanced-orthogonal-persistence" "")
+        )
+        "#;
+
+    let version2_wasm = wat::parse_str(version2_wat).unwrap();
+    test.upgrade_canister_v2(
+        canister_id,
+        version2_wasm,
+        CanisterUpgradeOptions {
+            skip_pre_upgrade: None,
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+        },
+    )
+    .unwrap();
+}
+
+#[test]
+fn fails_with_missing_main_memory_option_for_enhanced_orthogonal_persistence() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let version1_wat = r#"
+        (module
+            (memory 1)
+            (@custom "icp:private enhanced-orthogonal-persistence" "")
+        )
+        "#;
+    let version1_wasm = wat::parse_str(version1_wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    test.install_canister(canister_id, version1_wasm).unwrap();
+
+    let version2_wat = r#"
+        (module
+            (memory 1)
+        )
+        "#;
+
+    let version2_wasm = wat::parse_str(version2_wat).unwrap();
+    let error = test
+        .upgrade_canister_v2(
+            canister_id,
+            version2_wasm,
+            CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+                wasm_memory_persistence: None,
+            },
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(error.description(), "Missing upgrade option: Enhanced orthogonal persistence requires the `wasm_memory_persistence` upgrade option.");
+}
+
+#[test]
+fn fails_with_missing_upgrade_option_for_enhanced_orthogonal_persistence() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let version1_wat = r#"
+        (module
+            (memory 1)
+            (@custom "icp:private enhanced-orthogonal-persistence" "")
+        )
+        "#;
+    let version1_wasm = wat::parse_str(version1_wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    test.install_canister(canister_id, version1_wasm).unwrap();
+
+    let version2_wat = r#"
+        (module
+            (memory 1)
+        )
+        "#;
+
+    let version2_wasm = wat::parse_str(version2_wat).unwrap();
+    let error = test
+        .upgrade_canister(canister_id, version2_wasm)
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(error.description(), "Missing upgrade option: Enhanced orthogonal persistence requires the `wasm_memory_persistence` upgrade option.");
+}
+
+#[test]
+fn fails_when_keeping_main_memory_without_enhanced_orthogonal_persistence() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let classical_persistence = r#"
+    (module
+        (memory 1)
+    )
+    "#;
+    let orthogonal_persistence = r#"
+    (module
+        (memory 1)
+        (@custom "icp:private enhanced-orthogonal-persistence" "")
+    )
+    "#;
+
+    for (version1_wat, version2_wat) in [
+        (classical_persistence, classical_persistence),
+        (orthogonal_persistence, classical_persistence),
+    ] {
+        let version1_wasm = wat::parse_str(version1_wat).unwrap();
+        let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+        test.install_canister(canister_id, version1_wasm).unwrap();
+
+        let version2_wasm = wat::parse_str(version2_wat).unwrap();
+        let error = test
+            .upgrade_canister_v2(
+                canister_id,
+                version2_wasm,
+                CanisterUpgradeOptions {
+                    skip_pre_upgrade: None,
+                    wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+                },
+            )
+            .unwrap_err();
+        assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+        assert_eq!(error.description(), "Invalid upgrade option: The `wasm_memory_persistence: opt Keep` upgrade option requires that the new canister module supports enhanced orthogonal persistence.");
+    }
+}
+
+#[test]
+fn test_upgrade_to_enhanced_orthogonal_persistence() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let version1_wat = r#"
+    (module
+        (memory 1)
+    )
+    "#;
+    let version1_wasm = wat::parse_str(version1_wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    test.install_canister(canister_id, version1_wasm).unwrap();
+
+    let version2_wat = r#"
+    (module
+        (memory 1)
+        (@custom "icp:private enhanced-orthogonal-persistence" "")
+    )
+    "#;
+    let version2_wasm = wat::parse_str(version2_wat).unwrap();
+    test.upgrade_canister_v2(
+        canister_id,
+        version2_wasm,
+        CanisterUpgradeOptions {
+            skip_pre_upgrade: None,
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+        },
+    )
+    .unwrap();
 }
 
 fn create_canisters(test: &mut ExecutionTest, canisters: usize) {
@@ -5739,8 +5961,9 @@ fn install_reserves_cycles_on_memory_allocation() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -5773,7 +5996,7 @@ fn install_reserves_cycles_on_memory_allocation() {
     assert_eq!(reserved_cycles, new_reserved_cycles);
 
     // Message execution fee is an order of a few million cycles.
-    assert!(balance_before - balance_after < Cycles::new(1_000_000_000));
+    assert_lt!(balance_before - balance_after, Cycles::new(1_000_000_000));
 }
 
 #[test]
@@ -5835,8 +6058,9 @@ fn install_reserves_cycles_on_memory_grow() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -5906,8 +6130,9 @@ fn upgrade_reserves_cycles_on_memory_allocation() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -5980,8 +6205,9 @@ fn upgrade_reserves_cycles_on_memory_grow() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -6025,7 +6251,7 @@ fn install_does_not_reserve_cycles_on_system_subnet() {
     let balance_after = test.canister_state(canister_id).system_state.balance();
 
     // Message execution fee is an order of a few million cycles.
-    assert!(balance_before - balance_after < Cycles::new(1_000_000_000));
+    assert_lt!(balance_before - balance_after, Cycles::new(1_000_000_000));
 
     let reserved_cycles = test
         .canister_state(canister_id)
@@ -6071,7 +6297,7 @@ fn install_does_not_reserve_cycles_on_verified_application_subnet() {
     let balance_after = test.canister_state(canister_id).system_state.balance();
 
     // Message execution fee is an order of a few million cycles.
-    assert!(balance_before - balance_after < Cycles::new(1_000_000_000));
+    assert_lt!(balance_before - balance_after, Cycles::new(1_000_000_000));
 
     let reserved_cycles = test
         .canister_state(canister_id)
@@ -6133,8 +6359,9 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -6199,8 +6426,9 @@ fn update_settings_reserves_cycles_for_memory_allocation() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -6235,6 +6463,7 @@ fn test_upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
         UNIVERSAL_CANISTER_WASM.to_vec(),
         CanisterUpgradeOptions {
             skip_pre_upgrade: Some(true),
+            wasm_memory_persistence: None,
         },
     )
     .unwrap();
@@ -6254,6 +6483,7 @@ fn test_upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
             UNIVERSAL_CANISTER_WASM.to_vec(),
             CanisterUpgradeOptions {
                 skip_pre_upgrade: None,
+                wasm_memory_persistence: None,
             },
         )
         .unwrap_err();
@@ -6328,8 +6558,9 @@ fn resource_saturation_scaling_works_in_create_canister() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -6401,8 +6632,9 @@ fn resource_saturation_scaling_works_in_install_code() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -6724,7 +6956,7 @@ fn canister_status_contains_reserved_cycles() {
             .reserved_balance()
             .get()
     );
-    assert!(status.reserved_cycles() > 0);
+    assert_lt!(0, status.reserved_cycles());
 }
 
 #[test]
@@ -7293,8 +7525,9 @@ fn upload_chunk_reserves_cycles() {
         .system_state
         .reserved_balance()
         .get();
-    assert!(
-        reserved_balance > 0,
+    assert_lt!(
+        0,
+        reserved_balance,
         "Reserved balance {} should be positive",
         reserved_balance
     );
@@ -7322,7 +7555,10 @@ fn clear_chunk_store_works() {
     };
     test.subnet_message("upload_chunk", upload_args.encode())
         .unwrap();
-    assert!(test.canister_state(canister_id).memory_usage() > initial_memory_usage);
+    assert_lt!(
+        initial_memory_usage,
+        test.canister_state(canister_id).memory_usage()
+    );
     assert!(test
         .canister_state(canister_id)
         .system_state

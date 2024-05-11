@@ -1,8 +1,7 @@
 use core::future::Future;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client_sender::Sender;
-use ic_config::Config;
-use ic_config::{crypto::CryptoConfig, transport::TransportConfig};
+use ic_config::{crypto::CryptoConfig, transport::TransportConfig, Config};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::execution_environment::{
@@ -10,15 +9,16 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_management_canister_types::CanisterInstallMode;
 use ic_management_canister_types::{
-    CanisterIdRecord, InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    IC_00,
+    CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
-use ic_prep_lib::internet_computer::{IcConfig, TopologyConfig};
-use ic_prep_lib::node::{NodeConfiguration, NodeIndex, NodeSecretKeyStore};
-use ic_prep_lib::subnet_configuration::{SubnetConfig, SubnetRunningState};
+use ic_prep_lib::{
+    internet_computer::{IcConfig, TopologyConfig},
+    node::{NodeConfiguration, NodeIndex, NodeSecretKeyStore},
+    subnet_configuration::{SubnetConfig, SubnetRunningState},
+};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -30,7 +30,8 @@ use ic_state_machine_tests::StateMachine;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_types::{
-    ids::node_test_id, ids::user_anonymous_id, messages::SignedIngressBuilder,
+    ids::{node_test_id, user_anonymous_id},
+    messages::SignedIngressBuilder,
 };
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
@@ -43,19 +44,18 @@ use ic_types::{
 };
 use prost::Message;
 use slog_scope::info;
-use std::collections::BTreeMap;
-use std::net::SocketAddr;
-use std::str::FromStr;
-use std::sync::{Arc, Mutex};
-use std::thread::sleep;
 use std::{
+    collections::BTreeMap,
     convert::TryFrom,
+    net::SocketAddr,
+    str::FromStr,
+    sync::{Arc, Mutex},
     thread,
+    thread::sleep,
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::UnboundedSender;
-use tower::buffer::Buffer as TowerBuffer;
-use tower::ServiceExt;
+use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
 
 const CYCLES_BALANCE: u128 = 1 << 120;
 
@@ -246,6 +246,7 @@ pub fn get_ic_config() -> IcConfig {
             vec![],
             vec![],
             SubnetRunningState::Active,
+            None,
         ),
     );
 

@@ -1,4 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -55,6 +56,7 @@ rust_test(
         "//rs/registry/local_store/artifacts",
         "//rs/registry/proto_data_provider",
         "//rs/registry/transport",
+        "//rs/state_manager",
         "//rs/test_utilities",
         "//rs/test_utilities/execution_environment",
         "//rs/test_utilities/logger",
@@ -74,7 +76,7 @@ rust_test(
     ],
 )
 
-rust_test_suite(
+rust_ic_test_suite(
     name = "messaging_integration",
     srcs = glob(["tests/**/*.rs"]),
     data = [

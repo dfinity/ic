@@ -11,7 +11,7 @@ use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData};
-use crate::tx::TransactionPriceEstimate;
+use crate::tx::GasFeeEstimate;
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
@@ -19,6 +19,7 @@ use ic_crypto_ecdsa_secp256k1::PublicKey;
 use ic_ethereum_types::Address;
 use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
+use std::fmt::{Display, Formatter};
 use strum_macros::EnumIter;
 use transactions::EthTransactions;
 
@@ -55,7 +56,7 @@ pub struct State {
     pub eth_helper_contract_address: Option<Address>,
     pub erc20_helper_contract_address: Option<Address>,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
-    pub minimum_withdrawal_amount: Wei,
+    pub cketh_minimum_withdrawal_amount: Wei,
     pub ethereum_block_height: BlockTag,
     pub first_scraped_block_number: BlockNumber,
     pub last_scraped_block_number: BlockNumber,
@@ -63,7 +64,7 @@ pub struct State {
     pub last_observed_block_number: Option<BlockNumber>,
     pub events_to_mint: BTreeMap<EventSource, ReceivedEvent>,
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
-    pub invalid_events: BTreeMap<EventSource, String>,
+    pub invalid_events: BTreeMap<EventSource, InvalidEventReason>,
     pub eth_transactions: EthTransactions,
     pub skipped_blocks: BTreeSet<BlockNumber>,
 
@@ -85,7 +86,7 @@ pub struct State {
     /// Used to correlate request and response in logs.
     pub http_request_counter: u64,
 
-    pub last_transaction_price_estimate: Option<(u64, TransactionPriceEstimate)>,
+    pub last_transaction_price_estimate: Option<(u64, GasFeeEstimate)>,
 
     /// Canister ID of the ledger suite orchestrator that
     /// can add new ERC-20 token to the minter
@@ -110,6 +111,33 @@ pub enum InvalidStateError {
     InvalidLastErc20ScrapedBlockNumber(String),
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum InvalidEventReason {
+    /// Deposit is invalid and was never minted.
+    /// This is most likely due to a user error (e.g., user's IC principal cannot be decoded)
+    /// or there is a critical issue in the logs returned from the JSON-RPC providers.
+    InvalidDeposit(String),
+
+    /// Deposit is valid but it's unknown whether it was minted or not,
+    /// most likely because there was an unexpected panic in the callback.
+    /// The deposit is quarantined to avoid any double minting and
+    /// will not be further processed without manual intervention.
+    QuarantinedDeposit,
+}
+
+impl Display for InvalidEventReason {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InvalidEventReason::InvalidDeposit(reason) => {
+                write!(f, "Invalid deposit: {}", reason)
+            }
+            InvalidEventReason::QuarantinedDeposit => {
+                write!(f, "Quarantined deposit")
+            }
+        }
+    }
+}
+
 impl State {
     pub fn validate_config(&self) -> Result<(), InvalidStateError> {
         if self.ecdsa_key_name.trim().is_empty() {
@@ -131,9 +159,20 @@ impl State {
                 "eth_helper_contract_address cannot be the zero address".to_string(),
             ));
         }
-        if self.minimum_withdrawal_amount == Wei::ZERO {
+        if self.cketh_minimum_withdrawal_amount == Wei::ZERO {
             return Err(InvalidStateError::InvalidMinimumWithdrawalAmount(
                 "minimum_withdrawal_amount must be positive".to_string(),
+            ));
+        }
+        let cketh_ledger_transfer_fee = match self.ethereum_network {
+            EthereumNetwork::Mainnet => Wei::new(2_000_000_000_000),
+            EthereumNetwork::Sepolia => Wei::new(10_000_000_000),
+        };
+        if self.cketh_minimum_withdrawal_amount < cketh_ledger_transfer_fee {
+            return Err(InvalidStateError::InvalidMinimumWithdrawalAmount(
+                "minimum_withdrawal_amount must cover ledger transaction fee, \
+                otherwise ledger can return a BadBurn error that should be returned to the user"
+                    .to_string(),
             ));
         }
         Ok(())
@@ -215,6 +254,27 @@ impl State {
             .map(|(symbol, _)| symbol)
     }
 
+    pub fn ckerc20_token_symbol_for_ledger(&self, ledger_id: &Principal) -> Option<&CkTokenSymbol> {
+        self.ckerc20_tokens
+            .iter()
+            .find(|(_, _, id)| *id == ledger_id)
+            .map(|(symbol, _, _)| symbol)
+    }
+
+    /// Quarantine the deposit event to prevent double minting.
+    /// WARNING!: It's crucial that this method does not panic,
+    /// since it's called inside the clean-up callback, when an unexpected panic did occur before.
+    fn record_quarantined_deposit(&mut self, source: EventSource) -> bool {
+        self.events_to_mint.remove(&source);
+        match self.invalid_events.entry(source) {
+            btree_map::Entry::Occupied(_) => false,
+            btree_map::Entry::Vacant(entry) => {
+                entry.insert(InvalidEventReason::QuarantinedDeposit);
+                true
+            }
+        }
+    }
+
     fn record_invalid_deposit(&mut self, source: EventSource, error: String) -> bool {
         assert!(
             !self.events_to_mint.contains_key(&source),
@@ -228,7 +288,7 @@ impl State {
         match self.invalid_events.entry(source) {
             btree_map::Entry::Occupied(_) => false,
             btree_map::Entry::Vacant(entry) => {
-                entry.insert(error);
+                entry.insert(InvalidEventReason::InvalidDeposit(error));
                 true
             }
         }
@@ -309,8 +369,7 @@ impl State {
         let tx_fee = receipt.effective_transaction_fee();
         let tx = self
             .eth_transactions
-            .finalized_tx
-            .get_alt(withdrawal_id)
+            .get_finalized_transaction(withdrawal_id)
             .expect("BUG: missing finalized transaction");
         let charged_tx_fee = tx.transaction_price().max_transaction_fee();
         let unspent_tx_fee = charged_tx_fee.checked_sub(tx_fee).expect(
@@ -375,6 +434,21 @@ impl State {
         );
     }
 
+    pub fn erc20_balances_by_token_symbol(&self) -> BTreeMap<&CkTokenSymbol, &Erc20Value> {
+        self.erc20_balances
+            .balance_by_erc20_contract
+            .iter()
+            .map(|(erc20_contract, balance)| {
+                let symbol = self
+                    .ckerc20_token_symbol(erc20_contract)
+                    .unwrap_or_else(|| {
+                        panic!("BUG: missing symbol for ERC-20 contract {}", erc20_contract)
+                    });
+                (symbol, balance)
+            })
+            .collect()
+    }
+
     pub const fn ethereum_network(&self) -> EthereumNetwork {
         self.ethereum_network
     }
@@ -404,7 +478,7 @@ impl State {
             let minimum_withdrawal_amount = Wei::try_from(amount).map_err(|e| {
                 InvalidStateError::InvalidMinimumWithdrawalAmount(format!("ERROR: {}", e))
             })?;
-            self.minimum_withdrawal_amount = minimum_withdrawal_amount;
+            self.cketh_minimum_withdrawal_amount = minimum_withdrawal_amount;
         }
         if let Some(address) = ethereum_contract_address {
             let eth_helper_contract_address = Address::from_str(&address).map_err(|e| {
@@ -452,8 +526,8 @@ impl State {
             other.eth_helper_contract_address
         );
         ensure_eq!(
-            self.minimum_withdrawal_amount,
-            other.minimum_withdrawal_amount
+            self.cketh_minimum_withdrawal_amount,
+            other.cketh_minimum_withdrawal_amount
         );
         ensure_eq!(
             self.first_scraped_block_number,
@@ -614,6 +688,7 @@ impl EthBalance {
     pub fn eth_balance(&self) -> Wei {
         self.eth_balance
     }
+
     pub fn total_effective_tx_fees(&self) -> Wei {
         self.total_effective_tx_fees
     }
@@ -678,6 +753,7 @@ pub enum TaskType {
     Mint,
     RetrieveEth,
     ScrapEthLogs,
+    RefreshGasFeeEstimate,
     Reimbursement,
     MintCkErc20,
 }

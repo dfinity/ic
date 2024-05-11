@@ -18,10 +18,11 @@ pub struct Polynomial {
 
 impl Debug for Polynomial {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.curve {
-            EccCurveType::K256 => write!(f, "Polynomial {{curve: K256, coefficients: REDACTED}}"),
-            EccCurveType::P256 => write!(f, "Polynomial {{curve: P256, coefficients: REDACTED}}"),
-        }
+        write!(
+            f,
+            "Polynomial {{curve: {:?}, coefficients: REDACTED}}",
+            self.curve
+        )
     }
 }
 
@@ -318,26 +319,25 @@ impl CommitmentOpening {
 
 impl Debug for CommitmentOpening {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self {
-            Self::Simple(EccScalar::K256(_)) => {
-                write!(f, "CommitmentOpening::Simple(K256(REDACTED))")
+        let name = match self {
+            Self::Simple(_) => "Simple",
+            Self::Pedersen(_, _) => "Pedersen",
+        };
+
+        let curve = match self {
+            Self::Simple(o) => format!("{:?}", o.curve_type()),
+            Self::Pedersen(o1, o2) => {
+                let c1 = o1.curve_type();
+                let c2 = o2.curve_type();
+                if c1 != c2 {
+                    format!("Unexpected mismatch curve {} {}", c1, c2)
+                } else {
+                    format!("{:?}", c1)
+                }
             }
-            Self::Simple(EccScalar::P256(_)) => {
-                write!(f, "CommitmentOpening::Simple(P256(REDACTED))")
-            }
-            Self::Pedersen(EccScalar::K256(_), EccScalar::K256(_)) => write!(
-                f,
-                "CommitmentOpening::Pedersen(K256(REDACTED), K256(REDACTED))"
-            ),
-            Self::Pedersen(EccScalar::P256(_), EccScalar::P256(_)) => write!(
-                f,
-                "CommitmentOpening::Pedersen(P256(REDACTED), P256(REDACTED))"
-            ),
-            Self::Pedersen(_, _) => write!(
-                f,
-                "ERROR: Unsupported curve combination in CommitmentOpening!"
-            ),
-        }
+        };
+
+        write!(f, "CommitmentOpening::{}({}(REDACTED))", name, curve)
     }
 }
 

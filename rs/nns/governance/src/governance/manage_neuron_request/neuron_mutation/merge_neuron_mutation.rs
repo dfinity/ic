@@ -93,7 +93,7 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
 
         let new_aging_since_timestamp_seconds = now.saturating_sub(new_age_seconds);
         let aging_timestamp_seconds_delta = (new_aging_since_timestamp_seconds as i128)
-            .saturating_sub(target_neuron.aging_since_timestamp_seconds as i128);
+            .saturating_sub(target_neuron.deprecated_aging_since_timestamp_seconds() as i128);
 
         Ok(btreemap! {
         source_neuron.id() => NeuronDeltas {
@@ -106,7 +106,7 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
                 .neg(),
             // Reset aging
             aging_since_timestamp_seconds: if source_stake_less_transaction_fee_e8s > 0 {
-                now.saturating_sub(source_neuron.aging_since_timestamp_seconds) as i128
+                now.saturating_sub(source_neuron.deprecated_aging_since_timestamp_seconds()) as i128
             } else {
                 0
             },
@@ -165,11 +165,11 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
             let transaction_fee_e8s = gov.transaction_fee();
             let to_subaccount = gov.with_neuron(&self.target_neuron_id, |target_neuron| {
                 target_neuron.subaccount()
-            })??;
+            })?;
 
             let from_subaccount = gov.with_neuron(&self.source_neuron_id, |source_neuron| {
                 source_neuron.subaccount()
-            })??;
+            })?;
 
             let original_delta_cached_neuron_stake_e8s = source_delta.cached_neuron_stake_e8s;
             let original_delta_aging_since_timestamp_seconds =
@@ -212,12 +212,13 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
                 // here, since we do not change the dissolve state in any other
                 // way.
                 // let source_age_timestamp_seconds = source_neuron_mut.aging_since_timestamp_seconds;
-                if source_neuron_mut.aging_since_timestamp_seconds != u64::MAX {
-                    source_neuron_mut.aging_since_timestamp_seconds =
+                if source_neuron_mut.deprecated_aging_since_timestamp_seconds() != u64::MAX {
+                    source_neuron_mut.deprecated_set_aging_since_timestamp_seconds(
                         saturating_add_or_subtract_u64_i128(
-                            source_neuron_mut.aging_since_timestamp_seconds,
+                            source_neuron_mut.deprecated_aging_since_timestamp_seconds(),
                             source_delta_mut.aging_since_timestamp_seconds,
-                        );
+                        ),
+                    );
                     // Record that the delta was partially applied
                     source_delta_mut.aging_since_timestamp_seconds = 0;
                 }
@@ -241,11 +242,12 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
                                 source_neuron_mut.cached_neuron_stake_e8s,
                                 original_delta_cached_neuron_stake_e8s.saturating_neg(),
                             );
-                        source_neuron_mut.aging_since_timestamp_seconds =
+                        source_neuron_mut.deprecated_set_aging_since_timestamp_seconds(
                             saturating_add_or_subtract_u64_i128(
-                                source_neuron_mut.aging_since_timestamp_seconds,
+                                source_neuron_mut.deprecated_aging_since_timestamp_seconds(),
                                 original_delta_aging_since_timestamp_seconds.saturating_neg(),
-                            );
+                            ),
+                        );
                     })
                     .expect("Expected the source neuron to exist");
 

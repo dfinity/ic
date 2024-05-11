@@ -340,7 +340,7 @@ pub fn append_inert(wasm: Option<&Wasm>) -> Wasm {
 /// Submits a proposal to upgrade the root canister.
 pub async fn upgrade_root_canister_by_proposal(
     governance: &Canister<'_>,
-    lifeline: &Canister<'_>,
+    root: &Canister<'_>,
     wasm: Wasm,
 ) {
     let wasm = wasm.bytes();
@@ -366,21 +366,24 @@ pub async fn upgrade_root_canister_by_proposal(
         ProposalStatus::Executed
     );
 
-    loop {
-        let status: CanisterStatusResult = lifeline
+    for _ in 0..100 {
+        let Ok(status): Result<CanisterStatusResult, _> = root
             .update_(
                 "canister_status",
                 candid_one,
                 CanisterIdRecord::from(ROOT_CANISTER_ID),
             )
             .await
-            .unwrap();
+        else {
+            continue;
+        };
         if status.module_hash.unwrap().as_slice() == new_module_hash
             && status.status == CanisterStatusType::Running
         {
-            break;
+            return;
         }
     }
+    panic!("Root canister upgrade did not complete in time.");
 }
 
 /// Perform a change on a canister by upgrading it or
@@ -598,6 +601,34 @@ pub async fn bitcoin_set_config_by_proposal(
 ) -> ProposalId {
     let proposal = BitcoinSetConfigProposal {
         network,
+        payload: Encode!(&set_config_request).unwrap(),
+    };
+
+    // Submitting a proposal also implicitly records a vote from the proposer,
+    // which with TEST_NEURON_1 is enough to trigger execution.
+    submit_external_update_proposal(
+        governance,
+        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+        NeuronId(TEST_NEURON_1_ID),
+        NnsFunction::BitcoinSetConfig,
+        proposal,
+        "Set Bitcoin Config".to_string(),
+        "".to_string(),
+    )
+    .await
+}
+
+pub async fn invalid_bitcoin_set_config_by_proposal(
+    governance: &Canister<'_>,
+    set_config_request: SetConfigRequest,
+) -> ProposalId {
+    // An invalid proposal payload to set the Bitcoin configuration.
+    #[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Clone, Debug)]
+    pub struct BitcoinSetConfigProposalInvalid {
+        pub payload: Vec<u8>,
+    }
+
+    let proposal = BitcoinSetConfigProposalInvalid {
         payload: Encode!(&set_config_request).unwrap(),
     };
 

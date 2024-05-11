@@ -11,15 +11,15 @@ use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_types::{time::current_time, SubnetId};
 use openssh_keys::PublicKey;
+use registry_canister::mutations::do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
-use registry_canister::mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload;
 use reqwest::Url;
 use ssh2::Session;
 use std::io::{Read, Write};
 use std::net::{IpAddr, TcpStream};
 use std::time::Duration;
 
-pub(crate) fn generate_key_strings() -> (String, String) {
+pub fn generate_key_strings() -> (String, String) {
     // Our keys are Ed25519, and not RSA. Once we figure out a direct way to encode
     // an Ed25519 private key the SSH way, we might consider switching to it.
     let rsa = rsa::RsaPrivateKey::new(&mut rand::thread_rng(), 1024).expect("RSA keygen failed");
@@ -46,7 +46,7 @@ fn public_key_to_string(e: Vec<u8>, n: Vec<u8>) -> String {
     key.to_string()
 }
 
-pub(crate) enum AuthMean {
+pub enum AuthMean {
     PrivateKey(String),
     Password(String),
     None,
@@ -88,7 +88,7 @@ pub(crate) fn assert_authentication_fails(ip: &IpAddr, username: &str, mean: &Au
     assert!(SshSession::new().login(ip, username, mean).is_err());
 }
 
-pub(crate) fn wait_until_authentication_is_granted(ip: &IpAddr, username: &str, mean: &AuthMean) {
+pub fn wait_until_authentication_is_granted(ip: &IpAddr, username: &str, mean: &AuthMean) {
     // The orchestrator updates the access keys every 10 seconds. If we are lucky,
     // this call succeeds at the first trial. If we are unlucky, it starts
     // succeeding after 10 secs.
@@ -116,7 +116,7 @@ pub(crate) fn wait_until_authentication_fails(ip: &IpAddr, username: &str, mean:
     }
 }
 
-pub(crate) fn get_updatesubnetpayload_with_keys(
+pub fn get_updatesubnetpayload_with_keys(
     subnet_id: SubnetId,
     readonly_keys: Option<Vec<String>>,
     backup_keys: Option<Vec<String>>,
@@ -156,7 +156,7 @@ pub(crate) fn get_updatesubnetpayload_with_keys(
     }
 }
 
-pub(crate) async fn update_subnet_record(nns_url: Url, payload: UpdateSubnetPayload) {
+pub async fn update_subnet_record(nns_url: Url, payload: UpdateSubnetPayload) {
     let r = runtime_from_url(nns_url, REGISTRY_CANISTER_ID.into());
     let gov_can = get_governance_canister(&r);
 
@@ -178,25 +178,24 @@ pub(crate) async fn fail_to_update_subnet_record(nns_url: Url, payload: UpdateSu
     vote_execute_proposal_assert_failed(&gov_can, proposal_id, "too long").await;
 }
 
-pub(crate) fn get_updateunassignednodespayload(
-    readonly_keys: Option<Vec<String>>,
-) -> UpdateUnassignedNodesConfigPayload {
-    UpdateUnassignedNodesConfigPayload {
-        ssh_readonly_access: readonly_keys,
-        replica_version: None,
+pub(crate) fn get_updatesshreadonlyaccesskeyspayload(
+    readonly_keys: Vec<String>,
+) -> UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
+    UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
+        ssh_readonly_keys: readonly_keys,
     }
 }
 
 pub(crate) async fn update_ssh_keys_for_all_unassigned_nodes(
     nns_url: Url,
-    payload: UpdateUnassignedNodesConfigPayload,
+    payload: UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
 ) {
     let r = runtime_from_url(nns_url, REGISTRY_CANISTER_ID.into());
     let gov_can = get_governance_canister(&r);
 
     let proposal_id = submit_external_proposal_with_test_id(
         &gov_can,
-        NnsFunction::UpdateUnassignedNodesConfig,
+        NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes,
         payload,
     )
     .await;
@@ -206,14 +205,14 @@ pub(crate) async fn update_ssh_keys_for_all_unassigned_nodes(
 
 pub(crate) async fn fail_updating_ssh_keys_for_all_unassigned_nodes(
     nns_url: Url,
-    payload: UpdateUnassignedNodesConfigPayload,
+    payload: UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
 ) {
     let r = runtime_from_url(nns_url, REGISTRY_CANISTER_ID.into());
     let gov_can = get_governance_canister(&r);
 
     let proposal_id = submit_external_proposal_with_test_id(
         &gov_can,
-        NnsFunction::UpdateUnassignedNodesConfig,
+        NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes,
         payload,
     )
     .await;

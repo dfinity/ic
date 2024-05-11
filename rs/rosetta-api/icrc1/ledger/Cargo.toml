@@ -18,17 +18,17 @@ hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
-ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
-ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
+ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
 ic-icrc1 = { path = ".." }
-ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }
-icrc-ledger-client = { path = "../../../../packages/icrc-ledger-client" }
+ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_core" }
+ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 ic-metrics-encoder = "1.1.1"
+icrc-ledger-client = { path = "../../../../packages/icrc-ledger-client" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
 serde = { workspace = true }
@@ -38,11 +38,12 @@ serde_bytes = { workspace = true }
 candid_parser = { workspace = true }
 cddl = "0.9.4"
 ic-icrc1-ledger-sm-tests = { path = "sm-tests" }
-ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 leb128 = "0.2.4"
 proptest = "1.0"
 
 [features]
 default = []
+get-blocks-disabled = []
 u256-tokens = ["dep:ic-icrc1-tokens-u256"]

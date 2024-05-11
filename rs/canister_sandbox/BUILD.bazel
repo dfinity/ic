@@ -1,4 +1,4 @@
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 load("//bazel:defs.bzl", "rust_ic_test")
 

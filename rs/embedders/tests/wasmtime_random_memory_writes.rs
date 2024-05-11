@@ -424,7 +424,7 @@ mod tests {
     use super::*;
 
     use ic_embedders::{
-        wasm_executor::compute_page_delta, wasm_utils::instrumentation::instruction_to_cost_new,
+        wasm_executor::compute_page_delta, wasm_utils::instrumentation::instruction_to_cost,
         wasmtime_embedder::CanisterMemoryType,
     };
     // Get .current() trait method
@@ -673,9 +673,9 @@ mod tests {
 
             // (call $trap (i32.const 0) (i32.const 2147483648)) ;; equivalent to 2 ^ 31
             let expected_instructions = 1 // Function is 1 instruction.
-                + instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 })
-                + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::TRAP.get()
-                + 2 * instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
+                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 })
+                + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::TRAP.get()
+                + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
             assert_eq!(
                 instructions_executed.get(),
                 expected_instructions + (num_bytes / BYTES_PER_INSTRUCTION) as u64
@@ -730,18 +730,18 @@ mod tests {
             get_num_instructions_consumed, SubnetType, MAX_NUM_INSTRUCTIONS, STABLE_OP_BYTES,
         };
         use ic_config::subnet_config::SchedulerConfig;
-        use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
+        use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
         use ic_logger::replica_logger::no_op_logger;
 
         // (drop (call $ic0_stable_grow (i32.const 1)))
         // (call $ic0_stable64_read (i64.const 0) (i64.const 0) (i64.const {STABLE_OP_BYTES}))
         fn setup_instruction_overhead() -> u64 {
-            instruction_to_cost_new(&wasmparser::Operator::Drop)
-                + instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 })
-                + ic_embedders::wasmtime_embedder::system_api_complexity::overhead_native::new::STABLE_GROW.get()
-                + instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 })
-                + instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 })
-                + 3 * instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 })
+            instruction_to_cost(&wasmparser::Operator::Drop)
+                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 })
+                + ic_embedders::wasmtime_embedder::system_api_complexity::overhead_native::STABLE_GROW.get()
+                + instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 })
+                + instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 })
+                + 3 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 })
                 + 1 // Function is 1 instruction.
         }
 
@@ -756,10 +756,12 @@ mod tests {
             )
             .unwrap();
             // Additional charge for an empty read should just be the overhead.
-            assert_eq!(instructions_consumed.get(),                 setup_instruction_overhead()
-            + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_READ
-                .get()
-);
+            assert_eq!(
+                instructions_consumed.get(),
+                setup_instruction_overhead()
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
+                        .get()
+            );
         }
 
         #[test]
@@ -777,7 +779,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_READ
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
                         .get()
                     + STABLE_OP_BYTES
             );
@@ -798,7 +800,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::STABLE64_READ
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE64_READ
                         .get()
                     + STABLE_OP_BYTES
             );
@@ -818,7 +820,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_READ
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
                         .get()
             );
         }
@@ -838,7 +840,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
                     + SchedulerConfig::application_subnet()
@@ -861,7 +863,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + SchedulerConfig::system_subnet().dirty_page_overhead.get()
             );
@@ -882,7 +884,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
                     + SchedulerConfig::application_subnet()
@@ -905,7 +907,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + SchedulerConfig::system_subnet().dirty_page_overhead.get()
             );

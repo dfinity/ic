@@ -32,6 +32,11 @@ dfx deploy minter --argument '(variant {InitArg = record { ethereum_network = va
 dfx deploy --network ic minter --argument '(variant {InitArg = record { ethereum_network = variant {Sepolia} ; ecdsa_key_name = "key_1"; ethereum_contract_address = opt "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34" ; ledger_id = principal "'"$(dfx canister --network ic id ledger)"'"; ethereum_block_height = variant {Finalized} ; minimum_withdrawal_amount = 10_000_000_000_000_000; next_transaction_nonce = NEXT_NONCE; last_scraped_block_number = 4_775_280 }})' --mode reinstall --wallet mf7xa-laaaa-aaaar-qaaaa-cai
 ```
 
+### Upgrading for ckERC20
+```shell
+dfx deploy minter --network ic --argument "(variant {UpgradeArg = record {ledger_suite_orchestrator_id = opt principal \"$(dfx canister --network ic id orchestrator)\"; erc20_helper_contract_address = opt \"0x674Cdbe64Df412DA9bAb1596e00c1520979B5A23\"; last_erc20_scraped_block_number = opt 5680659;}})" --wallet mf7xa-laaaa-aaaar-qaaaa-cai
+```
+
 Note: you can query the next nonce using:
 
 ```
@@ -63,11 +68,11 @@ dfx deploy --network ic index --argument '(opt variant {Init = record { ledger_i
 
 ```shell
 dfx canister create orchestrator
-dfx deploy orchestrator --argument '(variant {InitArg = record {}})'
+dfx deploy orchestrator --network ic --argument "(variant { InitArg = record { more_controller_ids = vec { principal \"mf7xa-laaaa-aaaar-qaaaa-cai\"; }; minter_id = opt principal \"$(dfx canister --network ic id minter)\"; cycles_management = opt record { cycles_for_ledger_creation = 2_000_000_000_000 ; cycles_for_archive_creation = 1_000_000_000_000; cycles_for_index_creation = 1_000_000_000_000; cycles_top_up_increment = 500_000_000_000 } }})"
 ```
 
 ### Mainnet
 
 ```shell
-dfx deploy orchestrator --argument '(variant {InitArg = record {}})'
+dfx deploy orchestrator --network ic --argument "(variant { InitArg = record { more_controller_ids = vec { principal \"mf7xa-laaaa-aaaar-qaaaa-cai\"; }; minter_id = opt principal \"$(dfx canister --network ic id minter)\"; cycles_management = opt record { cycles_for_ledger_creation = 2_000_000_000_000 ; cycles_for_archive_creation = 1_000_000_000_000; cycles_for_index_creation = 1_000_000_000_000; cycles_top_up_increment = 500_000_000_000 } }})"
 ```

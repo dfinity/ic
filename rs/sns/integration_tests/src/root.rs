@@ -20,7 +20,8 @@ use ic_sns_test_utils::{
         local_test_on_sns_subnet, set_up_root_canister, SnsCanisters, SnsTestsInitPayloadBuilder,
     },
     state_test_helpers::{
-        sns_root_register_dapp_canister, sns_root_register_dapp_canisters, Scenario,
+        sns_root_register_dapp_canister, sns_root_register_dapp_canisters,
+        state_machine_builder_for_sns_tests, Scenario,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -118,7 +119,7 @@ fn test_get_sns_canisters_summary() {
 
 #[test]
 fn test_register_dapp_canister() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
     let scenario = Scenario::new(&state_machine, Tokens::from_tokens(100).unwrap());
     scenario.init_all_canisters(&state_machine);
@@ -159,7 +160,7 @@ fn test_register_dapp_canister() {
 
 #[test]
 fn test_register_dapp_canisters() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
     let scenario = Scenario::new(&state_machine, Tokens::from_tokens(100).unwrap());
     scenario.init_all_canisters(&state_machine);
@@ -197,7 +198,7 @@ fn test_register_dapp_canisters() {
 
 #[test]
 fn test_register_dapp_canisters_removes_other_controllers() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
     let scenario = Scenario::new(&state_machine, Tokens::from_tokens(100).unwrap());
     scenario.init_all_canisters(&state_machine);
@@ -256,7 +257,7 @@ fn test_register_dapp_canisters_removes_other_controllers() {
 
 #[test]
 fn test_root_restarts_governance_on_stop_canister_timeout() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
     let scenario = Scenario::new(&state_machine, Tokens::from_tokens(100).unwrap());
     scenario.init_all_canisters(&state_machine);

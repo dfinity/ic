@@ -56,7 +56,6 @@ mock! {
     impl<T> Chunkable<T> for Chunkable<T> {
         fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
         fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError>;
-        fn completed(&self) -> bool;
     }
 }
 
@@ -64,11 +63,9 @@ mock! {
     pub ValidatedPoolReader<A: ArtifactKind> {}
 
     impl<A: ArtifactKind> ValidatedPoolReader<A> for ValidatedPoolReader<A> {
-        fn contains(&self, id: &A::Id) -> bool;
-        fn get_validated_by_identifier(&self, id: &A::Id) -> Option<A::Message>;
-        fn get_all_validated_by_filter(
+        fn get(&self, id: &A::Id) -> Option<A::Message>;
+        fn get_all_validated(
             &self,
-            filter: &A::Filter,
         ) -> Box<dyn Iterator<Item = A::Message>>;
     }
 }
@@ -78,9 +75,5 @@ mock! {
 
     impl<A: ArtifactKind + Sync> PriorityFnAndFilterProducer<A, MockValidatedPoolReader<A>> for PriorityFnAndFilterProducer<A> {
         fn get_priority_function(&self, pool: &MockValidatedPoolReader<A>) -> PriorityFn<A::Id, A::Attribute>;
-        fn get_filter(&self) -> A::Filter {
-           A::Filter::default()
-        }
-
     }
 }

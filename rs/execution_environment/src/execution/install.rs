@@ -2,25 +2,22 @@
 //! `install`/`reinstall` is executed.
 //! See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
 
-use std::sync::Arc;
-
 use crate::as_round_instructions;
 use crate::canister_manager::{
     DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
 use crate::execution::install_code::{
-    canister_layout, finish_err, InstallCodeHelper, OriginalContext, PausedInstallCodeHelper,
-    StableMemoryHandling,
+    canister_layout, finish_err, CanisterMemoryHandling, InstallCodeHelper, MemoryHandling,
+    OriginalContext, PausedInstallCodeHelper,
 };
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::WasmExecutionOutput;
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState, SystemState,
+    metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState,
 };
 use ic_system_api::ApiType;
 use ic_types::funds::Cycles;
@@ -79,14 +76,20 @@ pub(crate) fn execute_install(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> DtsInstallCodeResult {
     let mut helper = InstallCodeHelper::new(&clean_canister, &original);
 
     // Stage 0: validate input.
     if let Err(err) = helper.validate_input(&original, &round, round_limits) {
         let instructions_left = helper.instructions_left();
-        return finish_err(clean_canister, instructions_left, original, round, err);
+        return finish_err(
+            clean_canister,
+            instructions_left,
+            original,
+            round,
+            err,
+            helper.take_canister_log(),
+        );
     }
 
     // Stage 1: create a new execution state based on the new Wasm binary, clear certified data, deactivate global timer, and bump canister version.
@@ -105,6 +108,7 @@ pub(crate) fn execute_install(
                 original,
                 round,
                 err,
+                helper.take_canister_log(),
             );
         }
     };
@@ -119,11 +123,21 @@ pub(crate) fn execute_install(
     if let Err(err) = helper.replace_execution_state_and_allocations(
         instructions_from_compilation,
         result,
-        StableMemoryHandling::Replace,
+        CanisterMemoryHandling {
+            stable_memory_handling: MemoryHandling::Replace,
+            main_memory_handling: MemoryHandling::Replace,
+        },
         &original,
     ) {
         let instructions_left = helper.instructions_left();
-        return finish_err(clean_canister, instructions_left, original, round, err);
+        return finish_err(
+            clean_canister,
+            instructions_left,
+            original,
+            round,
+            err,
+            helper.take_canister_log(),
+        );
     }
     helper.clear_certified_data();
     helper.deactivate_global_timer();
@@ -151,7 +165,7 @@ pub(crate) fn execute_install(
         let wasm_execution_result = round.hypervisor.execute_dts(
             ApiType::start(original.time),
             execution_state,
-            &SystemState::new_for_start(canister_id, fd_factory),
+            &helper.canister().system_state,
             helper.canister_memory_usage(),
             helper.canister_message_memory_usage(),
             helper.execution_parameters().clone(),
@@ -228,7 +242,14 @@ fn install_stage_2a_process_start_result(
 
     if let Err(err) = result {
         let instructions_left = helper.instructions_left();
-        return finish_err(clean_canister, instructions_left, original, round, err);
+        return finish_err(
+            clean_canister,
+            instructions_left,
+            original,
+            round,
+            err,
+            helper.take_canister_log(),
+        );
     }
 
     install_stage_2b_continue_install_after_start(
@@ -332,7 +353,14 @@ fn install_stage_3_process_init_result(
     );
     if let Err(err) = result {
         let instructions_left = helper.instructions_left();
-        return finish_err(clean_canister, instructions_left, original, round, err);
+        return finish_err(
+            clean_canister,
+            instructions_left,
+            original,
+            round,
+            err,
+            helper.take_canister_log(),
+        );
     }
     helper.finish(clean_canister, original, round, round_limits)
 }
@@ -366,7 +394,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
             round_limits,
         ) {
             Ok(helper) => helper,
-            Err((err, instructions_left)) => {
+            Err((err, instructions_left, new_canister_log)) => {
                 warn!(
                     round.log,
                     "[DTS] Canister {} failed to resume paused (canister_init) execution: {:?}.",
@@ -374,7 +402,14 @@ impl PausedInstallCodeExecution for PausedInitExecution {
                     err
                 );
                 self.paused_wasm_execution.abort();
-                return finish_err(clean_canister, instructions_left, self.original, round, err);
+                return finish_err(
+                    clean_canister,
+                    instructions_left,
+                    self.original,
+                    round,
+                    err,
+                    new_canister_log,
+                );
             }
         };
 
@@ -462,7 +497,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
             round_limits,
         ) {
             Ok(helper) => helper,
-            Err((err, instructions_left)) => {
+            Err((err, instructions_left, new_canister_log)) => {
                 warn!(
                     round.log,
                     "[DTS] Canister {} failed to resume paused (start) execution: {:?}",
@@ -470,7 +505,14 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
                     err
                 );
                 self.paused_wasm_execution.abort();
-                return finish_err(clean_canister, instructions_left, self.original, round, err);
+                return finish_err(
+                    clean_canister,
+                    instructions_left,
+                    self.original,
+                    round,
+                    err,
+                    new_canister_log,
+                );
             }
         };
         let execution_state = helper.canister().execution_state.as_ref().unwrap();

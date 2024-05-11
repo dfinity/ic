@@ -10,7 +10,10 @@ use ic_ledger_core::{
     tokens::{CheckedAdd, TOKEN_SUBDIVIDABLE_BY},
     Tokens,
 };
-use ic_nervous_system_common::{cmc::FakeCmc, i2d, NervousSystemError};
+use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
+use ic_nervous_system_common::{
+    cmc::FakeCmc, i2d, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS,
+};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
@@ -20,7 +23,6 @@ use ic_nns_test_utils::{
 };
 use ic_sns_governance::{
     governance::Governance,
-    ledger::ICRC1Ledger,
     neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
     pb::v1::{
         governance::{self, SnsMetadata},
@@ -40,7 +42,7 @@ use ic_sns_governance::{
         NeuronPermissionType, Proposal, ProposalData, ProposalId, ProposalRewardStatus,
         RewardEvent, Vote, VotingRewardsParameters, WaitForQuietState,
     },
-    types::{test_helpers::NativeEnvironment, Environment, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS},
+    types::{test_helpers::NativeEnvironment, Environment},
 };
 use ic_sns_test_utils::{
     icrc1,
@@ -1276,6 +1278,7 @@ async fn zero_total_reward_shares() {
             distributed_e8s_equivalent: 0,
             end_timestamp_seconds: Some(1),
             rounds_since_last_distribution: Some(1),
+            total_available_e8s_equivalent: None,
         }),
         sns_metadata: Some(SnsMetadata {
             logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
@@ -1492,6 +1495,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
             distributed_e8s_equivalent: 0,
             end_timestamp_seconds: Some(1),
             rounds_since_last_distribution: Some(1),
+            total_available_e8s_equivalent: None,
         }),
 
         sns_metadata: Some(SnsMetadata {

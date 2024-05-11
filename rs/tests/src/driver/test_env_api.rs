@@ -1136,11 +1136,11 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_canister_http_test_ca_cert(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.cert";
+        let dep_rel_path = "ic-os/rootfs/guestos/dev-certs/canister_http_test_ca.cert";
         self.read_dependency_to_string(dep_rel_path)
     }
     fn get_canister_http_test_ca_key(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.key";
+        let dep_rel_path = "ic-os/rootfs/guestos/dev-certs/canister_http_test_ca.key";
         self.read_dependency_to_string(dep_rel_path)
     }
 
@@ -1494,7 +1494,17 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     fn status_is_healthy(&self) -> Result<bool> {
         match self.status() {
             Ok(s) if s.replica_health_status.is_some() => {
-                Ok(Some(ReplicaHealthStatus::Healthy) == s.replica_health_status)
+                let healthy = Some(ReplicaHealthStatus::Healthy) == s.replica_health_status;
+                if !healthy {
+                    info!(
+                        self.test_env().logger(),
+                        "Replica not yet healthy, status: {}",
+                        s.replica_health_status
+                            .map(|s| s.as_ref().to_string())
+                            .unwrap_or("unknown".to_string())
+                    );
+                }
+                Ok(healthy)
             }
             Ok(_) => {
                 warn!(

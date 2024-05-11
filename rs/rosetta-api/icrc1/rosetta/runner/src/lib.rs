@@ -116,15 +116,25 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
         )
     }));
 
-    let mut tries_left = 100;
-    while tries_left > 0 && !port_file.exists() {
+    let mut tries_left = 600; // 600*100ms = 60s
+    let mut maybe_port: Option<u16> = None;
+    while tries_left > 0 {
+        if port_file.exists() {
+            let port_str = std::fs::read_to_string(&port_file).expect("Expected port in port file");
+            match u16::from_str(&port_str) {
+                Ok(p) => {
+                    maybe_port = Some(p);
+                    break;
+                }
+                Err(e) => {
+                    println!("Expected port in port file, got {}: {}", port_str, e);
+                }
+            }
+        }
         sleep(Duration::from_millis(100)).await;
         tries_left -= 1;
     }
-
-    let port = std::fs::read_to_string(port_file).expect("Expected port in port file");
-    let port = u16::from_str(&port)
-        .unwrap_or_else(|e| panic!("Expected port in port file, got {}: {}", port, e));
+    let port = maybe_port.expect("Error reading port from port file");
 
     RosettaContext {
         _proc,

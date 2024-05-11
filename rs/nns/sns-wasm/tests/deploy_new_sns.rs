@@ -177,6 +177,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
     let bad_wasm = SnsWasm {
         wasm: Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes(),
         canister_type: SnsCanisterType::Governance.into(),
+        ..SnsWasm::default()
     };
     sns_wasm::add_wasm_via_proposal(&machine, bad_wasm);
 
@@ -213,8 +214,8 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
             // the governance init payload, this fails.
             error: Some(SnsWasmError {
                 message: "Error installing Governance WASM: Failed to install WASM on canister \
-                qsgjb-riaaa-aaaaa-aaaga-cai: error code 5: Canister qsgjb-riaaa-aaaaa-aaaga-cai \
-                trapped explicitly: did not find blob on stack"
+                qsgjb-riaaa-aaaaa-aaaga-cai: error code 5: Error from Canister qsgjb-riaaa-aaaaa-aaaga-cai: \
+                Canister trapped explicitly: did not find blob on stack"
                     .to_string()
             }),
             dapp_canisters_transfer_result: Some(DappCanistersTransferResult {

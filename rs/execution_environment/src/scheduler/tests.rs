@@ -34,8 +34,8 @@ use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
     batch::ConsensusResponse,
     messages::{
-        CallbackId, Payload, RejectContext, StopCanisterCallId, MAX_RESPONSE_COUNT_BYTES,
-        NO_DEADLINE,
+        CallbackId, CanisterMessageOrTask, CanisterTask, Payload, RejectContext,
+        StopCanisterCallId, MAX_RESPONSE_COUNT_BYTES,
     },
     methods::SystemMethod,
     time::{expiry_time_from_now, UNIX_EPOCH},
@@ -1002,7 +1002,10 @@ fn dont_charge_allocations_for_long_running_canisters() {
     test.canister_state_mut(paused_canister)
         .system_state
         .task_queue
-        .push_front(ExecutionTask::PausedExecution(PausedExecutionId(0)));
+        .push_front(ExecutionTask::PausedExecution {
+            id: PausedExecutionId(0),
+            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+        });
 
     assert!(test.canister_state(paused_canister).has_paused_execution());
     assert!(!test.canister_state(canister).has_paused_execution());
@@ -3035,15 +3038,11 @@ fn ecdsa_signature_agreements_metric_is_updated() {
     assert_eq!(sign_with_ecdsa_contexts.len(), 2);
 
     // reject the first one
-    let (callback_id, context) = sign_with_ecdsa_contexts.iter().next().unwrap();
-    let response = ConsensusResponse {
-        callback: *callback_id,
-        payload: Payload::Reject(RejectContext::new(RejectCode::SysFatal, "")),
-        originator: Some(context.request.sender),
-        respondent: Some(CanisterId::ic_00()),
-        refund: Some(context.request.payment),
-        deadline: Some(context.request.deadline),
-    };
+    let (callback_id, _) = sign_with_ecdsa_contexts.iter().next().unwrap();
+    let response = ConsensusResponse::new(
+        *callback_id,
+        Payload::Reject(RejectContext::new(RejectCode::SysFatal, "")),
+    );
 
     test.state_mut().consensus_queue.push(response);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
@@ -3079,20 +3078,16 @@ fn ecdsa_signature_agreements_metric_is_updated() {
     assert_eq!(sign_with_ecdsa_contexts.len(), 1);
 
     // send a reply to the second request
-    let (callback_id, context) = sign_with_ecdsa_contexts.iter().next().unwrap();
-    let response = ConsensusResponse {
-        callback: *callback_id,
-        payload: Payload::Data(
+    let (callback_id, _) = sign_with_ecdsa_contexts.iter().next().unwrap();
+    let response = ConsensusResponse::new(
+        *callback_id,
+        Payload::Data(
             ic00::SignWithECDSAReply {
                 signature: vec![1, 2, 3],
             }
             .encode(),
         ),
-        originator: Some(context.request.sender),
-        respondent: Some(CanisterId::ic_00()),
-        refund: Some(context.request.payment),
-        deadline: Some(NO_DEADLINE),
-    };
+    );
 
     test.state_mut().consensus_queue.push(response);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
@@ -4758,9 +4753,10 @@ fn test_is_next_method_added_to_task_queue() {
     test.canister_state_mut(canister)
         .system_state
         .task_queue
-        .push_front(ExecutionTask::PausedExecution(
-            ic_replicated_state::canister_state::system_state::PausedExecutionId(1),
-        ));
+        .push_front(ExecutionTask::PausedExecution {
+            id: PausedExecutionId(1),
+            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+        });
 
     while test
         .canister_state_mut(canister)

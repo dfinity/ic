@@ -33,16 +33,14 @@ use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ledger_core::Tokens;
+use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_common::{i2d, ledger::compute_neuron_staking_subaccount_bytes};
 use ic_neurons_fund::{MatchedParticipationFunction, PolynomialNeuronsFundParticipation};
-use ic_sns_governance::{
-    ledger::ICRC1Ledger,
-    pb::v1::{
-        claim_swap_neurons_request::NeuronParameters,
-        claim_swap_neurons_response::{ClaimSwapNeuronsResult, SwapNeuron},
-        governance, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus,
-        NeuronId, SetMode, SetModeResponse,
-    },
+use ic_sns_governance::pb::v1::{
+    claim_swap_neurons_request::NeuronParameters,
+    claim_swap_neurons_response::{ClaimSwapNeuronsResult, SwapNeuron},
+    governance, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId,
+    SetMode, SetModeResponse,
 };
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{storable::Blob, GrowFailed, Storable};
@@ -3736,7 +3734,7 @@ mod tests {
         NeuronsFundParticipants, Params,
     };
     use crate::swap_builder::SwapBuilder;
-    use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+    use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
     use pretty_assertions::assert_eq;
     use proptest::prelude::proptest;
     use std::collections::HashSet;
@@ -4151,7 +4149,7 @@ mod tests {
         #[test]
         fn test_generate_vesting_schedule_proptest(
             count in 1..25_u64,
-            dissolve_delay_interval_seconds in 1..(90 * SECONDS_PER_DAY),
+            dissolve_delay_interval_seconds in 1..(90 * ONE_DAY_SECONDS),
             total_e8s in 1..(100 * E8),
         ) {
             let vesting_schedule = NeuronBasketConstructionParameters {
@@ -4591,7 +4589,7 @@ mod tests {
     #[test]
     fn test_purge_old_tickets() {
         const TEN_MINUTES: u64 = 60 * 10 * 1_000_000_000;
-        const ONE_DAY: u64 = SECONDS_PER_DAY * 1_000_000_000;
+        const ONE_DAY: u64 = ONE_DAY_SECONDS * 1_000_000_000;
         const NUMBER_OF_TICKETS_THRESHOLD: u64 = 10;
         const MAX_AGE_IN_NANOSECONDS: u64 = ONE_DAY * 2;
         const MAX_NUMBER_TO_INSPECT: u64 = 2;

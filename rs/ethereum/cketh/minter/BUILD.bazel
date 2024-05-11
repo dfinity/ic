@@ -9,7 +9,6 @@ package(default_visibility = ["//visibility:public"])
 sol_binary(
     name = "contracts",
     srcs = [
-        "ERC20DepositHelper.sol",
         "EthDepositHelper.sol",
     ],
 )
@@ -62,6 +61,7 @@ rust_library(
         "@crate_index//:num-bigint",
         "@crate_index//:num-traits",
         "@crate_index//:rlp",
+        "@crate_index//:scopeguard",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
@@ -84,21 +84,31 @@ rust_doc_test(
 rust_test(
     name = "lib_tests",
     crate = ":minter",
+    data = [
+        "test_resources/mainnet_events.gz",
+        "test_resources/sepolia_events.gz",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
+    },
     deps = [
         ":minter",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:assert_matches",
         "@crate_index//:candid_parser",
         "@crate_index//:ethers-core",
+        "@crate_index//:flate2",
+        "@crate_index//:ic-agent",
         "@crate_index//:maplit",
         "@crate_index//:proptest",
         "@crate_index//:rand",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
     ],
 )
 
 rust_test(
     name = "unit_tests",
-    srcs = ["src/dashboard/tests.rs"],
     crate = ":_wasm_cketh_minter",
     data = [":cketh_minter.did"],
     env = {
@@ -114,10 +124,7 @@ rust_test(
 
 [rust_canister(
     name = "cketh_minter" + target_suffix,
-    srcs = [
-        "src/dashboard.rs",
-        "src/main.rs",
-    ],
+    srcs = glob(["src/**/*.rs"]),
     compile_data = [
         "templates/dashboard.html",
         "templates/principal_to_bytes.js",

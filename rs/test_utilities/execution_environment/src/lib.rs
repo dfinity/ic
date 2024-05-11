@@ -34,18 +34,20 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{execution_state::SandboxMemory, NextExecution},
-    page_map::PAGE_SIZE,
+    page_map::{
+        test_utils::base_only_storage_layout, PageMap, TestPageAllocatorFileDescriptorImpl,
+        PAGE_SIZE,
+    },
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
     PageIndex, ReplicatedState, SubnetTopology,
 };
-use ic_replicated_state::{page_map::TestPageAllocatorFileDescriptorImpl, PageMap};
 use ic_system_api::InstructionLimits;
 use ic_test_utilities::crypto::mock_random_number_generator;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::{
     batch::QueryStats,
-    crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
+    crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId,
@@ -66,6 +68,9 @@ use std::{
 };
 use std::{os::unix::prelude::FileExt, str::FromStr};
 use tempfile::NamedTempFile;
+
+mod wat_canister;
+pub use wat_canister::{wat_canister, wat_fn, WatCanisterBuilder, WatFnCode};
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
 
@@ -190,7 +195,7 @@ pub struct ExecutionTest {
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     caller_canister_id: Option<CanisterId>,
-    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
 
     // The actual implementation.
     exec_env: ExecutionEnvironment,
@@ -560,6 +565,22 @@ impl ExecutionTest {
             canister_id: canister_id.into(),
             settings: CanisterSettingsArgsBuilder::new()
                 .with_reserved_cycles_limit(reserved_cycles_limit.get())
+                .build(),
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
+    }
+
+    pub fn canister_update_wasm_memory_limit(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_memory_limit: NumBytes,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_wasm_memory_limit(wasm_memory_limit.get())
                 .build(),
             sender_canister_version: None,
         }
@@ -1520,7 +1541,8 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.wasm_memory.page_map = PageMap::open(&path, &[], Height::new(0), factory).unwrap();
+            es.wasm_memory.page_map =
+                PageMap::open(&base_only_storage_layout(path), Height::new(0), factory).unwrap();
             *es.wasm_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
 
@@ -1539,7 +1561,8 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.stable_memory.page_map = PageMap::open(&path, &[], Height::new(0), factory).unwrap();
+            es.stable_memory.page_map =
+                PageMap::open(&base_only_storage_layout(path), Height::new(0), factory).unwrap();
             *es.stable_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
         }
@@ -1932,6 +1955,14 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_best_effort_responses(mut self, status: FlagStatus) -> Self {
+        self.execution_config
+            .embedders_config
+            .feature_flags
+            .best_effort_responses = status;
+        self
+    }
+
     pub fn with_time(mut self, time: Time) -> Self {
         self.time = time;
         self
@@ -2033,7 +2064,7 @@ impl ExecutionTestBuilder {
             .map(|key| {
                 (
                     key,
-                    MasterEcdsaPublicKey {
+                    MasterPublicKey {
                         algorithm_id: AlgorithmId::EcdsaSecp256k1,
                         public_key: b"abababab".to_vec(),
                     },

@@ -2,11 +2,12 @@ use crate::registry::Registry;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::{
     replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetListRecord,
+    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_keys::{
     make_api_boundary_node_record_key, make_blessed_replica_versions_key, make_node_record_key,
+    make_unassigned_nodes_config_record_key,
 };
-use ic_registry_transport::pb::v1::RegistryValue;
 use prost::Message;
 use std::{
     cmp::Eq, collections::HashSet, convert::TryFrom, fmt, hash::Hash, net::Ipv4Addr, str::FromStr,
@@ -48,35 +49,43 @@ pub(crate) fn check_api_boundary_nodes_exist(registry: &Registry, node_ids: &[No
     });
 }
 
-pub(crate) fn check_replica_version_is_blessed(registry: &Registry, replica_version_id: &str) {
+pub(crate) fn get_blessed_replica_versions(
+    registry: &Registry,
+) -> Result<BlessedReplicaVersions, String> {
     let blessed_replica_key = make_blessed_replica_versions_key();
-    // Get the current list of blessed replica versions
-    if let Some(RegistryValue {
-        value: blessed_list_vec,
-        version,
-        deletion_marker: _,
-    }) = registry.get(blessed_replica_key.as_bytes(), registry.latest_version())
-    {
-        let blessed_list =
-            decode_registry_value::<BlessedReplicaVersions>(blessed_list_vec.clone());
-        // Verify that the new one is blessed
-        assert!(
-            blessed_list
-                .blessed_version_ids
-                .iter()
-                .any(|v| v == replica_version_id),
-            "Attempt to change the replica version to '{}' is rejected, \
-            because that version is NOT blessed. The list of blessed replica versions, at \
-            registry version {}, is: {}.",
-            replica_version_id,
-            version,
-            blessed_versions_to_string(&blessed_list)
-        );
-    } else {
-        panic!(
-            "Error while fetching the list of blessed replica versions record: {}",
-            replica_version_id
+    registry
+        .get(blessed_replica_key.as_bytes(), registry.latest_version())
+        .map_or(
+            Err("Failed to retrieve the blessed replica versions.".to_string()),
+            |result| {
+                let decoded =
+                    decode_registry_value::<BlessedReplicaVersions>(result.value.to_vec());
+                Ok(decoded)
+            },
         )
+}
+
+pub(crate) fn check_replica_version_is_blessed(registry: &Registry, replica_version_id: &str) {
+    match get_blessed_replica_versions(registry) {
+        Ok(blessed_list) => {
+            // Verify that the new one is blessed
+            assert!(
+                blessed_list
+                    .blessed_version_ids
+                    .iter()
+                    .any(|v| v == replica_version_id),
+                "Attempt to check if the replica version to '{}' is blessed was rejected, \
+                because that version is NOT blessed. The list of blessed replica versions is: {}.",
+                replica_version_id,
+                blessed_versions_to_string(&blessed_list)
+            );
+        }
+        Err(_) => {
+            panic!(
+                "Error while fetching the list of blessed replica versions record: {}",
+                replica_version_id
+            )
+        }
     }
 }
 
@@ -101,6 +110,22 @@ pub fn check_ipv6_format(ipv6_string: &str) -> bool {
         }
     }
     count == 8
+}
+
+pub fn get_unassigned_nodes_record(
+    registry: &Registry,
+) -> Result<UnassignedNodesConfigRecord, String> {
+    let unassigned_nodes_key = make_unassigned_nodes_config_record_key();
+    registry
+        .get(unassigned_nodes_key.as_bytes(), registry.latest_version())
+        .map_or(
+            Err("No unassigned nodes record found in the registry.".to_string()),
+            |result| {
+                let decoded =
+                    decode_registry_value::<UnassignedNodesConfigRecord>(result.value.to_vec());
+                Ok(decoded)
+            },
+        )
 }
 
 // Perform a basic domain validation for a string

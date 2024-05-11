@@ -20,7 +20,7 @@ use ic_types::{
     consensus::{
         certification::{Certification, CertificationMessage, CertificationShare},
         dkg,
-        ecdsa::{
+        idkg::{
             EcdsaArtifactId, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening,
             EcdsaPrefix, EcdsaPrefixOf, EcdsaSigShare,
         },
@@ -1568,6 +1568,7 @@ impl From<&EcdsaMessageId> for EcdsaIdKey {
         let mut bytes = vec![];
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.group_tag()));
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.meta_hash()));
+        bytes.extend_from_slice(&u64::to_be_bytes(prefix.height().get()));
         bytes.extend_from_slice(&msg_id.hash().0);
         EcdsaIdKey(bytes)
     }
@@ -1578,6 +1579,7 @@ impl From<&EcdsaPrefix> for EcdsaIdKey {
         let mut bytes = vec![];
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.group_tag()));
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.meta_hash()));
+        bytes.extend_from_slice(&u64::to_be_bytes(prefix.height().get()));
         EcdsaIdKey(bytes)
     }
 }
@@ -1589,13 +1591,17 @@ fn deser_ecdsa_message_id(message_type: EcdsaMessageType, id_key: EcdsaIdKey) ->
     let mut meta_hash_bytes = [0; 8];
     meta_hash_bytes.copy_from_slice(&id_key.0[8..16]);
 
-    let crypto_hash_bytes: &[u8] = &id_key.0[16..];
+    let mut height_bytes = [0; 8];
+    height_bytes.copy_from_slice(&id_key.0[16..24]);
+
+    let crypto_hash_bytes: &[u8] = &id_key.0[24..];
 
     (
         message_type,
         EcdsaPrefix::new_with_meta_hash(
             u64::from_be_bytes(group_tag_bytes),
             u64::from_be_bytes(meta_hash_bytes),
+            Height::from(u64::from_be_bytes(height_bytes)),
         ),
         CryptoHash(crypto_hash_bytes.to_vec()),
     )

@@ -209,6 +209,7 @@ pub struct Swap {
     /// The next principal bytes that should be checked by the next
     /// running purge_old_tickets routine.
     #[prost(bytes = "vec", optional, tag = "14")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub purge_old_tickets_next_principal: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     /// Set to true when auto-finalization is attempted. Prevents auto-finalization
     /// from being attempted more than once.
@@ -893,7 +894,8 @@ pub struct DerivedState {
     /// the Neurons' Fund have the same controller.
     #[prost(uint64, optional, tag = "5")]
     pub cf_neuron_count: ::core::option::Option<u64>,
-    /// Current approximate rate SNS tokens per ICP.
+    /// Current approximate rate SNS tokens per ICP. Note that this should not be used for super
+    /// precise financial accounting, because this is floating point.
     #[prost(float, tag = "2")]
     pub sns_tokens_per_icp: f32,
     /// Current amount of contributions from direct swap participants.
@@ -1576,6 +1578,7 @@ pub mod settle_neurons_fund_participation_response {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronId {
     #[prost(bytes = "vec", tag = "1")]
+    #[serde(with = "serde_bytes")]
     pub id: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -1788,6 +1791,7 @@ pub struct Icrc1Account {
     #[prost(message, optional, tag = "1")]
     pub owner: ::core::option::Option<::ic_base_types::PrincipalId>,
     #[prost(bytes = "vec", optional, tag = "2")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub subaccount: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// A device for ensuring that retrying (direct) participation does not result
@@ -1921,6 +1925,7 @@ pub struct NewSaleTicketRequest {
     pub amount_icp_e8s: u64,
     /// The subaccount of the caller to be used for the ticket
     #[prost(bytes = "vec", optional, tag = "2")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub subaccount: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// Response struct for the method `new_sale_ticket`

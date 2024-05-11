@@ -16,7 +16,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
 use ic_nns_common::registry::encode_or_panic;
-use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
+use ic_protobuf::registry::subnet::v1::{EcdsaConfig, InitialNiDkgTranscriptRecord};
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, NodeRecord},
@@ -236,8 +236,16 @@ pub fn routing_table_mutation(rt: &RoutingTable) -> RegistryMutation {
 /// The argument `mutation_id` should be specified to a `u8` value that is
 /// unique within this registry instance.
 pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
-    let node_operator_pid = user_test_id(TEST_ID);
     let subnet_pid = subnet_test_id(TEST_ID);
+    invariant_compliant_mutation_with_subnet_id(mutation_id, subnet_pid, None)
+}
+
+pub fn invariant_compliant_mutation_with_subnet_id(
+    mutation_id: u8,
+    subnet_pid: SubnetId,
+    ecdsa_config: Option<EcdsaConfig>,
+) -> Vec<RegistryMutation> {
+    let node_operator_pid = user_test_id(TEST_ID);
 
     let (valid_pks, node_id) = new_node_keys_and_node_id();
 
@@ -285,6 +293,7 @@ pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
         replica_version_id: replica_version_id.clone(),
         unit_delay_millis: 600,
         gossip_config: Some(build_default_gossip_config()),
+        ecdsa_config,
         ..Default::default()
     };
 

@@ -23,7 +23,7 @@ use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_crypto_tecdsa::derive_tecdsa_public_key;
+use ic_crypto_tecdsa::derive_threshold_public_key;
 use ic_cycles_account_manager::{
     is_delayed_ingress_induction_cost, CyclesAccountManager, IngressInductionCost,
     ResourceSaturation,
@@ -38,10 +38,10 @@ use ic_management_canister_types::{
     CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType, ClearChunkStoreArgs,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs,
     ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs,
-    SignWithECDSAArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method as Ic00Method,
+    NodeMetricsHistoryArgs, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs, SignWithECDSAArgs, StoredChunksArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -59,7 +59,7 @@ use ic_replicated_state::{
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
-    crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey},
+    crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey},
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
@@ -285,6 +285,9 @@ pub trait PausedExecution: std::fmt::Debug + Send {
     /// Aborts the paused execution.
     /// Returns the original message and the cycles prepaid for execution.
     fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles);
+
+    /// Returns a reference to the message or task being executed.
+    fn input(&self) -> CanisterMessageOrTask;
 }
 
 /// Stores all paused executions keyed by their ids.
@@ -458,7 +461,7 @@ impl ExecutionEnvironment {
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
         rng: &mut dyn RngCore,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterPublicKey>,
         registry_settings: &RegistryExecutionSettings,
         round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, Option<NumInstructions>) {
@@ -1273,12 +1276,15 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::LoadCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
-                    // TODO(EXC-1530): Implement load_canister_snapshot.
+                    let res = LoadCanisterSnapshotArgs::decode(payload).and_then(|_| {
+                        // TODO(EXC-1530): Implement load_canister_snapshot.
+                        Err(UserError::new(
+                            ErrorCode::CanisterContractViolation,
+                            "This API is not enabled on this subnet".to_string(),
+                        ))
+                    });
                     ExecuteSubnetMessageResult::Finished {
-                        response: Err(UserError::new(
-                            ErrorCode::CanisterRejectedMessage,
-                            "Canister snapshotting API is not yet implemented.",
-                        )),
+                        response: res,
                         refund: msg.take_cycles(),
                     }
                 }
@@ -1296,12 +1302,11 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::ListCanisterSnapshots) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
-                    // TODO(EXC-1531): Implement list_canister_snapshot.
+                    let res = ListCanisterSnapshotArgs::decode(payload).and_then(|args| {
+                        self.list_canister_snapshot(*msg.sender(), &mut state, args)
+                    });
                     ExecuteSubnetMessageResult::Finished {
-                        response: Err(UserError::new(
-                            ErrorCode::CanisterRejectedMessage,
-                            "Canister snapshotting API is not yet implemented.",
-                        )),
+                        response: res,
                         refund: msg.take_cycles(),
                     }
                 }
@@ -1319,16 +1324,9 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::DeleteCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
-                    let res = match DeleteCanisterSnapshotArgs::decode(payload) {
-                        Err(err) => Err(err),
-                        Ok(_) => {
-                            // TODO(EXC-1532): Implement delete_canister_snapshot.
-                            Err(UserError::new(
-                                ErrorCode::CanisterRejectedMessage,
-                                "Canister snapshotting API is not yet implemented.",
-                            ))
-                        }
-                    };
+                    let res = DeleteCanisterSnapshotArgs::decode(payload).and_then(|args| {
+                        self.delete_canister_snapshot(*msg.sender(), &mut state, args)
+                    });
                     ExecuteSubnetMessageResult::Finished {
                         response: res,
                         refund: msg.take_cycles(),
@@ -1929,6 +1927,53 @@ impl ExecutionEnvironment {
         result
     }
 
+    /// Lists the snapshots belonging to the specified canister.
+    fn list_canister_snapshot(
+        &self,
+        sender: PrincipalId,
+        state: &mut ReplicatedState,
+        args: ListCanisterSnapshotArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(args.get_canister_id(), state)?;
+
+        let result = self
+            .canister_manager
+            .list_canister_snapshot(sender, canister, state)
+            .map_err(UserError::from)?;
+
+        Ok(Encode!(&result).unwrap())
+    }
+
+    /// Deletes the specified canister snapshot if it exists.
+    fn delete_canister_snapshot(
+        &self,
+        sender: PrincipalId,
+        state: &mut ReplicatedState,
+        args: DeleteCanisterSnapshotArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister_id = args.get_canister_id();
+        // Take canister out.
+        let mut canister = match state.take_canister_state(&canister_id) {
+            None => {
+                return Err(UserError::new(
+                    ErrorCode::CanisterNotFound,
+                    format!("Canister {} not found.", &canister_id),
+                ))
+            }
+            Some(canister) => canister,
+        };
+
+        let result = self
+            .canister_manager
+            .delete_canister_snapshot(sender, &mut canister, args.get_snapshot_id(), state)
+            .map(|()| EmptyBlob.encode())
+            .map_err(|err| err.into());
+
+        // Put canister back.
+        state.put_canister_state(canister);
+        result
+    }
+
     fn node_metrics_history(
         &self,
         state: &ReplicatedState,
@@ -2389,7 +2434,7 @@ impl ExecutionEnvironment {
 
     fn get_ecdsa_public_key(
         &self,
-        subnet_public_key: &MasterEcdsaPublicKey,
+        subnet_public_key: &MasterPublicKey,
         principal_id: PrincipalId,
         derivation_path: Vec<Vec<u8>>,
         // TODO EXC-1060: get the right public key.
@@ -2399,7 +2444,7 @@ impl ExecutionEnvironment {
             caller: principal_id,
             derivation_path,
         };
-        derive_tecdsa_public_key(subnet_public_key, &path)
+        derive_threshold_public_key(subnet_public_key, &path)
             .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{}", err)))
             .map(|res| ECDSAPublicKeyResponse {
                 public_key: res.public_key,
@@ -2863,7 +2908,7 @@ impl ExecutionEnvironment {
         match task {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::PausedExecution(_)
+            | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::AbortedExecution { .. } => {
                 panic!(
                     "Unexpected task {:?} in `resume_install_code` (broken precondition).",
@@ -2960,7 +3005,7 @@ impl ExecutionEnvironment {
                     | ExecutionTask::AbortedInstallCode { .. }
                     | ExecutionTask::Heartbeat
                     | ExecutionTask::GlobalTimer => task,
-                    ExecutionTask::PausedExecution(id) => {
+                    ExecutionTask::PausedExecution { id, .. } => {
                         let paused = self.take_paused_execution(id).unwrap();
                         let (input, prepaid_execution_cycles) = paused.abort(log);
                         self.metrics.executions_aborted.inc();
@@ -3067,11 +3112,12 @@ impl ExecutionEnvironment {
                 paused_execution,
                 ingress_status,
             } => {
+                let input = paused_execution.input();
                 let id = self.register_paused_execution(paused_execution);
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::PausedExecution(id));
+                    .push_front(ExecutionTask::PausedExecution { id, input });
                 (canister, None, NumBytes::from(0), ingress_status)
             }
         }
@@ -3471,7 +3517,7 @@ pub fn execute_canister(
 
     let (input, prepaid_execution_cycles) = match canister.system_state.task_queue.pop_front() {
         Some(task) => match task {
-            ExecutionTask::PausedExecution(id) => {
+            ExecutionTask::PausedExecution { id, .. } => {
                 let paused = exec_env.take_paused_execution(id).unwrap();
                 let round_counters = RoundCounters {
                     execution_refund_error: &exec_env.metrics.execution_cycles_refund_error,
@@ -3549,10 +3595,10 @@ pub fn execute_canister(
 }
 
 fn get_master_ecdsa_public_key<'a>(
-    ecdsa_subnet_public_keys: &'a BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    ecdsa_subnet_public_keys: &'a BTreeMap<EcdsaKeyId, MasterPublicKey>,
     subnet_id: SubnetId,
     key_id: &EcdsaKeyId,
-) -> Result<&'a MasterEcdsaPublicKey, UserError> {
+) -> Result<&'a MasterPublicKey, UserError> {
     match ecdsa_subnet_public_keys.get(key_id) {
         None => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,

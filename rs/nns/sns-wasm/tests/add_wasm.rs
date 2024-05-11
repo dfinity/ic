@@ -17,7 +17,7 @@ fn test_sns_wasms_can_be_added_via_nns_proposal() {
 
     let root_wasm = build_root_sns_wasm();
     let root_hash = root_wasm.sha256_hash();
-    add_wasm_via_proposal(&machine, root_wasm.clone());
+    let root_wasm = add_wasm_via_proposal(&machine, root_wasm);
 
     let response = sns_wasm::get_wasm(&machine, SNS_WASM_CANISTER_ID, &root_hash);
     let sns_wasm = response.wasm.unwrap();

@@ -1,51 +1,73 @@
 //! Implementations of ThresholdEcdsaSigner
-use ic_crypto_internal_csp::api::{CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner};
+use super::MasterPublicKeyExtractionError;
+use ic_crypto_internal_csp::vault::api::{CspVault, IDkgTranscriptInternalBytes};
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    EccCurveType, IDkgTranscriptInternal, ThresholdEcdsaCombinedSigInternal,
+    combine_ecdsa_signature_shares, verify_ecdsa_signature_share, verify_ecdsa_threshold_signature,
+    DerivationPath, EccCurveType, IDkgTranscriptInternal, ThresholdEcdsaCombinedSigInternal,
     ThresholdEcdsaSerializationError, ThresholdEcdsaSigShareInternal,
+    ThresholdEcdsaVerifySigShareInternalError, ThresholdEcdsaVerifySignatureInternalError,
 };
 use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptType::{Masked, Unmasked};
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgReceivers, IDkgTranscript};
-use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
+use ic_types::crypto::canister_threshold_sig::idkg::IDkgReceivers;
+use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, NodeIndex};
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
-#[cfg(test)]
-mod tests;
-
-/// Extracts the master public key from the given `idkg_transcript`.
-fn get_tecdsa_master_public_key_from_internal_transcript(
+/// Extracts the ECDSA master public key from the given `idkg_transcript`.
+pub(crate) fn get_tecdsa_master_public_key_from_internal_transcript(
     idkg_transcript_internal: &IDkgTranscriptInternal,
-) -> MasterEcdsaPublicKey {
+) -> Result<MasterPublicKey, MasterPublicKeyExtractionError> {
     let pub_key = idkg_transcript_internal.constant_term();
-    let alg = match pub_key.curve_type() {
+    let algorithm_id = match pub_key.curve_type() {
         EccCurveType::K256 => AlgorithmId::EcdsaSecp256k1,
         EccCurveType::P256 => AlgorithmId::EcdsaP256,
+        x => {
+            return Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(
+                format!("ECDSA does not support curve {:?}", x),
+            ))
+        }
     };
-    MasterEcdsaPublicKey {
-        algorithm_id: alg,
+
+    Ok(MasterPublicKey {
+        algorithm_id,
         public_key: pub_key.serialize(),
-    }
+    })
 }
 
-pub fn sign_share<C: CspThresholdEcdsaSigner>(
-    csp_client: &C,
+pub fn sign_share(
+    vault: &dyn CspVault,
     self_node_id: &NodeId,
     inputs: &ThresholdEcdsaSigInputs,
 ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
     ensure_self_was_receiver(self_node_id, inputs.receivers())?;
 
-    let internal_sig_share = csp_client.ecdsa_sign_share(inputs)?;
+    let key = inputs.key_transcript().transcript_to_bytes();
+
+    let q = inputs.presig_quadruple();
+    let kappa_unmasked = q.kappa_unmasked().transcript_to_bytes();
+    let lambda_masked = q.lambda_masked().transcript_to_bytes();
+    let kappa_times_lambda = q.kappa_times_lambda().transcript_to_bytes();
+    let key_times_lambda = q.key_times_lambda().transcript_to_bytes();
+
+    let internal_sig_share = vault.ecdsa_sign_share(
+        inputs.derivation_path().clone(),
+        inputs.hashed_message().to_vec(),
+        *inputs.nonce(),
+        IDkgTranscriptInternalBytes::from(key),
+        IDkgTranscriptInternalBytes::from(kappa_unmasked),
+        IDkgTranscriptInternalBytes::from(lambda_masked),
+        IDkgTranscriptInternalBytes::from(kappa_times_lambda),
+        IDkgTranscriptInternalBytes::from(key_times_lambda),
+        inputs.algorithm_id(),
+    )?;
 
     let sig_share_raw = internal_sig_share.serialize().map_err(|e| {
         ThresholdEcdsaSignShareError::SerializationError {
@@ -56,8 +78,7 @@ pub fn sign_share<C: CspThresholdEcdsaSigner>(
     Ok(ThresholdEcdsaSigShare { sig_share_raw })
 }
 
-pub fn verify_sig_share<C: CspThresholdEcdsaSigVerifier>(
-    csp_client: &C,
+pub fn verify_sig_share(
     signer: NodeId,
     inputs: &ThresholdEcdsaSigInputs,
     share: &ThresholdEcdsaSigShare,
@@ -93,12 +114,12 @@ pub fn verify_sig_share<C: CspThresholdEcdsaSigVerifier>(
         },
     )?;
 
-    csp_client.ecdsa_verify_sig_share(
+    verify_ecdsa_signature_share(
         &sig_share,
-        signer_index,
-        inputs.derivation_path(),
+        &DerivationPath::from(inputs.derivation_path()),
         inputs.hashed_message(),
-        inputs.nonce(),
+        *inputs.nonce(),
+        signer_index,
         &key,
         &kappa_unmasked,
         &lambda_masked,
@@ -106,10 +127,23 @@ pub fn verify_sig_share<C: CspThresholdEcdsaSigVerifier>(
         &key_times_lambda,
         inputs.algorithm_id(),
     )
+    .map_err(|e| match e {
+        ThresholdEcdsaVerifySigShareInternalError::InvalidArguments(s) => {
+            ThresholdEcdsaVerifySigShareError::InvalidArguments(s)
+        }
+        ThresholdEcdsaVerifySigShareInternalError::InternalError(s) => {
+            ThresholdEcdsaVerifySigShareError::InternalError { internal_error: s }
+        }
+        ThresholdEcdsaVerifySigShareInternalError::InconsistentCommitments => {
+            ThresholdEcdsaVerifySigShareError::InvalidSignatureShare
+        }
+        ThresholdEcdsaVerifySigShareInternalError::InvalidSignatureShare => {
+            ThresholdEcdsaVerifySigShareError::InvalidSignatureShare
+        }
+    })
 }
 
-pub fn verify_combined_signature<C: CspThresholdEcdsaSigVerifier>(
-    csp_client: &C,
+pub fn verify_combined_signature(
     inputs: &ThresholdEcdsaSigInputs,
     signature: &ThresholdEcdsaCombinedSignature,
 ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
@@ -134,19 +168,34 @@ pub fn verify_combined_signature<C: CspThresholdEcdsaSigVerifier>(
                 },
             )?;
 
-    csp_client.ecdsa_verify_combined_signature(
+    verify_ecdsa_threshold_signature(
         &signature,
-        inputs.derivation_path(),
+        &DerivationPath::from(inputs.derivation_path()),
         inputs.hashed_message(),
-        inputs.nonce(),
-        &key,
+        *inputs.nonce(),
         &kappa_unmasked,
+        &key,
         inputs.algorithm_id(),
     )
+    .map_err(|e| match e {
+        ThresholdEcdsaVerifySignatureInternalError::InvalidSignature => {
+            ThresholdEcdsaVerifyCombinedSignatureError::InvalidSignature
+        }
+        ThresholdEcdsaVerifySignatureInternalError::InvalidArguments(s) => {
+            ThresholdEcdsaVerifyCombinedSignatureError::InvalidArguments(s)
+        }
+        ThresholdEcdsaVerifySignatureInternalError::InternalError(s) => {
+            ThresholdEcdsaVerifyCombinedSignatureError::InternalError { internal_error: s }
+        }
+        ThresholdEcdsaVerifySignatureInternalError::InconsistentCommitments => {
+            ThresholdEcdsaVerifyCombinedSignatureError::InternalError {
+                internal_error: "Wrong commitment types".to_string(),
+            }
+        }
+    })
 }
 
-pub fn combine_sig_shares<C: CspThresholdEcdsaSigVerifier>(
-    csp_client: &C,
+pub fn combine_sig_shares(
     inputs: &ThresholdEcdsaSigInputs,
     shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
 ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
@@ -170,51 +219,23 @@ pub fn combine_sig_shares<C: CspThresholdEcdsaSigVerifier>(
 
     let key = IDkgTranscriptInternal::try_from(inputs.key_transcript()).map_err(conv_error)?;
 
-    let internal_combined_sig = csp_client.ecdsa_combine_sig_shares(
-        inputs.derivation_path(),
+    let internal_combined_sig = combine_ecdsa_signature_shares(
+        &DerivationPath::from(inputs.derivation_path()),
         inputs.hashed_message(),
-        inputs.nonce(),
+        *inputs.nonce(),
         &key,
         &kappa_unmasked,
         inputs.reconstruction_threshold(),
         &internal_shares,
         inputs.algorithm_id(),
-    )?;
+    )
+    .map_err(|e| ThresholdEcdsaCombineSigSharesError::InternalError {
+        internal_error: format!("{:?}", e),
+    })?;
 
     Ok(ThresholdEcdsaCombinedSignature {
         signature: internal_combined_sig.serialize(),
     })
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum MasterPublicKeyExtractionError {
-    UnsupportedAlgorithm(String),
-    SerializationError(String),
-    CannotExtractFromMasked,
-}
-
-/// Extracts the master public key from the given `idkg_transcript`.
-pub fn get_tecdsa_master_public_key(
-    idkg_transcript: &IDkgTranscript,
-) -> Result<MasterEcdsaPublicKey, MasterPublicKeyExtractionError> {
-    if idkg_transcript.algorithm_id.is_threshold_ecdsa() {
-        match idkg_transcript.transcript_type {
-            Unmasked(_) => {
-                let internal_transcript = IDkgTranscriptInternal::try_from(idkg_transcript)
-                    .map_err(|e| {
-                        MasterPublicKeyExtractionError::SerializationError(format!("{:?}", e))
-                    })?;
-                Ok(get_tecdsa_master_public_key_from_internal_transcript(
-                    &internal_transcript,
-                ))
-            }
-            Masked(_) => Err(MasterPublicKeyExtractionError::CannotExtractFromMasked),
-        }
-    } else {
-        Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(
-            format!("{:?}", idkg_transcript.algorithm_id),
-        ))
-    }
 }
 
 fn ensure_self_was_receiver(

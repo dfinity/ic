@@ -320,10 +320,21 @@ fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
 #[query]
 #[candid_method(query)]
 fn icrc3_get_blocks(reqs: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    const MAX_BLOCKS_PER_RESPONSE: u64 = 100;
+
     let mut blocks = vec![];
     for req in reqs {
         let mut id = req.start.clone();
-        for block in get_blocks(req).blocks {
+        let (start, length) = req
+            .as_start_and_length()
+            .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
+        let max_length = MAX_BLOCKS_PER_RESPONSE.saturating_sub(blocks.len() as u64);
+        if max_length == 0 {
+            break;
+        }
+        let length = length.min(max_length);
+        let decoded_block_range = decode_block_range(start, length, decode_icrc1_block);
+        for block in decoded_block_range {
             blocks.push(BlockWithId {
                 id: id.clone(),
                 block: ICRC3Value::from(block),

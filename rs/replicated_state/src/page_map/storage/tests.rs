@@ -8,11 +8,11 @@ use std::{
 
 use crate::page_map::{
     storage::{
-        test_utils::{ShardedTestStorageLayout, TestStorageLayout},
         Checkpoint, FileIndex, MergeCandidate, MergeDestination, OverlayFile, PageIndexRange,
         Shard, Storage, StorageLayout, CURRENT_OVERLAY_VERSION, PAGE_INDEX_RANGE_NUM_BYTES,
         SIZE_NUM_BYTES, VERSION_NUM_BYTES,
     },
+    test_utils::{ShardedTestStorageLayout, TestStorageLayout},
     FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocator, PageDelta, PageMap,
     PersistenceError, StorageMetrics, MAX_NUMBER_OF_FILES,
 };
@@ -356,9 +356,12 @@ fn storage_files(dir: &Path) -> StorageFiles {
 
 /// Verify that the storage in the `dir` directory is equivalent to `expected`.
 fn verify_storage(dir: &Path, expected: &PageDelta) {
-    let StorageFiles { base, overlays } = storage_files(dir);
-
-    let storage = Storage::load(base.as_deref(), &overlays).unwrap();
+    let storage = Storage::load(&ShardedTestStorageLayout {
+        dir_path: dir.to_path_buf(),
+        base: dir.join("vmemory_0.bin"),
+        overlay_suffix: "vmemory_0.overlay".to_owned(),
+    })
+    .unwrap();
 
     let expected_num_pages = if let Some(max) = expected.max_page_index() {
         max.get() + 1
@@ -546,7 +549,10 @@ fn write_overlays_and_verify_with_tempdir(
             } => {
                 let files_before = storage_files(tempdir.path());
                 let mut page_map = PageMap::new_for_testing();
-                let num_pages = combined_delta.max_page_index().unwrap_or(0.into()).get() + 1;
+                let num_pages = combined_delta
+                    .max_page_index()
+                    .map(|index| index.get() + 1)
+                    .unwrap_or(0);
                 page_map.update(
                     combined_delta
                         .iter()
@@ -566,6 +572,7 @@ fn write_overlays_and_verify_with_tempdir(
                         Height::from(round as u64),
                         num_pages,
                         lsmt_config,
+                        &metrics,
                     )
                     .unwrap()
                 };
@@ -901,6 +908,7 @@ fn wrong_shard_pages_is_an_error() {
             lsmt_status: FlagStatus::Enabled,
             shard_num_pages: 3,
         },
+        &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
     assert!(!merge_candidates.is_empty());
@@ -1008,6 +1016,7 @@ fn test_make_merge_candidates_on_empty_dir() {
         Height::from(0),
         0, /* num_pages */
         &lsmt_config_unsharded(),
+        &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
     assert!(merge_candidates.is_empty());
@@ -1033,6 +1042,7 @@ fn test_make_none_merge_candidate() {
         Height::from(0),
         10, /* num_pages */
         &lsmt_config_unsharded(),
+        &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
     assert!(merge_candidates.is_empty());
@@ -1041,20 +1051,25 @@ fn test_make_none_merge_candidate() {
 #[test]
 fn test_make_merge_candidates_to_overlay() {
     let tempdir = tempdir().unwrap();
+    let lsmt_config = LsmtConfig {
+        lsmt_status: FlagStatus::Enabled,
+        shard_num_pages: 15,
+    };
+
     // 000002 |xx|
     // 000001 |x|
-    // 000000 |xxxxxxxxxx|
+    // 000000 |xx...x| |xx...x| |xx...x|
     // Need to merge top two to reach pyramid.
     let instructions = vec![
-        WriteOverlay((0..15).collect()),
-        WriteOverlay((0..1).collect()),
-        WriteOverlay((0..2).collect()),
+        WriteOverlay((0..40).collect()), // 3 files created
+        WriteOverlay((0..1).collect()),  // 1 file created
+        WriteOverlay((0..2).collect()),  // 1 file created
     ];
 
-    write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tempdir);
+    write_overlays_and_verify_with_tempdir(instructions, &lsmt_config, &tempdir);
     let storage_files = storage_files(tempdir.path());
     assert!(storage_files.base.is_none());
-    assert_eq!(storage_files.overlays.len(), 3);
+    assert_eq!(storage_files.overlays.len(), 5);
 
     let merge_candidates = MergeCandidate::new(
         &ShardedTestStorageLayout {
@@ -1063,8 +1078,9 @@ fn test_make_merge_candidates_to_overlay() {
             overlay_suffix: "vmemory_0.overlay".to_owned(),
         },
         Height::from(3),
-        10, /* num_pages */
-        &lsmt_config_unsharded(),
+        40, /* num_pages */
+        &lsmt_config,
+        &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
     assert_eq!(merge_candidates.len(), 1);
@@ -1073,7 +1089,26 @@ fn test_make_merge_candidates_to_overlay() {
         MergeDestination::SingleShardOverlay(tempdir.path().join("000003_000_vmemory_0.overlay"))
     );
     assert!(merge_candidates[0].base.is_none());
-    assert_eq!(merge_candidates[0].overlays, storage_files.overlays[1..3]);
+    assert_eq!(merge_candidates[0].overlays, storage_files.overlays[3..5]);
+    assert_eq!(merge_candidates[0].num_files_before, 3); // only shard 0 to be merged, containing 3 overlays
+    assert_eq!(
+        merge_candidates[0].storage_size_bytes_before,
+        [
+            &storage_files.overlays[0],
+            &storage_files.overlays[3],
+            &storage_files.overlays[4]
+        ]
+        .iter()
+        .map(|p| p.metadata().unwrap().len())
+        .sum::<u64>()
+    );
+    assert_eq!(
+        merge_candidates[0].input_size_bytes,
+        storage_files.overlays[3..5]
+            .iter()
+            .map(|p| p.metadata().unwrap().len())
+            .sum::<u64>()
+    );
 }
 
 #[test]
@@ -1135,6 +1170,7 @@ fn test_two_same_length_files_are_a_pyramid() {
         Height::from(0),
         2, /* num_pages */
         &lsmt_config_unsharded(),
+        &StorageMetrics::new(&MetricsRegistry::new()),
     )
     .unwrap();
     assert!(merge_candidates.is_empty());
@@ -1305,6 +1341,100 @@ fn can_write_shards() {
             tempdir.path().join("000000_010_vmemory_0.overlay"),
         ]
     );
+}
+
+#[test]
+fn overlapping_shards_is_an_error() {
+    let tempdir = tempdir().unwrap();
+
+    let instructions = vec![WriteOverlay(vec![9, 10])];
+
+    write_overlays_and_verify_with_tempdir(
+        instructions,
+        &LsmtConfig {
+            lsmt_status: FlagStatus::Enabled,
+            shard_num_pages: 1,
+        },
+        &tempdir,
+    );
+    let files = storage_files(tempdir.path());
+    assert_eq!(
+        files.overlays,
+        vec![
+            tempdir.path().join("000000_009_vmemory_0.overlay"),
+            tempdir.path().join("000000_010_vmemory_0.overlay"),
+        ]
+    );
+    assert!(Storage::load(&ShardedTestStorageLayout {
+        dir_path: tempdir.path().to_path_buf(),
+        base: tempdir.path().join("vmemory_0.bin"),
+        overlay_suffix: "vmemory_0.overlay".to_owned(),
+    })
+    .is_ok());
+    std::fs::copy(
+        tempdir.path().join("000000_010_vmemory_0.overlay"),
+        tempdir.path().join("000000_011_vmemory_0.overlay"),
+    )
+    .unwrap();
+    assert!(Storage::load(&ShardedTestStorageLayout {
+        dir_path: tempdir.path().to_path_buf(),
+        base: tempdir.path().join("vmemory_0.bin"),
+        overlay_suffix: "vmemory_0.overlay".to_owned(),
+    })
+    .is_err());
+}
+#[test]
+fn sharded_base_file() {
+    // Base only files; expect get_base_memory_instructions to be exhaustive
+    let dir = tempdir().unwrap();
+    write_overlays_and_verify_with_tempdir(
+        vec![WriteOverlay(vec![1, 10]), WriteOverlay(vec![5])],
+        &lsmt_config_sharded(),
+        &dir,
+    );
+    let storage = Storage::load(&ShardedTestStorageLayout {
+        dir_path: dir.path().to_path_buf(),
+        base: dir.path().join("vmemory_0.bin"),
+        overlay_suffix: "vmemory_0.overlay".to_owned(),
+    })
+    .unwrap();
+    let full_range = PageIndex::new(0)..PageIndex::new(11);
+    let filter = BitVec::from_elem(
+        (full_range.end.get() - full_range.start.get()) as usize,
+        false,
+    );
+    // get_base_memory_instructions is exhaustive => empty get_memory_instructions.
+    assert!(storage
+        .get_memory_instructions(full_range.clone(), &mut filter.clone())
+        .instructions
+        .is_empty());
+    assert!(!storage
+        .get_base_memory_instructions()
+        .instructions
+        .is_empty());
+
+    // Base files plus one overlay on top; some instructions needed beyond
+    // get_base_memory_instructions.
+    let dir = tempdir().unwrap();
+    write_overlays_and_verify_with_tempdir(
+        vec![
+            WriteOverlay(vec![1, 10]),
+            WriteOverlay(vec![5]),
+            WriteOverlay(vec![5]),
+        ],
+        &lsmt_config_sharded(),
+        &dir,
+    );
+    let storage = Storage::load(&ShardedTestStorageLayout {
+        dir_path: dir.path().to_path_buf(),
+        base: dir.path().join("vmemory_0.bin"),
+        overlay_suffix: "vmemory_0.overlay".to_owned(),
+    })
+    .unwrap();
+    assert!(!storage
+        .get_memory_instructions(full_range, &mut filter.clone())
+        .instructions
+        .is_empty())
 }
 
 #[test]

@@ -19,7 +19,10 @@ system_test(
         NNS_CANISTER_RUNTIME_DEPS +
         MAINNET_REVISION_RUNTIME_DEPS +
         BACKUP_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES + [
+        "//rs/backup",
+        "//rs/tests",
+    ],
 )
 
 system_test(
@@ -27,6 +30,7 @@ system_test(
     flaky = True,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    # TODO(NET-1683): Adjust test for faster p2p
     tags = [
         "system_test_hourly",
         "system_test_nightly",
@@ -44,9 +48,8 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
-        "manual",
-        # "system_test_hourly",
-        # "system_test_nightly",
+        "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,

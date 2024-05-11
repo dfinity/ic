@@ -9,18 +9,17 @@ documentation.workspace = true
 [dependencies]
 base64 = { workspace = true }
 hex = { workspace = true }
-ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-rosetta-api = { path = "../" }
 ic-types = { path = "../../types/types" }
 icp-ledger = { path = "../icp_ledger" }
 log = "0.4.14"
 nix = { workspace = true }
 rand = "0.8"
+reqwest = { workspace = true }
+rosetta-core = { path = "../rosetta_core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 tempfile = "3.1.0"
-reqwest = { workspace = true }
 tokio = { workspace = true }
 url = "2.1.1"
-rosetta-core = {path = "../rosetta_core"}

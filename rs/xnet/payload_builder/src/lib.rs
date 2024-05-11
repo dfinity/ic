@@ -330,7 +330,10 @@ impl XNetPayloadBuilderImpl {
         ));
 
         let deterministic_rng_for_testing = Arc::new(None);
-        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(metrics_registry)));
+        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            Arc::clone(&certified_stream_store),
+            metrics_registry,
+        )));
         let slice_pool = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(metrics_registry));
         let endpoint_resolver = XNetEndpointResolver::new(
@@ -1037,7 +1040,8 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
 
         // We don't care if the send succeeded or not. If it didn't, the refill task is
         // just behind.
-        self.refill_task_handle.trigger_refill();
+        self.refill_task_handle
+            .trigger_refill(validation_context.registry_version);
 
         payload
     }
@@ -1113,7 +1117,8 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
             }
         }
         // And trigger a pool refill.
-        self.refill_task_handle.trigger_refill();
+        self.refill_task_handle
+            .trigger_refill(validation_context.registry_version);
 
         self.metrics
             .observe_validate_duration(VALIDATION_STATUS_VALID, since);
@@ -1207,17 +1212,27 @@ impl PoolRefillTask {
         };
 
         runtime_handle.spawn(async move {
-            while refill_receiver.recv().await.is_some() {
-                task.refill_pool(POOL_BYTE_SIZE_SOFT_CAP, POOL_SLICE_BYTE_SIZE_MAX)
-                    .await;
+            while let Some(registry_version) = refill_receiver.recv().await {
+                task.refill_pool(
+                    POOL_BYTE_SIZE_SOFT_CAP,
+                    POOL_SLICE_BYTE_SIZE_MAX,
+                    registry_version,
+                )
+                .await;
             }
         });
 
         RefillTaskHandle(Mutex::new(refill_trigger))
     }
 
-    /// Queries all subnets for new slices and puts / appends them to the pool.
-    async fn refill_pool(&self, pool_byte_size_soft_cap: usize, slice_byte_size_max: usize) {
+    /// Queries all subnets for new slices and puts / appends them to the pool after
+    /// validation against the given registry version.
+    async fn refill_pool(
+        &self,
+        pool_byte_size_soft_cap: usize,
+        slice_byte_size_max: usize,
+        registry_version: RegistryVersion,
+    ) {
         let pool_slice_stats = {
             let pool = self.pool.lock().unwrap();
 
@@ -1299,10 +1314,14 @@ impl PoolRefillTask {
                     Ok(slice) => {
                         let res = if witness_begin != msg_begin {
                             // Pulled a stream suffix, append to pooled slice.
-                            pool.lock().unwrap().append(subnet_id, slice)
+                            pool.lock()
+                                .unwrap()
+                                .append(subnet_id, slice, registry_version, log)
                         } else {
-                            // Pulled a complete stream, replace polled slice (if any).
-                            pool.lock().unwrap().put(subnet_id, slice)
+                            // Pulled a complete stream, replace pooled slice (if any).
+                            pool.lock()
+                                .unwrap()
+                                .put(subnet_id, slice, registry_version, log)
                         };
                         let status = match res {
                             Ok(()) => STATUS_SUCCESS,
@@ -1344,14 +1363,15 @@ impl PoolRefillTask {
 
 /// A handle for a `PoolRefillTask`to be used for triggering pool refills and
 /// terminating the task (by dropping the handle).
-pub struct RefillTaskHandle(pub Mutex<mpsc::Sender<()>>);
+pub struct RefillTaskHandle(pub Mutex<mpsc::Sender<RegistryVersion>>);
 
 impl RefillTaskHandle {
-    /// Triggers a slice pool refill.
-    pub fn trigger_refill(&self) {
+    /// Triggers a slice pool refill, validating slices against the given registry
+    /// version.
+    pub fn trigger_refill(&self, registry_version: RegistryVersion) {
         // We don't care if the send succeeded or not. If it didn't, the refill task is
         // just behind.
-        self.0.lock().unwrap().try_send(()).ok();
+        self.0.lock().unwrap().try_send(registry_version).ok();
     }
 }
 

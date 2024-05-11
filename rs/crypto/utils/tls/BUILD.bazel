@@ -4,8 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/types/base_types",
-    "//rs/crypto/tls_interfaces",
-    "@crate_index//:tokio-rustls",
+    "@crate_index//:rustls",
     "@crate_index//:x509-parser",
 ]
 

@@ -746,6 +746,10 @@ impl ConsensusPool for TestConsensusPool {
     fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
         self.pool.block_instant(hash)
     }
+
+    fn message_instant(&self, id: &ConsensusMessageId) -> Option<Instant> {
+        self.pool.message_instant(id)
+    }
 }
 
 impl MutablePool<ConsensusArtifact> for TestConsensusPool {

@@ -7,7 +7,7 @@ Network configuration details for each IC-OS:
 * SetupOS
 ** Basic network connectivity is checked via pinging nns.ic0.app and the default gateway. Virtually no network traffic goes through SetupOS.
 * HostOS
-** The br6 bridge network interface is set up and passed to the GuestOS VM through qemu (refer to hostos/rootfs/opt/ic/share/guestos.xml.template).
+** The br6 bridge network interface is set up and passed to the GuestOS VM through qemu (refer to guestos.xml.template).
 * GuestOS
 ** An internet connection is received via the br6 bridge interface from qemu.
 

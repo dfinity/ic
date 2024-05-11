@@ -7,7 +7,6 @@ use ic_types::{
     artifact::IngressMessageId,
     batch::{IngressPayload, IngressPayloadError, ValidationContext},
     consensus::Payload,
-    crypto::CryptoError,
     ingress::IngressSets,
     messages::MessageId,
     time::{Time, UNIX_EPOCH},
@@ -52,14 +51,11 @@ impl IngressSetQuery for IngressSets {
 /// Permanent errors returned by the Ingress Selector.
 #[derive(Debug)]
 pub enum IngressPermanentError {
-    CryptoError(CryptoError),
     IngressValidationError(MessageId, String),
-    IngressBucketError(MessageId),
     IngressHistoryError(IngressHistoryError),
     IngressPayloadError(IngressPayloadError),
     IngressExpired(MessageId, String),
     IngressMessageTooBig(usize, usize),
-    IngressPayloadTooBig(usize, usize),
     IngressPayloadTooManyMessages(usize, usize),
     DuplicatedIngressMessage(MessageId),
     InsufficientCycles(CanisterOutOfCyclesError),
@@ -73,24 +69,11 @@ pub enum IngressPermanentError {
 /// Transient errors returned by the Ingress Selector.
 #[derive(Debug)]
 pub enum IngressTransientError {
-    CryptoError(CryptoError),
     StateNotCommittedYet(Height),
 }
 
 pub type IngressPayloadValidationError =
     ValidationError<IngressPermanentError, IngressTransientError>;
-
-impl From<CryptoError> for IngressTransientError {
-    fn from(err: CryptoError) -> IngressTransientError {
-        IngressTransientError::CryptoError(err)
-    }
-}
-
-impl From<CryptoError> for IngressPermanentError {
-    fn from(err: CryptoError) -> IngressPermanentError {
-        IngressPermanentError::CryptoError(err)
-    }
-}
 
 impl<T> From<IngressPermanentError> for ValidationError<IngressPermanentError, T> {
     fn from(err: IngressPermanentError) -> ValidationError<IngressPermanentError, T> {

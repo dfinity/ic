@@ -1,17 +1,6 @@
 //! CSP canister threshold signature traits
 
-use ic_crypto_internal_threshold_sig_ecdsa::{
-    IDkgTranscriptInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
-    ThresholdEcdsaSigShareInternal,
-};
-use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
-    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
-};
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
-use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeIndex, NumberOfNodes, Randomness};
-use std::collections::BTreeMap;
+use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
 
 pub mod errors;
 pub use errors::*;
@@ -39,60 +28,4 @@ pub trait CspIDkgProtocol {
     /// * [`CspCreateMEGaKeyError::InternalError`]: if the key ID for the secret key cannot be
     ///   derived from the generated public key.
     fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
-}
-
-/// Crypto service provider (CSP) client for threshold ECDSA signature share
-/// generation.
-pub trait CspThresholdEcdsaSigner {
-    /// Generate a signature share.
-    fn ecdsa_sign_share(
-        &self,
-        inputs: &ThresholdEcdsaSigInputs,
-    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
-}
-
-/// Crypto service provider (CSP) client for threshold ECDSA signature
-/// verification.
-pub trait CspThresholdEcdsaSigVerifier {
-    /// Combine signature shares.
-    #[allow(clippy::too_many_arguments)]
-    fn ecdsa_combine_sig_shares(
-        &self,
-        derivation_path: &ExtendedDerivationPath,
-        hashed_message: &[u8],
-        nonce: &Randomness,
-        key: &IDkgTranscriptInternal,
-        kappa_unmasked: &IDkgTranscriptInternal,
-        reconstruction_threshold: NumberOfNodes,
-        sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
-        algorithm_id: AlgorithmId,
-    ) -> Result<ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaCombineSigSharesError>;
-
-    /// Verify a signature share
-    fn ecdsa_verify_sig_share(
-        &self,
-        share: &ThresholdEcdsaSigShareInternal,
-        signer_index: NodeIndex,
-        derivation_path: &ExtendedDerivationPath,
-        hashed_message: &[u8],
-        nonce: &Randomness,
-        key: &IDkgTranscriptInternal,
-        kappa_unmasked: &IDkgTranscriptInternal,
-        lambda_masked: &IDkgTranscriptInternal,
-        kappa_times_lambda: &IDkgTranscriptInternal,
-        key_times_lambda: &IDkgTranscriptInternal,
-        algorithm_id: AlgorithmId,
-    ) -> Result<(), ThresholdEcdsaVerifySigShareError>;
-
-    /// Verify a combined ECDSA signature with respect to a particular kappa transcript
-    fn ecdsa_verify_combined_signature(
-        &self,
-        signature: &ThresholdEcdsaCombinedSigInternal,
-        derivation_path: &ExtendedDerivationPath,
-        hashed_message: &[u8],
-        nonce: &Randomness,
-        key: &IDkgTranscriptInternal,
-        kappa_unmasked: &IDkgTranscriptInternal,
-        algorithm_id: AlgorithmId,
-    ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError>;
 }

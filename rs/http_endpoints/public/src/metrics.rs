@@ -17,6 +17,12 @@ pub const LABEL_UNKNOWN: &str = "unknown";
 pub const STATUS_SUCCESS: &str = "success";
 pub const STATUS_ERROR: &str = "error";
 
+pub const LABEL_SECURE: &str = "secure";
+pub const LABEL_INSECURE: &str = "insecure";
+pub const LABEL_IO_ERROR: &str = "io";
+pub const LABEL_TLS_ERROR: &str = "tls_handshake_failed";
+pub const LABEL_TIMEOUT_ERROR: &str = "timeout";
+
 pub const REQUESTS_NUM_LABELS: usize = 2;
 pub const REQUESTS_LABEL_NAMES: [&str; REQUESTS_NUM_LABELS] = [LABEL_REQUEST_TYPE, LABEL_STATUS];
 
@@ -97,7 +103,7 @@ impl HttpHandlerMetrics {
                 "HTTP connection durations, by closing status and protocol (HTTP/HTTPS).",
                 // 10ms, 20ms, ... 50000s
                 decimal_buckets(-2, 4),
-                &[LABEL_STATUS, LABEL_PROTOCOL],
+                &[LABEL_PROTOCOL],
             ),
         }
     }

@@ -1,8 +1,8 @@
 use super::*;
 
 use crate::{
-    neuron::types::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::Vote,
+    neuron::{DissolveStateAndAge, NeuronBuilder},
+    pb::v1::{abridged_neuron::DissolveState, Vote},
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::ProposalId;
@@ -13,7 +13,7 @@ use pretty_assertions::assert_eq;
 fn create_model_neuron(id: u64) -> Neuron {
     let controller = PrincipalId::new_user_test_id(id);
     let subaccount = Subaccount::from(&controller);
-    let mut neuron = NeuronBuilder::new(
+    NeuronBuilder::new(
         NeuronId { id },
         subaccount,
         controller,
@@ -45,8 +45,11 @@ fn create_model_neuron(id: u64) -> Neuron {
             ],
         },
     })
-    .build();
-    neuron.recent_ballots = vec![
+    .with_known_neuron_data(Some(KnownNeuronData {
+        name: "Fabulous".to_string(),
+        description: Some("Follow MeEe for max rewards!".to_string()),
+    }))
+    .with_recent_ballots(vec![
         BallotInfo {
             proposal_id: Some(ProposalId { id: 300 }),
             vote: Vote::Yes as i32,
@@ -55,12 +58,8 @@ fn create_model_neuron(id: u64) -> Neuron {
             proposal_id: Some(ProposalId { id: 301 }),
             vote: Vote::No as i32,
         },
-    ];
-    neuron.known_neuron_data = Some(KnownNeuronData {
-        name: "Fabulous".to_string(),
-        description: Some("Follow MeEe for max rewards!".to_string()),
-    });
-    neuron.transfer = Some(NeuronStakeTransfer {
+    ])
+    .with_transfer(Some(NeuronStakeTransfer {
         transfer_timestamp: 123_456_789,
         from: Some(PrincipalId::new_user_test_id(400)),
         from_subaccount: vec![4, 0x01],
@@ -68,8 +67,8 @@ fn create_model_neuron(id: u64) -> Neuron {
         neuron_stake_e8s: 403,
         block_height: 404,
         memo: 405,
-    });
-    neuron
+    }))
+    .build()
 }
 
 fn new_red_herring_neuron(seed: u64) -> Neuron {
@@ -234,18 +233,17 @@ fn test_store_simplest_nontrivial_case() {
         let mut transfer = neuron_1.transfer.clone();
         transfer.as_mut().unwrap().memo = 405_405;
 
-        Neuron {
-            cached_neuron_stake_e8s: 0xFEED, // After drink, we eat.
+        let mut neuron = neuron_1.clone();
+        neuron.cached_neuron_stake_e8s = 0xFEED; // After drink, we eat.
 
-            hot_keys,
-            followees,
-            recent_ballots,
+        neuron.hot_keys = hot_keys;
+        neuron.followees = followees;
+        neuron.recent_ballots = recent_ballots;
 
-            known_neuron_data,
-            transfer,
+        neuron.known_neuron_data = known_neuron_data;
+        neuron.transfer = transfer;
 
-            ..neuron_1.clone()
-        }
+        neuron
     };
     assert_eq!(store.update(&neuron_1, neuron_5.clone()), Ok(()));
     assert_that_red_herring_neurons_are_untouched(&store);
@@ -254,11 +252,7 @@ fn test_store_simplest_nontrivial_case() {
     assert_eq!(store.read(NeuronId { id: 42 }), Ok(neuron_5.clone()));
 
     // 7. Bad update: Neuron not found (unknown ID).
-    let non_existent_neuron = Neuron {
-        id: NeuronId { id: 0xDEAD_BEEF },
-        cached_neuron_stake_e8s: 0xBAD_F00D,
-        ..Default::default()
-    };
+    let non_existent_neuron = create_model_neuron(0xDEAD_BEEF);
     let update_result = store.update(&non_existent_neuron, non_existent_neuron.clone());
     match &update_result {
         // This is what we expected.
@@ -292,11 +286,9 @@ fn test_store_simplest_nontrivial_case() {
     }
 
     // 9. Update again.
-    let neuron_9 = Neuron {
-        known_neuron_data: None,
-        transfer: None,
-        ..neuron_5.clone()
-    };
+    let mut neuron_9 = neuron_5.clone();
+    neuron_9.known_neuron_data = None;
+    neuron_9.transfer = None;
     assert_eq!(store.update(&neuron_5, neuron_9.clone()), Ok(()));
     assert_that_red_herring_neurons_are_untouched(&store);
 
@@ -430,9 +422,7 @@ fn test_abridged_neuron_size() {
         not_for_profit: true,
         joined_community_fund_timestamp_seconds: Some(u64::MAX),
         neuron_type: Some(i32::MAX),
-        dissolve_state: Some(AbridgedNeuronDissolveState::WhenDissolvedTimestampSeconds(
-            u64::MAX,
-        )),
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(u64::MAX)),
     };
 
     assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());

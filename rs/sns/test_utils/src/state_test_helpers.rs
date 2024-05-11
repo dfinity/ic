@@ -7,7 +7,7 @@ use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResultV2,
 };
-use ic_nervous_system_common::{ExplosiveTokens, SECONDS_PER_DAY};
+use ic_nervous_system_common::{ExplosiveTokens, ONE_DAY_SECONDS};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID,
@@ -40,12 +40,16 @@ use ic_sns_swap::pb::v1::{
     NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest, OpenResponse, Params,
     RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Ticket,
 };
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_types::ingress::WasmResult;
 use icp_ledger::{
     AccountIdentifier, BlockIndex, Memo, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
+
+pub fn state_machine_builder_for_sns_tests() -> StateMachineBuilder {
+    StateMachineBuilder::new().with_current_time()
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct SnsTestCanisterIds {
@@ -741,7 +745,7 @@ pub fn open_sale(env: &StateMachine, swap_id: &CanisterId, params: Option<Params
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_secs()
-                    + 13 * SECONDS_PER_DAY,
+                    + 13 * ONE_DAY_SECONDS,
                 sns_token_e8s: 10_000_000,
                 neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
                     count: 2,

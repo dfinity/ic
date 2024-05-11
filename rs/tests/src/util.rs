@@ -15,10 +15,7 @@ use futures::FutureExt;
 use ic_agent::export::Principal;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::{
-    agent::{
-        http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, RejectCode,
-        RejectResponse,
-    },
+    agent::{http_transport::reqwest_transport::ReqwestTransport, RejectCode, RejectResponse},
     Agent, AgentError, Identity, RequestId,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
@@ -75,7 +72,7 @@ pub(crate) const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 pub(crate) const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
 
 pub(crate) const CFG_TEMPLATE_BYTES: &[u8] =
-    include_bytes!("../../../ic-os/guestos/rootfs/opt/ic/share/ic.json5.template");
+    include_bytes!("../../../ic-os/rootfs/guestos/opt/ic/share/ic.json5.template");
 
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
     ic_agent::identity::BasicIdentity::from_pem(IDENTITY_PEM.as_bytes())
@@ -790,9 +787,7 @@ pub async fn agent_with_client_identity(
     identity: impl Identity + 'static,
 ) -> Result<Agent, AgentError> {
     let a = Agent::builder()
-        .with_transport(ReqwestHttpReplicaV2Transport::create_with_client(
-            url, client,
-        )?)
+        .with_transport(ReqwestTransport::create_with_client(url, client)?)
         .with_identity(identity)
         // Ingresses are created with the system time but are checked against the consensus time.
         // Consensus time is the time that is in the last finalized block. Consensus time might lag
@@ -1363,8 +1358,8 @@ pub fn get_config() -> ConfigOptional {
         .replace("{{ replica_log_debug_overrides }}", "[]")
         .replace("{{ nns_url }}", "http://www.fakeurl.com/")
         .replace("{{ malicious_behavior }}", "null")
-        .replace("{{ query_stats_aggregation }}", "\"Disabled\"")
-        .replace("{{ query_stats_epoch_length }}", "1800");
+        .replace("{{ query_stats_aggregation }}", "\"Enabled\"")
+        .replace("{{ query_stats_epoch_length }}", "600");
 
     json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
 }

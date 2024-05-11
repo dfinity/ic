@@ -341,6 +341,7 @@ fn handle_transfer_operation(
         ingress_expiries,
         &convert::to_model_account_identifier(&from),
         &update,
+        SignatureType::from(pk.curve_type),
     );
     updates.push((RequestType::Send, update));
     Ok(())
@@ -385,6 +386,7 @@ fn handle_neuron_info(
         ingress_expiries,
         &convert::to_model_account_identifier(&account),
         &update,
+        SignatureType::from(pk.curve_type),
     );
     updates.push((
         RequestType::NeuronInfo {
@@ -435,6 +437,7 @@ fn handle_list_neurons(
         ingress_expiries,
         &convert::to_model_account_identifier(&account),
         &update,
+        SignatureType::from(pk.curve_type),
     );
     updates.push((RequestType::ListNeurons, update));
     Ok(())
@@ -526,6 +529,7 @@ fn handle_stake(
         ingress_expiries,
         &to_model_account_identifier(&account),
         &update,
+        SignatureType::from(pk.curve_type),
     );
     updates.push((RequestType::Stake { neuron_index }, update));
     Ok(())
@@ -930,6 +934,7 @@ fn add_neuron_management_payload(
         ingress_expiries,
         &convert::to_model_account_identifier(&account),
         &update,
+        SignatureType::from(pk.curve_type),
     );
 
     updates.push((request_type, update));
@@ -943,6 +948,7 @@ fn add_payloads(
     ingress_expiries: &[u64],
     account_identifier: &AccountIdentifier,
     update: &HttpCanisterUpdate,
+    signature_type: SignatureType,
 ) {
     for ingress_expiry in ingress_expiries {
         let mut update = update.clone();
@@ -952,7 +958,7 @@ fn add_payloads(
             address: None,
             account_identifier: Some(account_identifier.clone()),
             hex_bytes: hex::encode(make_sig_data(&message_id)),
-            signature_type: Some(SignatureType::Ed25519),
+            signature_type: Some(signature_type),
         };
         payloads.push(transaction_payload);
         let read_state = make_read_state_from_update(&update);
@@ -961,7 +967,7 @@ fn add_payloads(
             address: None,
             account_identifier: Some(account_identifier.clone()),
             hex_bytes: hex::encode(make_sig_data(&read_state_message_id)),
-            signature_type: Some(SignatureType::Ed25519),
+            signature_type: Some(signature_type),
         };
         payloads.push(read_state_payload);
     }

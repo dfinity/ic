@@ -30,25 +30,24 @@
 //! can be used to fetch newer CUPs. This way a node does not rely on the P2P protocol to catch up
 //! with its subnet and allows us to upgrade the protocol with breaking changes on any protocol layer.
 
-use crate::error::{OrchestratorError, OrchestratorResult};
-use crate::registry_helper::RegistryHelper;
-use ic_canister_client::Sender;
-use ic_canister_client::{Agent, HttpClient};
+use crate::{
+    error::{OrchestratorError, OrchestratorResult},
+    registry_helper::RegistryHelper,
+};
+use ic_canister_client::{Agent, HttpClient, Sender};
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_protobuf::registry::node::v1::NodeRecord;
-use ic_protobuf::types::v1 as pb;
+use ic_protobuf::{registry::node::v1::NodeRecord, types::v1 as pb};
 use ic_sys::fs::write_protobuf_using_tmp_file;
-use ic_types::NodeId;
 use ic_types::{
-    consensus::catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
-    consensus::HasHeight,
+    consensus::{
+        catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
+        HasHeight,
+    },
     crypto::*,
-    RegistryVersion, SubnetId,
+    NodeId, RegistryVersion, SubnetId,
 };
-use std::convert::TryFrom;
-use std::sync::Arc;
-use std::{fs::File, path::PathBuf};
+use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc};
 use url::Url;
 
 /// Fetches catch-up packages from peers and local storage.

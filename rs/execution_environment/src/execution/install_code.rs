@@ -11,7 +11,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{error, fatal, info, warn};
 use ic_management_canister_types::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterLog,
 };
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
@@ -37,12 +37,28 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
-/// Indicates whether to keep the old stable memory or replace it with the new
-/// (empty) stable memory.
+/// Indicates whether the memory is kept or replaced with new (initial) memory.
+/// Applicable to both the stable memory and the main memory of a canister.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum StableMemoryHandling {
+pub(crate) enum MemoryHandling {
+    /// Retain the memory.
     Keep,
+    /// Reset the memory.
     Replace,
+}
+
+/// Specifies the handling of the canister's memories.
+/// * On install and re-install:
+///   - Replace both the stable memory and the main memory.
+/// * On upgrade:
+///   - For canisters with enhanced orthogonal persistence (Motoko):
+///     Retain both the main memory and the stable memory.
+///   - For all other canisters:
+///     Retain only the stable memory and erase the main memory.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct CanisterMemoryHandling {
+    pub stable_memory_handling: MemoryHandling,
+    pub main_memory_handling: MemoryHandling,
 }
 
 /// The main steps of `install_code` execution that may fail with an error or
@@ -54,7 +70,7 @@ pub(crate) enum InstallCodeStep {
     ReplaceExecutionStateAndAllocations {
         instructions_from_compilation: NumInstructions,
         maybe_execution_state: HypervisorResult<ExecutionState>,
-        stable_memory_handling: StableMemoryHandling,
+        memory_handling: CanisterMemoryHandling,
     },
     ClearCertifiedData,
     DeactivateGlobalTimer,
@@ -207,13 +223,13 @@ impl InstallCodeHelper {
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &RoundLimits,
-    ) -> Result<Self, (CanisterManagerError, NumInstructions)> {
+    ) -> Result<Self, (CanisterManagerError, NumInstructions, CanisterLog)> {
         let mut helper = Self::new(clean_canister, original);
         let paused_instructions_left = paused.instructions_left;
         for state_change in paused.steps.into_iter() {
             helper
                 .replay_step(state_change, original, round, round_limits)
-                .map_err(|err| (err, paused_instructions_left))?;
+                .map_err(|err| (err, paused_instructions_left, helper.take_canister_log()))?;
         }
         assert_eq!(paused_instructions_left, helper.instructions_left());
         Ok(helper)
@@ -298,6 +314,7 @@ impl InstallCodeHelper {
                         original,
                         round,
                         err,
+                        self.take_canister_log(),
                     );
                 }
             }
@@ -323,6 +340,7 @@ impl InstallCodeHelper {
                     original,
                     round,
                     err,
+                    self.take_canister_log(),
                 );
             }
         }
@@ -366,6 +384,7 @@ impl InstallCodeHelper {
                         original,
                         round,
                         err,
+                        self.take_canister_log(),
                     );
                 }
             }
@@ -388,6 +407,7 @@ impl InstallCodeHelper {
                         requested: new_compute_allocation,
                         available: available.max(old_compute_allocation.as_percent()),
                     },
+                    self.take_canister_log(),
                 );
             }
             round_limits.compute_allocation_used = others + new_compute_allocation.as_percent();
@@ -424,6 +444,10 @@ impl InstallCodeHelper {
                 self.total_heap_delta.get() as usize / PAGE_SIZE,
                 instructions_used,
             );
+        }
+
+        if original.mode == CanisterInstallModeV2::Reinstall {
+            self.canister.clear_log();
         }
 
         DtsInstallCodeResult::Finished {
@@ -500,8 +524,8 @@ impl InstallCodeHelper {
     }
 
     /// Replaces the execution state of the current canister with the freshly
-    /// created execution state. The stable memory is conditionally replaced
-    /// based on the given `stable_memory_handling`.
+    /// created execution state. The stable memory and the main memory are
+    /// conditionally replaced based on the given `memory_handling`.
     ///
     /// It also updates the compute and memory allocations with the requested
     /// values in `original` context.
@@ -509,14 +533,14 @@ impl InstallCodeHelper {
         &mut self,
         instructions_from_compilation: NumInstructions,
         maybe_execution_state: HypervisorResult<ExecutionState>,
-        stable_memory_handling: StableMemoryHandling,
+        memory_handling: CanisterMemoryHandling,
         original: &OriginalContext,
     ) -> Result<(), CanisterManagerError> {
         self.steps
             .push(InstallCodeStep::ReplaceExecutionStateAndAllocations {
                 instructions_from_compilation,
                 maybe_execution_state: maybe_execution_state.clone(),
-                stable_memory_handling,
+                memory_handling,
             });
 
         self.reduce_instructions_by(instructions_from_compilation);
@@ -536,13 +560,17 @@ impl InstallCodeHelper {
 
         let new_wasm_custom_sections_memory_used = execution_state.metadata.memory_usage();
 
-        execution_state.stable_memory =
-            match (stable_memory_handling, self.canister.execution_state.take()) {
-                (StableMemoryHandling::Keep, Some(old)) => old.stable_memory,
-                (StableMemoryHandling::Keep, None) | (StableMemoryHandling::Replace, _) => {
-                    execution_state.stable_memory
-                }
-            };
+        if let Some(old) = self.canister.execution_state.take() {
+            match memory_handling.stable_memory_handling {
+                MemoryHandling::Keep => execution_state.stable_memory = old.stable_memory,
+                MemoryHandling::Replace => {}
+            }
+            match memory_handling.main_memory_handling {
+                MemoryHandling::Keep => execution_state.wasm_memory = old.wasm_memory,
+                MemoryHandling::Replace => {}
+            }
+        };
+
         self.canister.execution_state = Some(execution_state);
 
         // Update the compute allocation.
@@ -616,6 +644,11 @@ impl InstallCodeHelper {
         }
     }
 
+    /// Takes the canister log.
+    pub(crate) fn take_canister_log(&mut self) -> CanisterLog {
+        std::mem::take(&mut self.canister.system_state.canister_log)
+    }
+
     /// Checks the result of Wasm execution and applies the state changes.
     ///
     /// Returns the amount of instructions consumed along with the result of
@@ -623,10 +656,14 @@ impl InstallCodeHelper {
     pub fn handle_wasm_execution(
         &mut self,
         canister_state_changes: Option<CanisterStateChanges>,
-        output: WasmExecutionOutput,
+        mut output: WasmExecutionOutput,
         original: &OriginalContext,
         round: &RoundContext,
     ) -> (NumInstructions, Result<(), CanisterManagerError>) {
+        self.canister
+            .system_state
+            .canister_log
+            .append(&mut output.canister_log);
         self.steps.push(InstallCodeStep::HandleWasmExecution {
             canister_state_changes: canister_state_changes.clone(),
             output: output.clone(),
@@ -748,11 +785,11 @@ impl InstallCodeHelper {
             InstallCodeStep::ReplaceExecutionStateAndAllocations {
                 instructions_from_compilation,
                 maybe_execution_state,
-                stable_memory_handling,
+                memory_handling,
             } => self.replace_execution_state_and_allocations(
                 instructions_from_compilation,
                 maybe_execution_state,
-                stable_memory_handling,
+                memory_handling,
                 original,
             ),
             InstallCodeStep::ClearCertifiedData => {
@@ -846,18 +883,22 @@ pub(crate) fn canister_layout(
         .expect("failed to obtain canister layout")
 }
 
-/// Finishes an `install_code` execution early due to an error. The only state
-/// change that is applied to the clean canister state is refunding the prepaid
-/// execution cycles.
+/// Finishes an `install_code` execution early due to an error.
+///
+/// The only state changes applied to the clean canister state:
+///  - saving the new canister log
+///  - refunding the prepaid execution cycles
 pub(crate) fn finish_err(
     clean_canister: CanisterState,
     instructions_left: NumInstructions,
     original: OriginalContext,
     round: RoundContext,
     err: CanisterManagerError,
+    new_canister_log: CanisterLog,
 ) -> DtsInstallCodeResult {
     let mut new_canister = clean_canister;
 
+    new_canister.set_log(new_canister_log);
     new_canister
         .system_state
         .apply_ingress_induction_cycles_debit(

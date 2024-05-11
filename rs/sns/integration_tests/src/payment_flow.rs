@@ -2,7 +2,7 @@ use candid::{Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::{InitArgs as Icrc1InitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nns_test_utils::state_test_helpers::icrc1_transfer;
 use ic_sns_swap::{
     pb::v1::{
@@ -15,6 +15,7 @@ use ic_sns_swap::{
 use ic_sns_test_utils::state_test_helpers::{
     get_buyer_state, get_buyers_total, get_lifecycle, get_open_ticket, get_sns_sale_parameters,
     new_sale_ticket, notify_payment_failure, refresh_buyer_tokens,
+    state_machine_builder_for_sns_tests,
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
@@ -69,7 +70,7 @@ impl PaymentProtocolTestSetup {
     /// If no specific initialization arguments need to be used for a test, the default versions can be used by parsing None
     /// for all init args.
     pub fn default_setup() -> Self {
-        let state_machine = StateMachine::new();
+        let state_machine = state_machine_builder_for_sns_tests().build();
         let icp_ledger_id = state_machine.create_canister(None);
         let sns_ledger_id = state_machine.create_canister(None);
         let swap_id = state_machine.create_canister(None);
@@ -171,12 +172,13 @@ impl PaymentProtocolTestSetup {
             sns_token_e8s: Some(10_000_000),
             swap_start_timestamp_seconds: Some(0),
             swap_due_timestamp_seconds: Some(
-                StateMachine::new()
+                state_machine_builder_for_sns_tests()
+                    .build()
                     .time()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_secs()
-                    + 13 * SECONDS_PER_DAY,
+                    + 13 * ONE_DAY_SECONDS,
             ),
             neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
                 count: 2,

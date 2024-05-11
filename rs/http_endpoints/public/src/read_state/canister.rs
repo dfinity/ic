@@ -3,7 +3,7 @@ use crate::{
     common::{into_cbor, Cbor},
     state_reader_executor::StateReaderExecutor,
     validator_executor::ValidatorExecutor,
-    verify_cbor_content_header, HttpError, ReplicaHealthStatus,
+    HttpError, ReplicaHealthStatus,
 };
 
 use axum::{
@@ -12,7 +12,6 @@ use axum::{
     response::{IntoResponse, Response},
     Router,
 };
-use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
@@ -26,8 +25,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadStateContent, HttpReadStateResponse,
-        HttpRequest, HttpRequestEnvelope, MessageId, ReadState, SignedRequestBytes,
-        EXPECTED_MESSAGE_ID_LENGTH,
+        HttpRequest, HttpRequestEnvelope, MessageId, ReadState, EXPECTED_MESSAGE_ID_LENGTH,
     },
     CanisterId, PrincipalId, UserId,
 };
@@ -117,11 +115,7 @@ impl CanisterReadStateServiceBuilder {
             CanisterReadStateService::route(),
             axum::routing::post(canister_read_state)
                 .with_state(state)
-                .layer(
-                    ServiceBuilder::new()
-                        .layer(DefaultBodyLimit::disable())
-                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
-                ),
+                .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
         )
     }
 
@@ -140,29 +134,18 @@ pub(crate) async fn canister_read_state(
         validator_executor,
         registry_client,
     }): State<CanisterReadStateService>,
-    body: Bytes,
+    Cbor(request): Cbor<HttpRequestEnvelope<HttpReadStateContent>>,
 ) -> impl IntoResponse {
     if health_status.load() != ReplicaHealthStatus::Healthy {
         let status = StatusCode::SERVICE_UNAVAILABLE;
         let text = format!(
-            "Replica is unhealthy: {}. Check the /api/v2/status for more information.",
+            "Replica is unhealthy: {:?}. Check the /api/v2/status for more information.",
             health_status.load(),
         );
         return (status, text).into_response();
     }
 
     let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
-
-    let request = match <HttpRequestEnvelope<HttpReadStateContent>>::try_from(
-        &SignedRequestBytes::from(body.to_vec()),
-    ) {
-        Ok(request) => request,
-        Err(e) => {
-            let status = StatusCode::BAD_REQUEST;
-            let text = format!("Could not parse body as read request: {}", e);
-            return (status, text).into_response();
-        }
-    };
 
     // Convert the message to a strongly-typed struct.
     let request = match HttpRequest::<ReadState>::try_from(request) {

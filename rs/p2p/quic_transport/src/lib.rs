@@ -53,6 +53,7 @@ use phantom_newtype::AmountOf;
 use quinn::AsyncUdpSocket;
 use tokio::sync::watch;
 use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker};
+use tracing::instrument;
 
 use crate::connection_handle::ConnectionHandle;
 use crate::connection_manager::start_connection_manager;
@@ -183,6 +184,7 @@ impl QuicTransport {
 
 #[async_trait]
 impl Transport for QuicTransport {
+    #[instrument(skip(self, request))]
     async fn rpc(
         &self,
         peer_id: &NodeId,
@@ -192,6 +194,7 @@ impl Transport for QuicTransport {
         peer.rpc(request).await
     }
 
+    #[instrument(skip(self, request))]
     async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), anyhow::Error> {
         let peer = self.get_conn_handle(peer_id)?;
         peer.push(request).await

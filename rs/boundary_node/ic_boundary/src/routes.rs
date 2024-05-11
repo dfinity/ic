@@ -120,6 +120,7 @@ pub enum RequestType {
 pub enum RateLimitCause {
     Normal,
     LedgerTransfer,
+    Bouncer,
 }
 
 // Categorized possible causes for request processing failures

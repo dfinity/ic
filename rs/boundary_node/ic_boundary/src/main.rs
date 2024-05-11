@@ -5,6 +5,7 @@ use jemallocator::Jemalloc;
 use crate::cli::Cli;
 
 mod acme;
+mod bouncer;
 mod cache;
 mod check;
 mod cli;

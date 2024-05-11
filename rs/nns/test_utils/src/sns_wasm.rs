@@ -27,7 +27,7 @@ use ic_sns_wasm::pb::v1::{
     SnsWasm, UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
 };
 use ic_state_machine_tests::StateMachine;
-use maplit::{btreemap, hashmap};
+use maplit::btreemap;
 use std::{
     collections::{BTreeMap, HashMap},
     io::{Read, Write},
@@ -41,6 +41,7 @@ pub fn test_wasm(canister_type: SnsCanisterType, modify_with: Option<u8>) -> Sns
         &SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_type: canister_type.into(),
+            ..SnsWasm::default()
         },
         Some(&id_byte.to_string()),
     )
@@ -90,12 +91,24 @@ pub fn add_wasm(
 }
 
 /// Make add_wasm request to a canister in the StateMachine
-pub fn add_wasm_via_proposal(env: &StateMachine, wasm: SnsWasm) {
-    let proposal_id = add_wasm_via_proposal_and_return_immediately(env, wasm);
+/// Returns the `SnsWasm` that will be stored in SNS-W. Should normally be used
+/// like this:
+/// ```
+/// let wasm = add_wasm_via_proposal(&state_machine, wasm);
+/// ```
+/// NOT like this:
+/// ```
+/// add_wasm_via_proposal(&state_machine, wasm.clone());
+/// ```
+pub fn add_wasm_via_proposal(env: &StateMachine, wasm: SnsWasm) -> SnsWasm {
+    let wasm = add_wasm_via_proposal_and_return_immediately(env, wasm.clone());
+    let proposal_id = ProposalId(wasm.proposal_id.unwrap());
 
     while get_proposal_info(env, proposal_id).unwrap().status == (ProposalStatus::Open as i32) {
         std::thread::sleep(Duration::from_millis(100));
     }
+
+    wasm
 }
 
 /// Insert custom upgrade path entries into SNs-W
@@ -124,14 +137,11 @@ pub fn insert_upgrade_path_entries_via_proposal(
 }
 
 /// Make add_wasm request to a canister in the StateMachine
-pub fn add_wasm_via_proposal_and_return_immediately(
-    env: &StateMachine,
-    wasm: SnsWasm,
-) -> ProposalId {
+pub fn add_wasm_via_proposal_and_return_immediately(env: &StateMachine, wasm: SnsWasm) -> SnsWasm {
     let hash = wasm.sha256_hash();
     let payload = AddWasmRequest {
         hash: hash.to_vec(),
-        wasm: Some(wasm),
+        wasm: Some(wasm.clone()),
     };
 
     let proposal = Proposal {
@@ -144,7 +154,11 @@ pub fn add_wasm_via_proposal_and_return_immediately(
         })),
     };
 
-    make_proposal_with_test_neuron_1(env, proposal)
+    let proposal_id = make_proposal_with_test_neuron_1(env, proposal);
+    SnsWasm {
+        proposal_id: Some(proposal_id.0),
+        ..wasm
+    }
 }
 
 /// Make a proposal with test_neuron_1
@@ -301,22 +315,22 @@ pub fn add_dummy_wasms_to_sns_wasms(
 ) -> BTreeMap<SnsCanisterType, SnsWasm> {
     let delta = group_number.unwrap_or(0) * 6;
     let root_wasm = test_wasm(SnsCanisterType::Root, Some(delta));
-    add_wasm_via_proposal(machine, root_wasm.clone());
+    let root_wasm = add_wasm_via_proposal(machine, root_wasm);
 
     let gov_wasm = test_wasm(SnsCanisterType::Governance, Some(delta + 1));
-    add_wasm_via_proposal(machine, gov_wasm.clone());
+    let gov_wasm = add_wasm_via_proposal(machine, gov_wasm);
 
     let ledger_wasm = test_wasm(SnsCanisterType::Ledger, Some(delta + 2));
-    add_wasm_via_proposal(machine, ledger_wasm.clone());
+    let ledger_wasm = add_wasm_via_proposal(machine, ledger_wasm);
 
     let swap_wasm = test_wasm(SnsCanisterType::Swap, Some(delta + 3));
-    add_wasm_via_proposal(machine, swap_wasm.clone());
+    let swap_wasm = add_wasm_via_proposal(machine, swap_wasm);
 
     let archive_wasm = test_wasm(SnsCanisterType::Archive, Some(delta + 4));
-    add_wasm_via_proposal(machine, archive_wasm.clone());
+    let archive_wasm = add_wasm_via_proposal(machine, archive_wasm);
 
     let index_wasm = test_wasm(SnsCanisterType::Index, Some(delta + 5));
-    add_wasm_via_proposal(machine, index_wasm.clone());
+    let index_wasm = add_wasm_via_proposal(machine, index_wasm);
 
     btreemap! {
         SnsCanisterType::Root => root_wasm,
@@ -393,34 +407,34 @@ fn add_freshly_built_sns_wasms_and_return_immediately(
     filter_wasm: impl Fn(SnsWasm) -> SnsWasm,
 ) -> HashMap<SnsCanisterType, (ProposalId, SnsWasm)> {
     let root_wasm = filter_wasm(build_root_sns_wasm());
-    let root_proposal_id = add_wasm_via_proposal_and_return_immediately(machine, root_wasm.clone());
+    let root_wasm = add_wasm_via_proposal_and_return_immediately(machine, root_wasm);
 
     let gov_wasm = filter_wasm(build_governance_sns_wasm());
-    let gov_proposal_id = add_wasm_via_proposal_and_return_immediately(machine, gov_wasm.clone());
+    let gov_wasm = add_wasm_via_proposal_and_return_immediately(machine, gov_wasm);
 
     let ledger_wasm = filter_wasm(build_ledger_sns_wasm());
-    let ledger_proposal_id =
-        add_wasm_via_proposal_and_return_immediately(machine, ledger_wasm.clone());
+    let ledger_wasm = add_wasm_via_proposal_and_return_immediately(machine, ledger_wasm);
 
     let swap_wasm = filter_wasm(build_swap_sns_wasm());
-    let swap_proposal_id = add_wasm_via_proposal_and_return_immediately(machine, swap_wasm.clone());
+    let swap_wasm = add_wasm_via_proposal_and_return_immediately(machine, swap_wasm);
 
     let archive_wasm = filter_wasm(build_archive_sns_wasm());
-    let archive_proposal_id =
-        add_wasm_via_proposal_and_return_immediately(machine, archive_wasm.clone());
+    let archive_wasm = add_wasm_via_proposal_and_return_immediately(machine, archive_wasm);
 
     let index_ng_wasm = filter_wasm(build_index_ng_sns_wasm());
-    let index_proposal_id =
-        add_wasm_via_proposal_and_return_immediately(machine, index_ng_wasm.clone());
+    let index_ng_wasm = add_wasm_via_proposal_and_return_immediately(machine, index_ng_wasm);
 
-    hashmap! {
-        SnsCanisterType::Root => (root_proposal_id, root_wasm),
-        SnsCanisterType::Governance => (gov_proposal_id, gov_wasm),
-        SnsCanisterType::Ledger => (ledger_proposal_id, ledger_wasm),
-        SnsCanisterType::Swap => (swap_proposal_id, swap_wasm),
-        SnsCanisterType::Archive => (archive_proposal_id, archive_wasm),
-        SnsCanisterType::Index => (index_proposal_id, index_ng_wasm),
-    }
+    [
+        (SnsCanisterType::Root, root_wasm),
+        (SnsCanisterType::Governance, gov_wasm),
+        (SnsCanisterType::Ledger, ledger_wasm),
+        (SnsCanisterType::Swap, swap_wasm),
+        (SnsCanisterType::Archive, archive_wasm),
+        (SnsCanisterType::Index, index_ng_wasm),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k, (ProposalId(v.proposal_id.unwrap()), v)))
+    .collect()
 }
 
 /// Builds the mainnet SnsWasm for the root canister.
@@ -429,6 +443,7 @@ pub fn build_mainnet_root_sns_wasm() -> SnsWasm {
     SnsWasm {
         wasm: root_wasm.bytes(),
         canister_type: SnsCanisterType::Root.into(),
+        ..SnsWasm::default()
     }
 }
 
@@ -438,6 +453,7 @@ pub fn build_root_sns_wasm() -> SnsWasm {
     SnsWasm {
         wasm: root_wasm.bytes(),
         canister_type: SnsCanisterType::Root.into(),
+        ..SnsWasm::default()
     }
 }
 
@@ -447,6 +463,7 @@ pub fn build_mainnet_governance_sns_wasm() -> SnsWasm {
     SnsWasm {
         wasm: governance_wasm.bytes(),
         canister_type: SnsCanisterType::Governance.into(),
+        ..SnsWasm::default()
     }
 }
 
@@ -456,6 +473,7 @@ pub fn build_governance_sns_wasm() -> SnsWasm {
     SnsWasm {
         wasm: governance_wasm.bytes(),
         canister_type: SnsCanisterType::Governance.into(),
+        ..SnsWasm::default()
     }
 }
 
@@ -465,6 +483,7 @@ pub fn build_mainnet_swap_sns_wasm() -> SnsWasm {
     SnsWasm {
         wasm: swap_wasm.bytes(),
         canister_type: SnsCanisterType::Swap.into(),
+        ..SnsWasm::default()
     }
 }
 
@@ -474,6 +493,7 @@ pub fn build_swap_sns_wasm() -> SnsWasm {
     SnsWasm {
         wasm: swap_wasm.bytes(),
         canister_type: SnsCanisterType::Swap.into(),
+        ..SnsWasm::default()
     }
 }
 
@@ -483,6 +503,7 @@ pub fn build_mainnet_ledger_sns_wasm() -> SnsWasm {
     SnsWasm {
         wasm: ledger_wasm.bytes(),
         canister_type: SnsCanisterType::Ledger.into(),
+        ..SnsWasm::default()
     }
 }
 
@@ -492,6 +513,7 @@ pub fn build_ledger_sns_wasm() -> SnsWasm {
     SnsWasm {
         wasm: ledger_wasm.bytes(),
         canister_type: SnsCanisterType::Ledger.into(),
+        ..SnsWasm::default()
     }
 }
 
@@ -501,6 +523,7 @@ pub fn build_mainnet_archive_sns_wasm() -> SnsWasm {
     SnsWasm {
         wasm: archive_wasm.bytes(),
         canister_type: SnsCanisterType::Archive.into(),
+        ..SnsWasm::default()
     }
 }
 
@@ -510,6 +533,7 @@ pub fn build_archive_sns_wasm() -> SnsWasm {
     SnsWasm {
         wasm: archive_wasm.bytes(),
         canister_type: SnsCanisterType::Archive.into(),
+        ..SnsWasm::default()
     }
 }
 
@@ -519,6 +543,7 @@ pub fn build_index_ng_sns_wasm() -> SnsWasm {
     SnsWasm {
         wasm: index_wasm.bytes(),
         canister_type: SnsCanisterType::Index.into(),
+        ..SnsWasm::default()
     }
 }
 
@@ -528,6 +553,7 @@ pub fn build_mainnet_index_ng_sns_wasm() -> SnsWasm {
     SnsWasm {
         wasm: index_wasm.bytes(),
         canister_type: SnsCanisterType::Index.into(),
+        ..SnsWasm::default()
     }
 }
 
@@ -551,6 +577,7 @@ pub fn create_modified_sns_wasm(original_wasm: &SnsWasm, modify_with: Option<&st
     let mut sns_wasm_to_add = SnsWasm {
         wasm: wasm_to_add,
         canister_type: original_wasm.canister_type,
+        ..SnsWasm::default()
     };
 
     if originally_gzipped {

@@ -1,14 +1,22 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::HashSet,
+    pin::{pin, Pin},
+    sync::Arc,
+    task::Poll,
+};
 
 use anyhow::Context;
 use axum::{
-    body::{Body, StreamBody},
-    extract::{Query, State},
+    body::{Body, HttpBody},
+    extract::{Query, Request, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use bytes::Bytes;
+use futures_util::Stream;
 use itertools::{concat, Itertools};
-use reqwest::{Method, Request};
+use reqwest::Method;
+use sync_wrapper::SyncWrapper;
 use url::Url;
 
 use crate::client::HttpClient;
@@ -43,7 +51,7 @@ pub(crate) async fn entries(
         c,  // http_client
     )): State<(Url, HashSet<String>, Arc<dyn HttpClient>)>,
     Query(params): Query<Vec<(String, String)>>,
-    req: http::Request<Body>,
+    req: Request<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Validate request
     let (ps_us, ps_other) =
@@ -92,11 +100,12 @@ pub(crate) async fn entries(
     });
 
     let (parts, body) = req.into_parts();
+    let body_stream = BodyDataStream::new(body);
 
-    let mut upstream_req = Request::new(Method::GET, u);
+    let mut upstream_req = reqwest::Request::new(Method::GET, u);
 
     *upstream_req.headers_mut() = parts.headers;
-    *upstream_req.body_mut() = Some(body.into());
+    *upstream_req.body_mut() = Some(reqwest::Body::wrap_stream(body_stream));
 
     // Send request to upstream
     let resp = c
@@ -123,8 +132,42 @@ pub(crate) async fn entries(
 
     // Body
     let resp = b
-        .body(StreamBody::from(resp.bytes_stream()))
+        .body(Body::from_stream(resp.bytes_stream()))
         .context("failed to set response body")?;
 
     Ok(resp)
+}
+
+/// Wrapper used for conversion from an Axum Body to a Reqwest one
+pub struct BodyDataStream {
+    inner: SyncWrapper<Body>,
+}
+
+impl BodyDataStream {
+    pub const fn new(body: Body) -> Self {
+        Self {
+            inner: SyncWrapper::new(body),
+        }
+    }
+}
+
+impl Stream for BodyDataStream {
+    type Item = Result<Bytes, anyhow::Error>;
+
+    #[inline]
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        loop {
+            let mut pinned = pin!(self.inner.get_mut());
+            match futures_util::ready!(pinned.as_mut().poll_frame(cx)?) {
+                Some(frame) => match frame.into_data() {
+                    Ok(data) => return Poll::Ready(Some(Ok(data))),
+                    Err(_frame) => {}
+                },
+                None => return Poll::Ready(None),
+            }
+        }
+    }
 }

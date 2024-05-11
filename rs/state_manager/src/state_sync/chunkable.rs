@@ -1572,8 +1572,4 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
             }
         }
     }
-
-    fn completed(&self) -> bool {
-        matches!(self.state, DownloadState::Complete)
-    }
 }

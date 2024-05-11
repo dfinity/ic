@@ -2,13 +2,13 @@ use candid::{Decode, Encode, Nat, Principal};
 use canister_test::{CanisterInstallMode, Wasm};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     self, ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
     init::TEST_NEURON_1_ID,
@@ -23,8 +23,8 @@ use ic_nns_test_utils::{
     common::{
         build_governance_wasm, build_ledger_wasm, build_lifeline_wasm,
         build_mainnet_governance_wasm, build_mainnet_ledger_wasm, build_mainnet_lifeline_wasm,
-        build_mainnet_root_wasm, build_mainnet_sns_wasms_wasm, build_root_wasm,
-        build_sns_wasms_wasm, NnsInitPayloadsBuilder,
+        build_mainnet_registry_wasm, build_mainnet_root_wasm, build_mainnet_sns_wasms_wasm,
+        build_registry_wasm, build_root_wasm, build_sns_wasms_wasm, NnsInitPayloadsBuilder,
     },
     governance::UpgradeRootProposal,
     sns_wasm::{
@@ -35,6 +35,7 @@ use ic_nns_test_utils::{
         build_swap_sns_wasm, ensure_sns_wasm_gzipped,
     },
 };
+use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_sns_governance::pb::v1::{self as sns_pb, governance::Version};
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_swap::pb::v1::{
@@ -98,7 +99,7 @@ pub fn pocket_ic_for_sns_tests_with_mainnet_versions() -> PocketIc {
 
     // Install the (mainnet) NNS canisters.
     let with_mainnet_nns_canisters = true;
-    install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters);
+    install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None);
 
     // Publish (mainnet) SNS Wasms to SNS-W.
     let with_mainnet_sns_wasms = true;
@@ -223,12 +224,12 @@ pub fn add_wasms_to_sns_wasm(
 /// Installs the NNS canisters, ensuring that there is a whale neuron with `TEST_NEURON_1_ID`.
 ///
 /// Arguments
-/// 1. `initial_balances` is a `Vec` of `(test_user_icp_ledger_account,
+/// 1. `with_mainnet_nns_canister_versions` is a flag indicating whether the mainnet
+///    (or, therwise, tip-of-this-branch) WASM versions should be installed.
+/// 2. `initial_balances` is a `Vec` of `(test_user_icp_ledger_account,
 ///    test_user_icp_ledger_initial_balance)` pairs, representing some initial ICP balances.
-/// 2. `with_mainnet_ledger_wasms` is a flag indicating whether the mainnet (or tip-of-this-branch)
-///    WASM versions should be installed for the (Index, Ledger, Archive)  canisters.
-/// 3. `with_mainnet_sns_wasm_wasm` is a flag indicating whether the mainnet (or tip-of-this-branch)
-///     WASM versions should be installed for the SNS-W canister.
+/// 3. `custom_initial_registry_mutations` are custom mutations for the inital Registry. These
+///    should mutations should comply with Registry invariants, otherwise this function will fail.
 ///
 /// Returns
 /// 1. A list of `controller_principal_id`s of pre-configured NNS neurons.
@@ -236,6 +237,7 @@ pub fn install_nns_canisters(
     pocket_ic: &PocketIc,
     initial_balances: Vec<(AccountIdentifier, Tokens)>,
     with_mainnet_nns_canister_versions: bool,
+    custom_initial_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
 ) -> Vec<PrincipalId> {
     let topology = pocket_ic.topology();
 
@@ -243,9 +245,15 @@ pub fn install_nns_canisters(
     let sns_subnet_id = PrincipalId::from(sns_subnet_id);
     let sns_subnet_id = SubnetId::from(sns_subnet_id);
     println!("sns_subnet_id = {:?}", sns_subnet_id);
+
     let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
+
+    if let Some(custom_initial_registry_mutations) = custom_initial_registry_mutations {
+        nns_init_payload_builder.with_initial_mutations(custom_initial_registry_mutations);
+    } else {
+        nns_init_payload_builder.with_initial_invariant_compliant_mutations();
+    }
     nns_init_payload_builder
-        .with_initial_invariant_compliant_mutations()
         .with_test_neurons_fund_neurons(1_500_000 * E8)
         .with_sns_dedicated_subnets(vec![sns_subnet_id])
         .with_sns_wasm_access_controls(true);
@@ -259,7 +267,7 @@ pub fn install_nns_canisters(
 
     let nns_init_payload = nns_init_payload_builder.build();
 
-    let (governance_wasm, ledger_wasm, root_wasm, lifeline_wasm, sns_wasm_wasm) =
+    let (governance_wasm, ledger_wasm, root_wasm, lifeline_wasm, sns_wasm_wasm, registry_wasm) =
         if with_mainnet_nns_canister_versions {
             (
                 build_mainnet_governance_wasm(),
@@ -267,6 +275,7 @@ pub fn install_nns_canisters(
                 build_mainnet_root_wasm(),
                 build_mainnet_lifeline_wasm(),
                 build_mainnet_sns_wasms_wasm(),
+                build_mainnet_registry_wasm(),
             )
         } else {
             (
@@ -275,6 +284,7 @@ pub fn install_nns_canisters(
                 build_root_wasm(),
                 build_lifeline_wasm(),
                 build_sns_wasms_wasm(),
+                build_registry_wasm(),
             )
         };
 
@@ -316,6 +326,14 @@ pub fn install_nns_canisters(
         SNS_WASM_CANISTER_ID,
         Encode!(&nns_init_payload.sns_wasms).unwrap(),
         sns_wasm_wasm,
+        Some(ROOT_CANISTER_ID.get()),
+    );
+    install_canister(
+        pocket_ic,
+        "Registry",
+        REGISTRY_CANISTER_ID,
+        Encode!(&nns_init_payload.registry).unwrap(),
+        registry_wasm,
         Some(ROOT_CANISTER_ID.get()),
     );
 
@@ -537,6 +555,8 @@ pub fn upgrade_nns_canister_to_tip_of_master_or_panic(
         (build_root_wasm(), LIFELINE_CANISTER_ID.get(), "NNS Root")
     } else if canister_id == SNS_WASM_CANISTER_ID {
         (build_sns_wasms_wasm(), ROOT_CANISTER_ID.get(), "SNS-W")
+    } else if canister_id == REGISTRY_CANISTER_ID {
+        (build_registry_wasm(), ROOT_CANISTER_ID.get(), "Registry")
     } else {
         panic!("ID {} does not identify a known NNS canister.", canister_id);
     };
@@ -1346,7 +1366,7 @@ pub mod sns {
             );
         }
 
-        fn get_proposal(
+        pub fn get_proposal(
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
             proposal_id: sns_pb::ProposalId,
@@ -1409,7 +1429,7 @@ pub mod sns {
                 .iter()
                 .find(|neuron| {
                     neuron.dissolve_delay_seconds(neuron.created_timestamp_seconds)
-                        >= 6 * 30 * SECONDS_PER_DAY
+                        >= 6 * 30 * ONE_DAY_SECONDS
                 })
                 .map(|sns_neuron| {
                     (

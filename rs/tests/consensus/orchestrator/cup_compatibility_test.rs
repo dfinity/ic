@@ -32,9 +32,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// TODO: Replace with testnet/mainnet_revisions.json dependency once
-/// exhaustive unit test is part of mainnet version.
-const MAINNET_VERSION: &str = "e622d038043a21636311b04f2bb26cd0310d1d31";
+const SANITY_CHECK_ARTIFACTS_COUNT: usize = 88;
 
 #[derive(PartialEq)]
 enum Action {
@@ -106,7 +104,7 @@ and the custom `ExhaustiveSet` implementation is removed at the same time.
 ///    g-zipped archives, and make them executable.
 /// 2. There is a way to automatically update the version of this dependency,
 ///    Ideally such that it is in sync with testnet/mainnet_revisions.json
-fn download_mainnet_binary(log: &Logger, target_dir: &Path) -> PathBuf {
+fn download_mainnet_binary(version: String, log: &Logger, target_dir: &Path) -> PathBuf {
     block_on(retry_with_msg_async!(
         "download mainnet binary",
         log,
@@ -115,7 +113,7 @@ fn download_mainnet_binary(log: &Logger, target_dir: &Path) -> PathBuf {
         || async {
             Ok(download_binary(
                 log,
-                ReplicaVersion::try_from(MAINNET_VERSION).unwrap(),
+                ReplicaVersion::try_from(version.clone()).unwrap(),
                 "types-test".into(),
                 target_dir,
             )
@@ -128,18 +126,27 @@ fn download_mainnet_binary(log: &Logger, target_dir: &Path) -> PathBuf {
 fn test(env: TestEnv) {
     let log = env.logger();
 
+    let mainnet_version = env
+        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
+        .expect("mainnet IC version");
+    info!(log, "Continuing with mainnet version {mainnet_version}");
+
     let output_dir = PathBuf::from("cup_compatibility_test");
     let branch_test = env.get_dependency_path("rs/tests/cup_compatibility/binaries/types_test");
     let tmp_dir = tempfile::tempdir().unwrap();
-    let mainnet_test = download_mainnet_binary(&log, tmp_dir.path());
+    let mainnet_test = download_mainnet_binary(mainnet_version, &log, tmp_dir.path());
 
     info!(log, "Creating artifacts with mainnet version...");
     call_unit_test(&log, &mainnet_test, Action::Serialize);
 
     let created_artifacts = fs::read_dir(&output_dir).unwrap().count();
     info!(log, "{created_artifacts} artifacts created.");
-    assert!(created_artifacts >= 150, "Not enough artifacts created");
-
+    assert!(
+        created_artifacts >= SANITY_CHECK_ARTIFACTS_COUNT,
+        "Not enough artifacts created. This is just a sanity check. \
+        If it's expected that the number of artifacts decreases, \
+        please adjust `SANITY_CHECK_ARTIFACTS_COUNT`."
+    );
     info!(
         log,
         "Deserializing mainnet artifacts with branch version..."
@@ -154,7 +161,12 @@ fn test(env: TestEnv) {
 
     let created_artifacts = fs::read_dir(output_dir).unwrap().count();
     info!(log, "{created_artifacts} artifacts created.");
-    assert!(created_artifacts >= 150, "Not enough artifacts created");
+    assert!(
+        created_artifacts >= SANITY_CHECK_ARTIFACTS_COUNT,
+        "Not enough artifacts created. This is just a sanity check. \
+        If it's expected that the number of artifacts decreases, \
+        please adjust `SANITY_CHECK_ARTIFACTS_COUNT`."
+    );
 
     info!(
         log,

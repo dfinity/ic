@@ -2,6 +2,7 @@ mod checkpoint;
 pub mod int_map;
 mod page_allocator;
 pub mod storage;
+pub mod test_utils;
 
 use bit_vec::BitVec;
 pub use checkpoint::{CheckpointSerialization, MappingSerialization};
@@ -32,7 +33,7 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::ops::Range;
 use std::os::unix::io::RawFd;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 // When persisting data we expand dirty pages to an aligned bucket of given size.
@@ -55,6 +56,10 @@ pub struct StorageMetrics {
     empty_delta_writes: IntCounter,
     /// For each merge, amount of input files we merged.
     num_merged_files: Histogram,
+    /// The number of files in a shard before merging.
+    num_files_by_shard: Histogram,
+    /// The storage overhead of a shard before merging.
+    storage_overhead_by_shard: Histogram,
 }
 
 impl StorageMetrics {
@@ -94,11 +99,29 @@ impl StorageMetrics {
             linear_buckets(0.0, 1.0, 20),
         );
 
+        let num_files_by_shard = metrics_registry.histogram(
+            "storage_layer_merge_num_files_by_shard",
+            "Number of files per PageMap shard before merging.",
+            linear_buckets(0.0, 1.0, 20),
+        );
+
+        let storage_overhead_by_shard = metrics_registry.histogram(
+            "storage_layer_merge_storage_overhead_by_shard",
+            "Storage overhead per PageMap shard before merging.",
+            // Extra resolution in the 1 - 1.25 range.
+            vec![
+                0.5, 0.75, 1.0, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0,
+                3.5, 4.0, 4.5, 5.0, 6.0, 7.0,
+            ],
+        );
+
         Self {
             write_bytes,
             write_duration,
             empty_delta_writes,
             num_merged_files,
+            num_files_by_shard,
+            storage_overhead_by_shard,
         }
     }
 }
@@ -401,18 +424,12 @@ impl PageMap {
     ///
     /// Note that the file is assumed to be read-only.
     pub fn open(
-        base_file: &Path,
-        overlays: &[PathBuf],
+        storage_layout: &dyn StorageLayout,
         base_height: Height,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Result<Self, PersistenceError> {
-        let base = if base_file.exists() {
-            Some(base_file)
-        } else {
-            None
-        };
         Ok(Self {
-            storage: Storage::load(base, overlays)?,
+            storage: Storage::load(storage_layout)?,
             base_height: Some(base_height),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),

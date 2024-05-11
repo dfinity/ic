@@ -15,7 +15,6 @@ use candid::{
 };
 use cycles_minting_canister::IcpXdrConversionRate;
 use ic_base_types::PrincipalId;
-use ic_sns_swap_proto_library::pb::v1::Init as SwapInit;
 use lazy_static::lazy_static;
 use maplit::hashmap;
 use mockall::predicate;
@@ -98,27 +97,13 @@ async fn test_icps_per_sns_token_client() {
                     let request = Encode!(&GetDerivedStateRequest {}).unwrap();
 
                     let response = Encode!(&GetDerivedStateResponse {
-                        buyer_total_icp_e8s: Some(321),
+                        sns_tokens_per_icp: Some(12.34),
                         ..Default::default()
                     })
                     .unwrap();
 
                     (request, response)
                 },
-
-                "get_init" => {
-                    let request = Encode!(&GetInitRequest {}).unwrap();
-
-                    let response = Encode!(&GetInitResponse {
-                        init: Some(SwapInit {
-                            sns_token_e8s: Some(100),
-                            ..Default::default()
-                        }),
-                    })
-                    .unwrap();
-
-                    (request, response)
-                }
             })
         }
     }
@@ -191,7 +176,7 @@ async fn test_icps_per_sns_token_client() {
 
     {
         let observed = f64::try_from(observed_icps_per_sns_token).unwrap();
-        let expected = 3.21;
+        let expected = 1.0 / 12.34;
         let relative_error = (observed - expected) / expected;
         assert!(
             relative_error.abs() < 1e-9,

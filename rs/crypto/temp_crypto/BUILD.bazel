@@ -22,9 +22,9 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:rand",
+    "@crate_index//:rustls",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
-    "@crate_index//:tokio-rustls",
 ]
 
 MACRO_DEPENDENCIES = [

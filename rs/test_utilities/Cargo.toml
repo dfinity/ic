@@ -26,7 +26,6 @@ ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
-ic-interfaces-transport = { path = "../interfaces/transport" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
@@ -45,13 +44,13 @@ lazy_static = "1.4.0"
 nix = { workspace = true }
 parking_lot = "0.12.1"
 rand = "0.8"
+rustls = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
 socket2 = { workspace = true }
 tempfile = "3.1.0"
 tokio = { workspace = true }
-tokio-rustls = { workspace = true }
 wat = "1.0.52"
 tower = { workspace = true }
 

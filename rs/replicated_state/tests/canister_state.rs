@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use ic_base_types::CanisterId;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, InputQueueType, StateError};
@@ -10,8 +11,9 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     messages::{CallbackId, Request, RequestOrResponse, NO_DEADLINE},
-    time::UNIX_EPOCH,
+    time::{CoarseTime, UNIX_EPOCH},
     xnet::QueueId,
+    Time,
 };
 use std::sync::Arc;
 
@@ -187,10 +189,11 @@ fn validate_response_fails_when_unknown_callback_id() {
         fixture.push_input(response.clone()),
         Err((
             StateError::NonMatchingResponse {
-                err_str: "unknown callback id".to_string(),
+                err_str: "unknown callback ID".to_string(),
                 originator: CANISTER_ID,
                 callback_id: CallbackId::from(13),
                 respondent: OTHER_CANISTER_ID,
+                deadline: NO_DEADLINE,
             },
             response,
         ))
@@ -242,9 +245,9 @@ fn validate_responses_against_callback_details() {
     assert_eq!(
         fixture.push_input(response.clone()),
         Err((StateError::NonMatchingResponse { err_str: format!(
-            "invalid details, expected => [originator => {}, respondent => {}], but got response with",
-            CANISTER_ID, canister_b_id,
-        ), originator: response.receiver(), callback_id: callback_id_1, respondent: response.sender()}, response)),
+            "invalid details, expected => [originator => {}, respondent => {}, deadline => {}], but got response with",
+            CANISTER_ID, canister_b_id, Time::from(NO_DEADLINE)
+        ), originator: response.receiver(), callback_id: callback_id_1, respondent: response.sender(), deadline: response.deadline()}, response)),
     );
 
     // Creating valid response from canister C to this canister.
@@ -258,4 +261,75 @@ fn validate_responses_against_callback_details() {
     fixture
         .push_input(input_response_from(canister_b_id, callback_id_1))
         .unwrap();
+}
+
+#[test]
+fn validate_response_fails_with_mismatching_deadline() {
+    const CALLBACK_ID: CallbackId = CallbackId::new(CALLBACK_ID_RAW);
+    const DEADLINE_1: CoarseTime = CoarseTime::from_secs_since_unix_epoch(13);
+    const DEADLINE_2: CoarseTime = CoarseTime::from_secs_since_unix_epoch(17);
+
+    // Creates a request with the given deadline.
+    fn output_request(deadline: CoarseTime) -> Request {
+        RequestBuilder::new()
+            .sender(CANISTER_ID)
+            .receiver(OTHER_CANISTER_ID)
+            .sender_reply_callback(CALLBACK_ID)
+            .deadline(deadline)
+            .build()
+    }
+
+    // Registers a callback with `callback_deadline` and tries to push a response
+    // with `response_deadline`, returning the result.
+    fn try_push_input(
+        callback_deadline: CoarseTime,
+        response_deadline: CoarseTime,
+    ) -> Result<(), StateError> {
+        let mut fixture = CanisterFixture::running();
+
+        // Register a callback with the given `callback_deadline`.
+        register_callback(
+            &mut fixture.canister_state,
+            CANISTER_ID,
+            OTHER_CANISTER_ID,
+            CALLBACK_ID,
+            callback_deadline,
+        );
+
+        // Push and pop an output request with the same `callback_deadline`, to reserve
+        // a slot.
+        fixture
+            .push_output_request(output_request(callback_deadline))
+            .unwrap();
+        fixture.pop_output().unwrap();
+
+        // Push an input response with the (potentially different) `response_deadline`.
+        let response = ResponseBuilder::new()
+            .originator(CANISTER_ID)
+            .respondent(OTHER_CANISTER_ID)
+            .originator_reply_callback(CALLBACK_ID)
+            .deadline(response_deadline)
+            .build()
+            .into();
+        fixture.push_input(response).map_err(|(err, _)| err)
+    }
+
+    // Can enqueue response with matching deadline.
+    assert_eq!(Ok(()), try_push_input(NO_DEADLINE, NO_DEADLINE));
+    assert_eq!(Ok(()), try_push_input(DEADLINE_1, DEADLINE_1));
+
+    // But enqueuing mismatching deadlines (best-effort vs guaranteed response; or
+    //different best-effort deadlines) fails.
+    assert_matches!(
+        try_push_input(DEADLINE_1, NO_DEADLINE),
+        Err(StateError::NonMatchingResponse { .. })
+    );
+    assert_matches!(
+        try_push_input(NO_DEADLINE, DEADLINE_1),
+        Err(StateError::NonMatchingResponse { .. })
+    );
+    assert_matches!(
+        try_push_input(DEADLINE_1, DEADLINE_2),
+        Err(StateError::NonMatchingResponse { .. })
+    );
 }

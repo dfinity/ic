@@ -81,6 +81,11 @@ pub struct FeatureFlags {
     // TODO(IC-272): remove this flag once the feature is enabled by default.
     /// Indicates whether canister logging feature is enabled or not.
     pub canister_logging: FlagStatus,
+    /// Indicates whether the support for 64 bit main memory is enabled
+    pub wasm64: FlagStatus,
+    // TODO(IC-1674): remove this flag once the feature is enabled by default.
+    /// Indicates whether the best-effort responses feature is enabled.
+    pub best_effort_responses: FlagStatus,
 }
 
 impl FeatureFlags {
@@ -90,6 +95,8 @@ impl FeatureFlags {
             write_barrier: FlagStatus::Disabled,
             wasm_native_stable_memory: FlagStatus::Enabled,
             canister_logging: FlagStatus::Disabled,
+            wasm64: FlagStatus::Disabled,
+            best_effort_responses: FlagStatus::Disabled,
         }
     }
 }
@@ -102,7 +109,6 @@ impl Default for FeatureFlags {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum MeteringType {
-    Old,
     New,
     /// for testing and benchmarking
     None,

@@ -426,6 +426,10 @@ impl State {
         &self.cycles_management
     }
 
+    pub fn cycles_management_mut(&mut self) -> &mut CyclesManagement {
+        &mut self.cycles_management
+    }
+
     pub fn managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Token, &Canisters)> {
         self.managed_canisters.canisters.iter()
     }
@@ -462,6 +466,13 @@ impl State {
                 .insert(contract, Canisters::new(metadata)),
             None
         );
+    }
+
+    pub fn record_archives(&mut self, contract: &Erc20Token, archives: Vec<Principal>) {
+        let canisters = self
+            .managed_canisters_mut(contract)
+            .unwrap_or_else(|| panic!("BUG: token {:?} is not managed", contract));
+        canisters.archives = archives;
     }
 
     pub fn record_created_canister<T: Debug>(

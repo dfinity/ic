@@ -57,7 +57,7 @@ macro_rules! declare_mul_by_g_impl {
 
                 assert_eq!(self.table.len(), WINDOWS * Self::TABLE_ELEM_PER_WINDOW);
 
-                let s = x.as_bytes();
+                let s = x.to_bytes();
 
                 let mut accum = <$projective>::identity();
 
@@ -176,8 +176,8 @@ macro_rules! declare_mul2_table_impl {
 
             /// Computes g*a + h*b where g and h are the points specified during construction
             pub fn mul2(&self, a: &$scalar, b: &$scalar) -> $projective {
-                let s1 = a.as_bytes();
-                let s2 = b.as_bytes();
+                let s1 = a.to_bytes();
+                let s2 = b.to_bytes();
 
                 let mut accum = <$projective>::identity();
 
@@ -216,17 +216,18 @@ macro_rules! declare_sswu_p_3_mod_4_map_to_curve_impl {
                 const P_BITS: usize = $fe::BYTES * 8;
                 const SECURITY_LEVEL: usize = P_BITS / 2;
 
-                const FIELD_LEN: usize = (P_BITS + SECURITY_LEVEL + 7) / 8; // "L" in spec
-                const LEN_IN_BYTES: usize = 2 * FIELD_LEN;
-                const WIDE_BYTES_OFFSET: usize = 2 * $fe::BYTES - FIELD_LEN;
+                const FIELD_BYTES: usize = (P_BITS + SECURITY_LEVEL + 7) / 8; // "L" in spec
+                const XMD_BYTES: usize = 2 * FIELD_BYTES;
+                const WIDE_BYTES_OFFSET: usize = 2 * $fe::BYTES - FIELD_BYTES;
 
                 // Compile time assertion that XMD can output the requested bytes
-                const _: () = assert!(LEN_IN_BYTES <= 8160, "XMD output is sufficient");
+                const _: () = assert!(XMD_BYTES <= 8160, "XMD output is sufficient");
 
                 // XMD only fails if the requested output is too long, but we already checked
                 // at compile time that the output length is within range.
-                let u = ic_crypto_internal_seed::xmd::expand_message_xmd(input, dst, LEN_IN_BYTES)
-                    .expect("XMD unexpected failed");
+                let u =
+                    ic_crypto_internal_seed::xmd::<ic_crypto_sha2::Sha256>(input, dst, XMD_BYTES)
+                        .expect("XMD unexpected failed");
 
                 fn extended_u(u: &[u8]) -> [u8; 2 * $fe::BYTES] {
                     let mut ext_u = [0u8; 2 * $fe::BYTES];
@@ -234,8 +235,8 @@ macro_rules! declare_sswu_p_3_mod_4_map_to_curve_impl {
                     ext_u
                 }
 
-                let u0 = $fe::from_bytes_wide_exact(&extended_u(&u[..FIELD_LEN]));
-                let u1 = $fe::from_bytes_wide_exact(&extended_u(&u[FIELD_LEN..]));
+                let u0 = $fe::from_bytes_wide_exact(&extended_u(&u[..FIELD_BYTES]));
+                let u1 = $fe::from_bytes_wide_exact(&extended_u(&u[FIELD_BYTES..]));
 
                 (u0, u1)
             }

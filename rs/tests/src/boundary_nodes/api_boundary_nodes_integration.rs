@@ -1,3 +1,10 @@
+use discower_bowndary::{
+    check::{HealthCheck, HealthCheckImpl},
+    fetch::{NodesFetcher, NodesFetcherImpl},
+    node::Node,
+    route_provider::HealthCheckRouteProvider,
+    snapshot_health_based::HealthBasedSnapshot,
+};
 use k256::SecretKey;
 
 use crate::boundary_nodes::{
@@ -28,16 +35,18 @@ use ic_nns_governance::{init::TEST_NEURON_1_ID, pb::v1::NnsFunction};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use itertools::Itertools;
 use registry_canister::mutations::{
-    do_add_api_boundary_node::AddApiBoundaryNodePayload,
+    do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     node_management::do_update_node_domain_directly::UpdateNodeDomainDirectlyPayload,
 };
-use reqwest::{redirect::Policy, ClientBuilder};
-use std::net::Ipv6Addr;
+use std::{net::Ipv6Addr, sync::Arc};
 use std::{net::SocketAddr, time::Duration};
 
 use anyhow::bail;
 use ic_agent::{
-    agent::http_transport::{route_provider::RoundRobinRouteProvider, ReqwestTransport},
+    agent::http_transport::{
+        reqwest_transport::reqwest::{redirect::Policy, ClientBuilder},
+        ReqwestTransport,
+    },
     export::Principal,
     identity::{AnonymousIdentity, Secp256k1Identity},
     Agent,
@@ -128,15 +137,15 @@ pub fn decentralization_test(env: TestEnv) {
             log,
             "Successfully updated domain name of the unassigned node with id={}", node.node_id
         );
-        let proposal_payload = AddApiBoundaryNodePayload {
-            node_id: node.node_id,
+        let proposal_payload = AddApiBoundaryNodesPayload {
+            node_ids: vec![node.node_id],
             version: version.clone().into(),
         };
         let proposal_id = block_on(submit_external_update_proposal(
             &governance,
             Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
             NeuronId(TEST_NEURON_1_ID),
-            NnsFunction::AddApiBoundaryNode,
+            NnsFunction::AddApiBoundaryNodes,
             proposal_payload,
             String::from("Add an API boundary node"),
             "Motivation: API boundary node testing".to_string(),
@@ -184,15 +193,6 @@ pub fn decentralization_test(env: TestEnv) {
         log,
         "API BNs with expected domains are present in the state tree"
     );
-
-    // This is temporary until we complete the firewall for API BNs in the orchestrator
-    info!(log, "Opening the firewall ports ...");
-    for node in unassigned_nodes.iter() {
-        node.block_on_bash_script(&indoc::formatdoc! {r#"
-            sudo nft add rule ip6 filter INPUT tcp dport 443 accept
-        "#})
-            .expect("unable to open firewall port");
-    }
 
     info!(log, "Create an HTTP client for the two API BNs ...");
     let http_client = {
@@ -248,15 +248,51 @@ pub fn decentralization_test(env: TestEnv) {
         "Successfully installed {} counter canisters",
         canister_ids.len()
     );
+
+    info!(
+        log,
+        "Creating an agent with a HealthCheckRouteProvider (from API BN Discovery Library) to route traffic against healthy BNs",
+    );
+
+    let route_provider = {
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .flatten_event(true)
+            .finish();
+        tracing::subscriber::set_global_default(subscriber).unwrap();
+        let fetch_interval = Duration::from_secs(5);
+        let fetcher = Arc::new(NodesFetcherImpl::new(http_client.clone(), canister_ids[0]));
+        let health_timeout = Duration::from_secs(5);
+        let check_interval = Duration::from_secs(1);
+        let checker = Arc::new(HealthCheckImpl::new(http_client.clone(), health_timeout));
+        let seed_nodes = vec![Node::new("api1.com"), Node::new("api2.com")];
+        let snapshot = HealthBasedSnapshot::new();
+        let route_provider = Arc::new(HealthCheckRouteProvider::new(
+            snapshot,
+            Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
+            fetch_interval,
+            Arc::clone(&checker) as Arc<dyn HealthCheck>,
+            check_interval,
+            seed_nodes,
+        ));
+        block_on(route_provider.run());
+        // TODO: BOUN-1134 - Dissect seed phase health check in Discovery Library
+        // // Wait till all nodes go through health checks.
+        // std::thread::sleep(2 * check_interval);
+        // // Do an additional assertions that routing works correctly.
+        // let routed_domains = route_n_times(6, Arc::clone(&route_provider));
+        // assert_routed_domains(
+        //     routed_domains,
+        //     vec!["api1.com".into(), "api2.com".into()],
+        //     3,
+        // );
+        // TODO: remove this once ic-agent 0.35.0 is released + call route_provider.stop() at the end
+        Arc::try_unwrap(route_provider).unwrap()
+    };
+
     let api_bn_agent = {
         // This agent routes directly via ipv6 addresses and doesn't employ domain names.
         // Ideally, domains with valid certificates should be used in testing.
-        info!(log, "Creating an agent with routing over both API BNs ...");
-        let api_bn_urls: Vec<String> = api_bns
-            .into_iter()
-            .map(|bn| format!("https://[{}]", bn.ipv6_address.parse::<Ipv6Addr>().unwrap()))
-            .collect();
-        let route_provider = RoundRobinRouteProvider::new(api_bn_urls).unwrap();
         let transport =
             ReqwestTransport::create_with_client_route(Box::new(route_provider), http_client)
                 .unwrap();

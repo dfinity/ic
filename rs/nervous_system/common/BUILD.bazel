@@ -1,4 +1,4 @@
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/http_types",
     "//rs/nervous_system/runtime",
     "//rs/types/base_types",
+    "@crate_index//:base64",
     "@crate_index//:build-info",
     "@crate_index//:bytes",
     "@crate_index//:by_address",

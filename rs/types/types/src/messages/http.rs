@@ -11,7 +11,6 @@ use crate::{
     },
     Height, Time, UserId,
 };
-use derive_more::Display;
 use ic_base_types::{CanisterId, CanisterIdError, NodeId, PrincipalId};
 use ic_crypto_tree_hash::{MixedHashTree, Path};
 use maplit::btreemap;
@@ -24,6 +23,7 @@ use std::{
     error::Error,
     fmt,
 };
+use strum_macros::AsRefStr;
 
 #[cfg(test)]
 mod tests;
@@ -714,7 +714,7 @@ pub struct CertificateDelegation {
 
 /// Different stages required for the full initialization of the HTTPS endpoint.
 /// The fields are listed in order of execution/transition.
-#[derive(Debug, Display, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, AsRefStr)]
 #[serde(rename_all = "snake_case")]
 pub enum ReplicaHealthStatus {
     /// Marks the start state of the HTTPS endpoint. Some requests will fail

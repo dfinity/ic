@@ -11,7 +11,7 @@ use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
-use ic_types::consensus::ecdsa::{
+use ic_types::consensus::idkg::{
     dealing_prefix, dealing_support_prefix, EcdsaBlockReader, EcdsaMessage, EcdsaStats,
     IDkgTranscriptParamsRef,
 };
@@ -850,7 +850,9 @@ impl EcdsaPreSignerImpl {
             .validated()
             .dealing_support_by_prefix(prefix)
             .any(|(_, support)| {
-                support.dealing_hash == *dealing_hash && support.sig_share.signer == *signer_id
+                support.dealing_hash == *dealing_hash
+                    && support.sig_share.signer == *signer_id
+                    && support.transcript_id == *transcript_id
             })
     }
 
@@ -1356,7 +1358,7 @@ mod tests {
     use ic_test_utilities_consensus::EcdsaStatsNoOp;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
-    use ic_types::consensus::ecdsa::EcdsaObject;
+    use ic_types::consensus::idkg::EcdsaObject;
     use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHash};
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{Height, RegistryVersion};

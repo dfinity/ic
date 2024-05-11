@@ -795,7 +795,7 @@ fn cannot_run_method_on_empty_canister() {
                 assert_eq!(err.code(), ErrorCode::CanisterWasmModuleNotFound);
                 assert_eq!(
                     err.description(),
-                    "Attempt to execute a message on canister rwlgt-iiaaa-aaaaa-aaaaa-cai which contains no Wasm module"
+                    "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Attempt to execute a message, but the canister contains no Wasm module"
                 );
             }
             rest => panic!("Unexpected behaviour {:?}", rest),
@@ -988,6 +988,7 @@ fn test_canister_skip_upgrade() {
                 management::install_code(canister_id, UNIVERSAL_CANISTER_WASM).with_mode(
                     management::InstallMode::Upgrade(Some(CanisterUpgradeOptions {
                         skip_pre_upgrade: Some(false),
+                        wasm_memory_persistence: None,
                     })),
                 ),
             )),
@@ -1000,6 +1001,7 @@ fn test_canister_skip_upgrade() {
                 management::install_code(canister_id, UNIVERSAL_CANISTER_WASM).with_mode(
                     management::InstallMode::Upgrade(Some(CanisterUpgradeOptions {
                         skip_pre_upgrade: Some(true),
+                        wasm_memory_persistence: None,
                     }))
                 ),
             )),
@@ -1013,6 +1015,7 @@ fn test_canister_skip_upgrade() {
                 management::install_code(canister_id, UNIVERSAL_CANISTER_WASM).with_mode(
                     management::InstallMode::Upgrade(Some(CanisterUpgradeOptions {
                         skip_pre_upgrade: Some(false),
+                        wasm_memory_persistence: None,
                     })),
                 ),
             )),

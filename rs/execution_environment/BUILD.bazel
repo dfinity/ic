@@ -76,6 +76,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:insta",
     "@crate_index//:libflate",
     "@crate_index//:maplit",
+    "@crate_index//:more-asserts",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",
     "@crate_index//:wasmparser",
@@ -200,7 +201,7 @@ rust_ic_bench(
 
 rust_ic_bench(
     name = "wasm_instructions_bench",
-    srcs = ["benches/wasm_instructions/main.rs"],
+    srcs = glob(["benches/wasm_instructions/*.rs"]),
     data = DATA,
     env = ENV,
     deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,

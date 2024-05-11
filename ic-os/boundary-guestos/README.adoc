@@ -109,18 +109,6 @@ ic-os/boundary-guestos/scripts/build-bootstrap-config-image.sh \
 
 _Note:_ If you need to make changes, just destroy the VM, rebuild the images you need and create the VM again. The XML configuration file can be reused.
 
-== Developing with the system
-
-The entirety of the actual Ubuntu operating system is contained in the
-`rootfs/` subdirectory. See instructions link:rootfs/README.adoc[there] on how to
-make changes to the OS and the included components.
-
 == Directory organization
 
-The directory `rootfs/` contains everything related to building a bootable Ubuntu system. It uses various template
-directories (e.g., `opt/`) that are copied verbatim to the target system -- you can just drop files there to
-include them into the image.
-
 The directory `../bootloader/` contains everything related to building EFI firmware and the grub bootloader image.
-
-All build steps are contained in the link:../defs.bzl[../defs.bzl] and the target specific directories (e.g., link:prod/BUILD.bazel[prod/BUILD.bazel]).

@@ -7,7 +7,10 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
-use ic_cketh_minter::endpoints::{AddCkErc20Token, MinterInfo, RetrieveEthStatus, WithdrawalArg};
+use ic_cketh_minter::endpoints::{
+    AddCkErc20Token, MinterInfo, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail,
+    WithdrawalSearchParameter,
+};
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::logs::Log;
 use ic_cketh_minter::{
@@ -57,6 +60,7 @@ pub const DEFAULT_BLOCK_NUMBER: u64 = 0x4132ec;
 pub const EXPECTED_BALANCE: u64 = 100_000_000_000_000_000 + CKETH_TRANSFER_FEE - 10_u64;
 pub const CKETH_WITHDRAWAL_AMOUNT: u64 = EXPECTED_BALANCE - CKETH_TRANSFER_FEE;
 pub const EFFECTIVE_GAS_PRICE: u64 = 4_277_923_390;
+pub const GAS_USED: u64 = 0x5208;
 
 pub const DEFAULT_WITHDRAWAL_TRANSACTION_HASH: &str =
     "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5";
@@ -65,6 +69,8 @@ pub const DEFAULT_WITHDRAWAL_TRANSACTION: &str = "0x02f87301808459682f008507af2c
 pub const DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION: &str = "0x02f8b001808459682f008507af2c9f6282fde894a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4880b844a9059cbb000000000000000000000000221e931fbfcb9bd54ddd26ce6f5e29e98add01c000000000000000000000000000000000000000000000000000000000001e8480c080a0bb694aec6175b489523a55d5fce39452368e97096d4afa2cdcc35cf2d805152fa00112b26a028af84dd397d23549844efdaf761d90cdcfdbe6c3608239648a85a3";
 pub const DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH: &str =
     "0x2c0c328876b8d60580e00d8e5a82599e22099e78d9d9c25cc5e6164bc8f4db62";
+
+pub const DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE: u64 = 2_145_241_036_770_000_u64;
 pub const USDC_ERC20_CONTRACT_ADDRESS: &str = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 pub const MINTER_ADDRESS: &str = "0xfd644a761079369962386f8e4259217c2a10b8d0";
 pub const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str =
@@ -172,6 +178,26 @@ impl CkEthSetup {
                     .expect("failed to get eth address")
             ),
             RetrieveEthStatus
+        )
+        .unwrap()
+    }
+
+    pub fn withdrawal_status(
+        &self,
+        parameter: &WithdrawalSearchParameter,
+    ) -> Vec<WithdrawalDetail> {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query_as(
+                        self.caller,
+                        self.minter_id,
+                        "withdrawal_status",
+                        Encode!(parameter).unwrap(),
+                    )
+                    .expect("failed to get eth address")
+            ),
+            Vec<WithdrawalDetail>
         )
         .unwrap()
     }

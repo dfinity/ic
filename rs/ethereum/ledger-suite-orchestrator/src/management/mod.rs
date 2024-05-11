@@ -96,6 +96,14 @@ pub trait CanisterRuntime {
     /// Returns the canister id of the current canister.
     fn id(&self) -> Principal;
 
+    /// Gets current timestamp, in nanoseconds since the epoch (1970-01-01)
+    fn time(&self) -> u64;
+
+    /// Set a global timer to make the system schedule a call to the exported `canister_global_timer` Wasm method after the specified time.
+    /// The time must be provided as nanoseconds since 1970-01-01.
+    /// See the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#global-timer-1).
+    fn global_timer_set(&self, timestamp: u64);
+
     /// Creates a new canister with the given cycles.
     async fn create_canister(
         &self,
@@ -126,6 +134,7 @@ pub trait CanisterRuntime {
         O: CandidType + DeserializeOwned + Debug + 'static;
 }
 
+#[derive(Clone, Copy)]
 pub struct IcCanisterRuntime {}
 
 impl IcCanisterRuntime {
@@ -164,6 +173,18 @@ impl IcCanisterRuntime {
 impl CanisterRuntime for IcCanisterRuntime {
     fn id(&self) -> Principal {
         ic_cdk::id()
+    }
+
+    fn time(&self) -> u64 {
+        ic_cdk::api::time()
+    }
+
+    fn global_timer_set(&self, timestamp: u64) {
+        // SAFETY: setting the global timer is always safe; it does not
+        // mutate any canister memory.
+        unsafe {
+            ic0::global_timer_set(timestamp as i64);
+        }
     }
 
     async fn create_canister(

@@ -38,7 +38,7 @@ pub fn test(env: TestEnv) {
     //The controller of the neuron has to be the agent principal otherwise we cannot make proposals and vote on them.
     let agent_identity = get_identity();
     let agent_principal = agent_identity.sender().unwrap();
-    let agent_keypair = EdKeypair::from_pem(IDENTITY_PEM).unwrap();
+    let agent_keypair = EdKeypair::deserialize_pkcs8_pem(IDENTITY_PEM).unwrap();
 
     // Create neurons and set the controller account to be the agent who makes the proposal with that neuron
     let mut neurons = TestNeurons::new(2000, &mut ledger_balances);
@@ -135,7 +135,7 @@ async fn test_register_proposal(
     let neuron_index = neuron_info.neuron_subaccount_identifier;
     //The caller of the register vote command has to be the same as the controller of the neuron
     //let key_pair: Arc<EdKeypair> = Arc::new(EdKeypair::from_pem(IDENTITY_PEM).unwrap());
-    let key_pair: Arc<EdKeypair> = Arc::new(neuron_info.key_pair);
+    let key_pair: Arc<EdKeypair> = Arc::new(neuron_info.key_pair.clone());
 
     do_multiple_txn(
         ros,

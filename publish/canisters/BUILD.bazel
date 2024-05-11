@@ -81,6 +81,12 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # but enough to get an alert in case of a spike in size.
     "ic-icrc1-ledger.wasm.gz": "7",
     "ic-icrc1-ledger-u256.wasm.gz": "7",
+
+    # -- XC team --
+    # The orchestrator needs to embed 3 wasms at compile time
+    # (ICRC1 index, ICRC1 ledger, and ICRC1 archive) and size is
+    # therefore strictly controlled.
+    "ic-ledger-suite-orchestrator-canister.wasm.gz": "16",
 }
 
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES)

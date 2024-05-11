@@ -11,10 +11,10 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:rand",
     "@crate_index//:rand_distr",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
     "@crate_index//:tracing",
 ]
 

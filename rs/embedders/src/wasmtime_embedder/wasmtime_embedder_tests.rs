@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use super::{system_api, StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME};
 use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
+use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::ResourceSaturation;
@@ -18,8 +19,8 @@ use ic_system_api::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    messages::RequestMetadata, time::UNIX_EPOCH, ComputeAllocation, MemoryAllocation, NumBytes,
-    NumInstructions,
+    messages::RequestMetadata, time::UNIX_EPOCH, ComputeAllocation, Cycles, MemoryAllocation,
+    NumBytes, NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
@@ -44,8 +45,13 @@ fn test_wasmtime_system_api() {
     ))
     .expect("Failed to initialize Wasmtime engine");
     let canister_id = canister_test_id(53);
-    let system_state =
-        SystemState::new_for_start(canister_id, Arc::new(TestPageAllocatorFileDescriptorImpl));
+    let system_state = SystemState::new_running(
+        canister_id,
+        canister_id.get(),
+        Cycles::zero(),
+        NumSeconds::from(0),
+        Arc::new(TestPageAllocatorFileDescriptorImpl),
+    );
     let api_type = ApiType::start(UNIX_EPOCH);
     let sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
@@ -129,7 +135,7 @@ fn test_wasmtime_system_api() {
         config.feature_flags,
         config.stable_memory_dirty_page_limit,
         config.stable_memory_accessed_page_limit,
-        config.metering_type,
+        crate::wasmtime_embedder::WasmMemoryType::Wasm32,
     );
     let instance = linker
         .instantiate(&mut store, &module)
@@ -165,10 +171,10 @@ fn test_initial_wasmtime_config() {
             "tail calls support is not enabled",
         ),
         (
-            "simd",
+            "relaxed_simd",
             "https://github.com/WebAssembly/relaxed-simd/",
-            "(module (func $f (drop (v128.const i64x2 0 0))))",
-            "SIMD support is not enabled",
+            "(module (func $f (param v128) (drop (f64x2.relaxed_madd (local.get 0) (local.get 0) (local.get 0)))))",
+            "relaxed SIMD support is not enabled",
         ),
         (
             "threads",
@@ -210,10 +216,9 @@ fn test_initial_wasmtime_config() {
         // Memory control
         // GC
     ] {
-        let wasm_binary = BinaryEncodedWasm::new(
-            wat::parse_str(wat)
-                .unwrap_or_else(|_| panic!("Error parsing proposal `{proposal}` code snippet")),
-        );
+        let wasm_binary = BinaryEncodedWasm::new(wat::parse_str(wat).unwrap_or_else(|err| {
+            panic!("Error parsing proposal `{proposal}` code snippet: {err}")
+        }));
         let err = validate_and_instrument_for_testing(
             &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),
             &wasm_binary,

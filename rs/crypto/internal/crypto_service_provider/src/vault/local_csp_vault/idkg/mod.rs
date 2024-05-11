@@ -19,7 +19,7 @@ use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     compute_secret_shares, compute_secret_shares_with_openings,
-    create_dealing as tecdsa_create_dealing, gen_keypair, generate_complaints, open_dealing,
+    create_dealing as clib_create_dealing, gen_keypair, generate_complaints, open_dealing,
     privately_verify_dealing, CommitmentOpening, CommitmentOpeningBytes, EccCurveType,
     IDkgComplaintInternal, IDkgComputeSecretSharesInternalError, IDkgDealingInternal,
     IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaKeySetK256Bytes, MEGaPrivateKey,
@@ -284,15 +284,15 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         receiver_keys: &[MEGaPublicKey],
         transcript_operation: &IDkgTranscriptOperationInternal,
     ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError> {
-        let tecdsa_shares = self.get_secret_shares(transcript_operation)?;
+        let shares = self.get_secret_shares(transcript_operation)?;
         let seed = Seed::from_rng(&mut *self.rng_write_lock());
-        let dealing = tecdsa_create_dealing(
+        let dealing = clib_create_dealing(
             algorithm_id,
             context_data,
             dealer_index,
             reconstruction_threshold,
             receiver_keys,
-            &tecdsa_shares,
+            &shares,
             seed,
         )
         .map_err(|e| IDkgCreateDealingVaultError::InternalError(format!("{:?}", e)))?;
@@ -583,7 +583,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         //  - [`IDkgProtocolCspVault::idkg_retain_active_keys`] is called by consensus around once
         //    per minute, but we expect to actually have to delete old iDKG dealing encryption keys
         //    only at much longer time intervals (on the order of hours/days; configured in the
-        //    registry) on production tECDSA subnets.
+        //    registry) on production subnets using canister threshold
+        //    signatures such as tECDSA or tSchnorr.
         //  - Acquiring both PKS and SKS write locks each time blocks all readers - analysis shows
         //    that they sometimes end up waiting for up to 1 second.
         // The drawback of this approach is that it introduces a race condition - between the time

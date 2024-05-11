@@ -454,7 +454,7 @@ def upload_to_file_share(
         tmp_dir = str.strip(result.stdout)
         # scp is faster than fabric's built-in transfer.
         ssh_key_arg = f"-i {file_share_ssh_key}" if file_share_ssh_key else ""
-        invoke.run(f"scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ssh_key_arg} {upload_img}  {file_share_endpoint}:{tmp_dir}", echo=True)
+        invoke.run(f"scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ssh_key_arg} {upload_img}  {file_share_endpoint}:{tmp_dir}", echo=True, pty=True)
 
         upload_img_filename = upload_img.name
         # Decompress in place. disk.img should appear in the same directory

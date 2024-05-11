@@ -89,10 +89,7 @@ ALIASES = {}
 
 rust_binary(
     name = "ic-admin",
-    srcs = glob(
-        ["src/*.rs"],
-        exclude = ["**/*_tests.rs"],
-    ),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
@@ -100,7 +97,6 @@ rust_binary(
 
 rust_test(
     name = "ic-admin_unit_test",
-    srcs = glob(["src/*.rs"]),
     crate = ":ic-admin",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,

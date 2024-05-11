@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "gzip_compress", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -44,6 +45,7 @@ rust_library(
         "@crate_index//:hex",
         "@crate_index//:ic-canister-log",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-metrics-encoder",
         "@crate_index//:ic-stable-structures",
         "@crate_index//:ic0",
         "@crate_index//:num-traits",
@@ -72,7 +74,6 @@ rust_test(
 
 rust_test(
     name = "canister_unit_tests",
-    srcs = ["src/dashboard/tests.rs"],
     crate = ":_wasm_ledger_suite_orchestrator_canister",
     data = [":ledger_suite_orchestrator.did"],
     env = {
@@ -81,6 +82,7 @@ rust_test(
     deps = [
         ":ledger_suite_orchestrator",
         "@crate_index//:candid_parser",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:scraper",
     ],
 )
@@ -109,16 +111,20 @@ rust_canister(
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:serde",
+        "@crate_index//:time",
     ],
 )
 
-rust_test(
+gzip_compress(
+    name = "ledger_suite_orchestrator_canister" + ".wasm.gz",
+    srcs = [":ledger_suite_orchestrator_canister"],
+)
+
+rust_ic_test(
     name = "integration_tests",
     srcs = ["tests/tests.rs"],
     data = [
         "ledger_suite_orchestrator_canister.wasm",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox:sandbox_launcher",
         "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
         "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
         "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz",
@@ -129,8 +135,6 @@ rust_test(
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz)",
         "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     proc_macro_deps = [],
     deps = [

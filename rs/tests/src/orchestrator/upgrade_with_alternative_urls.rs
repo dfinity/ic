@@ -30,8 +30,8 @@ use crate::{
         test_env_api::*,
     },
     orchestrator::utils::upgrade::{
-        bless_replica_version_with_urls, get_assigned_replica_version,
-        update_subnet_replica_version, UpdateImageType,
+        bless_replica_version_with_urls, deploy_guestos_to_all_subnet_nodes,
+        get_assigned_replica_version, UpdateImageType,
     },
     util::{block_on, get_nns_node},
 };
@@ -90,7 +90,7 @@ pub fn test(env: TestEnv) {
 
     info!(logger, "Proposing to upgrade the subnet replica version");
     let test_version = format!("{}-test", original_version);
-    block_on(update_subnet_replica_version(
+    block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
         &ReplicaVersion::try_from(test_version).unwrap(),
         subnet_id,

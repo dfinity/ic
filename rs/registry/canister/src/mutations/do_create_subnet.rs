@@ -17,8 +17,8 @@ use ic_management_canister_types::{EcdsaKeyId, SetupInitialDKGArgs, SetupInitial
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     subnet::v1::{
-        CatchUpPackageContents, EcdsaConfig, GossipConfig, SubnetFeatures as pbSubnetFeatures,
-        SubnetRecord,
+        CatchUpPackageContents, ChainKeyConfig, EcdsaConfig, GossipConfig,
+        SubnetFeatures as pbSubnetFeatures, SubnetRecord,
     },
 };
 use ic_registry_keys::{
@@ -118,7 +118,7 @@ impl Registry {
             value: encode_or_panic(&response.subnet_threshold_public_key),
         };
 
-        let subnet_record: SubnetRecord = payload.into();
+        let subnet_record = SubnetRecord::from(payload);
 
         // 4. Update registry with the new subnet data
         // The subnet data is the new subnet record plus the update to the global
@@ -312,6 +312,12 @@ impl From<EcdsaInitialConfig> for EcdsaConfig {
 
 impl From<CreateSubnetPayload> for SubnetRecord {
     fn from(val: CreateSubnetPayload) -> Self {
+        // TODO[NNS1-3006]: Stop updating the ecdsa_config field.
+        let ecdsa_config = val.ecdsa_config.map(EcdsaConfig::from);
+
+        // TODO[NNS1-2988]: Take value directly from `CreateSubnetPayload.chain_key_config`.
+        let chain_key_config = ecdsa_config.clone().map(ChainKeyConfig::from);
+
         SubnetRecord {
             membership: val
                 .node_ids
@@ -352,10 +358,9 @@ impl From<CreateSubnetPayload> for SubnetRecord {
             max_number_of_canisters: val.max_number_of_canisters,
             ssh_readonly_access: val.ssh_readonly_access,
             ssh_backup_access: val.ssh_backup_access,
-            ecdsa_config: val.ecdsa_config.map(|x| x.into()),
 
-            // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
-            chain_key_config: None,
+            chain_key_config,
+            ecdsa_config,
         }
     }
 }

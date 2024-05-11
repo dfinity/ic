@@ -2,10 +2,10 @@
 #
 # Packs contents of a tar file into a ext4 image (possibly taking only a
 # subdirectory of the full tar file). The (sparse) ext4 image itself is then
-# wrapped into a tar file itself.
+# wrapped into a tzst file.
 #
 # Call example:
-#   build_ext4_image -s 10M -o partition.img.tar -p boot -i dockerimg.tar -S file_contexts
+#   build_ext4_image -s 10M -o partition.img.tzst -p boot -i dockerimg.tar -S file_contexts
 #
 import argparse
 import atexit
@@ -171,7 +171,7 @@ def fixup_permissions(fs_rootdir, fakeroot_statefile, image_file):
 def make_argparser():
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--size", help="Size of image to build", type=str)
-    parser.add_argument("-o", "--output", help="Target (tar) file to write partition image to", type=str)
+    parser.add_argument("-o", "--output", help="Target (tzst) file to write partition image to", type=str)
     parser.add_argument(
         "-i", "--input", help="Source (tar) file to take files from", type=str, default="", required=False
     )
@@ -199,6 +199,7 @@ def make_argparser():
         default=[],
         help="Directories to be cleared from the tree; expects a list of full paths",
     )
+    parser.add_argument("-d", "--dflate", help="Path to dflate", type=str)
     return parser
 
 
@@ -256,22 +257,29 @@ def main():
     fixup_permissions(os.path.join(fs_basedir, limit_prefix), fakeroot_statefile, image_file)
 
     subprocess.run(['sync'], check=True)
-    # Wrap the built filesystem image up in a tar file. Use sparse to
-    # deflate all the zeroes left unwritten during build.
+
+    # If dflate is ever misbehaving, it can be replaced with:
+    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
+    temp_tar = os.path.join(tmpdir, "partition.tar")
     subprocess.run(
         [
-            "tar",
-            "cf",
+            args.dflate,
+            "--input",
+            image_file,
+            "--output",
+            temp_tar,
+        ],
+        check=True,
+    )
+
+    subprocess.run(
+        [
+            "zstd",
+            "-q",
+            "--threads=0",
+            temp_tar,
+            "-o",
             out_file,
-            "--sort=name",
-            "--owner=root:0",
-            "--group=root:0",
-            "--mtime=UTC 1970-01-01 00:00:00",
-            "--sparse",
-            "--hole-detection=raw",
-            "-C",
-            tmpdir,
-            "partition.img",
         ],
         check=True,
     )

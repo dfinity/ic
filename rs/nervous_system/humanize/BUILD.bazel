@@ -28,6 +28,5 @@ rust_library(
 rust_test(
     name = "humanize_test",
     srcs = glob(["src/**"]),
-    crate = ":humanize",
     deps = DEV_DEPENDENCIES,
 )

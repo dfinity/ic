@@ -420,6 +420,7 @@ pub struct Subnet {
     pub ecdsa_config: Option<EcdsaConfig>,
     pub running_state: SubnetRunningState,
     pub query_stats_epoch_length: Option<u64>,
+    pub initial_height: u64,
 }
 
 impl Subnet {
@@ -448,6 +449,7 @@ impl Subnet {
             ecdsa_config: None,
             running_state: SubnetRunningState::Active,
             query_stats_epoch_length: None,
+            initial_height: 0,
         }
     }
 
@@ -601,6 +603,17 @@ impl Subnet {
         self
     }
 
+    pub fn with_initial_height(mut self, initial_height: u64) -> Self {
+        self.initial_height = initial_height;
+        self
+    }
+
+    pub fn with_random_height(mut self) -> Self {
+        use rand::Rng;
+        self.initial_height = rand::thread_rng().gen();
+        self
+    }
+
     pub fn add_malicious_nodes(
         self,
         no_of_nodes: usize,
@@ -668,6 +681,7 @@ impl Default for Subnet {
             ecdsa_config: None,
             running_state: SubnetRunningState::Active,
             query_stats_epoch_length: None,
+            initial_height: 0,
         }
     }
 }

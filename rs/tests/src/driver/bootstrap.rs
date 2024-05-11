@@ -152,6 +152,7 @@ pub fn init_ic(
                 subnet.ssh_readonly_access.clone(),
                 subnet.ssh_backup_access.clone(),
                 subnet.running_state,
+                Some(subnet.initial_height),
             ),
         );
     }
@@ -414,6 +415,8 @@ fn create_config_disk_image(
         .arg(node.node_id.to_string())
         .arg("--ic_registry_local_store")
         .arg(local_store_path)
+        .arg("--ic_state")
+        .arg(node.state_path())
         .arg("--ic_crypto")
         .arg(node.crypto_path())
         .arg("--elasticsearch_tags")

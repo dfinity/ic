@@ -74,6 +74,7 @@ exports_files(
     [
         "prost_generator.sh",
         "generic_rust_bench.sh",
+        "canbench.sh",
     ],
     visibility = ["//visibility:public"],
 )

@@ -239,16 +239,16 @@ impl RegistryReplicator {
 
         // Fill the local registry store by polling the registry canister until we get no
         // more changes.
-        let certified_time = loop {
+        loop {
             // Note, code duplicate in internal_state.rs poll()
             match registry_canister
                 .get_certified_changes_since(registry_version.get(), &nns_pub_key)
                 .await
             {
-                Ok((mut records, _, t)) => {
+                Ok((mut records, _, _t)) => {
                     // We fetched the latest version.
                     if records.is_empty() {
-                        break t;
+                        break;
                     }
                     records.sort_by_key(|tr| tr.version);
                     let changelog = records.iter().fold(Changelog::default(), |mut cl, r| {
@@ -294,12 +294,7 @@ impl RegistryReplicator {
                     timeout = timeout.min(60); // limit the timeout by a minute max
                 }
             }
-        };
-
-        // Set certified time for the first time now, to indicate that local store is up-to-date
-        self.local_store
-            .update_certified_time(certified_time.as_nanos_since_unix_epoch())
-            .expect("Could not store certified time");
+        }
 
         info!(
             self.logger,

@@ -8,6 +8,7 @@ fn alg_for_curve(curve: EccCurveType) -> AlgorithmId {
     match curve {
         EccCurveType::P256 => AlgorithmId::ThresholdEcdsaSecp256r1,
         EccCurveType::K256 => AlgorithmId::ThresholdEcdsaSecp256k1,
+        EccCurveType::Ed25519 => AlgorithmId::ThresholdEd25519,
     }
 }
 
@@ -15,6 +16,7 @@ fn wrong_curve(curve: EccCurveType) -> EccCurveType {
     match curve {
         EccCurveType::K256 => EccCurveType::P256,
         EccCurveType::P256 => EccCurveType::K256,
+        EccCurveType::Ed25519 => EccCurveType::K256,
     }
 }
 
@@ -306,10 +308,7 @@ fn secret_shares_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
         let secret = EccScalar::random(curve, rng);
         let shares = SecretShares::ReshareOfUnmasked(secret);
         let log = format!("{:?}", shares);
-        assert_eq!(
-            "SecretShares::ReshareOfUnmasked(EccScalar::K256) - REDACTED",
-            log
-        );
+        assert_eq!("SecretShares::ReshareOfUnmasked(K256) - REDACTED", log);
     }
 
     {
@@ -317,10 +316,7 @@ fn secret_shares_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
         let mask = EccScalar::random(curve, rng);
         let shares = SecretShares::ReshareOfMasked(secret, mask);
         let log = format!("{:?}", shares);
-        assert_eq!(
-            "SecretShares::ReshareOfMasked(EccScalar::K256) - REDACTED",
-            log
-        );
+        assert_eq!("SecretShares::ReshareOfMasked(K256) - REDACTED", log);
     }
 
     {
@@ -329,10 +325,7 @@ fn secret_shares_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
         let mask = EccScalar::random(curve, rng);
         let shares = SecretShares::UnmaskedTimesMasked(lhs, (rhs, mask));
         let log = format!("{:?}", shares);
-        assert_eq!(
-            "SecretShares::UnmaskedTimesMasked(EccScalar::K256) - REDACTED",
-            log
-        );
+        assert_eq!("SecretShares::UnmaskedTimesMasked(K256) - REDACTED", log);
     }
 
     Ok(())
@@ -609,10 +602,7 @@ impl Setup {
         let dealer_index = 0;
         let shares = SecretShares::Random;
 
-        let algorithm_id = match curve {
-            EccCurveType::K256 => AlgorithmId::ThresholdEcdsaSecp256k1,
-            EccCurveType::P256 => AlgorithmId::ThresholdEcdsaSecp256r1,
-        };
+        let algorithm_id = alg_for_curve(curve);
 
         let dealing_internal = create_dealing(
             algorithm_id,

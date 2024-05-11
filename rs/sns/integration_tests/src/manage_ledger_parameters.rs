@@ -6,8 +6,9 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     sns_wasm::{add_wasm_via_proposal, build_ledger_sns_wasm},
     state_test_helpers::{
-        icrc1_fee, icrc1_transfer, query, setup_nns_canisters, sns_claim_staked_neuron,
-        sns_make_proposal, sns_wait_for_proposal_execution, update,
+        icrc1_fee, icrc1_token_logo, icrc1_token_name, icrc1_token_symbol, icrc1_transfer, query,
+        setup_nns_canisters, sns_claim_staked_neuron, sns_make_proposal,
+        sns_wait_for_proposal_execution, update,
     },
 };
 use ic_sns_governance::pb::v1::{
@@ -16,7 +17,9 @@ use ic_sns_governance::pb::v1::{
 };
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
-    state_test_helpers::{setup_sns_canisters, SnsTestCanisterIds},
+    state_test_helpers::{
+        setup_sns_canisters, state_machine_builder_for_sns_tests, SnsTestCanisterIds,
+    },
 };
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -27,7 +30,7 @@ const DEFAULT_NEURON_STAKE: u64 = 500500000000;
 
 #[test]
 fn test_manage_ledger_parameters_change_transfer_fee() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
     let user = PrincipalId::new_user_test_id(1000);
 
@@ -53,6 +56,7 @@ fn test_manage_ledger_parameters_change_transfer_fee() {
             title: "Change ledger transfer fee".to_string(),
             action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
                 transfer_fee: Some(new_fee),
+                ..ManageLedgerParameters::default()
             })),
             ..Default::default()
         },
@@ -129,6 +133,73 @@ fn test_manage_ledger_parameters_change_transfer_fee() {
         nervous_system_parameters_with_new_fee.transaction_fee_e8s,
         Some(new_fee)
     );
+}
+
+#[test]
+fn test_manage_ledger_parameters_change_name_and_symbol_and_logo() {
+    let state_machine = state_machine_builder_for_sns_tests().build();
+
+    let user = PrincipalId::new_user_test_id(1000);
+
+    let (sns_canisters, neuron) = set_up_sns_for_mlp(&state_machine, &user);
+
+    assert_eq!(
+        icrc1_fee(&state_machine, sns_canisters.ledger_canister_id)
+            .0
+            .to_u64()
+            .unwrap(),
+        DEFAULT_LEDGER_TRANSFER_FEE
+    );
+
+    let original_logo = icrc1_token_logo(&state_machine, sns_canisters.ledger_canister_id);
+    assert!(original_logo.is_none());
+    let original_name = icrc1_token_name(&state_machine, sns_canisters.ledger_canister_id);
+    let original_symbol = icrc1_token_symbol(&state_machine, sns_canisters.ledger_canister_id);
+
+    // change ledger logo, name, and symbol with the ManageLedgerParameters proposal
+    let new_logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string();
+    let new_name = "MySns".to_string();
+    let new_symbol = "MYS".to_string();
+
+    let change_ledger_info_proposal_id = sns_make_proposal(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        user,
+        neuron.clone(),
+        Proposal {
+            title: "Change ledger transfer fee".to_string(),
+            action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                transfer_fee: None,
+                token_name: Some(new_name.clone()),
+                token_symbol: Some(new_symbol.clone()),
+                token_logo: Some(new_logo.clone()),
+            })),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    sns_wait_for_proposal_execution(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        change_ledger_info_proposal_id,
+    );
+
+    wait_for_ledger_canister_to_start_after_an_upgrade(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
+    );
+
+    let changed_logo = icrc1_token_logo(&state_machine, sns_canisters.ledger_canister_id);
+    let changed_name = icrc1_token_name(&state_machine, sns_canisters.ledger_canister_id);
+    let changed_symbol = icrc1_token_symbol(&state_machine, sns_canisters.ledger_canister_id);
+
+    assert_ne!(original_name, changed_name);
+    assert_ne!(original_symbol, changed_symbol);
+
+    assert_eq!(new_logo, changed_logo.unwrap());
+    assert_eq!(new_name, changed_name);
+    assert_eq!(new_symbol, changed_symbol);
 }
 
 fn wait_for_ledger_canister_to_start_after_an_upgrade(

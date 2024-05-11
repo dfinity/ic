@@ -1,12 +1,13 @@
 use assert_matches::assert_matches;
-use candid::Encode;
+use candid::{Decode, Encode};
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types::{
-    self as ic00, DeleteCanisterSnapshotArgs, Method, Payload as Ic00Payload,
-    TakeCanisterSnapshotArgs, TakeCanisterSnapshotResponse, UploadChunkArgs,
+    self as ic00, CanisterSnapshotResponse, DeleteCanisterSnapshotArgs, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, Method, Payload as Ic00Payload, TakeCanisterSnapshotArgs,
+    UploadChunkArgs,
 };
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_test_utilities_execution_environment::{
@@ -33,7 +34,7 @@ fn take_canister_snapshot_decode_round_trip() {
         TakeCanisterSnapshotArgs::decode(encoded_args.as_slice()).unwrap()
     );
 
-    let response = TakeCanisterSnapshotResponse::new(
+    let response = CanisterSnapshotResponse::new(
         &snapshot_id,
         UNIX_EPOCH.as_nanos_since_unix_epoch(),
         NumBytes::from(65),
@@ -41,7 +42,7 @@ fn take_canister_snapshot_decode_round_trip() {
     let encoded_response = response.encode();
     assert_eq!(
         response,
-        TakeCanisterSnapshotResponse::decode(encoded_response.as_slice()).unwrap()
+        CanisterSnapshotResponse::decode(encoded_response.as_slice()).unwrap()
     );
 }
 
@@ -150,44 +151,6 @@ fn take_snapshot_ingress_rejected_because_feature_is_disabled() {
              method,
             "\"Snapshotting API is not yet implemented\""));
         assert_eq!(result, expected_result);
-    }
-}
-
-#[test]
-fn list_canister_snapshot_request_rejected_because_feature_is_not_implemented() {
-    let own_subnet = subnet_test_id(1);
-    let caller_canister = canister_test_id(1);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_manual_execution()
-        .with_snapshots(FlagStatus::Enabled)
-        .with_caller(own_subnet, caller_canister)
-        .build();
-
-    let canister_id = canister_test_id(4);
-    let snapshot_id = SnapshotId::from((canister_id, 6));
-    let args: TakeCanisterSnapshotArgs =
-        TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id));
-    // Inject a list canister snapshots request.
-    test.inject_call_to_ic00(
-        Method::ListCanisterSnapshots,
-        args.encode(),
-        Cycles::new(1_000_000_000),
-    );
-
-    test.execute_subnet_message();
-
-    let (receiver, response) = &get_output_messages(test.state_mut()).pop().unwrap();
-    assert_matches!(response, RequestOrResponse::Response(_));
-    if let RequestOrResponse::Response(res) = response {
-        assert_eq!(res.originator, *receiver);
-        assert_eq!(
-            res.response_payload,
-            Payload::Reject(RejectContext::new(
-                RejectCode::CanisterReject,
-                "Canister snapshotting API is not yet implemented."
-            ))
-        );
     }
 }
 
@@ -357,7 +320,7 @@ fn take_canister_snapshot_fails_canister_does_not_own_replace_snapshot() {
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id_1, None);
     let result = test.subnet_message("take_canister_snapshot", args.encode());
     assert!(result.is_ok());
-    let response = TakeCanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
+    let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
     let snapshot_id = response.snapshot_id();
 
     // Take a snapshot for the canister_2. Provide replace snapshot.
@@ -412,7 +375,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
     let result = test.subnet_message("take_canister_snapshot", args.encode());
     assert!(result.is_ok());
-    let response = TakeCanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
+    let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
     let snapshot_id = response.snapshot_id();
 
     assert!(test.state().canister_snapshots.contains(&snapshot_id));
@@ -442,7 +405,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
         TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id));
     let result = test.subnet_message("take_canister_snapshot", args.encode());
     assert!(result.is_ok());
-    let new_snapshot_id = TakeCanisterSnapshotResponse::decode(&result.unwrap().bytes())
+    let new_snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
         .unwrap()
         .snapshot_id();
 
@@ -646,7 +609,7 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
     let result = test.subnet_message("take_canister_snapshot", args.encode());
-    let snapshot_id = TakeCanisterSnapshotResponse::decode(&result.unwrap().bytes())
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
         .unwrap()
         .snapshot_id();
     let initial_subnet_available_memory = test.subnet_available_memory();
@@ -736,13 +699,260 @@ fn test_delete_canister_snapshot_decode_round_trip() {
 }
 
 #[test]
-fn test_delete_canister_snapshot_decode_fails() {
+fn delete_canister_snapshot_fails_canister_not_found() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let canister_id = canister_test_id(10);
+    let snapshot_id = SnapshotId::from((canister_id, 3));
+    let args: DeleteCanisterSnapshotArgs =
+        DeleteCanisterSnapshotArgs::new(canister_id, snapshot_id);
+    let error = test
+        .subnet_message("delete_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterNotFound);
+    let message = format!("Canister {} not found.", canister_id,).to_string();
+    assert!(error.description().contains(&message));
+}
+
+#[test]
+fn delete_canister_snapshot_fails_snapshot_not_found() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create canister.
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    // Delete canister snapshot fails because snapshot does not exist.
+    let snapshot_id = SnapshotId::from((canister_id, 3));
+    let args: DeleteCanisterSnapshotArgs =
+        DeleteCanisterSnapshotArgs::new(canister_id, snapshot_id);
+    let error = test
+        .subnet_message("delete_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
+    let message = format!(
+        "Could not find the snapshot ID {} for canister {}",
+        snapshot_id, canister_id,
+    )
+    .to_string();
+    assert!(error.description().contains(&message));
+    assert!(test.state().canister_state(&canister_id).is_some());
+}
+
+#[test]
+fn delete_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create canister.
+    let canister_id_1 = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+    let canister_id_2 = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    // Take a snapshot.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id_1, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    assert!(result.is_ok());
+    let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
+    let snapshot_id = response.snapshot_id();
+    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+
+    let initial_canister_state = test.state().canister_state(&canister_id_2).unwrap().clone();
+
+    // Delete canister snapshot fails because snapshot does not belong to `canister_id_2`.
+    let args: DeleteCanisterSnapshotArgs =
+        DeleteCanisterSnapshotArgs::new(canister_id_2, snapshot_id);
+    let error = test
+        .subnet_message("delete_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+    let message = format!(
+        "The snapshot {} does not belong to canister {}",
+        snapshot_id, canister_id_2,
+    )
+    .to_string();
+    assert!(error.description().contains(&message));
+    assert!(test.state().canister_state(&canister_id_2).is_some());
+    assert_eq!(
+        initial_canister_state,
+        test.state().canister_state(&canister_id_2).unwrap().clone()
+    );
+}
+
+#[test]
+fn delete_canister_snapshot_succeeds() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create canister.
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    // Take a snapshot.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    assert!(result.is_ok());
+    let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
+    let snapshot_id = response.snapshot_id();
+    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+
+    // Deletes canister snapshot successfully.
+    let args: DeleteCanisterSnapshotArgs =
+        DeleteCanisterSnapshotArgs::new(canister_id, snapshot_id);
+    let result = test.subnet_message("delete_canister_snapshot", args.encode());
+
+    assert!(result.is_ok());
+    assert!(test.state().canister_snapshots.get(snapshot_id).is_none());
+    assert!(test.state().canister_state(&canister_id).is_some());
+}
+
+#[test]
+fn list_canister_snapshot_fails_canister_not_found() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let canister_id = canister_test_id(10);
+    let args: ListCanisterSnapshotArgs = ListCanisterSnapshotArgs::new(canister_id);
+    let error = test
+        .subnet_message("list_canister_snapshots", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterNotFound);
+    let message = format!("Canister {} not found.", canister_id,).to_string();
+    assert!(error.description().contains(&message));
+}
+
+#[test]
+fn list_canister_snapshot_fails_invalid_controller() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_manual_execution()
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create new canister.
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    let prev_canister_state = test.state().canister_state(&canister_id).unwrap().clone();
+
+    // Create `ListCanisterSnapshot` request.
+    let args: ListCanisterSnapshotArgs = ListCanisterSnapshotArgs::new(canister_id);
+    test.inject_call_to_ic00(
+        Method::ListCanisterSnapshots,
+        args.encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    // Reject expected: caller is not a controller of the canister.
+    let (receiver, response) = &get_output_messages(test.state_mut()).pop().unwrap();
+    assert_matches!(response, RequestOrResponse::Response(_));
+    if let RequestOrResponse::Response(res) = response {
+        assert_eq!(res.originator, *receiver);
+        assert_eq!(
+            res.response_payload,
+            Payload::Reject(RejectContext::new(
+                RejectCode::CanisterError,
+                format!(
+                    "Only the controllers of the canister {} can control it.\n\
+                    Canister's controllers: {}\n\
+                    Sender's ID: {}",
+                    canister_id,
+                    test.user_id().get(),
+                    caller_canister.get(),
+                )
+            ))
+        );
+    }
+
+    // Verify the canister exists in the `ReplicatedState` and is unchanged.
+    assert_eq!(
+        *test.state().canister_state(&canister_id).unwrap(),
+        prev_canister_state
+    );
+}
+
+#[test]
+fn list_canister_snapshot_succeeds() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create new canister.
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+
+    // Get the canister snapshot list.
+    let args: ListCanisterSnapshotArgs = ListCanisterSnapshotArgs::new(canister_id);
+    let result = test
+        .subnet_message("list_canister_snapshots", args.encode())
+        .unwrap();
+    if let WasmResult::Reply(data) = result {
+        let snapshots = Decode!(&data, Vec<CanisterSnapshotResponse>).unwrap();
+        assert_eq!(snapshots.len(), 1);
+        assert_eq!(snapshots[0].snapshot_id(), snapshot_id);
+    }
+}
+
+#[test]
+fn load_canister_snapshot_decode_round_trip() {
     let canister_id = canister_test_id(4);
-    let args = ic00::DeleteCanisterSnapshotArgs {
-        canister_id: canister_id.get(),
-        snapshot_id: vec![4, 5, 6, 6], // Invalid snapshot ID.
-    };
+    let snapshot_id = SnapshotId::from((canister_id, 6));
+    let args = ic00::LoadCanisterSnapshotArgs::new(canister_test_id(4), snapshot_id, Some(5u64));
     let encoded_args = args.encode();
-    let err = DeleteCanisterSnapshotArgs::decode(encoded_args.as_slice()).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload,);
+    assert_eq!(
+        args,
+        LoadCanisterSnapshotArgs::decode(encoded_args.as_slice()).unwrap()
+    );
 }

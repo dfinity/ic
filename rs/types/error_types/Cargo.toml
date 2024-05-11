@@ -7,6 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+ic-protobuf = { path = "../../protobuf" }
 ic-utils = { path = "../../utils" }
 serde = { workspace = true }
 strum = { workspace = true }

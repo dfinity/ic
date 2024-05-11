@@ -2,6 +2,7 @@ syntax = "proto3";
 package state.queues.v1;
 
 import "state/ingress/v1/ingress.proto";
+import "types/v1/errors.proto";
 import "types/v1/types.proto";
 
 message Cycles {
@@ -63,7 +64,8 @@ message Request {
 }
 
 message RejectContext {
-  uint64 reject_code = 1;
+  uint64 reject_code_old = 1;
+  types.v1.RejectCode reject_code = 3;
   string reject_message = 2;
 }
 

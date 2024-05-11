@@ -1,13 +1,14 @@
 use crate::{
     DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_NUMBER,
     DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
-    DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, EFFECTIVE_GAS_PRICE, HEADER_SIZE_LIMIT, MINTER_ADDRESS,
-    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC, USDC_ERC20_CONTRACT_ADDRESS,
+    DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, EFFECTIVE_GAS_PRICE, GAS_USED, HEADER_SIZE_LIMIT,
+    MINTER_ADDRESS, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+    USDC_ERC20_CONTRACT_ADDRESS,
 };
 use ethers_core::abi::AbiDecode;
 use ethers_core::utils::rlp;
 use ic_ethereum_types::Address;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::str::FromStr;
 
 #[derive(Clone)]
@@ -141,7 +142,7 @@ pub fn transaction_receipt(transaction_hash: String) -> ethers_core::types::Tran
         "cumulativeGasUsed": "0x8b2e10",
         "effectiveGasPrice": format!("{:#x}", EFFECTIVE_GAS_PRICE),
         "from": "0x1789f79e95324a47c5fd6693071188e82e9a3558",
-        "gasUsed": "0x5208",
+        "gasUsed": format!("{:#x}", GAS_USED),
         "logs": [],
         "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
         "status": format!("{:#x}", 1_u8),
@@ -158,7 +159,12 @@ pub fn transaction_count_response(count: u32) -> String {
 }
 
 pub fn fee_history() -> ethers_core::types::FeeHistory {
-    let json_value = json!({
+    let json_value = fee_history_json_value();
+    serde_json::from_value(json_value).expect("BUG: invalid fee history")
+}
+
+pub fn fee_history_json_value() -> Value {
+    json!({
         "oldestBlock": "0x1134b57",
         "reward": [
             ["0x25ed41c"],
@@ -182,8 +188,7 @@ pub fn fee_history() -> ethers_core::types::FeeHistory {
             0.5756615333333334,
             0.3254294
         ]
-    });
-    serde_json::from_value(json_value).expect("BUG: invalid fee history")
+    })
 }
 
 pub fn default_signed_eip_1559_transaction() -> (

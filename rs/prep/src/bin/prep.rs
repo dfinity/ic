@@ -213,6 +213,7 @@ fn main() -> Result<()> {
             valid_args.ssh_readonly_access.clone(),
             valid_args.ssh_backup_access.clone(),
             SubnetRunningState::Active,
+            None,
         );
         topology_config.insert_subnet(*subnet_id, subnet_configuration);
     }

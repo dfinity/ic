@@ -202,6 +202,13 @@ impl StorageClient {
         storage_operations::update_account_balances(&mut open_connection)
     }
 
+    /// Retrieves the highest block index in the account balance table.
+    /// Returns None if the account balance table is empty.
+    pub fn get_highest_block_idx_in_account_balance_table(&self) -> Result<Option<u64>> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_highest_block_idx_in_account_balance_table(&open_connection)
+    }
+
     // Retrieves the account balance at a certain block height
     // Returns None if the account does not exist in the database
     pub fn get_account_balance_at_block_idx(
@@ -218,6 +225,12 @@ impl StorageClient {
     pub fn get_account_balance(&self, account: &Account) -> anyhow::Result<Option<Nat>> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_account_balance_at_highest_block_idx(&open_connection, account)
+    }
+
+    // Returns the number of blocks in the database.
+    pub fn get_block_count(&self) -> anyhow::Result<u64> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_block_count(&open_connection)
     }
 }
 

@@ -17,6 +17,7 @@ ic-config = { path = "../../config" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-registry-transport = { path = "../../registry/transport" }
 ic-replica-tests = { path = "../../replica_tests" }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-types = { path = "../../types/types" }
 escargot = "0.5.2"
 on_wire = { path = "../on_wire" }

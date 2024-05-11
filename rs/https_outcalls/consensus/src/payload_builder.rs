@@ -38,10 +38,10 @@ use ic_types::{
     },
     consensus::Committee,
     crypto::Signed,
-    messages::{CallbackId, Payload, RejectContext, NO_DEADLINE},
+    messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
     signature::BasicSignature,
-    CanisterId, CountBytes, Cycles, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
+    CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
 use std::{
     collections::{BTreeSet, HashSet},
@@ -653,35 +653,27 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
 
         let responses = messages.responses.into_iter().map(|response| {
             stats.responses += 1;
-            ConsensusResponse {
-                callback: response.content.id,
-                payload: match response.content.content {
+            ConsensusResponse::new(
+                response.content.id,
+                match response.content.content {
                     CanisterHttpResponseContent::Success(data) => Payload::Data(data),
                     CanisterHttpResponseContent::Reject(canister_http_reject) => {
                         Payload::Reject(RejectContext::from(&canister_http_reject))
                     }
                 },
-                originator: Some(CanisterId::ic_00()),
-                respondent: Some(CanisterId::ic_00()),
-                refund: Some(Cycles::zero()),
-                deadline: Some(NO_DEADLINE),
-            }
+            )
         });
 
         let timeouts = messages.timeouts.iter().map(|callback| {
             // Map timeouts to a rejected response
             stats.timeouts += 1;
-            ConsensusResponse {
-                callback: *callback,
-                payload: Payload::Reject(RejectContext::new(
+            ConsensusResponse::new(
+                *callback,
+                Payload::Reject(RejectContext::new(
                     RejectCode::SysTransient,
                     "Canister http request timed out",
                 )),
-                originator: Some(CanisterId::ic_00()),
-                respondent: Some(CanisterId::ic_00()),
-                refund: Some(Cycles::zero()),
-                deadline: Some(NO_DEADLINE),
-            }
+            )
         });
 
         let divergece_responses = messages.divergence_responses.iter().filter_map(|response| {
@@ -692,19 +684,15 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
             response.shares.first().map(|share| {
                 // Map divergence responses to reject response
                 stats.divergence_responses += 1;
-                ConsensusResponse {
-                    callback: share.content.id,
-                    payload: Payload::Reject(RejectContext::new(
+                ConsensusResponse::new(
+                    share.content.id,
+                    Payload::Reject(RejectContext::new(
                         RejectCode::SysTransient,
                         "Canister http responses were different across replicas, \
                           and no consensus was reached"
                             .to_string(),
                     )),
-                    originator: Some(CanisterId::ic_00()),
-                    respondent: Some(CanisterId::ic_00()),
-                    refund: Some(Cycles::zero()),
-                    deadline: Some(NO_DEADLINE),
-                }
+                )
             })
         });
 

@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -43,7 +44,7 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:http",
     "@crate_index//:http-body",
-    "@crate_index//:hyper",
+    "@crate_index//:hyper_0_14_27",
     "@crate_index//:hyper-rustls",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:instant-acme",
@@ -54,12 +55,13 @@ DEPENDENCIES = [
     "@crate_index//:maxminddb",
     "@crate_index//:mockall",
     "@crate_index//:moka",
+    "@crate_index//:nftables",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:ratelimit",
     "@crate_index//:rcgen",
     "@crate_index//:regex",
-    "@crate_index//:reqwest",
+    "@crate_index//:reqwest_0_11_27",
     "@crate_index//:rustls",
     "@crate_index//:rustls-pemfile",
     "@crate_index//:serde",
@@ -75,7 +77,7 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tower",
     "@crate_index//:tower_governor",
-    "@crate_index//:tower-http",
+    "@crate_index//:tower_http_0_4_4",
     "@crate_index//:tracing-core",
     "@crate_index//:tracing-serde",
     "@crate_index//:tracing-slog",
@@ -91,6 +93,7 @@ MACRO_DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    "@crate_index//:criterion",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
@@ -140,8 +143,28 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     aliases = ALIASES,
-    crate_features = ["tls"],
+    crate_features = [
+        "tls",
+        "bench",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     version = VERSION,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "ic_boundary_bench",
+    testonly = True,
+    srcs = glob(
+        [
+            "benches/**",
+            "src/**",
+        ],
+        exclude = ["src/main.rs"],
+    ),
+    aliases = ALIASES,
+    crate_root = "benches/perf.rs",
+    pin_cpu = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ic_boundary"],
 )

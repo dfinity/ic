@@ -18,8 +18,6 @@ use serde::{Deserialize, Serialize};
 use std::cmp::{Ordering, PartialOrd};
 use std::convert::TryFrom;
 
-use super::ecdsa::ECDSA_IMPROVED_LATENCY;
-
 /// [`CatchUpContent`] contains all necessary data to bootstrap a subnet's participant.
 pub type CatchUpContent = CatchUpContentT<HashedBlock>;
 
@@ -197,17 +195,13 @@ impl CatchUpPackage {
             .as_ref()
             .as_summary()
             .get_oldest_registry_version_in_use();
-        if ECDSA_IMPROVED_LATENCY {
-            let Some(cup_version) = self
-                .content
-                .oldest_registry_version_in_use_by_replicated_state
-            else {
-                return summary_version;
-            };
-            cup_version.min(summary_version)
-        } else {
-            summary_version
-        }
+        let Some(cup_version) = self
+            .content
+            .oldest_registry_version_in_use_by_replicated_state
+        else {
+            return summary_version;
+        };
+        cup_version.min(summary_version)
     }
 }
 

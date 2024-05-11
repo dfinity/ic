@@ -19,7 +19,7 @@ use ic_nns_governance::{
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     registry::{get_value, get_value_or_panic, prepare_add_node_payload},
 };
 use ic_protobuf::registry::node::v1::NodeRecord;
@@ -36,7 +36,7 @@ use std::collections::BTreeMap;
 /// operator is then added and subsequently removed.
 #[test]
 fn test_add_and_remove_nodes_from_registry() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_invariant_compliant_mutations()
             .with_test_neurons()

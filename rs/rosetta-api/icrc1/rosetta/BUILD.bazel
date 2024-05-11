@@ -9,67 +9,67 @@ load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "@crate_index//:rusqlite",
-    "@crate_index//:serde",
+    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+    "//packages/icrc-ledger-agent:icrc_ledger_agent",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/constants",
+    "//rs/crypto/tree_hash",
+    "//rs/rosetta-api",
+    "//rs/rosetta-api/icrc1",
+    "//rs/rosetta-api/icrc1/ledger",
+    "//rs/rosetta-api/icrc1/tokens_u256",
+    "//rs/rosetta-api/icrc1/tokens_u64",
+    "//rs/rosetta-api/ledger_canister_core",
+    "//rs/rosetta-api/ledger_core",
+    "//rs/rosetta-api/rosetta_core:rosetta-core",
+    "//rs/sys",
+    "//rs/types/base_types",
+    "@crate_index//:anyhow",
+    "@crate_index//:axum",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
-    "@crate_index//:anyhow",
-    "@crate_index//:num-traits",
-    "@crate_index//:serde_bytes",
+    "@crate_index//:clap",  # no clap because feature derive
+    "@crate_index//:hex",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-certification",
+    "@crate_index//:indicatif",
+    "@crate_index//:lazy_static",
+    "@crate_index//:num-bigint",
+    "@crate_index//:num-traits",
+    "@crate_index//:proptest",
+    "@crate_index//:rand",
+    "@crate_index//:reqwest",
+    "@crate_index//:rolling-file",
+    "@crate_index//:rusqlite",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
-    "@crate_index//:axum",
-    "@crate_index//:tempfile",
-    "@crate_index//:clap",  # no clap because feature derive
-    "@crate_index//:tokio",
-    "@crate_index//:proptest",
-    "@crate_index//:hex",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:rand",
-    "@crate_index//:lazy_static",
-    "@crate_index//:url",
-    "@crate_index//:tower_http_0_5_1",
-    "@crate_index//:ic-certification",
-    "@crate_index//:tower-request-id",
-    "@crate_index//:tracing",
-    "@crate_index//:indicatif",
     "@crate_index//:strum",
-    "@crate_index//:tracing-subscriber",
-    "@crate_index//:num-bigint",
-    "@crate_index//:reqwest",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:tower-request-id",
+    "@crate_index//:tower-http",
+    "@crate_index//:tracing",
     "@crate_index//:tracing-appender",
-    "@crate_index//:rolling-file",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//packages/icrc-ledger-agent:icrc_ledger_agent",
-    "//rs/rosetta-api",
-    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-    "//rs/rosetta-api/icrc1",
-    "//rs/constants",
-    "//rs/rosetta-api/icrc1/ledger",
-    "//rs/rosetta-api/icrc1/tokens_u64",
-    "//rs/rosetta-api/icrc1/tokens_u256",
-    "//rs/rosetta-api/ledger_core",
-    "//rs/rosetta-api/ledger_canister_core",
-    "//rs/rosetta-api/rosetta_core:rosetta-core",
-    "//rs/types/base_types",
-    "//rs/crypto/tree_hash",
+    "@crate_index//:tracing-subscriber",
+    "@crate_index//:url",
 ]
 
 DEV_DEPENDENCIES = [
-    "//packages/ic-starter-tests",
-    "//rs/test_utilities/load_wasm",
-    "//rs/types/management_canister_types",
-    "//rs/rosetta-api/icrc1/test_utils",
+    "//packages/pocket-ic:pocket-ic",
     "//rs/rosetta-api/icrc1/ledger/sm-tests",
     "//rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client",
     "//rs/rosetta-api/icrc1/rosetta/runner:ic-icrc-rosetta-runner",
+    "//rs/rosetta-api/icrc1/test_utils",
     "//rs/rosetta-api/test_utils",
-    "//rs/canister_client/sender",
+    "//rs/test_utilities/load_wasm",
     ":ic-icrc-rosetta",
     "@crate_index//:futures",
-    "@crate_index//:ring",
+    "@crate_index//:ic-utils",
     "@crate_index//:once_cell",
+    "@crate_index//:ring",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -82,7 +82,7 @@ MACRO_DEV_DEPENDENCIES = [
 ALIASES = {
 }
 
-ROSETTA_VERSION = "1.0.1"
+ROSETTA_VERSION = "1.0.2"
 
 rust_library(
     name = "ic-icrc-rosetta",
@@ -120,18 +120,18 @@ LOCAL_REPLICA_DATA = [
     "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     "//rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin",
     "//rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client-bin",
-    "//rs/starter:ic-starter",
+    "//rs/pocket_ic_server:pocket-ic-server",
 ]
 
 LOCAL_REPLICA_ENV = {
     "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
     "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister)",
     "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     "REPLICA_BIN": "$(rootpath //rs/replica)",
     "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin)",
-    "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
-    "STARTER_BIN": "$(rootpath //rs/starter:ic-starter)",
     "ROSETTA_CLIENT_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client-bin)",
+    "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
 }
 
 rust_test_suite_with_extra_srcs(
@@ -165,12 +165,13 @@ rust_test_suite_with_extra_srcs(
         "@rosetta-cli//:rosetta-cli",
     ],
     env = LOCAL_REPLICA_ENV | {
-        "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/rosetta/",
+        "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
     },
     extra_srcs = glob([
         "tests/common/*.rs",
     ]),
+    flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )

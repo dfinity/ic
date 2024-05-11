@@ -432,7 +432,7 @@ pub fn pipe_meta_manifest(
     }
 
     match dst.add_chunk(id, chunk) {
-        Ok(()) => Ok(dst.completed()),
+        Ok(()) => Ok(dst.chunks_to_download().next().is_none()),
         Err(_) => Err(StateSyncErrorCode::MetaManifestVerificationFailed),
     }
 }
@@ -466,7 +466,7 @@ pub fn pipe_manifest(
 
         match dst.add_chunk(*id, chunk) {
             Ok(()) => {
-                if dst.completed() {
+                if dst.chunks_to_download().next().is_none() {
                     return Ok(true);
                 }
             }
@@ -510,7 +510,7 @@ pub fn pipe_partial_state_sync(
 
             match dst.add_chunk(*id, chunk) {
                 Ok(()) => {
-                    if dst.completed() {
+                    if dst.chunks_to_download().next().is_none() {
                         return Ok(true);
                     }
                 }

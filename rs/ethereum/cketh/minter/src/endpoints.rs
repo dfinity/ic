@@ -1,9 +1,13 @@
+use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::ledger_client::LedgerBurnError;
-use crate::state::transactions::EthWithdrawalRequest;
+use crate::numeric::LedgerBurnIndex;
+use crate::state::{transactions, transactions::EthWithdrawalRequest};
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
 use candid::{CandidType, Deserialize, Nat, Principal};
+use icrc_ledger_types::icrc1::account::Account;
 use minicbor::{Decode, Encode};
 use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 pub mod ckerc20;
 
@@ -54,6 +58,8 @@ pub struct Erc20Balance {
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct MinterInfo {
     pub minter_address: Option<String>,
+    #[deprecated(note = "use eth_helper_contract_address instead")]
+    pub smart_contract_address: Option<String>,
     pub eth_helper_contract_address: Option<String>,
     pub erc20_helper_contract_address: Option<String>,
     pub supported_ckerc20_tokens: Option<Vec<CkErc20Token>>,
@@ -63,6 +69,8 @@ pub struct MinterInfo {
     pub eth_balance: Option<Nat>,
     pub last_gas_fee_estimate: Option<GasFeeEstimate>,
     pub erc20_balances: Option<Vec<Erc20Balance>>,
+    pub last_eth_scraped_block_number: Option<Nat>,
+    pub last_erc20_scraped_block_number: Option<Nat>,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
@@ -81,6 +89,14 @@ impl From<&SignedEip1559TransactionRequest> for EthTransaction {
     fn from(value: &SignedEip1559TransactionRequest) -> Self {
         Self {
             transaction_hash: value.hash().to_string(),
+        }
+    }
+}
+
+impl From<&TransactionReceipt> for EthTransaction {
+    fn from(receipt: &TransactionReceipt) -> Self {
+        Self {
+            transaction_hash: receipt.transaction_hash.to_string(),
         }
     }
 }
@@ -112,7 +128,7 @@ pub enum CandidBlockTag {
 impl From<EthWithdrawalRequest> for RetrieveEthRequest {
     fn from(value: EthWithdrawalRequest) -> Self {
         Self {
-            block_index: candid::Nat::from(value.ledger_burn_index.get()),
+            block_index: Nat::from(value.ledger_burn_index.get()),
         }
     }
 }
@@ -128,7 +144,10 @@ pub enum RetrieveEthStatus {
 
 #[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
 pub enum TxFinalizedStatus {
-    Success(EthTransaction),
+    Success {
+        transaction_hash: String,
+        effective_transaction_fee: Option<Nat>,
+    },
     PendingReimbursement(EthTransaction),
     Reimbursed {
         transaction_hash: String,
@@ -145,7 +164,9 @@ impl Display for RetrieveEthStatus {
             RetrieveEthStatus::TxCreated => write!(f, "Created"),
             RetrieveEthStatus::TxSent(tx) => write!(f, "Sent({})", tx.transaction_hash),
             RetrieveEthStatus::TxFinalized(tx_status) => match tx_status {
-                TxFinalizedStatus::Success(tx) => write!(f, "Confirmed({})", tx.transaction_hash),
+                TxFinalizedStatus::Success {
+                    transaction_hash, ..
+                } => write!(f, "Confirmed({})", transaction_hash),
                 TxFinalizedStatus::PendingReimbursement(tx) => {
                     write!(f, "PendingReimbursement({})", tx.transaction_hash)
                 }
@@ -190,8 +211,57 @@ impl From<LedgerBurnError> for WithdrawalError {
             LedgerBurnError::InsufficientAllowance { allowance, .. } => {
                 Self::InsufficientAllowance { allowance }
             }
+            LedgerBurnError::AmountTooLow {
+                minimum_burn_amount,
+                failed_burn_amount,
+                ledger,
+            } => {
+                panic!("BUG: withdrawal amount {failed_burn_amount} on the ckETH ledger {ledger:?} should always be higher than the ledger transaction fee {minimum_burn_amount}")
+            }
         }
     }
+}
+
+#[derive(CandidType, Deserialize, Clone, Eq, PartialEq, Debug)]
+pub enum WithdrawalSearchParameter {
+    ByWithdrawalId(u64),
+    ByRecipient(String),
+    BySenderAccount(Account),
+}
+
+impl TryFrom<WithdrawalSearchParameter> for transactions::WithdrawalSearchParameter {
+    type Error = String;
+
+    fn try_from(parameter: WithdrawalSearchParameter) -> Result<Self, String> {
+        use WithdrawalSearchParameter::*;
+        match parameter {
+            ByWithdrawalId(index) => Ok(Self::ByWithdrawalId(LedgerBurnIndex::new(index))),
+            ByRecipient(address) => Ok(Self::ByRecipient(ic_ethereum_types::Address::from_str(
+                &address,
+            )?)),
+            BySenderAccount(account) => Ok(Self::BySenderAccount(account)),
+        }
+    }
+}
+
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+pub struct WithdrawalDetail {
+    pub withdrawal_id: u64,
+    pub recipient_address: String,
+    pub from: Principal,
+    pub from_subaccount: Option<[u8; 32]>,
+    pub token_symbol: String,
+    pub withdrawal_amount: Nat,
+    pub max_transaction_fee: Option<Nat>,
+    pub status: WithdrawalStatus,
+}
+
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+pub enum WithdrawalStatus {
+    Pending,
+    TxCreated,
+    TxSent(EthTransaction),
+    TxFinalized(TxFinalizedStatus),
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
@@ -230,6 +300,18 @@ pub mod events {
     pub struct EventSource {
         pub transaction_hash: String,
         pub log_index: Nat,
+    }
+
+    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    pub enum ReimbursementIndex {
+        CkEth {
+            ledger_burn_index: Nat,
+        },
+        CkErc20 {
+            cketh_ledger_burn_index: Nat,
+            ledger_id: Principal,
+            ckerc20_ledger_burn_index: Nat,
+        },
     }
 
     #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -372,6 +454,12 @@ pub mod events {
             mint_block_index: Nat,
             ckerc20_token_symbol: String,
             erc20_contract_address: String,
+        },
+        QuarantinedDeposit {
+            event_source: EventSource,
+        },
+        QuarantinedReimbursement {
+            index: ReimbursementIndex,
         },
     }
 }

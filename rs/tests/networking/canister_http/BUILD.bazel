@@ -29,8 +29,8 @@ uvm_config_image(
     srcs = [
         ":minica_image",
         ":universal_vm_activation.sh",
-        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
-        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.key",
+        "//ic-os/rootfs/guestos:dev-certs/canister_http_test_ca.cert",
+        "//ic-os/rootfs/guestos:dev-certs/canister_http_test_ca.key",
         "//rs/tests/httpbin-rs:httpbin_image.tar",
     ],
     remap_paths = {

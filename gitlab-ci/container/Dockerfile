@@ -33,7 +33,7 @@ RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && \
     apt -yq update && \
     apt -yqq install --no-install-recommends lld-17 llvm-17 llvm-17-dev clang-17 libclang-rt-17-dev google-cloud-cli \
-        gcc-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-plugin-dev libstdc++-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-dev
+    gcc-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-plugin-dev libstdc++-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-dev
 
 ARG sdk_version=0.12.0
 ARG sdk_sha=40da56ad27774d5e1b2cbc35f94c17368be8c8da557aca19878940264bd82a0a
@@ -48,8 +48,8 @@ RUN curl -fsSL https://github.com/FiloSottile/mkcert/releases/download/v${mkcert
     echo "$mkcert_sha /usr/local/bin/mkcert" | sha256sum --check && \
     chmod +x /usr/local/bin/mkcert
 
-ARG bazelisk_sha=8b739ac23a189b70d51a98041e90ba16f6559d5f991d83bbc031c740f8796310
-RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.12.2/bazelisk-linux-amd64 -o /usr/bin/bazel && \
+ARG bazelisk_sha=d28b588ac0916abd6bf02defb5433f6eddf7cba35ffa808eabb65a44aab226f7
+RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64 -o /usr/bin/bazel && \
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
     chmod 777 /usr/bin/bazel
 
@@ -122,9 +122,9 @@ RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
 
 # Add buf
 ARG BUF_BIN="/usr/local/bin/buf"
-ARG BUF_VERSION="1.28.1"
+ARG BUF_VERSION="1.31.0"
 RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-$(uname -s)-$(uname -m)" -o "${BUF_BIN}" && \
-    echo "855a055c8615a03ee93219f287bd7f652586c6b6b8d2b01079782cba54ee6033  ${BUF_BIN}" | shasum -a 256 -c - && \
+    echo "a4589eea3afa5f8cda01c3830cdc0112ddd08c32f8b1d45007291fae9fc9bbf4  ${BUF_BIN}" | shasum -a 256 -c - && \
     chmod +x "${BUF_BIN}"
 
 # Add zshrc generated from zsh-newuser-install (option 2)

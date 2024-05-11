@@ -13,12 +13,14 @@ use ic_base_types::PrincipalId;
 use ic_btc_types_internal::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
+use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue as ProtoNextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     batch::{ConsensusResponse, RawQueryStats},
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
+    time::CoarseTime,
     xnet::QueueId,
     CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
 };
@@ -27,6 +29,7 @@ use rand_chacha::ChaChaRng;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
+use strum_macros::EnumIter;
 
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.
@@ -42,15 +45,39 @@ pub enum InputQueueType {
 }
 
 /// Next input queue: round-robin across local subnet; ingress; or remote subnet.
-#[derive(Clone, Copy, Eq, Debug, PartialEq, Default)]
+#[derive(Clone, Copy, Eq, EnumIter, Debug, PartialEq, Default)]
 pub enum NextInputQueue {
     /// Local subnet input messages.
     #[default]
-    LocalSubnet,
+    LocalSubnet = 0,
     /// Ingress messages.
-    Ingress,
+    Ingress = 1,
     /// Remote subnet input messages.
-    RemoteSubnet,
+    RemoteSubnet = 2,
+}
+
+impl From<&NextInputQueue> for ProtoNextInputQueue {
+    fn from(next: &NextInputQueue) -> Self {
+        match next {
+            // Encode `LocalSubnet` as `Unspecified` because it is decoded as such (and it
+            // serializes to zero bytes).
+            NextInputQueue::LocalSubnet => ProtoNextInputQueue::Unspecified,
+            NextInputQueue::Ingress => ProtoNextInputQueue::Ingress,
+            NextInputQueue::RemoteSubnet => ProtoNextInputQueue::RemoteSubnet,
+        }
+    }
+}
+
+impl From<ProtoNextInputQueue> for NextInputQueue {
+    fn from(next: ProtoNextInputQueue) -> Self {
+        match next {
+            ProtoNextInputQueue::Unspecified | ProtoNextInputQueue::LocalSubnet => {
+                NextInputQueue::LocalSubnet
+            }
+            ProtoNextInputQueue::Ingress => NextInputQueue::Ingress,
+            ProtoNextInputQueue::RemoteSubnet => NextInputQueue::RemoteSubnet,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Hash)]
@@ -85,6 +112,7 @@ pub enum StateError {
         originator: CanisterId,
         callback_id: CallbackId,
         respondent: CanisterId,
+        deadline: CoarseTime,
     },
 
     /// Message enqueuing failed due to calling a subnet method with
@@ -282,10 +310,10 @@ impl std::fmt::Display for StateError {
                 "Cannot enqueue management message. Method {} is unknown.",
                 method
             ),
-            StateError::NonMatchingResponse {err_str, originator, callback_id, respondent} => write!(
+            StateError::NonMatchingResponse {err_str, originator, callback_id, respondent, deadline} => write!(
                 f,
-                "Cannot enqueue response with callback id {} due to {} : originator => {}, respondent => {}",
-                callback_id, err_str, originator, respondent
+                "Cannot enqueue response with callback id {} due to {} : originator => {}, respondent => {}, deadline => {}",
+                callback_id, err_str, originator, respondent, Time::from(*deadline)
             ),
             StateError::InvalidSubnetPayload => write!(
                 f,

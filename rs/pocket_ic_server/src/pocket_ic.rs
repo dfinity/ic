@@ -9,6 +9,7 @@ use hyper::header::{HeaderValue, CONTENT_TYPE};
 use hyper::Method;
 use ic_boundary::{Health, RootKey};
 use ic_config::execution_environment;
+use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_public::{
@@ -27,15 +28,17 @@ use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
     crypto::{BasicSig, BasicSigOf, CryptoResult, Signable},
-    messages::{CertificateDelegation, QueryResponseHash, ReplicaHealthStatus},
+    messages::{
+        CertificateDelegation, MessageId as OtherMessageId, QueryResponseHash, ReplicaHealthStatus,
+    },
     CanisterId, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
 };
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use itertools::Itertools;
 use pocket_ic::common::rest::{
-    self, BinaryBlob, BlobCompression, ExtendedSubnetConfigSet, RawAddCycles, RawCanisterCall,
-    RawEffectivePrincipal, RawSetStableMemory, SubnetInstructionConfig, SubnetKind, SubnetSpec,
-    Topology,
+    self, BinaryBlob, BlobCompression, DtsFlag, ExtendedSubnetConfigSet, RawAddCycles,
+    RawCanisterCall, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
+    SubnetInstructionConfig, SubnetKind, SubnetSpec, Topology,
 };
 use rand::rngs::StdRng;
 use rand::Rng;
@@ -84,6 +87,7 @@ impl PocketIc {
                     SubnetKind::System,
                     spec.get_state_path(),
                     spec.get_instruction_config(),
+                    spec.get_dts_flag(),
                 )
             });
             let app = subnet_configs.application.iter().map(|spec| {
@@ -91,6 +95,7 @@ impl PocketIc {
                     SubnetKind::Application,
                     spec.get_state_path(),
                     spec.get_instruction_config(),
+                    spec.get_dts_flag(),
                 )
             });
             sys.chain(app)
@@ -107,7 +112,7 @@ impl PocketIc {
 
         let ii_subnet_split = subnet_configs.ii.is_some();
 
-        for (subnet_kind, subnet_state_dir, instruction_config) in
+        for (subnet_kind, subnet_state_dir, instruction_config, dts_flag) in
             fixed_range_subnets.into_iter().chain(flexible_subnets)
         {
             let RangeConfig {
@@ -129,6 +134,7 @@ impl PocketIc {
                 subnet_kind,
                 state_dir,
                 instruction_config,
+                dts_flag,
             });
         }
 
@@ -146,6 +152,7 @@ impl PocketIc {
                 subnet_kind,
                 state_dir,
                 instruction_config,
+                dts_flag,
             },
         ) in subnet_config_info.into_iter().enumerate()
         {
@@ -163,6 +170,15 @@ impl PocketIc {
                     .max_instructions_per_message_without_dts = instruction_limit;
                 hypervisor_config.max_query_call_graph_instructions = instruction_limit;
             }
+            // bound PocketIc resource consumption
+            hypervisor_config.embedders_config.min_sandbox_count = 0;
+            hypervisor_config.embedders_config.max_sandbox_count = 64;
+            hypervisor_config.embedders_config.max_sandbox_idle_time = Duration::from_secs(30);
+            // enable canister debug prints
+            hypervisor_config
+                .embedders_config
+                .feature_flags
+                .rate_limiting_of_debug_prints = FlagStatus::Disabled;
             let sm_config = StateMachineConfig::new(subnet_config, hypervisor_config);
             let subnet_size = subnet_size(subnet_kind);
             let mut builder = StateMachineBuilder::new()
@@ -174,6 +190,10 @@ impl PocketIc {
                 .with_registry_data_provider(registry_data_provider.clone())
                 .with_multisubnet_ecdsa_key()
                 .with_use_cost_scaling_flag(true);
+
+            if let DtsFlag::Disabled = dts_flag {
+                builder = builder.no_dts();
+            };
 
             if subnet_kind == SubnetKind::NNS {
                 builder = builder.with_root_subnet_config();
@@ -491,6 +511,7 @@ struct SubnetConfigInfo {
     pub subnet_kind: SubnetKind,
     pub state_dir: Option<TempDir>,
     pub instruction_config: SubnetInstructionConfig,
+    pub dts_flag: DtsFlag,
 }
 
 // ---------------------------------------------------------------------------------------- //
@@ -589,6 +610,121 @@ impl Operation for AdvanceTimeAndTick {
 }
 
 #[derive(Clone, Debug)]
+pub struct SubmitIngressMessage(pub CanisterCall);
+
+impl Operation for SubmitIngressMessage {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let canister_call = self.0.clone();
+        let subnet = route_call(pic, canister_call);
+        match subnet {
+            Ok(subnet) => {
+                match subnet.submit_ingress_as(
+                    self.0.sender,
+                    self.0.canister_id,
+                    self.0.method.clone(),
+                    self.0.payload.clone(),
+                ) {
+                    Err(SubmitIngressError::HttpError(e)) => {
+                        eprintln!("Failed to submit ingress message: {}", e);
+                        OpOut::Error(PocketIcError::BadIngressMessage(e))
+                    }
+                    Err(SubmitIngressError::UserError(e)) => {
+                        eprintln!("Failed to submit ingress message: {:?}", e);
+                        Err::<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>(e).into()
+                    }
+                    Ok(msg_id) => OpOut::MessageId((
+                        EffectivePrincipal::SubnetId(subnet.get_subnet_id()),
+                        msg_id.as_bytes().to_vec(),
+                    )),
+                }
+            }
+            Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        let call_id = self.0.id();
+        OpId(format!("submit_update_{}", call_id.0))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct MessageId {
+    effective_principal: EffectivePrincipal,
+    msg_id: OtherMessageId,
+}
+
+impl TryFrom<RawMessageId> for MessageId {
+    type Error = ConversionError;
+    fn try_from(
+        RawMessageId {
+            effective_principal,
+            message_id,
+        }: RawMessageId,
+    ) -> Result<Self, Self::Error> {
+        let effective_principal = effective_principal.try_into()?;
+        let msg_id = match OtherMessageId::try_from(message_id.as_slice()) {
+            Ok(msg_id) => msg_id,
+            Err(_) => {
+                return Err(ConversionError {
+                    message: "Bad message id".to_string(),
+                })
+            }
+        };
+        Ok(MessageId {
+            effective_principal,
+            msg_id,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct AwaitIngressMessage(pub MessageId);
+
+impl Operation for AwaitIngressMessage {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let subnet = route(pic, self.0.effective_principal.clone(), None);
+        match subnet {
+            Ok(subnet) => {
+                // Now, we execute on all subnets until we have the result
+                let max_rounds = 100;
+                for _i in 0..max_rounds {
+                    match subnet.ingress_status(&self.0.msg_id) {
+                        IngressStatus::Known {
+                            state: IngressState::Completed(result),
+                            ..
+                        } => return Ok(result).into(),
+                        IngressStatus::Known {
+                            state: IngressState::Failed(error),
+                            ..
+                        } => {
+                            return Err::<
+                                ic_state_machine_tests::WasmResult,
+                                ic_state_machine_tests::UserError,
+                            >(error)
+                            .into()
+                        }
+                        _ => {}
+                    }
+                    for subnet_ in pic.subnets.read().unwrap().values() {
+                        subnet_.execute_round();
+                    }
+                }
+                OpOut::Error(PocketIcError::BadIngressMessage(format!(
+                    "Failed to answer to ingress {} after {} rounds.",
+                    self.0.msg_id, max_rounds
+                )))
+            }
+            Err(e) => OpOut::Error(PocketIcError::BadIngressMessage(e)),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!("await_update_{}", self.0.msg_id))
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct ExecuteIngressMessage(pub CanisterCall);
 
 impl Operation for ExecuteIngressMessage {
@@ -616,7 +752,6 @@ impl Operation for ExecuteIngressMessage {
                         let max_rounds = 100;
                         for _i in 0..max_rounds {
                             for subnet_ in pic.subnets.read().unwrap().values() {
-                                subnet_.advance_time(Duration::from_nanos(1));
                                 subnet_.execute_round();
                             }
                             match subnet.ingress_status(&msg_id) {
@@ -1039,11 +1174,51 @@ impl Operation for ReadStateRequest {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum EffectivePrincipal {
     None,
     SubnetId(SubnetId),
     CanisterId(CanisterId),
+}
+
+impl TryFrom<RawEffectivePrincipal> for EffectivePrincipal {
+    type Error = ConversionError;
+    fn try_from(effective_principal: RawEffectivePrincipal) -> Result<Self, Self::Error> {
+        match effective_principal {
+            RawEffectivePrincipal::SubnetId(subnet_id) => {
+                let sid = PrincipalId::try_from(subnet_id);
+                match sid {
+                    Ok(sid) => Ok(EffectivePrincipal::SubnetId(SubnetId::new(sid))),
+                    Err(_) => Err(ConversionError {
+                        message: "Bad subnet id".to_string(),
+                    }),
+                }
+            }
+            RawEffectivePrincipal::CanisterId(canister_id) => {
+                match CanisterId::try_from(canister_id) {
+                    Ok(canister_id) => Ok(EffectivePrincipal::CanisterId(canister_id)),
+                    Err(_) => Err(ConversionError {
+                        message: "Bad effective canister id".to_string(),
+                    }),
+                }
+            }
+            RawEffectivePrincipal::None => Ok(EffectivePrincipal::None),
+        }
+    }
+}
+
+impl From<EffectivePrincipal> for RawEffectivePrincipal {
+    fn from(effective_principal: EffectivePrincipal) -> Self {
+        match effective_principal {
+            EffectivePrincipal::None => RawEffectivePrincipal::None,
+            EffectivePrincipal::CanisterId(canister_id) => {
+                RawEffectivePrincipal::CanisterId(canister_id.get().to_vec())
+            }
+            EffectivePrincipal::SubnetId(subnet_id) => {
+                RawEffectivePrincipal::SubnetId(subnet_id.get().to_vec())
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1066,30 +1241,7 @@ impl TryFrom<RawCanisterCall> for CanisterCall {
             effective_principal,
         }: RawCanisterCall,
     ) -> Result<Self, Self::Error> {
-        let effective_principal = match effective_principal {
-            RawEffectivePrincipal::SubnetId(subnet_id) => {
-                let sid = PrincipalId::try_from(subnet_id);
-                match sid {
-                    Ok(sid) => EffectivePrincipal::SubnetId(SubnetId::new(sid)),
-                    Err(_) => {
-                        return Err(ConversionError {
-                            message: "Bad subnet id".to_string(),
-                        })
-                    }
-                }
-            }
-            RawEffectivePrincipal::CanisterId(canister_id) => {
-                match CanisterId::try_from(canister_id) {
-                    Ok(canister_id) => EffectivePrincipal::CanisterId(canister_id),
-                    Err(_) => {
-                        return Err(ConversionError {
-                            message: "Bad effective canister id".to_string(),
-                        })
-                    }
-                }
-            }
-            RawEffectivePrincipal::None => EffectivePrincipal::None,
-        };
+        let effective_principal = effective_principal.try_into()?;
         let sender = match PrincipalId::try_from(sender) {
             Ok(sender) => sender,
             Err(_) => {

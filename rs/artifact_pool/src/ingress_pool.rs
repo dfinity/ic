@@ -99,15 +99,6 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         removed
     }
 
-    fn exists(&self, message_id: &IngressMessageId) -> bool {
-        let _timer = self
-            .metrics
-            .op_duration
-            .with_label_values(&["exists"])
-            .start_timer();
-        self.artifacts.contains_key(message_id)
-    }
-
     // Purge below an expiry prefix (non-inclusive), and return the purged artifacts
     // as an iterator.
     fn purge_below(&mut self, expiry: Time) -> Box<dyn Iterator<Item = T> + '_> {
@@ -308,20 +299,13 @@ impl MutablePool<IngressArtifact> for IngressPoolImpl {
         let mut purged = Vec::new();
         for change_action in change_set {
             match change_action {
-                ChangeAction::MoveToValidated((
-                    message_id,
-                    source_node_id,
-                    size,
-                    (),
-                    integrity_hash,
-                )) => {
+                ChangeAction::MoveToValidated((message_id, source_node_id, size)) => {
                     if source_node_id == self.node_id {
                         artifacts_with_opt.push(ArtifactWithOpt {
                             advert: Advert {
                                 size,
                                 id: message_id.clone(),
                                 attribute: (),
-                                integrity_hash: integrity_hash.clone(),
                             },
                             is_latency_sensitive: false,
                         });
@@ -405,19 +389,11 @@ impl MutablePool<IngressArtifact> for IngressPoolImpl {
 }
 
 impl ValidatedPoolReader<IngressArtifact> for IngressPoolImpl {
-    /// Check if an Ingress message exists by its hash
-    fn contains(&self, id: &IngressMessageId) -> bool {
-        self.unvalidated.exists(id) || self.validated.exists(id)
-    }
-
-    fn get_validated_by_identifier(&self, id: &IngressMessageId) -> Option<SignedIngress> {
+    fn get(&self, id: &IngressMessageId) -> Option<SignedIngress> {
         self.validated.get(id).map(|a| a.msg.signed_ingress.clone())
     }
 
-    fn get_all_validated_by_filter<'a>(
-        &'a self,
-        _filter: &(),
-    ) -> Box<dyn Iterator<Item = SignedIngress> + 'a> {
+    fn get_all_validated<'a>(&'a self) -> Box<dyn Iterator<Item = SignedIngress> + 'a> {
         Box::new(vec![].into_iter())
     }
 }
@@ -464,7 +440,7 @@ impl PriorityFnAndFilterProducer<IngressArtifact, IngressPoolImpl> for IngressPr
             let start = time_source.get_relative_time();
             let range = start..=start + MAX_INGRESS_TTL;
             if range.contains(&ingress_id.expiry()) {
-                Priority::Later
+                Priority::FetchNow
             } else {
                 Priority::Drop
             }
@@ -528,7 +504,7 @@ mod tests {
                         timestamp: UNIX_EPOCH,
                     },
                 );
-                assert!(ingress_pool.contains(&message_id));
+                assert!(ingress_pool.validated.artifacts.contains_key(&message_id));
             })
         })
     }
@@ -560,7 +536,10 @@ mod tests {
 
                 // Ingress message not in the pool
                 let ingress_msg = SignedIngressBuilder::new().nonce(3).build();
-                assert!(!ingress_pool.contains(&IngressMessageId::from(&ingress_msg)));
+                assert!(!ingress_pool
+                    .validated
+                    .artifacts
+                    .contains_key(&IngressMessageId::from(&ingress_msg)));
             })
         })
     }
@@ -582,16 +561,16 @@ mod tests {
                     peer_id: node_test_id(0),
                     timestamp: time_source.get_relative_time(),
                 });
-                assert!(ingress_pool.contains(&message_id));
+                assert!(ingress_pool.unvalidated.artifacts.contains_key(&message_id));
 
                 ingress_pool.remove(&message_id);
-                assert!(!ingress_pool.contains(&message_id));
+                assert!(!ingress_pool.unvalidated.artifacts.contains_key(&message_id));
             })
         })
     }
 
     #[test]
-    fn test_get_all_validated_by_filter() {
+    fn test_get_all_validated() {
         with_test_replica_logger(|log| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let time_source = FastForwardTimeSource::new();
@@ -624,7 +603,7 @@ mod tests {
                     );
                 }
                 // empty
-                let filtered_msgs = ingress_pool.get_all_validated_by_filter(&());
+                let filtered_msgs = ingress_pool.get_all_validated();
                 assert!(filtered_msgs.count() == 0);
             })
         })
@@ -641,11 +620,9 @@ mod tests {
                     IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
                 let ingress_msg_0 = SignedIngressBuilder::new().nonce(1).build();
                 let message_id0 = IngressMessageId::from(&ingress_msg_0);
-                let msg_0_integrity_hash =
-                    ic_types::crypto::crypto_hash(ingress_msg_0.binary()).get();
 
                 ingress_pool.insert(UnvalidatedArtifact {
-                    message: ingress_msg_0,
+                    message: ingress_msg_0.clone(),
                     peer_id: node_test_id(0),
                     timestamp: time_source.get_relative_time(),
                 });
@@ -672,13 +649,7 @@ mod tests {
                 );
 
                 let changeset = vec![
-                    ChangeAction::MoveToValidated((
-                        message_id0.clone(),
-                        node_test_id(0),
-                        0,
-                        (),
-                        msg_0_integrity_hash,
-                    )),
+                    ChangeAction::MoveToValidated((message_id0.clone(), node_test_id(0), 0)),
                     ChangeAction::RemoveFromUnvalidated(message_id1.clone()),
                 ];
                 let result = ingress_pool.apply_changes(changeset);
@@ -688,6 +659,8 @@ mod tests {
                 assert_eq!(result.artifacts_with_opt.len(), 1);
                 assert_eq!(result.artifacts_with_opt[0].advert.id, message_id0);
                 assert!(!result.poll_immediately);
+                // Check that message is indeed in the pool
+                assert_eq!(ingress_msg_0, ingress_pool.get(&message_id0).unwrap());
                 // Check timestamp is carried over for msg_0.
                 assert_eq!(ingress_pool.unvalidated.get_timestamp(&message_id0), None);
                 assert_eq!(
@@ -730,7 +703,6 @@ mod tests {
                         .expiry_time(now + expiry)
                         .build();
                     let message_id = IngressMessageId::from(&ingress);
-                    let integrity_hash = ic_types::crypto::crypto_hash(ingress.binary()).get();
                     let peer_id = (i % nodes) as u64;
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress,
@@ -741,8 +713,6 @@ mod tests {
                         message_id,
                         node_test_id(peer_id),
                         0,
-                        (),
-                        integrity_hash,
                     )));
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
