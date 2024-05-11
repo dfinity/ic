@@ -5,7 +5,7 @@ use crate::{
 };
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
-use ic_types::{RegistryVersion, SubnetId};
+use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::{
     io::Write,
     process::{Command, Stdio},
@@ -25,6 +25,7 @@ pub(crate) struct SshAccessParameters {
 pub(crate) struct SshAccessManager {
     registry: Arc<RegistryHelper>,
     metrics: Arc<OrchestratorMetrics>,
+    node_id: NodeId,
     logger: ReplicaLogger,
     last_applied_parameters: Arc<RwLock<SshAccessParameters>>,
 }
@@ -33,11 +34,13 @@ impl SshAccessManager {
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
+        node_id: NodeId,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
             registry,
             metrics,
+            node_id,
             logger,
             last_applied_parameters: Default::default(),
         }
@@ -138,13 +141,22 @@ impl SshAccessManager {
         match subnet_id {
             None => match self
                 .registry
-                .registry_client
-                .get_unassigned_nodes_config(version)
-                .map_err(OrchestratorError::RegistryClientError)?
+                .get_api_boundary_node_record(self.node_id, version)
             {
-                // Unassigned nodes do not need backup keys
-                Some(record) => Ok((record.ssh_readonly_access, vec![])),
-                None => Ok((vec![], vec![])),
+                // API boundary nodes (for now) do not have readonly or backup keys
+                Ok(_) => Ok((vec![], vec![])),
+                // If it is not an API boundary node, it is an unassigned node
+                Err(OrchestratorError::ApiBoundaryNodeMissingError(_, _)) => match self
+                    .registry
+                    .registry_client
+                    .get_unassigned_nodes_config(version)
+                    .map_err(OrchestratorError::RegistryClientError)?
+                {
+                    // Unassigned nodes do not need backup keys
+                    Some(record) => Ok((record.ssh_readonly_access, vec![])),
+                    None => Ok((vec![], vec![])),
+                },
+                Err(err) => Err(err),
             },
             Some(subnet_id) => {
                 self.registry
