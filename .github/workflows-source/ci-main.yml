@@ -92,8 +92,6 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     <<: *bazel-large-setup
-    outputs:
-      artifacts_produced: ${{ steps.bazel-test-all.outputs.upload_artifacts }}
     steps:
       - <<: *checkout
         uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
@@ -119,7 +117,6 @@ jobs:
       - <<: *after-script
       - name: Upload bazel-targets
         uses: actions/upload-artifact@v3
-        if: ${{ needs.bazel-test-all.outputs.upload_artifacts == 'true' }}
         with:
           name: bazel-targets
           retention-days: 1
@@ -243,8 +240,6 @@ jobs:
   build-ic:
     name: Build IC
     <<: *bazel-large-setup
-    outputs:
-      artifacts_produced: ${{ steps.build-ic.outputs.upload_artifacts }}
     steps:
       - <<: *checkout
         uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
@@ -271,7 +266,6 @@ jobs:
           BAZEL_COMMAND: "build"
       - name: Upload build-ic.tar
         uses: actions/upload-artifact@v3
-        if: ${{ needs.build-ic.outputs.upload_artifacts == 'true' }}
         with:
           name: build-ic
           retention-days: 1
@@ -283,7 +277,6 @@ jobs:
     name: Build Determinism
     <<: *default-setup
     needs: [build-ic, bazel-test-all]
-    if: ${{ needs.build-ic.outputs.artifacts_produced == 'true' && needs.bazel-test-all.outputs.artifacts_produced == 'true' }}
     strategy:
       matrix:
         include:
