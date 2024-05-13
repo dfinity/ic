@@ -86,7 +86,8 @@ pub enum Method {
     StopCanister,
     UninstallCode,
     UpdateSettings,
-    ComputeInitialEcdsaDealings,
+    ComputeInitialEcdsaDealings, // TODO(EXC-1599): remove after ComputeInitialIDkgDealings is released.
+    ComputeInitialIDkgDealings,
 
     // Bitcoin Interface.
     BitcoinGetBalance,
@@ -1780,7 +1781,7 @@ impl<'a> Payload<'a> for CreateCanisterArgs {
 /// Struct used for encoding/decoding
 /// `(record {
 ///     node_ids : vec principal;
-///     registry_version: nat;
+///     registry_version: nat64;
 /// })`
 #[derive(CandidType, Deserialize, Debug)]
 pub struct SetupInitialDKGArgs {
@@ -1856,7 +1857,7 @@ impl SetupInitialDKGResponse {
         )>(&serde_encoded_transcript_records)
         {
             Err(err) => Err(UserError::new(
-                ErrorCode::CanisterContractViolation,
+                ErrorCode::InvalidManagementPayload,
                 format!("Payload deserialization error: '{}'", err),
             )),
             Ok((
@@ -2285,7 +2286,7 @@ impl Payload<'_> for ECDSAPublicKeyResponse {}
 ///     key_id: ecdsa_key_id;
 ///     subnet_id: principal;
 ///     nodes: vec principal;
-///     registry_version: nat;
+///     registry_version: nat64;
 /// })`
 #[derive(CandidType, Deserialize, Debug, Eq, PartialEq)]
 pub struct ComputeInitialEcdsaDealingsArgs {
@@ -2355,7 +2356,56 @@ impl ComputeInitialEcdsaDealingsResponse {
             Decode!([decoder_config()]; blob, Vec<u8>).map_err(candid_error_to_user_error)?;
         match serde_cbor::from_slice::<(InitialIDkgDealings,)>(&serde_encoded_transcript_records) {
             Err(err) => Err(UserError::new(
-                ErrorCode::CanisterContractViolation,
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: '{}'", err),
+            )),
+            Ok((initial_dkg_dealings,)) => Ok(Self {
+                initial_dkg_dealings,
+            }),
+        }
+    }
+}
+
+/// Argument of the compute_initial_idkg_dealings API.
+/// `(record {
+///     key_id: master_public_key_id;
+///     subnet_id: principal;
+///     nodes: vec principal;
+///     registry_version: nat64;
+/// })`
+#[derive(CandidType, Deserialize, Debug, Eq, PartialEq)]
+pub struct ComputeInitialIDkgDealingsArgs {
+    pub key_id: MasterPublicKeyId,
+    pub subnet_id: SubnetId,
+    nodes: Vec<PrincipalId>,
+    registry_version: u64,
+}
+
+impl Payload<'_> for ComputeInitialIDkgDealingsArgs {}
+
+/// Struct used to return the xnet initial dealings.
+#[derive(Debug)]
+pub struct ComputeInitialIDkgDealingsResponse {
+    pub initial_dkg_dealings: InitialIDkgDealings,
+}
+
+impl ComputeInitialIDkgDealingsResponse {
+    pub fn encode(&self) -> Vec<u8> {
+        let serde_encoded_transcript_records = self.encode_with_serde_cbor();
+        Encode!(&serde_encoded_transcript_records).unwrap()
+    }
+
+    fn encode_with_serde_cbor(&self) -> Vec<u8> {
+        let transcript_records = (&self.initial_dkg_dealings,);
+        serde_cbor::to_vec(&transcript_records).unwrap()
+    }
+
+    pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
+        let serde_encoded_transcript_records =
+            Decode!([decoder_config()]; blob, Vec<u8>).map_err(candid_error_to_user_error)?;
+        match serde_cbor::from_slice::<(InitialIDkgDealings,)>(&serde_encoded_transcript_records) {
+            Err(err) => Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
                 format!("Payload deserialization error: '{}'", err),
             )),
             Ok((initial_dkg_dealings,)) => Ok(Self {
@@ -2472,8 +2522,8 @@ impl FetchCanisterLogsRequest {
 /// `CandidType` for `CanisterLogRecord`
 /// ```text
 /// record {
-///     idx: nat;
-///     timestamp_nanos: nat;
+///     idx: nat64;
+///     timestamp_nanos: nat64;
 ///     content: blob;
 /// }
 /// ```

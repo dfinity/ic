@@ -1072,6 +1072,15 @@ impl ExecutionEnvironment {
                 }
             }
 
+            // TODO(EXC-1599): implement ComputeInitialIDkgDealings.
+            Ok(Ic00Method::ComputeInitialIDkgDealings) => ExecuteSubnetMessageResult::Finished {
+                response: Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "ComputeInitialIDkgDealings API is not yet implemented.",
+                )),
+                refund: msg.take_cycles(),
+            },
+
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
                 let res =
                     ProvisionalCreateCanisterWithCyclesArgs::decode(payload).and_then(|args| {

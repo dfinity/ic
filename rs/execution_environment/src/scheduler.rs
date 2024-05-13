@@ -2332,6 +2332,7 @@ fn get_instructions_limits_for_subnet_message(
             | SetupInitialDKG
             | SignWithECDSA
             | ComputeInitialEcdsaDealings
+            | ComputeInitialIDkgDealings
             | StartCanister
             | StopCanister
             | UninstallCode
