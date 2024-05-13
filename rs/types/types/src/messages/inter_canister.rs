@@ -189,6 +189,7 @@ impl Request {
             | Ok(Method::ECDSAPublicKey)
             | Ok(Method::SignWithECDSA)
             | Ok(Method::ComputeInitialEcdsaDealings)
+            | Ok(Method::ComputeInitialIDkgDealings)
             | Ok(Method::BitcoinGetBalance)
             | Ok(Method::BitcoinGetUtxos)
             | Ok(Method::BitcoinSendTransaction)
