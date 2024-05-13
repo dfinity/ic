@@ -90,6 +90,10 @@ impl TimeSource for FastForwardTimeSource {
     fn get_instant(&self) -> Instant {
         self.0.read().unwrap().current_instant
     }
+
+    fn get_origin_instant(&self) -> Instant {
+        self.0.read().unwrap().origin_instant
+    }
 }
 
 /// Execute the provided closure on a separate thread, but with a timeout.
