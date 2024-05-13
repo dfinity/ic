@@ -385,7 +385,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ed25519-dalek": crate.spec(
                 version = "^2.1.1",
-                features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem"],
+                features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem", "hazmat"],
             ),
             "educe": crate.spec(
                 version = "^0.4",
@@ -464,6 +464,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "hex-literal": crate.spec(
                 version = "^0.4.1",
+            ),
+            "hkdf": crate.spec(
+                version = "^0.12",
             ),
             "http": crate.spec(
                 version = "^0.2.9",
