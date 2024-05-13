@@ -1510,26 +1510,6 @@ impl SystemState {
             )));
         }
 
-        let unresponded_call_contexts = self
-            .call_context_manager()
-            .map(|ccm| {
-                ccm.unresponded_canister_update_call_contexts(self.aborted_or_paused_request())
-            })
-            .unwrap_or_default();
-
-        let num_requests = self.queues.input_queues_request_count();
-        let output_queue_reserved_slots =
-            self.queues.reserved_slots() - self.queues.input_queues_reserved_slots();
-
-        if num_requests + unresponded_call_contexts != output_queue_reserved_slots {
-            return Err(StateError::InvariantBroken(format!(
-                "Canister {}: Number of output queue reservations ({}) is different from the number of input requests plus unresponded call contexts ({})",
-                self.canister_id(),
-                output_queue_reserved_slots,
-                num_requests + unresponded_call_contexts
-            )));
-        }
-
         Ok(())
     }
 
