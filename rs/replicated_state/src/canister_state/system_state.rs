@@ -1498,8 +1498,7 @@ impl SystemState {
             .unwrap_or_default();
 
         let num_requests = self.queues.input_queues_request_count();
-        let output_queue_reserved_slots =
-            self.queues.reserved_slots() - self.queues.input_queues_reserved_slots();
+        let output_queue_reserved_slots = self.queues.output_queues_reserved_slots();
 
         if num_requests + unresponded_call_contexts != output_queue_reserved_slots {
             return Err(StateError::InvariantBroken(format!(

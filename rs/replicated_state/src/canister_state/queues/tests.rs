@@ -1160,11 +1160,13 @@ fn test_memory_usage_stats_oversized_requests() {
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Two messages in output queues.
-    let expected_oq_stats = OutputQueuesStats { message_count: 2 };
+    let expected_oq_stats = OutputQueuesStats {
+        message_count: 2,
+        reserved_slots: 2,
+    };
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // Four slot reservations, two guaranteed response memory reservations.
     let expected_mu_stats = MemoryUsageStats {
-        reserved_slots: 4,
         guaranteed_response_memory_reservations: 2,
         transient_stream_responses_size_bytes: 0,
     };
@@ -1199,11 +1201,13 @@ fn test_memory_usage_stats_oversized_requests() {
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Still two messages in output queues.
-    let expected_oq_stats = OutputQueuesStats { message_count: 2 };
+    let expected_oq_stats = OutputQueuesStats {
+        message_count: 2,
+        reserved_slots: 2,
+    };
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // Still four slots, two guaranteed response memory reservations.
     let expected_mu_stats = MemoryUsageStats {
-        reserved_slots: 4,
         guaranteed_response_memory_reservations: 2,
         transient_stream_responses_size_bytes: 0,
     };
@@ -1238,10 +1242,13 @@ fn test_memory_usage_stats_oversized_requests() {
         },
         queues.input_queues_stats
     );
-    assert_eq!(OutputQueuesStats::default(), queues.output_queues_stats);
+    let expected_oq_stats = OutputQueuesStats {
+        message_count: 0,
+        reserved_slots: 2,
+    };
+    assert_eq!(expected_oq_stats, queues.output_queues_stats);
     assert_eq!(
         MemoryUsageStats {
-            reserved_slots: 2,
             guaranteed_response_memory_reservations: 1,
             transient_stream_responses_size_bytes: 0,
         },
@@ -1298,10 +1305,13 @@ fn test_stats() {
             guaranteed_response_count: 0,
         };
         assert_eq!(expected_iq_stats, queues.input_queues_stats);
+        expected_oq_stats += OutputQueuesStats {
+            message_count: 0,
+            reserved_slots: 1,
+        };
         assert_eq!(expected_oq_stats, queues.output_queues_stats);
         // Pushed a request: one more response slot and memory reservation.
         expected_mu_stats += MemoryUsageStats {
-            reserved_slots: 1,
             guaranteed_response_memory_reservations: 1,
             transient_stream_responses_size_bytes: 0,
         };
@@ -1338,11 +1348,13 @@ fn test_stats() {
     queues.push_output_response(msg.into());
     // Input queue stats are unchanged.
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    expected_oq_stats += OutputQueuesStats { message_count: 1 };
+    expected_oq_stats += OutputQueuesStats {
+        message_count: 1,
+        reserved_slots: -1,
+    };
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // Consumed a guaranteed response memory reservation and added a response.
     expected_mu_stats += MemoryUsageStats {
-        reserved_slots: -1,
         guaranteed_response_memory_reservations: -1,
         // responses_size_bytes: msg_size[3],
         // oversized_requests_extra_bytes: 0,
@@ -1362,13 +1374,15 @@ fn test_stats() {
     // One more reserved slot and response memory reservation, oversized request.
     expected_iq_stats.reserved_slots += 1;
     expected_mu_stats += MemoryUsageStats {
-        reserved_slots: 1,
         guaranteed_response_memory_reservations: 1,
         transient_stream_responses_size_bytes: 0,
     };
     // expected_mu_stats.oversized_requests_extra_bytes += msg_size[4] - MAX_RESPONSE_COUNT_BYTES;
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    expected_oq_stats += OutputQueuesStats { message_count: 1 };
+    expected_oq_stats += OutputQueuesStats {
+        message_count: 1,
+        reserved_slots: 0,
+    };
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
@@ -1386,7 +1400,10 @@ fn test_stats() {
         .expect("could not pop a message")
     {
         (_, RequestOrResponse::Response(msg)) => {
-            expected_oq_stats -= OutputQueuesStats { message_count: 1 };
+            expected_oq_stats -= OutputQueuesStats {
+                message_count: 1,
+                reserved_slots: 0,
+            };
             assert_eq!(msg.originator, other_1)
         }
         msg => panic!("unexpected message popped: {:?}", msg),
@@ -1405,7 +1422,10 @@ fn test_stats() {
         .expect("could not pop a message")
     {
         (_, RequestOrResponse::Request(msg)) => {
-            expected_oq_stats -= OutputQueuesStats { message_count: 1 };
+            expected_oq_stats -= OutputQueuesStats {
+                message_count: 1,
+                reserved_slots: 0,
+            };
             assert_eq!(msg.receiver, other_1)
         }
         msg => panic!("unexpected message popped: {:?}", msg),
@@ -1419,7 +1439,6 @@ fn test_stats() {
 
     // Ensure no more outgoing messages.
     assert!(queues.output_into_iter(this).next().is_none());
-    expected_oq_stats = OutputQueuesStats { message_count: 0 };
 
     // And enqueue a matching incoming response.
     let msg: RequestOrResponse = ResponseBuilder::default()
@@ -1445,7 +1464,6 @@ fn test_stats() {
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // Consumed one guaranteed response memory reservation, added some response bytes.
     expected_mu_stats += MemoryUsageStats {
-        reserved_slots: -1,
         guaranteed_response_memory_reservations: -1,
         // responses_size_bytes: msg_size[5],
         // oversized_requests_extra_bytes: 0,
@@ -1550,7 +1568,6 @@ fn test_stats_induct_message_to_self() {
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Pushed a request: one more response slot and memory reservation.
     expected_mu_stats += MemoryUsageStats {
-        reserved_slots: 1,
         guaranteed_response_memory_reservations: 1,
         transient_stream_responses_size_bytes: 0,
     };
@@ -1572,7 +1589,6 @@ fn test_stats_induct_message_to_self() {
     // We now have slot and guaranteed response memory reservations (for the same
     // request) in both the input and the output queue.
     expected_mu_stats += MemoryUsageStats {
-        reserved_slots: 1,
         guaranteed_response_memory_reservations: 1,
         transient_stream_responses_size_bytes: 0,
     };
@@ -1604,7 +1620,6 @@ fn test_stats_induct_message_to_self() {
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Consumed output queue response memory reservation and added a response.
     expected_mu_stats += MemoryUsageStats {
-        reserved_slots: -1,
         guaranteed_response_memory_reservations: -1,
         // responses_size_bytes: response_size,
         // oversized_requests_extra_bytes: 0,
@@ -1627,7 +1642,6 @@ fn test_stats_induct_message_to_self() {
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Consumed input queue response slot and memory reservation.
     expected_mu_stats += MemoryUsageStats {
-        reserved_slots: -1,
         guaranteed_response_memory_reservations: -1,
         transient_stream_responses_size_bytes: 0,
     };
