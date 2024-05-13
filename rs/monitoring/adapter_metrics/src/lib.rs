@@ -1,4 +1,5 @@
 use ic_adapter_metrics_service::adapter_metrics_service_client::AdapterMetricsServiceClient;
+use ic_adapter_metrics_service::ScrapeRequest;
 use ic_async_utils::ExecuteOnTokioRuntime;
 use prometheus::proto::MetricFamily;
 use protobuf::Message;
@@ -61,7 +62,7 @@ impl AdapterMetrics {
     /// Scrapes metrics from remote adapter. Returns an error if unable to fetch metrics.
     pub async fn scrape(&self, timeout: Duration) -> Result<Vec<MetricFamily>, Status> {
         let mut client = AdapterMetricsServiceClient::new(self.channel.clone());
-        let mut scrape_request = Request::new(());
+        let mut scrape_request = Request::new(ScrapeRequest {});
         scrape_request.set_timeout(timeout);
         match client.scrape(scrape_request).await {
             Err(err) => Err(err),

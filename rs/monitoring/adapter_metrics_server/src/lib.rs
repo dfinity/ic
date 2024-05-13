@@ -1,7 +1,7 @@
 use futures::stream::Stream;
 use ic_adapter_metrics_service::{
     adapter_metrics_service_server::{AdapterMetricsService, AdapterMetricsServiceServer},
-    ScrapeResponse,
+    ScrapeRequest, ScrapeResponse,
 };
 use ic_logger::{error, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -28,7 +28,10 @@ impl Metrics {
 
 #[tonic::async_trait]
 impl AdapterMetricsService for Metrics {
-    async fn scrape(&self, _request: Request<()>) -> Result<Response<ScrapeResponse>, Status> {
+    async fn scrape(
+        &self,
+        _request: Request<ScrapeRequest>,
+    ) -> Result<Response<ScrapeResponse>, Status> {
         let metrics = self
             .metrics
             .prometheus_registry()
