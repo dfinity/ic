@@ -201,6 +201,16 @@ impl EcdsaPayload {
         }
     }
 
+    /// Return true if this payload uses the new layout supporting multiple key transcripts
+    pub fn is_multiple_keys_layout(&self) -> bool {
+        matches!(self.layout, EcdsaPayloadLayout::MultipleKeyTranscripts)
+    }
+
+    /// Return true if this payload uses the new layout supporting generalized pre-signatures
+    pub fn is_generalized_pre_signatures_layout(&self) -> bool {
+        self.generalized_pre_signatures
+    }
+
     /// Returns the reference to the current key transcript of the given [`MasterPublicKeyId`].
     pub fn current_key_transcript(
         &self,
@@ -496,13 +506,11 @@ impl EcdsaKeyTranscript {
         }
     }
 
-    pub fn get_key_id(&self) -> &EcdsaKeyId {
-        &self.key_id
-    }
-
     // TODO: Adapt this function once `[EcdsaKeyTranscript::master_key_id]` is available.
     pub(crate) fn get_master_public_key_id(&self) -> MasterPublicKeyId {
-        MasterPublicKeyId::Ecdsa(self.key_id.clone())
+        self.master_key_id
+            .clone()
+            .unwrap_or_else(|| MasterPublicKeyId::Ecdsa(self.key_id.clone()))
     }
 
     pub fn get_refs(&self) -> Vec<TranscriptRef> {
