@@ -830,6 +830,14 @@ impl EcdsaPayloadMetrics {
             "xnet_reshare_agreements",
             count_by_master_public_key_id(payload.xnet_reshare_agreements.keys(), &expected_keys),
         );
+        self.payload_metrics_set_without_key_id_label(
+            "payload_layout_multiple_keys",
+            payload.is_multiple_keys_layout() as usize,
+        );
+        self.payload_metrics_set_without_key_id_label(
+            "payload_layout_generalized_pre_signatures",
+            payload.is_generalized_pre_signatures_layout() as usize,
+        );
     }
 
     fn payload_metrics_set_without_key_id_label(&self, label: &str, value: usize) {
