@@ -738,8 +738,8 @@ impl ExhaustiveSet for EcdsaReshareRequest {
         DerivedEcdsaReshareRequest::exhaustive_set(rng)
             .into_iter()
             .map(|r| EcdsaReshareRequest {
-                key_id: Some(r.key_id.clone()),
-                master_key_id: MasterPublicKeyId::Ecdsa(r.key_id),
+                key_id: r.key_id.clone(),
+                master_key_id: Some(MasterPublicKeyId::Ecdsa(r.key_id)),
                 receiving_node_ids: r.receiving_node_ids,
                 registry_version: r.registry_version,
             })
