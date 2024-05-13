@@ -613,6 +613,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 },
             )],
         ),
+        (
+            "msg_deadline",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![ValType::I64],
+                },
+            )],
+        ),
     ];
 
     valid_system_apis
