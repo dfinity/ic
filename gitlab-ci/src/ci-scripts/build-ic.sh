@@ -36,6 +36,7 @@ elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
 
     if [ ${#ARGS[@]} -eq 1 ]; then
         echo "No changes that require building IC-OS, binaries or canisters."
+        touch build-ic.tar
         exit 0
     fi
     gitlab-ci/container/build-ic.sh "${ARGS[@]}"
@@ -67,6 +68,3 @@ EXTERNAL_URL="https://objects.$(echo "${NODE_NAME:-}" | cut -d'-' -f1)-idx1.dfin
 echo -e "Node: ${NODE_NAME:-}\nURL: ${URL}\nExternal URL: ${EXTERNAL_URL}" >./build-ic/info
 echo "${EXTERNAL_URL}" >./build-ic/url
 tar -cf build-ic.tar build-ic
-if [ -n "${GITHUB_OUTPUT:-}" ]; then
-    echo "upload_artifacts=true" >>"$GITHUB_OUTPUT"
-fi
