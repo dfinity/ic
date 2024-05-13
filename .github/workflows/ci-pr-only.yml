@@ -21,6 +21,12 @@ jobs:
     if: ${{ vars.RUN_CI == 'true' }}
     timeout-minutes: 60
     steps:
+      - name: Before script
+        if: always()
+        id: before-script
+        shell: bash
+        run: |
+          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
         uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -51,6 +57,12 @@ jobs:
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
+      - name: Before script
+        if: always()
+        id: before-script
+        shell: bash
+        run: |
+          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
         uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -82,6 +94,12 @@ jobs:
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
+      - name: Before script
+        if: always()
+        id: before-script
+        shell: bash
+        run: |
+          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
         uses: actions/checkout@v4
       - name: Commit Lint
@@ -96,6 +114,12 @@ jobs:
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
+      - name: Before script
+        if: always()
+        id: before-script
+        shell: bash
+        run: |
+          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
         uses: actions/checkout@v4
         with:
