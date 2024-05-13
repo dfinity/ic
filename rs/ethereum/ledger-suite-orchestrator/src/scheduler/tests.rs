@@ -10,6 +10,7 @@ use crate::state::{
 };
 use crate::storage::{mutate_wasm_store, record_icrc1_ledger_suite_wasms};
 use candid::Principal;
+use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 
 const ORCHESTRATOR_PRINCIPAL: Principal = Principal::from_slice(&[0_u8; 29]);
 const LEDGER_PRINCIPAL: Principal = Principal::from_slice(&[1_u8; 29]);
@@ -561,6 +562,165 @@ mod notify_erc_20_added {
         }
     }
 }
+mod discover_archives {
+    use crate::management::{CallError, Reason};
+    use crate::scheduler::test_fixtures::{
+        dai, dai_metadata, usdc, usdc_metadata, usdt, usdt_metadata,
+    };
+    use crate::scheduler::tests::mock::MockCanisterRuntime;
+    use crate::scheduler::tests::{expect_call_canister_archives, init_state, LEDGER_PRINCIPAL};
+    use crate::scheduler::{Erc20Token, Task, TaskError, TaskExecution};
+    use crate::state::{mutate_state, read_state, Ledger};
+    use candid::Principal;
+    use icrc_ledger_types::icrc3::archive::ArchiveInfo;
+
+    #[tokio::test]
+    async fn should_discover_multiple_archives() {
+        init_state();
+        let usdc = usdc();
+        mutate_state(|s| {
+            s.record_new_erc20_token(usdc.clone(), usdc_metadata());
+            s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
+        });
+
+        let first_archive = Principal::from_slice(&[4_u8; 29]);
+        let first_archive_info = ArchiveInfo {
+            canister_id: first_archive,
+            block_range_start: 0_u8.into(),
+            block_range_end: 1_u8.into(),
+        };
+        let mut runtime = MockCanisterRuntime::new();
+        expect_call_canister_archives(
+            &mut runtime,
+            LEDGER_PRINCIPAL,
+            Ok(vec![first_archive_info.clone()]),
+        );
+
+        let discover_archives_task = TaskExecution {
+            task_type: Task::DiscoverArchives,
+            execute_at_ns: 0,
+        };
+        assert_eq!(discover_archives_task.execute(&runtime).await, Ok(()));
+        assert_eq!(archives_from_state(&usdc), vec![first_archive]);
+
+        runtime.checkpoint();
+
+        let second_archive = Principal::from_slice(&[5_u8; 29]);
+        let second_archive_info = ArchiveInfo {
+            canister_id: second_archive,
+            block_range_start: 2_u8.into(),
+            block_range_end: 3_u8.into(),
+        };
+        expect_call_canister_archives(
+            &mut runtime,
+            LEDGER_PRINCIPAL,
+            Ok(vec![first_archive_info, second_archive_info]),
+        );
+
+        assert_eq!(discover_archives_task.execute(&runtime).await, Ok(()));
+        assert_eq!(
+            archives_from_state(&usdc),
+            vec![first_archive, second_archive]
+        );
+    }
+
+    #[tokio::test]
+    async fn should_discover_archive_and_return_first_error() {
+        init_state();
+        let (dai, dai_ledger) = (dai(), candid::Principal::from_slice(&[4_u8; 29]));
+        let (usdc, usdc_ledger) = (usdc(), candid::Principal::from_slice(&[5_u8; 29]));
+        let (usdt, usdt_ledger) = (usdt(), candid::Principal::from_slice(&[6_u8; 29]));
+        mutate_state(|s| {
+            s.record_new_erc20_token(dai.clone(), dai_metadata());
+            s.record_created_canister::<Ledger>(&dai, dai_ledger);
+
+            s.record_new_erc20_token(usdc.clone(), usdc_metadata());
+            s.record_created_canister::<Ledger>(&usdc, usdc_ledger);
+
+            s.record_new_erc20_token(usdt.clone(), usdt_metadata());
+            s.record_created_canister::<Ledger>(&usdt, usdt_ledger);
+        });
+
+        let mut runtime = MockCanisterRuntime::new();
+        let first_error = CallError {
+            method: "dai error".to_string(),
+            reason: Reason::OutOfCycles,
+        };
+        expect_call_canister_archives(&mut runtime, dai_ledger, Err(first_error.clone()));
+        let usdc_archive = Principal::from_slice(&[7_u8; 29]);
+        expect_call_canister_archives(
+            &mut runtime,
+            usdc_ledger,
+            Ok(vec![ArchiveInfo {
+                canister_id: usdc_archive,
+                block_range_start: 0_u8.into(),
+                block_range_end: 1_u8.into(),
+            }]),
+        );
+        expect_call_canister_archives(
+            &mut runtime,
+            usdt_ledger,
+            Err(CallError {
+                method: "usdt error".to_string(),
+                reason: Reason::OutOfCycles,
+            }),
+        );
+
+        let discover_archives_task = TaskExecution {
+            task_type: Task::DiscoverArchives,
+            execute_at_ns: 0,
+        };
+        assert_eq!(
+            discover_archives_task.execute(&runtime).await,
+            Err(TaskError::InterCanisterCallError(first_error))
+        );
+        assert_eq!(archives_from_state(&dai), vec![]);
+        assert_eq!(archives_from_state(&usdc), vec![usdc_archive]);
+        assert_eq!(archives_from_state(&usdt), vec![]);
+    }
+
+    fn archives_from_state(contract: &Erc20Token) -> Vec<Principal> {
+        read_state(|s| s.managed_canisters(contract).unwrap().archives.clone())
+    }
+}
+
+mod run_task {
+    use crate::guard::TimerGuard;
+    use crate::scheduler::tests::init_state;
+    use crate::scheduler::tests::mock::MockCanisterRuntime;
+    use crate::scheduler::{run_task, Task, TaskExecution};
+    use crate::storage::TASKS;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn should_reschedule_task_when_previous_one_still_running() {
+        init_state();
+        let task = Task::MaybeTopUp;
+        let mut runtime = MockCanisterRuntime::new();
+        runtime.expect_time().return_const(0_u64);
+        runtime.expect_global_timer_set().return_const(());
+        let _guard_mocking_already_running_task =
+            TimerGuard::new(task.clone()).expect("no previous task running");
+
+        run_task(
+            TaskExecution {
+                execute_at_ns: 0,
+                task_type: task.clone(),
+            },
+            runtime,
+        )
+        .await;
+
+        assert_eq!(
+            task_deadline_from_state(&task),
+            Some(Duration::from_secs(3_600).as_nanos() as u64)
+        );
+    }
+
+    fn task_deadline_from_state(task: &Task) -> Option<u64> {
+        TASKS.with(|t| t.borrow().deadline_by_task.get(task))
+    }
+}
 
 fn init_state() {
     crate::state::init_state(new_state());
@@ -648,6 +808,20 @@ fn expect_call_canister_add_ckerc20_token(
                 && method == "add_ckerc20_token"
                 && args == &expected_args
         })
+        .return_const(mocked_result);
+}
+
+fn expect_call_canister_archives(
+    runtime: &mut MockCanisterRuntime,
+    expected_canister_id: Principal,
+    mocked_result: Result<Vec<ArchiveInfo>, CallError>,
+) {
+    runtime
+        .expect_call_canister()
+        .withf(move |&canister_id, method, _args: &()| {
+            canister_id == expected_canister_id && method == "archives"
+        })
+        .times(1)
         .return_const(mocked_result);
 }
 
@@ -763,12 +937,16 @@ mod mock {
     use std::marker::Send;
 
     mock! {
-       pub CanisterRuntime{}
+        pub CanisterRuntime{}
 
         #[async_trait]
         impl CanisterRuntime for CanisterRuntime {
 
             fn id(&self) -> Principal;
+
+            fn time(&self) -> u64;
+
+            fn global_timer_set(&self, timestamp: u64);
 
             async fn create_canister(
                 &self,

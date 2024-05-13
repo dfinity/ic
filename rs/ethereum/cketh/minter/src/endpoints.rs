@@ -1,9 +1,13 @@
+use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::ledger_client::LedgerBurnError;
-use crate::state::transactions::EthWithdrawalRequest;
+use crate::numeric::LedgerBurnIndex;
+use crate::state::{transactions, transactions::EthWithdrawalRequest};
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
 use candid::{CandidType, Deserialize, Nat, Principal};
+use icrc_ledger_types::icrc1::account::Account;
 use minicbor::{Decode, Encode};
 use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 pub mod ckerc20;
 
@@ -65,6 +69,8 @@ pub struct MinterInfo {
     pub eth_balance: Option<Nat>,
     pub last_gas_fee_estimate: Option<GasFeeEstimate>,
     pub erc20_balances: Option<Vec<Erc20Balance>>,
+    pub last_eth_scraped_block_number: Option<Nat>,
+    pub last_erc20_scraped_block_number: Option<Nat>,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
@@ -83,6 +89,14 @@ impl From<&SignedEip1559TransactionRequest> for EthTransaction {
     fn from(value: &SignedEip1559TransactionRequest) -> Self {
         Self {
             transaction_hash: value.hash().to_string(),
+        }
+    }
+}
+
+impl From<&TransactionReceipt> for EthTransaction {
+    fn from(receipt: &TransactionReceipt) -> Self {
+        Self {
+            transaction_hash: receipt.transaction_hash.to_string(),
         }
     }
 }
@@ -114,7 +128,7 @@ pub enum CandidBlockTag {
 impl From<EthWithdrawalRequest> for RetrieveEthRequest {
     fn from(value: EthWithdrawalRequest) -> Self {
         Self {
-            block_index: candid::Nat::from(value.ledger_burn_index.get()),
+            block_index: Nat::from(value.ledger_burn_index.get()),
         }
     }
 }
@@ -130,7 +144,10 @@ pub enum RetrieveEthStatus {
 
 #[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
 pub enum TxFinalizedStatus {
-    Success(EthTransaction),
+    Success {
+        transaction_hash: String,
+        effective_transaction_fee: Option<Nat>,
+    },
     PendingReimbursement(EthTransaction),
     Reimbursed {
         transaction_hash: String,
@@ -147,7 +164,9 @@ impl Display for RetrieveEthStatus {
             RetrieveEthStatus::TxCreated => write!(f, "Created"),
             RetrieveEthStatus::TxSent(tx) => write!(f, "Sent({})", tx.transaction_hash),
             RetrieveEthStatus::TxFinalized(tx_status) => match tx_status {
-                TxFinalizedStatus::Success(tx) => write!(f, "Confirmed({})", tx.transaction_hash),
+                TxFinalizedStatus::Success {
+                    transaction_hash, ..
+                } => write!(f, "Confirmed({})", transaction_hash),
                 TxFinalizedStatus::PendingReimbursement(tx) => {
                     write!(f, "PendingReimbursement({})", tx.transaction_hash)
                 }
@@ -201,6 +220,48 @@ impl From<LedgerBurnError> for WithdrawalError {
             }
         }
     }
+}
+
+#[derive(CandidType, Deserialize, Clone, Eq, PartialEq, Debug)]
+pub enum WithdrawalSearchParameter {
+    ByWithdrawalId(u64),
+    ByRecipient(String),
+    BySenderAccount(Account),
+}
+
+impl TryFrom<WithdrawalSearchParameter> for transactions::WithdrawalSearchParameter {
+    type Error = String;
+
+    fn try_from(parameter: WithdrawalSearchParameter) -> Result<Self, String> {
+        use WithdrawalSearchParameter::*;
+        match parameter {
+            ByWithdrawalId(index) => Ok(Self::ByWithdrawalId(LedgerBurnIndex::new(index))),
+            ByRecipient(address) => Ok(Self::ByRecipient(ic_ethereum_types::Address::from_str(
+                &address,
+            )?)),
+            BySenderAccount(account) => Ok(Self::BySenderAccount(account)),
+        }
+    }
+}
+
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+pub struct WithdrawalDetail {
+    pub withdrawal_id: u64,
+    pub recipient_address: String,
+    pub from: Principal,
+    pub from_subaccount: Option<[u8; 32]>,
+    pub token_symbol: String,
+    pub withdrawal_amount: Nat,
+    pub max_transaction_fee: Option<Nat>,
+    pub status: WithdrawalStatus,
+}
+
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+pub enum WithdrawalStatus {
+    Pending,
+    TxCreated,
+    TxSent(EthTransaction),
+    TxFinalized(TxFinalizedStatus),
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]

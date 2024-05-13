@@ -35,6 +35,7 @@ use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, Ser
 use tracing::{debug, error, warn};
 
 use crate::{
+    bouncer,
     cache::{cache_middleware, Cache},
     check::{Checker, Runner as CheckRunner},
     cli::Cli,
@@ -176,11 +177,19 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         )
     });
 
+    // Bouncer
+    let bouncer = if cli.bouncer.bouncer_enable {
+        Some(bouncer::setup(&cli.bouncer, &metrics_registry).context("unable to setup bouncer")?)
+    } else {
+        None
+    };
+
     // Server / API
     let routers_https = setup_router(
         registry_snapshot.clone(),
         routing_table.clone(),
         http_client.clone(),
+        bouncer,
         &cli,
         &metrics_registry,
         cache.clone(),
@@ -495,6 +504,7 @@ pub fn setup_router(
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     routing_table: Arc<ArcSwapOption<Routes>>,
     http_client: Arc<dyn HttpClient>,
+    bouncer: Option<Arc<bouncer::Bouncer>>,
     cli: &Cli,
     metrics_registry: &Registry,
     cache: Option<Arc<Cache>>,
@@ -614,11 +624,15 @@ pub fn setup_router(
             )
         }));
 
+    let middlware_bouncer =
+        option_layer(bouncer.map(|x| middleware::from_fn_with_state(x, bouncer::middleware)));
+
     let middleware_subnet_lookup = middleware::from_fn_with_state(lookup, routes::lookup_subnet);
 
     // Layers under ServiceBuilder are executed top-down (opposite to that under Router)
     // 1st layer wraps 2nd layer and so on
     let common_service_layers = ServiceBuilder::new()
+        .layer(middlware_bouncer)
         .layer(middleware_geoip)
         .set_x_request_id(MakeRequestUuid)
         .layer(middleware_metrics)

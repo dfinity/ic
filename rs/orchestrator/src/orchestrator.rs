@@ -303,8 +303,12 @@ impl Orchestrator {
             logger.clone(),
         );
 
-        let ssh_access_manager =
-            SshAccessManager::new(Arc::clone(&registry), Arc::clone(&metrics), logger.clone());
+        let ssh_access_manager = SshAccessManager::new(
+            Arc::clone(&registry),
+            Arc::clone(&metrics),
+            node_id,
+            logger.clone(),
+        );
 
         let subnet_id: Arc<RwLock<Option<SubnetId>>> = Default::default();
 

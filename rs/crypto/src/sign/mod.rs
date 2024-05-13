@@ -717,7 +717,8 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentImpl<C> {
             crypto.signature_inputs => format!("{:?}", inputs),
         );
         let start_time = self.metrics.now();
-        let result = canister_threshold_sig::ecdsa::sign_share(&self.csp, &self.node_id, inputs);
+        let result =
+            canister_threshold_sig::ecdsa::sign_share(self.vault.as_ref(), &self.node_id, inputs);
         self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdEcdsa,
             MetricsScope::Full,
@@ -755,8 +756,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentImpl
             crypto.signature_inputs => format!("{:?}", inputs),
         );
         let start_time = self.metrics.now();
-        let result =
-            canister_threshold_sig::ecdsa::verify_sig_share(&self.csp, signer, inputs, share);
+        let result = canister_threshold_sig::ecdsa::verify_sig_share(signer, inputs, share);
         self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdEcdsa,
             MetricsScope::Full,
@@ -789,7 +789,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentImpl
             crypto.signature_shares => format!{"{:?}", shares},
         );
         let start_time = self.metrics.now();
-        let result = canister_threshold_sig::ecdsa::combine_sig_shares(&self.csp, inputs, shares);
+        let result = canister_threshold_sig::ecdsa::combine_sig_shares(inputs, shares);
         self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdEcdsa,
             MetricsScope::Full,
@@ -823,8 +823,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentImpl
             crypto.signature => format!("{:?}", signature),
         );
         let start_time = self.metrics.now();
-        let result =
-            canister_threshold_sig::ecdsa::verify_combined_signature(&self.csp, inputs, signature);
+        let result = canister_threshold_sig::ecdsa::verify_combined_signature(inputs, signature);
         self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdEcdsa,
             MetricsScope::Full,

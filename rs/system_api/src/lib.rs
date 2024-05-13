@@ -3149,6 +3149,44 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
+    fn ic0_msg_deadline(&self) -> HypervisorResult<u64> {
+        let result = match self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_msg_deadline")),
+            ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery {
+                query_kind: NonReplicatedQueryKind::Pure,
+                ..
+            } => Ok(0),
+            ApiType::Update {
+                call_context_id, ..
+            }
+            | ApiType::NonReplicatedQuery {
+                query_kind:
+                    NonReplicatedQueryKind::Stateful {
+                        call_context_id, ..
+                    },
+                ..
+            }
+            | ApiType::ReplyCallback {
+                call_context_id, ..
+            }
+            | ApiType::RejectCallback {
+                call_context_id, ..
+            } => {
+                let deadline = self.sandbox_safe_system_state.msg_deadline(call_context_id);
+                Ok(Time::from(deadline).as_nanos_since_unix_epoch())
+            }
+        };
+
+        trace_syscall!(self, CallWithBestEffortResponse, result);
+        result
+    }
+
     fn ic0_in_replicated_execution(&self) -> HypervisorResult<i32> {
         let result = match &self.api_type {
             ApiType::Start { .. }

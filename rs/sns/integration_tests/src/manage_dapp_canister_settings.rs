@@ -3,16 +3,14 @@ use canister_test::Wasm;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types::{CanisterSettingsArgsBuilder, DefiniteCanisterSettingsArgs};
+use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_test_utils::state_test_helpers::{
     create_canister, sns_claim_staked_neuron, sns_get_proposal, sns_make_proposal,
     sns_stake_neuron, sns_wait_for_proposal_executed_or_failed, sns_wait_for_proposal_execution,
 };
-use ic_sns_governance::{
-    pb::v1::{
-        proposal::Action, LogVisibility, ManageDappCanisterSettings, NervousSystemParameters,
-        NeuronPermissionList, NeuronPermissionType, Proposal,
-    },
-    types::ONE_YEAR_SECONDS,
+use ic_sns_governance::pb::v1::{
+    proposal::Action, LogVisibility, ManageDappCanisterSettings, NervousSystemParameters,
+    NeuronPermissionList, NeuronPermissionType, Proposal,
 };
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,

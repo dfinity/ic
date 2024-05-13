@@ -12,7 +12,8 @@ use ic_cketh_minter::endpoints::events::{
 };
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, Eip1559TransactionPrice, Erc20Balance, GasFeeEstimate, MinterInfo,
-    RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalError,
+    RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError,
+    WithdrawalSearchParameter,
 };
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_withdraw_guard;
@@ -26,7 +27,9 @@ use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
     ReimbursementRequest,
 };
-use ic_cketh_minter::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, State, STATE};
+use ic_cketh_minter::state::{
+    lazy_call_ecdsa_public_key, mutate_state, read_state, transactions, State, STATE,
+};
 use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
     process_reimbursement, process_retrieve_eth_requests, CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
@@ -39,6 +42,7 @@ use ic_cketh_minter::{
 };
 use ic_ethereum_types::Address;
 use std::collections::BTreeSet;
+use std::convert::TryFrom;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -200,6 +204,8 @@ async fn get_minter_info() -> MinterInfo {
                 },
             ),
             erc20_balances,
+            last_eth_scraped_block_number: Some(s.last_scraped_block_number.into()),
+            last_erc20_scraped_block_number: Some(s.last_erc20_scraped_block_number.into()),
         }
     })
 }
@@ -279,6 +285,46 @@ async fn withdraw_eth(
 async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
     let ledger_burn_index = LedgerBurnIndex::new(block_index);
     read_state(|s| s.eth_transactions.transaction_status(&ledger_burn_index))
+}
+
+#[query]
+async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<WithdrawalDetail> {
+    use transactions::WithdrawalRequest::*;
+    let parameter = transactions::WithdrawalSearchParameter::try_from(parameter).unwrap();
+    read_state(|s| {
+        s.eth_transactions
+            .withdrawal_status(&parameter)
+            .into_iter()
+            .map(|(request, status, tx)| WithdrawalDetail {
+                withdrawal_id: *request.cketh_ledger_burn_index().as_ref(),
+                recipient_address: request.payee().to_string(),
+                token_symbol: match request {
+                    CkEth(_) => "ckETH".to_string(),
+                    CkErc20(r) => s
+                        .ckerc20_token_symbol(&r.erc20_contract_address)
+                        .unwrap()
+                        .to_string(),
+                },
+                withdrawal_amount: match request {
+                    CkEth(r) => r.withdrawal_amount.into(),
+                    CkErc20(r) => r.withdrawal_amount.into(),
+                },
+                max_transaction_fee: match (request, tx) {
+                    (CkEth(_), None) => None,
+                    (CkEth(r), Some(tx)) => {
+                        r.withdrawal_amount.checked_sub(tx.amount).map(|x| x.into())
+                    }
+                    (CkErc20(r), _) => Some(r.max_transaction_fee.into()),
+                },
+                from: request.from(),
+                from_subaccount: request
+                    .from_subaccount()
+                    .clone()
+                    .map(|subaccount| subaccount.0),
+                status,
+            })
+            .collect()
+    })
 }
 
 #[update]
@@ -813,6 +859,14 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     s.eth_balance.eth_balance().as_f64(),
                     "Known amount of ETH on the minter's address",
                 )?;
+                let mut erc20_balances = w.gauge_vec(
+                    "cketh_minter_erc20_balances",
+                    "Known amount of ERC-20 on the minter's address",
+                )?;
+                for (token, balance) in s.erc20_balances_by_token_symbol().iter() {
+                    erc20_balances = erc20_balances
+                        .value(&[("erc20_token", &token.to_string())], balance.as_f64())?;
+                }
                 w.encode_gauge(
                     "cketh_minter_total_effective_tx_fees",
                     s.eth_balance.total_effective_tx_fees().as_f64(),

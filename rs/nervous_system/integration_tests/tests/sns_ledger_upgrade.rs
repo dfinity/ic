@@ -1,6 +1,7 @@
 use candid::Nat;
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers,
@@ -10,7 +11,6 @@ use ic_nervous_system_integration_tests::{
     },
 };
 use ic_nns_constants::{self, GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::governance::ONE_MONTH_SECONDS;
 use ic_nns_test_utils::sns_wasm::{
     build_archive_sns_wasm, build_index_ng_sns_wasm, build_ledger_sns_wasm, build_swap_sns_wasm,
     create_modified_sns_wasm,

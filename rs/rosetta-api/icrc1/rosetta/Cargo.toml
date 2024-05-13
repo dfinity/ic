@@ -2,7 +2,7 @@
 name = "ic-icrc-rosetta"
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 default-run = "ic-icrc-rosetta"
-version.workspace = true
+version = "1.0.2"
 authors.workspace = true
 edition.workspace = true
 documentation.workspace = true
@@ -53,7 +53,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = "3.1.0"
 tokio = { workspace = true }
-tower-http = { version = "^0.5.1", features = ["trace"] }
+tower-http = { version = "^0.5.2", features = ["trace"] }
 tower-request-id = "^0.3.0"
 tracing = { workspace = true }
 tracing-appender = { workspace = true }

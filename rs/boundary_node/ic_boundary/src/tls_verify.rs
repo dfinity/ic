@@ -1,9 +1,7 @@
 use std::{sync::Arc, time::SystemTime};
 
 use arc_swap::ArcSwapOption;
-use ic_crypto_utils_tls::{
-    node_id_from_cert_subject_common_name, tls_pubkey_cert_from_rustls_certs,
-};
+use ic_crypto_utils_tls::node_id_from_rustls_certs;
 use rustls::{
     client::{ServerCertVerified, ServerCertVerifier},
     Certificate, CertificateError, Error as RustlsError, ServerName,
@@ -54,14 +52,8 @@ impl ServerCertVerifier for TlsVerifier {
         }
 
         // Check if the CommonName in the certificate can be parsed into a Principal
-        let end_entity_cert = tls_pubkey_cert_from_rustls_certs(std::slice::from_ref(end_entity))?;
-        let node_id = node_id_from_cert_subject_common_name(&end_entity_cert).map_err(|e| {
-            RustlsError::General(format!(
-                "The presented certificate subject CN could not be parsed as node ID: {:?}",
-                e
-            ))
-        })?;
-
+        let node_id =
+            node_id_from_rustls_certs(end_entity).map_err(RustlsError::InvalidCertificate)?;
         // Load a routing table if we have one
         let rs = self
             .rs

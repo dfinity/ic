@@ -110,5 +110,6 @@ try_from_u8!(
         PushEqualBytes = 80,
         InReplicatedExecution = 81,
         CallWithBestEffortResponse = 82,
+        MsgDeadline = 83,
     }
 );

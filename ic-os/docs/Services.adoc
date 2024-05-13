@@ -7,12 +7,12 @@ To see the full list of packages included in each IC-OS, refer to the context/pa
 
 == Services
 
-In addition to the regular, built-in Ubuntu services, a unique set of systemd services are added or managed for each IC-OS. Some services are enabled in context/Dockerfile, and custom services are defined at rootfs/etc/systemd/services.
+In addition to the regular, built-in Ubuntu services, a unique set of systemd services are added or managed for each IC-OS. Some services are enabled in context/Dockerfile, and custom services are defined at etc/systemd/services.
 
 The specific systemd services for each IC-OS are as follows:
 
 [NOTE]
-These lists may be out-of-date. For the source of truth, see each OSes `context/Dockerfile` and `rootfs/etc/systemd`.
+These lists may be out-of-date. For the source of truth, see each OSes `context/Dockerfile` and `etc/systemd`.
 
 === SetupOS
 

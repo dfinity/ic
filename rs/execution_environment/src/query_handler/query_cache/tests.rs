@@ -1492,6 +1492,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::MsgCyclesAvailable128
         | SystemApiCallId::MsgCyclesRefunded
         | SystemApiCallId::MsgCyclesRefunded128
+        | SystemApiCallId::MsgDeadline
         | SystemApiCallId::MsgMethodNameCopy
         | SystemApiCallId::MsgMethodNameSize
         | SystemApiCallId::MsgReject

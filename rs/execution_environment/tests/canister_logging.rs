@@ -1295,8 +1295,9 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
 }
 
 #[test]
-fn test_canister_logging_metrics_log_size() {
+fn test_canister_log_memory_usage_bytes() {
     // Test canister logging metrics record the size of the log.
+    let metric = "canister_log_memory_usage_bytes";
     const PAYLOAD_SIZE: usize = 1_000;
     let (env, canister_id, _controller) = setup_with_controller(
         FlagStatus::Enabled,
@@ -1305,19 +1306,14 @@ fn test_canister_logging_metrics_log_size() {
             .build(),
     );
     // Assert canister log size metric is zero initially.
-    let stats = fetch_histogram_stats(env.metrics_registry(), "canister_log_size_bytes").unwrap();
+    let stats = fetch_histogram_stats(env.metrics_registry(), metric).unwrap();
     assert_eq!(stats.sum, 0.0);
 
     // Add log message.
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let duration_between_allocation_charges = Duration::from_secs(10);
-    env.advance_time(duration_between_allocation_charges);
-    env.tick();
 
     // Assert canister log size metric is within the expected range.
-    let stats = fetch_histogram_stats(env.metrics_registry(), "canister_log_size_bytes").unwrap();
-    let assert_tolerance_percentage = 5.0;
-    let payload_size_max = (PAYLOAD_SIZE as f64) * (1.0 + assert_tolerance_percentage / 100.0);
+    let stats = fetch_histogram_stats(env.metrics_registry(), metric).unwrap();
     assert_le!(PAYLOAD_SIZE as f64, stats.sum);
-    assert_le!(stats.sum, payload_size_max);
+    assert_le!(stats.sum, 1.05 * (PAYLOAD_SIZE as f64));
 }

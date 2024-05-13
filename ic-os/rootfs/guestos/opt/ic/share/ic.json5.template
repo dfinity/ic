@@ -66,7 +66,7 @@
         crypto_root: "/var/lib/ic/crypto",
         // The logic and metrics sockets for communicating with the crypto csp vault.
         // Shall match the values configured in
-        // ic-os/guestos/rootfs/etc/systemd/system/ic-crypto-csp.socket
+        // ic-crypto-csp.socket
         csp_vault_type: { unix_socket: { logic: "/run/ic-node/crypto-csp/socket", metrics: "/run/ic-node/crypto-csp/metrics" } },
     },
 
@@ -119,7 +119,7 @@
     adapters_config: {
         // IPC socket and metrics path for BTC Testnet adapter. This UDS path has to be the same as
         // specified in the systemd socket file.
-        // The BTC adapter socket file is: /ic-os/guestos/rootfs/etc/systemd/system/ic-btc-testnet-adapter.socket
+        // The BTC adapter socket file is: ic-btc-testnet-adapter.socket
         bitcoin_testnet_uds_path: "/run/ic-node/bitcoin-testnet-adapter/socket",
         bitcoin_testnet_uds_metrics_path: "/run/ic-node/bitcoin-testnet-adapter/metrics",
         // IPC socket and metrics path for BTC Mainnet adapter. This UDS path has to be the same as
@@ -128,7 +128,7 @@
         bitcoin_mainnet_uds_metrics_path: "/run/ic-node/bitcoin-mainnet-adapter/metrics",
         // IPC socket and metrics path for canister http adapter. These UDS path has to be the same as
         // specified in the systemd socket file.
-        // The canister http adapter socket file is: /ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.socket
+        // The canister http adapter socket file is: ic-https-outcalls-adapter.socket
         https_outcalls_uds_path: "/run/ic-node/https-outcalls-adapter/socket",
         https_outcalls_uds_metrics_path: "/run/ic-node/https-outcalls-adapter/metrics",
     },

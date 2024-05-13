@@ -24,7 +24,7 @@ use std::path::Path;
 use std::{convert::TryFrom, io::Read};
 
 #[derive(Clone, Copy, PartialEq)]
-pub(crate) enum UpdateImageType {
+pub enum UpdateImageType {
     Image,
     ImageTest,
     Sha256,
@@ -130,8 +130,7 @@ pub(crate) fn fetch_unassigned_node_version(endpoint: &IcNodeSnapshot) -> Result
 
 /// Waits until the node is healthy and running the given replica version.
 /// Panics if the timeout is reached while waiting.
-#[allow(dead_code)]
-pub(crate) fn assert_assigned_replica_version(
+pub fn assert_assigned_replica_version(
     node: &IcNodeSnapshot,
     expected_version: &str,
     logger: Logger,
@@ -199,7 +198,7 @@ pub(crate) fn assert_assigned_replica_version(
 }
 
 /// Gets the replica version from the node if it is healthy.
-pub(crate) fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<String, String> {
+pub fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<String, String> {
     let version = match node.status() {
         Ok(status) if Some(ReplicaHealthStatus::Healthy) == status.replica_health_status => status,
         Ok(status) => return Err(format!("Replica is not healthy: {:?}", status)),
@@ -278,7 +277,7 @@ pub(crate) async fn bless_replica_version(
     .await;
 }
 
-pub(crate) async fn bless_public_replica_version(
+pub async fn bless_public_replica_version(
     nns_node: &IcNodeSnapshot,
     target_version: &str,
     image_type: UpdateImageType,
@@ -347,7 +346,7 @@ pub(crate) async fn bless_replica_version_with_urls(
     info!(logger, "Updated: {:?}", blessed_versions);
 }
 
-pub(crate) async fn deploy_guestos_to_all_subnet_nodes(
+pub async fn deploy_guestos_to_all_subnet_nodes(
     nns_node: &IcNodeSnapshot,
     new_replica_version: &ReplicaVersion,
     subnet_id: SubnetId,

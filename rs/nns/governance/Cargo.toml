@@ -80,6 +80,8 @@ registry-canister = { path = "../../registry/canister" }
 strum_macros = { workspace = true }
 strum = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
+canbench-rs = { version = "0.1.1", optional = true }
+ic-cdk = { workspace = true, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 csv = "1.1"
@@ -106,3 +108,4 @@ tokio-test = "0.4.2"
 
 [features]
 test = ["ic-sns-swap/test"]
+canbench-rs = ["dep:canbench-rs", "dep:ic-cdk"]

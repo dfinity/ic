@@ -1,6 +1,5 @@
 use crate::PROXIED_CANISTER_CALLS_TRACKER;
 use dfn_core::api::{call, call_bytes, call_with_funds, caller, print, CanisterId, Funds};
-use ic_base_types::PrincipalId;
 use ic_management_canister_types::{CanisterInstallMode::Install, InstallCodeArgs};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -16,7 +15,6 @@ use ic_nns_common::{
     registry::{encode_or_panic, get_value, mutate_registry},
     types::CallCanisterProposal,
 };
-use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
 };
@@ -200,19 +198,8 @@ pub async fn call_canister(proposal: CallCanisterProposal) {
 
 pub async fn change_canister_controllers(
     change_canister_controllers_request: ChangeCanisterControllersRequest,
-    caller: PrincipalId,
     management_canister_client: &mut impl ManagementCanisterClient,
 ) -> ChangeCanisterControllersResponse {
-    if caller != SNS_WASM_CANISTER_ID.get() {
-        return ChangeCanisterControllersResponse::error(
-            None,
-            format!(
-                "change_canister_controllers is only callable by the SNS-W canister ({})",
-                SNS_WASM_CANISTER_ID
-            ),
-        );
-    }
-
     let update_settings_args = UpdateSettings {
         canister_id: change_canister_controllers_request.target_canister_id,
         settings: CanisterSettings {

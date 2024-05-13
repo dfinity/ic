@@ -326,6 +326,11 @@ pub fn execute_update_bench(c: &mut Criterion) {
             ),
             2058000006,
         ),
+        common::Benchmark(
+            "ic0_msg_deadline()".into(),
+            Module::Test.from_ic0("msg_deadline", NoParams, Result::I64),
+            517000006,
+        ),
     ];
     common::run_benchmarks(
         c,

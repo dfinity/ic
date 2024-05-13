@@ -142,7 +142,7 @@ fn should_change_cycles_for_canister_creation() {
             embedded_index_wasm_hash.clone(),
         ))
         .expect_new_ledger_and_index_canisters()
-        .assert_ledger_has_cycles(100_000_000_000_000_u128)
+        .assert_ledger_has_cycles(200_000_000_000_000_u128)
         .assert_index_has_cycles(100_000_000_000_000_u128)
         .setup;
 
@@ -153,7 +153,7 @@ fn should_change_cycles_for_canister_creation() {
             index_compressed_wasm_hash: None,
             archive_compressed_wasm_hash: None,
             cycles_management: Some(UpdateCyclesManagement {
-                cycles_for_ledger_creation: Some(200_000_000_000_000_u128.into()),
+                cycles_for_ledger_creation: Some(300_000_000_000_000_u128.into()),
                 cycles_for_index_creation: Some(50_000_000_000_000_u128.into()),
                 ..Default::default()
             }),
@@ -167,7 +167,7 @@ fn should_change_cycles_for_canister_creation() {
             embedded_index_wasm_hash,
         ))
         .expect_new_ledger_and_index_canisters()
-        .assert_ledger_has_cycles(200_000_000_000_000_u128)
+        .assert_ledger_has_cycles(300_000_000_000_000_u128)
         .assert_index_has_cycles(50_000_000_000_000_u128);
 }
 
@@ -194,6 +194,44 @@ fn should_spawn_archive_from_ledger_with_correct_controllers() {
 }
 
 #[test]
+fn should_discover_new_archive_and_top_up() {
+    let orchestrator = LedgerSuiteOrchestrator::default();
+
+    let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+    let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+    let usdc = usdc(
+        Principal::anonymous(),
+        embedded_ledger_wasm_hash,
+        embedded_index_wasm_hash,
+    );
+
+    let managed_canisters = orchestrator
+        .add_erc20_token(usdc.clone())
+        .expect_new_ledger_and_index_canisters()
+        .assert_ledger_has_cycles(200_000_000_000_000_u128)
+        .check_metrics()
+        .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0")
+        .trigger_creation_of_archive()
+        .assert_ledger_has_cycles(100_000_000_000_000_u128)
+        .assert_all_archives_have_cycles(100_000_000_000_000_u128);
+
+    managed_canisters.setup.advance_time_for_cycles_top_up();
+
+    //[maybe_top_up] task started before archive discovery, so no top-up is expected.
+    let managed_canisters = managed_canisters
+        .assert_all_archives_have_cycles(100_000_000_000_000_u128)
+        .check_metrics()
+        .assert_contains_metric("ledger_suite_orchestrator_managed_archives 1");
+
+    managed_canisters.setup.advance_time_for_cycles_top_up();
+
+    managed_canisters
+        .assert_all_archives_have_cycles(110_000_000_000_000_u128)
+        .check_metrics()
+        .assert_contains_metric("ledger_suite_orchestrator_managed_archives 1");
+}
+
+#[test]
 fn should_reject_adding_an_already_managed_erc20_token() {
     let orchestrator = LedgerSuiteOrchestrator::default();
     let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
@@ -216,7 +254,10 @@ fn should_reject_adding_an_already_managed_erc20_token() {
 
 #[test]
 fn should_top_up_spawned_canisters() {
-    let orchestrator = LedgerSuiteOrchestrator::default();
+    let orchestrator = LedgerSuiteOrchestrator::with_cycles_management(CyclesManagement {
+        cycles_for_ledger_creation: 100_000_000_000_000_u128.into(),
+        ..Default::default()
+    });
     let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
     let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
     let usdc = usdc(
@@ -449,7 +490,7 @@ fn should_retrieve_orchestrator_info() {
                 }
             ],
             cycles_management: CyclesManagement {
-                cycles_for_ledger_creation: Nat::from(100000000000000_u64),
+                cycles_for_ledger_creation: Nat::from(200_000_000_000_000_u64),
                 cycles_for_archive_creation: Nat::from(100000000000000_u64),
                 cycles_for_index_creation: Nat::from(100000000000000_u64),
                 cycles_top_up_increment: Nat::from(10000000000000_u64),

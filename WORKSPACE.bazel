@@ -491,6 +491,15 @@ http_file(
     url = "https://github.com/dfinity/sdk/raw/0.14.2/src/distributed/assetstorage.wasm.gz",
 )
 
+# Old version of wallet canister
+
+http_file(
+    name = "wallet_canister_0.7.2",
+    downloaded_file_path = "wallet.wasm",
+    sha256 = "1404b28b1c66491689b59e184a9de3c2be0dbdd75d952f29113b516742b7f898",
+    url = "https://github.com/dfinity/sdk/raw/0.7.2/src/distributed/wallet.wasm",
+)
+
 # Bitcoin canister
 
 http_file(

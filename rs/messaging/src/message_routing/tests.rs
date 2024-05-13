@@ -1,3 +1,8 @@
+use self::routing::demux::Demux;
+use self::routing::stream_handler::StreamHandler;
+use self::scheduling::valid_set_rule::ValidSetRule;
+use crate::routing::demux::DemuxImpl;
+
 use super::*;
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_ni_dkg::{
@@ -19,9 +24,10 @@ use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalS
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDataProviderError};
 use ic_registry_routing_table::{routing_table_insert_subnet, CanisterMigrations, RoutingTable};
 use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig};
+use ic_replicated_state::Stream;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
+use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec};
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::{
@@ -29,6 +35,7 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, node_test_id, subnet_test_id},
 };
 use ic_types::batch::BlockmakerMetrics;
+use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
 use ic_types::{
     batch::{Batch, BatchMessages},
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
@@ -1825,6 +1832,127 @@ fn process_batch_updates_subnet_metrics() {
         assert_eq!(
             latest_state.metadata.subnet_metrics.canister_state_bytes,
             canister_state
+        );
+    });
+}
+
+#[test]
+fn test_demux_delivers_certified_stream_slices() {
+    struct FakeValidSetRule;
+    impl ValidSetRule for FakeValidSetRule {
+        fn induct_messages(
+            &self,
+            _: &mut ReplicatedState,
+            _: Vec<ic_types::messages::SignedIngressContent>,
+        ) {
+            // do nothing
+        }
+    }
+
+    struct FakeStreamHandler {
+        expected_slices: BTreeMap<SubnetId, StreamSlice>,
+    }
+
+    impl FakeStreamHandler {
+        fn new(expected_slices: BTreeMap<SubnetId, StreamSlice>) -> FakeStreamHandler {
+            FakeStreamHandler { expected_slices }
+        }
+    }
+
+    impl StreamHandler for FakeStreamHandler {
+        fn process_stream_slices(
+            &self,
+            state: ReplicatedState,
+            stream_slices: BTreeMap<SubnetId, StreamSlice>,
+        ) -> ReplicatedState {
+            assert_eq!(self.expected_slices, stream_slices);
+            state
+        }
+    }
+
+    with_test_replica_logger(|log| {
+        let src_subnet_id = subnet_test_id(42);
+        let dst_subnet_id = subnet_test_id(43);
+        let other_subnet_id = subnet_test_id(44);
+
+        // Obtain a certified stream slice.
+        let certified_stream_slice = {
+            // Set up state manager.
+            let src_state_manager = FakeStateManager::new();
+
+            // Obtain tip...
+            let (mut height, mut state) = src_state_manager.take_tip();
+            // ... and use testing function to put stream to encode as certified slice
+            use ic_replicated_state::testing::ReplicatedStateTesting;
+            state.modify_streams(|streams| {
+                streams.insert(
+                    dst_subnet_id,
+                    Stream::new(
+                        StreamIndexedQueue::with_begin(StreamIndex::new(0)),
+                        StreamIndex::new(42),
+                    ),
+                );
+            });
+
+            // Commit state with modified streams.
+            height.inc_assign();
+            src_state_manager.commit_and_certify(state, height, CertificationScope::Metadata);
+
+            // Encode slice.
+            src_state_manager
+                .encode_certified_stream_slice(dst_subnet_id, None, None, None, None)
+                .unwrap()
+        };
+
+        // Set up destination state manager.
+        let dst_metrics = MetricsRegistry::new();
+        let dst_state_manager = Arc::new(FakeStateManager::new());
+
+        // Make up a second slice with a different height.
+        let other_height = Height::new(99);
+        let mut certified_stream_slice_other_height = certified_stream_slice.clone();
+        certified_stream_slice_other_height.certification.height = other_height;
+
+        // Create messages to be provided as part of `BatchMessages`.
+        let certified_stream_slices = btreemap![src_subnet_id => certified_stream_slice, other_subnet_id => certified_stream_slice_other_height];
+
+        let expected_slices = certified_stream_slices
+            .clone()
+            .into_iter()
+            .map(|(subnet, slice)| {
+                (
+                    subnet,
+                    dst_state_manager
+                        .decode_valid_certified_stream_slice(&slice)
+                        .unwrap(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        let demux: Box<dyn Demux> = Box::new(DemuxImpl::new(
+            Box::new(FakeValidSetRule),
+            Box::new(FakeStreamHandler::new(expected_slices)),
+            dst_state_manager.clone(),
+            MessageRoutingMetrics::new(&dst_metrics),
+            log,
+        ));
+
+        let (_, dst_state) = dst_state_manager.take_tip();
+
+        demux.process_payload(
+            dst_state,
+            BatchMessages {
+                certified_stream_slices,
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            metric_vec(&[
+                (&[(LABEL_REMOTE, &src_subnet_id.to_string())], 1),
+                (&[(LABEL_REMOTE, &other_subnet_id.to_string())], 99)
+            ]),
+            fetch_int_gauge_vec(&dst_metrics, METRIC_REMOTE_CERTIFIED_HEIGHTS)
         );
     });
 }

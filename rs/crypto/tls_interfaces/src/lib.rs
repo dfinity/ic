@@ -6,13 +6,13 @@ use async_trait::async_trait;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::registry::RegistryClientError;
 use ic_types::{NodeId, RegistryVersion};
+use rustls::{ClientConfig, ServerConfig};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeSet;
 use std::fmt::{self, Display, Formatter};
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
-use tokio_rustls::rustls::{ClientConfig, ServerConfig};
 use x509_parser::certificate::X509Certificate;
 
 #[cfg(test)]

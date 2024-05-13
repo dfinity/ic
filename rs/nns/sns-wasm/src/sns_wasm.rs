@@ -2104,6 +2104,7 @@ mod test {
         SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_type: i32::from(SnsCanisterType::Governance),
+            ..SnsWasm::default()
         }
     }
 
@@ -2136,6 +2137,7 @@ mod test {
         let root = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta],
             canister_type: i32::from(SnsCanisterType::Root),
+            ..SnsWasm::default()
         };
         let root_wasm_hash = root.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2151,6 +2153,7 @@ mod test {
         let governance = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 1],
             canister_type: i32::from(SnsCanisterType::Governance),
+            ..SnsWasm::default()
         };
         let governance_wasm_hash = governance.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2166,6 +2169,7 @@ mod test {
         let ledger = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 2],
             canister_type: i32::from(SnsCanisterType::Ledger),
+            ..SnsWasm::default()
         };
         let ledger_wasm_hash = ledger.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2180,6 +2184,7 @@ mod test {
         let swap = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 3],
             canister_type: i32::from(SnsCanisterType::Swap),
+            ..SnsWasm::default()
         };
         let swap_wasm_hash = swap.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2195,6 +2200,7 @@ mod test {
         let archive = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 4],
             canister_type: i32::from(SnsCanisterType::Archive),
+            ..SnsWasm::default()
         };
         let archive_wasm_hash = archive.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2210,6 +2216,7 @@ mod test {
         let index = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 5],
             canister_type: i32::from(SnsCanisterType::Index),
+            ..SnsWasm::default()
         };
         let index_wasm_hash = index.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2307,6 +2314,7 @@ mod test {
         let unspecified_canister_wasm = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_type: i32::from(SnsCanisterType::Unspecified),
+            ..SnsWasm::default()
         };
 
         let response = canister.add_wasm(AddWasmRequest {
@@ -2330,6 +2338,7 @@ mod test {
         let invalid_canister_type_wasm = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_type: 1000,
+            ..SnsWasm::default()
         };
 
         let response = canister.add_wasm(AddWasmRequest {
@@ -2424,6 +2433,7 @@ mod test {
         let governance = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 6],
             canister_type: SnsCanisterType::Governance.into(),
+            ..SnsWasm::default()
         };
         let governance_wasm_hash = governance.sha256_hash().to_vec();
 
@@ -2477,6 +2487,7 @@ mod test {
         let governance = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 6],
             canister_type: i32::from(SnsCanisterType::Governance),
+            ..SnsWasm::default()
         };
         let governance_wasm_hash = governance.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2487,6 +2498,7 @@ mod test {
         let ledger = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 7],
             canister_type: i32::from(SnsCanisterType::Ledger),
+            ..SnsWasm::default()
         };
         let ledger_wasm_hash = ledger.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2598,6 +2610,7 @@ mod test {
         let governance = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 6],
             canister_type: i32::from(SnsCanisterType::Governance),
+            ..SnsWasm::default()
         };
         let governance_wasm_hash = governance.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2608,6 +2621,7 @@ mod test {
         let ledger = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 7],
             canister_type: i32::from(SnsCanisterType::Ledger),
+            ..SnsWasm::default()
         };
         let ledger_wasm_hash = ledger.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {

@@ -819,7 +819,7 @@ impl SchedulerImpl {
                 let canister = state.canister_state_mut(canister_id).unwrap();
                 canister.system_state.task_queue.retain(|task| match task {
                     ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
-                    ExecutionTask::PausedExecution(..)
+                    ExecutionTask::PausedExecution { .. }
                     | ExecutionTask::PausedInstallCode(..)
                     | ExecutionTask::AbortedExecution { .. }
                     | ExecutionTask::AbortedInstallCode { .. } => true,
@@ -1050,9 +1050,6 @@ impl SchedulerImpl {
         self.metrics
             .canister_balance
             .observe(canister.system_state.balance().get() as f64);
-        self.metrics
-            .canister_log_size
-            .observe(canister.system_state.canister_log.used_space() as f64);
         if let Some(es) = &canister.execution_state {
             self.metrics
                 .canister_binary_size
@@ -1372,7 +1369,7 @@ impl SchedulerImpl {
                             id
                         );
                     }
-                    ExecutionTask::PausedExecution(_) | ExecutionTask::PausedInstallCode(_) => {
+                    ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
                         assert_eq!(
                             self.deterministic_time_slicing,
                             FlagStatus::Enabled,
@@ -1728,10 +1725,14 @@ impl Scheduler for SchedulerImpl {
                             ),
                             FlagStatus::Disabled => NumInstructions::from(0),
                         };
+                    self.metrics
+                        .canister_log_memory_usage
+                        .observe(canister.system_state.canister_log.used_space() as f64);
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_usage += canister.memory_usage();
                     total_canister_balance += canister.system_state.balance();
                     total_canister_reserved_balance += canister.system_state.reserved_balance();
+
                     // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
                     // cycles_out_sum += canister.system_state.queues().output_queue_cycles();
                 }
@@ -2095,7 +2096,7 @@ fn observe_replicated_state_metrics(
             CanisterStatus::Stopped { .. } => num_stopped_canisters += 1,
         }
         match canister.next_task() {
-            Some(&ExecutionTask::PausedExecution(_)) => {
+            Some(&ExecutionTask::PausedExecution { .. }) => {
                 num_paused_exec += 1;
             }
             Some(&ExecutionTask::PausedInstallCode(_)) => {
@@ -2331,6 +2332,7 @@ fn get_instructions_limits_for_subnet_message(
             | SetupInitialDKG
             | SignWithECDSA
             | ComputeInitialEcdsaDealings
+            | ComputeInitialIDkgDealings
             | StartCanister
             | StopCanister
             | UninstallCode

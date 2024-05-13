@@ -1,4 +1,6 @@
 use super::types::*;
+use ic_consensus::consensus::bounds::validated_pool_within_bounds;
+use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
 use ic_logger::{trace, ReplicaLogger};
 use ic_test_utilities_types::ids::node_test_id;
@@ -105,6 +107,27 @@ fn execute_instance(
         for message in instance.driver.step() {
             out_queue.push(Message { message, timestamp })
         }
+
+        // Assert that instance has not crossed their validated pool bounds.
+        let pool = instance.deps.consensus_pool.read().unwrap();
+        let pool_reader = PoolReader::new(&*pool);
+        let cfg = &instance.deps.replica_config;
+        let registry_client = instance.deps.registry_client.as_ref();
+        if let Some(excess) = validated_pool_within_bounds(&pool_reader, registry_client, cfg) {
+            // There are multiple reasons for why this could panic:
+            // - You introduced or triggered a regression/bug in the purging logic.
+            // - The consensus bounds are outdated, and don't match the implementation.
+            //   In this case, consider updating the formulas.
+            // - A malicious behavior deviates from the honest replicas, by keeping
+            //   too many artifacts in its pool. If this is intentional, consider
+            //   excluding malicious nodes from this check.
+            panic!(
+                "violated consensus pool bounds! too many artifacts in validated pool. \
+                    Excess counts:\n--\nExpected:  {:?}\n--\nFound:     {:?}\n--\n",
+                excess.expected, excess.found,
+            );
+        }
+
         Some(timestamp)
     } else {
         None

@@ -7,6 +7,15 @@ pub struct EcdsaSigningSubnetList {
     #[prost(message, repeated, tag = "2")]
     pub subnets: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
+/// A list of subnets that can sign with a given chain key.
+/// This allows replicas to route their signing requests to the right subnets.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ChainKeySigningSubnetList {
+    #[prost(message, repeated, tag = "1")]
+    pub subnets: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
+}
 /// A public key. Described by its `AlgorithmId`, the key's value and proof data holding, e.g., a proof of possession (PoP).
 #[derive(serde::Serialize, serde::Deserialize, Eq, Hash, PartialOrd, Ord)]
 #[allow(clippy::derive_partial_eq_without_eq)]

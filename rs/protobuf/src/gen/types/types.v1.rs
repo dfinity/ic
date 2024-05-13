@@ -483,6 +483,8 @@ pub struct EcdsaPayload {
     pub available_quadruples: ::prost::alloc::vec::Vec<AvailableQuadruple>,
     #[prost(message, repeated, tag = "4")]
     pub quadruples_in_creation: ::prost::alloc::vec::Vec<QuadrupleInProgress>,
+    #[prost(bool, tag = "16")]
+    pub generalized_pre_signatures: bool,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -743,18 +745,12 @@ pub mod pre_signature_ref {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QuadrupleInCreation {
-    #[prost(message, optional, tag = "1")]
-    pub kappa_masked_config: ::core::option::Option<RandomTranscriptParams>,
-    #[prost(message, optional, tag = "2")]
-    pub kappa_masked: ::core::option::Option<MaskedTranscript>,
     #[prost(message, optional, tag = "3")]
     pub lambda_config: ::core::option::Option<RandomTranscriptParams>,
     #[prost(message, optional, tag = "4")]
     pub lambda_masked: ::core::option::Option<MaskedTranscript>,
     #[prost(message, optional, tag = "11")]
     pub kappa_unmasked_config: ::core::option::Option<RandomUnmaskedTranscriptParams>,
-    #[prost(message, optional, tag = "5")]
-    pub unmask_kappa_config: ::core::option::Option<ReshareOfMaskedParams>,
     #[prost(message, optional, tag = "6")]
     pub kappa_unmasked: ::core::option::Option<UnmaskedTranscript>,
     #[prost(message, optional, tag = "7")]
@@ -955,6 +951,8 @@ pub struct EcdsaPrefix {
     pub group_tag: u64,
     #[prost(uint64, tag = "2")]
     pub meta_hash: u64,
+    #[prost(uint64, tag = "3")]
+    pub height: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

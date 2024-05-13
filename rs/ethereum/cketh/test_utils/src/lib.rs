@@ -7,7 +7,10 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
-use ic_cketh_minter::endpoints::{AddCkErc20Token, MinterInfo, RetrieveEthStatus, WithdrawalArg};
+use ic_cketh_minter::endpoints::{
+    AddCkErc20Token, MinterInfo, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail,
+    WithdrawalSearchParameter,
+};
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::logs::Log;
 use ic_cketh_minter::{
@@ -57,6 +60,7 @@ pub const DEFAULT_BLOCK_NUMBER: u64 = 0x4132ec;
 pub const EXPECTED_BALANCE: u64 = 100_000_000_000_000_000 + CKETH_TRANSFER_FEE - 10_u64;
 pub const CKETH_WITHDRAWAL_AMOUNT: u64 = EXPECTED_BALANCE - CKETH_TRANSFER_FEE;
 pub const EFFECTIVE_GAS_PRICE: u64 = 4_277_923_390;
+pub const GAS_USED: u64 = 0x5208;
 
 pub const DEFAULT_WITHDRAWAL_TRANSACTION_HASH: &str =
     "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5";
@@ -174,6 +178,26 @@ impl CkEthSetup {
                     .expect("failed to get eth address")
             ),
             RetrieveEthStatus
+        )
+        .unwrap()
+    }
+
+    pub fn withdrawal_status(
+        &self,
+        parameter: &WithdrawalSearchParameter,
+    ) -> Vec<WithdrawalDetail> {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query_as(
+                        self.caller,
+                        self.minter_id,
+                        "withdrawal_status",
+                        Encode!(parameter).unwrap(),
+                    )
+                    .expect("failed to get eth address")
+            ),
+            Vec<WithdrawalDetail>
         )
         .unwrap()
     }

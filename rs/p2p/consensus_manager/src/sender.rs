@@ -27,6 +27,7 @@ use tokio::{
     time,
 };
 use tokio_util::sync::CancellationToken;
+use tracing::{instrument, span, Instrument, Level};
 
 use crate::{
     metrics::ConsensusManagerMetrics, uri_prefix, CommitId, SlotNumber, SlotUpdate, Update,
@@ -181,6 +182,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         }
     }
 
+    #[instrument(skip_all)]
     fn handle_send_advert(&mut self, new_artifact: ArtifactWithOpt<Artifact>) {
         let entry = self.active_adverts.entry(new_artifact.advert.id.clone());
 
@@ -191,7 +193,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
 
             let child_token = self.cancellation_token.child_token();
             let child_token_clone = child_token.clone();
-
+            let send_advert_to_all_peers_span = span!(Level::INFO, "send_advert_to_all_peers");
             let send_future = Self::send_advert_to_all_peers(
                 self.rt_handle.clone(),
                 self.log.clone(),
@@ -202,7 +204,8 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
                 new_artifact,
                 self.pool_reader.clone(),
                 child_token_clone,
-            );
+            )
+            .instrument(send_advert_to_all_peers_span);
 
             self.join_set.spawn_on(send_future, &self.rt_handle);
             entry.insert((child_token, used_slot));
@@ -265,6 +268,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         let mut initiated_transmissions: HashMap<NodeId, (ConnId, CancellationToken)> =
             HashMap::new();
         let mut periodic_check_interval = time::interval(Duration::from_secs(5));
+        let send_advert_to_peer_span = span!(Level::INFO, "send_advert_to_peer");
 
         loop {
             select! {
@@ -291,10 +295,11 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
 
                             let transport = transport.clone();
                             let body = body.clone();
+                            let send_advert_to_peer_span = send_advert_to_peer_span.clone();
 
                             let send_future = async move {
                                 select! {
-                                    _ = send_advert_to_peer(transport, body, peer, uri_prefix::<Artifact>()) => {},
+                                    _ = send_advert_to_peer(transport, body, peer, uri_prefix::<Artifact>()).instrument(send_advert_to_peer_span) => {},
                                     _ = child_token.cancelled() => {},
                                 }
                             };

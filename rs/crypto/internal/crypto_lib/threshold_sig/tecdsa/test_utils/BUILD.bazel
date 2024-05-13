@@ -4,6 +4,7 @@ package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 rust_library(
     name = "test_utils",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_threshold_sig_ecdsa_test_utils",
     version = "0.1.0",

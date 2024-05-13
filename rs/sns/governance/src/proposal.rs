@@ -24,7 +24,7 @@ use crate::{
         UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
     sns_upgrade::{get_upgrade_params, UpgradeSnsParams},
-    types::{Environment, DEFAULT_TRANSFER_FEE},
+    types::Environment,
     validate_chars_count, validate_len, validate_required_field,
 };
 use candid::Principal;
@@ -34,7 +34,7 @@ use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
     denominations_to_tokens, i2d, ledger::compute_distribution_subaccount_bytes, ledger_validation,
-    E8, SECONDS_PER_DAY,
+    DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_sns_governance_proposals_amount_total_limit::{
@@ -83,11 +83,11 @@ pub const MAX_NUMBER_OF_BALLOTS_IN_LIST_PROPOSALS_RESPONSE: usize = 100;
 /// successfully executed. (This is used by can_be_purged, and is generally used when calling
 /// total_treasury_transfer_amount_tokens to construct the min_executed_timestamp_seconds argument).
 pub const EXECUTED_TRANSFER_SNS_TREASURY_FUNDS_PROPOSAL_RETENTION_DURATION_SECONDS: u64 =
-    7 * SECONDS_PER_DAY;
+    7 * ONE_DAY_SECONDS;
 
 /// Analogous to the previous constant; this one is for MintSnsTokens proposals. The value here is
 /// the same, but we keep separate constants, because we consider this to be a coincidence.
-pub const EXECUTED_MINT_SNS_TOKENS_PROPOSAL_RETENTION_DURATION_SECONDS: u64 = 7 * SECONDS_PER_DAY;
+pub const EXECUTED_MINT_SNS_TOKENS_PROPOSAL_RETENTION_DURATION_SECONDS: u64 = 7 * ONE_DAY_SECONDS;
 
 /// The maximum message size for inter-canister calls to a different subnet
 /// is 2MiB and thus we restrict the maximum joint size of the canister WASM
@@ -796,7 +796,7 @@ impl TokenProposalAction for TransferSnsTreasuryFunds {
         total_treasury_transfer_amount_tokens(
             proposals,
             self.from_treasury(),
-            now_timestamp_seconds - 7 * SECONDS_PER_DAY,
+            now_timestamp_seconds - 7 * ONE_DAY_SECONDS,
         )
     }
 
@@ -962,7 +962,7 @@ impl TokenProposalAction for MintSnsTokens {
         proposals: impl Iterator<Item = &'a ProposalData>,
         now_timestamp_seconds: u64,
     ) -> Result<Decimal, String> {
-        total_minting_amount_tokens(proposals, now_timestamp_seconds - 7 * SECONDS_PER_DAY)
+        total_minting_amount_tokens(proposals, now_timestamp_seconds - 7 * ONE_DAY_SECONDS)
     }
 
     /* TODO(NNS1-2982): Uncomment.
@@ -2098,7 +2098,7 @@ impl ProposalData {
             failure_reason,
             reward_event_round,
             wait_for_quiet_state,
-            payload_text_rendering,
+            payload_text_rendering: _,
             is_eligible_for_rewards,
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
@@ -2128,7 +2128,6 @@ impl ProposalData {
             failure_reason: failure_reason.clone(),
             reward_event_round: *reward_event_round,
             wait_for_quiet_state: wait_for_quiet_state.clone(),
-            payload_text_rendering: payload_text_rendering.clone(),
             is_eligible_for_rewards: *is_eligible_for_rewards,
             initial_voting_period_seconds: *initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds: *wait_for_quiet_deadline_increase_seconds,
@@ -2138,6 +2137,7 @@ impl ProposalData {
             action_auxiliary: action_auxiliary.clone(),
 
             // The following fields are truncated:
+            payload_text_rendering: None,
             proposal: proposal.as_ref().map(Proposal::limited_for_list_proposals),
             ballots: limited_ballots,
         }
@@ -2191,7 +2191,7 @@ pub(crate) fn transfer_sns_treasury_funds_amount_is_small_enough_at_execution_ti
     let spent_tokens = total_treasury_transfer_amount_tokens(
         proposals,
         transfer.from_treasury(),
-        now_timestamp_seconds - 7 * SECONDS_PER_DAY,
+        now_timestamp_seconds - 7 * ONE_DAY_SECONDS,
     )
     .map_err(|message| {
         GovernanceError::new_with_message(ErrorType::InconsistentInternalData, message)
@@ -4409,7 +4409,7 @@ Version {
     }
 
     #[test]
-    fn limited_proposal_data_for_list_proposals_truncate_ballots() {
+    fn limited_proposal_data_for_list_proposals_truncate_ballots_and_text_rendering() {
         let ballots = (100..300)
             .map(|i| {
                 (
@@ -4429,6 +4429,9 @@ Version {
                 ..Default::default()
             }),
             ballots,
+            payload_text_rendering: Some(
+                "# Motion Proposal: ## Motion Text: some motion text".to_string(),
+            ),
             ..Default::default()
         };
         let caller_neurons = (0..1000).map(|i| i.to_string()).collect::<HashSet<_>>();
@@ -4451,6 +4454,7 @@ Version {
             limited_proposal_data,
             ProposalData {
                 ballots: expected_ballots,
+                payload_text_rendering: None,
                 ..original_proposal_data
             }
         );
@@ -4523,6 +4527,76 @@ Version {
                             mode: Some(1),
                         },
                     )),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn limited_proposal_data_for_list_proposals_limited_manage_sns_metadata() {
+        let original_proposal_data = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::ManageSnsMetadata(ManageSnsMetadata {
+                    logo: Some("some logo".to_string()),
+                    url: Some("some url".to_string()),
+                    name: Some("some name".to_string()),
+                    description: Some("some description".to_string()),
+                })),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let limited_proposal_data =
+            original_proposal_data.limited_for_list_proposals(&HashSet::new());
+
+        assert_eq!(
+            limited_proposal_data,
+            ProposalData {
+                proposal: Some(Proposal {
+                    action: Some(Action::ManageSnsMetadata(ManageSnsMetadata {
+                        logo: None,
+                        url: Some("some url".to_string()),
+                        name: Some("some name".to_string()),
+                        description: Some("some description".to_string()),
+                    },)),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn limited_proposal_data_for_list_proposals_limited_manage_ledger_parameters() {
+        let original_proposal_data = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                    transfer_fee: Some(100),
+                    token_name: Some("some name".to_string()),
+                    token_symbol: Some("some symbol".to_string()),
+                    token_logo: Some("some logo".to_string()),
+                })),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let limited_proposal_data =
+            original_proposal_data.limited_for_list_proposals(&HashSet::new());
+
+        assert_eq!(
+            limited_proposal_data,
+            ProposalData {
+                proposal: Some(Proposal {
+                    action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                        transfer_fee: Some(100),
+                        token_name: Some("some name".to_string()),
+                        token_symbol: Some("some symbol".to_string()),
+                        token_logo: None,
+                    },)),
                     ..Default::default()
                 }),
                 ..Default::default()

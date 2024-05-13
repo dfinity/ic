@@ -3,7 +3,7 @@ use discower_bowndary::{
     fetch::{NodesFetcher, NodesFetcherImpl},
     node::Node,
     route_provider::HealthCheckRouteProvider,
-    test_helpers::{assert_routed_domains, route_n_times},
+    snapshot_health_based::HealthBasedSnapshot,
 };
 use k256::SecretKey;
 
@@ -35,7 +35,7 @@ use ic_nns_governance::{init::TEST_NEURON_1_ID, pb::v1::NnsFunction};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use itertools::Itertools;
 use registry_canister::mutations::{
-    do_add_api_boundary_node::AddApiBoundaryNodePayload,
+    do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     node_management::do_update_node_domain_directly::UpdateNodeDomainDirectlyPayload,
 };
 use std::{net::Ipv6Addr, sync::Arc};
@@ -137,15 +137,15 @@ pub fn decentralization_test(env: TestEnv) {
             log,
             "Successfully updated domain name of the unassigned node with id={}", node.node_id
         );
-        let proposal_payload = AddApiBoundaryNodePayload {
-            node_id: node.node_id,
+        let proposal_payload = AddApiBoundaryNodesPayload {
+            node_ids: vec![node.node_id],
             version: version.clone().into(),
         };
         let proposal_id = block_on(submit_external_update_proposal(
             &governance,
             Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
             NeuronId(TEST_NEURON_1_ID),
-            NnsFunction::AddApiBoundaryNode,
+            NnsFunction::AddApiBoundaryNodes,
             proposal_payload,
             String::from("Add an API boundary node"),
             "Motivation: API boundary node testing".to_string(),
@@ -266,7 +266,9 @@ pub fn decentralization_test(env: TestEnv) {
         let check_interval = Duration::from_secs(1);
         let checker = Arc::new(HealthCheckImpl::new(http_client.clone(), health_timeout));
         let seed_nodes = vec![Node::new("api1.com"), Node::new("api2.com")];
+        let snapshot = HealthBasedSnapshot::new();
         let route_provider = Arc::new(HealthCheckRouteProvider::new(
+            snapshot,
             Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
             fetch_interval,
             Arc::clone(&checker) as Arc<dyn HealthCheck>,
@@ -274,15 +276,16 @@ pub fn decentralization_test(env: TestEnv) {
             seed_nodes,
         ));
         block_on(route_provider.run());
-        // Wait till all nodes go through health checks.
-        std::thread::sleep(2 * check_interval);
-        // Do an additional assertions that routing works correctly.
-        let routed_domains = route_n_times(6, Arc::clone(&route_provider));
-        assert_routed_domains(
-            routed_domains,
-            vec!["api1.com".into(), "api2.com".into()],
-            3,
-        );
+        // TODO: BOUN-1134 - Dissect seed phase health check in Discovery Library
+        // // Wait till all nodes go through health checks.
+        // std::thread::sleep(2 * check_interval);
+        // // Do an additional assertions that routing works correctly.
+        // let routed_domains = route_n_times(6, Arc::clone(&route_provider));
+        // assert_routed_domains(
+        //     routed_domains,
+        //     vec!["api1.com".into(), "api2.com".into()],
+        //     3,
+        // );
         // TODO: remove this once ic-agent 0.35.0 is released + call route_provider.stop() at the end
         Arc::try_unwrap(route_provider).unwrap()
     };

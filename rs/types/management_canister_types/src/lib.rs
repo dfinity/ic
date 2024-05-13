@@ -86,7 +86,8 @@ pub enum Method {
     StopCanister,
     UninstallCode,
     UpdateSettings,
-    ComputeInitialEcdsaDealings,
+    ComputeInitialEcdsaDealings, // TODO(EXC-1599): remove after ComputeInitialIDkgDealings is released.
+    ComputeInitialIDkgDealings,
 
     // Bitcoin Interface.
     BitcoinGetBalance,
@@ -1780,7 +1781,7 @@ impl<'a> Payload<'a> for CreateCanisterArgs {
 /// Struct used for encoding/decoding
 /// `(record {
 ///     node_ids : vec principal;
-///     registry_version: nat;
+///     registry_version: nat64;
 /// })`
 #[derive(CandidType, Deserialize, Debug)]
 pub struct SetupInitialDKGArgs {
@@ -1856,7 +1857,7 @@ impl SetupInitialDKGResponse {
         )>(&serde_encoded_transcript_records)
         {
             Err(err) => Err(UserError::new(
-                ErrorCode::CanisterContractViolation,
+                ErrorCode::InvalidManagementPayload,
                 format!("Payload deserialization error: '{}'", err),
             )),
             Ok((
@@ -2050,6 +2051,24 @@ impl From<SchnorrAlgorithm> for pb_registry_crypto::SchnorrAlgorithm {
     }
 }
 
+impl std::fmt::Display for SchnorrAlgorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl FromStr for SchnorrAlgorithm {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Bip340Secp256k1" => Ok(Self::Bip340Secp256k1),
+            "Ed25519" => Ok(Self::Ed25519),
+            _ => Err(format!("{} is not a recognized Schnorr algorithm", s)),
+        }
+    }
+}
+
 /// Unique identifier for a key that can be used for Schnorr signatures. The name
 /// is just a identifier, but it may be used to convey some information about
 /// the key (e.g. that the key is meant to be used for testing purposes).
@@ -2086,6 +2105,25 @@ impl From<SchnorrKeyId> for pb_registry_crypto::SchnorrKeyId {
             algorithm: pb_registry_crypto::SchnorrAlgorithm::from(item.algorithm) as i32,
             name: item.name,
         }
+    }
+}
+
+impl std::fmt::Display for SchnorrKeyId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.algorithm, self.name)
+    }
+}
+
+impl FromStr for SchnorrKeyId {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (algorithm, name) = s
+            .split_once(':')
+            .ok_or_else(|| format!("Schnorr key id {} does not contain a ':'", s))?;
+        Ok(SchnorrKeyId {
+            algorithm: algorithm.parse::<SchnorrAlgorithm>()?,
+            name: name.to_string(),
+        })
     }
 }
 
@@ -2137,6 +2175,38 @@ impl From<MasterPublicKeyId> for pb_registry_crypto::MasterPublicKeyId {
         };
         Self {
             key_id: Some(key_id),
+        }
+    }
+}
+
+impl std::fmt::Display for MasterPublicKeyId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ecdsa(esdsa_key_id) => {
+                write!(f, "ecdsa:")?;
+                esdsa_key_id.fmt(f)
+            }
+            Self::Schnorr(schnorr_key_id) => {
+                write!(f, "schnorr:")?;
+                schnorr_key_id.fmt(f)
+            }
+        }
+    }
+}
+
+impl FromStr for MasterPublicKeyId {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (scheme, key_id) = s
+            .split_once(':')
+            .ok_or_else(|| format!("Master public key id {} does not contain a ':'", s))?;
+        match scheme {
+            "ecdsa" => Ok(Self::Ecdsa(EcdsaKeyId::from_str(key_id)?)),
+            "schnorr" => Ok(Self::Schnorr(SchnorrKeyId::from_str(key_id)?)),
+            other => Err(format!(
+                "Scheme {} in master public key id {} is not supported.",
+                other, s
+            )),
         }
     }
 }
@@ -2216,7 +2286,7 @@ impl Payload<'_> for ECDSAPublicKeyResponse {}
 ///     key_id: ecdsa_key_id;
 ///     subnet_id: principal;
 ///     nodes: vec principal;
-///     registry_version: nat;
+///     registry_version: nat64;
 /// })`
 #[derive(CandidType, Deserialize, Debug, Eq, PartialEq)]
 pub struct ComputeInitialEcdsaDealingsArgs {
@@ -2286,7 +2356,56 @@ impl ComputeInitialEcdsaDealingsResponse {
             Decode!([decoder_config()]; blob, Vec<u8>).map_err(candid_error_to_user_error)?;
         match serde_cbor::from_slice::<(InitialIDkgDealings,)>(&serde_encoded_transcript_records) {
             Err(err) => Err(UserError::new(
-                ErrorCode::CanisterContractViolation,
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: '{}'", err),
+            )),
+            Ok((initial_dkg_dealings,)) => Ok(Self {
+                initial_dkg_dealings,
+            }),
+        }
+    }
+}
+
+/// Argument of the compute_initial_idkg_dealings API.
+/// `(record {
+///     key_id: master_public_key_id;
+///     subnet_id: principal;
+///     nodes: vec principal;
+///     registry_version: nat64;
+/// })`
+#[derive(CandidType, Deserialize, Debug, Eq, PartialEq)]
+pub struct ComputeInitialIDkgDealingsArgs {
+    pub key_id: MasterPublicKeyId,
+    pub subnet_id: SubnetId,
+    nodes: Vec<PrincipalId>,
+    registry_version: u64,
+}
+
+impl Payload<'_> for ComputeInitialIDkgDealingsArgs {}
+
+/// Struct used to return the xnet initial dealings.
+#[derive(Debug)]
+pub struct ComputeInitialIDkgDealingsResponse {
+    pub initial_dkg_dealings: InitialIDkgDealings,
+}
+
+impl ComputeInitialIDkgDealingsResponse {
+    pub fn encode(&self) -> Vec<u8> {
+        let serde_encoded_transcript_records = self.encode_with_serde_cbor();
+        Encode!(&serde_encoded_transcript_records).unwrap()
+    }
+
+    fn encode_with_serde_cbor(&self) -> Vec<u8> {
+        let transcript_records = (&self.initial_dkg_dealings,);
+        serde_cbor::to_vec(&transcript_records).unwrap()
+    }
+
+    pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
+        let serde_encoded_transcript_records =
+            Decode!([decoder_config()]; blob, Vec<u8>).map_err(candid_error_to_user_error)?;
+        match serde_cbor::from_slice::<(InitialIDkgDealings,)>(&serde_encoded_transcript_records) {
+            Err(err) => Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
                 format!("Payload deserialization error: '{}'", err),
             )),
             Ok((initial_dkg_dealings,)) => Ok(Self {
@@ -2403,8 +2522,8 @@ impl FetchCanisterLogsRequest {
 /// `CandidType` for `CanisterLogRecord`
 /// ```text
 /// record {
-///     idx: nat;
-///     timestamp_nanos: nat;
+///     idx: nat64;
+///     timestamp_nanos: nat64;
 ///     content: blob;
 /// }
 /// ```
@@ -2857,6 +2976,60 @@ impl<'a> Payload<'a> for TakeCanisterSnapshotArgs {
     }
 }
 
+/// Struct used for encoding/decoding
+/// `(record {
+///     canister_id: principal;
+///     snapshot_id: blob;
+///     sender_canister_version: opt nat64;
+/// })`
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub struct LoadCanisterSnapshotArgs {
+    canister_id: PrincipalId,
+    #[serde(with = "serde_bytes")]
+    snapshot_id: Vec<u8>,
+    sender_canister_version: Option<u64>,
+}
+
+impl LoadCanisterSnapshotArgs {
+    pub fn new(
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+        sender_canister_version: Option<u64>,
+    ) -> Self {
+        Self {
+            canister_id: canister_id.get(),
+            snapshot_id: snapshot_id.to_vec(),
+            sender_canister_version,
+        }
+    }
+
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
+    }
+
+    pub fn sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
+    }
+}
+
+impl<'a> Payload<'a> for LoadCanisterSnapshotArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+        // Verify that snapshot ID has the correct format.
+        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
+            return Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: {err:?}"),
+            ));
+        }
+        Ok(args)
+    }
+}
+
 /// Struct to be returned when taking a canister snapshot.
 /// `(record {
 ///      id: blob;
@@ -3088,22 +3261,75 @@ mod tests {
 
     #[test]
     fn ecdsa_curve_round_trip() {
-        assert_eq!(
-            format!("{}", EcdsaCurve::Secp256k1)
-                .parse::<EcdsaCurve>()
-                .unwrap(),
-            EcdsaCurve::Secp256k1
-        );
+        for curve in EcdsaCurve::iter() {
+            assert_eq!(format!("{}", curve).parse::<EcdsaCurve>().unwrap(), curve);
+        }
     }
 
     #[test]
     fn ecdsa_key_id_round_trip() {
-        for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
-            let key = EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: name.to_string(),
-            };
-            assert_eq!(format!("{}", key).parse::<EcdsaKeyId>().unwrap(), key);
+        for curve in EcdsaCurve::iter() {
+            for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
+                let key = EcdsaKeyId {
+                    curve,
+                    name: name.to_string(),
+                };
+                assert_eq!(format!("{}", key).parse::<EcdsaKeyId>().unwrap(), key);
+            }
+        }
+    }
+
+    #[test]
+    fn schnorr_algorithm_round_trip() {
+        for algorithm in SchnorrAlgorithm::iter() {
+            assert_eq!(
+                format!("{}", algorithm)
+                    .parse::<SchnorrAlgorithm>()
+                    .unwrap(),
+                algorithm
+            );
+        }
+    }
+
+    #[test]
+    fn schnorr_key_id_round_trip() {
+        for algorithm in SchnorrAlgorithm::iter() {
+            for name in ["Ed25519", "", "other_key", "other key", "other:key"] {
+                let key = SchnorrKeyId {
+                    algorithm,
+                    name: name.to_string(),
+                };
+                assert_eq!(format!("{}", key).parse::<SchnorrKeyId>().unwrap(), key);
+            }
+        }
+    }
+
+    #[test]
+    fn master_public_key_id_round_trip() {
+        for algorithm in SchnorrAlgorithm::iter() {
+            for name in ["Ed25519", "", "other_key", "other key", "other:key"] {
+                let key = MasterPublicKeyId::Schnorr(SchnorrKeyId {
+                    algorithm,
+                    name: name.to_string(),
+                });
+                assert_eq!(
+                    format!("{}", key).parse::<MasterPublicKeyId>().unwrap(),
+                    key
+                );
+            }
+        }
+
+        for curve in EcdsaCurve::iter() {
+            for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
+                let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                    curve,
+                    name: name.to_string(),
+                });
+                assert_eq!(
+                    format!("{}", key).parse::<MasterPublicKeyId>().unwrap(),
+                    key
+                );
+            }
         }
     }
 

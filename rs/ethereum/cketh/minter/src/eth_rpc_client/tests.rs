@@ -227,11 +227,11 @@ mod multi_call_results {
     }
 
     mod reduce_with_stable_majority_by_key {
-        use crate::eth_rpc::{FeeHistory, JsonRpcResult};
+        use crate::eth_rpc::{FeeHistory, HttpOutcallError, JsonRpcResult};
         use crate::eth_rpc_client::tests::multi_call_results::{ANKR, LLAMA_NODES, PUBLIC_NODE};
-        use crate::eth_rpc_client::MultiCallError::ConsistentJsonRpcError;
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
         use crate::numeric::{BlockNumber, WeiPerGas};
+        use ic_cdk::api::call::RejectionCode;
 
         #[test]
         fn should_get_unanimous_fee_history() {
@@ -278,6 +278,27 @@ mod multi_call_results {
 
                 assert_eq!(reduced, Ok(majority_fee));
             }
+        }
+
+        #[test]
+        fn should_get_fee_history_with_2_out_of_3_when_third_is_error() {
+            let results: MultiCallResults<FeeHistory> =
+                MultiCallResults::from_non_empty_iter(vec![
+                    (ANKR, Ok(JsonRpcResult::Result(fee_history()))),
+                    (
+                        PUBLIC_NODE,
+                        Err(HttpOutcallError::IcError {
+                            code: RejectionCode::SysTransient,
+                            message: "no consensus".to_string(),
+                        }),
+                    ),
+                    (LLAMA_NODES, Ok(JsonRpcResult::Result(fee_history()))),
+                ]);
+
+            let reduced =
+                results.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+
+            assert_eq!(reduced, Ok(fee_history()));
         }
 
         #[test]
@@ -337,9 +358,42 @@ mod multi_call_results {
                 reduced,
                 Err(MultiCallError::InconsistentResults(
                     MultiCallResults::from_non_empty_iter(vec![
-                        (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history))),
+                        (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history.clone()))),
                         (
                             PUBLIC_NODE,
+                            Ok(JsonRpcResult::Result(llama_nodes_fee_history.clone()))
+                        ),
+                    ])
+                ))
+            );
+
+            let two_distinct_results_and_error: MultiCallResults<FeeHistory> =
+                MultiCallResults::from_non_empty_iter(vec![
+                    (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history.clone()))),
+                    (
+                        PUBLIC_NODE,
+                        Ok(JsonRpcResult::Error {
+                            code: -32700,
+                            message: "error".to_string(),
+                        }),
+                    ),
+                    (
+                        LLAMA_NODES,
+                        Ok(JsonRpcResult::Result(llama_nodes_fee_history.clone())),
+                    ),
+                ]);
+
+            let reduced = two_distinct_results_and_error
+                .clone()
+                .reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
+
+            assert_eq!(
+                reduced,
+                Err(MultiCallError::InconsistentResults(
+                    MultiCallResults::from_non_empty_iter(vec![
+                        (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history))),
+                        (
+                            LLAMA_NODES,
                             Ok(JsonRpcResult::Result(llama_nodes_fee_history))
                         ),
                     ])
@@ -381,7 +435,7 @@ mod multi_call_results {
         }
 
         #[test]
-        fn should_fail_upon_any_error() {
+        fn should_fail_when_no_sufficient_ok_responses() {
             let results: MultiCallResults<FeeHistory> =
                 MultiCallResults::from_non_empty_iter(vec![
                     (ANKR, Ok(JsonRpcResult::Result(fee_history()))),
@@ -398,13 +452,7 @@ mod multi_call_results {
                 .clone()
                 .reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block);
 
-            assert_eq!(
-                reduced,
-                Err(ConsistentJsonRpcError {
-                    code: -32700,
-                    message: "error".to_string()
-                })
-            );
+            assert_eq!(reduced, Err(MultiCallError::InconsistentResults(results)));
         }
 
         fn fee_history() -> FeeHistory {

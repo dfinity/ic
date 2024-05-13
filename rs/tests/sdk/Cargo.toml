@@ -1,0 +1,24 @@
+[package]
+name = "sdk-system-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+tests = { path = ".." }
+
+[[bin]]
+name = "dfx_check_old_wallet_version_test"
+path = "dfx_check_old_wallet_version_test.rs"
+
+[[bin]]
+name = "dfx_smoke_test"
+path = "dfx_smoke_test.rs"

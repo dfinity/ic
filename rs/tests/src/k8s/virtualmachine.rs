@@ -6,6 +6,7 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use kube::api::{DynamicObject, Patch, PatchParams};
 use kube::{Api, Client};
 use std::convert::AsRef;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use strum_macros::AsRefStr;
 use tracing::*;
 
@@ -23,6 +24,7 @@ spec:
     metadata:
       annotations:
         "container.apparmor.security.beta.kubernetes.io/compute": unconfined
+        "cni.projectcalico.org/ipAddrs": "[\"{ipv4}\", \"{ipv6}\"]"
       labels:
         kubevirt.io/vm: {name}
         kubevirt.io/network: passt
@@ -111,6 +113,7 @@ spec:
     metadata:
       annotations:
         "container.apparmor.security.beta.kubernetes.io/compute": unconfined
+        "cni.projectcalico.org/ipAddrs": "[\"{ipv4}\", \"{ipv6}\"]"
       labels:
         kubevirt.io/vm: {name}
         kubevirt.io/network: passt
@@ -140,6 +143,7 @@ spec:
               - port: 443
               - port: 2497
               - port: 4100
+                protocol: UDP
               - port: 4444
               - port: 7070
               - port: 8080
@@ -168,6 +172,8 @@ pub async fn create_vm(
     name: &str,
     cpus: &str,
     memory: &str,
+    ipv4: Ipv4Addr,
+    ipv6: Ipv6Addr,
     running: bool,
     owner: OwnerReference,
     access_key: Option<String>,
@@ -183,7 +189,9 @@ pub async fn create_vm(
         .replace("{tnet}", &owner.name)
         .replace("{running}", &running.to_string())
         .replace("{memory}", memory)
-        .replace("{cpus}", cpus);
+        .replace("{cpus}", cpus)
+        .replace("{ipv4}", &ipv4.to_string())
+        .replace("{ipv6}", &ipv6.to_string());
     let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
     data.metadata.owner_references = vec![owner].into();
     let response = api

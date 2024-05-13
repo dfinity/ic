@@ -156,6 +156,15 @@ fn populate_canister_state() {
     let mut proto = GovernanceProto {
         economics: Some(NetworkEconomicsProto::with_default_values()),
         in_flight_commands: create_in_flight_commands(),
+        xdr_conversion_rate: Some(XdrConversionRate {
+            timestamp_seconds: Some(
+                dfn_core::api::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+            ),
+            xdr_permyriad_per_icp: Some(1000),
+        }),
         ..Default::default()
     };
 

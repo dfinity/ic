@@ -17,7 +17,7 @@ use universal_canister::Ops;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("7ee086b08867bfc54b726f918044043a85e0739190c14565de18149412fcff13");
+    hex!("b8501c0a7789bb6c8208a930bc9c03940f96497e1ea73673dbcc759f366f2210");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -314,7 +314,7 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn call_with_cycles_and_best_effort_response(mut self, timeout_seconds: u32) -> Self {
+    pub fn call_with_best_effort_response(mut self, timeout_seconds: u32) -> Self {
         self = self.push_int(timeout_seconds);
         self.0.push(Ops::CallWithBestEffortResponse as u8);
         self
@@ -537,6 +537,12 @@ impl PayloadBuilder {
     /// Pushes the size of the caller data onto the stack.
     pub fn msg_caller_size(mut self) -> Self {
         self.0.push(Ops::MsgCallerSize as u8);
+        self
+    }
+
+    /// Pushes the deadline of the message onto the stack.
+    pub fn msg_deadline(mut self) -> Self {
+        self.0.push(Ops::MsgDeadline as u8);
         self
     }
 

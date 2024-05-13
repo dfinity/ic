@@ -5,8 +5,8 @@ use ic_crypto_tls_interfaces::{
     TlsHandshake, TlsServerHandshakeError, TlsStream,
 };
 use mockall::*;
+use rustls::{ClientConfig, ServerConfig};
 use tokio::net::TcpStream;
-use tokio_rustls::rustls::{ClientConfig, ServerConfig};
 
 mock! {
     pub TlsHandshake {}

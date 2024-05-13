@@ -624,7 +624,7 @@ mod tests {
         pb::v1::{neuron::Followees, proposal::Action, ManageNeuron, NeuronType, Proposal, Topic},
     };
     use assert_matches::assert_matches;
-    use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+    use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
     use lazy_static::lazy_static;
     use maplit::{btreemap, hashmap};
     use std::collections::BTreeMap;
@@ -1085,8 +1085,8 @@ mod tests {
             .with_cached_neuron_stake_e8s(300 * E8 + 10 * E8 + TRANSACTION_FEES_E8S)
             .with_neuron_fees_e8s(10 * E8)
             .with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                aging_since_timestamp_seconds: NOW_SECONDS - 100 * SECONDS_PER_DAY,
+                dissolve_delay_seconds: 200 * ONE_DAY_SECONDS,
+                aging_since_timestamp_seconds: NOW_SECONDS - 100 * ONE_DAY_SECONDS,
             })
             .with_maturity_e8s_equivalent(50 * E8)
             .with_staked_maturity_e8s_equivalent(40 * E8)
@@ -1096,8 +1096,8 @@ mod tests {
         let target_neuron = create_model_neuron_builder(2)
             .with_cached_neuron_stake_e8s(100 * E8)
             .with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds: 100 * SECONDS_PER_DAY,
-                aging_since_timestamp_seconds: NOW_SECONDS - 300 * SECONDS_PER_DAY,
+                dissolve_delay_seconds: 100 * ONE_DAY_SECONDS,
+                aging_since_timestamp_seconds: NOW_SECONDS - 300 * ONE_DAY_SECONDS,
             })
             .build();
         neuron_store.add_neuron(target_neuron).unwrap();
@@ -1122,12 +1122,12 @@ mod tests {
                 source_burn_fees_e8s: Some(10 * E8),
                 stake_transfer_to_target_e8s: Some(300 * E8),
                 source_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
+                    dissolve_delay_seconds: 200 * ONE_DAY_SECONDS,
                     aging_since_timestamp_seconds: NOW_SECONDS,
                 },
                 target_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                    aging_since_timestamp_seconds: NOW_SECONDS - 150 * SECONDS_PER_DAY,
+                    dissolve_delay_seconds: 200 * ONE_DAY_SECONDS,
+                    aging_since_timestamp_seconds: NOW_SECONDS - 150 * ONE_DAY_SECONDS,
                 },
                 transfer_maturity_e8s: 50 * E8,
                 transfer_staked_maturity_e8s: 40 * E8,
@@ -1144,16 +1144,16 @@ mod tests {
             .with_cached_neuron_stake_e8s(10 * E8 + 9_000) // 9_000 is lesss than TRANSACTION_FEES_E8S
             .with_neuron_fees_e8s(10 * E8)
             .with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                aging_since_timestamp_seconds: NOW_SECONDS - 100 * SECONDS_PER_DAY,
+                dissolve_delay_seconds: 200 * ONE_DAY_SECONDS,
+                aging_since_timestamp_seconds: NOW_SECONDS - 100 * ONE_DAY_SECONDS,
             })
             .build();
         neuron_store.add_neuron(source_neuron).unwrap();
         let target_neuron = create_model_neuron_builder(2)
             .with_cached_neuron_stake_e8s(100 * E8)
             .with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds: 100 * SECONDS_PER_DAY,
-                aging_since_timestamp_seconds: NOW_SECONDS - 300 * SECONDS_PER_DAY,
+                dissolve_delay_seconds: 100 * ONE_DAY_SECONDS,
+                aging_since_timestamp_seconds: NOW_SECONDS - 300 * ONE_DAY_SECONDS,
             })
             .build();
         neuron_store.add_neuron(target_neuron).unwrap();
@@ -1178,12 +1178,12 @@ mod tests {
                 source_burn_fees_e8s: Some(10 * E8,),
                 stake_transfer_to_target_e8s: None,
                 source_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                    aging_since_timestamp_seconds: NOW_SECONDS - 100 * SECONDS_PER_DAY,
+                    dissolve_delay_seconds: 200 * ONE_DAY_SECONDS,
+                    aging_since_timestamp_seconds: NOW_SECONDS - 100 * ONE_DAY_SECONDS,
                 },
                 target_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                    aging_since_timestamp_seconds: NOW_SECONDS - 300 * SECONDS_PER_DAY,
+                    dissolve_delay_seconds: 200 * ONE_DAY_SECONDS,
+                    aging_since_timestamp_seconds: NOW_SECONDS - 300 * ONE_DAY_SECONDS,
                 },
                 transfer_maturity_e8s: 0,
                 transfer_staked_maturity_e8s: 0,
@@ -1200,16 +1200,16 @@ mod tests {
             .with_cached_neuron_stake_e8s(300 * E8 + TRANSACTION_FEES_E8S)
             .with_neuron_fees_e8s(0)
             .with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                aging_since_timestamp_seconds: NOW_SECONDS - 100 * SECONDS_PER_DAY,
+                dissolve_delay_seconds: 200 * ONE_DAY_SECONDS,
+                aging_since_timestamp_seconds: NOW_SECONDS - 100 * ONE_DAY_SECONDS,
             })
             .build();
         neuron_store.add_neuron(source_neuron).unwrap();
         let target_neuron = create_model_neuron_builder(2)
             .with_cached_neuron_stake_e8s(100 * E8)
             .with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds: 100 * SECONDS_PER_DAY,
-                aging_since_timestamp_seconds: NOW_SECONDS - 300 * SECONDS_PER_DAY,
+                dissolve_delay_seconds: 100 * ONE_DAY_SECONDS,
+                aging_since_timestamp_seconds: NOW_SECONDS - 300 * ONE_DAY_SECONDS,
             })
             .build();
         neuron_store.add_neuron(target_neuron).unwrap();
@@ -1234,12 +1234,12 @@ mod tests {
                 source_burn_fees_e8s: None,
                 stake_transfer_to_target_e8s: Some(300 * E8),
                 source_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
+                    dissolve_delay_seconds: 200 * ONE_DAY_SECONDS,
                     aging_since_timestamp_seconds: NOW_SECONDS,
                 },
                 target_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                    aging_since_timestamp_seconds: NOW_SECONDS - 150 * SECONDS_PER_DAY,
+                    dissolve_delay_seconds: 200 * ONE_DAY_SECONDS,
+                    aging_since_timestamp_seconds: NOW_SECONDS - 150 * ONE_DAY_SECONDS,
                 },
                 transfer_maturity_e8s: 0,
                 transfer_staked_maturity_e8s: 0,
@@ -1262,8 +1262,8 @@ mod tests {
             .with_cached_neuron_stake_e8s(17_000)
             .with_neuron_fees_e8s(8_000)
             .with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                aging_since_timestamp_seconds: NOW_SECONDS - 100 * SECONDS_PER_DAY,
+                dissolve_delay_seconds: 200 * ONE_DAY_SECONDS,
+                aging_since_timestamp_seconds: NOW_SECONDS - 100 * ONE_DAY_SECONDS,
             })
             .with_maturity_e8s_equivalent(50 * E8)
             .with_staked_maturity_e8s_equivalent(40 * E8)
@@ -1272,8 +1272,8 @@ mod tests {
         let target_neuron = create_model_neuron_builder(2)
             .with_cached_neuron_stake_e8s(100 * E8)
             .with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds: 100 * SECONDS_PER_DAY,
-                aging_since_timestamp_seconds: NOW_SECONDS - 300 * SECONDS_PER_DAY,
+                dissolve_delay_seconds: 100 * ONE_DAY_SECONDS,
+                aging_since_timestamp_seconds: NOW_SECONDS - 300 * ONE_DAY_SECONDS,
             })
             .build();
         neuron_store.add_neuron(target_neuron).unwrap();
@@ -1298,12 +1298,12 @@ mod tests {
                 source_burn_fees_e8s: None,
                 stake_transfer_to_target_e8s: None,
                 source_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                    aging_since_timestamp_seconds: NOW_SECONDS - 100 * SECONDS_PER_DAY,
+                    dissolve_delay_seconds: 200 * ONE_DAY_SECONDS,
+                    aging_since_timestamp_seconds: NOW_SECONDS - 100 * ONE_DAY_SECONDS,
                 },
                 target_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                    aging_since_timestamp_seconds: NOW_SECONDS - 300 * SECONDS_PER_DAY,
+                    dissolve_delay_seconds: 200 * ONE_DAY_SECONDS,
+                    aging_since_timestamp_seconds: NOW_SECONDS - 300 * ONE_DAY_SECONDS,
                 },
                 transfer_maturity_e8s: 50 * E8,
                 transfer_staked_maturity_e8s: 40 * E8,

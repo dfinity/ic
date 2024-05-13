@@ -369,8 +369,7 @@ impl State {
         let tx_fee = receipt.effective_transaction_fee();
         let tx = self
             .eth_transactions
-            .finalized_tx
-            .get_alt(withdrawal_id)
+            .get_finalized_transaction(withdrawal_id)
             .expect("BUG: missing finalized transaction");
         let charged_tx_fee = tx.transaction_price().max_transaction_fee();
         let unspent_tx_fee = charged_tx_fee.checked_sub(tx_fee).expect(
@@ -433,6 +432,21 @@ impl State {
             Ok(()),
             "ERROR: some ckERC20 tokens use the same ERC-20 address or symbol"
         );
+    }
+
+    pub fn erc20_balances_by_token_symbol(&self) -> BTreeMap<&CkTokenSymbol, &Erc20Value> {
+        self.erc20_balances
+            .balance_by_erc20_contract
+            .iter()
+            .map(|(erc20_contract, balance)| {
+                let symbol = self
+                    .ckerc20_token_symbol(erc20_contract)
+                    .unwrap_or_else(|| {
+                        panic!("BUG: missing symbol for ERC-20 contract {}", erc20_contract)
+                    });
+                (symbol, balance)
+            })
+            .collect()
     }
 
     pub const fn ethereum_network(&self) -> EthereumNetwork {
@@ -674,6 +688,7 @@ impl EthBalance {
     pub fn eth_balance(&self) -> Wei {
         self.eth_balance
     }
+
     pub fn total_effective_tx_fees(&self) -> Wei {
         self.total_effective_tx_fees
     }

@@ -3,7 +3,8 @@ use cycles_minting_canister::DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::{tokens::CheckedSub, Tokens};
 use ic_nervous_system_common::{
-    ledger::compute_distribution_subaccount, ExplosiveTokens, E8, SECONDS_PER_DAY,
+    ledger::compute_distribution_subaccount, ExplosiveTokens, DEFAULT_TRANSFER_FEE, E8,
+    ONE_DAY_SECONDS,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
@@ -25,7 +26,7 @@ use ic_sns_governance::{
         NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
         TransferSnsTreasuryFunds, Vote,
     },
-    types::{DEFAULT_TRANSFER_FEE, E8S_PER_TOKEN},
+    types::E8S_PER_TOKEN,
 };
 use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
 use ic_sns_test_utils::{
@@ -198,7 +199,7 @@ fn new_treasury_scenario(
         }),
 
         swap_start_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
-        swap_due_timestamp_seconds: Some(START_TIMESTAMP_SECONDS + SECONDS_PER_DAY),
+        swap_due_timestamp_seconds: Some(START_TIMESTAMP_SECONDS + ONE_DAY_SECONDS),
 
         // Misc.
         nns_proposal_id: Some(42),
@@ -450,8 +451,8 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
                         basis_points: Some(6700)
                     },
                 ),
-                initial_voting_period_seconds: 5 * SECONDS_PER_DAY,
-                wait_for_quiet_deadline_increase_seconds: 5 * SECONDS_PER_DAY / 2, // 2.5 days
+                initial_voting_period_seconds: 5 * ONE_DAY_SECONDS,
+                wait_for_quiet_deadline_increase_seconds: 5 * ONE_DAY_SECONDS / 2, // 2.5 days
                 ..Default::default()
             },
             "{:#?}",
@@ -500,8 +501,8 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
                         basis_points: Some(5000)
                     },
                 ),
-                initial_voting_period_seconds: 4 * SECONDS_PER_DAY,
-                wait_for_quiet_deadline_increase_seconds: SECONDS_PER_DAY,
+                initial_voting_period_seconds: 4 * ONE_DAY_SECONDS,
+                wait_for_quiet_deadline_increase_seconds: ONE_DAY_SECONDS,
                 ..Default::default()
             },
             "{:#?}",

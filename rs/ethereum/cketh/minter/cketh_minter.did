@@ -166,6 +166,12 @@ type MinterInfo = record {
     // Amount of ETH in Wei controlled by the minter.
     // This might be less that the actual amount available on the `minter_address()`.
     erc20_balances : opt vec record { erc20_contract_address: text; balance: nat};
+
+    // Last scraped block number for logs of the ETH helper contract.
+    last_eth_scraped_block_number: opt nat;
+
+    // Last scraped block number for logs of the ERC20 helper contract.
+    last_erc20_scraped_block_number: opt nat;
 };
 
 
@@ -188,7 +194,10 @@ type EthTransaction = record { transaction_hash : text };
 // Status of a finalized transaction.
 type TxFinalizedStatus = variant {
     // Transaction was successful.
-    Success : EthTransaction;
+    Success : record {
+        transaction_hash : text;
+        effective_transaction_fee: opt nat;
+    };
     // Transaction failed, user got reimbursed.
     Reimbursed : record {
         transaction_hash : text;
@@ -219,6 +228,63 @@ type RetrieveEthStatus = variant {
 };
 
 type WithdrawalArg = record { recipient : text; amount : nat };
+
+// Details of a withdrawal request and its status.
+type WithdrawalDetail = record {
+    // Symbol of the withdrawal token (either ckETH or ckERC20 token symbol).
+    token_symbol : text;
+
+    // Amount of tokens in base unit that was withdrawn.
+    withdrawal_amount : nat;
+
+    // Max transaction fee in Wei (transaction fee paid by the sender).
+    max_transaction_fee : opt nat;
+
+    // Withdrawal id (i.e. burn index on the ckETH ledger).
+    withdrawal_id : nat64;
+
+    // Sender's principal.
+    from : principal;
+
+    // Sender's subaccount (if given).
+    from_subaccount : opt blob;
+
+    // Address to send tokens to.
+    recipient_address : text;
+
+    // Withdrawal status
+    status : WithdrawalStatus;
+};
+
+// Status of a withdrawal request.
+type WithdrawalStatus = variant {
+    // Request is pending, i.e. transaction is not yet created.
+    Pending;
+
+    // Transaction created byt not yet sent.
+    TxCreated;
+
+    // Transaction sent but not yet finalized.
+    TxSent : EthTransaction;
+
+    // Transaction already finalized.
+    TxFinalized : TxFinalizedStatus;
+};
+
+// ICRC-1 account type.
+type Account = record { owner : principal; subaccount : opt blob };
+
+// Search parameter for withdrawals.
+type WithdrawalSearchParameter = variant {
+    // Search by recipient's ETH address.
+    ByRecipient : text;
+
+    // Search by sender's token account.
+    BySenderAccount : Account;
+
+    // Search by ckETH burn index (which is also used to index ckERC20 withdrawals).
+    ByWithdrawalId : nat64;
+};
 
 type RetrieveEthRequest = record { block_index : nat };
 
@@ -487,6 +553,9 @@ service : (MinterArg) -> {
 
     // Retrieve the status of a Eth withdrawal request.
     retrieve_eth_status : (nat64) -> (RetrieveEthStatus);
+
+    // Return details of all withdrawals matching the given search parameter.
+    withdrawal_status : (WithdrawalSearchParameter) -> (vec WithdrawalDetail) query;
 
     // Check if an address is blocked by the minter.
     is_address_blocked : (text) -> (bool) query;

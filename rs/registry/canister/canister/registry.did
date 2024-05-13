@@ -1,4 +1,7 @@
-type AddApiBoundaryNodePayload = record { node_id : principal; version : text };
+type AddApiBoundaryNodesPayload = record {
+  version : text;
+  node_ids : vec principal;
+};
 type AddFirewallRulesPayload = record {
   expected_hash : text;
   scope : FirewallRulesScope;
@@ -219,10 +222,6 @@ type SubnetFeatures = record {
   sev_enabled : opt bool;
 };
 type SubnetType = variant { application; verified_application; system };
-type UpdateApiBoundaryNodesVersionPayload = record {
-  version : text;
-  node_ids : vec principal;
-};
 type UpdateElectedHostosVersionsPayload = record {
   release_package_urls : vec text;
   hostos_version_to_elect : opt text;
@@ -301,7 +300,7 @@ type UpdateUnassignedNodesConfigPayload = record {
   ssh_readonly_access : opt vec text;
 };
 service : {
-  add_api_boundary_node : (AddApiBoundaryNodePayload) -> ();
+  add_api_boundary_nodes : (AddApiBoundaryNodesPayload) -> ();
   add_firewall_rules : (AddFirewallRulesPayload) -> ();
   add_node : (AddNodePayload) -> (Result);
   add_node_operator : (AddNodeOperatorPayload) -> ();
@@ -337,9 +336,7 @@ service : {
   retire_replica_version : (RetireReplicaVersionPayload) -> ();
   revise_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();
-  update_api_boundary_nodes_version : (
-      UpdateApiBoundaryNodesVersionPayload,
-    ) -> ();
+  update_api_boundary_nodes_version : (AddApiBoundaryNodesPayload) -> ();
   update_elected_hostos_versions : (UpdateElectedHostosVersionsPayload) -> ();
   update_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   update_firewall_rules : (AddFirewallRulesPayload) -> ();

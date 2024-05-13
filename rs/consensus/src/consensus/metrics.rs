@@ -1,6 +1,6 @@
 use ic_consensus_utils::{get_block_hash_string, pool_reader::PoolReader};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
@@ -9,7 +9,7 @@ use ic_types::{
     batch::BatchPayload,
     consensus::{
         idkg::{
-            CompletedReshareRequest, CompletedSignature, EcdsaPayload, HasEcdsaKeyId,
+            CompletedReshareRequest, CompletedSignature, EcdsaPayload, HasMasterPublicKeyId,
             KeyTranscriptCreation,
         },
         Block, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank,
@@ -158,39 +158,38 @@ impl BatchStats {
     }
 }
 
-type CounterPerEcdsaKeyId = BTreeMap<EcdsaKeyId, usize>;
+type CounterPerMasterPublicKeyId = BTreeMap<MasterPublicKeyId, usize>;
 
 // Ecdsa payload stats
 pub struct EcdsaStats {
     pub signature_agreements: usize,
-    pub key_transcript_created: CounterPerEcdsaKeyId,
-    pub available_quadruples: CounterPerEcdsaKeyId,
-    pub quadruples_in_creation: CounterPerEcdsaKeyId,
-    pub ongoing_xnet_reshares: CounterPerEcdsaKeyId,
-    pub xnet_reshare_agreements: CounterPerEcdsaKeyId,
+    pub key_transcript_created: CounterPerMasterPublicKeyId,
+    pub available_quadruples: CounterPerMasterPublicKeyId,
+    pub quadruples_in_creation: CounterPerMasterPublicKeyId,
+    pub ongoing_xnet_reshares: CounterPerMasterPublicKeyId,
+    pub xnet_reshare_agreements: CounterPerMasterPublicKeyId,
 }
 
 impl From<&EcdsaPayload> for EcdsaStats {
     fn from(payload: &EcdsaPayload) -> Self {
-        let mut key_transcript_created = CounterPerEcdsaKeyId::new();
-        if let KeyTranscriptCreation::Created(transcript) = payload.key_transcript.next_in_creation
-        {
-            let transcript_id = &transcript.as_ref().transcript_id;
-            let current_transcript_id = payload
-                .key_transcript
-                .current
-                .as_ref()
-                .map(|transcript| &transcript.as_ref().transcript_id);
-            if Some(transcript_id) != current_transcript_id
-                && payload.idkg_transcripts.get(transcript_id).is_some()
-            {
-                *key_transcript_created
-                    .entry(payload.key_transcript.key_id.clone())
-                    .or_default() += 1;
+        let mut key_transcript_created = CounterPerMasterPublicKeyId::new();
+
+        for (key_id, key_transcript) in &payload.key_transcripts {
+            if let KeyTranscriptCreation::Created(transcript) = &key_transcript.next_in_creation {
+                let transcript_id = &transcript.as_ref().transcript_id;
+                let current_transcript_id = key_transcript
+                    .current
+                    .as_ref()
+                    .map(|transcript| &transcript.as_ref().transcript_id);
+                if Some(transcript_id) != current_transcript_id
+                    && payload.idkg_transcripts.get(transcript_id).is_some()
+                {
+                    *key_transcript_created.entry(key_id.clone()).or_default() += 1;
+                }
             }
         }
 
-        let keys = vec![payload.key_transcript.key_id.clone()];
+        let keys = expected_keys(payload);
 
         Self {
             key_transcript_created,
@@ -199,19 +198,19 @@ impl From<&EcdsaPayload> for EcdsaStats {
                 .values()
                 .filter(|status| matches!(status, CompletedSignature::Unreported(_)))
                 .count(),
-            available_quadruples: count_by_ecdsa_key_id(
-                payload.available_quadruples.values(),
+            available_quadruples: count_by_master_public_key_id(
+                payload.available_pre_signatures.values(),
                 &keys,
             ),
-            quadruples_in_creation: count_by_ecdsa_key_id(
-                payload.quadruples_in_creation.values(),
+            quadruples_in_creation: count_by_master_public_key_id(
+                payload.pre_signatures_in_creation.values(),
                 &keys,
             ),
-            ongoing_xnet_reshares: count_by_ecdsa_key_id(
+            ongoing_xnet_reshares: count_by_master_public_key_id(
                 payload.ongoing_xnet_reshares.keys(),
                 &keys,
             ),
-            xnet_reshare_agreements: count_by_ecdsa_key_id(
+            xnet_reshare_agreements: count_by_master_public_key_id(
                 payload
                     .xnet_reshare_agreements
                     .iter()
@@ -222,11 +221,11 @@ impl From<&EcdsaPayload> for EcdsaStats {
     }
 }
 
-fn count_by_ecdsa_key_id<T: HasEcdsaKeyId>(
+fn count_by_master_public_key_id<T: HasMasterPublicKeyId>(
     collection: impl Iterator<Item = T>,
-    expected_keys: &[EcdsaKeyId],
-) -> CounterPerEcdsaKeyId {
-    let mut counter_per_key_id = CounterPerEcdsaKeyId::new();
+    expected_keys: &[MasterPublicKeyId],
+) -> CounterPerMasterPublicKeyId {
+    let mut counter_per_key_id = CounterPerMasterPublicKeyId::new();
 
     // To properly report `0` for ecdsa keys which do not appear in the `collection`, we insert the
     // default values for all the ecdsa keys which we expect to see in the payload.
@@ -363,7 +362,7 @@ impl FinalizerMetrics {
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
 
         if let Some(ecdsa) = &block_stats.ecdsa_stats {
-            let set = |metric: &IntGaugeVec, counts: &CounterPerEcdsaKeyId| {
+            let set = |metric: &IntGaugeVec, counts: &CounterPerMasterPublicKeyId| {
                 for (key_id, count) in counts.iter() {
                     metric
                         .with_label_values(&[&key_id_label(Some(key_id))])
@@ -371,7 +370,7 @@ impl FinalizerMetrics {
                 }
             };
 
-            let inc_by = |metric: &IntCounterVec, counts: &CounterPerEcdsaKeyId| {
+            let inc_by = |metric: &IntCounterVec, counts: &CounterPerMasterPublicKeyId| {
                 for (key_id, count) in counts.iter() {
                     metric
                         .with_label_values(&[&key_id_label(Some(key_id))])
@@ -405,8 +404,8 @@ impl FinalizerMetrics {
     }
 }
 
-fn key_id_label(key_id: Option<&EcdsaKeyId>) -> String {
-    key_id.map(|key_id| key_id.to_string()).unwrap_or_default()
+fn key_id_label(key_id: Option<&MasterPublicKeyId>) -> String {
+    key_id.map(ToString::to_string).unwrap_or_default()
 }
 
 pub struct NotaryMetrics {
@@ -803,7 +802,7 @@ impl EcdsaPayloadMetrics {
     }
 
     pub(crate) fn report(&self, payload: &EcdsaPayload) {
-        let expected_keys = vec![payload.key_transcript.key_id.clone()];
+        let expected_keys = expected_keys(payload);
 
         self.payload_metrics_set_without_key_id_label(
             "signature_agreements",
@@ -811,19 +810,33 @@ impl EcdsaPayloadMetrics {
         );
         self.payload_metrics_set(
             "available_quadruples",
-            count_by_ecdsa_key_id(payload.available_quadruples.values(), &expected_keys),
+            count_by_master_public_key_id(
+                payload.available_pre_signatures.values(),
+                &expected_keys,
+            ),
         );
         self.payload_metrics_set(
-            "quaruples_in_creation",
-            count_by_ecdsa_key_id(payload.quadruples_in_creation.values(), &expected_keys),
+            "quadruples_in_creation",
+            count_by_master_public_key_id(
+                payload.pre_signatures_in_creation.values(),
+                &expected_keys,
+            ),
         );
         self.payload_metrics_set(
             "ongoing_xnet_reshares",
-            count_by_ecdsa_key_id(payload.ongoing_xnet_reshares.keys(), &expected_keys),
+            count_by_master_public_key_id(payload.ongoing_xnet_reshares.keys(), &expected_keys),
         );
         self.payload_metrics_set(
             "xnet_reshare_agreements",
-            count_by_ecdsa_key_id(payload.xnet_reshare_agreements.keys(), &expected_keys),
+            count_by_master_public_key_id(payload.xnet_reshare_agreements.keys(), &expected_keys),
+        );
+        self.payload_metrics_set_without_key_id_label(
+            "payload_layout_multiple_keys",
+            payload.is_multiple_keys_layout() as usize,
+        );
+        self.payload_metrics_set_without_key_id_label(
+            "payload_layout_generalized_pre_signatures",
+            payload.is_generalized_pre_signatures_layout() as usize,
         );
     }
 
@@ -833,7 +846,7 @@ impl EcdsaPayloadMetrics {
             .set(value as i64);
     }
 
-    fn payload_metrics_set(&self, label: &str, values: CounterPerEcdsaKeyId) {
+    fn payload_metrics_set(&self, label: &str, values: CounterPerMasterPublicKeyId) {
         for (key_id, value) in values {
             self.payload_metrics
                 .with_label_values(&[label, &key_id_label(Some(&key_id))])
@@ -841,7 +854,7 @@ impl EcdsaPayloadMetrics {
         }
     }
 
-    pub(crate) fn payload_metrics_inc(&self, label: &str, key_id: Option<&EcdsaKeyId>) {
+    pub(crate) fn payload_metrics_inc(&self, label: &str, key_id: Option<&MasterPublicKeyId>) {
         self.payload_metrics
             .with_label_values(&[label, &key_id_label(key_id)])
             .inc();
@@ -916,6 +929,10 @@ impl EcdsaComplaintMetrics {
     pub fn complaint_errors_inc(&self, label: &str) {
         self.complaint_errors.with_label_values(&[label]).inc();
     }
+}
+
+fn expected_keys(payload: &EcdsaPayload) -> Vec<MasterPublicKeyId> {
+    payload.key_transcripts.keys().cloned().collect()
 }
 
 #[derive(Clone)]

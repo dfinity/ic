@@ -9,7 +9,8 @@ fi
 
 cd "$CI_PROJECT_DIR"
 
-if [ "$CI_COMMIT_REF_PROTECTED" == "true" ]; then
+if [ "$CI_COMMIT_REF_PROTECTED" == "true" ] \
+    || [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.+-rc--.+ ]]; then
     gitlab-ci/container/build-ic.sh -i -c -b
 elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
     && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" -o "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \

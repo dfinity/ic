@@ -38,10 +38,10 @@ use ic_management_canister_types::{
     CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType, ClearChunkStoreArgs,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs,
     ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, ListCanisterSnapshotArgs, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SetupInitialDKGArgs, SignWithECDSAArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method as Ic00Method,
+    NodeMetricsHistoryArgs, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs, SignWithECDSAArgs, StoredChunksArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -285,6 +285,9 @@ pub trait PausedExecution: std::fmt::Debug + Send {
     /// Aborts the paused execution.
     /// Returns the original message and the cycles prepaid for execution.
     fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles);
+
+    /// Returns a reference to the message or task being executed.
+    fn input(&self) -> CanisterMessageOrTask;
 }
 
 /// Stores all paused executions keyed by their ids.
@@ -1069,6 +1072,15 @@ impl ExecutionEnvironment {
                 }
             }
 
+            // TODO(EXC-1599): implement ComputeInitialIDkgDealings.
+            Ok(Ic00Method::ComputeInitialIDkgDealings) => ExecuteSubnetMessageResult::Finished {
+                response: Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "ComputeInitialIDkgDealings API is not yet implemented.",
+                )),
+                refund: msg.take_cycles(),
+            },
+
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
                 let res =
                     ProvisionalCreateCanisterWithCyclesArgs::decode(payload).and_then(|args| {
@@ -1273,12 +1285,15 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::LoadCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
-                    // TODO(EXC-1530): Implement load_canister_snapshot.
+                    let res = LoadCanisterSnapshotArgs::decode(payload).and_then(|_| {
+                        // TODO(EXC-1530): Implement load_canister_snapshot.
+                        Err(UserError::new(
+                            ErrorCode::CanisterContractViolation,
+                            "This API is not enabled on this subnet".to_string(),
+                        ))
+                    });
                     ExecuteSubnetMessageResult::Finished {
-                        response: Err(UserError::new(
-                            ErrorCode::CanisterRejectedMessage,
-                            "Canister snapshotting API is not yet implemented.",
-                        )),
+                        response: res,
                         refund: msg.take_cycles(),
                     }
                 }
@@ -2902,7 +2917,7 @@ impl ExecutionEnvironment {
         match task {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::PausedExecution(_)
+            | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::AbortedExecution { .. } => {
                 panic!(
                     "Unexpected task {:?} in `resume_install_code` (broken precondition).",
@@ -2999,7 +3014,7 @@ impl ExecutionEnvironment {
                     | ExecutionTask::AbortedInstallCode { .. }
                     | ExecutionTask::Heartbeat
                     | ExecutionTask::GlobalTimer => task,
-                    ExecutionTask::PausedExecution(id) => {
+                    ExecutionTask::PausedExecution { id, .. } => {
                         let paused = self.take_paused_execution(id).unwrap();
                         let (input, prepaid_execution_cycles) = paused.abort(log);
                         self.metrics.executions_aborted.inc();
@@ -3106,11 +3121,12 @@ impl ExecutionEnvironment {
                 paused_execution,
                 ingress_status,
             } => {
+                let input = paused_execution.input();
                 let id = self.register_paused_execution(paused_execution);
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::PausedExecution(id));
+                    .push_front(ExecutionTask::PausedExecution { id, input });
                 (canister, None, NumBytes::from(0), ingress_status)
             }
         }
@@ -3510,7 +3526,7 @@ pub fn execute_canister(
 
     let (input, prepaid_execution_cycles) = match canister.system_state.task_queue.pop_front() {
         Some(task) => match task {
-            ExecutionTask::PausedExecution(id) => {
+            ExecutionTask::PausedExecution { id, .. } => {
                 let paused = exec_env.take_paused_execution(id).unwrap();
                 let round_counters = RoundCounters {
                     execution_refund_error: &exec_env.metrics.execution_cycles_refund_error,

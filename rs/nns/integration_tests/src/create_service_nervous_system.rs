@@ -115,7 +115,10 @@ fn test_several_proposals() {
     // Step 2.3: This unblocks more proposals from being made.
     execute_proposal(&mut state_machine, ProposalId { id: proposal_id_1 });
 
-    // Step 2.4: Finally, make a third proposal. This should be allowed.
+    // Step 2.4: Wait for proposal_1 to finish executing.
+    nns_wait_for_proposal_execution(&mut state_machine, proposal_id_1);
+
+    // Step 2.5: Finally, make a third proposal. This should now be allowed.
     let response_3 = make_proposal(&mut state_machine, 3);
     let response_3 = match response_3.command {
         Some(manage_neuron_response::Command::MakeProposal(response_3)) => response_3,
@@ -132,9 +135,6 @@ fn test_several_proposals() {
         .id;
 
     // Step 3: Inspect results.
-
-    // Step 3.0: Wait for proposal_1 to finish executing.
-    nns_wait_for_proposal_execution(&mut state_machine, proposal_id_1);
 
     // Step 3.1: Inspect proposals.
 

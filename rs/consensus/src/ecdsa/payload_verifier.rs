@@ -586,7 +586,9 @@ mod test {
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
-        consensus::idkg::{ecdsa::PreSignatureQuadrupleRef, CompletedSignature},
+        consensus::idkg::{
+            common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef, CompletedSignature,
+        },
         crypto::AlgorithmId,
         messages::CallbackId,
         Height,
@@ -639,7 +641,7 @@ mod test {
         );
 
         // Add the reference
-        prev_payload.key_transcript.next_in_creation =
+        prev_payload.single_key_transcript_mut().next_in_creation =
             idkg::KeyTranscriptCreation::RandomTranscriptParams(idkg::RandomTranscriptParams::new(
                 transcript_id_0,
                 env.nodes.ids(),
@@ -647,7 +649,7 @@ mod test {
                 registry_version,
                 algorithm_id,
             ));
-        curr_payload.key_transcript.next_in_creation =
+        curr_payload.single_key_transcript_mut().next_in_creation =
             idkg::KeyTranscriptCreation::Created(transcript_ref_0);
         let res = validate_transcript_refs(
             crypto,
@@ -675,7 +677,7 @@ mod test {
         // Add another reference
         let (transcript_1, transcript_ref_1, _) =
             generate_key_transcript(&env, &mut rng, height_100);
-        curr_payload.key_transcript.next_in_creation =
+        curr_payload.single_key_transcript_mut().next_in_creation =
             idkg::KeyTranscriptCreation::Created(transcript_ref_1);
         assert_matches!(
             validate_transcript_refs(
@@ -709,7 +711,9 @@ mod test {
         let subnet_id = subnet_test_id(1);
         let crypto = &CryptoReturningOk::default();
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
-        let mut payload = empty_ecdsa_payload(subnet_id);
+
+        let key_id = fake_ecdsa_key_id();
+        let mut payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let mut block_reader = TestEcdsaBlockReader::new();
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
 
@@ -728,7 +732,8 @@ mod test {
             ),
         ]);
 
-        let (key_transcript, key_transcript_ref) = payload.generate_current_key(&env, &mut rng);
+        let (key_transcript, key_transcript_ref) =
+            payload.generate_current_key(&key_id, &env, &mut rng);
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
         initiate_reshare_requests(&mut payload, reshare_requests.clone());
         let prev_payload = payload.clone();
@@ -809,7 +814,7 @@ mod test {
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         valid_keys.insert(key_id.clone());
 
-        let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+        let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let quadruple_id1 = ecdsa_payload.uid_generator.next_quadruple_id();
         let quadruple_id2 = ecdsa_payload.uid_generator.next_quadruple_id();
         let quadruple_id3 = ecdsa_payload.uid_generator.next_quadruple_id();
@@ -833,7 +838,7 @@ mod test {
             .collect::<Vec<_>>();
 
         let (key_transcript, key_transcript_ref) =
-            ecdsa_payload.generate_current_key(&env, &mut rng);
+            ecdsa_payload.generate_current_key(&key_id, &env, &mut rng);
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
 
         // Add the quadruples and transcripts to block reader and payload
@@ -1072,25 +1077,25 @@ mod test {
             registry_version,
             algorithm_id,
         );
-        prev_payload.key_transcript.next_in_creation =
+        prev_payload.single_key_transcript_mut().next_in_creation =
             idkg::KeyTranscriptCreation::RandomTranscriptParams(random_params);
-        curr_payload.key_transcript.next_in_creation =
+        curr_payload.single_key_transcript_mut().next_in_creation =
             idkg::KeyTranscriptCreation::Created(transcript_ref_0);
 
         const NUM_MALICIOUS_REFS: i32 = 10_000;
         for i in 0..NUM_MALICIOUS_REFS {
             let malicious_transcript_ref =
                 idkg::UnmaskedTranscript::try_from((Height::new(i as u64), &transcript_0)).unwrap();
-            curr_payload.available_quadruples.insert(
+            curr_payload.available_pre_signatures.insert(
                 curr_payload.uid_generator.next_quadruple_id(),
-                PreSignatureQuadrupleRef {
-                    key_id: curr_payload.key_transcript.key_id.clone(),
+                PreSignatureRef::Ecdsa(PreSignatureQuadrupleRef {
+                    key_id: key_id.clone(),
                     kappa_unmasked_ref: malicious_transcript_ref,
                     lambda_masked_ref: masked_transcript_1,
                     kappa_times_lambda_ref: masked_transcript_1,
                     key_times_lambda_ref: masked_transcript_1,
                     key_unmasked_ref: transcript_ref_0,
-                },
+                }),
             );
         }
 

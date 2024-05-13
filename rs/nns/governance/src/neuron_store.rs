@@ -887,3 +887,6 @@ pub struct NeuronIndexesLens {
 
 #[cfg(test)]
 mod neuron_store_tests;
+
+#[cfg(feature = "canbench-rs")]
+mod benches;

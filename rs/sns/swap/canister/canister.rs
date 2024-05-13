@@ -7,6 +7,7 @@ use dfn_core::{
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_nervous_system_clients::ledger_client::LedgerCanister;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultV2,
@@ -16,7 +17,6 @@ use ic_nervous_system_common::{
     dfn_core_stable_mem_utils::BufferedStableMemReader, serve_logs, serve_logs_v2, serve_metrics,
 };
 use ic_nervous_system_runtime::DfnRuntime;
-use ic_sns_governance::ledger::LedgerCanister;
 use ic_sns_swap::{
     clients::RealSnsRootClient,
     logs::{ERROR, INFO},

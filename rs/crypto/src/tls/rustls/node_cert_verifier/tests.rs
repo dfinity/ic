@@ -175,12 +175,9 @@ mod client_cert_verifier_tests {
             UNIX_EPOCH,
         );
 
-        assert_eq!(
-            result.err(),
-            Some(TLSError::General(
-                "The presented certificate subject CN could not be parsed as node ID: MalformedPeerCertificateError \
-                { internal_error: \"Principal ID parse error: Text must be in valid Base32 encoding.\" }".to_string(),
-            ))
+        assert_matches!(
+            result,
+            Err(TLSError::InvalidCertificate(CertificateError::Other(_)))
         );
     }
 
@@ -200,12 +197,9 @@ mod client_cert_verifier_tests {
             std::time::UNIX_EPOCH,
         );
 
-        assert_eq!(
-            result.err(),
-            Some(TLSError::General(
-                "The presented certificate subject CN could not be parsed as node ID: MalformedPeerCertificateError \
-                { internal_error: \"invalid subject common name (CN): found second common name (CN) entry, but expected a single one\" }".to_string(),
-            ))
+        assert_matches!(
+            result,
+            Err(TLSError::InvalidCertificate(CertificateError::Other(_)))
         );
     }
 
@@ -336,9 +330,9 @@ mod client_cert_verifier_tests {
 
         let result = verifier.verify_client_cert(&Certificate(invalid_cert_der), &[], UNIX_EPOCH);
 
-        assert_eq!(
-            result.err(),
-            Some(TLSError::InvalidCertificate(CertificateError::BadEncoding))
+        assert_matches!(
+            result,
+            Err(TLSError::InvalidCertificate(CertificateError::BadEncoding))
         );
     }
 
@@ -476,10 +470,7 @@ mod server_cert_verifier_tests {
 
         assert_eq!(
             result.err(),
-            Some(TLSError::General(
-                "The peer must send exactly one self signed certificate, but it sent 2 certificates."
-                    .to_string(),
-            ))
+            Some(TLSError::General("The peer must send exactly one self signed certificate, but it sent 2 certificates.".to_string()))
         );
     }
 
@@ -509,9 +500,9 @@ mod server_cert_verifier_tests {
             UNIX_EPOCH,
         );
 
-        assert_eq!(
-            result.err(),
-            Some(TLSError::InvalidCertificate(CertificateError::BadEncoding))
+        assert_matches!(
+            result,
+            Err(TLSError::InvalidCertificate(CertificateError::BadEncoding))
         );
     }
 

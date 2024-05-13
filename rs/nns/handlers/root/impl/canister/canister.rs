@@ -24,7 +24,10 @@ use ic_nervous_system_root::{
     LOG_PREFIX,
 };
 use ic_nervous_system_runtime::DfnRuntime;
-use ic_nns_common::{access_control::check_caller_is_governance, types::CallCanisterProposal};
+use ic_nns_common::{
+    access_control::{check_caller_is_governance, check_caller_is_sns_w},
+    types::CallCanisterProposal,
+};
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
 };
@@ -224,6 +227,7 @@ fn call_canister() {
 /// by SNS-W.
 #[export_name = "canister_update change_canister_controllers"]
 fn change_canister_controllers() {
+    check_caller_is_sns_w();
     over_async(candid_one, change_canister_controllers_)
 }
 
@@ -235,7 +239,6 @@ async fn change_canister_controllers_(
 ) -> ChangeCanisterControllersResponse {
     canister_management::change_canister_controllers(
         change_canister_controllers_request,
-        caller(),
         &mut new_management_canister_client(),
     )
     .await

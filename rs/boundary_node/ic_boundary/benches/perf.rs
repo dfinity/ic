@@ -44,6 +44,12 @@ fn gen_request(cli: &reqwest::Client, addr: &SocketAddr, bytes_size: usize) -> r
 }
 
 fn benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ic_boundary_router");
+    group.throughput(Throughput::Elements(1));
+    group.significance_level(0.1);
+    group.sample_size(250);
+    group.measurement_time(Duration::from_secs(15));
+
     let (app, _) = setup_test_router(true, true, 40, 15, 16384);
 
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -69,15 +75,9 @@ fn benchmark(c: &mut Criterion) {
 
     let cli = reqwest::ClientBuilder::new().build().unwrap();
 
-    let mut group = c.benchmark_group("rps");
-    group.throughput(Throughput::Elements(1));
-    group.significance_level(0.1);
-    group.sample_size(250);
-    group.measurement_time(Duration::from_secs(15));
-
     for req_size in [1024, 4096, 8192, 16384].iter() {
         group.bench_with_input(
-            BenchmarkId::from_parameter(req_size),
+            BenchmarkId::new("response_time_vs_request_size_bytes", req_size),
             req_size,
             |b, &size| {
                 b.to_async(&runtime).iter_batched(

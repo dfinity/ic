@@ -187,7 +187,7 @@ impl EcdsaStats for EcdsaStatsImpl {
     fn update_active_quadruples(&self, block_reader: &dyn EcdsaBlockReader) {
         let mut active_quadruples = HashSet::new();
         let mut state = self.state.lock().unwrap();
-        for quadruple_id in block_reader.quadruples_in_creation() {
+        for quadruple_id in block_reader.pre_signatures_in_creation() {
             active_quadruples.insert(quadruple_id);
 
             state

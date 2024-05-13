@@ -267,6 +267,8 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, **kwargs):
       **kwargs: see docs for `rust_binary`.
     """
 
+    kwargs.setdefault("testonly", True)
+
     # The initial binary is a regular rust_binary with rustc flags as in the
     # current build configuration.
     binary_name_initial = "_" + name + "_bin_default"
@@ -277,7 +279,7 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, **kwargs):
     release_nostrip_binary(
         name = binary_name_publish,
         binary = binary_name_initial,
-        testonly = kwargs.get("testonly", False),
+        testonly = kwargs.get("testonly"),
     )
 
     bench_prefix = "taskset -c 0 " if pin_cpu else ""
@@ -288,7 +290,7 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, **kwargs):
         srcs = ["//bazel:generic_rust_bench.sh"],
         name = name,
         # Allow benchmark targets to use test-only libraries.
-        testonly = kwargs.get("testonly", False),
+        testonly = kwargs.get("testonly"),
         env = dict(env.items() +
                    [("BAZEL_DEFS_BENCH_PREFIX", bench_prefix)] +
                    {"BAZEL_DEFS_BENCH_BIN": "$(location :%s)" % binary_name_publish}.items()),

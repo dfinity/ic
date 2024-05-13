@@ -38,6 +38,7 @@ use tokio::{
     task::JoinSet,
     time::{self, sleep_until, timeout_at, Instant, MissedTickBehavior},
 };
+use tracing::{instrument, span, Instrument, Level};
 
 const MIN_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
@@ -302,6 +303,7 @@ where
         if !peer_rx.borrow().is_empty() {
             self.metrics.download_task_restart_after_join_total.inc();
             self.metrics.download_task_started_total.inc();
+            let process_advert_span = span!(Level::INFO, "process_advert");
             self.artifact_processor_tasks.spawn_on(
                 Self::process_advert(
                     self.log.clone(),
@@ -313,7 +315,8 @@ where
                     self.sender.clone(),
                     self.transport.clone(),
                     self.metrics.clone(),
-                ),
+                )
+                .instrument(process_advert_span),
                 &self.rt_handle,
             );
         } else {
@@ -328,6 +331,7 @@ where
         );
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn handle_advert_receive(
         &mut self,
         advert_update: SlotUpdate<Artifact>,
@@ -399,6 +403,7 @@ where
                     tx.send_if_modified(|h| h.insert(peer_id));
                     self.active_downloads.insert(id.clone(), tx);
 
+                    let process_advert_span = span!(Level::INFO, "process_advert");
                     self.artifact_processor_tasks.spawn_on(
                         Self::process_advert(
                             self.log.clone(),
@@ -410,7 +415,8 @@ where
                             self.sender.clone(),
                             self.transport.clone(),
                             self.metrics.clone(),
-                        ),
+                        )
+                        .instrument(process_advert_span),
                         &self.rt_handle,
                     );
                 }
@@ -437,6 +443,7 @@ where
     }
 
     /// Waits until advert resolves to fetch. If all peers are removed or priority becomes drop `DownloadStopped` is returned.
+    #[instrument(skip_all)]
     async fn wait_fetch(
         id: &Artifact::Id,
         attr: &Artifact::Attribute,
@@ -488,6 +495,7 @@ where
     /// - The priority function evaluates the advert to [`Priority::Drop`] -> [`DownloadStopped::PriorityIsDrop`]
     /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`DownloadStopped::AllPeersDeletedTheArtifact`]
     /// and the failure condition is reported in the error variant of the returned result.
+    #[instrument(skip_all)]
     async fn download_artifact(
         log: ReplicaLogger,
         id: &Artifact::Id,

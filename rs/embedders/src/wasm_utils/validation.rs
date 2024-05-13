@@ -613,6 +613,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 },
             )],
         ),
+        (
+            "msg_deadline",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![ValType::I64],
+                },
+            )],
+        ),
     ];
 
     valid_system_apis
@@ -1364,9 +1374,8 @@ pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtim
     // implementation.
     config.wasm_multi_memory(false);
     config.wasm_reference_types(true);
-    // The SIMD instructions are disable for determinism.
+    // The relaxed SIMD instructions are disable for determinism.
     config.wasm_relaxed_simd(false);
-    config.wasm_simd(false);
     // Tail calls may be enabled in the future.
     config.wasm_tail_call(false);
     // Threads are disabled for determinism.

@@ -341,6 +341,7 @@ members = [
     "rs/tests/nested",
     "rs/tests/nns/sns",
     "rs/tests/nns/ic_mainnet_nns_recovery",
+    "rs/tests/sdk",
     "rs/tests/test_canisters/http_counter",
     "rs/tests/test_canisters/kv_store",
     "rs/tests/test_canisters/message",
@@ -518,7 +519,7 @@ reqwest = { version = "0.12.3", default-features = false, features = [
     "socks",
     "stream",
 ] }
-rustls = { version = "0.21.10", features = ["dangerous_configuration"] }
+rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
 serde_cbor = "0.11.2"
@@ -538,6 +539,7 @@ socket2 = { version = "0.5.6", features = ["all"] }
 strum = { version = "0.26.2", features = ["derive"] }
 strum_macros = "0.26.2"
 syn = { version = "1.0.109", features = ["fold", "full"] }
+sync_wrapper = "^1.0.1"
 tempfile = "^3.1.0"
 thiserror = "1.0.57"
 time = { version = "0.3.20", features = ["formatting"] }
@@ -558,3 +560,8 @@ tracing-subscriber = { version = "0.3.18", features = [
 turmoil = "0.6.0"
 x509-cert = { version = "0.2.4", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.15.1" }
+
+[workspace.dependencies.ic-wasm]
+version = "^0.7.1"
+default-features = false
+features = ["exe"]

@@ -259,6 +259,7 @@ fn get_all_nodes_public_keys_and_certs(
     Ok((pks, certs))
 }
 
+//TODO(NNS1-3039): extend to check chain key signing subnet lists
 fn check_ecdsa_signing_subnet_lists(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {

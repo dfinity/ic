@@ -452,7 +452,11 @@ pub enum ExecutionTask {
     /// A paused execution task exists only within an epoch (between
     /// checkpoints). It is never serialized, and it turns into `AbortedExecution`
     /// before the checkpoint or when there are too many long-running executions.
-    PausedExecution(PausedExecutionId),
+    PausedExecution {
+        id: PausedExecutionId,
+        /// A copy of the message or task whose execution is being paused.
+        input: CanisterMessageOrTask,
+    },
 
     /// A paused `install_code` task exists only within an epoch (between
     /// checkpoints). It is never serialized and turns into `AbortedInstallCode`
@@ -490,7 +494,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
         match item {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::PausedExecution(_)
+            | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_) => {
                 panic!("Attempt to serialize ephemeral task: {:?}.", item);
             }
@@ -1200,6 +1204,7 @@ impl SystemState {
     ///
     ///  + S1: size of responses in output queues
     ///  + S2: size of responses in input queues
+    ///  + S3: oversized requests extra bytes
     pub fn message_memory_usage(&self) -> NumBytes {
         (self.queues.memory_usage() as u64).into()
     }
@@ -1449,6 +1454,81 @@ impl SystemState {
 
     pub fn get_canister_history(&self) -> &CanisterHistory {
         &self.canister_history
+    }
+
+    /// Checks the invariants that should hold at the end of each consensus round.
+    pub fn check_invariants(&self) -> Result<(), StateError> {
+        // Callbacks still awaiting a (potentially already enqueued) response.
+        let pending_callbacks = self
+            .call_context_manager()
+            .map(|ccm| ccm.unresponded_callback_count(self.aborted_or_paused_response()))
+            .unwrap_or_default();
+
+        let num_responses = self.queues.input_queues_response_count();
+        let num_reservations = self.queues.input_queues_reservation_count();
+
+        if pending_callbacks != num_reservations + num_responses {
+            return Err(StateError::InvariantBroken(format!(
+                "Canister {}: Number of callbacks ({}) is different from the accumulated number of reservations and responses ({})",
+                self.canister_id(),
+                pending_callbacks,
+                num_reservations + num_responses
+            )));
+        }
+
+        let unresponded_call_contexts = self
+            .call_context_manager()
+            .map(|ccm| {
+                ccm.unresponded_canister_update_call_contexts(self.aborted_or_paused_request())
+            })
+            .unwrap_or_default();
+
+        let num_requests = self.queues.input_queues_request_count();
+        let output_queue_reservations =
+            self.queues.reserved_slots() - self.queues.input_queues_reservation_count();
+
+        if num_requests + unresponded_call_contexts != output_queue_reservations {
+            return Err(StateError::InvariantBroken(format!(
+                "Canister {}: Number of output queue reservations ({}) is different from the number of input requests plus unresponded call contexts ({})",
+                self.canister_id(),
+                output_queue_reservations,
+                num_requests + unresponded_call_contexts
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Returns the aborted or paused `Response` at the head of the task queue, if
+    /// any.
+    fn aborted_or_paused_response(&self) -> Option<&Response> {
+        match self.task_queue.front() {
+            Some(ExecutionTask::AbortedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                ..
+            })
+            | Some(ExecutionTask::PausedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                ..
+            }) => Some(response),
+            _ => None,
+        }
+    }
+
+    /// Returns the aborted or paused `Request` at the head of the task queue, if
+    /// any.
+    fn aborted_or_paused_request(&self) -> Option<&Request> {
+        match self.task_queue.front() {
+            Some(ExecutionTask::AbortedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
+                ..
+            })
+            | Some(ExecutionTask::PausedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
+                ..
+            }) => Some(request),
+            _ => None,
+        }
     }
 }
 

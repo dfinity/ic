@@ -322,11 +322,20 @@ async fn scrape_eth_logs(last_block_number: BlockNumber) {
 }
 
 async fn scrape_erc20_logs(last_block_number: BlockNumber) {
+    let token_contract_addresses =
+        read_state(|s| s.ckerc20_tokens.alt_keys().cloned().collect::<Vec<_>>());
+    if token_contract_addresses.is_empty() {
+        log!(
+            DEBUG,
+            "[scrape_contract_logs]: skipping scrapping ERC-20 logs: no token contract address"
+        );
+        return;
+    }
     scrape_contract_logs(
         &RECEIVED_ERC20_EVENT_TOPIC,
         "ERC-20",
         read_state(|s| s.erc20_helper_contract_address),
-        &read_state(|s| s.ckerc20_tokens.alt_keys().cloned().collect::<Vec<_>>()),
+        &token_contract_addresses,
         last_block_number,
         read_state(|s| s.last_erc20_scraped_block_number),
         &|last_block_number| {
