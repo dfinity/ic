@@ -414,6 +414,7 @@ fn eval(ops_bytes: OpsBytes) {
             }
             Ops::InReplicatedExecution => stack.push_int(api::in_replicated_execution()),
             Ops::CallWithBestEffortResponse => api::call_with_best_effort_response(stack.pop_int()),
+            Ops::MsgDeadline => stack.push_int64(api::msg_deadline()),
         }
     }
 }

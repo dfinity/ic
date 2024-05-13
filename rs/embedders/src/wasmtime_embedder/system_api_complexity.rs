@@ -52,6 +52,7 @@ pub mod overhead {
     pub const MSG_CYCLES_AVAILABLE128: NumInstructions = NumInstructions::new(500);
     pub const MSG_CYCLES_REFUNDED: NumInstructions = NumInstructions::new(500);
     pub const MSG_CYCLES_REFUNDED128: NumInstructions = NumInstructions::new(500);
+    pub const MSG_DEADLINE: NumInstructions = NumInstructions::new(500);
     pub const MSG_METHOD_NAME_COPY: NumInstructions = NumInstructions::new(500);
     pub const MSG_METHOD_NAME_SIZE: NumInstructions = NumInstructions::new(500);
     pub const MSG_REJECT_CODE: NumInstructions = NumInstructions::new(500);

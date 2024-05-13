@@ -21,8 +21,9 @@ use ic_replicated_state::{
     CallOrigin, CanisterStatus, NetworkTopology, SystemState,
 };
 use ic_types::{
-    messages::{CallContextId, CallbackId, RejectContext, Request, RequestMetadata},
+    messages::{CallContextId, CallbackId, RejectContext, Request, RequestMetadata, NO_DEADLINE},
     methods::Callback,
+    time::CoarseTime,
     CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, NumPages, Time,
 };
 use ic_wasm_types::WasmEngineError;
@@ -552,6 +553,7 @@ pub struct SandboxSafeSystemState {
     initial_reserved_balance: Cycles,
     reserved_balance_limit: Option<Cycles>,
     call_context_balances: BTreeMap<CallContextId, Cycles>,
+    call_context_deadlines: BTreeMap<CallContextId, Option<CoarseTime>>,
     cycles_account_manager: CyclesAccountManager,
     // None indicates that we are in a context where the canister cannot
     // register callbacks (e.g. running the `start` method when installing a
@@ -581,6 +583,7 @@ impl SandboxSafeSystemState {
         initial_reserved_balance: Cycles,
         reserved_balance_limit: Option<Cycles>,
         call_context_balances: BTreeMap<CallContextId, Cycles>,
+        call_context_deadlines: BTreeMap<CallContextId, Option<CoarseTime>>,
         cycles_account_manager: CyclesAccountManager,
         next_callback_id: Option<u64>,
         available_request_slots: BTreeMap<CanisterId, usize>,
@@ -613,6 +616,7 @@ impl SandboxSafeSystemState {
             initial_reserved_balance,
             reserved_balance_limit,
             call_context_balances,
+            call_context_deadlines,
             cycles_account_manager,
             next_callback_id,
             available_request_slots,
@@ -640,6 +644,14 @@ impl SandboxSafeSystemState {
                 .call_contexts()
                 .iter()
                 .map(|(id, context)| (*id, context.available_cycles()))
+                .collect(),
+            None => BTreeMap::new(),
+        };
+        let call_context_deadlines = match system_state.call_context_manager() {
+            Some(call_context_manager) => call_context_manager
+                .call_contexts()
+                .iter()
+                .map(|(id, context)| (*id, context.deadline()))
                 .collect(),
             None => BTreeMap::new(),
         };
@@ -684,6 +696,7 @@ impl SandboxSafeSystemState {
             system_state.reserved_balance(),
             system_state.reserved_balance_limit(),
             call_context_balances,
+            call_context_deadlines,
             cycles_account_manager,
             system_state
                 .call_context_manager()
@@ -781,6 +794,13 @@ impl SandboxSafeSystemState {
             .get(&call_context_id)
             .unwrap_or(&Cycles::zero());
         initial_available - already_taken
+    }
+
+    /// Returns the deadline of `CallContext`.
+    pub fn msg_deadline(&self, call_context_id: CallContextId) -> CoarseTime {
+        self.call_context_deadlines
+            .get(&call_context_id)
+            .map_or(NO_DEADLINE, |v| v.unwrap_or(NO_DEADLINE))
     }
 
     fn update_balance_change(&mut self, new_balance: Cycles) {
@@ -1253,15 +1273,26 @@ pub struct RequestMetadataStats {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use ic_base_types::NumSeconds;
+    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
+    use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
+    use ic_cycles_account_manager::CyclesAccountManager;
+    use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{canister_state::system_state::CyclesUseCase, SystemState};
-    use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
-    use ic_types::Cycles;
+    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
+    use ic_types::{
+        messages::{CallContextId, RequestMetadata, NO_DEADLINE},
+        time::CoarseTime,
+        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
+    };
 
     use crate::{
-        cycles_balance_change::CyclesBalanceChange, sandbox_safe_system_state::SystemStateChanges,
+        cycles_balance_change::CyclesBalanceChange,
+        sandbox_safe_system_state::{
+            CanisterStatusView, SandboxSafeSystemState, SystemStateChanges,
+        },
     };
 
     #[test]
@@ -1324,5 +1355,60 @@ mod tests {
         system_state_changes.apply_balance_changes(&mut system_state);
 
         assert_eq!(initial_cycles_balance + added, system_state.balance());
+    }
+
+    #[test]
+    fn test_msg_deadline() {
+        let context_no_deadline = CallContextId::new(1);
+        let context_with_deadline = CallContextId::new(2);
+        let deadline = CoarseTime::from_secs_since_unix_epoch(10);
+
+        let mut call_context_deadlines = BTreeMap::new();
+
+        call_context_deadlines.insert(context_no_deadline, None);
+        call_context_deadlines.insert(context_with_deadline, Some(deadline));
+
+        let sandbox_state = SandboxSafeSystemState::new_internal(
+            canister_test_id(0),
+            CanisterStatusView::Running,
+            NumSeconds::from(3600),
+            MemoryAllocation::BestEffort,
+            ComputeAllocation::default(),
+            Cycles::new(1_000_000),
+            Cycles::zero(),
+            None,
+            BTreeMap::new(),
+            call_context_deadlines,
+            CyclesAccountManager::new(
+                NumInstructions::from(1_000_000_000),
+                SubnetType::Application,
+                subnet_test_id(0),
+                CyclesAccountManagerConfig::application_subnet(),
+            ),
+            Some(0),
+            BTreeMap::new(),
+            0,
+            BTreeSet::new(),
+            SMALL_APP_SUBNET_MAX_SIZE,
+            SchedulerConfig::application_subnet().dirty_page_overhead,
+            CanisterTimer::Inactive,
+            0,
+            BTreeSet::new(),
+            RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
+            None,
+            0,
+        );
+
+        // `NO_DEADLINE` is returned when CallContext is unknown.
+        assert_eq!(
+            sandbox_state.msg_deadline(CallContextId::new(123)),
+            NO_DEADLINE
+        );
+
+        // `NO_DEADLINE` is returned when CallContext does not have a deadline set.
+        assert_eq!(sandbox_state.msg_deadline(context_no_deadline), NO_DEADLINE);
+
+        // The correct deadline is returned when CallContext has a deadline set.
+        assert_eq!(sandbox_state.msg_deadline(context_with_deadline), deadline);
     }
 }
