@@ -2466,14 +2466,14 @@ impl Payload<'_> for NodeMetricsHistoryArgs {}
 /// ```text
 /// record {
 ///     node_id : principal;
-///     num_blocks_total : nat64;
+///     num_blocks_proposed_total : nat64;
 ///     num_block_failures_total : nat64;
 /// }
 /// ```
 #[derive(Default, Clone, CandidType, Deserialize, Debug)]
 pub struct NodeMetrics {
     pub node_id: PrincipalId,
-    pub num_blocks_total: u64,
+    pub num_blocks_proposed_total: u64,
     pub num_block_failures_total: u64,
 }
 
