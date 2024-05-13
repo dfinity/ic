@@ -83,6 +83,7 @@ use ic_nns_common::{
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -675,6 +676,9 @@ impl NnsFunction {
                 REGISTRY_CANISTER_ID,
                 "update_ssh_readonly_access_for_all_unassigned_nodes",
             ),
+            NnsFunction::SubnetRentalRequest => {
+                (SUBNET_RENTAL_CANISTER_ID, "execute_rental_request_proposal")
+            }
         };
         Ok((canister_id, method))
     }
@@ -803,6 +807,7 @@ impl Proposal {
                             | NnsFunction::UpdateApiBoundaryNodesVersion => {
                                 Topic::ApiBoundaryNodeManagement
                             }
+                            NnsFunction::SubnetRentalRequest => Topic::SubnetRental,
                         }
                     } else {
                         println!(
@@ -1338,7 +1343,7 @@ impl Topic {
     pub const MIN: Topic = Topic::Unspecified;
     // A unit test will fail if this value does not stay up to date (e.g. when a new value is
     // added).
-    pub const MAX: Topic = Topic::ApiBoundaryNodeManagement;
+    pub const MAX: Topic = Topic::SubnetRental;
 
     /// When voting rewards are distributed, the voting power of
     /// neurons voting on proposals are weighted by this amount. The
@@ -4913,6 +4918,10 @@ impl Governance {
         }
 
         match nns_function {
+            NnsFunction::SubnetRentalRequest => {
+                self.validate_subnet_rental_proposal(&update.payload)
+                    .map_err(invalid_proposal_error)?;
+            }
             NnsFunction::IcpXdrConversionRate => {
                 Self::validate_icp_xdr_conversion_rate_payload(
                     &update.payload,
@@ -4932,9 +4941,32 @@ impl Governance {
                 Self::validate_add_or_remove_data_centers_payload(&update.payload)
                     .map_err(invalid_proposal_error)?;
             }
-
             _ => {}
         };
+
+        Ok(())
+    }
+
+    fn validate_subnet_rental_proposal(&self, payload: &[u8]) -> Result<(), String> {
+        // Must be able to parse the payload.
+        if let Err(e) = Decode!([decoder_config()]; &payload, SubnetRentalRequest) {
+            return Err(format!("Invalid SubnetRentalRequest: {}", e));
+        }
+
+        // No concurrent subnet rental requests are allowed.
+        let other_proposal_ids = self.select_nonfinal_proposal_ids(|action| {
+            let Action::ExecuteNnsFunction(execute_nns_function) = action else {
+                return false;
+            };
+
+            execute_nns_function.nns_function == NnsFunction::SubnetRentalRequest as i32
+        });
+        if !other_proposal_ids.is_empty() {
+            return Err(format!(
+                "There is another open SubnetRentalRequest proposal: {:?}",
+                other_proposal_ids,
+            ));
+        }
 
         Ok(())
     }
@@ -8043,4 +8075,29 @@ impl FromStr for BitcoinNetwork {
 pub struct BitcoinSetConfigProposal {
     pub network: BitcoinNetwork,
     pub payload: Vec<u8>,
+}
+
+// A proposal payload for a subnet rental request,
+// used to deserialize `ExecuteNnsFunction.payload`,
+// where `ExecuteNnsFunction.nns_function == NnsFunction::SubnetRentalRequest as i32`.
+#[derive(candid::CandidType, candid::Deserialize)]
+pub struct SubnetRentalRequest {
+    pub user: PrincipalId,
+    pub rental_condition_id: RentalConditionId,
+}
+
+// The following two Subnet Rental Canister types are copied
+// from the Subnet Rental Canister's repository and used
+// to serialize the payload passed to Subnet Rental Canister's
+// method `execute_rental_request_proposal`.
+#[derive(candid::CandidType, candid::Deserialize)]
+pub enum RentalConditionId {
+    App13CH,
+}
+#[derive(candid::CandidType, candid::Deserialize)]
+pub struct SubnetRentalProposalPayload {
+    pub user: PrincipalId,
+    pub rental_condition_id: RentalConditionId,
+    pub proposal_id: u64,
+    pub proposal_creation_time_seconds: u64,
 }

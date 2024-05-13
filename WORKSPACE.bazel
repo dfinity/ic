@@ -590,6 +590,15 @@ http_file(
     url = "https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v0.2.3/cycles-ledger.wasm.gz",
 )
 
+# Subnet Rental Canister
+
+http_file(
+    name = "subnet_rental_canister",
+    downloaded_file_path = "subnet_rental_canister.wasm",
+    sha256 = "c4d4db8618a6ce9c24672f57cd88572a2a66ae78cbf1315fe96ae96e598c3fbf",
+    url = "https://github.com/dfinity/subnet-rental-canister/releases/download/0.1.0/subnet_rental_canister.wasm",
+)
+
 # Import Python rules
 
 http_archive(
