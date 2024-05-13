@@ -7140,15 +7140,15 @@ fn test_default_followees() {
     );
 
     let default_followees2 = hashmap![
-        Topic::ExchangeRate as i32 => Followees { followees: vec![]},
+        Topic::ExchangeRate as i32 => Followees { followees: vec![voter_neuron]},
         Topic::NetworkEconomics as i32 => Followees { followees: vec![voter_neuron]},
-        Topic::Governance as i32 => Followees { followees: vec![]},
-        Topic::SnsAndCommunityFund as i32 => Followees { followees: vec![]},
+        Topic::Governance as i32 => Followees { followees: vec![voter_neuron]},
+        Topic::SnsAndCommunityFund as i32 => Followees { followees: vec![voter_neuron]},
         Topic::NodeAdmin as i32 => Followees { followees: vec![voter_neuron]},
-        Topic::ParticipantManagement as i32 => Followees { followees: vec![]},
+        Topic::ParticipantManagement as i32 => Followees { followees: vec![voter_neuron]},
         Topic::SubnetManagement as i32 => Followees { followees: vec![voter_neuron]},
         Topic::NetworkCanisterManagement as i32 => Followees { followees: vec![voter_neuron]},
-        Topic::Kyc as i32 => Followees { followees: vec![]},
+        Topic::Kyc as i32 => Followees { followees: vec![voter_neuron]},
     ];
 
     // Make a proposal to change the default followees.

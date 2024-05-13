@@ -22,7 +22,8 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
 use ic_nervous_system_common::{
-    ledger::compute_neuron_staking_subaccount, DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
+    ledger::{compute_neuron_staking_subaccount, compute_neuron_staking_subaccount_bytes},
+    DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -807,6 +808,34 @@ pub fn nns_governance_get_proposal_info(
     };
 
     Decode!(&result, Option<ProposalInfo>).unwrap().unwrap()
+}
+
+pub fn nns_send_icp_to_claim_or_refresh_neuron(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    amount: Tokens,
+    destination_neuron_nonce: u64,
+) {
+    icrc1_transfer(
+        state_machine,
+        LEDGER_CANISTER_ID,
+        sender,
+        TransferArg {
+            amount: amount.into(),
+            fee: Some(Nat::from(DEFAULT_TRANSFER_FEE)),
+            from_subaccount: None,
+            to: Account {
+                owner: PrincipalId::from(GOVERNANCE_CANISTER_ID).into(),
+                subaccount: Some(compute_neuron_staking_subaccount_bytes(
+                    sender,
+                    destination_neuron_nonce,
+                )),
+            },
+            created_at_time: None,
+            memo: None,
+        },
+    )
+    .unwrap();
 }
 
 #[must_use]
