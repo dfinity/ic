@@ -318,19 +318,19 @@ impl EccScalar {
         match curve {
             EccCurveType::K256 => {
                 let s = secp256k1::Scalar::deserialize(bytes).ok_or_else(|| {
-                    ThresholdEcdsaSerializationError("Invalid point encoding".to_string())
+                    ThresholdEcdsaSerializationError("Invalid scalar encoding".to_string())
                 })?;
                 Ok(Self::K256(s))
             }
             EccCurveType::P256 => {
                 let s = secp256r1::Scalar::deserialize(bytes).ok_or_else(|| {
-                    ThresholdEcdsaSerializationError("Invalid point encoding".to_string())
+                    ThresholdEcdsaSerializationError("Invalid scalar encoding".to_string())
                 })?;
                 Ok(Self::P256(s))
             }
             EccCurveType::Ed25519 => {
                 let s = ed25519::Scalar::deserialize(bytes).ok_or_else(|| {
-                    ThresholdEcdsaSerializationError("Invalid point encoding".to_string())
+                    ThresholdEcdsaSerializationError("Invalid scalar encoding".to_string())
                 })?;
                 Ok(Self::Ed25519(s))
             }

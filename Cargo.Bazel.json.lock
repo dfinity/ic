@@ -1,5 +1,5 @@
 {
-  "checksum": "27300c3ec36ae2ab7c6a967210bbbb7e2dc95cfd580b6abbc58eb8e0907cff41",
+  "checksum": "8be0e409fc4e0b2d8b5c1f2950a1cb5ea092897212f96c8f302b1e983ae90dde",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17170,6 +17170,10 @@
               "target": "hex_literal"
             },
             {
+              "id": "hkdf 0.12.4",
+              "target": "hkdf"
+            },
+            {
               "id": "http 0.2.9",
               "target": "http"
             },
@@ -19092,6 +19096,7 @@
             "default",
             "digest",
             "fast",
+            "hazmat",
             "merlin",
             "pem",
             "pkcs8",
@@ -25175,6 +25180,54 @@
         "CC0-1.0"
       ],
       "license_file": null
+    },
+    "hkdf 0.12.4": {
+      "name": "hkdf",
+      "version": "0.12.4",
+      "package_url": "https://github.com/RustCrypto/KDFs/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hkdf/0.12.4/download",
+          "sha256": "7b5f8eb2ad728638ea2c7d47a21db23b7b58a72ed6a38256b8a1849f15fbbdf7"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hkdf",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hkdf",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "hmac 0.12.1",
+              "target": "hmac"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.12.4"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "hmac 0.8.1": {
       "name": "hmac",
@@ -76867,6 +76920,7 @@
     "hashlink 0.8.3",
     "hex 0.4.3",
     "hex-literal 0.4.1",
+    "hkdf 0.12.4",
     "http 0.2.9",
     "http 1.0.0",
     "http-body 0.4.5",
