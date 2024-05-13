@@ -5964,8 +5964,8 @@ impl Governance {
             nid,
             subaccount,
             controller,
-            DissolveStateAndAge::LegacyDissolved {
-                aging_since_timestamp_seconds: now,
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: now,
             },
             now,
         )
