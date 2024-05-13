@@ -34,6 +34,13 @@ anchors:
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
+  before-script: &before-script
+    name: Before script
+    if: always()
+    id: before-script
+    shell: bash
+    run: |
+      if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
 
 jobs:
   bazel-build-fuzzers-archives:
@@ -41,6 +48,7 @@ jobs:
     <<: *bazel-small-setup
     timeout-minutes: 60
     steps:
+      - <<: *before-script
       - <<: *checkout
       - uses: dorny/paths-filter@v3
         id: filter
@@ -66,6 +74,7 @@ jobs:
     name: Lock Generate
     <<: *bazel-small-setup
     steps:
+      - <<: *before-script
       - <<: *checkout
       - uses: dorny/paths-filter@v3
         id: filter
@@ -92,6 +101,7 @@ jobs:
     name: Commit Lint
     <<: *default-setup
     steps:
+      - <<: *before-script
       - <<: *checkout
       - name: Commit Lint
         id: commit-lint
@@ -101,6 +111,7 @@ jobs:
     name: Pre Commit Test
     <<: *bazel-small-setup
     steps:
+      - <<: *before-script
       - <<: *checkout
         with:
           fetch-depth: 256
