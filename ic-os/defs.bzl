@@ -8,7 +8,7 @@ load("//bazel:output_files.bzl", "output_files")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/rootfs:boundary-guestos.bzl", boundary_rootfs_files = "rootfs_files")
-load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "inject_files", "sha256sum", "tar_extract", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "inject_files", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
 
 def icos_build(
         name,
@@ -115,6 +115,31 @@ def icos_build(
         target_compatible_with = [
             "@platforms//os:linux",
         ],
+        tags = ["manual"],
+    )
+
+    # Helpful tool to print a hash of all input rootfs files
+    tree_hash(
+        name = "root-files-hash",
+        src = image_deps["rootfs_files"],
+        tags = ["manual"],
+    )
+
+    native.genrule(
+        name = "echo-root-files-hash",
+        srcs = [
+            ":root-files-hash",
+        ],
+        outs = ["root-files-hash-script"],
+        cmd = """
+        HASH="$(location :root-files-hash)"
+        cat <<EOF > $@
+#!/usr/bin/env bash
+set -euo pipefail
+cat $$HASH
+EOF
+        """,
+        executable = True,
         tags = ["manual"],
     )
 
