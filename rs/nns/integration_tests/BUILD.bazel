@@ -147,6 +147,7 @@ DEV_DATA = [
     "//rs/sns/swap:sns-swap-canister",
     "src/neurons.csv",
     "@cycles-ledger.wasm.gz//file",
+    "@subnet_rental_canister//file",
 ]
 
 DEV_ENV = {
@@ -175,6 +176,7 @@ DEV_ENV = {
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
     "NEURON_CSV_PATH": "rs/nns/integration_tests/src/neurons.csv",
     "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
+    "SUBNET_RENTAL_CANISTER_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
 }
 
 rust_library(

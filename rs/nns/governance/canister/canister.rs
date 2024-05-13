@@ -34,7 +34,7 @@ use ic_nns_governance::{
     decoder_config, encode_metrics,
     governance::{
         BitcoinNetwork, BitcoinSetConfigProposal, Environment, Governance, HeapGrowthPotential,
-        TimeWarp,
+        SubnetRentalProposalPayload, SubnetRentalRequest, TimeWarp,
     },
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{
@@ -255,7 +255,8 @@ impl Environment for CanisterEnv {
         let (canister_id, method) = mt.canister_and_function()?;
         let proposal_timestamp_seconds = governance()
             .get_proposal_data(ProposalId(proposal_id))
-            .map(|data| data.proposal_timestamp_seconds);
+            .map(|data| data.proposal_timestamp_seconds)
+            .ok_or(GovernanceError::new(ErrorType::PreconditionFailed))?;
         let effective_payload =
             get_effective_payload(mt, &update.payload, proposal_id, proposal_timestamp_seconds)?;
         let err = call_with_callbacks(canister_id, method, &effective_payload, reply, reject);
@@ -955,7 +956,7 @@ fn get_effective_payload(
     mt: NnsFunction,
     payload: &[u8],
     proposal_id: u64,
-    _proposal_timestamp_seconds: Option<u64>,
+    proposal_timestamp_seconds: u64,
 ) -> Result<Cow<[u8]>, GovernanceError> {
     const BITCOIN_SET_CONFIG_METHOD_NAME: &str = "set_config";
     const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
@@ -983,6 +984,30 @@ fn get_effective_payload(
                 payload: payload.payload
             })
             .unwrap();
+
+            Ok(Cow::Owned(encoded_payload))
+        }
+        NnsFunction::SubnetRentalRequest => {
+            // Decode the payload to `SubnetRentalRequest`.
+            let payload = match Decode!([decoder_config()]; payload, SubnetRentalRequest) {
+              Ok(payload) => payload,
+              Err(_) => {
+                return Err(GovernanceError::new_with_message(ErrorType::InvalidProposal, "Payload must be a valid SubnetRentalRequest."));
+              }
+            };
+
+            // Convert the payload to `SubnetRentalProposalPayload`.
+            let SubnetRentalRequest {
+                user,
+                rental_condition_id,
+            } = payload;
+            let proposal_creation_time_seconds = proposal_timestamp_seconds;
+            let encoded_payload = Encode!(&SubnetRentalProposalPayload {
+                user,
+                rental_condition_id,
+                proposal_id,
+                proposal_creation_time_seconds,
+            }).unwrap();
 
             Ok(Cow::Owned(encoded_payload))
         }
@@ -1197,7 +1222,7 @@ fn test_get_effective_payload_sets_proposal_id_for_add_wasm() {
     })
     .unwrap();
 
-    let effective_payload = get_effective_payload(mt, &payload, proposal_id, None).unwrap();
+    let effective_payload = get_effective_payload(mt, &payload, proposal_id, 0).unwrap();
 
     let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
     assert_eq!(
@@ -1226,7 +1251,7 @@ fn test_get_effective_payload_overrides_proposal_id_for_add_wasm() {
     })
     .unwrap();
 
-    let effective_payload = get_effective_payload(mt, &payload, proposal_id, None).unwrap();
+    let effective_payload = get_effective_payload(mt, &payload, proposal_id, 0).unwrap();
 
     let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
     assert_eq!(decoded.wasm.unwrap().proposal_id.unwrap(), proposal_id);
