@@ -3473,6 +3473,12 @@ struct ProposeToSetBitcoinConfig {
 
     #[clap(long, help = "Sets/clears the watchdog canister principal.")]
     pub watchdog_canister: Option<Option<PrincipalId>>,
+
+    #[clap(
+        long,
+        help = "Whether or not to disable the API if canister isn't fully synced."
+    )]
+    pub disable_api_if_not_fully_synced: Option<bool>,
 }
 
 impl ProposalTitle for ProposeToSetBitcoinConfig {
@@ -3501,6 +3507,13 @@ impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
             watchdog_canister: self
                 .watchdog_canister
                 .map(|principal_id| principal_id.map(Principal::from)),
+            disable_api_if_not_fully_synced: self.disable_api_if_not_fully_synced.map(|flag| {
+                if flag {
+                    Flag::Enabled
+                } else {
+                    Flag::Disabled
+                }
+            }),
             ..Default::default()
         };
 
