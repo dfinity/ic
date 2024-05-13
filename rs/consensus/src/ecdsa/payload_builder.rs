@@ -288,9 +288,9 @@ fn create_summary_payload_helper(
         .retain(|_, pre_sig| !new_key_transcripts.contains(&pre_sig.key_id()));
     // This will clear the current ongoing reshares, and the execution requests will be restarted
     // with the new key and different transcript IDs.
-    ecdsa_summary
-        .ongoing_xnet_reshares
-        .retain(|request, _| !new_key_transcripts.contains(&request.master_key_id));
+    ecdsa_summary.ongoing_xnet_reshares.retain(|request, _| {
+        !new_key_transcripts.contains(&MasterPublicKeyId::Ecdsa(request.key_id.clone()))
+    });
 
     ecdsa_summary.uid_generator.update_height(height)?;
     update_summary_refs(height, &mut ecdsa_summary, block_reader)?;
