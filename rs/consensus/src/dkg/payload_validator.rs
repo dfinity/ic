@@ -1,18 +1,100 @@
-use super::{payload_builder, utils, DkgMessageValidationError, PermanentError};
+use super::{payload_builder, utils, PayloadCreationError};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
-use ic_interfaces::{dkg::DkgPool, validation::ValidationResult};
+use ic_interfaces::{
+    dkg::DkgPool,
+    validation::{ValidationError, ValidationResult},
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        dkg::{Message, Summary},
+        dkg::{self, Message, Summary},
         Block, BlockPayload,
     },
-    Height, SubnetId,
+    crypto::{
+        threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError, CryptoError,
+    },
+    Height, NodeId, SubnetId,
 };
 use prometheus::IntCounterVec;
+
+/// Permanent Dkg message validation errors.
+// The `Debug` implementation is ignored during the dead code analysis and we are getting a `field
+// is never used` warning on this enum even though we are implicitly reading them when we log the
+// enum. See https://github.com/rust-lang/rust/issues/88900
+#[allow(dead_code)]
+#[derive(Debug)]
+pub(crate) enum PermanentPayloadValidationError {
+    CryptoError(CryptoError),
+    DkgVerifyDealingError(DkgVerifyDealingError),
+    MismatchedDkgSummary(dkg::Summary, dkg::Summary),
+    MissingDkgConfigForDealing,
+    DkgStartHeightDoesNotMatchParentBlock,
+    DkgSummaryAtNonStartHeight(Height),
+    DkgDealingAtStartHeight(Height),
+    InvalidDealer(NodeId),
+    DealerAlreadyDealt(NodeId),
+}
+
+/// Transient Dkg message validation errors.
+#[allow(dead_code)]
+#[derive(Debug)]
+pub(crate) enum TransientPayloadValidationError {
+    PayloadCreationFailed(PayloadCreationError),
+    /// Crypto related errors.
+    CryptoError(CryptoError),
+    DkgVerifyDealingError(DkgVerifyDealingError),
+}
+
+/// Dkg errors.
+pub(crate) type PayloadValidationError =
+    ValidationError<PermanentPayloadValidationError, TransientPayloadValidationError>;
+
+impl From<DkgVerifyDealingError> for PermanentPayloadValidationError {
+    fn from(err: DkgVerifyDealingError) -> Self {
+        PermanentPayloadValidationError::DkgVerifyDealingError(err)
+    }
+}
+
+impl From<DkgVerifyDealingError> for TransientPayloadValidationError {
+    fn from(err: DkgVerifyDealingError) -> Self {
+        TransientPayloadValidationError::DkgVerifyDealingError(err)
+    }
+}
+
+impl From<CryptoError> for PermanentPayloadValidationError {
+    fn from(err: CryptoError) -> Self {
+        PermanentPayloadValidationError::CryptoError(err)
+    }
+}
+
+impl From<CryptoError> for TransientPayloadValidationError {
+    fn from(err: CryptoError) -> Self {
+        TransientPayloadValidationError::CryptoError(err)
+    }
+}
+
+impl From<PermanentPayloadValidationError> for PayloadValidationError {
+    fn from(err: PermanentPayloadValidationError) -> Self {
+        PayloadValidationError::Permanent(err)
+    }
+}
+
+impl From<TransientPayloadValidationError> for PayloadValidationError {
+    fn from(err: TransientPayloadValidationError) -> Self {
+        PayloadValidationError::Transient(err)
+    }
+}
+
+impl From<PayloadCreationError> for PayloadValidationError {
+    fn from(err: PayloadCreationError) -> Self {
+        PayloadValidationError::Transient(TransientPayloadValidationError::PayloadCreationFailed(
+            err,
+        ))
+    }
+}
 
 /// Validates the DKG payload. The parent block is expected to be a valid block.
 #[allow(clippy::too_many_arguments)]
@@ -27,7 +109,7 @@ pub(crate) fn validate_payload(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
     metrics: &IntCounterVec,
-) -> ValidationResult<DkgMessageValidationError> {
+) -> ValidationResult<PayloadValidationError> {
     let last_summary_block = pool_reader
         .dkg_summary_block(&parent)
         // We expect the parent to be valid, so there will be _always_ a DKG start block on the
@@ -40,7 +122,10 @@ pub(crate) fn validate_payload(
 
     if payload.is_summary() {
         if !is_dkg_start_height {
-            return Err(PermanentError::DkgSummaryAtNonStartHeight(current_height).into());
+            return Err(PermanentPayloadValidationError::DkgSummaryAtNonStartHeight(
+                current_height,
+            )
+            .into());
         }
         let registry_version = pool_reader
             .registry_version(current_height)
@@ -58,7 +143,7 @@ pub(crate) fn validate_payload(
             ic_logger::replica_logger::no_op_logger(),
         )?;
         if payload.as_summary().dkg != expected_summary {
-            return Err(PermanentError::MismatchedDkgSummary(
+            return Err(PermanentPayloadValidationError::MismatchedDkgSummary(
                 expected_summary,
                 payload.as_summary().dkg.clone(),
             )
@@ -67,7 +152,9 @@ pub(crate) fn validate_payload(
         Ok(())
     } else {
         if is_dkg_start_height {
-            return Err(PermanentError::DkgDealingAtStartHeight(current_height).into());
+            return Err(
+                PermanentPayloadValidationError::DkgDealingAtStartHeight(current_height).into(),
+            );
         }
         validate_dealings_payload(
             crypto,
@@ -93,10 +180,10 @@ fn validate_dealings_payload(
     messages: &[Message],
     parent: &Block,
     metrics: &IntCounterVec,
-) -> ValidationResult<DkgMessageValidationError> {
+) -> ValidationResult<PayloadValidationError> {
     let valid_start_height = parent.payload.as_ref().dkg_interval_start_height();
     if start_height != valid_start_height {
-        return Err(PermanentError::DkgStartHeightDoesNotMatchParentBlock.into());
+        return Err(PermanentPayloadValidationError::DkgStartHeightDoesNotMatchParentBlock.into());
     }
 
     // Get a list of all dealers, who created a dealing already, indexed by DKG id.
@@ -117,13 +204,13 @@ fn validate_dealings_payload(
 
         match config {
             None => {
-                return Err(PermanentError::MissingDkgConfigForDealing.into());
+                return Err(PermanentPayloadValidationError::MissingDkgConfigForDealing.into());
             }
             Some(config) => {
                 let dealer_id = message.signature.signer;
                 // If the dealer is not in the set of dealers, reject.
                 if !config.dealers().get().contains(&dealer_id) {
-                    return Err(PermanentError::InvalidDealer(dealer_id).into());
+                    return Err(PermanentPayloadValidationError::InvalidDealer(dealer_id).into());
                 }
 
                 // If the dealer created a dealing already, reject.
@@ -132,7 +219,9 @@ fn validate_dealings_payload(
                     .map(|dealers| dealers.contains(&dealer_id))
                     .unwrap_or(false)
                 {
-                    return Err(PermanentError::DealerAlreadyDealt(dealer_id).into());
+                    return Err(
+                        PermanentPayloadValidationError::DealerAlreadyDealt(dealer_id).into(),
+                    );
                 }
 
                 // Verify the signature.
@@ -156,7 +245,6 @@ mod tests {
     use super::*;
     use assert_matches::assert_matches;
     use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
-    use ic_interfaces::validation::ValidationError;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_registry::SubnetRecordBuilder;
@@ -304,8 +392,8 @@ mod tests {
             let result = validate_dealings_payload(&messages, &parent);
             assert_matches!(
                 result,
-                Err(ValidationError::Permanent(
-                    PermanentError::MissingDkgConfigForDealing
+                Err(PayloadValidationError::Permanent(
+                    PermanentPayloadValidationError::MissingDkgConfigForDealing
                 ))
             );
 
@@ -317,7 +405,9 @@ mod tests {
             let result = validate_dealings_payload(&messages, &parent);
             assert_matches!(
                 result,
-                Err(ValidationError::Permanent(PermanentError::InvalidDealer(_)))
+                Err(PayloadValidationError::Permanent(
+                    PermanentPayloadValidationError::InvalidDealer(_)
+                ))
             );
 
             // Use valid message and valid signer but add messages to parent block as well.
@@ -337,8 +427,8 @@ mod tests {
             let result = validate_dealings_payload(&messages, &parent);
             assert_matches!(
                 result,
-                Err(ValidationError::Permanent(
-                    PermanentError::DealerAlreadyDealt(_)
+                Err(PayloadValidationError::Permanent(
+                    PermanentPayloadValidationError::DealerAlreadyDealt(_)
                 ))
             );
         })

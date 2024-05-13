@@ -11,12 +11,11 @@ use crate::ecdsa::{
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
+    crypto::ErrorReproducibility,
     dkg::{ChangeAction, ChangeSet, DkgPool},
     p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
-    validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManagerError;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
@@ -28,28 +27,22 @@ use ic_types::{
     artifact_kind::DkgArtifact,
     batch::ValidationContext,
     consensus::{
-        dkg,
         dkg::{DealingContent, DkgMessageId, Message},
         idkg, Block, BlockPayload, CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon,
         Payload, RandomBeaconContent, Rank,
     },
     crypto::{
         crypto_hash,
-        threshold_sig::ni_dkg::{
-            config::NiDkgConfig,
-            errors::{
-                create_transcript_error::DkgCreateTranscriptError,
-                verify_dealing_error::DkgVerifyDealingError,
-            },
-            NiDkgId, NiDkgTag, NiDkgTargetSubnet,
-        },
-        CryptoError, Signed,
+        threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        Signed,
     },
-    registry::RegistryClientError,
     signature::ThresholdSignature,
     Height, NodeId, RegistryVersion, SubnetId, Time,
 };
-pub use payload_builder::{create_payload, make_genesis_summary};
+pub use payload_builder::{create_payload, make_genesis_summary, PayloadCreationError};
+pub(crate) use payload_validator::{
+    PermanentPayloadValidationError, TransientPayloadValidationError,
+};
 use phantom_newtype::Id;
 use prometheus::Histogram;
 use rayon::prelude::*;
@@ -80,90 +73,6 @@ const TAGS: [NiDkgTag; 2] = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold];
 struct Metrics {
     on_state_change_duration: Histogram,
     on_state_change_processed: Histogram,
-}
-
-/// Transient Dkg message validation errors.
-// The `Debug` implementation is ignored during the dead code analysis and we are getting a `field
-// is never used` warning on this enum even though we are implicitly reading them when we log the
-// enum. See https://github.com/rust-lang/rust/issues/88900
-#[allow(dead_code)]
-#[derive(Debug)]
-pub(crate) enum PermanentError {
-    CryptoError(CryptoError),
-    DkgCreateTranscriptError(DkgCreateTranscriptError),
-    DkgVerifyDealingError(DkgVerifyDealingError),
-    MismatchedDkgSummary(dkg::Summary, dkg::Summary),
-    MissingDkgConfigForDealing,
-    DkgStartHeightDoesNotMatchParentBlock,
-    DkgSummaryAtNonStartHeight(Height),
-    DkgDealingAtStartHeight(Height),
-    InvalidDealer(NodeId),
-    DealerAlreadyDealt(NodeId),
-}
-
-/// Permanent Dkg message validation errors.
-#[allow(missing_docs)]
-#[derive(Debug)]
-pub enum TransientError {
-    /// Crypto related errors.
-    CryptoError(CryptoError),
-    StateManagerError(StateManagerError),
-    DkgCreateTranscriptError(DkgCreateTranscriptError),
-    DkgVerifyDealingError(DkgVerifyDealingError),
-    FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
-    FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
-    MissingDkgStartBlock,
-}
-
-/// Dkg errors.
-pub(crate) type DkgMessageValidationError = ValidationError<PermanentError, TransientError>;
-
-impl From<DkgCreateTranscriptError> for PermanentError {
-    fn from(err: DkgCreateTranscriptError) -> Self {
-        PermanentError::DkgCreateTranscriptError(err)
-    }
-}
-
-impl From<DkgCreateTranscriptError> for TransientError {
-    fn from(err: DkgCreateTranscriptError) -> Self {
-        TransientError::DkgCreateTranscriptError(err)
-    }
-}
-
-impl From<DkgVerifyDealingError> for PermanentError {
-    fn from(err: DkgVerifyDealingError) -> Self {
-        PermanentError::DkgVerifyDealingError(err)
-    }
-}
-
-impl From<DkgVerifyDealingError> for TransientError {
-    fn from(err: DkgVerifyDealingError) -> Self {
-        TransientError::DkgVerifyDealingError(err)
-    }
-}
-
-impl From<CryptoError> for PermanentError {
-    fn from(err: CryptoError) -> Self {
-        PermanentError::CryptoError(err)
-    }
-}
-
-impl From<CryptoError> for TransientError {
-    fn from(err: CryptoError) -> Self {
-        TransientError::CryptoError(err)
-    }
-}
-
-impl From<PermanentError> for DkgMessageValidationError {
-    fn from(err: PermanentError) -> Self {
-        ValidationError::Permanent(err)
-    }
-}
-
-impl From<TransientError> for DkgMessageValidationError {
-    fn from(err: TransientError) -> Self {
-        ValidationError::Transient(err)
-    }
 }
 
 /// `DkgImpl` is responsible for holding DKG dependencies and for responding to
@@ -359,26 +268,22 @@ impl DkgImpl {
             return ChangeSet::from(ChangeAction::RemoveFromUnvalidated((*message).clone()));
         }
 
-        // Verify the signature and reject if it's invalid, or skip, if there was an
-        // error.
-        match self
-            .crypto
-            .verify(message, config.registry_version())
-            .map_err(DkgMessageValidationError::from)
-        {
+        // Verify the signature and reject if it's invalid, or skip, if there was an error.
+        match self.crypto.verify(message, config.registry_version()) {
             Ok(()) => (),
-            Err(ValidationError::Permanent(err)) => {
+            Err(err) if err.is_reproducible() => {
                 return get_handle_invalid_change_action(
                     message,
-                    format!("Invalid signature: {:?}", err),
+                    format!("Invalid signature: {}", err),
                 )
                 .into()
             }
-            Err(ValidationError::Transient(err)) => {
+            Err(err) => {
                 error!(
                     self.logger,
-                    "Couldn't verify the signature of a DKG dealing: {:?}", err
+                    "Couldn't verify the signature of a DKG dealing: {}", err
                 );
+
                 return ChangeSet::new();
             }
         }
@@ -390,17 +295,16 @@ impl DkgImpl {
             config,
             *dealer_id,
             &message.content.dealing,
-        )
-        .map_err(DkgMessageValidationError::from)
-        {
+        ) {
             Ok(()) => ChangeAction::MoveToValidated((*message).clone()).into(),
-            Err(ValidationError::Permanent(err)) => get_handle_invalid_change_action(
+            Err(err) if err.is_reproducible() => get_handle_invalid_change_action(
                 message,
-                format!("Dealing verification failed: {:?}", err),
+                format!("Dealing verification failed: {}", err),
             )
             .into(),
-            Err(ValidationError::Transient(err)) => {
-                error!(self.logger, "Couldn't verify a DKG dealing: {:?}", err);
+            Err(err) => {
+                error!(self.logger, "Couldn't verify a DKG dealing: {}", err);
+
                 ChangeSet::new()
             }
         }
