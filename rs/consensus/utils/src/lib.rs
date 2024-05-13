@@ -118,7 +118,7 @@ pub fn is_time_to_make_block(
     pool.get_round_start_time(height)
         .is_some_and(|start_time| time_source.get_relative_time() >= start_time + block_maker_delay)
         || pool
-            .get_round_start_instant(height)
+            .get_round_start_instant(height, time_source.get_origin_instant())
             .is_some_and(|start_instant| {
                 time_source.get_instant() >= start_instant + block_maker_delay
             })
