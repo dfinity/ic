@@ -115,6 +115,7 @@ message CanisterHttpRequestContextTree {
   CanisterHttpRequestContext context = 2;
 }
 
+// TODO(EXC-1599): remove after generalized version `IDkgDealingsContext` is released.
 message EcdsaDealingsContext {
   state.queues.v1.Request request = 1;
   reserved 2;
@@ -127,6 +128,14 @@ message EcdsaDealingsContext {
 message EcdsaDealingsContextTree {
   uint64 callback_id = 1;
   EcdsaDealingsContext context = 2;
+}
+
+message IDkgDealingsContext {
+  state.queues.v1.Request request = 1;
+  registry.crypto.v1.MasterPublicKeyId key_id = 2;
+  repeated types.v1.NodeId nodes = 3;
+  uint64 registry_version = 4;
+  Time time = 5;
 }
 
 message BitcoinGetSuccessorsContext {
