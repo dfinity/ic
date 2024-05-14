@@ -106,6 +106,14 @@
         query_stats_epoch_length: {{ query_stats_epoch_length }},
     },
 
+    // ==================================
+    // Configuration for replica tracing.
+    // ==================================
+
+    tracing: {
+        jaeger_addr: "{{ jaeger_addr }}",
+    },
+
     // ====================================
     // Configuration of the HTTP endpoint.
     // ====================================

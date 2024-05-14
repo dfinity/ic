@@ -1,5 +1,5 @@
 {
-  "checksum": "5aa2efd624b94e5674ea310ce60fcb799ae7eec9c5ef1a778fea4ce4100a5a99",
+  "checksum": "c9caabbdad373b6447d9b09584cc26ed2a1cf88054519891519d8ab4c73b74e2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17702,8 +17702,21 @@
               "target": "opentelemetry"
             },
             {
+              "id": "opentelemetry 0.21.0",
+              "target": "opentelemetry",
+              "alias": "opentelemetry_0_21_0"
+            },
+            {
+              "id": "opentelemetry-otlp 0.14.0",
+              "target": "opentelemetry_otlp"
+            },
+            {
               "id": "opentelemetry-prometheus 0.13.0",
               "target": "opentelemetry_prometheus"
+            },
+            {
+              "id": "opentelemetry_sdk 0.21.2",
+              "target": "opentelemetry_sdk"
             },
             {
               "id": "p256 0.13.2",
@@ -18180,6 +18193,10 @@
             {
               "id": "tracing-flame 0.2.0",
               "target": "tracing_flame"
+            },
+            {
+              "id": "tracing-opentelemetry 0.22.0",
+              "target": "tracing_opentelemetry"
             },
             {
               "id": "tracing-serde 0.1.3",
@@ -41656,6 +41673,110 @@
       ],
       "license_file": "LICENSE"
     },
+    "opentelemetry-otlp 0.14.0": {
+      "name": "opentelemetry-otlp",
+      "version": "0.14.0",
+      "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-otlp",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/opentelemetry-otlp/0.14.0/download",
+          "sha256": "f24cda83b20ed2433c68241f918d0f6fdec8b1d43b7a9590ab4420c5095ca930"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "opentelemetry_otlp",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "opentelemetry_otlp",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "grpc-tonic",
+            "http",
+            "prost",
+            "tokio",
+            "tonic",
+            "trace"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures-core 0.3.30",
+              "target": "futures_core"
+            },
+            {
+              "id": "http 0.2.9",
+              "target": "http"
+            },
+            {
+              "id": "opentelemetry 0.21.0",
+              "target": "opentelemetry"
+            },
+            {
+              "id": "opentelemetry-proto 0.4.0",
+              "target": "opentelemetry_proto"
+            },
+            {
+              "id": "opentelemetry-semantic-conventions 0.13.0",
+              "target": "opentelemetry_semantic_conventions"
+            },
+            {
+              "id": "opentelemetry_sdk 0.21.2",
+              "target": "opentelemetry_sdk"
+            },
+            {
+              "id": "prost 0.11.9",
+              "target": "prost"
+            },
+            {
+              "id": "thiserror 1.0.57",
+              "target": "thiserror"
+            },
+            {
+              "id": "tokio 1.37.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tonic 0.9.2",
+              "target": "tonic"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.74",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.14.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "opentelemetry-prometheus 0.13.0": {
       "name": "opentelemetry-prometheus",
       "version": "0.13.0",
@@ -41781,6 +41902,75 @@
         },
         "edition": "2021",
         "version": "0.14.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "opentelemetry-proto 0.4.0": {
+      "name": "opentelemetry-proto",
+      "version": "0.4.0",
+      "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-proto",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/opentelemetry-proto/0.4.0/download",
+          "sha256": "a2e155ce5cc812ea3d1dffbd1539aed653de4bf4882d60e6e04dcf0901d674e1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "opentelemetry_proto",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "opentelemetry_proto",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "gen-tonic",
+            "gen-tonic-messages",
+            "prost",
+            "tonic",
+            "trace"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "opentelemetry 0.21.0",
+              "target": "opentelemetry"
+            },
+            {
+              "id": "opentelemetry_sdk 0.21.2",
+              "target": "opentelemetry_sdk"
+            },
+            {
+              "id": "prost 0.11.9",
+              "target": "prost"
+            },
+            {
+              "id": "tonic 0.9.2",
+              "target": "tonic"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.4.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -47558,6 +47748,70 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "prost 0.11.9": {
+      "name": "prost",
+      "version": "0.11.9",
+      "package_url": "https://github.com/tokio-rs/prost",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/prost/0.11.9/download",
+          "sha256": "0b82eaa1d779e9a4bc1c3217db8ffbeabaae1dca241bf70183242128d48681cd"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "prost",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "prost",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "prost-derive",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.6.0",
+              "target": "bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "prost-derive 0.11.9",
+              "target": "prost_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.11.9"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "prost 0.12.2": {
       "name": "prost",
       "version": "0.12.2",
@@ -47723,6 +47977,69 @@
         },
         "edition": "2021",
         "version": "0.12.2"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "prost-derive 0.11.9": {
+      "name": "prost-derive",
+      "version": "0.11.9",
+      "package_url": "https://github.com/tokio-rs/prost",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/prost-derive/0.11.9/download",
+          "sha256": "e5d2d8d10f3c6ded6da8b05b5fb3b8a5082514344d56c9f871412d29b4e075b4"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "prost_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "prost_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.75",
+              "target": "anyhow"
+            },
+            {
+              "id": "itertools 0.10.5",
+              "target": "itertools"
+            },
+            {
+              "id": "proc-macro2 1.0.76",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.11.9"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -64819,6 +65136,144 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "tonic 0.9.2": {
+      "name": "tonic",
+      "version": "0.9.2",
+      "package_url": "https://github.com/hyperium/tonic",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tonic/0.9.2/download",
+          "sha256": "3082666a3a6433f7f511c7192923fa1fe07c69332d3c6a2e6bb040b569199d5a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tonic",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tonic",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "channel",
+            "codegen",
+            "default",
+            "prost",
+            "transport"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "axum 0.6.20",
+              "target": "axum"
+            },
+            {
+              "id": "base64 0.21.4",
+              "target": "base64"
+            },
+            {
+              "id": "bytes 1.6.0",
+              "target": "bytes"
+            },
+            {
+              "id": "futures-core 0.3.30",
+              "target": "futures_core"
+            },
+            {
+              "id": "futures-util 0.3.30",
+              "target": "futures_util"
+            },
+            {
+              "id": "h2 0.3.26",
+              "target": "h2"
+            },
+            {
+              "id": "http 0.2.9",
+              "target": "http"
+            },
+            {
+              "id": "http-body 0.4.5",
+              "target": "http_body"
+            },
+            {
+              "id": "hyper 0.14.27",
+              "target": "hyper"
+            },
+            {
+              "id": "hyper-timeout 0.4.1",
+              "target": "hyper_timeout"
+            },
+            {
+              "id": "percent-encoding 2.3.0",
+              "target": "percent_encoding"
+            },
+            {
+              "id": "pin-project 1.1.3",
+              "target": "pin_project"
+            },
+            {
+              "id": "prost 0.11.9",
+              "target": "prost"
+            },
+            {
+              "id": "tokio 1.37.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-stream 0.1.14",
+              "target": "tokio_stream"
+            },
+            {
+              "id": "tower 0.4.13",
+              "target": "tower"
+            },
+            {
+              "id": "tower-layer 0.3.2",
+              "target": "tower_layer"
+            },
+            {
+              "id": "tower-service 0.3.2",
+              "target": "tower_service"
+            },
+            {
+              "id": "tracing 0.1.40",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.74",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.9.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "tonic 0.11.0": {
       "name": "tonic",
       "version": "0.11.0",
@@ -66147,6 +66602,101 @@
         },
         "edition": "2018",
         "version": "0.18.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "tracing-opentelemetry 0.22.0": {
+      "name": "tracing-opentelemetry",
+      "version": "0.22.0",
+      "package_url": "https://github.com/tokio-rs/tracing-opentelemetry",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tracing-opentelemetry/0.22.0/download",
+          "sha256": "c67ac25c5407e7b961fafc6f7e9aa5958fd297aada2d20fa2ae1737357e55596"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tracing_opentelemetry",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tracing_opentelemetry",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "metrics",
+            "smallvec",
+            "tracing-log"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "opentelemetry 0.21.0",
+              "target": "opentelemetry"
+            },
+            {
+              "id": "opentelemetry_sdk 0.21.2",
+              "target": "opentelemetry_sdk"
+            },
+            {
+              "id": "smallvec 1.13.2",
+              "target": "smallvec"
+            },
+            {
+              "id": "tracing 0.1.40",
+              "target": "tracing"
+            },
+            {
+              "id": "tracing-core 0.1.32",
+              "target": "tracing_core"
+            },
+            {
+              "id": "tracing-log 0.2.0",
+              "target": "tracing_log"
+            },
+            {
+              "id": "tracing-subscriber 0.3.18",
+              "target": "tracing_subscriber"
+            }
+          ],
+          "selects": {
+            "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
+              {
+                "id": "js-sys 0.3.64",
+                "target": "js_sys"
+              },
+              {
+                "id": "web-time 0.2.4",
+                "target": "web_time"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.22.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -71570,6 +72120,60 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "web-time 0.2.4": {
+      "name": "web-time",
+      "version": "0.2.4",
+      "package_url": "https://github.com/daxpedda/web-time",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/web-time/0.2.4/download",
+          "sha256": "aa30049b1c872b72c89866d458eae9f20380ab280ffd1b1e18df2d3e2d98cfe0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "web_time",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "web_time",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(all(target_family = \"wasm\", not(any(target_os = \"emscripten\", target_os = \"wasi\"))))": [
+              {
+                "id": "js-sys 0.3.64",
+                "target": "js_sys"
+              },
+              {
+                "id": "wasm-bindgen 0.2.87",
+                "target": "wasm_bindgen"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.2.4"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "webpki-roots 0.25.2": {
       "name": "webpki-roots",
       "version": "0.25.2",
@@ -75805,6 +76409,9 @@
     "cfg(all(target_arch = \"x86_64\", target_env = \"msvc\", not(windows_raw_dylib)))": [
       "x86_64-pc-windows-msvc"
     ],
+    "cfg(all(target_family = \"wasm\", not(any(target_os = \"emscripten\", target_os = \"wasi\"))))": [
+      "wasm32-unknown-unknown"
+    ],
     "cfg(all(unix, not(target_arch = \"wasm32\")))": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
@@ -76939,7 +77546,10 @@
     "once_cell 1.19.0",
     "openssh-keys 0.5.0",
     "opentelemetry 0.20.0",
+    "opentelemetry 0.21.0",
+    "opentelemetry-otlp 0.14.0",
     "opentelemetry-prometheus 0.13.0",
+    "opentelemetry_sdk 0.21.2",
     "p256 0.13.2",
     "pairing 0.22.0",
     "parking_lot 0.12.1",
@@ -77066,6 +77676,7 @@
     "tracing-appender 0.2.3",
     "tracing-core 0.1.32",
     "tracing-flame 0.2.0",
+    "tracing-opentelemetry 0.22.0",
     "tracing-serde 0.1.3",
     "tracing-slog 0.2.0",
     "tracing-subscriber 0.3.18",

@@ -15,9 +15,13 @@ use ic_types::{
     SubnetId,
 };
 use nix::unistd::{setpgid, Pid};
+use opentelemetry::KeyValue;
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::{trace, Resource};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
 use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::Layer;
 
 #[cfg(target_os = "linux")]
 mod jemalloc_metrics;
@@ -227,17 +231,54 @@ fn main() -> io::Result<()> {
         Err(_) => setup::get_subnet_id(node_id, registry.as_ref(), cup.as_ref(), &logger),
     };
 
-    // Set up tracing
-    let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);
-    let tracing_handle = ReloadHandles::new(reload_handle);
-    let subscriber = tracing_subscriber::Registry::default().with(reload_layer);
-    tracing::subscriber::set_global_default(subscriber).unwrap();
-
     // Set node_id and subnet_id in the logging context
     let mut context = logger.get_context();
     context.node_id = format!("{}", node_id.get());
     context.subnet_id = format!("{}", subnet_id.get());
     let logger = logger.with_new_context(context);
+
+    // Set up tracing
+    let mut tracing_layers = vec![];
+
+    if let Some(ref jaeger_collector_addr) = config.tracing.jaeger_addr {
+        let _rt_guard = rt_main.enter();
+        let jaeger_collector_addr = jaeger_collector_addr.trim().to_string();
+
+        let span_exporter = opentelemetry_otlp::new_exporter()
+            .tonic()
+            .with_endpoint(jaeger_collector_addr)
+            .with_protocol(opentelemetry_otlp::Protocol::Grpc);
+
+        match opentelemetry_otlp::new_pipeline()
+            .tracing()
+            .with_exporter(span_exporter)
+            .with_trace_config(
+                trace::config().with_resource(Resource::new(vec![KeyValue::new(
+                    "service.name",
+                    "Replica Jaeger Service",
+                )])),
+            )
+            .install_simple()
+        {
+            Ok(tracer) => {
+                let otel_layer = tracing_opentelemetry::OpenTelemetryLayer::new(tracer);
+                tracing_layers.push(otel_layer.boxed());
+            }
+            Err(err) => {
+                tracing::warn!("Failed to create the opentelemetry tracer: {:#?}", err);
+            }
+        }
+    }
+
+    let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);
+    let tracing_handle = ReloadHandles::new(reload_handle);
+    tracing_layers.push(reload_layer.boxed());
+
+    let subscriber = tracing_subscriber::Registry::default().with(tracing_layers);
+
+    if let Err(err) = tracing::subscriber::set_global_default(subscriber) {
+        tracing::warn!("Failed to set global subscriber: {:#?}", err);
+    }
 
     info!(logger, "Replica Started");
     info!(logger, "Running in subnetwork {:?}", subnet_id);

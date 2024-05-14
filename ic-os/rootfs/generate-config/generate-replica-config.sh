@@ -16,6 +16,7 @@ Usage:
   -l log.conf: Optional, logging parameters of the node software
   -m malicious_behavior.conf: Optional, malicious behavior parameters
   -q query_stats.conf: Optional, query statistics epoch length configuration
+  -t jaeger_addr.conf: Optional, Jaeger address
   -i infile: input ic.json5.template file
   -o outfile: output ic.json5 file
 EOF
@@ -156,7 +157,16 @@ function read_query_stats_variables() {
     done <"$1"
 }
 
-while getopts "l:m:q:n:c:i:o:b:" OPT; do
+# Read Jaeger address variable from file. The file contains a single value Jaeger node address used in system tests.
+function read_jaeger_addr_variable() {
+    while IFS="=" read -r key value; do
+        case "$key" in
+            "jaeger_addr") jaeger_addr="${value}" ;;
+        esac
+    done <"$1"
+}
+
+while getopts "l:m:q:n:c:t:i:o:b:" OPT; do
     case "${OPT}" in
         n)
             NETWORK_CONFIG_FILE="${OPTARG}"
@@ -175,6 +185,9 @@ while getopts "l:m:q:n:c:i:o:b:" OPT; do
             ;;
         q)
             QUERY_STATS_CONFIG_FILE="${OPTARG}"
+            ;;
+        t)
+            JAEGER_ADDR_FILE="${OPTARG}"
             ;;
         i)
             IN_FILE="${OPTARG}"
@@ -218,6 +231,10 @@ if [ "${QUERY_STATS_CONFIG_FILE}" != "" -a -e "${QUERY_STATS_CONFIG_FILE}" ]; th
     read_query_stats_variables "${QUERY_STATS_CONFIG_FILE}"
 fi
 
+if [ "${JAEGER_ADDR_FILE}" != "" -a -e "${JAEGER_ADDR_FILE}" ]; then
+    read_jaeger_addr_variable "${JAEGER_ADDR_FILE}"
+fi
+
 INTERFACE=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
 IPV6_ADDRESS="${ipv6_address%/*}"
 IPV6_ADDRESS="${IPV6_ADDRESS:-$(get_if_address_retries 6 ${INTERFACE} 12)}"
@@ -238,6 +255,8 @@ MALICIOUS_BEHAVIOR="${malicious_behavior:-null}"
 QUERY_STATS_AGGREGATION="${query_stats_aggregation:-\"Enabled\"}"
 # Default is 600 blocks i.e. around 10min
 QUERY_STATS_EPOCH_LENGTH="${query_stats_epoch_length:-600}"
+# Default is None
+JAEGER_ADDR="${jaeger_addr:-}"
 
 if [ "${IPV6_ADDRESS}" == "" ]; then
     echo "Cannot determine an IPv6 address, aborting"
@@ -272,6 +291,7 @@ sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ malicious_behavior }}@${MALICIOUS_BEHAVIOR}@" \
     -e "s@{{ query_stats_aggregation }}@${QUERY_STATS_AGGREGATION}@" \
     -e "s@{{ query_stats_epoch_length }}@${QUERY_STATS_EPOCH_LENGTH}@" \
+    -e "s@{{ jaeger_addr }}@${JAEGER_ADDR}@" \
     "${IN_FILE}" >"${OUT_FILE}"
 
 # umask for service is set to be restricted, but this file needs to be

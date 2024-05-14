@@ -181,6 +181,23 @@ uvm_config_image(
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
 
+exports_files([
+    "src/jaeger/jaeger_activate.sh",
+])
+
+uvm_config_image(
+    name = "jaeger_uvm_config_image",
+    srcs = [
+        # ":src/btc_integration/bitcoin.conf",
+        ":src/jaeger/jaeger_activate.sh",
+        "@jaeger//image",
+    ],
+    remap_paths = {
+        "jaeger_activate.sh": "activate",
+    },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+)
+
 filegroup(
     name = "rosetta_workspace",
     srcs = glob(["rosetta_workspace/*"]),
