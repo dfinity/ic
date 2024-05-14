@@ -609,7 +609,10 @@ impl From<EcdsaKeyTranscript> for pb::EcdsaKeyTranscript {
                 &transcript.next_in_creation,
             )),
             key_id: Some(crypto_pb::EcdsaKeyId::from(&transcript.key_id)),
-            master_key_id: transcript.master_key_id.clone().map(|key_id| key_id.into()),
+            master_key_id: transcript
+                .master_key_id
+                .as_ref()
+                .map(|key_id| key_id.into()),
         }
     }
 }
@@ -818,7 +821,7 @@ impl From<&EcdsaReshareRequest> for pb::EcdsaReshareRequest {
         }
         Self {
             key_id: Some((&request.key_id).into()),
-            master_key_id: request.master_key_id.clone().map(|key_id| key_id.into()),
+            master_key_id: request.master_key_id.as_ref().map(|key_id| key_id.into()),
             receiving_node_ids,
             registry_version: request.registry_version.get(),
         }

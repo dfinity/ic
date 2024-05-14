@@ -716,8 +716,8 @@ pub enum LogVisibility {
     Public = 2,
 }
 
-impl From<LogVisibility> for pb_canister_state_bits::LogVisibility {
-    fn from(item: LogVisibility) -> Self {
+impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
+    fn from(item: &LogVisibility) -> Self {
         match item {
             LogVisibility::Controllers => pb_canister_state_bits::LogVisibility::Controllers,
             LogVisibility::Public => pb_canister_state_bits::LogVisibility::Public,
@@ -1296,7 +1296,7 @@ impl From<&CanisterInstallModeV2> for CanisterInstallModeV2Proto {
                             skip_pre_upgrade: upgrade_options.skip_pre_upgrade,
                             wasm_memory_persistence: upgrade_options.wasm_memory_persistence.map(
                                 |mode| {
-                                    let proto: WasmMemoryPersistenceProto = mode.into();
+                                    let proto: WasmMemoryPersistenceProto = (&mode).into();
                                     proto.into()
                                 },
                             ),
@@ -1320,6 +1320,15 @@ impl From<CanisterInstallModeV2> for CanisterInstallMode {
     }
 }
 
+impl From<&WasmMemoryPersistence> for WasmMemoryPersistenceProto {
+    fn from(item: &WasmMemoryPersistence) -> Self {
+        match item {
+            WasmMemoryPersistence::Keep => WasmMemoryPersistenceProto::Keep,
+            WasmMemoryPersistence::Replace => WasmMemoryPersistenceProto::Replace,
+        }
+    }
+}
+
 impl TryFrom<WasmMemoryPersistenceProto> for WasmMemoryPersistence {
     type Error = CanisterInstallModeError;
 
@@ -1330,15 +1339,6 @@ impl TryFrom<WasmMemoryPersistenceProto> for WasmMemoryPersistence {
             WasmMemoryPersistenceProto::Unspecified => Err(CanisterInstallModeError(
                 format!("Invalid `WasmMemoryPersistence` value: {item:?}").to_string(),
             )),
-        }
-    }
-}
-
-impl From<WasmMemoryPersistence> for WasmMemoryPersistenceProto {
-    fn from(item: WasmMemoryPersistence) -> Self {
-        match item {
-            WasmMemoryPersistence::Keep => WasmMemoryPersistenceProto::Keep,
-            WasmMemoryPersistence::Replace => WasmMemoryPersistenceProto::Replace,
         }
     }
 }
@@ -1898,6 +1898,14 @@ pub enum EcdsaCurve {
     Secp256k1,
 }
 
+impl From<&EcdsaCurve> for pb_registry_crypto::EcdsaCurve {
+    fn from(item: &EcdsaCurve) -> Self {
+        match item {
+            EcdsaCurve::Secp256k1 => pb_registry_crypto::EcdsaCurve::Secp256k1,
+        }
+    }
+}
+
 impl TryFrom<pb_registry_crypto::EcdsaCurve> for EcdsaCurve {
     type Error = ProxyDecodeError;
 
@@ -1908,14 +1916,6 @@ impl TryFrom<pb_registry_crypto::EcdsaCurve> for EcdsaCurve {
                 typ: "EcdsaCurve",
                 err: format!("Unable to convert {:?} to an EcdsaCurve", item),
             }),
-        }
-    }
-}
-
-impl From<EcdsaCurve> for pb_registry_crypto::EcdsaCurve {
-    fn from(item: EcdsaCurve) -> Self {
-        match item {
-            EcdsaCurve::Secp256k1 => pb_registry_crypto::EcdsaCurve::Secp256k1,
         }
     }
 }
@@ -1951,6 +1951,15 @@ pub struct EcdsaKeyId {
     pub name: String,
 }
 
+impl From<&EcdsaKeyId> for pb_registry_crypto::EcdsaKeyId {
+    fn from(item: &EcdsaKeyId) -> Self {
+        Self {
+            curve: pb_registry_crypto::EcdsaCurve::from(&item.curve) as i32,
+            name: item.name.clone(),
+        }
+    }
+}
+
 impl TryFrom<pb_registry_crypto::EcdsaKeyId> for EcdsaKeyId {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_registry_crypto::EcdsaKeyId) -> Result<Self, Self::Error> {
@@ -1965,15 +1974,6 @@ impl TryFrom<pb_registry_crypto::EcdsaKeyId> for EcdsaKeyId {
             )?,
             name: item.name,
         })
-    }
-}
-
-impl From<&EcdsaKeyId> for pb_registry_crypto::EcdsaKeyId {
-    fn from(item: &EcdsaKeyId) -> Self {
-        Self {
-            curve: pb_registry_crypto::EcdsaCurve::from(item.curve) as i32,
-            name: item.name.clone(),
-        }
     }
 }
 
@@ -2021,6 +2021,17 @@ pub enum SchnorrAlgorithm {
     Ed25519,
 }
 
+impl From<&SchnorrAlgorithm> for pb_registry_crypto::SchnorrAlgorithm {
+    fn from(item: &SchnorrAlgorithm) -> Self {
+        match item {
+            SchnorrAlgorithm::Bip340Secp256k1 => {
+                pb_registry_crypto::SchnorrAlgorithm::Bip340secp256k1
+            }
+            SchnorrAlgorithm::Ed25519 => pb_registry_crypto::SchnorrAlgorithm::Ed25519,
+        }
+    }
+}
+
 impl TryFrom<pb_registry_crypto::SchnorrAlgorithm> for SchnorrAlgorithm {
     type Error = ProxyDecodeError;
 
@@ -2036,17 +2047,6 @@ impl TryFrom<pb_registry_crypto::SchnorrAlgorithm> for SchnorrAlgorithm {
                     err: format!("Unable to convert {:?} to a SchnorrAlgorithm", item),
                 })
             }
-        }
-    }
-}
-
-impl From<SchnorrAlgorithm> for pb_registry_crypto::SchnorrAlgorithm {
-    fn from(item: SchnorrAlgorithm) -> Self {
-        match item {
-            SchnorrAlgorithm::Bip340Secp256k1 => {
-                pb_registry_crypto::SchnorrAlgorithm::Bip340secp256k1
-            }
-            SchnorrAlgorithm::Ed25519 => pb_registry_crypto::SchnorrAlgorithm::Ed25519,
         }
     }
 }
@@ -2083,6 +2083,15 @@ pub struct SchnorrKeyId {
     pub name: String,
 }
 
+impl From<&SchnorrKeyId> for pb_registry_crypto::SchnorrKeyId {
+    fn from(item: &SchnorrKeyId) -> Self {
+        Self {
+            algorithm: pb_registry_crypto::SchnorrAlgorithm::from(&item.algorithm) as i32,
+            name: item.name.clone(),
+        }
+    }
+}
+
 impl TryFrom<pb_registry_crypto::SchnorrKeyId> for SchnorrKeyId {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_registry_crypto::SchnorrKeyId) -> Result<Self, Self::Error> {
@@ -2096,15 +2105,6 @@ impl TryFrom<pb_registry_crypto::SchnorrKeyId> for SchnorrKeyId {
             })?,
         )?;
         Ok(Self { algorithm, name })
-    }
-}
-
-impl From<SchnorrKeyId> for pb_registry_crypto::SchnorrKeyId {
-    fn from(item: SchnorrKeyId) -> Self {
-        Self {
-            algorithm: pb_registry_crypto::SchnorrAlgorithm::from(item.algorithm) as i32,
-            name: item.name,
-        }
     }
 }
 
@@ -2140,42 +2140,33 @@ pub enum MasterPublicKeyId {
     Schnorr(SchnorrKeyId),
 }
 
+impl From<&MasterPublicKeyId> for pb_registry_crypto::MasterPublicKeyId {
+    fn from(item: &MasterPublicKeyId) -> Self {
+        use pb_registry_crypto::master_public_key_id::KeyId;
+        let key_id_pb = match item {
+            MasterPublicKeyId::Schnorr(schnorr_key_id) => KeyId::Schnorr(schnorr_key_id.into()),
+            MasterPublicKeyId::Ecdsa(ecdsa_key_id) => KeyId::Ecdsa(ecdsa_key_id.into()),
+        };
+        Self {
+            key_id: Some(key_id_pb),
+        }
+    }
+}
+
 impl TryFrom<pb_registry_crypto::MasterPublicKeyId> for MasterPublicKeyId {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_registry_crypto::MasterPublicKeyId) -> Result<Self, Self::Error> {
         use pb_registry_crypto::master_public_key_id::KeyId;
-        let Some(key_id) = item.key_id else {
+        let Some(key_id_pb) = item.key_id else {
             return Err(ProxyDecodeError::MissingField("MasterPublicKeyId::key_id"));
         };
-        Ok(match key_id {
-            KeyId::Schnorr(schnorr_key_id_pb) => {
-                let schnorr_key_id = SchnorrKeyId::try_from(schnorr_key_id_pb)?;
-                MasterPublicKeyId::Schnorr(schnorr_key_id)
+        let master_public_key_id = match key_id_pb {
+            KeyId::Schnorr(schnorr_key_id) => {
+                MasterPublicKeyId::Schnorr(schnorr_key_id.try_into()?)
             }
-            KeyId::Ecdsa(ecdsa_key_id_pb) => {
-                let ecdsa_key_id = EcdsaKeyId::try_from(ecdsa_key_id_pb)?;
-                MasterPublicKeyId::Ecdsa(ecdsa_key_id)
-            }
-        })
-    }
-}
-
-impl From<MasterPublicKeyId> for pb_registry_crypto::MasterPublicKeyId {
-    fn from(item: MasterPublicKeyId) -> Self {
-        use pb_registry_crypto::master_public_key_id::KeyId;
-        let key_id = match item {
-            MasterPublicKeyId::Schnorr(schnorr_key_id) => {
-                let schnorr_key_id_pb = pb_registry_crypto::SchnorrKeyId::from(schnorr_key_id);
-                KeyId::Schnorr(schnorr_key_id_pb)
-            }
-            MasterPublicKeyId::Ecdsa(ecdsa_key_id) => {
-                let ecdsa_key_id_pb = pb_registry_crypto::EcdsaKeyId::from(&ecdsa_key_id);
-                KeyId::Ecdsa(ecdsa_key_id_pb)
-            }
+            KeyId::Ecdsa(ecdsa_key_id) => MasterPublicKeyId::Ecdsa(ecdsa_key_id.try_into()?),
         };
-        Self {
-            key_id: Some(key_id),
-        }
+        Ok(master_public_key_id)
     }
 }
 
@@ -2545,18 +2536,18 @@ impl DataSize for CanisterLogRecord {
     }
 }
 
-impl From<pb_canister_state_bits::CanisterLogRecord> for CanisterLogRecord {
-    fn from(item: pb_canister_state_bits::CanisterLogRecord) -> Self {
+impl From<&CanisterLogRecord> for pb_canister_state_bits::CanisterLogRecord {
+    fn from(item: &CanisterLogRecord) -> Self {
         Self {
             idx: item.idx,
             timestamp_nanos: item.timestamp_nanos,
-            content: item.content,
+            content: item.content.clone(),
         }
     }
 }
 
-impl From<CanisterLogRecord> for pb_canister_state_bits::CanisterLogRecord {
-    fn from(item: CanisterLogRecord) -> Self {
+impl From<pb_canister_state_bits::CanisterLogRecord> for CanisterLogRecord {
+    fn from(item: pb_canister_state_bits::CanisterLogRecord) -> Self {
         Self {
             idx: item.idx,
             timestamp_nanos: item.timestamp_nanos,
@@ -3164,7 +3155,7 @@ mod tests {
     #[test]
     fn wasm_persistence_round_trip() {
         for persistence in WasmMemoryPersistence::iter() {
-            let encoded: WasmMemoryPersistenceProto = (*persistence).into();
+            let encoded: WasmMemoryPersistenceProto = persistence.into();
             let decoded = WasmMemoryPersistence::try_from(encoded).unwrap();
             assert_eq!(*persistence, decoded);
         }
