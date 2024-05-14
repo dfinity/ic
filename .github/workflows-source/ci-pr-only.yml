@@ -41,6 +41,10 @@ anchors:
     shell: bash
     run: |
       if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
+  bazel-clean: &bazel-clean
+    name: Bazel Clean
+    if: always()
+    run: bazel clean
 
 jobs:
   bazel-build-fuzzers-archives:
@@ -69,6 +73,7 @@ jobs:
       - name: No run
         if: steps.filter.outputs.fuzzers == 'false'
         run: echo "No changes in fuzzers, skipping build"
+      - <<: *bazel-clean
 
   lock-generate:
     name: Lock Generate
