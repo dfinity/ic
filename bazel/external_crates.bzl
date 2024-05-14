@@ -739,6 +739,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.7.8",
                 default_features = False,
             ),
+            "mach2": crate.spec(
+                # Wasmtime depends on 0.4.2 but specifies 0.4.1.
+                # Enforce 0.4.2 using a dummy dependency until
+                # the upstream issue is fixed.
+                version = "^0.4.2",
+            ),
             "maplit": crate.spec(
                 version = "^1.0.2",
             ),
@@ -1412,7 +1418,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.50",
             ),
             "wasmtime": crate.spec(
-                version = "^19.0.2",
+                version = "^20.0.2",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1422,10 +1428,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^19.0.2",
+                version = "^20.0.2",
             ),
             "wasmtime-runtime": crate.spec(
-                version = "^19.0.2",
+                version = "^20.0.2",
             ),
             "wast": crate.spec(
                 version = "^53.0.0",
