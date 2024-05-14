@@ -115,6 +115,10 @@ options may be specified:
     The IP address of a running bitcoind instance. To be used in
     systems tests only.
 
+  --jaeger_addr address
+    The IP address of a running Jaeger Collector instance. To be used in
+    systems tests only.
+
   --socks_proxy url
     The URL of the socks proxy to use. To be used in
     systems tests only.
@@ -138,6 +142,7 @@ function build_ic_bootstrap_tar() {
     local MALICIOUS_BEHAVIOR
     local QUERY_STATS_EPOCH_LENGTH
     local BITCOIND_ADDR
+    local JAEGER_ADDR
 
     while true; do
         if [ $# == 0 ]; then
@@ -208,6 +213,9 @@ function build_ic_bootstrap_tar() {
             --bitcoind_addr)
                 BITCOIND_ADDR="$2"
                 ;;
+            --jaeger_addr)
+                JAEGER_ADDR="$2"
+                ;;
             --socks_proxy)
                 SOCKS_PROXY="$2"
                 ;;
@@ -263,6 +271,9 @@ EOF
     fi
     if [ "${BITCOIND_ADDR}" != "" ]; then
         echo "bitcoind_addr=${BITCOIND_ADDR}" >"${BOOTSTRAP_TMPDIR}/bitcoind_addr.conf"
+    fi
+    if [ "${JAEGER_ADDR}" != "" ]; then
+        echo "jaeger_addr=http://${JAEGER_ADDR}" >"${BOOTSTRAP_TMPDIR}/jaeger_addr.conf"
     fi
     if [ "${SOCKS_PROXY}" != "" ]; then
         echo "socks_proxy=${SOCKS_PROXY}" >"${BOOTSTRAP_TMPDIR}/socks_proxy.conf"
