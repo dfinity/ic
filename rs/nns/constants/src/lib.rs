@@ -26,6 +26,7 @@ pub const NNS_UI_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 8;
 pub const SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 10;
 // NNS ICP Index Canister = 11;
 // NNS ICP Archive Canister = 12;
+pub const SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 13;
 // Exchange Rate Canister is deployed to the II subnet.
 pub const EXCHANGE_RATE_CANISTER_INDEX: u64 = 0x2100001;
 
@@ -68,6 +69,9 @@ pub const NNS_UI_CANISTER_ID: CanisterId =
     CanisterId::from_u64(NNS_UI_CANISTER_INDEX_IN_NNS_SUBNET);
 pub const SNS_WASM_CANISTER_ID: CanisterId =
     CanisterId::from_u64(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET);
+// `SUBNET_RENTAL_CANISTER_ID` is `qvhpv-4qaaa-aaaaa-aaagq-cai`
+pub const SUBNET_RENTAL_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET);
 pub const EXCHANGE_RATE_CANISTER_ID: CanisterId =
     CanisterId::from_u64(EXCHANGE_RATE_CANISTER_INDEX);
 

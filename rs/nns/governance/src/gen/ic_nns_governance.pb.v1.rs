@@ -3363,6 +3363,8 @@ pub enum Topic {
     SnsAndCommunityFund = 14,
     /// Proposals related to the management of API Boundary Nodes
     ApiBoundaryNodeManagement = 15,
+    /// Proposals related to subnet rental.
+    SubnetRental = 16,
 }
 impl Topic {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3386,6 +3388,7 @@ impl Topic {
             Topic::IcOsVersionElection => "TOPIC_IC_OS_VERSION_ELECTION",
             Topic::SnsAndCommunityFund => "TOPIC_SNS_AND_COMMUNITY_FUND",
             Topic::ApiBoundaryNodeManagement => "TOPIC_API_BOUNDARY_NODE_MANAGEMENT",
+            Topic::SubnetRental => "TOPIC_SUBNET_RENTAL",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3406,6 +3409,7 @@ impl Topic {
             "TOPIC_IC_OS_VERSION_ELECTION" => Some(Self::IcOsVersionElection),
             "TOPIC_SNS_AND_COMMUNITY_FUND" => Some(Self::SnsAndCommunityFund),
             "TOPIC_API_BOUNDARY_NODE_MANAGEMENT" => Some(Self::ApiBoundaryNodeManagement),
+            "TOPIC_SUBNET_RENTAL" => Some(Self::SubnetRental),
             _ => None,
         }
     }
@@ -3791,6 +3795,8 @@ pub enum NnsFunction {
     /// Deploy a HostOS version to a given set of nodes. The proposal changes the HostOS version that
     /// is used on the specified nodes.
     DeployHostosToSomeNodes = 51,
+    /// The proposal requests a subnet rental.
+    SubnetRentalRequest = 52,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3870,6 +3876,7 @@ impl NnsFunction {
                 "NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS"
             }
             NnsFunction::DeployHostosToSomeNodes => "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES",
+            NnsFunction::SubnetRentalRequest => "NNS_FUNCTION_SUBNET_RENTAL_REQUEST",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3946,6 +3953,7 @@ impl NnsFunction {
                 Some(Self::ReviseElectedHostosVersions)
             }
             "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES" => Some(Self::DeployHostosToSomeNodes),
+            "NNS_FUNCTION_SUBNET_RENTAL_REQUEST" => Some(Self::SubnetRentalRequest),
             _ => None,
         }
     }

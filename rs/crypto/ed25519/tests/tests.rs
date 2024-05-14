@@ -296,3 +296,81 @@ fn should_pass_wycheproof_test_vectors() {
         }
     }
 }
+
+#[test]
+fn should_produce_expected_derived_public_keys() {
+    fn check_derivation(
+        path: &DerivationPath,
+        key: [u8; 32],
+        chain_code: [u8; 32],
+        expected_key: [u8; 32],
+        expected_chain_code: [u8; 32],
+    ) {
+        let key = PublicKey::deserialize_raw(&key).expect("Invalid key");
+
+        let (dk, chain_code) = key.derive_subkey_with_chain_code(path, &chain_code);
+
+        assert_eq!(hex::encode(dk.serialize_raw()), hex::encode(expected_key));
+        assert_eq!(hex::encode(chain_code), hex::encode(expected_chain_code));
+    }
+
+    check_derivation(
+        &DerivationPath::new_bip32(&[1]),
+        hex!("931387a550eb4524a7af29381b938df38e76aeecac08e2cfaae4f4ca99bb4881"),
+        [0u8; 32],
+        hex!("6f3086e738ab5417c6e02504464f208a763f0fba0c4d7ade40694773b6c2273c"),
+        hex!("d34e4e22d2c008ccc7e9bb9882fbc025a1e5516e3421d8e932dbc0be35f787a0"),
+    );
+
+    check_derivation(
+        &DerivationPath::new_bip32(&[2]),
+        hex!("6f3086e738ab5417c6e02504464f208a763f0fba0c4d7ade40694773b6c2273c"),
+        hex!("d34e4e22d2c008ccc7e9bb9882fbc025a1e5516e3421d8e932dbc0be35f787a0"),
+        hex!("8efb675fcaf45c93e785ff535e380d9019c876a7c5faed264b911f97ef34d838"),
+        hex!("2562ad75c50708f8d20c442e48b3f8ee851570be256ef0a7060b9f755a837216"),
+    );
+
+    check_derivation(
+        &DerivationPath::new_bip32(&[1, 2]),
+        hex!("931387a550eb4524a7af29381b938df38e76aeecac08e2cfaae4f4ca99bb4881"),
+        [0u8; 32],
+        hex!("8efb675fcaf45c93e785ff535e380d9019c876a7c5faed264b911f97ef34d838"),
+        hex!("2562ad75c50708f8d20c442e48b3f8ee851570be256ef0a7060b9f755a837216"),
+    );
+}
+
+#[test]
+fn private_derivation_is_compatible_with_public_derivation() {
+    let mut rng = &mut rand::thread_rng();
+
+    fn random_path<R: Rng>(rng: &mut R) -> DerivationPath {
+        let l = 1 + rng.gen::<usize>() % 9;
+        let path = (0..l).map(|_| rng.gen::<u32>()).collect::<Vec<u32>>();
+        DerivationPath::new_bip32(&path)
+    }
+
+    for _ in 0..100 {
+        let master_sk = PrivateKey::generate_using_rng(&mut rng);
+        let master_pk = master_sk.public_key();
+
+        let path = random_path(rng);
+
+        let chain_code = rng.gen::<[u8; 32]>();
+
+        let (derived_pk, cc_pk) = master_pk.derive_subkey_with_chain_code(&path, &chain_code);
+
+        let (derived_sk, cc_sk) = master_sk.derive_subkey_with_chain_code(&path, &chain_code);
+
+        assert_eq!(
+            hex::encode(derived_pk.serialize_raw()),
+            hex::encode(derived_sk.public_key().serialize_raw())
+        );
+
+        assert_eq!(hex::encode(cc_pk), hex::encode(cc_sk));
+
+        let msg = rng.gen::<[u8; 32]>();
+        let derived_sig = derived_sk.sign_message(&msg);
+
+        assert!(derived_pk.verify_signature(&msg, &derived_sig).is_ok());
+    }
+}

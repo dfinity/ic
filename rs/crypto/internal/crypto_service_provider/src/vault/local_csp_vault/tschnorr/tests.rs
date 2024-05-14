@@ -354,7 +354,7 @@ mod create_schnorr_sig_share {
                 assert_matches!(
                     parameters.create_schnorr_sig_share(&vault),
                     Err(ThresholdSchnorrCreateSigShareVaultError::SerializationError(s))
-                    if s == "ThresholdEcdsaSerializationError(\"Invalid point encoding\")"
+                    if s == "ThresholdEcdsaSerializationError(\"Invalid scalar encoding\")"
                 );
             }
         }

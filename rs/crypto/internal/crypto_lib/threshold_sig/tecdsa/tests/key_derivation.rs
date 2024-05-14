@@ -41,6 +41,77 @@ fn verify_bip32_extended_key_derivation_max_length_enforced() -> Result<(), Thre
     Ok(())
 }
 
+struct KeyDerivationTest {
+    path: Vec<DerivationIndex>,
+    chain_code: [u8; 32],
+    public_key: EccPoint,
+    private_key: EccScalar,
+    expected_chain_code: [u8; 32],
+    expected_public_key: EccPoint,
+    expected_private_key: EccScalar,
+}
+
+impl KeyDerivationTest {
+    fn decode_scalar(curve: EccCurveType, hex: &'static str) -> EccScalar {
+        let bits = hex::decode(hex).expect("Invalid hex");
+        EccScalar::deserialize(curve, &bits).expect("Invalid scalar")
+    }
+
+    fn decode_point(curve: EccCurveType, hex: &'static str) -> EccPoint {
+        let bits = hex::decode(hex).expect("Invalid hex");
+        EccPoint::deserialize(curve, &bits).expect("Invalid point")
+    }
+
+    fn decode_chain_code(hex: &'static str) -> [u8; 32] {
+        let bits = hex::decode(hex).expect("Invalid hex");
+        bits.try_into().expect("Invalid chain code")
+    }
+
+    fn new(
+        curve: EccCurveType,
+        path: &[u32],
+        chain_code: &'static str,
+        private_key: &'static str,
+        public_key: &'static str,
+        expected_chain_code: &'static str,
+        expected_private_key: &'static str,
+        expected_public_key: &'static str,
+    ) -> Self {
+        let chain_code = Self::decode_chain_code(chain_code);
+        let public_key = Self::decode_point(curve, public_key);
+        let private_key = Self::decode_scalar(curve, private_key);
+
+        assert_eq!(
+            hex::encode(EccPoint::mul_by_g(&private_key).serialize()),
+            hex::encode(public_key.serialize())
+        );
+
+        let expected_chain_code = Self::decode_chain_code(expected_chain_code);
+        let expected_private_key = Self::decode_scalar(curve, expected_private_key);
+        let expected_public_key = Self::decode_point(curve, expected_public_key);
+
+        assert_eq!(
+            hex::encode(EccPoint::mul_by_g(&expected_private_key).serialize()),
+            hex::encode(expected_public_key.serialize())
+        );
+
+        let path = path
+            .iter()
+            .map(|p| DerivationIndex(p.to_be_bytes().to_vec()))
+            .collect::<Vec<_>>();
+
+        Self {
+            path,
+            chain_code,
+            public_key,
+            private_key,
+            expected_chain_code,
+            expected_public_key,
+            expected_private_key,
+        }
+    }
+}
+
 #[test]
 fn check_key_derivation_slip_0010_test_vectors() {
     // From https://github.com/satoshilabs/slips/blob/master/slip-0010.md#test-vectors
@@ -48,69 +119,8 @@ fn check_key_derivation_slip_0010_test_vectors() {
     // This only includes tests where the derivation was non-hardened since we do not
     // support hardened derivation
 
-    struct Slip10Test {
-        path: Vec<DerivationIndex>,
-        chain_code: [u8; 32],
-        public_key: EccPoint,
-        private_key: EccScalar,
-        expected_chain_code: [u8; 32],
-        expected_public_key: EccPoint,
-        expected_private_key: EccScalar,
-    }
-
-    impl Slip10Test {
-        fn decode_scalar(curve: EccCurveType, hex: &'static str) -> EccScalar {
-            let bits = hex::decode(hex).expect("Invalid hex");
-            EccScalar::deserialize(curve, &bits).expect("Invalid scalar")
-        }
-
-        fn decode_point(curve: EccCurveType, hex: &'static str) -> EccPoint {
-            let bits = hex::decode(hex).expect("Invalid hex");
-            EccPoint::deserialize(curve, &bits).expect("Invalid point")
-        }
-
-        fn decode_chain_code(hex: &'static str) -> [u8; 32] {
-            let bits = hex::decode(hex).expect("Invalid hex");
-            bits.try_into().expect("Invalid chain code")
-        }
-
-        fn new(
-            curve: EccCurveType,
-            path: &[u32],
-            chain_code: &'static str,
-            private_key: &'static str,
-            public_key: &'static str,
-            expected_chain_code: &'static str,
-            expected_private_key: &'static str,
-            expected_public_key: &'static str,
-        ) -> Self {
-            let chain_code = Self::decode_chain_code(chain_code);
-            let public_key = Self::decode_point(curve, public_key);
-            let private_key = Self::decode_scalar(curve, private_key);
-
-            let expected_chain_code = Self::decode_chain_code(expected_chain_code);
-            let expected_private_key = Self::decode_scalar(curve, expected_private_key);
-            let expected_public_key = Self::decode_point(curve, expected_public_key);
-
-            let path = path
-                .iter()
-                .map(|p| DerivationIndex(p.to_be_bytes().to_vec()))
-                .collect::<Vec<_>>();
-
-            Self {
-                path,
-                chain_code,
-                public_key,
-                private_key,
-                expected_chain_code,
-                expected_public_key,
-                expected_private_key,
-            }
-        }
-    }
-
     let slip10_tests = [
-        Slip10Test::new(
+        KeyDerivationTest::new(
             EccCurveType::K256,
             &[1],
             "47fdacbd0f1097043b78c63c20c34ef4ed9a111d980047ad16282c7ae6236141",
@@ -120,7 +130,7 @@ fn check_key_derivation_slip_0010_test_vectors() {
             "3c6cb8d0f6a264c91ea8b5030fadaa8e538b020f0a387421a12de9319dc93368",
             "03501e454bf00751f24b1b489aa925215d66af2234e3891c3b21a52bedb3cd711c",
         ),
-        Slip10Test::new(
+        KeyDerivationTest::new(
             EccCurveType::K256,
             &[2],
             "04466b9cc8e161e966409ca52986c584f07e9dc81f735db683c3ff6ec7b1503f",
@@ -130,7 +140,7 @@ fn check_key_derivation_slip_0010_test_vectors() {
             "0f479245fb19a38a1954c5c7c0ebab2f9bdfd96a17563ef28a6a4b1a2a764ef4",
             "02e8445082a72f29b75ca48748a914df60622a609cacfce8ed0e35804560741d29",
         ),
-        Slip10Test::new(
+        KeyDerivationTest::new(
             EccCurveType::K256,
             &[2, 1000000000],
             "04466b9cc8e161e966409ca52986c584f07e9dc81f735db683c3ff6ec7b1503f",
@@ -140,7 +150,7 @@ fn check_key_derivation_slip_0010_test_vectors() {
             "471b76e389e528d6de6d816857e012c5455051cad6660850e58372a6c3e6e7c8",
             "022a471424da5e657499d1ff51cb43c47481a03b1e77f951fe64cec9f5a48f7011",
         ),
-        Slip10Test::new(
+        KeyDerivationTest::new(
             EccCurveType::P256,
             &[1],
             "3460cea53e6a6bb5fb391eeef3237ffd8724bf0a40e94943c98b83825342ee11",
@@ -150,7 +160,7 @@ fn check_key_derivation_slip_0010_test_vectors() {
             "284e9d38d07d21e4e281b645089a94f4cf5a5a81369acf151a1c3a57f18b2129",
             "03526c63f8d0b4bbbf9c80df553fe66742df4676b241dabefdef67733e070f6844",
         ),
-        Slip10Test::new(
+        KeyDerivationTest::new(
             EccCurveType::P256,
             &[2],
             "98c7514f562e64e74170cc3cf304ee1ce54d6b6da4f880f313e8204c2a185318",
@@ -160,7 +170,7 @@ fn check_key_derivation_slip_0010_test_vectors() {
             "5996c37fd3dd2679039b23ed6f70b506c6b56b3cb5e424681fb0fa64caf82aaa",
             "029f871f4cb9e1c97f9f4de9ccd0d4a2f2a171110c61178f84430062230833ff20",
         ),
-        Slip10Test::new(
+        KeyDerivationTest::new(
             EccCurveType::P256,
             &[2, 1000000000],
             "98c7514f562e64e74170cc3cf304ee1ce54d6b6da4f880f313e8204c2a185318",
@@ -170,7 +180,7 @@ fn check_key_derivation_slip_0010_test_vectors() {
             "21c4f269ef0a5fd1badf47eeacebeeaa3de22eb8e5b0adcd0f27dd99d34d0119",
             "02216cd26d31147f72427a453c443ed2cde8a1e53c9cc44e5ddf739725413fe3f4",
         ),
-        Slip10Test::new(
+        KeyDerivationTest::new(
             EccCurveType::K256,
             &[0],
             "60499f801b896d83179a4374aeb7822aaeaceaa0db1f85ee3e904c4defbd9689",
@@ -180,7 +190,7 @@ fn check_key_derivation_slip_0010_test_vectors() {
             "abe74a98f6c7eabee0428f53798f0ab8aa1bd37873999041703c742f15ac7e1e",
             "02fc9e5af0ac8d9b3cecfe2a888e2117ba3d089d8585886c9c826b6b22a98d12ea",
         ),
-        Slip10Test::new(
+        KeyDerivationTest::new(
             EccCurveType::K256,
             &[1],
             "be17a268474a6bb9c61e1d720cf6215e2a88c5406c4aee7b38547f585c9a37d9",
@@ -190,7 +200,7 @@ fn check_key_derivation_slip_0010_test_vectors() {
             "704addf544a06e5ee4bea37098463c23613da32020d604506da8c0518e1da4b7",
             "03a7d1d856deb74c508e05031f9895dab54626251b3806e16b4bd12e781a7df5b9",
         ),
-        Slip10Test::new(
+        KeyDerivationTest::new(
             EccCurveType::K256,
             &[2],
             "637807030d55d01f9a0cb3a7839515d796bd07706386a6eddf06cc29a65a0e29",
@@ -200,7 +210,7 @@ fn check_key_derivation_slip_0010_test_vectors() {
             "bb7d39bdb83ecf58f2fd82b6d918341cbef428661ef01ab97c28a4842125ac23",
             "024d902e1a2fc7a8755ab5b694c575fce742c48d9ff192e63df5193e4c7afe1f9c",
         ),
-        Slip10Test::new(
+        KeyDerivationTest::new(
             EccCurveType::P256,
             &[0],
             "96cd4465a9644e31528eda3592aa35eb39a9527769ce1855beafc1b81055e75d",
@@ -210,7 +220,7 @@ fn check_key_derivation_slip_0010_test_vectors() {
             "d7d065f63a62624888500cdb4f88b6d59c2927fee9e6d0cdff9cad555884df6e",
             "039b6df4bece7b6c81e2adfeea4bcf5c8c8a6e40ea7ffa3cf6e8494c61a1fc82cc",
         ),
-        Slip10Test::new(
+        KeyDerivationTest::new(
             EccCurveType::P256,
             &[1],
             "f235b2bc5c04606ca9c30027a84f353acf4e4683edbd11f635d0dcc1cd106ea6",
@@ -220,7 +230,7 @@ fn check_key_derivation_slip_0010_test_vectors() {
             "974f9096ea6873a915910e82b29d7c338542ccde39d2064d1cc228f371542bbc",
             "03abe0ad54c97c1d654c1852dfdc32d6d3e487e75fa16f0fd6304b9ceae4220c64",
         ),
-        Slip10Test::new(
+        KeyDerivationTest::new(
             EccCurveType::P256,
             &[2],
             "5794e616eadaf33413aa309318a26ee0fd5163b70466de7a4512fd4b1a5c9e6a",
@@ -230,7 +240,7 @@ fn check_key_derivation_slip_0010_test_vectors() {
             "bb0a77ba01cc31d77205d51d08bd313b979a71ef4de9b062f8958297e746bd67",
             "020ee02e18967237cf62672983b253ee62fa4dd431f8243bfeccdf39dbe181387f",
         ),
-        Slip10Test::new(
+        KeyDerivationTest::new(
             EccCurveType::P256,
             &[33941],
             "e94c8ebe30c2250a14713212f6449b20f3329105ea15b652ca5bdfc68f6c65c2",
@@ -264,6 +274,82 @@ fn check_key_derivation_slip_0010_test_vectors() {
         assert_eq!(
             EccPoint::mul_by_g(&derived_private),
             test.expected_public_key
+        );
+    }
+}
+
+#[test]
+fn check_key_derivation_ed25519_test_vectors() {
+    let ed25519_derivation_tests = [
+        KeyDerivationTest::new(
+            EccCurveType::Ed25519,
+            &[1],
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "0e919f8f8b97adfea540c2813d4b196fd562396f00fd1b835f286b3ce18eac06",
+            "931387a550eb4524a7af29381b938df38e76aeecac08e2cfaae4f4ca99bb4881",
+            "d34e4e22d2c008ccc7e9bb9882fbc025a1e5516e3421d8e932dbc0be35f787a0",
+            "bb8a0837ae73aa0681dbc7499c041c2ad82a8b97ab5f7b4cc1d611db77d08e08",
+            "6f3086e738ab5417c6e02504464f208a763f0fba0c4d7ade40694773b6c2273c",
+        ),
+        KeyDerivationTest::new(
+            EccCurveType::Ed25519,
+            &[2],
+            "d34e4e22d2c008ccc7e9bb9882fbc025a1e5516e3421d8e932dbc0be35f787a0",
+            "bb8a0837ae73aa0681dbc7499c041c2ad82a8b97ab5f7b4cc1d611db77d08e08",
+            "6f3086e738ab5417c6e02504464f208a763f0fba0c4d7ade40694773b6c2273c",
+            "2562ad75c50708f8d20c442e48b3f8ee851570be256ef0a7060b9f755a837216",
+            "e2a9d6ac45d802074d92c4d480059a34d1d75bbceca6083f3bdb7e4c88bd2e0e",
+            "8efb675fcaf45c93e785ff535e380d9019c876a7c5faed264b911f97ef34d838",
+        ),
+        KeyDerivationTest::new(
+            EccCurveType::Ed25519,
+            &[3],
+            "2562ad75c50708f8d20c442e48b3f8ee851570be256ef0a7060b9f755a837216",
+            "e2a9d6ac45d802074d92c4d480059a34d1d75bbceca6083f3bdb7e4c88bd2e0e",
+            "8efb675fcaf45c93e785ff535e380d9019c876a7c5faed264b911f97ef34d838",
+            "3716acba4fd7d3e56ddc0b11b598684d10a851fd786dd1ff71d6d3600f5ec790",
+            "05776db9b2f9542990d1a4ec1fe9388450b5bf81509030d440a6675b86ab6e0c",
+            "0a1332435409769db6a478180590471d2cb706c6a1b2e84ff33763e0004623b4",
+        ),
+        KeyDerivationTest::new(
+            EccCurveType::Ed25519,
+            &[1, 2, 3],
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "0e919f8f8b97adfea540c2813d4b196fd562396f00fd1b835f286b3ce18eac06",
+            "931387a550eb4524a7af29381b938df38e76aeecac08e2cfaae4f4ca99bb4881",
+            "3716acba4fd7d3e56ddc0b11b598684d10a851fd786dd1ff71d6d3600f5ec790",
+            "05776db9b2f9542990d1a4ec1fe9388450b5bf81509030d440a6675b86ab6e0c",
+            "0a1332435409769db6a478180590471d2cb706c6a1b2e84ff33763e0004623b4",
+        ),
+    ];
+
+    for test in &ed25519_derivation_tests {
+        let path = DerivationPath::new(test.path.clone());
+
+        let (tweak, chain_code) = path
+            .derive_tweak_with_chain_code(&test.public_key, &test.chain_code)
+            .expect("Derivation failed");
+
+        assert_eq!(
+            hex::encode(chain_code),
+            hex::encode(test.expected_chain_code),
+            "Unexpected chain code",
+        );
+
+        let derived_private = test
+            .private_key
+            .add(&tweak)
+            .expect("Scalar addition failed");
+
+        assert_eq!(
+            derived_private, test.expected_private_key,
+            "Unexpected private key"
+        );
+
+        assert_eq!(
+            EccPoint::mul_by_g(&derived_private),
+            test.expected_public_key,
+            "Unexpected public key",
         );
     }
 }

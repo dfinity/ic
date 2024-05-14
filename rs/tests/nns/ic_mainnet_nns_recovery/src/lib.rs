@@ -495,15 +495,17 @@ fn setup_boundary_node(
         .get_snapshot()
         .unwrap();
 
-    let recovered_nns_node_id = recovered_nns_node.node_id;
+    let recovered_nns_node_ipv6 = recovered_nns_node.get_ip_addr();
     boundary_node.block_on_bash_script(&format!(r#"
         set -e
-        cp /etc/nginx/conf.d/002-mainnet-nginx.conf /tmp/
-        sed 's/set $subnet_id "$random_route_subnet_id";/set $subnet_id "{ORIGINAL_NNS_ID}";/' -i /tmp/002-mainnet-nginx.conf
-        sed 's/set $subnet_type "$random_route_subnet_type";/set $subnet_type "system";/' -i /tmp/002-mainnet-nginx.conf
-        sed 's/set $node_id "$random_route_node_id";/set $node_id "{recovered_nns_node_id}";/' -i /tmp/002-mainnet-nginx.conf
-        sudo mount --bind /tmp/002-mainnet-nginx.conf /etc/nginx/conf.d/002-mainnet-nginx.conf
-        sudo systemctl reload nginx
+        cp /etc/systemd/system/ic-boundary.service /tmp/
+        sed -i '/--nns-urls/d' /tmp/ic-boundary.service
+        sed -i '/--local-store-path/d' /tmp/ic-boundary.service
+        sed -i '/--nns-pub-key-pem/a\        --stub-replica [{recovered_nns_node_ipv6}]:8080 \\' /tmp/ic-boundary.service
+        sed -i '/--stub-replica/a\        --skip-replica-tls-verification \\' /tmp/ic-boundary.service
+        sudo mount --bind /tmp/ic-boundary.service /etc/systemd/system/ic-boundary.service
+        sudo systemctl daemon-reload
+        sudo systemctl restart ic-boundary
     "#)).unwrap_or_else(|e| {
         panic!("Could not reconfigure nginx on {BOUNDARY_NODE_NAME} to only route to the recovered NNS because {e:?}",)
     });

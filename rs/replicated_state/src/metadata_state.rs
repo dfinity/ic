@@ -2182,7 +2182,7 @@ impl BlockmakerMetricsTimeSeries {
                     .iter()
                     .map(|(node_id, stats)| NodeMetrics {
                         node_id: node_id.get(),
-                        num_blocks_total: stats.blocks_proposed_total,
+                        num_blocks_proposed_total: stats.blocks_proposed_total,
                         num_block_failures_total: stats.blocks_not_proposed_total,
                     })
                     .collect();

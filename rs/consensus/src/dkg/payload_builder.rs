@@ -1,11 +1,11 @@
 use super::{
-    utils, DkgMessageValidationError, TransientError, MAX_REMOTE_DKGS_PER_INTERVAL,
-    MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR, TAGS,
+    utils, MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS,
+    REMOTE_DKG_REPEATED_FAILURE_ERROR, TAGS,
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
-use ic_interfaces::dkg::DkgPool;
+use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_registry_client_helpers::{
@@ -16,11 +16,16 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{dkg, dkg::Summary, get_faults_tolerated, Block},
-    crypto::threshold_sig::ni_dkg::{
-        config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
-        NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
+    crypto::{
+        threshold_sig::ni_dkg::{
+            config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
+            errors::create_transcript_error::DkgCreateTranscriptError,
+            NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
+        },
+        CryptoError,
     },
     messages::CallbackId,
+    registry::RegistryClientError,
     Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId,
 };
 use std::{
@@ -28,6 +33,18 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
+
+/// Errors which could occur when creating a Dkg payload.
+#[allow(missing_docs)]
+#[derive(Debug)]
+pub enum PayloadCreationError {
+    CryptoError(CryptoError),
+    StateManagerError(StateManagerError),
+    DkgCreateTranscriptError(DkgCreateTranscriptError),
+    FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
+    FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
+    MissingDkgStartBlock,
+}
 
 /// Creates the DKG payload for a new block proposal with the given parent. If
 /// the new height corresponds to a new DKG start interval, creates a summary,
@@ -45,12 +62,12 @@ pub fn create_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
     max_dealings_per_block: usize,
-) -> Result<dkg::Payload, TransientError> {
+) -> Result<dkg::Payload, PayloadCreationError> {
     let height = parent.height.increment();
     // Get the last summary from the chain.
     let last_summary_block = pool_reader
         .dkg_summary_block(parent)
-        .ok_or(TransientError::MissingDkgStartBlock)?;
+        .ok_or(PayloadCreationError::MissingDkgStartBlock)?;
     let last_dkg_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
 
     if last_dkg_summary.get_next_start_height() == height {
@@ -140,7 +157,7 @@ pub(super) fn create_summary_payload(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
-) -> Result<dkg::Summary, TransientError> {
+) -> Result<dkg::Summary, PayloadCreationError> {
     let all_dealings = utils::get_dkg_dealings(pool_reader, parent);
     let mut transcripts_for_new_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
@@ -164,14 +181,14 @@ pub(super) fn create_summary_payload(
                     );
                 }
             }
-            Err(DkgMessageValidationError::Permanent(err)) => {
+            Err(err) if err.is_reproducible() => {
                 warn!(
                     logger,
                     "Failed to create transcript for dkg id {:?}: {:?}", dkg_id, err
                 );
             }
-            Err(DkgMessageValidationError::Transient(err)) => {
-                return Err(err);
+            Err(err) => {
+                return Err(PayloadCreationError::DkgCreateTranscriptError(err));
             }
         };
     }
@@ -248,12 +265,11 @@ fn create_transcript(
     config: &NiDkgConfig,
     all_dealings: &BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>>,
     _logger: &ReplicaLogger,
-) -> Result<NiDkgTranscript, DkgMessageValidationError> {
+) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
     let no_dealings = BTreeMap::new();
     let dealings = all_dealings.get(&config.dkg_id()).unwrap_or(&no_dealings);
-    let transcript =
-        ic_interfaces::crypto::NiDkgAlgorithm::create_transcript(crypto, config, dealings)?;
-    Ok(transcript)
+
+    ic_interfaces::crypto::NiDkgAlgorithm::create_transcript(crypto, config, dealings)
 }
 
 #[allow(clippy::type_complexity)]
@@ -274,11 +290,11 @@ fn compute_remote_dkg_data(
         Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
         BTreeMap<NiDkgTargetId, u32>,
     ),
-    TransientError,
+    PayloadCreationError,
 > {
     let state = state_manager
         .get_state_at(validation_context.certified_height)
-        .map_err(TransientError::StateManagerError)?;
+        .map_err(PayloadCreationError::StateManagerError)?;
     let (context_configs, errors, valid_target_ids) = process_subnet_call_context(
         subnet_id,
         height,
@@ -477,7 +493,7 @@ pub(crate) fn get_configs_for_local_transcripts(
     start_block_height: Height,
     reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
     registry_version: RegistryVersion,
-) -> Result<Vec<NiDkgConfig>, TransientError> {
+) -> Result<Vec<NiDkgConfig>, PayloadCreationError> {
     let mut new_configs = Vec::new();
     for tag in TAGS.iter() {
         let dkg_id = NiDkgId {
@@ -523,10 +539,10 @@ fn get_dkg_interval_length(
     registry_client: &dyn RegistryClient,
     version: RegistryVersion,
     subnet_id: SubnetId,
-) -> Result<Height, TransientError> {
+) -> Result<Height, PayloadCreationError> {
     registry_client
         .get_dkg_interval_length(subnet_id, version)
-        .map_err(TransientError::FailedToGetDkgIntervalSettingFromRegistry)?
+        .map_err(PayloadCreationError::FailedToGetDkgIntervalSettingFromRegistry)?
         .ok_or_else(|| {
             panic!(
                 "No subnet record found for registry version={:?} and subnet_id={:?}",
@@ -553,7 +569,7 @@ fn process_subnet_call_context(
         Vec<(NiDkgId, String)>,
         Vec<NiDkgTargetId>,
     ),
-    TransientError,
+    PayloadCreationError,
 > {
     let mut new_configs = Vec::new();
     let mut errors = Vec::new();
@@ -604,10 +620,10 @@ fn get_node_list(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
-) -> Result<BTreeSet<NodeId>, TransientError> {
+) -> Result<BTreeSet<NodeId>, PayloadCreationError> {
     Ok(registry_client
         .get_node_ids_on_subnet(subnet_id, registry_version)
-        .map_err(TransientError::FailedToGetSubnetMemberListFromRegistry)?
+        .map_err(PayloadCreationError::FailedToGetSubnetMemberListFromRegistry)?
         .unwrap_or_else(|| {
             panic!(
                 "No subnet record found for registry version={:?} and subnet_id={:?}",

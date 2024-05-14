@@ -396,10 +396,8 @@ pub struct SimpleCommitment {
 }
 
 fn evaluate_at(points: &[EccPoint], eval_point: NodeIndex) -> ThresholdEcdsaResult<EccPoint> {
-    let curve_type = points[0].curve_type();
-
-    let mut acc = EccPoint::identity(curve_type);
-    for pt in points.iter().rev() {
+    let mut acc = points[points.len() - 1].clone();
+    for pt in points.iter().rev().skip(1) {
         acc = acc.mul_by_node_index_vartime(eval_point)?;
         acc = acc.add_points(pt)?;
     }

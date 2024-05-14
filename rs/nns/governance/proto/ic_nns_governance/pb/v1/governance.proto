@@ -122,6 +122,9 @@ enum Topic {
   // Proposals related to the management of API Boundary Nodes
   TOPIC_API_BOUNDARY_NODE_MANAGEMENT = 15;
 
+  // Proposals related to subnet rental.
+  TOPIC_SUBNET_RENTAL = 16;
+
   // Superseded by SNS_COMMUNITY_FUND.
   reserved 11;
   reserved "TOPIC_SNS_DECENTRALIZATION_SALE";
@@ -644,6 +647,9 @@ enum NnsFunction {
   // Deploy a HostOS version to a given set of nodes. The proposal changes the HostOS version that
   // is used on the specified nodes.
   NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES = 51;
+
+  // The proposal requests a subnet rental.
+  NNS_FUNCTION_SUBNET_RENTAL_REQUEST = 52;
 }
 
 // Payload of a proposal that calls a function on another NNS

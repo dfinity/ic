@@ -35,7 +35,9 @@ use ic_nervous_system_root::change_canister::{
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::{
-    governance::{BitcoinNetwork, BitcoinSetConfigProposal},
+    governance::{
+        BitcoinNetwork, BitcoinSetConfigProposal, RentalConditionId, SubnetRentalRequest,
+    },
     init::TEST_NEURON_1_ID,
     pb::v1::{
         add_or_remove_node_provider::Change,
@@ -479,6 +481,8 @@ enum SubCommand {
     GetApiBoundaryNode(GetApiBoundaryNodeCmd),
     /// Retrieve all API Boundary Node Ids
     GetApiBoundaryNodes,
+    /// Submits a proposal to express the interest in renting a subnet.
+    ProposeToRentSubnet(ProposeToRentSubnetCmd),
 }
 
 /// Indicates whether a value should be added or removed.
@@ -2073,6 +2077,40 @@ impl ProposalPayload<CanisterIdRecord> for ProposeToUninstallCodeCmd {
     }
 }
 
+/// Sub-command to submit a subnet rental request proposal.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToRentSubnetCmd {
+    #[clap(long, required = true)]
+    /// One of the predefined rental conditions of the subnet rental canister.
+    rental_condition_id: RentalConditionId,
+    /// The user who will be whitelisted for the subnet if the subnet rental request results in a successful subnet rental agreement.
+    #[clap(long, required = true)]
+    user: PrincipalId,
+}
+
+impl ProposalTitle for ProposeToRentSubnetCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Subnet rental request with condition {:?}",
+                self.rental_condition_id
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<SubnetRentalRequest> for ProposeToRentSubnetCmd {
+    async fn payload(&self, _agent: &Agent) -> SubnetRentalRequest {
+        SubnetRentalRequest {
+            user: self.user,
+            rental_condition_id: self.rental_condition_id,
+        }
+    }
+}
+
 /// Sub-command to submit a proposal to add a new NNS canister.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
@@ -3473,6 +3511,12 @@ struct ProposeToSetBitcoinConfig {
 
     #[clap(long, help = "Sets/clears the watchdog canister principal.")]
     pub watchdog_canister: Option<Option<PrincipalId>>,
+
+    #[clap(
+        long,
+        help = "Whether or not to disable the API if canister isn't fully synced."
+    )]
+    pub disable_api_if_not_fully_synced: Option<bool>,
 }
 
 impl ProposalTitle for ProposeToSetBitcoinConfig {
@@ -3501,6 +3545,13 @@ impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
             watchdog_canister: self
                 .watchdog_canister
                 .map(|principal_id| principal_id.map(Principal::from)),
+            disable_api_if_not_fully_synced: self.disable_api_if_not_fully_synced.map(|flag| {
+                if flag {
+                    Flag::Enabled
+                } else {
+                    Flag::Disabled
+                }
+            }),
             ..Default::default()
         };
 
@@ -5689,6 +5740,21 @@ async fn main() {
                 serde_json::to_string_pretty(&records)
                     .expect("Failed to serialize the records to JSON")
             );
+        }
+        SubCommand::ProposeToRentSubnet(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::SubnetRentalRequest,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
         }
         // Since we're matching on the `SubCommand` type the second time, this match doesn't have
         // to be exhaustive, e.g., we've already verified that the subcommand is not obsolete.

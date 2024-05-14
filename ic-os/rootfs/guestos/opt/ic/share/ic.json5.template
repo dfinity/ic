@@ -365,7 +365,7 @@ table ip6 filter {\n\
     icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded, parameter-problem } accept\n\
     ct state invalid drop\n\
     ct state { established, related } accept\n\
-    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport { http, https } accept\n\
+    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport { 80, 443 } accept\n\
 \n\
     <<IPv4_TCP_RULES>>\n\
     <<IPv4_UDP_RULES>>\n\
@@ -381,8 +381,8 @@ table ip6 filter {\n\
     icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded, parameter-problem } accept\n\
     ct state invalid drop\n\
     ct state { established, related } accept\n\
-    ct state new tcp dport { domain, http, https, 8080 } accept\n\
-    ct state new udp dport { domain, ntp } accept\n\
+    ct state new tcp dport { 53, 80, 443, 8080 } accept\n\
+    ct state new udp dport { 53, 123 } accept\n\
   }\n\
 }\n\
 \n\
@@ -393,7 +393,7 @@ table ip6 filter {\n\
     icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\
-    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport { http, https } accept\n\
+    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport { 80, 443 } accept\n\
 \n\
     <<IPv6_TCP_RULES>>\n\
     <<IPv6_UDP_RULES>>\n\
@@ -409,8 +409,8 @@ table ip6 filter {\n\
     icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, echo-reply, nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
     ct state invalid drop\n\
     ct state { established, related } accept\n\
-    ct state new tcp dport { domain, http, https, 8080 } accept\n\
-    ct state new udp dport { domain, ntp } accept\n\
+    ct state new tcp dport { 53, 80, 443, 8080 } accept\n\
+    ct state new udp dport { 53, 123 } accept\n\
   }\n\
 }\n",
         ipv4_tcp_rule_template: "ip saddr {<<IPv4_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
@@ -428,7 +428,7 @@ table ip6 filter {\n\
                 "2602:fb2b:100::/48",
                 "2607:fb58:9005::/48",
             ],
-            ports: [22, 7070, 9091, 9092, 9100, 19531],
+            ports: [7070, 9091, 9100, 9324, 19531],
             action: 1,
             comment: "Default rule from template",
             direction: null,

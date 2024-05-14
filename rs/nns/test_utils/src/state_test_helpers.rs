@@ -22,7 +22,8 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
 use ic_nervous_system_common::{
-    ledger::compute_neuron_staking_subaccount, DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
+    ledger::{compute_neuron_staking_subaccount, compute_neuron_staking_subaccount_bytes},
+    DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -31,7 +32,8 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID,
     LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID,
-    SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET, SUBNET_RENTAL_CANISTER_ID,
+    SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_governance::pb::v1::{
     self as nns_governance_pb,
@@ -806,6 +808,34 @@ pub fn nns_governance_get_proposal_info(
     };
 
     Decode!(&result, Option<ProposalInfo>).unwrap().unwrap()
+}
+
+pub fn nns_send_icp_to_claim_or_refresh_neuron(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    amount: Tokens,
+    destination_neuron_nonce: u64,
+) {
+    icrc1_transfer(
+        state_machine,
+        LEDGER_CANISTER_ID,
+        sender,
+        TransferArg {
+            amount: amount.into(),
+            fee: Some(Nat::from(DEFAULT_TRANSFER_FEE)),
+            from_subaccount: None,
+            to: Account {
+                owner: PrincipalId::from(GOVERNANCE_CANISTER_ID).into(),
+                subaccount: Some(compute_neuron_staking_subaccount_bytes(
+                    sender,
+                    destination_neuron_nonce,
+                )),
+            },
+            created_at_time: None,
+            memo: None,
+        },
+    )
+    .unwrap();
 }
 
 #[must_use]
@@ -1875,4 +1905,31 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
             arg,
         )
         .expect("Installing cycles ledger failed");
+}
+
+pub fn setup_subnet_rental_canister_with_correct_canister_id(state_machine: &StateMachine) {
+    let canister_id = create_canister_id_at_position(
+        state_machine,
+        SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![ROOT_CANISTER_ID.get()])
+                .with_memory_allocation(memory_allocation_of(SUBNET_RENTAL_CANISTER_ID))
+                .build(),
+        ),
+    );
+    assert_eq!(canister_id, SUBNET_RENTAL_CANISTER_ID);
+
+    let subnet_rental_canister_wasm = std::fs::read(
+        std::env::var("SUBNET_RENTAL_CANISTER_WASM_PATH")
+            .expect("SUBNET_RENTAL_CANISTER_WASM_PATH not set"),
+    )
+    .unwrap();
+    let arg = Encode!(&()).unwrap();
+    state_machine
+        .install_existing_canister(SUBNET_RENTAL_CANISTER_ID, subnet_rental_canister_wasm, arg)
+        .expect("Installing subnet rental canister failed");
+
+    // Subnet Rental Canister needs cycles to call XRC
+    state_machine.add_cycles(canister_id, 100_000_000_000_000);
 }

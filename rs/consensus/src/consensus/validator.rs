@@ -49,7 +49,7 @@ use ic_types::{
 use std::{
     collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 /// The number of seconds spent in unvalidated pool, after which we start
@@ -72,7 +72,7 @@ enum TransientError {
     CryptoError(CryptoError),
     RegistryClientError(RegistryClientError),
     PayloadValidationError(PayloadTransientError),
-    DkgPayloadValidationError(dkg::TransientError),
+    DkgPayloadValidationError(dkg::TransientPayloadValidationError),
     EcdsaPayloadValidationError(ecdsa::TransientError),
     DkgSummaryNotFound(Height),
     RandomBeaconNotFound(Height),
@@ -98,7 +98,7 @@ enum PermanentError {
     SignerNotInThresholdCommittee(NodeId),
     SignerNotInMultiSigCommittee(NodeId),
     PayloadValidationError(PayloadPermanentError),
-    DkgPayloadValidationError(dkg::PermanentError),
+    DkgPayloadValidationError(dkg::PermanentPayloadValidationError),
     EcdsaPayloadValidationError(ecdsa::PermanentError),
     InsufficientSignatures,
     CannotVerifyBlockHeightZero,
@@ -588,10 +588,6 @@ pub struct Validator {
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
     time_source: Arc<dyn TimeSource>,
-    /// Earliest monotonic measurement available for the validator, used for fallback
-    /// during out-of-sync validation. Should ideally represent a time close to the
-    /// start of the replica process.
-    origin_instant: Instant,
 }
 
 impl Validator {
@@ -622,7 +618,6 @@ impl Validator {
             log,
             metrics,
             schedule: RoundRobin::default(),
-            origin_instant: time_source.get_instant(),
             time_source,
         }
     }
@@ -1036,7 +1031,7 @@ impl Validator {
         // further slowdown for other rounds.
         let parent_block_instant = pool_reader
             .get_block_instant(&proposal.parent)
-            .unwrap_or(self.origin_instant);
+            .unwrap_or(self.time_source.get_origin_instant());
         let duration_since_received_parent = self
             .time_source
             .get_instant()

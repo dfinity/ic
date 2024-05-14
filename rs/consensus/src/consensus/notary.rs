@@ -130,7 +130,7 @@ impl Notary {
             // back to the the monotonic round start time. We do this to safeguard
             // against a stalled relative clock.
             .or(pool
-                .get_round_start_instant(height)
+                .get_round_start_instant(height, self.time_source.get_origin_instant())
                 .filter(|&start| now_instant >= start + adjusted_notary_delay)
                 .map(|start| now_instant.saturating_duration_since(start)))
     }

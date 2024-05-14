@@ -53,7 +53,8 @@ const BUGGY_RING_V2_DER_PREFIX: [u8; 16] = [
 ];
 
 const BUGGY_RING_V2_DER_PK_PREFIX: [u8; 5] = [
-    161, 35, // An explicitly tagged with 35 bytes.
+    161,
+    35, // An explicitly tagged with 35 bytes. (This is the bug; this should be an implicit tag)
     3, 33, // A bitstring of 33 bytes follows.
     0,  // The bitstring (32 bytes) is divisible by 8
 ];
@@ -246,6 +247,97 @@ impl PrivateKey {
 
         Self::deserialize_pkcs8(&der.contents)
     }
+
+    /// Derive a private key from this private key using a derivation path
+    ///
+    /// This is the same derivation system used by the Internet Computer when
+    /// deriving subkeys for threshold Ed25519
+    ///
+    /// Note that this function returns a DerivedPrivateKey rather than Self,
+    /// and that DerivedPrivateKey can sign messages but cannot be serialized.
+    /// This is due to the definition of Ed25519 private keys, which is
+    /// incompatible with additive derivation.
+    ///
+    pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (DerivedPrivateKey, [u8; 32]) {
+        let chain_code = [0u8; 32];
+        self.derive_subkey_with_chain_code(derivation_path, &chain_code)
+    }
+
+    /// Derive a private key from this private key using a derivation path
+    /// and chain code
+    ///
+    /// This is the same derivation system used by the Internet Computer when
+    /// deriving subkeys for threshold Ed25519
+    ///
+    /// Note that this function returns a DerivedPrivateKey rather than Self,
+    /// and that DerivedPrivateKey can sign messages but cannot be serialized.
+    /// This is due to the definition of Ed25519 private keys, which is
+    /// incompatible with additive derivation.
+    ///
+    pub fn derive_subkey_with_chain_code(
+        &self,
+        derivation_path: &DerivationPath,
+        chain_code: &[u8; 32],
+    ) -> (DerivedPrivateKey, [u8; 32]) {
+        let sk_scalar = self.sk.to_scalar();
+        let pt = curve25519_dalek::EdwardsPoint::mul_base(&sk_scalar);
+
+        let (pt, sum, chain_code) = derivation_path.derive_offset(pt, chain_code);
+
+        let derived_scalar = sk_scalar + sum;
+
+        use sha2::Digest;
+
+        // Hash the new derived key and chain code with SHA-256 to derive
+        // the new hash prefix
+        let mut sha2 = sha2::Sha256::new();
+        sha2.update(derived_scalar.to_bytes());
+        sha2.update(chain_code);
+        let derived_hash_prefix = sha2.finalize().into();
+
+        let dpk = DerivedPrivateKey::new(derived_scalar, derived_hash_prefix, pt);
+        (dpk, chain_code)
+    }
+}
+
+/// A private key derived via the IC's derivation mechanism
+///
+/// Due to oddities in Ed25519's secret key format, a derived private
+/// key cannot be treated the same way as an ordinary private key.
+/// In particular, it cannot be serialized.
+pub struct DerivedPrivateKey {
+    // ExpandedSecretKey has a Drop impl which will zeroize the key
+    esk: ed25519_dalek::hazmat::ExpandedSecretKey,
+    vk: ed25519_dalek::VerifyingKey,
+}
+
+impl DerivedPrivateKey {
+    fn new(
+        scalar: curve25519_dalek::Scalar,
+        hash_prefix: [u8; 32],
+        pk: curve25519_dalek::edwards::EdwardsPoint,
+    ) -> Self {
+        let esk = ed25519_dalek::hazmat::ExpandedSecretKey {
+            scalar,
+            hash_prefix,
+        };
+
+        let vk = ed25519_dalek::VerifyingKey::from(pk);
+
+        Self { esk, vk }
+    }
+
+    /// Sign a message and return a signature
+    ///
+    /// This is the non-prehashed variant of Ed25519
+    pub fn sign_message(&self, msg: &[u8]) -> [u8; 64] {
+        ed25519_dalek::hazmat::raw_sign::<sha2::Sha512>(&self.esk, msg, &self.vk).to_bytes()
+    }
+
+    /// Return the public key associated with this private key
+    pub fn public_key(&self) -> PublicKey {
+        PublicKey::new_unchecked(self.vk)
+    }
 }
 
 /// An invalid key was encountered
@@ -284,6 +376,13 @@ pub enum SignatureError {
 impl PublicKey {
     /// The number of bytes in the raw public key
     pub const BYTES: usize = 32;
+
+    /// Internal constructor
+    ///
+    /// Does not check the point; assumes this is done previously
+    fn new_unchecked(pk: VerifyingKey) -> Self {
+        Self { pk }
+    }
 
     /// Internal constructor
     ///
@@ -455,5 +554,117 @@ impl PublicKey {
         let keys = keys.iter().map(|k| k.pk).collect::<Vec<_>>();
 
         verify_batch(messages, &signatures, &keys).map_err(|_| SignatureError::InvalidSignature)
+    }
+
+    /// Derive a public key from this public key using a derivation path
+    ///
+    /// This is the same derivation system used by the Internet Computer when
+    /// deriving subkeys for Ed25519
+    pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (Self, [u8; 32]) {
+        let chain_code = [0u8; 32];
+        self.derive_subkey_with_chain_code(derivation_path, &chain_code)
+    }
+
+    /// Derive a public key from this public key using a derivation path
+    /// and chain code
+    ///
+    /// This is the same derivation system used by the Internet Computer when
+    /// deriving subkeys for Ed25519
+    pub fn derive_subkey_with_chain_code(
+        &self,
+        derivation_path: &DerivationPath,
+        chain_code: &[u8; 32],
+    ) -> (Self, [u8; 32]) {
+        // TODO(CRP-2412) Use VerifyingKey::to_edwards once available
+        let pt = curve25519_dalek::edwards::CompressedEdwardsY(self.pk.to_bytes())
+            .decompress()
+            .unwrap();
+
+        let (pt, _sum, chain_code) = derivation_path.derive_offset(pt, chain_code);
+
+        let key = Self {
+            pk: VerifyingKey::from(pt),
+        };
+
+        (key, chain_code)
+    }
+}
+
+/// A component of a derivation path
+#[derive(Debug, Clone)]
+pub struct DerivationIndex(pub Vec<u8>);
+
+/// Derivation Path
+///
+/// A derivation path is simply a sequence of DerivationIndex
+#[derive(Debug, Clone)]
+pub struct DerivationPath {
+    path: Vec<DerivationIndex>,
+}
+
+impl DerivationPath {
+    /// Create a BIP32-style derivation path
+    pub fn new_bip32(bip32: &[u32]) -> Self {
+        let mut path = Vec::with_capacity(bip32.len());
+        for n in bip32 {
+            path.push(DerivationIndex(n.to_be_bytes().to_vec()));
+        }
+        Self::new(path)
+    }
+
+    /// Create a free-form derivation path
+    pub fn new(path: Vec<DerivationIndex>) -> Self {
+        Self { path }
+    }
+
+    /// Return the length of this path
+    pub fn len(&self) -> usize {
+        self.path.len()
+    }
+
+    /// Return if this path is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Return the components of the derivation path
+    pub fn path(&self) -> &[DerivationIndex] {
+        &self.path
+    }
+
+    fn derive_offset(
+        &self,
+        mut pt: curve25519_dalek::EdwardsPoint,
+        chain_code: &[u8; 32],
+    ) -> (
+        curve25519_dalek::EdwardsPoint,
+        curve25519_dalek::Scalar,
+        [u8; 32],
+    ) {
+        let mut chain_code = *chain_code;
+        let mut sum = curve25519_dalek::Scalar::ZERO;
+
+        for idx in self.path() {
+            let mut ikm = Vec::with_capacity(PublicKey::BYTES + idx.0.len());
+            ikm.extend_from_slice(&pt.compress().0);
+            ikm.extend_from_slice(&idx.0);
+
+            let hkdf = hkdf::Hkdf::<sha2::Sha512>::new(Some(&chain_code), &ikm);
+
+            let mut okm = [0u8; 96];
+            hkdf.expand(b"Ed25519", &mut okm)
+                .expect("96 is a valid length for HKDF-SHA-512");
+
+            let mut offset = [0u8; 64];
+            offset.copy_from_slice(&okm[0..64]);
+            offset.reverse(); // dalek uses little endian
+            let offset = curve25519_dalek::Scalar::from_bytes_mod_order_wide(&offset);
+
+            pt += curve25519_dalek::EdwardsPoint::mul_base(&offset);
+            sum += offset;
+            chain_code.copy_from_slice(&okm[64..]);
+        }
+
+        (pt, sum, chain_code)
     }
 }
