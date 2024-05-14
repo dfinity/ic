@@ -10,11 +10,13 @@ use actix_web::{
     get, post, web, App, HttpResponse, HttpServer,
 };
 
+use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
 use prometheus::{
     register_gauge, register_histogram, register_histogram_vec, register_int_counter,
     register_int_counter_vec, register_int_gauge, Encoder, Gauge, Histogram, HistogramVec,
     IntCounter, IntCounterVec, IntGauge,
 };
+use serde::{Deserialize, Serialize};
 use std::{
     io,
     mem::replace,
@@ -320,6 +322,19 @@ async fn rosetta_metrics() -> HttpResponse {
         .body(String::from_utf8(buffer).unwrap())
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+struct Status {
+    rosetta_blocks_mode: RosettaBlocksMode,
+}
+
+#[get("/status")]
+async fn status(req_handler: web::Data<RosettaRequestHandler>) -> HttpResponse {
+    let rosetta_blocks_mode = req_handler.rosetta_blocks_mode().await;
+    to_rosetta_response(Ok(Status {
+        rosetta_blocks_mode,
+    }))
+}
+
 enum ServerState {
     Unstarted(Server),
     Started(tokio::task::JoinHandle<()>),
@@ -375,7 +390,8 @@ impl RosettaApiServer {
                 .service(network_list)
                 .service(network_options)
                 .service(network_status)
-                .service(search_transactions);
+                .service(search_transactions)
+                .service(status);
             if expose_metrics {
                 app.service(rosetta_metrics)
             } else {

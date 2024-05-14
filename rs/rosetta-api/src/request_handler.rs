@@ -16,6 +16,7 @@ use crate::transaction_id::TransactionIdentifier;
 use crate::{convert, models, API_VERSION, NODE_VERSION};
 use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
+use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
 use rosetta_core::objects::ObjectMap;
@@ -630,6 +631,10 @@ impl RosettaRequestHandler {
             created_timestamp_seconds: res.created_timestamp_seconds,
             stake_e8s: res.stake_e8s,
         })
+    }
+
+    pub async fn rosetta_blocks_mode(&self) -> RosettaBlocksMode {
+        self.ledger.rosetta_blocks_mode().await
     }
 }
 

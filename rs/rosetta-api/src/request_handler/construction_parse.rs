@@ -627,6 +627,7 @@ mod tests {
             None,
             true,
             None,
+            false,
         ))
         .unwrap();
         let handler = RosettaRequestHandler::new("Internet Computer".into(), ledger_client.into());

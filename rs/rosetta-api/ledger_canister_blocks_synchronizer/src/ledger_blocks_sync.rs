@@ -69,10 +69,11 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         store_max_blocks: Option<u64>,
         verification_info: Option<VerificationInfo>,
         metrics: Box<dyn LedgerBlocksSynchronizerMetrics + Send + Sync>,
+        enable_rosetta_blocks: bool,
     ) -> Result<LedgerBlocksSynchronizer<B>, Error> {
         let mut blocks = match store_location {
-            Some(loc) => Blocks::new_persistent(loc)?,
-            None => Blocks::new_in_memory()?,
+            Some(loc) => Blocks::new_persistent(loc, enable_rosetta_blocks)?,
+            None => Blocks::new_in_memory(enable_rosetta_blocks)?,
         };
 
         if let Some(blocks_access) = &blocks_access {
