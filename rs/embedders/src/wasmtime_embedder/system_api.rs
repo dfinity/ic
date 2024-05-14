@@ -11,7 +11,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_types::{Cycles, NumBytes, NumInstructions, NumPages, Time};
+use ic_types::{Cycles, NumBytes, NumInstructions, NumOsPages, Time};
 use ic_wasm_types::WasmEngineError;
 
 use wasmtime::{AsContextMut, Caller, Global, Linker, Val};
@@ -139,7 +139,7 @@ fn charge_for_stable_write(
     mut overhead: NumInstructions,
     offset: u64,
     size: u64,
-    stable_memory_dirty_page_limit: NumPages,
+    stable_memory_dirty_page_limit: NumOsPages,
 ) -> HypervisorResult<()> {
     let system_api = caller.data().system_api()?;
     let (new_stable_dirty_pages, dirty_page_cost) =
@@ -165,7 +165,7 @@ fn charge_for_stable_write(
             let stable_dirty_pages = &mut caller
                 .data_mut()
                 .num_stable_dirty_pages_from_non_native_writes;
-            let total_pages = NumPages::from(
+            let total_pages = NumOsPages::from(
                 stable_dirty_pages
                     .get()
                     .saturating_add(new_stable_dirty_pages.get()),
@@ -298,8 +298,8 @@ fn ic0_performance_counter_helper(
 pub(crate) fn syscalls(
     linker: &mut Linker<StoreData>,
     feature_flags: FeatureFlags,
-    stable_memory_dirty_page_limit: NumPages,
-    stable_memory_access_page_limit: NumPages,
+    stable_memory_dirty_page_limit: NumOsPages,
+    stable_memory_access_page_limit: NumOsPages,
     main_memory_type: WasmMemoryType,
 ) {
     fn with_system_api<T>(

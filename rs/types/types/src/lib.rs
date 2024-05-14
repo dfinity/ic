@@ -94,8 +94,8 @@ pub use crate::time::Time;
 pub use funds::*;
 pub use ic_base_types::{
     subnet_id_into_protobuf, subnet_id_try_from_protobuf, CanisterId, CanisterIdBlobParseError,
-    NodeId, NodeTag, NumBytes, PrincipalId, PrincipalIdBlobParseError, PrincipalIdParseError,
-    RegistryVersion, SnapshotId, SubnetId,
+    NodeId, NodeTag, NumBytes, NumOsPages, PrincipalId, PrincipalIdBlobParseError,
+    PrincipalIdParseError, RegistryVersion, SnapshotId, SubnetId,
 };
 pub use ic_crypto_internal_types::NodeIndex;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
@@ -197,10 +197,6 @@ pub type CryptoHashOfPartialState = crypto::CryptoHashOf<CanonicalPartialStateTa
 pub enum CanonicalStateTag {}
 /// A cryptographic hash of a full canonical replicated state at some height.
 pub type CryptoHashOfState = crypto::CryptoHashOf<CanonicalStateTag>;
-
-pub enum NumPagesTag {}
-/// A number of OS-sized pages.
-pub type NumPages = AmountOf<NumPagesTag, u64>;
 
 /// `AccumulatedPriority` is a part of the SchedulerState. It is the value by
 /// which we prioritize canisters for execution. It is reset to 0 in the round

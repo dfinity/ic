@@ -23,7 +23,7 @@ pub use storage::{
 };
 use storage::{OverlayFile, OverlayVersion, Storage};
 
-use ic_types::{Height, NumPages, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_types::{Height, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES};
 use int_map::{Bounds, IntMap};
 use libc::off_t;
 use page_allocator::Page;
@@ -977,9 +977,9 @@ impl Buffer {
     ///
     /// This function assumes the write doesn't extend beyond the maximum stable
     /// memory size (in which case the memory would fail anyway).
-    pub fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumPages {
+    pub fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumOsPages {
         if size == 0 {
-            return NumPages::from(0);
+            return NumOsPages::from(0);
         }
         let first_page = offset / (PAGE_SIZE as u64);
         let last_page = offset
@@ -989,7 +989,7 @@ impl Buffer {
         let dirty_page_count = (first_page..=last_page)
             .filter(|p| !self.dirty_pages.contains_key(&PageIndex::new(*p)))
             .count();
-        NumPages::new(dirty_page_count as u64)
+        NumOsPages::new(dirty_page_count as u64)
     }
 
     pub fn dirty_pages(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> {

@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use ic_protobuf::{proxy::ProxyDecodeError, state::canister_state_bits::v1 as pb};
 use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
-use ic_types::{NumBytes, NumPages};
+use ic_types::{NumBytes, NumOsPages};
 
 use crate::{page_map::PageAllocatorFileDescriptor, PageMap};
 
@@ -159,7 +159,7 @@ impl WasmChunkStore {
             &temp_last_page,
         ));
 
-        self.metadata.size += NumPages::from(PAGES_PER_CHUNK);
+        self.metadata.size += NumOsPages::from(PAGES_PER_CHUNK);
         self.data.update(&pages_to_insert);
         self.metadata.chunks.insert(
             hash,
@@ -192,7 +192,7 @@ pub struct WasmChunkStoreMetadata {
     /// Maps each chunk to its chunk index and length.
     chunks: BTreeMap<WasmChunkHash, ChunkInfo>,
     /// Total size of the data in the chunk store.
-    size: NumPages,
+    size: NumOsPages,
 }
 
 // In order to make the metadata cheap to clone, we should ensure that the size

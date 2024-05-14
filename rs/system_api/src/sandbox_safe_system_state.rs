@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{routing::ResolveDestinationError, ApiType};
-use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
 use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
@@ -24,7 +24,7 @@ use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, Request, RequestMetadata, NO_DEADLINE},
     methods::Callback,
     time::CoarseTime,
-    CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, NumPages, Time,
+    CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
 };
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
@@ -1015,7 +1015,7 @@ impl SandboxSafeSystemState {
     }
 
     /// Calculate the cost for newly created dirty pages.
-    pub fn dirty_page_cost(&self, dirty_pages: NumPages) -> HypervisorResult<NumInstructions> {
+    pub fn dirty_page_cost(&self, dirty_pages: NumOsPages) -> HypervisorResult<NumInstructions> {
         let (inst, overflow) = dirty_pages
             .get()
             .overflowing_mul(self.dirty_page_overhead.get());

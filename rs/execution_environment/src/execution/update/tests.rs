@@ -16,7 +16,7 @@ use ic_replicated_state::{
 use ic_state_machine_tests::{Cycles, IngressStatus, WasmResult};
 use ic_sys::PAGE_SIZE;
 use ic_types::messages::{CallbackId, RequestMetadata};
-use ic_types::{NumInstructions, NumPages};
+use ic_types::{NumInstructions, NumOsPages};
 use ic_universal_canister::{call_args, wasm};
 
 use ic_test_utilities_execution_environment::{
@@ -51,7 +51,7 @@ fn wat_writing_to_each_stable_memory_page(memory_amount: u64) -> String {
 #[test]
 fn can_write_to_each_page_in_stable_memory() {
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(NumPages::new(10))
+        .with_stable_memory_dirty_page_limit(NumOsPages::new(10))
         .build();
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64);
     let canister_id = test.canister_from_wat(wat).unwrap();
@@ -311,7 +311,7 @@ fn dirty_pages_are_free_on_system_subnet() {
 #[test]
 fn hitting_page_delta_limit_fails_message() {
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(NumPages::from(10))
+        .with_stable_memory_dirty_page_limit(NumOsPages::from(10))
         .build();
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
     let canister_id = test.canister_from_wat(wat).unwrap();
@@ -327,7 +327,7 @@ fn hitting_page_delta_limit_fails_message() {
 #[test]
 fn hitting_page_delta_limit_fails_message_non_native_stable() {
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(NumPages::from(10))
+        .with_stable_memory_dirty_page_limit(NumOsPages::from(10))
         .with_non_native_stable()
         .build();
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
