@@ -2998,9 +2998,15 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
-                self.sandbox_safe_system_state
-                    .mint_cycles(Cycles::from(amount))?;
-                Ok(amount)
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    // Non-replicated mode means we are handling a composite query.
+                    // Access to this syscall not permitted.
+                    Err(self.error_for("ic0_mint_cycles"))
+                } else {
+                    self.sandbox_safe_system_state
+                        .mint_cycles(Cycles::from(amount))?;
+                    Ok(amount)
+                }
             }
         };
         trace_syscall!(self, MintCycles, result, amount);
@@ -3231,13 +3237,19 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
-                let cycles = self.sandbox_safe_system_state.cycles_burn128(
-                    amount,
-                    self.memory_usage.current_usage,
-                    self.memory_usage.current_message_usage,
-                );
-                copy_cycles_to_heap(cycles, dst, heap, method_name)?;
-                Ok(())
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    // Non-replicated mode means we are handling a composite query.
+                    // Access to this syscall not permitted.
+                    Err(self.error_for(method_name))
+                } else {
+                    let cycles = self.sandbox_safe_system_state.cycles_burn128(
+                        amount,
+                        self.memory_usage.current_usage,
+                        self.memory_usage.current_message_usage,
+                    );
+                    copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+                    Ok(())
+                }
             }
         };
         trace_syscall!(self, CyclesBurn128, result, amount);
