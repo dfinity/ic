@@ -7246,3 +7246,21 @@ fn wasm_memory_limit_is_enforced_in_init() {
     let err = test.install_canister(canister_id, wasm).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
 }
+
+#[test]
+fn wasm_memory_limit_cannot_exceed_256_tb() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    // Setting the limit to 2^48 works.
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1 << 4))
+        .unwrap();
+
+    // Setting the limit above 2^48 fails.
+    let err = test
+        .canister_update_wasm_memory_limit(canister_id, NumBytes::new((1 << 48) + 1))
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+}
