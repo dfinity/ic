@@ -670,6 +670,31 @@ def boundary_node_icos_build(
         tags = ["manual"],
     )
 
+    # Helpful tool to print a hash of all input rootfs files
+    tree_hash(
+        name = "root-files-hash",
+        src = boundary_rootfs_files,
+        tags = ["manual"],
+    )
+
+    native.genrule(
+        name = "echo-root-files-hash",
+        srcs = [
+            ":root-files-hash",
+        ],
+        outs = ["root-files-hash-script"],
+        cmd = """
+        HASH="$(location :root-files-hash)"
+        cat <<EOF > $@
+#!/usr/bin/env bash
+set -euo pipefail
+cat $$HASH
+EOF
+        """,
+        executable = True,
+        tags = ["manual"],
+    )
+
     ext4_image(
         name = "partition-config.tzst",
         partition_size = "100M",
