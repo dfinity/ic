@@ -999,11 +999,11 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
 }
 
 // #[test]
-// fn test_memory_usage_stats_best_effort() {
+// fn test_message_stats_best_effort() {
 //     let mut pool = MessagePool::default();
 
 //     // No memoory used by messages.
-//     assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
+//     assert_eq!(MessageStats::default(), pool.message_stats);
 
 //     // Insert a bunch of best-effort messages.
 //     let request = request(time(10));
@@ -1017,15 +1017,15 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
 //     let _ = pool.insert_outbound_response(response.into());
 
 //     // The guaranteed memory usage is zero.
-//     assert_eq!(0, pool.memory_usage_stats.memory_usage());
+//     assert_eq!(0, pool.message_stats.memory_usage());
 //     // Best-effort memory usage and total byte size account for all messages.
 //     assert_eq!(
 //         2 * (request_size_bytes + response_size_bytes),
-//         pool.memory_usage_stats.best_effort_message_bytes
+//         pool.message_stats.best_effort_message_bytes
 //     );
 //     assert_eq!(
 //         2 * (request_size_bytes + response_size_bytes),
-//         pool.memory_usage_stats.size_bytes
+//         pool.message_stats.size_bytes
 //     );
 
 //     // Take one request and one response.
@@ -1033,15 +1033,15 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
 //     assert!(pool.take(outbound_request_id).is_some());
 
 //     // The guaranteed memory usage is still zero.
-//     assert_eq!(0, pool.memory_usage_stats.memory_usage());
+//     assert_eq!(0, pool.message_stats.memory_usage());
 //     // Best-effort memory usage and total byte size are halved.
 //     assert_eq!(
 //         request_size_bytes + response_size_bytes,
-//         pool.memory_usage_stats.best_effort_message_bytes
+//         pool.message_stats.best_effort_message_bytes
 //     );
 //     assert_eq!(
 //         request_size_bytes + response_size_bytes,
-//         pool.memory_usage_stats.size_bytes
+//         pool.message_stats.size_bytes
 //     );
 
 //     // Shed one of the remaining messages and time out the other.
@@ -1049,15 +1049,15 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
 //     assert_eq!(1, pool.expire_messages(time(u32::MAX).into()).len());
 
 //     // Again no message memoory usage.
-//     assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
+//     assert_eq!(MessageStats::default(), pool.message_stats);
 // }
 
 // #[test]
-// fn test_memory_usage_stats_guaranteed_response() {
+// fn test_message_stats_guaranteed_response() {
 //     let mut pool = MessagePool::default();
 
 //     // No memoory used by messages.
-//     assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
+//     assert_eq!(MessageStats::default(), pool.message_stats);
 
 //     // Insert a bunch of guaranteed response messages.
 //     let request = request(NO_DEADLINE);
@@ -1073,14 +1073,14 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
 //     // The guaranteed memory usage covers the two responses.
 //     assert_eq!(
 //         2 * response_size_bytes,
-//         pool.memory_usage_stats.memory_usage()
+//         pool.message_stats.memory_usage()
 //     );
 //     // Best-effort memory usage is zero.
-//     assert_eq!(0, pool.memory_usage_stats.best_effort_message_bytes);
+//     assert_eq!(0, pool.message_stats.best_effort_message_bytes);
 //     // Total byte size accounts for all messages.
 //     assert_eq!(
 //         2 * (request_size_bytes + response_size_bytes),
-//         pool.memory_usage_stats.size_bytes
+//         pool.message_stats.size_bytes
 //     );
 
 //     // Take one request and one response.
@@ -1088,13 +1088,13 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
 //     assert!(pool.take(outbound_response_id).is_some());
 
 //     // The guaranteed memory usage covers the remaining response.
-//     assert_eq!(response_size_bytes, pool.memory_usage_stats.memory_usage());
+//     assert_eq!(response_size_bytes, pool.message_stats.memory_usage());
 //     // Best-effort memory usage is still zero.
-//     assert_eq!(0, pool.memory_usage_stats.best_effort_message_bytes);
+//     assert_eq!(0, pool.message_stats.best_effort_message_bytes);
 //     // Total byte size accounts for the two remaining messages.
 //     assert_eq!(
 //         request_size_bytes + response_size_bytes,
-//         pool.memory_usage_stats.size_bytes
+//         pool.message_stats.size_bytes
 //     );
 
 //     // Time out the one message that has an (implicit) deadline (the outgoing
@@ -1103,11 +1103,11 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
 //     assert!(pool.take(inbound_response_id).is_some());
 
 //     // Again no message memoory usage.
-//     assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
+//     assert_eq!(MessageStats::default(), pool.message_stats);
 // }
 
 #[test]
-fn test_memory_usage_stats_oversized_requests() {
+fn test_message_stats_oversized_requests() {
     let mut queues = CanisterQueues::default();
     let iq_size: usize = CanisterQueue::empty_size_bytes();
 
@@ -1115,8 +1115,8 @@ fn test_memory_usage_stats_oversized_requests() {
     assert_eq!(OutputQueuesStats::default(), queues.output_queues_stats);
     assert_eq!(MemoryUsageStats::default(), queues.memory_usage_stats);
     assert_eq!(
-        &message_pool::MemoryUsageStats::default(),
-        queues.pool.memory_usage_stats()
+        &message_pool::MessageStats::default(),
+        queues.pool.message_stats()
     );
 
     // Insert one best-effort and one guaranteed oversized request each into an
@@ -1172,13 +1172,19 @@ fn test_memory_usage_stats_oversized_requests() {
     };
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
     // Two best-effort requests, two oversized guaranteed requests, 4 requests in all.
-    let expected_pool_mu_stats = message_pool::MemoryUsageStats {
+    let expected_pool_mu_stats = message_pool::MessageStats {
         best_effort_message_bytes: 2 * best_effort_size_bytes,
         guaranteed_responses_size_bytes: 0,
         oversized_guaranteed_requests_extra_bytes: 2 * guaranteed_extra_bytes,
         size_bytes: 2 * (best_effort_size_bytes + guaranteed_size_bytes),
+        inbound_message_count: 2,
+        inbound_response_count: 0,
+        inbound_size_bytes: best_effort_size_bytes + guaranteed_size_bytes,
+        inbound_guaranteed_request_count: 1,
+        inbound_guaranteed_response_count: 0,
+        outbound_message_count: 2,
     };
-    assert_eq!(&expected_pool_mu_stats, queues.pool.memory_usage_stats());
+    assert_eq!(&expected_pool_mu_stats, queues.pool.message_stats());
 
     // Pop the incoming best-effort request and the incoming guaranteed request.
     assert_eq!(
@@ -1213,13 +1219,19 @@ fn test_memory_usage_stats_oversized_requests() {
     };
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
     // One best-effort request, one oversized guaranteed request, 2 requests in all.
-    let expected_pool_mu_stats = message_pool::MemoryUsageStats {
+    let expected_pool_mu_stats = message_pool::MessageStats {
         best_effort_message_bytes: best_effort_size_bytes,
         guaranteed_responses_size_bytes: 0,
         oversized_guaranteed_requests_extra_bytes: guaranteed_extra_bytes,
         size_bytes: best_effort_size_bytes + guaranteed_size_bytes,
+        inbound_message_count: 0,
+        inbound_response_count: 0,
+        inbound_size_bytes: 0,
+        inbound_guaranteed_request_count: 0,
+        inbound_guaranteed_response_count: 0,
+        outbound_message_count: 2,
     };
-    assert_eq!(&expected_pool_mu_stats, queues.pool.memory_usage_stats());
+    assert_eq!(&expected_pool_mu_stats, queues.pool.message_stats());
 
     // FIXME: Drop everything after this point except in one of the 3 tests.
 
@@ -1255,8 +1267,8 @@ fn test_memory_usage_stats_oversized_requests() {
         queues.memory_usage_stats
     );
     assert_eq!(
-        &message_pool::MemoryUsageStats::default(),
-        queues.pool.memory_usage_stats()
+        &message_pool::MessageStats::default(),
+        queues.pool.message_stats()
     );
 }
 
@@ -1543,10 +1555,10 @@ fn test_stats_induct_message_to_self() {
     let mut queues = CanisterQueues::default();
     let mut expected_iq_stats = InputQueuesStats::default();
     let mut expected_mu_stats = MemoryUsageStats::default();
-    let expected_pool_mu_stats = message_pool::MemoryUsageStats::default();
+    let expected_pool_mu_stats = message_pool::MessageStats::default();
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
-    assert_eq!(&expected_pool_mu_stats, queues.pool.memory_usage_stats());
+    assert_eq!(&expected_pool_mu_stats, queues.pool.message_stats());
 
     // No messages to induct.
     assert!(queues.induct_message_to_self(this).is_err());

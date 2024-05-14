@@ -131,8 +131,8 @@ pub struct MessagePool {
     /// Pool contents.
     messages: BTreeMap<MessageId, RequestOrResponse>,
 
-    /// Running memory usage stats for the pool.
-    memory_usage_stats: MemoryUsageStats,
+    /// Running message stats for the pool.
+    message_stats: MessageStats,
 
     /// Deadline priority queue, earliest deadlines first.
     ///
@@ -239,12 +239,12 @@ impl MessagePool {
         let size_bytes = msg.count_bytes();
         let is_best_effort = msg.is_best_effort();
 
-        // Update memory usage stats.
-        self.memory_usage_stats += MemoryUsageStats::stats_delta(&msg);
+        // Update message stats.
+        self.message_stats += MessageStats::stats_delta(&msg, context);
 
         // Insert.
         assert!(self.messages.insert(id, msg).is_none());
-        debug_assert_eq!(self.calculate_memory_usage_stats(), self.memory_usage_stats);
+        debug_assert_eq!(self.calculate_message_stats(), self.message_stats);
 
         // Record in deadline queue iff a deadline was provided.
         if deadline != NO_DEADLINE {
@@ -281,14 +281,17 @@ impl MessagePool {
         }
 
         let id = placeholder.0;
+        debug_assert!(Context::Inbound == id.context());
+        debug_assert!(Class::BestEffort == id.class());
+        debug_assert!(Kind::Response == id.kind());
         let size_bytes = msg.count_bytes();
 
-        // Update memory usage stats.
-        self.memory_usage_stats += MemoryUsageStats::stats_delta(&msg);
+        // Update message stats.
+        self.message_stats += MessageStats::stats_delta(&msg, id.context());
 
         // Insert. Cannot lead to a conflict because the placeholder is consumed on use.
         assert!(self.messages.insert(id, msg).is_none());
-        debug_assert_eq!(self.calculate_memory_usage_stats(), self.memory_usage_stats);
+        debug_assert_eq!(self.calculate_message_stats(), self.message_stats);
 
         // Record in load shedding queue only.
         self.size_queue.push((size_bytes, id));
@@ -330,8 +333,8 @@ impl MessagePool {
     pub(crate) fn take(&mut self, id: MessageId) -> Option<RequestOrResponse> {
         let msg = self.messages.remove(&id)?;
 
-        self.memory_usage_stats -= MemoryUsageStats::stats_delta(&msg);
-        debug_assert_eq!(self.calculate_memory_usage_stats(), self.memory_usage_stats);
+        self.message_stats -= MessageStats::stats_delta(&msg, id.context());
+        debug_assert_eq!(self.calculate_message_stats(), self.message_stats);
 
         self.maybe_trim_queues();
 
@@ -401,9 +404,9 @@ impl MessagePool {
         self.messages.len()
     }
 
-    /// Returns a reference to the pool's memory usage stats.
-    pub(crate) fn memory_usage_stats(&self) -> &MemoryUsageStats {
-        &self.memory_usage_stats
+    /// Returns a reference to the pool's message stats.
+    pub(crate) fn message_stats(&self) -> &MessageStats {
+        &self.message_stats
     }
 
     /// Prunes stale entries from the priority queues if they make up more than half
@@ -422,14 +425,14 @@ impl MessagePool {
         }
     }
 
-    /// Computes memory usage stats from scratch. Used when deserializing and in
+    /// Computes message stats from scratch. Used when deserializing and in
     /// `debug_assert!()` checks.
     ///
     /// Time complexity: `O(n)`.
-    fn calculate_memory_usage_stats(&self) -> MemoryUsageStats {
-        let mut stats = MemoryUsageStats::default();
-        for msg in self.messages.values() {
-            stats += MemoryUsageStats::stats_delta(msg);
+    fn calculate_message_stats(&self) -> MessageStats {
+        let mut stats = MessageStats::default();
+        for (id, msg) in self.messages.iter() {
+            stats += MessageStats::stats_delta(msg, id.context());
         }
         stats
     }
@@ -439,45 +442,38 @@ impl PartialEq for MessagePool {
     fn eq(&self, other: &Self) -> bool {
         let Self {
             messages,
-            memory_usage_stats,
+            message_stats,
             deadline_queue,
             size_queue,
             next_message_id_generator,
         } = self;
-        let Self {
-            messages: other_messages,
-            memory_usage_stats: other_memory_usage_stats,
-            deadline_queue: other_deadline_queue,
-            size_queue: other_size_queue,
-            next_message_id_generator: other_next_message_id_generator,
-        } = other;
 
-        messages == other_messages
-            && memory_usage_stats == other_memory_usage_stats
-            && deadline_queue.len() == other_deadline_queue.len()
+        *messages == other.messages
+            && *message_stats == other.message_stats
+            && deadline_queue.len() == other.deadline_queue.len()
             && deadline_queue
                 .iter()
-                .zip(other_deadline_queue.iter())
+                .zip(other.deadline_queue.iter())
                 .all(|(entry, other_entry)| entry == other_entry)
-            && size_queue.len() == other_size_queue.len()
+            && size_queue.len() == other.size_queue.len()
             && size_queue
                 .iter()
-                .zip(other_size_queue.iter())
+                .zip(other.size_queue.iter())
                 .all(|(entry, other_entry)| entry == other_entry)
-            && next_message_id_generator == other_next_message_id_generator
+            && *next_message_id_generator == other.next_message_id_generator
     }
 }
 impl Eq for MessagePool {}
 
-/// Running memory utilization stats for all messages in a `MessagePool`.
+/// Running stats for all messages in a `MessagePool`.
 ///
-/// Memory reservations for guaranteed responses and memory usage of output
-/// responses in streams are tracked by `CanisterQueues`.
+/// Slot reservations and memory reservations for guaranteed responses, being
+/// queue metrics, are tracked separately by `CanisterQueues`.
 ///
 /// All operations (computing stats deltas and retrieving the stats) are
 /// constant time.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(super) struct MemoryUsageStats {
+pub(super) struct MessageStats {
     /// Sum total of the byte size of all best-effort messages in the pool.
     pub(super) best_effort_message_bytes: usize,
 
@@ -491,9 +487,35 @@ pub(super) struct MemoryUsageStats {
 
     /// Total size of all messages in the pool, in bytes.
     pub(super) size_bytes: usize,
+
+    /// Count of messages in input queues.
+    pub(super) inbound_message_count: usize,
+
+    /// Count of responses in input queues.
+    pub(super) inbound_response_count: usize,
+
+    /// Byte size of input queue messages.
+    pub(super) inbound_size_bytes: usize,
+
+    /// Number of guaranteed response requests in input queues.
+    ///
+    /// At the end of each round, this plus the number of not yet responded
+    /// guaranteed response call contexts must be equal to the number of guaranteed
+    /// response memory reservations for inbound calls.
+    pub(super) inbound_guaranteed_request_count: usize,
+
+    /// Number of guaranteed responses in input queues.
+    ///
+    /// At the end of each round, the number of guaranteed response callbacks minus
+    /// this must be equal to the number of guaranteed response memory reservations
+    /// for outbound calls.
+    pub(super) inbound_guaranteed_response_count: usize,
+
+    /// Count of messages in output queues.
+    pub(super) outbound_message_count: usize,
 }
 
-impl MemoryUsageStats {
+impl MessageStats {
     /// Returns the memory usage of the guaranteed response messages in the pool,
     /// excluding memory reservations for guaranteed responses.
     ///
@@ -504,88 +526,205 @@ impl MemoryUsageStats {
 
     /// Calculates the change in stats caused by pushing (+) or popping (-) the
     /// given message.
-    fn stats_delta(msg: &RequestOrResponse) -> MemoryUsageStats {
+    fn stats_delta(msg: &RequestOrResponse, context: Context) -> MessageStats {
         match msg {
-            RequestOrResponse::Request(req) => Self::request_stats_delta(req),
-            RequestOrResponse::Response(rep) => Self::response_stats_delta(rep),
+            RequestOrResponse::Request(req) => Self::request_stats_delta(req, context),
+            RequestOrResponse::Response(rep) => Self::response_stats_delta(rep, context),
         }
     }
 
     /// Calculates the change in stats caused by pushing (+) or popping (-) the
-    /// given request.
-    fn request_stats_delta(req: &Request) -> MemoryUsageStats {
+    /// given request in the given context.
+    fn request_stats_delta(req: &Request, context: Context) -> MessageStats {
+        use Class::*;
+        use Context::*;
+
         let size_bytes = req.count_bytes();
-        if req.deadline == NO_DEADLINE {
-            // Adjust the byte size; and the extra bytes for oversized guaranteed requests,
-            // if necessary.
-            MemoryUsageStats {
+        let class = if req.deadline == NO_DEADLINE {
+            Class::GuaranteedResponse
+        } else {
+            Class::BestEffort
+        };
+
+        // Not a response, these stats are all unaffected.
+        let guaranteed_responses_size_bytes = 0;
+        let inbound_response_count = 0;
+        let inbound_guaranteed_response_count = 0;
+
+        match (context, class) {
+            (Inbound, GuaranteedResponse) => MessageStats {
                 best_effort_message_bytes: 0,
-                guaranteed_responses_size_bytes: 0,
+                guaranteed_responses_size_bytes,
                 oversized_guaranteed_requests_extra_bytes: size_bytes
                     .saturating_sub(MAX_RESPONSE_COUNT_BYTES),
                 size_bytes,
-            }
-        } else {
-            // Adjust best-effort message byte size and total byte size.
-            MemoryUsageStats {
+                inbound_message_count: 1,
+                inbound_response_count,
+                inbound_size_bytes: size_bytes,
+                inbound_guaranteed_request_count: 1,
+                inbound_guaranteed_response_count,
+                outbound_message_count: 0,
+            },
+            (Inbound, BestEffort) => MessageStats {
                 best_effort_message_bytes: size_bytes,
-                guaranteed_responses_size_bytes: 0,
+                guaranteed_responses_size_bytes,
                 oversized_guaranteed_requests_extra_bytes: 0,
                 size_bytes,
-            }
+                inbound_message_count: 1,
+                inbound_response_count,
+                inbound_size_bytes: size_bytes,
+                inbound_guaranteed_request_count: 0,
+                inbound_guaranteed_response_count,
+                outbound_message_count: 0,
+            },
+            (Outbound, GuaranteedResponse) => MessageStats {
+                best_effort_message_bytes: 0,
+                guaranteed_responses_size_bytes,
+                oversized_guaranteed_requests_extra_bytes: size_bytes
+                    .saturating_sub(MAX_RESPONSE_COUNT_BYTES),
+                size_bytes,
+                inbound_message_count: 0,
+                inbound_response_count,
+                inbound_size_bytes: 0,
+                inbound_guaranteed_request_count: 0,
+                inbound_guaranteed_response_count,
+                outbound_message_count: 1,
+            },
+            (Outbound, BestEffort) => MessageStats {
+                best_effort_message_bytes: size_bytes,
+                guaranteed_responses_size_bytes,
+                oversized_guaranteed_requests_extra_bytes: 0,
+                size_bytes,
+                inbound_message_count: 0,
+                inbound_response_count,
+                inbound_size_bytes: 0,
+                inbound_guaranteed_request_count: 0,
+                inbound_guaranteed_response_count,
+                outbound_message_count: 1,
+            },
         }
     }
 
     /// Calculates the change in stats caused by pushing (+) or popping (-) the
-    /// given response.
-    fn response_stats_delta(rep: &Response) -> MemoryUsageStats {
+    /// given response in the given context.
+    fn response_stats_delta(rep: &Response, context: Context) -> MessageStats {
+        use Class::*;
+        use Context::*;
+
         let size_bytes = rep.count_bytes();
-        if rep.deadline == NO_DEADLINE {
-            // Adjust guaranteed responses byte size and total byte size.
-            MemoryUsageStats {
+        let class = if rep.deadline == NO_DEADLINE {
+            Class::GuaranteedResponse
+        } else {
+            Class::BestEffort
+        };
+
+        // Not a request, request stats are all unaffected.
+        let oversized_guaranteed_requests_extra_bytes = 0;
+        let inbound_guaranteed_request_count = 0;
+
+        match (context, class) {
+            (Inbound, GuaranteedResponse) => MessageStats {
                 best_effort_message_bytes: 0,
                 guaranteed_responses_size_bytes: size_bytes,
-                oversized_guaranteed_requests_extra_bytes: 0,
+                oversized_guaranteed_requests_extra_bytes,
                 size_bytes,
-            }
-        } else {
-            // Adjust best-effort message byte size and total byte size.
-            MemoryUsageStats {
+                inbound_message_count: 1,
+                inbound_response_count: 1,
+                inbound_size_bytes: size_bytes,
+                inbound_guaranteed_request_count,
+                inbound_guaranteed_response_count: 1,
+                outbound_message_count: 0,
+            },
+            (Inbound, BestEffort) => MessageStats {
                 best_effort_message_bytes: size_bytes,
                 guaranteed_responses_size_bytes: 0,
-                oversized_guaranteed_requests_extra_bytes: 0,
+                oversized_guaranteed_requests_extra_bytes,
                 size_bytes,
-            }
+                inbound_message_count: 1,
+                inbound_response_count: 1,
+                inbound_size_bytes: size_bytes,
+                inbound_guaranteed_request_count,
+                inbound_guaranteed_response_count: 0,
+                outbound_message_count: 0,
+            },
+            (Outbound, GuaranteedResponse) => MessageStats {
+                best_effort_message_bytes: 0,
+                guaranteed_responses_size_bytes: size_bytes,
+                oversized_guaranteed_requests_extra_bytes,
+                size_bytes,
+                inbound_message_count: 0,
+                inbound_response_count: 0,
+                inbound_size_bytes: 0,
+                inbound_guaranteed_request_count,
+                inbound_guaranteed_response_count: 0,
+                outbound_message_count: 1,
+            },
+            (Outbound, BestEffort) => MessageStats {
+                best_effort_message_bytes: size_bytes,
+                guaranteed_responses_size_bytes: 0,
+                oversized_guaranteed_requests_extra_bytes,
+                size_bytes,
+                inbound_message_count: 0,
+                inbound_response_count: 0,
+                inbound_size_bytes: 0,
+                inbound_guaranteed_request_count,
+                inbound_guaranteed_response_count: 0,
+                outbound_message_count: 1,
+            },
         }
     }
 }
 
-impl AddAssign<MemoryUsageStats> for MemoryUsageStats {
-    fn add_assign(&mut self, rhs: MemoryUsageStats) {
-        let MemoryUsageStats {
+impl AddAssign<MessageStats> for MessageStats {
+    fn add_assign(&mut self, rhs: MessageStats) {
+        let MessageStats {
             best_effort_message_bytes,
             guaranteed_responses_size_bytes,
             oversized_guaranteed_requests_extra_bytes,
             size_bytes,
+            inbound_message_count,
+            inbound_response_count,
+            inbound_size_bytes,
+            inbound_guaranteed_request_count,
+            inbound_guaranteed_response_count,
+            outbound_message_count,
         } = rhs;
         self.best_effort_message_bytes += best_effort_message_bytes;
         self.guaranteed_responses_size_bytes += guaranteed_responses_size_bytes;
         self.oversized_guaranteed_requests_extra_bytes += oversized_guaranteed_requests_extra_bytes;
         self.size_bytes += size_bytes;
+        self.inbound_message_count += inbound_message_count;
+        self.inbound_response_count += inbound_response_count;
+        self.inbound_size_bytes += inbound_size_bytes;
+        self.inbound_guaranteed_request_count += inbound_guaranteed_request_count;
+        self.inbound_guaranteed_response_count += inbound_guaranteed_response_count;
+        self.outbound_message_count += outbound_message_count;
     }
 }
 
-impl SubAssign<MemoryUsageStats> for MemoryUsageStats {
-    fn sub_assign(&mut self, rhs: MemoryUsageStats) {
-        let MemoryUsageStats {
+impl SubAssign<MessageStats> for MessageStats {
+    fn sub_assign(&mut self, rhs: MessageStats) {
+        let MessageStats {
             best_effort_message_bytes,
             guaranteed_responses_size_bytes,
             oversized_guaranteed_requests_extra_bytes,
             size_bytes,
+            inbound_message_count,
+            inbound_response_count,
+            inbound_size_bytes,
+            inbound_guaranteed_request_count,
+            inbound_guaranteed_response_count,
+            outbound_message_count,
         } = rhs;
         self.best_effort_message_bytes -= best_effort_message_bytes;
         self.guaranteed_responses_size_bytes -= guaranteed_responses_size_bytes;
         self.oversized_guaranteed_requests_extra_bytes -= oversized_guaranteed_requests_extra_bytes;
         self.size_bytes -= size_bytes;
+        self.inbound_message_count -= inbound_message_count;
+        self.inbound_response_count -= inbound_response_count;
+        self.inbound_size_bytes -= inbound_size_bytes;
+        self.inbound_guaranteed_request_count -= inbound_guaranteed_request_count;
+        self.inbound_guaranteed_response_count -= inbound_guaranteed_response_count;
+        self.outbound_message_count -= outbound_message_count;
     }
 }

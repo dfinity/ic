@@ -1,3 +1,5 @@
+use crate::canister_state::queues::QueueOp;
+
 use super::*;
 use core::fmt::Debug;
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
@@ -657,121 +659,162 @@ fn test_message_id_range() {
 }
 
 #[test]
-fn test_memory_usage_stats_best_effort() {
+fn test_message_stats_best_effort() {
+    use Context::*;
+    use QueueOp::*;
+
     let mut pool = MessagePool::default();
 
-    // No memory used by messages.
-    assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
+    //
+    // All-zero stats iniially.
+    //
+    let mut stats = StatsFixture::default();
+    assert_eq!(stats.inner, pool.message_stats);
 
+    //
     // Insert a bunch of best-effort messages.
+    //
     let request = request(time(10));
     let request_size_bytes = request.count_bytes();
     let response = response(time(20));
     let response_size_bytes = response.count_bytes();
 
     let _ = pool.insert_inbound(request.clone().into());
+    stats.adjust_and_check(&pool, Push, Inbound, request.clone().into());
     let inbound_response_id = pool.insert_inbound(response.clone().into());
-    let outbound_request_id = pool.insert_outbound_request(request.into(), UNIX_EPOCH);
-    let _ = pool.insert_outbound_response(response.into());
+    stats.adjust_and_check(&pool, Push, Inbound, response.clone().into());
+    let outbound_request_id = pool.insert_outbound_request(request.clone().into(), UNIX_EPOCH);
+    stats.adjust_and_check(&pool, Push, Outbound, request.clone().into());
+    let _ = pool.insert_outbound_response(response.clone().into());
+    stats.adjust_and_check(&pool, Push, Outbound, response.clone().into());
 
     // The guaranteed memory usage is zero.
-    assert_eq!(0, pool.memory_usage_stats.memory_usage());
+    assert_eq!(0, pool.message_stats.memory_usage());
     // Best-effort memory usage and total byte size account for all messages.
     assert_eq!(
         2 * (request_size_bytes + response_size_bytes),
-        pool.memory_usage_stats.best_effort_message_bytes
+        pool.message_stats.best_effort_message_bytes
     );
     assert_eq!(
         2 * (request_size_bytes + response_size_bytes),
-        pool.memory_usage_stats.size_bytes
+        pool.message_stats.size_bytes
     );
 
+    //
     // Take one request and one response.
+    //
     assert!(pool.take(inbound_response_id).is_some());
+    stats.adjust_and_check(&pool, Pop, Inbound, response.into());
     assert!(pool.take(outbound_request_id).is_some());
+    stats.adjust_and_check(&pool, Pop, Outbound, request.into());
 
     // The guaranteed memory usage is still zero.
-    assert_eq!(0, pool.memory_usage_stats.memory_usage());
+    assert_eq!(0, pool.message_stats.memory_usage());
     // Best-effort memory usage and total byte size are halved.
     assert_eq!(
         request_size_bytes + response_size_bytes,
-        pool.memory_usage_stats.best_effort_message_bytes
+        pool.message_stats.best_effort_message_bytes
     );
     assert_eq!(
         request_size_bytes + response_size_bytes,
-        pool.memory_usage_stats.size_bytes
+        pool.message_stats.size_bytes
     );
 
+    //
     // Shed one of the remaining messages and time out the other.
+    //
     assert!(pool.shed_largest_message().is_some());
     assert_eq!(1, pool.expire_messages(time(u32::MAX).into()).len());
 
-    // Again no message memory usage.
-    assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
+    // Back to all-zero stats.
+    assert_eq!(MessageStats::default(), pool.message_stats);
 }
 
 #[test]
-fn test_memory_usage_stats_guaranteed_response() {
+fn test_message_stats_guaranteed_response() {
+    use Context::*;
+    use QueueOp::*;
+
     let mut pool = MessagePool::default();
 
-    // No memory used by messages.
-    assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
+    //
+    // All-zero stats iniially.
+    //
+    let mut stats = StatsFixture::default();
+    assert_eq!(stats.inner, pool.message_stats);
 
+    //
     // Insert a bunch of guaranteed response messages.
+    //
     let request = request(NO_DEADLINE);
     let request_size_bytes = request.count_bytes();
     let response = response(NO_DEADLINE);
     let response_size_bytes = response.count_bytes();
 
     let inbound_request_id = pool.insert_inbound(request.clone().into());
+    stats.adjust_and_check(&pool, Push, Inbound, request.clone().into());
     let inbound_response_id = pool.insert_inbound(response.clone().into());
-    let _ = pool.insert_outbound_request(request.into(), UNIX_EPOCH);
-    let outbound_response_id = pool.insert_outbound_response(response.into());
+    stats.adjust_and_check(&pool, Push, Inbound, response.clone().into());
+    let _ = pool.insert_outbound_request(request.clone().into(), UNIX_EPOCH);
+    stats.adjust_and_check(&pool, Push, Outbound, request.clone().into());
+    let outbound_response_id = pool.insert_outbound_response(response.clone().into());
+    stats.adjust_and_check(&pool, Push, Outbound, response.clone().into());
 
     // The guaranteed memory usage covers the two responses.
-    assert_eq!(
-        2 * response_size_bytes,
-        pool.memory_usage_stats.memory_usage()
-    );
+    assert_eq!(2 * response_size_bytes, pool.message_stats.memory_usage());
     // Best-effort memory usage is zero.
-    assert_eq!(0, pool.memory_usage_stats.best_effort_message_bytes);
+    assert_eq!(0, pool.message_stats.best_effort_message_bytes);
     // Total byte size accounts for all messages.
     assert_eq!(
         2 * (request_size_bytes + response_size_bytes),
-        pool.memory_usage_stats.size_bytes
+        pool.message_stats.size_bytes
     );
 
+    //
     // Take one request and one response.
+    //
     assert!(pool.take(inbound_request_id).is_some());
+    stats.adjust_and_check(&pool, Pop, Inbound, request.clone().into());
     assert!(pool.take(outbound_response_id).is_some());
+    stats.adjust_and_check(&pool, Pop, Outbound, response.clone().into());
 
     // The guaranteed memory usage covers the remaining response.
-    assert_eq!(response_size_bytes, pool.memory_usage_stats.memory_usage());
+    assert_eq!(response_size_bytes, pool.message_stats.memory_usage());
     // Best-effort memory usage is still zero.
-    assert_eq!(0, pool.memory_usage_stats.best_effort_message_bytes);
+    assert_eq!(0, pool.message_stats.best_effort_message_bytes);
     // Total byte size accounts for the two remaining messages.
     assert_eq!(
         request_size_bytes + response_size_bytes,
-        pool.memory_usage_stats.size_bytes
+        pool.message_stats.size_bytes
     );
 
     // Time out the one message that has an (implicit) deadline (the outgoing
     // request), take the other.
     assert_eq!(1, pool.expire_messages(time(u32::MAX).into()).len());
+    stats.adjust_and_check(&pool, Pop, Outbound, request.into());
     assert!(pool.take(inbound_response_id).is_some());
+    stats.adjust_and_check(&pool, Pop, Inbound, response.into());
 
-    // Again no message memory usage.
-    assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
+    // Back to all-zero stats.
+    assert_eq!(MessageStats::default(), pool.message_stats);
 }
 
 #[test]
-fn test_memory_usage_stats_oversized_requests() {
+fn test_message_stats_oversized_requests() {
+    use Context::*;
+    use QueueOp::*;
+
     let mut pool = MessagePool::default();
 
-    // No memory used by messages.
-    assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
+    //
+    // All-zero stats iniially.
+    //
+    let mut stats = StatsFixture::default();
+    assert_eq!(stats.inner, pool.message_stats);
 
+    //
     // Insert a bunch of oversized requests.
+    //
     let best_effort = request_with_payload(
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1000,
         time(10),
@@ -788,54 +831,58 @@ fn test_memory_usage_stats_oversized_requests() {
     let guaranteed_extra_bytes = guaranteed_size_bytes - MAX_RESPONSE_COUNT_BYTES;
 
     let _ = pool.insert_inbound(best_effort.clone().into());
+    stats.adjust_and_check(&pool, Push, Inbound, best_effort.clone().into());
     let inbound_guaranteed_id = pool.insert_inbound(guaranteed.clone().into());
-    let outbound_best_effort_id = pool.insert_outbound_request(best_effort.into(), UNIX_EPOCH);
-    let _ = pool.insert_outbound_request(guaranteed.into(), UNIX_EPOCH);
+    stats.adjust_and_check(&pool, Push, Inbound, guaranteed.clone().into());
+    let outbound_best_effort_id =
+        pool.insert_outbound_request(best_effort.clone().into(), UNIX_EPOCH);
+    stats.adjust_and_check(&pool, Push, Outbound, best_effort.clone().into());
+    let _ = pool.insert_outbound_request(guaranteed.clone().into(), UNIX_EPOCH);
+    stats.adjust_and_check(&pool, Push, Outbound, guaranteed.clone().into());
 
     // The guaranteed memory usage covers the extra bytes of the two guaranteed
     // requests.
     assert_eq!(
         2 * guaranteed_extra_bytes,
-        pool.memory_usage_stats.memory_usage()
+        pool.message_stats.memory_usage()
     );
     // Best-effort memory usage covers the two best-effort requests.
     assert_eq!(
         2 * best_effort_size_bytes,
-        pool.memory_usage_stats.best_effort_message_bytes
+        pool.message_stats.best_effort_message_bytes
     );
     // Total byte size accounts for all requests.
     assert_eq!(
         2 * (best_effort_size_bytes + guaranteed_size_bytes),
-        pool.memory_usage_stats.size_bytes
+        pool.message_stats.size_bytes
     );
 
     // Take one best-effort and one guaranteed request.
     assert!(pool.take(inbound_guaranteed_id).is_some());
+    stats.adjust_and_check(&pool, Pop, Inbound, guaranteed.into());
     assert!(pool.take(outbound_best_effort_id).is_some());
+    stats.adjust_and_check(&pool, Pop, Outbound, best_effort.into());
 
     // The guaranteed memory usage covers the extra bytes of the remaining
     // guaranteed request.
-    assert_eq!(
-        guaranteed_extra_bytes,
-        pool.memory_usage_stats.memory_usage()
-    );
+    assert_eq!(guaranteed_extra_bytes, pool.message_stats.memory_usage());
     // Best-effort memory usage covers the remaining best-effort request.
     assert_eq!(
         best_effort_size_bytes,
-        pool.memory_usage_stats.best_effort_message_bytes
+        pool.message_stats.best_effort_message_bytes
     );
     // Total byte size accounts for both remaining requests.
     assert_eq!(
         best_effort_size_bytes + guaranteed_size_bytes,
-        pool.memory_usage_stats.size_bytes
+        pool.message_stats.size_bytes
     );
 
     // Shed one the remaining best-effort request and time out guaranteed one.
     assert!(pool.shed_largest_message().is_some());
     assert_eq!(1, pool.expire_messages(time(u32::MAX).into()).len());
 
-    // Again no message memory usage.
-    assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
+    // Back to all-zero stats.
+    assert_eq!(MessageStats::default(), pool.message_stats);
 }
 
 //
@@ -916,4 +963,133 @@ pub(crate) fn new_request_message_id(generator: u64) -> MessageId {
 /// Generates a `MessageId` for an inbound response.
 pub(crate) fn new_response_message_id(generator: u64, class: Class) -> MessageId {
     MessageId::new(Kind::Response, Context::Inbound, class, generator)
+}
+
+/// Fixture for validating updates to the message stats. Relies on a parallel
+/// implementation of stats calculations.
+#[derive(Default)]
+struct StatsFixture {
+    inner: MessageStats,
+}
+
+impl StatsFixture {
+    /// Adjusts the wrapped stats according to the given message, operation and
+    /// context, relying on an independent stats implementation; then validates the
+    /// given pool's stats by comparing them against the just-updated stats.
+    fn adjust_and_check(
+        &mut self,
+        pool: &MessagePool,
+        op: QueueOp,
+        context: Context,
+        msg: RequestOrResponse,
+    ) {
+        match op {
+            QueueOp::Push => self.inner += stats_delta2(&msg, context),
+            QueueOp::Pop => self.inner -= stats_delta2(&msg, context),
+        }
+        assert_eq!(self.inner, pool.message_stats);
+    }
+}
+
+/// Alternate calculation of the stats change caused by pushing (+) or popping
+/// (-) the given message in the given context.
+fn stats_delta2(msg: &RequestOrResponse, context: Context) -> MessageStats {
+    match msg {
+        RequestOrResponse::Request(req) => request_stats_delta2(req, context),
+        RequestOrResponse::Response(rep) => response_stats_delta2(rep, context),
+    }
+}
+
+/// Alternate calculation of the stats change caused by pushing (+) or popping
+/// (-) the given request in the given context.
+fn request_stats_delta2(req: &Request, context: Context) -> MessageStats {
+    use Class::*;
+    use Context::*;
+
+    let class = if req.deadline == NO_DEADLINE {
+        Class::GuaranteedResponse
+    } else {
+        Class::BestEffort
+    };
+
+    let size_bytes = req.count_bytes();
+    let (best_effort_message_bytes, oversized_guaranteed_requests_extra_bytes) = match class {
+        GuaranteedResponse => (0, size_bytes.saturating_sub(MAX_RESPONSE_COUNT_BYTES)),
+        BestEffort => (size_bytes, 0),
+    };
+    let inbound_guaranteed_request_count = if context == Inbound && class == GuaranteedResponse {
+        1
+    } else {
+        0
+    };
+    let (inbound_message_count, inbound_size_bytes, outbound_message_count) = if context == Inbound
+    {
+        (1, size_bytes, 0)
+    } else {
+        (0, 0, 1)
+    };
+    // Response stats are unaffected.
+    let guaranteed_responses_size_bytes = 0;
+    let inbound_response_count = 0;
+    let inbound_guaranteed_response_count = 0;
+
+    MessageStats {
+        best_effort_message_bytes,
+        guaranteed_responses_size_bytes,
+        oversized_guaranteed_requests_extra_bytes,
+        size_bytes,
+        inbound_message_count,
+        inbound_response_count,
+        inbound_size_bytes,
+        inbound_guaranteed_request_count,
+        inbound_guaranteed_response_count,
+        outbound_message_count,
+    }
+}
+
+/// Alternate calculation of the stats change caused by pushing (+) or popping
+/// (-) the given response in the given context.
+fn response_stats_delta2(rep: &Response, context: Context) -> MessageStats {
+    use Class::*;
+    use Context::*;
+
+    let class = if rep.deadline == NO_DEADLINE {
+        Class::GuaranteedResponse
+    } else {
+        Class::BestEffort
+    };
+
+    let size_bytes = rep.count_bytes();
+    let (best_effort_message_bytes, guaranteed_responses_size_bytes) = match class {
+        GuaranteedResponse => (0, size_bytes),
+        BestEffort => (size_bytes, 0),
+    };
+    let inbound_guaranteed_response_count = if context == Inbound && class == GuaranteedResponse {
+        1
+    } else {
+        0
+    };
+    let (inbound_message_count, inbound_response_count, inbound_size_bytes, outbound_message_count) =
+        if context == Inbound {
+            (1, 1, size_bytes, 0)
+        } else {
+            (0, 0, 0, 1)
+        };
+
+    // Request stats are unaffected.
+    let oversized_guaranteed_requests_extra_bytes = 0;
+    let inbound_guaranteed_request_count = 0;
+
+    MessageStats {
+        best_effort_message_bytes,
+        guaranteed_responses_size_bytes,
+        oversized_guaranteed_requests_extra_bytes,
+        size_bytes,
+        inbound_message_count,
+        inbound_response_count,
+        inbound_size_bytes,
+        inbound_guaranteed_request_count,
+        inbound_guaranteed_response_count,
+        outbound_message_count,
+    }
 }

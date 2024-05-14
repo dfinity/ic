@@ -246,7 +246,7 @@ pub trait PeekableOutputIterator: std::iter::Iterator<Item = (QueueId, RequestOr
 impl PeekableOutputIterator for OutputIterator<'_> {
     fn peek(&mut self) -> Option<(QueueId, &RequestOrResponse)> {
         while let Some(canister_iterator) = self.canister_iterators.front_mut() {
-            if let Some(_) = canister_iterator.peek() {
+            if canister_iterator.peek().is_some() {
                 // Borrow checker won't let me return here, so bail out and peek again.
                 break;
             }

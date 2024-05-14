@@ -923,20 +923,18 @@ impl CanisterQueues {
 
     /// Returns the memory usage of all best-effort messages.
     pub fn best_effort_memory_usage(&self) -> usize {
-        self.pool.memory_usage_stats().best_effort_message_bytes
+        self.pool.message_stats().best_effort_message_bytes
     }
 
     /// Returns the memory usage of all guaranteed response messages.
     pub fn memory_usage(&self) -> usize {
-        self.memory_usage_stats.memory_usage() + self.pool.memory_usage_stats().memory_usage()
+        self.memory_usage_stats.memory_usage() + self.pool.message_stats().memory_usage()
     }
 
     /// Returns the total byte size of guaranteed responses across input and
     /// output queues.
     pub fn guaranteed_responses_size_bytes(&self) -> usize {
-        self.pool
-            .memory_usage_stats()
-            .guaranteed_responses_size_bytes
+        self.pool.message_stats().guaranteed_responses_size_bytes
     }
 
     /// Returns the total memory reservations for guaranteed responses across input
@@ -953,7 +951,7 @@ impl CanisterQueues {
     /// oversized guaranteed response call request.
     pub fn oversized_guaranteed_requests_extra_bytes(&self) -> usize {
         self.pool
-            .memory_usage_stats()
+            .message_stats()
             .oversized_guaranteed_requests_extra_bytes
     }
 
@@ -1746,8 +1744,8 @@ impl MemoryUsageStats {
     /// given message.
     fn stats_delta(op: QueueOp, msg: &RequestOrResponse) -> MemoryUsageStats {
         match msg {
-            RequestOrResponse::Request(request) => Self::request_stats_delta(op, &request),
-            RequestOrResponse::Response(response) => Self::response_stats_delta(op, &response),
+            RequestOrResponse::Request(request) => Self::request_stats_delta(op, request),
+            RequestOrResponse::Response(response) => Self::response_stats_delta(op, response),
         }
     }
 
