@@ -19,13 +19,18 @@ use std::time::Duration;
 
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer};
+use crate::driver::test_env_api::{
+    retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, READY_WAIT_TIMEOUT,
+    RETRY_BACKOFF,
+};
 use crate::nns::get_subnet_list_from_registry;
+use crate::retry_with_msg_async;
 use crate::tecdsa::{
     create_new_subnet_with_keys, empty_subnet_update, enable_ecdsa_signing,
     execute_update_subnet_proposal, get_public_key_with_retries, verify_signature, DKG_INTERVAL,
 };
 use crate::util::*;
+use anyhow::bail;
 use canister_test::{Canister, Cycles};
 use ic_agent::{
     agent::{RejectCode, RejectResponse},
@@ -53,6 +58,8 @@ const USE_COST_SCALING_FLAG: bool = true;
 const NUMBER_OF_NODES: usize = 4;
 
 const ECDSA_KEY_TRANSCRIPT_CREATED: &str = "consensus_ecdsa_key_transcript_created";
+const ECDSA_PAYLOAD_METRICS: &str = "ecdsa_payload_metrics";
+const XNET_RESHARE_AGREEMENTS: &str = "xnet_reshare_agreements";
 
 /// Life cycle test requires more time
 pub const LIFE_CYCLE_OVERALL_TIMEOUT: Duration = Duration::from_secs(14 * 60);
@@ -530,6 +537,42 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
         .await
         .unwrap();
         verify_signature(&message_hash, &public_key, &new_signature);
+
+        // Reshare agreement on original App subnet should be purged
+        let metric_with_label = format!(
+            "{}{{key_id=\"{}\",type=\"{}\"}}",
+            ECDSA_PAYLOAD_METRICS,
+            MasterPublicKeyId::Ecdsa(make_key(KEY_ID2)),
+            XNET_RESHARE_AGREEMENTS,
+        );
+        let metrics = MetricsFetcher::new(app_subnet.nodes(), vec![metric_with_label.clone()]);
+        retry_with_msg_async!(
+            format!(
+                "check if number of reshare agreements on subnet {} is zero",
+                app_subnet.subnet_id,
+            ),
+            log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                match metrics.fetch::<u64>().await {
+                    Ok(val) => {
+                        info!(log, "metrics: {:?}", val);
+                        for agreements in &val[&metric_with_label] {
+                            if *agreements != 0 {
+                                panic!("Number of reshare agreements is {}", agreements)
+                            }
+                        }
+                        Ok(())
+                    }
+                    Err(err) => {
+                        bail!("Could not connect to metrics yet {:?}", err);
+                    }
+                }
+            }
+        )
+        .await
+        .expect("Unable to fetch the metrics in time")
     });
 }
 
