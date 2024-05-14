@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icp_ledger/ledger",
     "//rs/rosetta-api/icp_ledger/test_utils",
     "//rs/rosetta-api/icrc1",
+    "//rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client",
     "//rs/rosetta-api/rosetta_core:rosetta-core",
     "//rs/test_utilities/load_wasm",
     "@crate_index//:candid",
@@ -58,5 +59,7 @@ rust_test_suite(
     ],
     # The test runs replica binary that constantly uses more than 100% cpu core + rosetta server.
     tags = ["cpu:3"],
-    deps = DEPENDENCIES + [":rosetta-integration-tests-lib"],
+    deps = DEPENDENCIES + [
+        ":rosetta-integration-tests-lib",
+    ],
 )

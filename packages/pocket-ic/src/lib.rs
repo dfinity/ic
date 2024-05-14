@@ -395,6 +395,15 @@ impl PocketIc {
         self.post::<(), _>(endpoint, "");
     }
 
+    /// Returns the URL at which `/api/v2` requests
+    /// for this instance can be made if the HTTP
+    /// gateway has been started.
+    pub fn url(&self) -> Option<Url> {
+        self.http_gateway
+            .as_ref()
+            .map(|res| Url::parse(&format!("http://{}:{}/", LOCALHOST, res.port)).unwrap())
+    }
+
     /// Creates an HTTP gateway for this IC instance
     /// listening on an optionally specified port
     /// and configures the IC instance to make progress
@@ -405,8 +414,8 @@ impl PocketIc {
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub fn make_live(&mut self, listen_at: Option<u16>) -> Url {
         self.auto_progress();
-        if let Some(res) = &self.http_gateway {
-            return Url::parse(&format!("http://{}:{}/", LOCALHOST, res.port)).unwrap();
+        if let Some(url) = self.url() {
+            return url;
         }
         let endpoint = self.server_url.join("http_gateway").unwrap();
         let http_gateway_config = HttpGatewayConfig {
