@@ -368,14 +368,12 @@ async fn main() {
                 ),
                 ..Default::default()
             };
-            Some(
-                ic_http_endpoints_metrics::MetricsHttpEndpoint::new_insecure(
-                    tokio::runtime::Handle::current(),
-                    config,
-                    ic_metrics::MetricsRegistry::global(),
-                    &logger,
-                ),
-            )
+            Some(ic_http_endpoints_metrics::MetricsHttpEndpoint::new(
+                tokio::runtime::Handle::current(),
+                config,
+                ic_metrics::MetricsRegistry::global(),
+                &logger,
+            ))
         }
         None => {
             println!("⚠️  Printed rates are completion rates, not rates at which requests are issued. Recommending to use Prometheus metrics (-p) to verify rate at which workload generator issues requests");

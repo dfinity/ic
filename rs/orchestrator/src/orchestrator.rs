@@ -17,10 +17,8 @@ use get_if_addrs::get_if_addrs;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{generate_node_keys_once, NodeKeyGenerationError};
-use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_image_upgrader::ImageUpgrader;
-use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
@@ -189,13 +187,8 @@ impl Orchestrator {
         .unwrap();
 
         let slog_logger = logger.inner_logger.root.clone();
-        let (metrics, _metrics_runtime) = Self::get_metrics(
-            metrics_addr,
-            &slog_logger,
-            &metrics_registry,
-            registry.get_registry_client(),
-            Arc::clone(&crypto) as _,
-        );
+        let (metrics, _metrics_runtime) =
+            Self::get_metrics(metrics_addr, &slog_logger, &metrics_registry);
         let metrics = Arc::new(metrics);
 
         metrics
@@ -577,8 +570,6 @@ impl Orchestrator {
         metrics_addr: SocketAddr,
         logger: &slog::Logger,
         metrics_registry: &MetricsRegistry,
-        registry_client: Arc<dyn RegistryClient>,
-        crypto: Arc<dyn TlsHandshake + Send + Sync>,
     ) -> (OrchestratorMetrics, MetricsHttpEndpoint) {
         let metrics_config = MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
@@ -589,8 +580,6 @@ impl Orchestrator {
             tokio::runtime::Handle::current(),
             metrics_config,
             metrics_registry.clone(),
-            registry_client,
-            crypto,
             logger,
         );
 

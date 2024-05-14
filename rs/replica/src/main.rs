@@ -3,7 +3,6 @@
 use ic_async_utils::{abort_on_panic, shutdown_signal};
 use ic_config::Config;
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
@@ -251,8 +250,6 @@ fn main() -> io::Result<()> {
         rt_http.handle().clone(),
         config.metrics.clone(),
         metrics_registry.clone(),
-        registry.clone(),
-        Arc::clone(&crypto) as Arc<dyn TlsHandshake + Send + Sync>,
         &logger.inner_logger.root,
     );
 

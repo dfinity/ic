@@ -17,7 +17,6 @@ ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }

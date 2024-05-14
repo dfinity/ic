@@ -240,12 +240,8 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
         .into_parts();
 
     let runtime = tokio::runtime::Handle::current();
-    let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
-        runtime.clone(),
-        cfg.metrics,
-        metrics_registry.clone(),
-        &log,
-    );
+    let _metrics_endpoint =
+        MetricsHttpEndpoint::new(runtime.clone(), cfg.metrics, metrics_registry.clone(), &log);
 
     let message_routing = MessageRoutingImpl::new(
         Arc::clone(&state_manager) as _,
