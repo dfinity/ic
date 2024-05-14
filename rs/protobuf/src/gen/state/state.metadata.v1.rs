@@ -160,6 +160,7 @@ pub struct CanisterHttpRequestContextTree {
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<CanisterHttpRequestContext>,
 }
+/// TODO(EXC-1599): remove after generalized version `IDkgDealingsContext` is released.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaDealingsContext {
@@ -181,6 +182,21 @@ pub struct EcdsaDealingsContextTree {
     pub callback_id: u64,
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<EcdsaDealingsContext>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IDkgDealingsContext {
+    #[prost(message, optional, tag = "1")]
+    pub request: ::core::option::Option<super::super::queues::v1::Request>,
+    #[prost(message, optional, tag = "2")]
+    pub key_id:
+        ::core::option::Option<super::super::super::registry::crypto::v1::MasterPublicKeyId>,
+    #[prost(message, repeated, tag = "3")]
+    pub nodes: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
+    #[prost(uint64, tag = "4")]
+    pub registry_version: u64,
+    #[prost(message, optional, tag = "5")]
+    pub time: ::core::option::Option<Time>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
