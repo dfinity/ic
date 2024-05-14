@@ -4,24 +4,13 @@ use std::{
 };
 
 use crate::invariants::common::{
-    get_all_chain_key_signing_subnet_list_records, get_all_ecdsa_signing_subnet_list_records,
     get_subnet_ids_from_snapshot, InvariantCheckError, RegistrySnapshot,
 };
 
 use ic_base_types::{NodeId, PrincipalId};
-use ic_management_canister_types::MasterPublicKeyId;
-use ic_nns_common::registry::{decode_or_panic, encode_or_panic, MAX_NUM_SSH_KEYS};
-use ic_protobuf::registry::{
-    crypto::v1::ChainKeySigningSubnetList,
-    subnet::v1::{ChainKeyConfig, SubnetRecord, SubnetType},
-};
-use ic_registry_keys::{
-    get_ecdsa_key_id_from_signing_subnet_list_key,
-    get_master_public_key_id_from_signing_subnet_list_key, make_chain_key_signing_subnet_list_key,
-    make_ecdsa_signing_subnet_list_key, make_node_record_key, make_subnet_record_key,
-    SUBNET_RECORD_KEY_PREFIX,
-};
-use ic_registry_transport::{delete, upsert};
+use ic_nns_common::registry::{decode_or_panic, MAX_NUM_SSH_KEYS};
+use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, SubnetRecord, SubnetType};
+use ic_registry_keys::{make_node_record_key, make_subnet_record_key, SUBNET_RECORD_KEY_PREFIX};
 
 /// Subnet invariants hold iff:
 ///    * Each SSH key access list does not contain more than 50 keys
@@ -213,67 +202,6 @@ pub fn subnet_record_mutations_from_ecdsa_configs_to_chain_key_configs(
         );
 
         mutations.push(subnet_record_mutation);
-    }
-
-    mutations
-}
-
-// TODO[NNS1-2986]: Remove this function after the migration has been performed.
-// This function keeps the ecdsa_signing_subnet_list and the chain_key_signing_subnet_list in sync
-// The ecdsa_signing_subnet_list is the source of truth, the chain_key_signing_subnet_list will be overwritten
-pub fn subnet_record_mutations_from_ecdsa_to_master_public_key_signing_subnet_list(
-    snapshot: &RegistrySnapshot,
-) -> Vec<ic_registry_transport::pb::v1::RegistryMutation> {
-    let ecdsa_signing_subnet_list = get_all_ecdsa_signing_subnet_list_records(snapshot);
-    let mut ck_signing_subnet_list = get_all_chain_key_signing_subnet_list_records(snapshot);
-
-    let mut mutations = vec![];
-
-    // Check that for every key in chain_key_signing_subnet_list we have a key in ecdsa_signing_subnet_list, i.e. it is not a superset
-    for ck_key_id in ck_signing_subnet_list.keys() {
-        let ck_key_id = match get_master_public_key_id_from_signing_subnet_list_key(ck_key_id) {
-            Ok(key_id) => key_id,
-            Err(err) => panic!(
-                "Failed to decode chain key singing subnet list key: {:?}",
-                err
-            ),
-        };
-
-        let inner_key = match ck_key_id {
-            MasterPublicKeyId::Ecdsa(ref key) => key,
-            MasterPublicKeyId::Schnorr(_) => panic!(
-                "Found a Schnorr Key in chain_key_signing_subnet_list which is not supported yet"
-            ),
-        };
-
-        match ecdsa_signing_subnet_list.get(&make_ecdsa_signing_subnet_list_key(inner_key)) {
-            // NOTE: If we have two lists, we don't need to compare them as we will overwrite one with the other anyway
-            Some(_) => (),
-            None => {
-                // We need to remove the key from the ck_signing_subnet_list
-                mutations.push(delete(make_chain_key_signing_subnet_list_key(&ck_key_id)));
-            }
-        }
-    }
-
-    // Overwrite the ck_signing_subnet_list with the values from ecdsa_siging_subnet_list
-    for (ecdsa_key_id, ecdsa_signing_list_for_key) in ecdsa_signing_subnet_list {
-        let ecdsa_key_id = get_ecdsa_key_id_from_signing_subnet_list_key(&ecdsa_key_id)
-            .expect("Failed to decode ECDSA signing subnet list key");
-        let ck_key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id);
-
-        let ck_signing_list_for_key = ChainKeySigningSubnetList {
-            subnets: ecdsa_signing_list_for_key.subnets.clone(),
-        };
-        ck_signing_subnet_list.insert(
-            make_chain_key_signing_subnet_list_key(&ck_key_id),
-            ck_signing_list_for_key.clone(),
-        );
-
-        mutations.push(upsert(
-            make_chain_key_signing_subnet_list_key(&ck_key_id),
-            encode_or_panic(&ck_signing_list_for_key),
-        ));
     }
 
     mutations
