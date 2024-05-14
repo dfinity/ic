@@ -10,14 +10,11 @@ use dfn_core::println;
 use serde::Serialize;
 
 use ic_base_types::{subnet_id_into_protobuf, SubnetId};
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types::EcdsaKeyId;
 use ic_protobuf::registry::subnet::v1::{
     SubnetFeatures as SubnetFeaturesPb, SubnetRecord as SubnetRecordPb,
 };
-use ic_registry_keys::{
-    make_chain_key_signing_subnet_list_key, make_ecdsa_signing_subnet_list_key,
-    make_subnet_record_key,
-};
+use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
@@ -160,31 +157,20 @@ impl Registry {
         );
     }
 
-    // TODO(NNS1-2986): Migrate the function to work over MasterPublicKeyId without replicating to EcdsaKeyId
+    // TODO(NNS1-3037): Replicate changes to chain key signing list
     fn mutations_to_enable_subnet_signing(
         &self,
         subnet_id: SubnetId,
         ecdsa_key_signing_enable: &Vec<EcdsaKeyId>,
     ) -> Vec<RegistryMutation> {
         let mut mutations = vec![];
-        for ecdsa_key_id in ecdsa_key_signing_enable {
-            let ck_key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
-
-            let mut ecdsa_signing_list_for_key = self
-                .get_ecdsa_signing_subnet_list(ecdsa_key_id)
-                .unwrap_or_default();
-            let mut ck_signing_list_for_key = self
-                .get_chain_key_signing_subnet_list(&ck_key_id)
+        for key_id in ecdsa_key_signing_enable {
+            let mut signing_list_for_key = self
+                .get_ecdsa_signing_subnet_list(key_id)
                 .unwrap_or_default();
 
             // If this subnet already signs for this key, do nothing.
-            if ecdsa_signing_list_for_key
-                .subnets
-                .contains(&subnet_id_into_protobuf(subnet_id))
-            {
-                continue;
-            }
-            if ck_signing_list_for_key
+            if signing_list_for_key
                 .subnets
                 .contains(&subnet_id_into_protobuf(subnet_id))
             {
@@ -192,20 +178,13 @@ impl Registry {
             }
 
             // Preconditions are okay, so we add the subnet to our list of signing subnets.
-            ecdsa_signing_list_for_key
-                .subnets
-                .push(subnet_id_into_protobuf(subnet_id));
-            ck_signing_list_for_key
+            signing_list_for_key
                 .subnets
                 .push(subnet_id_into_protobuf(subnet_id));
 
             mutations.push(upsert(
-                make_ecdsa_signing_subnet_list_key(ecdsa_key_id).into_bytes(),
-                encode_or_panic(&ecdsa_signing_list_for_key),
-            ));
-            mutations.push(upsert(
-                make_chain_key_signing_subnet_list_key(&ck_key_id),
-                encode_or_panic(&ck_signing_list_for_key),
+                make_ecdsa_signing_subnet_list_key(key_id).into_bytes(),
+                encode_or_panic(&signing_list_for_key),
             ));
         }
         mutations
