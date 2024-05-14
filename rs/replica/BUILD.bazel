@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/consensus",
     "//rs/crypto",
     "//rs/crypto/sha2",
-    "//rs/crypto/tls_interfaces",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/http_endpoints/metrics",
