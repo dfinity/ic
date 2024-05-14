@@ -48,6 +48,9 @@ jobs:
       - name: No run
         if: steps.filter.outputs.fuzzers == 'false'
         run: echo "No changes in fuzzers, skipping build"
+      - name: Bazel Clean
+        if: always()
+        run: bazel clean
   lock-generate:
     name: Lock Generate
     runs-on:

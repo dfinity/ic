@@ -79,7 +79,6 @@ if [ -n "${GITHUB_OUTPUT:-}" ]; then
     echo "upload_artifacts=true" >>"$GITHUB_OUTPUT"
 fi
 
-EXIT_CODE=0
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
 buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" -- bazel \
@@ -93,10 +92,4 @@ buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" 
     ${BAZEL_EXTRA_ARGS:-} \
     ${BAZEL_TARGETS} \
     2>&1 \
-    | perl -pe 'BEGIN { select(STDOUT); $| = 1 } s/(.*Streaming build results to:.*)/\o{33}[92m$1\o{33}[0m/' || EXIT_CODE="${PIPESTATUS[0]}"
-
-if [ "$(uname)" == "Linux" ]; then
-    bazel clean || true
-fi
-
-exit $EXIT_CODE
+    | perl -pe 'BEGIN { select(STDOUT); $| = 1 } s/(.*Streaming build results to:.*)/\o{33}[92m$1\o{33}[0m/'
