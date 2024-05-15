@@ -4509,6 +4509,7 @@ async fn main() {
                 "Subcommand OpenSnsTokenSwap is obsolete; please use \
                 ProposeToCreateServiceNervousSystem instead"
             ),
+            SubCommand::ProposeToRentSubnet(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
