@@ -1,12 +1,14 @@
 #![allow(clippy::unwrap_used)]
-use super::*;
 use crate::keygen::fixtures::multi_bls_test_vector;
 use crate::keygen::utils::node_signing_pk_to_proto;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
+use crate::Csp;
+use crate::CspPublicKey;
 use crate::KeyId;
 use crate::LocalCspVault;
 use assert_matches::assert_matches;
 use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types_test_utils::ids::node_test_id;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -15,12 +17,13 @@ const FIXED_SEED: u64 = 42;
 
 mod gen_node_siging_key_pair_tests {
     use super::*;
+    use crate::vault::api::CspBasicSignatureKeygenError;
     use crate::CspPublicKeyStore;
 
     #[test]
     fn should_correctly_generate_node_signing_keys() {
         let csp = csp_with_fixed_seed();
-        let public_key = csp.gen_node_signing_key_pair().unwrap();
+        let public_key = csp.csp_vault.gen_node_signing_key_pair().unwrap();
         let key_id = KeyId::try_from(&public_key).unwrap();
 
         assert_eq!(
@@ -48,15 +51,15 @@ mod gen_node_siging_key_pair_tests {
     fn should_fail_with_internal_error_if_node_signing_public_key_already_set() {
         let csp = Csp::builder_for_test().build();
 
-        assert!(csp.gen_node_signing_key_pair().is_ok());
-        let result = csp.gen_node_signing_key_pair();
+        assert!(csp.csp_vault.gen_node_signing_key_pair().is_ok());
+        let result = csp.csp_vault.gen_node_signing_key_pair();
 
         assert_matches!(result,
             Err(CspBasicSignatureKeygenError::InternalError { internal_error })
             if internal_error.contains("node signing public key already set")
         );
 
-        assert_matches!(csp.gen_node_signing_key_pair(),
+        assert_matches!(csp.csp_vault.gen_node_signing_key_pair(),
             Err(CspBasicSignatureKeygenError::InternalError { internal_error })
             if internal_error.contains("node signing public key already set")
         );
@@ -76,13 +79,14 @@ mod gen_node_siging_key_pair_tests {
             )
             .build();
 
-        let result = csp.gen_node_signing_key_pair();
+        let result = csp.csp_vault.gen_node_signing_key_pair();
 
         assert_matches!(result, Err(CspBasicSignatureKeygenError::DuplicateKeyId {key_id}) if key_id == duplicated_key_id)
     }
 }
 
 mod gen_key_pair_with_pop_tests {
+    use crate::vault::api::CspMultiSignatureKeygenError;
     use crate::{api::CspPublicKeyStore, keygen::utils::committee_signing_pk_to_proto};
 
     use super::*;
@@ -91,7 +95,7 @@ mod gen_key_pair_with_pop_tests {
     fn should_correctly_generate_committee_signing_keys() {
         let test_vector = multi_bls_test_vector();
         let csp = csp_seeded_with(test_vector.seed);
-        let (public_key, pop) = csp.gen_committee_signing_key_pair().unwrap();
+        let (public_key, pop) = csp.csp_vault.gen_committee_signing_key_pair().unwrap();
         let key_id = KeyId::try_from(&public_key).unwrap();
 
         assert_eq!(key_id, test_vector.key_id);
@@ -121,7 +125,7 @@ mod gen_key_pair_with_pop_tests {
             )
             .build();
 
-        let result = csp.gen_committee_signing_key_pair();
+        let result = csp.csp_vault.gen_committee_signing_key_pair();
 
         assert_matches!(result, Err(CspMultiSignatureKeygenError::DuplicateKeyId {key_id}) if key_id == duplicated_key_id)
     }
@@ -130,11 +134,11 @@ mod gen_key_pair_with_pop_tests {
     fn should_fail_with_internal_error_if_committee_signing_public_key_already_set() {
         let csp = Csp::builder_for_test().build();
 
-        assert!(csp.gen_committee_signing_key_pair().is_ok());
+        assert!(csp.csp_vault.gen_committee_signing_key_pair().is_ok());
 
         // the attempts after the first one should fail
         for _ in 0..5 {
-            assert_matches!(csp.gen_committee_signing_key_pair(),
+            assert_matches!(csp.csp_vault.gen_committee_signing_key_pair(),
                 Err(CspMultiSignatureKeygenError::InternalError { internal_error })
                 if internal_error.contains("committee signing public key already set")
             );
@@ -150,13 +154,13 @@ mod idkg_create_mega_key_pair_tests {
         secret_key_store_with_io_error_on_insert,
         secret_key_store_with_serialization_error_on_insert,
     };
-    use crate::CspIDkgProtocol;
 
     #[test]
     fn should_correctly_create_mega_key_pair() {
         let test_vector = mega_test_vector();
         let csp = csp_seeded_with(test_vector.seed);
         let public_key = csp
+            .csp_vault
             .idkg_gen_dealing_encryption_key_pair()
             .expect("failed creating MEGa key pair");
 
@@ -177,7 +181,7 @@ mod idkg_create_mega_key_pair_tests {
             )
             .build();
 
-        let result = csp.idkg_gen_dealing_encryption_key_pair();
+        let result = csp.csp_vault.idkg_gen_dealing_encryption_key_pair();
 
         assert_matches!(
             result,
@@ -198,7 +202,7 @@ mod idkg_create_mega_key_pair_tests {
             )
             .build();
 
-        let result = csp.idkg_gen_dealing_encryption_key_pair();
+        let result = csp.csp_vault.idkg_gen_dealing_encryption_key_pair();
 
         assert_matches!(
             result,
@@ -218,7 +222,7 @@ mod idkg_create_mega_key_pair_tests {
             )
             .build();
 
-        let result = csp.idkg_gen_dealing_encryption_key_pair();
+        let result = csp.csp_vault.idkg_gen_dealing_encryption_key_pair();
 
         assert_matches!(
             result,
@@ -269,6 +273,7 @@ fn should_correctly_convert_tls_cert_hash_as_key_id() {
 
 mod tls {
     use super::*;
+    use crate::vault::api::CspTlsKeygenError;
     use crate::CspPublicKeyStore;
 
     const NODE_1: u64 = 4241;
@@ -277,6 +282,7 @@ mod tls {
     fn should_correctly_generate_tls_certificate() {
         let csp = csp_with_fixed_seed();
         let cert = csp
+            .csp_vault
             .gen_tls_key_pair(node_test_id(NODE_1))
             .expect("Generation of TLS keys failed.");
         let key_id = KeyId::try_from(&cert).unwrap();
@@ -301,15 +307,15 @@ mod tls {
     fn should_fail_with_internal_error_if_node_signing_public_key_already_set() {
         let csp = Csp::builder_for_test().build();
 
-        assert!(csp.gen_tls_key_pair(node_test_id(NODE_1)).is_ok());
-        let result = csp.gen_tls_key_pair(node_test_id(NODE_1));
+        assert!(csp.csp_vault.gen_tls_key_pair(node_test_id(NODE_1)).is_ok());
+        let result = csp.csp_vault.gen_tls_key_pair(node_test_id(NODE_1));
 
         assert_matches!(result,
             Err(CspTlsKeygenError::InternalError { internal_error })
             if internal_error.contains("TLS certificate already set")
         );
 
-        assert_matches!(csp.gen_tls_key_pair(node_test_id(NODE_1)),
+        assert_matches!(csp.csp_vault.gen_tls_key_pair(node_test_id(NODE_1)),
             Err(CspTlsKeygenError::InternalError { internal_error })
             if internal_error.contains("TLS certificate already set")
         );
@@ -329,7 +335,7 @@ mod tls {
             )
             .build();
 
-        let result = csp.gen_tls_key_pair(node_test_id(NODE_1));
+        let result = csp.csp_vault.gen_tls_key_pair(node_test_id(NODE_1));
 
         assert_matches!(result, Err(CspTlsKeygenError::DuplicateKeyId {key_id}) if key_id == duplicated_key_id)
     }
