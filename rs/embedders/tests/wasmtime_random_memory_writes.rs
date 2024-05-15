@@ -57,6 +57,15 @@ fn test_api_for_update(
             .with_subnet_type(subnet_type)
             .build(),
     );
+
+    let api_type = ApiType::update(
+        UNIX_EPOCH,
+        payload,
+        Cycles::zero(),
+        caller,
+        call_context_test_id(13),
+    );
+
     let static_system_state = SandboxSafeSystemState::new(
         &system_state,
         *cycles_account_manager,
@@ -70,19 +79,14 @@ fn test_api_for_update(
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
         Some(caller),
+        api_type.call_context_id(),
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
     let canister_current_message_memory_usage = NumBytes::from(0);
 
     SystemApiImpl::new(
-        ApiType::update(
-            UNIX_EPOCH,
-            payload,
-            Cycles::zero(),
-            caller,
-            call_context_test_id(13),
-        ),
+        api_type,
         static_system_state,
         canister_current_memory_usage,
         canister_current_message_memory_usage,

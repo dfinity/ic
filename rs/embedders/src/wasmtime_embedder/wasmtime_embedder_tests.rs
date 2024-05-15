@@ -61,6 +61,7 @@ fn test_wasmtime_system_api() {
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
+        api_type.call_context_id(),
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);

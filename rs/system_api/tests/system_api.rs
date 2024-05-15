@@ -1538,6 +1538,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         execution_parameters().compute_allocation,
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
+        api_type.call_context_id(),
     );
     let mut api = SystemApiImpl::new(
         api_type,
@@ -1593,6 +1594,7 @@ fn push_output_request_respects_memory_limits() {
         execution_parameters().compute_allocation,
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
+        api_type.call_context_id(),
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -1702,6 +1704,7 @@ fn push_output_request_oversized_request_memory_limits() {
         execution_parameters().compute_allocation,
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
+        api_type.call_context_id(),
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
