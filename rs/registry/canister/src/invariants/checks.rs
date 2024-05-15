@@ -655,7 +655,7 @@ mod tests {
                 key_configs: vec![KeyConfig {
                     key_id: Some(MasterPublicKeyId {
                         key_id: Some(master_public_key_id::KeyId::Ecdsa(EcdsaKeyId {
-                            curve: 0,
+                            curve: 1,
                             name: "test_curve_1".to_string(),
                         })),
                     }),
