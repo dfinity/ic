@@ -12,6 +12,7 @@ use crate::util::{block_on, create_canister, install_canister, runtime_from_url}
 use candid::Principal;
 use candid::{CandidType, Encode};
 use ic_base_types::SubnetId;
+use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_ledger_core::Tokens;
 use ic_registry_subnet_type::SubnetType;
 use icp_ledger::AccountIdentifier;
@@ -19,15 +20,31 @@ use serde::{Deserialize, Serialize};
 use slog::info;
 use std::collections::HashMap;
 
+pub const ICRC1_LEDGER_WASM: &str = "rs/rosetta-api/icrc1/ledger/ledger_canister.wasm.gz";
 pub const INTERNET_IDENTITY_WASM: &str =
     "external/ii_dev_canister/file/internet_identity_dev.wasm.gz";
 pub const NNS_DAPP_WASM: &str = "external/nns_dapp_canister/file/nns_dapp_canister.wasm.gz";
+pub const SUBNET_RENTAL_CANISTER_WASM: &str =
+    "external/subnet_rental_canister/file/subnet_rental_canister.wasm";
 pub const SNS_AGGREGATOR_WASM: &str = "external/sns_aggregator/file/sns_aggregator_dev.wasm.gz";
 
+/// Init and post_upgrade arguments for SNS aggregator.
+#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
+pub struct Config {
+    pub update_interval_ms: u64,
+    pub fast_interval_ms: u64,
+}
+
 /// Init and post_upgrade arguments for NNS frontend dapp.
-#[derive(Debug, Default, Eq, PartialEq, CandidType, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
+pub enum SchemaLabel {
+    Map,
+    AccountsInStableMemory,
+}
+#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
 pub struct CanisterArguments {
     pub args: Vec<(String, String)>,
+    pub schema: Option<SchemaLabel>,
 }
 
 pub fn nns_dapp_customizations() -> NnsCustomizations {
@@ -75,7 +92,11 @@ pub fn install_sns_aggregator(
             &sns_agent,
             sns_aggregator_canister_id,
             sns_aggregator_wasm.as_slice(),
-            Encode!(&()).unwrap(),
+            Encode!(&Some(Config {
+                update_interval_ms: 1_000,
+                fast_interval_ms: 100,
+            }))
+            .unwrap(),
         )
         .await;
         info!(
@@ -99,44 +120,63 @@ pub fn install_ii_and_nns_dapp(
     let farm_url = boundary_node.get_playnet().unwrap();
     let https_farm_url = format!("https://{}", farm_url);
     let topology = env.topology_snapshot();
+
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     let nns_agent = nns_node.build_default_agent();
 
     let ii_canister_id =
         nns_node.create_and_install_canister_with_arg(INTERNET_IDENTITY_WASM, None);
+    let nns_dapp_canister_id =
+        block_on(
+            async move { create_canister(&nns_agent, nns_node.effective_canister_id()).await },
+        );
+
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let nns_agent = nns_node.build_default_agent();
+
+    nns_node.create_and_install_canister_with_arg(SUBNET_RENTAL_CANISTER_WASM, None);
+
+    let cketh_init_args = InitArgsBuilder::for_tests()
+        .with_token_symbol("ckETH".to_string())
+        .with_token_name("ckETH".to_string())
+        .build();
+    let cketh_canister_id = nns_node.create_and_install_canister_with_arg(
+        ICRC1_LEDGER_WASM,
+        Some(Encode!(&(LedgerArgument::Init(cketh_init_args))).unwrap()),
+    );
 
     let nns_dapp_wasm = env.load_wasm(NNS_DAPP_WASM);
     let logger = env.logger();
     block_on(async move {
-        let nns_dapp_canister_id =
-            create_canister(&nns_agent, nns_node.effective_canister_id()).await;
-        let nns_dapp_args = vec![
+        let nns_dapp_metadata = vec![
             ("API_HOST".to_string(), https_farm_url.clone()),
+            ("CKETH_INDEX_CANISTER_ID".to_string(), cketh_canister_id.to_string()),
+            ("CKETH_LEDGER_CANISTER_ID".to_string(), cketh_canister_id.to_string()),
             ("CYCLES_MINTING_CANISTER_ID".to_string(), "rkp4c-7iaaa-aaaaa-aaaca-cai".to_string()),
             ("DFX_NETWORK".to_string(), "farm".to_string()),
-            ("FEATURE_FLAGS".to_string(), "{\"ENABLE_CKBTC\":false,\"ENABLE_CKTESTBTC\":false,\"ENABLE_SNS_2\":false,\"ENABLE_SNS_AGGREGATOR\":false,\"ENABLE_SNS_VOTING\":false,\"ENABLE_MY_TOKENS\":true}".to_string()),
+            ("FEATURE_FLAGS".to_string(), "{\"ENABLE_CKBTC\":false,\"ENABLE_CKTESTBTC\":false,\"ENABLE_HIDE_ZERO_BALANCE\":true,\"ENABLE_VOTING_INDICATION\":true}".to_string()),
             ("FETCH_ROOT_KEY".to_string(), "true".to_string()),
             ("GOVERNANCE_CANISTER_ID".to_string(), "rrkah-fqaaa-aaaaa-aaaaq-cai".to_string()),
-            ("GOVERNANCE_CANISTER_URL".to_string(), format!("https://rrkah-fqaaa-aaaaa-aaaaq-cai.{}", farm_url)),
             ("HOST".to_string(), https_farm_url.clone()),
             ("IDENTITY_SERVICE_URL".to_string(), format!("https://{}.{}",  ii_canister_id, farm_url)),
+            ("INDEX_CANISTER_ID".to_string(), "ryjl3-tyaaa-aaaaa-aaaba-cai".to_string()),
             ("LEDGER_CANISTER_ID".to_string(), "ryjl3-tyaaa-aaaaa-aaaba-cai".to_string()),
-            ("LEDGER_CANISTER_URL".to_string(), format!("https://ryjl3-tyaaa-aaaaa-aaaba-cai.{}", farm_url)),
             ("OWN_CANISTER_ID".to_string(), nns_dapp_canister_id.to_string()),
-            ("OWN_CANISTER_URL".to_string(), format!("https://{}.{}", nns_dapp_canister_id, farm_url)),
             ("ROBOTS".to_string(), "<meta name=\"robots\" content=\"noindex, nofollow\" />".to_string()),
             ("SNS_AGGREGATOR_URL".to_string(), sns_aggregator_canister_id.map(|s| format!("https://{}.{}", s, farm_url)).unwrap_or_default()),
             ("STATIC_HOST".to_string(), https_farm_url),
+            ("TVL_CANISTER_ID".to_string(), "".to_string()),
             ("WASM_CANISTER_ID".to_string(), "qaa6y-5yaaa-aaaaa-aaafa-cai".to_string())
         ];
+        let nns_dapp_init_args = Some(CanisterArguments {
+            args: nns_dapp_metadata,
+            schema: Some(SchemaLabel::AccountsInStableMemory),
+        });
         install_canister(
             &nns_agent,
             nns_dapp_canister_id,
             nns_dapp_wasm.as_slice(),
-            Encode!(&CanisterArguments {
-                args: nns_dapp_args
-            })
-            .unwrap(),
+            Encode!(&nns_dapp_init_args).unwrap(),
         )
         .await;
         info!(
