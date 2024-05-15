@@ -12,8 +12,10 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + [
+        "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm.gz",
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
+        "@subnet_rental_canister//file",
     ],
     deps = DEPENDENCIES + ["@crate_index//:libflate"] + ["//rs/tests"],
 )

@@ -50,12 +50,16 @@ use ic_tests::driver::{
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCanisterWasmStrategy},
+    test_env_api::{
+        await_boundary_node_healthy, HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy,
+    },
 };
 use ic_tests::nns_dapp::{
-    install_ii_and_nns_dapp, nns_dapp_customizations, set_authorized_subnets,
+    install_ii_and_nns_dapp, install_sns_aggregator, nns_dapp_customizations,
+    set_authorized_subnets, set_sns_subnet,
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
+use ic_tests::sns_client::add_all_wasms_to_sns_wasm;
 
 const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
 const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 1;
@@ -117,7 +121,16 @@ pub fn setup(env: TestEnv) {
         let bn_name = format!("boundary-node-{}", i);
         await_boundary_node_healthy(&env, &bn_name);
         if i == 0 {
-            install_ii_and_nns_dapp(&env, &bn_name, None);
+            let topology = env.topology_snapshot();
+            let mut app_subnets = topology
+                .subnets()
+                .filter(|s| s.subnet_type() == SubnetType::Application);
+            let sns_subnet = app_subnets.next().unwrap();
+            let sns_node = sns_subnet.nodes().next().unwrap();
+            let sns_aggregator_canister_id = install_sns_aggregator(&env, &bn_name, sns_node);
+            install_ii_and_nns_dapp(&env, &bn_name, Some(sns_aggregator_canister_id));
+            set_sns_subnet(&env, sns_subnet.subnet_id);
+            add_all_wasms_to_sns_wasm(&env, NnsCanisterWasmStrategy::TakeBuiltFromSources);
         }
     }
 }
