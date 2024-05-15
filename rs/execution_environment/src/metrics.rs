@@ -444,7 +444,7 @@ pub fn cycles_histogram<S: Into<String>>(
     metrics_registry.histogram(name, help, decimal_buckets_with_zero(6, 15))
 }
 
-/// Returns buckets appropriate for WASM and Stable memories
+/// Returns buckets appropriate for Wasm and Stable memories
 fn memory_buckets() -> Vec<f64> {
     const K: u64 = 1024;
     const M: u64 = K * 1024;

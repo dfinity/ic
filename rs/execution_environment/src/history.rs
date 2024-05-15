@@ -258,7 +258,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         CanisterTrapped => "Canister Trapped",
         CanisterCalledTrap => "Canister Called Trap",
         CanisterContractViolation => "Canister Contract Violation",
-        CanisterInvalidWasm => "Canister Invalid WASM",
+        CanisterInvalidWasm => "Canister Invalid Wasm",
         CanisterDidNotReply => "Canister Did Not Reply",
         CanisterOutOfMemory => "Canister Out Of Memory",
         CanisterStopped => "Canister Stopped",
@@ -305,7 +305,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
             "Canister does not have enough cycles to grow message memory"
         }
         CanisterMethodNotFound => "Canister Method Not Found",
-        CanisterWasmModuleNotFound => "Canister WASM Module Not Found",
+        CanisterWasmModuleNotFound => "Canister Wasm Module Not Found",
         CanisterAlreadyInstalled => "Canister Already Installed",
         CanisterWasmMemoryLimitExceeded => "Canister exceeded its Wasm memory limit",
     }

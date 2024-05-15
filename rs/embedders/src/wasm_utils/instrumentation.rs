@@ -442,7 +442,7 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
         Operator::RefFunc { .. } => 130,
 
         ////////////////////////////////////////////////////////////////
-        // WASM SIMD Operators
+        // Wasm SIMD Operators
         Operator::V128Load { .. } => 1,
         Operator::V128Load8x8S { .. } => 1,
         Operator::V128Load8x8U { .. } => 1,

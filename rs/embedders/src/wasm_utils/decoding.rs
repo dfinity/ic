@@ -57,7 +57,7 @@ fn wasm_encoding_and_size(
     ))
 }
 
-/// Returns the expected size of the WASM that will result from decoding this module
+/// Returns the expected size of the Wasm that will result from decoding this module
 /// (which may require uncompressing it).
 ///
 /// # Warning
