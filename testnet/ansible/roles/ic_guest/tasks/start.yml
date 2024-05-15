@@ -1,7 +1,6 @@
 ---
-
-- name: start guest
-  shell: |
+- name: Start guest
+  ansible.builtin.shell: |
     set -eExuo pipefail
     virsh start "{{ item }}" || true
     virsh autostart "{{ item }}" || true
@@ -10,4 +9,4 @@
     label:
   args:
     executable: /bin/bash
-  tags: [ "ic_guest" ]
+  tags: [ic_guest]

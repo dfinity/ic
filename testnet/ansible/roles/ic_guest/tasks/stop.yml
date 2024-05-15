@@ -1,7 +1,6 @@
 ---
-
-- name: stop guest
-  shell: |
+- name: Stop guest
+  ansible.builtin.shell: |
     set -eExu
     virsh stop "{{ item }}"
     virsh autostart --disable "{{ item }}"
@@ -10,4 +9,4 @@
     label:
   args:
     executable: /bin/bash
-  tags: [ "ic_guest" ]
+  tags: [ic_guest]

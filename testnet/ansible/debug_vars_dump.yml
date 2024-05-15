@@ -1,8 +1,8 @@
 ---
-- name: dump all
+- name: Dump all
   hosts: all
 
   tasks:
     - name: Display all variables/facts known for a host
-      debug:
+      ansible.builtin.debug:
         var: hostvars[inventory_hostname]
