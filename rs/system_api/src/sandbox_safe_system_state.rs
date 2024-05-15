@@ -10,9 +10,8 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::{
-    CanisterLog, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    Method as Ic00Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, IC_00,
+    CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -24,7 +23,7 @@ use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, Request, RequestMetadata, NO_DEADLINE},
     methods::Callback,
     time::CoarseTime,
-    CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
+    CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
 };
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};

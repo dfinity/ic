@@ -9,7 +9,7 @@ use ic_interfaces::execution_environment::{
     SubnetAvailableMemory, SystemApi, TrapCode,
 };
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::{DataSize, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE};
+use ic_management_canister_types::DataSize;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     testing::CanisterQueuesTesting, CallOrigin, Memory, NetworkTopology, SystemState,
@@ -33,6 +33,7 @@ use ic_types::{
     time,
     time::UNIX_EPOCH,
     CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, Time,
+    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
 };
 use std::{
     collections::BTreeSet,

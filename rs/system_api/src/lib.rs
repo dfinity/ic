@@ -16,7 +16,6 @@ use ic_interfaces::execution_environment::{
     TrapCode::{self, CyclesAmountTooBigFor64Bit},
 };
 use ic_logger::{error, ReplicaLogger};
-use ic_management_canister_types::CanisterLog;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_required_to_push_request, Memory, NumWasmPages,
@@ -27,7 +26,7 @@ use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{SystemMethod, WasmClosure},
-    CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, NumOsPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
