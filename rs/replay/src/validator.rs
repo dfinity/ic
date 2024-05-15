@@ -133,6 +133,7 @@ impl ReplayValidator {
             log.clone(),
             ValidatorMetrics::new(metrics_registry.clone()),
             time_source.clone(),
+            /*ingress_selector=*/ None,
         );
 
         Self {

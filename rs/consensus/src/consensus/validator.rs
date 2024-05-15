@@ -24,6 +24,7 @@ use ic_interfaces::{
     consensus::{PayloadBuilder, PayloadPermanentError, PayloadTransientError},
     consensus_pool::*,
     dkg::DkgPool,
+    ingress_manager::IngressSelector,
     messaging::MessageRouting,
     time_source::TimeSource,
     validation::{ValidationError, ValidationResult},
@@ -588,6 +589,7 @@ pub struct Validator {
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
     time_source: Arc<dyn TimeSource>,
+    ingress_selector: Option<Arc<dyn IngressSelector>>,
 }
 
 impl Validator {
@@ -605,6 +607,7 @@ impl Validator {
         log: ReplicaLogger,
         metrics: ValidatorMetrics,
         time_source: Arc<dyn TimeSource>,
+        ingress_selector: Option<Arc<dyn IngressSelector>>,
     ) -> Validator {
         Validator {
             replica_config,
@@ -619,6 +622,7 @@ impl Validator {
             metrics,
             schedule: RoundRobin::default(),
             time_source,
+            ingress_selector,
         }
     }
 
@@ -862,6 +866,8 @@ impl Validator {
                         ));
                     } else if verification.is_ok() {
                         if get_notarized_parent(pool_reader, &proposal).is_ok() {
+                            self.metrics
+                                .observe_data_payload(&proposal, self.ingress_selector.as_deref());
                             self.metrics.observe_block(pool_reader, &proposal);
                             known_ranks.insert(proposal.height(), Some(proposal.rank()));
                             change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
@@ -916,6 +922,8 @@ impl Validator {
 
                 match self.check_block_validity(pool_reader, &proposal) {
                     Ok(()) => {
+                        self.metrics
+                            .observe_data_payload(&proposal, self.ingress_selector.as_deref());
                         self.metrics.observe_block(pool_reader, &proposal);
                         known_ranks.insert(proposal.height(), Some(proposal.rank()));
                         change_set.push(ChangeAction::MoveToValidated(proposal.into_message()))
@@ -1725,6 +1733,7 @@ pub mod test {
                 no_op_logger(),
                 ValidatorMetrics::new(MetricsRegistry::new()),
                 Arc::clone(&dependencies.time_source) as Arc<_>,
+                /*ingress_selector=*/ None,
             );
             Self {
                 validator,
