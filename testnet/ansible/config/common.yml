@@ -15,4 +15,4 @@ ic_version: "0.8.0"
 # PLEASE DO NOT ADD MORE CONFIGURATION FLAGS TO THIS FILE. #
 ############################################################
 ic_namespace: node
-replica_with_symbols: no
+replica_with_symbols: false

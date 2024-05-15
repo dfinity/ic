@@ -21,12 +21,10 @@
   ansible.builtin.apt:
     name: parallel
     state: present
-    cmd: ""
   tags: [ic_guest]
 
 - name: Install zstd
   ansible.builtin.apt:
     name: zstd
     state: present
-    cmd: ""
   tags: [ic_guest]

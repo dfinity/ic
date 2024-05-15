@@ -32,7 +32,8 @@
     # Deploy replica images
     IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
     ITEMS=({{ replica_nodes | join(' ') }})
-    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| \
+        cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
 
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chown libvirt-qemu:kvm /var/lib/libvirt/images/'{}.img'
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chmod 0664 /var/lib/libvirt/images/'{}.img'
@@ -90,7 +91,8 @@
     # Deploy replica images
     IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/api{{ bn_image_type }}"
     ITEMS=({{ api_nodes | join(' ') }})
-    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| \
+        cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
 
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chown libvirt-qemu:kvm /var/lib/libvirt/images/'{}.img'
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chmod 0664 /var/lib/libvirt/images/'{}.img'
@@ -113,7 +115,8 @@
     # Deploy replica images
     IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary{{ bn_image_type }}"
     ITEMS=({{ boundary_nodes | join(' ') }})
-    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| \
+        cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
 
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chown libvirt-qemu:kvm /var/lib/libvirt/images/'{}.img'
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chmod 0664 /var/lib/libvirt/images/'{}.img'
@@ -134,7 +137,8 @@
 
     IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/aux"
     ITEMS=({{ aux_nodes | join(' ') }})
-    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| \
+        cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
 
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chown libvirt-qemu:kvm /var/lib/libvirt/images/'{}.img'
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chmod 0664 /var/lib/libvirt/images/'{}.img'
@@ -181,7 +185,7 @@
     owner: root
     group: root
     mode: "0644"
-  loop: "{{ api_nodes | union(aux_nodes)  | union(boundary_nodes) }}"
+  loop: "{{ api_nodes | union(aux_nodes) | union(boundary_nodes) }}"
   loop_control:
     label:
   tags: [ic_guest]
@@ -224,9 +228,8 @@
   tags: [ic_guest]
 
 - name: Load the vhost_vsock kernel module
-  modprobe:
-    name: vhost_vsock
-    state: present
+  ansible.builtin.command: modprobe vhost_vsock
+  ignore_errors: true
   tags: [ic_guest]
 
 - name: Start the dfinity-hsm-agent.service

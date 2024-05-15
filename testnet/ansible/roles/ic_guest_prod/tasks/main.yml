@@ -36,12 +36,6 @@
   when: ic_state == "create"
   tags: [ic_guest]
 
-- name: Import tasks
-  ansible.builtin.import_tasks:
-    file: "{{ lookup('first_found', ['tasks/ssh_keys.yml', '../ic_guest/tasks/ssh_keys.yml']) }}"
-  when: ic_state == "create"
-  tags: [ic_guest]
-
 - name: Import tasks start
   ansible.builtin.import_tasks:
     file: "{{ lookup('first_found', ['tasks/start.yml', '../ic_guest/tasks/start.yml']) }}"

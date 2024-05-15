@@ -1,14 +1,4 @@
 ---
-#- name: Retrieve host vars
-#  debug:
-#    var: "{{ index }} - {{ item }}"
-#  tags: [ "boundary_node_vm" ]
-#
-#- name: Retrieve host vars
-#  debug:
-#    var: inventory_hostname
-#  tags: [ "boundary_node_vm" ]
-
 - name: Copy media.img to remote
   vars:
     api_nodes: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
