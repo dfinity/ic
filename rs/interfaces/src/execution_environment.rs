@@ -16,7 +16,7 @@ use ic_types::{
         AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, MessageId,
         SignedIngressContent, UserQuery,
     },
-    Cycles, ExecutionRound, Height, NumInstructions, NumPages, Randomness, Time,
+    Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, ops};
@@ -866,7 +866,7 @@ pub trait SystemApi {
         &self,
         offset: u64,
         size: u64,
-    ) -> HypervisorResult<(NumPages, NumInstructions)>;
+    ) -> HypervisorResult<(NumOsPages, NumInstructions)>;
 
     /// The canister can query the IC for the current time.
     fn ic0_time(&mut self) -> HypervisorResult<Time>;

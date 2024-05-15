@@ -3,7 +3,7 @@ use std::time::Duration;
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_types::{NumInstructions, NumPages};
+use ic_types::{NumInstructions, NumOsPages};
 use serde::{Deserialize, Serialize};
 
 use crate::flag_status::FlagStatus;
@@ -154,11 +154,11 @@ pub struct Config {
 
     // Maximum number of stable memory dirty pages that a single message execution
     // is allowed to produce.
-    pub stable_memory_dirty_page_limit: NumPages,
+    pub stable_memory_dirty_page_limit: NumOsPages,
 
     // Maximum number of stable memory pages that a single message execution
     // can access.
-    pub stable_memory_accessed_page_limit: NumPages,
+    pub stable_memory_accessed_page_limit: NumOsPages,
 
     /// Sandbox process eviction does not activate if the number of sandbox
     /// processes is below this threshold.
@@ -208,8 +208,8 @@ impl Config {
             num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
             feature_flags: FeatureFlags::const_default(),
             metering_type: MeteringType::New,
-            stable_memory_dirty_page_limit: NumPages::new(STABLE_MEMORY_DIRTY_PAGE_LIMIT),
-            stable_memory_accessed_page_limit: NumPages::new(STABLE_MEMORY_ACCESSED_PAGE_LIMIT),
+            stable_memory_dirty_page_limit: NumOsPages::new(STABLE_MEMORY_DIRTY_PAGE_LIMIT),
+            stable_memory_accessed_page_limit: NumOsPages::new(STABLE_MEMORY_ACCESSED_PAGE_LIMIT),
             min_sandbox_count: DEFAULT_MIN_SANDBOX_COUNT,
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,

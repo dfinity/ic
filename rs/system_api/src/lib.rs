@@ -28,7 +28,7 @@ use ic_types::{
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{SystemMethod, WasmClosure},
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, NumPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
+    NumInstructions, NumOsPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use request_in_prep::{into_request, RequestInPrep};
@@ -2412,7 +2412,7 @@ impl SystemApi for SystemApiImpl {
         &self,
         offset: u64,
         size: u64,
-    ) -> HypervisorResult<(NumPages, NumInstructions)> {
+    ) -> HypervisorResult<(NumOsPages, NumInstructions)> {
         let dirty_pages = self.stable_memory().dirty_pages_from_write(offset, size);
         let cost = self
             .sandbox_safe_system_state

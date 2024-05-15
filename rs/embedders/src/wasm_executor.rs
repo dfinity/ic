@@ -8,7 +8,7 @@ use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageM
 use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges};
 use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
 use ic_types::methods::{FuncRef, WasmMethod};
-use ic_types::NumPages;
+use ic_types::NumOsPages;
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use wasmtime::Module;
@@ -661,7 +661,7 @@ pub fn process(
     // In case the message dirtied too many pages, as a performance optimization we will
     // yield the control to the replica and then resume copying dirty pages in a new execution slice.
     let num_dirty_pages = if let Ok(ref res) = run_result {
-        let dirty_pages = NumPages::from(res.dirty_pages.len() as u64);
+        let dirty_pages = NumOsPages::from(res.dirty_pages.len() as u64);
         // Do not perform this optimization for subnets where DTS is not enabled.
         if execution_parameters.instruction_limits.slicing_enabled()
             && dirty_pages.get() > embedder.config().max_dirty_pages_without_optimization as u64
@@ -693,11 +693,11 @@ pub fn process(
             dirty_pages
         } else {
             // The optimization wasn't performed.
-            NumPages::from(0)
+            NumOsPages::from(0)
         }
     } else {
         // The optimization wasn't performed because the message execution failed.
-        NumPages::from(0)
+        NumOsPages::from(0)
     };
 
     // Has the side effect of deallocating memory if message failed and
