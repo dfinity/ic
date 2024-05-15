@@ -17,7 +17,7 @@ use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     EcdsaDealingsContext, SignWithEcdsaContext,
@@ -1480,6 +1480,13 @@ pub(crate) fn empty_ecdsa_payload_with_key_ids(
 
 pub(crate) fn fake_ecdsa_key_id() -> EcdsaKeyId {
     EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()
+}
+
+pub(crate) fn fake_schnorr_master_public_key_id(algorithm: SchnorrAlgorithm) -> MasterPublicKeyId {
+    MasterPublicKeyId::Schnorr(SchnorrKeyId {
+        algorithm,
+        name: String::from("some_schnorr_key"),
+    })
 }
 
 pub(crate) fn create_reshare_request(num_nodes: u64, registry_version: u64) -> EcdsaReshareRequest {

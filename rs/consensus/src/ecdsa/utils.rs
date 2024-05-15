@@ -8,7 +8,7 @@ use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm};
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::ecdsa_keys::EcdsaKeysRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -29,6 +29,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
 };
 use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey};
+use ic_types::crypto::AlgorithmId;
 use ic_types::registry::RegistryClientError;
 use ic_types::{Height, RegistryVersion, SubnetId};
 use phantom_newtype::Id;
@@ -347,6 +348,18 @@ pub(crate) fn inspect_ecdsa_initializations(
     }
 
     Ok(initial_dealings_per_key_id)
+}
+
+pub(crate) fn algorithm_for_key_id(key_id: &MasterPublicKeyId) -> AlgorithmId {
+    match key_id {
+        MasterPublicKeyId::Ecdsa(ecdsa_key_id) => match ecdsa_key_id.curve {
+            EcdsaCurve::Secp256k1 => AlgorithmId::ThresholdEcdsaSecp256k1,
+        },
+        MasterPublicKeyId::Schnorr(schnorr_key_id) => match schnorr_key_id.algorithm {
+            SchnorrAlgorithm::Bip340Secp256k1 => AlgorithmId::ThresholdSchnorrBip340,
+            SchnorrAlgorithm::Ed25519 => AlgorithmId::ThresholdEd25519,
+        },
+    }
 }
 
 /// Return [`EcdsaConfig`] if it is enabled for the given subnet.
