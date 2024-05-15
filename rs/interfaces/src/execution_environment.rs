@@ -4,7 +4,7 @@ mod errors;
 pub use errors::{CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
-use ic_management_canister_types::{CanisterLog, EcdsaKeyId};
+use ic_management_canister_types::EcdsaKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -16,12 +16,14 @@ use ic_types::{
         AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, MessageId,
         SignedIngressContent, UserQuery,
     },
-    Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, Time,
+    CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, ops};
-use std::{collections::BTreeSet, convert::TryFrom};
-use std::{convert::Infallible, fmt};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    convert::{Infallible, TryFrom},
+    fmt, ops,
+};
 use tower::util::BoxCloneService;
 
 /// Instance execution statistics. The stats are cumulative and

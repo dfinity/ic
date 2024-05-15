@@ -67,6 +67,7 @@ pub mod artifact;
 pub mod artifact_kind;
 pub mod batch;
 pub mod canister_http;
+pub mod canister_log;
 pub mod consensus;
 pub mod crypto;
 pub mod funds;
@@ -89,6 +90,7 @@ pub mod xnet;
 #[cfg(test)]
 pub mod exhaustive;
 
+pub use crate::canister_log::{CanisterLog, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE};
 pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
 pub use funds::*;

@@ -5,7 +5,7 @@ use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterLogRecord, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, DataSize, FetchCanisterLogsRequest, FetchCanisterLogsResponse,
-    LogVisibility, Payload, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
+    LogVisibility, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -14,7 +14,9 @@ use ic_state_machine_tests::{
 };
 use ic_test_utilities_execution_environment::{get_reply, wat_canister, wat_fn};
 use ic_test_utilities_metrics::fetch_histogram_stats;
-use ic_types::{ingress::WasmResult, CanisterId, Cycles, NumInstructions};
+use ic_types::{
+    ingress::WasmResult, CanisterId, Cycles, NumInstructions, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
+};
 use more_asserts::{assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
 use std::time::{Duration, SystemTime};
