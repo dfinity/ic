@@ -27,7 +27,7 @@ fn test_reset_root_with_governance_proposal() {
     let root_version = state_machine.module_hash(ROOT_CANISTER_ID).unwrap();
 
     // Execute proposal
-    let new_root = modify_wasm_bytes(&build_root_wasm().bytes(), "yolo");
+    let new_root = modify_wasm_bytes(&build_root_wasm().bytes(), 42);
 
     let new_root_version = Sha256::hash(&new_root);
 
@@ -82,7 +82,7 @@ fn test_other_controllers_cannot_reset_root() {
     let root_version = state_machine.module_hash(ROOT_CANISTER_ID).unwrap();
 
     // Execute proposal
-    let new_root = modify_wasm_bytes(&build_root_wasm().bytes(), "yolo");
+    let new_root = modify_wasm_bytes(&build_root_wasm().bytes(), 42);
 
     let new_root_version = Sha256::hash(&new_root);
 

@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "gzip_compress", "rust_ic_test")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -33,11 +33,6 @@ rust_canister(
         "@crate_index//:lazy_static",
         "@crate_index//:serde",
     ],
-)
-
-gzip_compress(
-    name = "ledger_archive_node_canister.wasm.gz",
-    srcs = [":ledger-archive-node-canister-wasm"],
 )
 
 rust_test(

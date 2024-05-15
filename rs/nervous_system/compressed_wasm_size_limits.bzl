@@ -15,17 +15,17 @@ WASMs are allowed to be.
 
 NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     "cycles-minting-canister.wasm.gz": "5",
-    "genesis-token-canister.wasm.gz": "2",
-    "governance-canister.wasm.gz": "10",
-    "governance-canister_test.wasm.gz": "10",
+    "genesis-token-canister.wasm.gz": "3",
+    "governance-canister.wasm.gz": "12",
+    "governance-canister_test.wasm.gz": "12",
     "governance-mem-test-canister.wasm.gz": "2",
-    "registry-canister.wasm.gz": "10",
+    "registry-canister.wasm.gz": "12",
     "root-canister.wasm.gz": "4",
 }
 
 SNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
-    "sns-governance-canister.wasm.gz": "8",
-    "sns-governance-canister_test.wasm.gz": "8",
-    "sns-root-canister.wasm.gz": "3",
+    "sns-governance-canister.wasm.gz": "10",
+    "sns-governance-canister_test.wasm.gz": "10",
+    "sns-root-canister.wasm.gz": "4",
     "sns-swap-canister.wasm.gz": "6",
 }

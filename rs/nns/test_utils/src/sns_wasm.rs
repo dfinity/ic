@@ -30,20 +30,23 @@ use ic_state_machine_tests::StateMachine;
 use maplit::btreemap;
 use std::{
     collections::{BTreeMap, HashMap},
-    io::{Read, Write},
+    io::Write,
     time::{Duration, Instant},
 };
 
-/// Get a valid tiny WASM for use in tests of a particular SnsCanisterType
+/// Get a valid tiny WASM for use in tests of a particular SnsCanisterType.
+/// The WASM is the gzip encoding of the trivial WASM 0061736d01000000.
 pub fn test_wasm(canister_type: SnsCanisterType, modify_with: Option<u8>) -> SnsWasm {
-    let id_byte = modify_with.unwrap_or(1);
     create_modified_sns_wasm(
         &SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            wasm: hex::decode(
+                "1f8b0808f5a434660003612e7761736d0063482cce656460600000ce334b1c08000000",
+            )
+            .unwrap(),
             canister_type: canister_type.into(),
             ..SnsWasm::default()
         },
-        Some(&id_byte.to_string()),
+        modify_with.map(|b| b.into()),
     )
 }
 
@@ -558,31 +561,20 @@ pub fn build_mainnet_index_ng_sns_wasm() -> SnsWasm {
 }
 
 /// Create an SnsWasm with custom metadata
-pub fn create_modified_sns_wasm(original_wasm: &SnsWasm, modify_with: Option<&str>) -> SnsWasm {
+pub fn create_modified_sns_wasm(original_wasm: &SnsWasm, modify_with: Option<u32>) -> SnsWasm {
     let original_hash = original_wasm.sha256_hash();
-    let mut wasm_to_add = original_wasm.wasm.clone();
+    let wasm_to_add = original_wasm.wasm.clone();
 
-    let mut originally_gzipped = false;
-    if is_gzipped_blob(&wasm_to_add) {
-        originally_gzipped = true;
-        let mut decoder = flate2::read::GzDecoder::new(&wasm_to_add[..]);
-        let mut decoded = vec![];
-        decoder.read_to_end(&mut decoded).unwrap();
-        wasm_to_add = decoded;
-    }
+    assert!(is_gzipped_blob(&wasm_to_add));
 
-    let wasm_to_add = modify_wasm_bytes(&wasm_to_add, modify_with.unwrap_or("no op"));
+    let wasm_to_add = modify_wasm_bytes(&wasm_to_add, modify_with.unwrap_or(42));
 
     // We get our new WASM, which is functionally the same.
-    let mut sns_wasm_to_add = SnsWasm {
+    let sns_wasm_to_add = SnsWasm {
         wasm: wasm_to_add,
         canister_type: original_wasm.canister_type,
         ..SnsWasm::default()
     };
-
-    if originally_gzipped {
-        sns_wasm_to_add = ensure_sns_wasm_gzipped(sns_wasm_to_add);
-    }
 
     // Make sure that the output differs from the input, since that is the whole point of this
     // function.

@@ -12,14 +12,14 @@ rust_library(
         "src/tests.rs",
     ],
     compile_data = [
-        "//rs/rosetta-api/icp_ledger/archive:ledger_archive_node_canister.wasm.gz",
+        "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm.wasm.gz",
     ],
     crate_name = "ledger_canister",
     proc_macro_deps = [
         "@crate_index//:async-trait",
     ],
     rustc_env = {
-        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/rosetta-api/icp_ledger/archive:ledger_archive_node_canister.wasm.gz)",
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm.wasm.gz)",
     },
     version = "0.9.0",
     deps = [
@@ -47,14 +47,14 @@ rust_library(
 rust_test(
     name = "ledger_test",
     compile_data = [
-        "//rs/rosetta-api/icp_ledger/archive:ledger_archive_node_canister.wasm.gz",
+        "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm.wasm.gz",
     ],
     crate = ":ledger",
     data = [
-        "//rs/rosetta-api/icp_ledger/archive:ledger_archive_node_canister.wasm.gz",
+        "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm.wasm.gz",
     ],
     rustc_env = {
-        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/rosetta-api/icp_ledger/archive:ledger_archive_node_canister.wasm.gz)",
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm.wasm.gz)",
     },
 )
 
