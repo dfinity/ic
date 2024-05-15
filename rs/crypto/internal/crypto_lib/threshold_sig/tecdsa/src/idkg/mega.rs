@@ -69,9 +69,9 @@ impl MEGaPublicKey {
     pub fn deserialize(
         curve: EccCurveType,
         value: &[u8],
-    ) -> ThresholdEcdsaSerializationResult<Self> {
+    ) -> CanisterThresholdSerializationResult<Self> {
         let point = EccPoint::deserialize(curve, value)
-            .map_err(|e| ThresholdEcdsaSerializationError(format!("{:?}", e)))?;
+            .map_err(|e| CanisterThresholdSerializationError(format!("{:?}", e)))?;
         Ok(Self { point })
     }
 
@@ -106,9 +106,9 @@ impl MEGaPrivateKey {
     pub fn deserialize(
         curve: EccCurveType,
         value: &[u8],
-    ) -> ThresholdEcdsaSerializationResult<Self> {
+    ) -> CanisterThresholdSerializationResult<Self> {
         let secret = EccScalar::deserialize(curve, value)
-            .map_err(|_| ThresholdEcdsaSerializationError("REDACTED".to_string()))?;
+            .map_err(|_| CanisterThresholdSerializationError("REDACTED".to_string()))?;
         Ok(Self { secret })
     }
 
@@ -196,9 +196,9 @@ impl MEGaCiphertext {
         expected_recipients: usize,
         associated_data: &[u8],
         dealer_index: NodeIndex,
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         if self.recipients() != expected_recipients {
-            return Err(ThresholdEcdsaError::InvalidRecipients);
+            return Err(CanisterThresholdError::InvalidRecipients);
         }
 
         match self {
@@ -216,16 +216,16 @@ impl MEGaCiphertext {
         ctype: MEGaCiphertextType,
         key_curve: EccCurveType,
         plaintext_curve: EccCurveType,
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         if self.ephemeral_key().curve_type() != key_curve {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         if self.pop_public_key().curve_type() != key_curve {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
         if self.pop_proof().curve_type()? != key_curve {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         let curves_ok = match self {
@@ -236,11 +236,11 @@ impl MEGaCiphertext {
         };
 
         if !curves_ok {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         if self.ctype() != ctype {
-            return Err(ThresholdEcdsaError::InconsistentCiphertext);
+            return Err(CanisterThresholdError::InconsistentCiphertext);
         }
 
         Ok(())
@@ -267,7 +267,7 @@ impl MEGaCiphertext {
         receiver_index: NodeIndex,
         secret_key: &MEGaPrivateKey,
         public_key: &MEGaPublicKey,
-    ) -> ThresholdEcdsaResult<CommitmentOpening> {
+    ) -> CanisterThresholdResult<CommitmentOpening> {
         let opening = match self {
             MEGaCiphertext::Single(ciphertext) => {
                 let opening = ciphertext.decrypt(
@@ -311,15 +311,15 @@ impl From<MEGaCiphertextPair> for MEGaCiphertext {
 fn check_plaintexts(
     plaintexts: &[EccScalar],
     recipients: &[MEGaPublicKey],
-) -> ThresholdEcdsaResult<(EccCurveType, EccCurveType)> {
+) -> CanisterThresholdResult<(EccCurveType, EccCurveType)> {
     if plaintexts.len() != recipients.len() {
-        return Err(ThresholdEcdsaError::InvalidArguments(
+        return Err(CanisterThresholdError::InvalidArguments(
             "Must be as many plaintexts as recipients".to_string(),
         ));
     }
 
     if plaintexts.is_empty() {
-        return Err(ThresholdEcdsaError::InvalidArguments(
+        return Err(CanisterThresholdError::InvalidArguments(
             "Must encrypt at least one plaintext".to_string(),
         ));
     }
@@ -328,7 +328,7 @@ fn check_plaintexts(
 
     for pt in plaintexts {
         if pt.curve_type() != plaintext_curve {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
     }
 
@@ -336,7 +336,7 @@ fn check_plaintexts(
 
     for recipient in recipients {
         if recipient.curve_type() != key_curve {
-            return Err(ThresholdEcdsaError::InvalidRecipients);
+            return Err(CanisterThresholdError::InvalidRecipients);
         }
     }
 
@@ -346,15 +346,15 @@ fn check_plaintexts(
 fn check_plaintexts_pair(
     plaintexts: &[(EccScalar, EccScalar)],
     recipients: &[MEGaPublicKey],
-) -> ThresholdEcdsaResult<(EccCurveType, EccCurveType)> {
+) -> CanisterThresholdResult<(EccCurveType, EccCurveType)> {
     if plaintexts.len() != recipients.len() {
-        return Err(ThresholdEcdsaError::InvalidArguments(
+        return Err(CanisterThresholdError::InvalidArguments(
             "Must be as many plaintexts as recipients".to_string(),
         ));
     }
 
     if plaintexts.is_empty() {
-        return Err(ThresholdEcdsaError::InvalidArguments(
+        return Err(CanisterThresholdError::InvalidArguments(
             "Must encrypt at least one plaintext".to_string(),
         ));
     }
@@ -363,7 +363,7 @@ fn check_plaintexts_pair(
 
     for pt in plaintexts {
         if pt.0.curve_type() != plaintext_curve || pt.1.curve_type() != plaintext_curve {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
     }
 
@@ -371,7 +371,7 @@ fn check_plaintexts_pair(
 
     for recipient in recipients {
         if recipient.curve_type() != key_curve {
-            return Err(ThresholdEcdsaError::InvalidRecipients);
+            return Err(CanisterThresholdError::InvalidRecipients);
         }
     }
 
@@ -387,7 +387,7 @@ fn mega_hash_to_scalars(
     public_key: &EccPoint,
     ephemeral_key: &EccPoint,
     shared_secret: &EccPoint,
-) -> ThresholdEcdsaResult<Vec<EccScalar>> {
+) -> CanisterThresholdResult<Vec<EccScalar>> {
     let count = match ctype {
         MEGaCiphertextType::Single => 1,
         MEGaCiphertextType::Pairs => 2,
@@ -414,7 +414,7 @@ fn compute_pop_base(
     associated_data: &[u8],
     dealer_index: NodeIndex,
     ephemeral_key: &EccPoint,
-) -> ThresholdEcdsaResult<EccPoint> {
+) -> CanisterThresholdResult<EccPoint> {
     let mut ro = RandomOracle::new(ctype.pop_base_domain_sep());
     ro.add_bytestring("associated_data", associated_data)?;
     ro.add_u32("dealer_index", dealer_index)?;
@@ -430,7 +430,7 @@ fn verify_pop(
     ephemeral_key: &EccPoint,
     pop_public_key: &EccPoint,
     pop_proof: &zk::ProofOfDLogEquivalence,
-) -> ThresholdEcdsaResult<()> {
+) -> CanisterThresholdResult<()> {
     let curve_type = ephemeral_key.curve_type();
 
     let pop_base = compute_pop_base(
@@ -467,7 +467,7 @@ fn compute_eph_key_and_pop(
     seed: Seed,
     associated_data: &[u8],
     dealer_index: NodeIndex,
-) -> ThresholdEcdsaResult<(EccScalar, EccPoint, EccPoint, zk::ProofOfDLogEquivalence)> {
+) -> CanisterThresholdResult<(EccScalar, EccPoint, EccPoint, zk::ProofOfDLogEquivalence)> {
     let beta = EccScalar::from_seed(curve_type, seed.derive(ctype.ephemeral_key_domain_sep()));
     let v = EccPoint::mul_by_g(&beta);
 
@@ -491,7 +491,7 @@ impl MEGaCiphertextSingle {
         recipients: &[MEGaPublicKey],
         dealer_index: NodeIndex,
         associated_data: &[u8],
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let (plaintext_curve, key_curve) = check_plaintexts(plaintexts, recipients)?;
 
         let ctype = MEGaCiphertextType::Single;
@@ -532,7 +532,7 @@ impl MEGaCiphertextSingle {
         &self,
         associated_data: &[u8],
         dealer_index: NodeIndex,
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         verify_pop(
             MEGaCiphertextType::Single,
             associated_data,
@@ -550,9 +550,9 @@ impl MEGaCiphertextSingle {
         recipient_index: NodeIndex,
         recipient_public_key: &MEGaPublicKey,
         shared_secret: &EccPoint,
-    ) -> ThresholdEcdsaResult<EccScalar> {
+    ) -> CanisterThresholdResult<EccScalar> {
         if self.ctexts.len() <= recipient_index as usize {
-            return Err(ThresholdEcdsaError::InvalidArguments(
+            return Err(CanisterThresholdError::InvalidArguments(
                 "Invalid index".to_string(),
             ));
         }
@@ -580,7 +580,7 @@ impl MEGaCiphertextSingle {
         recipient_index: NodeIndex,
         our_private_key: &MEGaPrivateKey,
         recipient_public_key: &MEGaPublicKey,
-    ) -> ThresholdEcdsaResult<EccScalar> {
+    ) -> CanisterThresholdResult<EccScalar> {
         // We could verify the PoP here. However we assume that it was
         // already checked when the dealing was verified, and we only
         // decrypt verified dealings.
@@ -605,7 +605,7 @@ impl MEGaCiphertextPair {
         recipients: &[MEGaPublicKey],
         dealer_index: NodeIndex,
         associated_data: &[u8],
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let (plaintext_curve, key_curve) = check_plaintexts_pair(plaintexts, recipients)?;
 
         let ctype = MEGaCiphertextType::Pairs;
@@ -647,7 +647,7 @@ impl MEGaCiphertextPair {
         &self,
         associated_data: &[u8],
         dealer_index: NodeIndex,
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         verify_pop(
             MEGaCiphertextType::Pairs,
             associated_data,
@@ -665,9 +665,9 @@ impl MEGaCiphertextPair {
         recipient_index: NodeIndex,
         recipient_public_key: &MEGaPublicKey,
         shared_secret: &EccPoint,
-    ) -> ThresholdEcdsaResult<(EccScalar, EccScalar)> {
+    ) -> CanisterThresholdResult<(EccScalar, EccScalar)> {
         if self.ctexts.len() <= recipient_index as usize {
-            return Err(ThresholdEcdsaError::InvalidArguments(
+            return Err(CanisterThresholdError::InvalidArguments(
                 "Invalid index".to_string(),
             ));
         }
@@ -698,7 +698,7 @@ impl MEGaCiphertextPair {
         recipient_index: NodeIndex,
         our_private_key: &MEGaPrivateKey,
         recipient_public_key: &MEGaPublicKey,
-    ) -> ThresholdEcdsaResult<(EccScalar, EccScalar)> {
+    ) -> CanisterThresholdResult<(EccScalar, EccScalar)> {
         // We could verify the PoP here. However we assume that it was
         // already checked when the dealing was verified, and we only
         // decrypt verified dealings.
@@ -726,9 +726,9 @@ macro_rules! generate_serializable_keyset {
     ($curve:ident, $pub_size:expr, $priv_size:expr) => {
         paste! {
             impl TryFrom<&[<MEGaPublicKey $curve Bytes>]> for MEGaPublicKey {
-                type Error = ThresholdEcdsaSerializationError;
+                type Error = CanisterThresholdSerializationError;
 
-                fn try_from(raw: &[<MEGaPublicKey $curve Bytes>]) -> ThresholdEcdsaSerializationResult<Self> {
+                fn try_from(raw: &[<MEGaPublicKey $curve Bytes>]) -> CanisterThresholdSerializationResult<Self> {
                     Self::deserialize(EccCurveType::$curve, &raw.0)
                 }
             }
@@ -742,16 +742,16 @@ macro_rules! generate_serializable_keyset {
             }
 
             impl TryFrom<&MEGaPublicKey> for [<MEGaPublicKey $curve Bytes>] {
-                type Error = ThresholdEcdsaSerializationError;
+                type Error = CanisterThresholdSerializationError;
 
-                fn try_from(key: &MEGaPublicKey) -> ThresholdEcdsaSerializationResult<Self> {
+                fn try_from(key: &MEGaPublicKey) -> CanisterThresholdSerializationResult<Self> {
                     match key.curve_type() {
                         EccCurveType::$curve => {
                             Ok(Self(key.serialize().try_into().map_err(|e| {
-                                ThresholdEcdsaSerializationError(format!("{:?}", e))
+                                CanisterThresholdSerializationError(format!("{:?}", e))
                             })?))
                         }
-                        _ => Err(ThresholdEcdsaSerializationError(
+                        _ => Err(CanisterThresholdSerializationError(
                             "Wrong curve".to_string(),
                         )),
                     }
@@ -759,9 +759,9 @@ macro_rules! generate_serializable_keyset {
             }
 
             impl TryFrom<&[<MEGaPrivateKey $curve Bytes>]> for MEGaPrivateKey {
-                type Error = ThresholdEcdsaSerializationError;
+                type Error = CanisterThresholdSerializationError;
 
-                fn try_from(raw: &[<MEGaPrivateKey $curve Bytes>]) -> ThresholdEcdsaSerializationResult<Self> {
+                fn try_from(raw: &[<MEGaPrivateKey $curve Bytes>]) -> CanisterThresholdSerializationResult<Self> {
                     Self::deserialize(EccCurveType::$curve, raw.0.expose_secret().as_ref())
                 }
             }
@@ -780,20 +780,20 @@ macro_rules! generate_serializable_keyset {
             }
 
             impl TryFrom<&MEGaPrivateKey> for [<MEGaPrivateKey $curve Bytes>] {
-                type Error = ThresholdEcdsaSerializationError;
+                type Error = CanisterThresholdSerializationError;
 
-                fn try_from(key: &MEGaPrivateKey) -> ThresholdEcdsaSerializationResult<Self> {
+                fn try_from(key: &MEGaPrivateKey) -> CanisterThresholdSerializationResult<Self> {
                     match key.curve_type() {
                         EccCurveType::$curve => {
                             let mut bits: [u8; Self::SIZE] = key.serialize().try_into().map_err(|e| {
-                                ThresholdEcdsaSerializationError(format!("{:?}", e))
+                                CanisterThresholdSerializationError(format!("{:?}", e))
                             })?;
 
                             let arr = SecretArray::new_and_zeroize_argument(&mut bits);
 
                             Ok(Self(arr))
                         }
-                        _ => Err(ThresholdEcdsaSerializationError(
+                        _ => Err(CanisterThresholdSerializationError(
                             "Wrong curve".to_string(),
                         )),
                     }

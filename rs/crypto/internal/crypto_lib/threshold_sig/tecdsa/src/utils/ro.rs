@@ -73,17 +73,17 @@ impl RandomOracle {
         name: &str,
         input: &[u8],
         ty: RandomOracleInputType,
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         if self.inputs.contains_key(name) {
-            return Err(ThresholdEcdsaError::InvalidRandomOracleInput);
+            return Err(CanisterThresholdError::InvalidRandomOracleInput);
         }
 
         if name.is_empty() || name.len() != (name.len() as u8) as usize {
-            return Err(ThresholdEcdsaError::InvalidRandomOracleInput);
+            return Err(CanisterThresholdError::InvalidRandomOracleInput);
         }
 
         if input.len() != (input.len() as u32) as usize {
-            return Err(ThresholdEcdsaError::InvalidRandomOracleInput);
+            return Err(CanisterThresholdError::InvalidRandomOracleInput);
         }
 
         let mut encoded_input = Vec::with_capacity(1 + 4 + input.len());
@@ -102,14 +102,18 @@ impl RandomOracle {
     /// Add a point to the input
     ///
     /// The name must be a unique identifier for this random oracle invocation
-    pub fn add_point(&mut self, name: &'static str, pt: &EccPoint) -> ThresholdEcdsaResult<()> {
+    pub fn add_point(&mut self, name: &'static str, pt: &EccPoint) -> CanisterThresholdResult<()> {
         self.add_input(name, &pt.serialize_tagged(), RandomOracleInputType::Point)
     }
 
     /// Add several points to the input
     ///
     /// The name must be a unique identifier for this random oracle invocation
-    pub fn add_points(&mut self, name: &'static str, pts: &[EccPoint]) -> ThresholdEcdsaResult<()> {
+    pub fn add_points(
+        &mut self,
+        name: &'static str,
+        pts: &[EccPoint],
+    ) -> CanisterThresholdResult<()> {
         for (i, pt) in pts.iter().enumerate() {
             self.add_input(
                 &format!("{}[{}]", name, i),
@@ -124,7 +128,7 @@ impl RandomOracle {
     /// Add a scalar to the input
     ///
     /// The name must be a unique identifier for this random oracle invocation
-    pub fn add_scalar(&mut self, name: &'static str, s: &EccScalar) -> ThresholdEcdsaResult<()> {
+    pub fn add_scalar(&mut self, name: &'static str, s: &EccScalar) -> CanisterThresholdResult<()> {
         self.add_input(name, &s.serialize_tagged(), RandomOracleInputType::Scalar)
     }
 
@@ -132,34 +136,34 @@ impl RandomOracle {
     ///
     /// The name must be a unique identifier for this random oracle invocation
     /// The byte string can be at most 2**32-1 bytes
-    pub fn add_bytestring(&mut self, name: &'static str, v: &[u8]) -> ThresholdEcdsaResult<()> {
+    pub fn add_bytestring(&mut self, name: &'static str, v: &[u8]) -> CanisterThresholdResult<()> {
         self.add_input(name, v, RandomOracleInputType::Bytestring)
     }
 
     /// Add an integer to the input
     ///
     /// The name must be a unique identifier for this random oracle invocation
-    pub fn add_u64(&mut self, name: &'static str, i: u64) -> ThresholdEcdsaResult<()> {
+    pub fn add_u64(&mut self, name: &'static str, i: u64) -> CanisterThresholdResult<()> {
         self.add_input(name, &i.to_be_bytes(), RandomOracleInputType::Integer)
     }
 
     /// Add an integer to the input
     ///
     /// The name must be a unique identifier for this random oracle invocation
-    pub fn add_usize(&mut self, name: &'static str, i: usize) -> ThresholdEcdsaResult<()> {
+    pub fn add_usize(&mut self, name: &'static str, i: usize) -> CanisterThresholdResult<()> {
         self.add_u64(name, i as u64)
     }
 
     /// Add an integer to the input
     ///
     /// The name must be a unique identifier for this random oracle invocation
-    pub fn add_u32(&mut self, name: &'static str, i: u32) -> ThresholdEcdsaResult<()> {
+    pub fn add_u32(&mut self, name: &'static str, i: u32) -> CanisterThresholdResult<()> {
         self.add_u64(name, i as u64)
     }
 
-    fn form_ro_input(&self) -> ThresholdEcdsaResult<Vec<u8>> {
+    fn form_ro_input(&self) -> CanisterThresholdResult<Vec<u8>> {
         if self.inputs.is_empty() {
-            return Err(ThresholdEcdsaError::InvalidRandomOracleInput);
+            return Err(CanisterThresholdError::InvalidRandomOracleInput);
         }
 
         let mut input = Vec::with_capacity(self.input_size);
@@ -179,7 +183,7 @@ impl RandomOracle {
     ///
     /// Due to limitations of XMD this can produce only a limited amount of data,
     /// at most 8160 bytes.
-    pub fn output_bytestring(self, output_length: usize) -> ThresholdEcdsaResult<Vec<u8>> {
+    pub fn output_bytestring(self, output_length: usize) -> CanisterThresholdResult<Vec<u8>> {
         let ro_input = self.form_ro_input()?;
 
         Ok(xmd::<ic_crypto_sha2::Sha256>(
@@ -190,7 +194,7 @@ impl RandomOracle {
     }
 
     /// Consume the random oracle and generate a point as output
-    pub fn output_point(self, curve_type: EccCurveType) -> ThresholdEcdsaResult<EccPoint> {
+    pub fn output_point(self, curve_type: EccCurveType) -> CanisterThresholdResult<EccPoint> {
         let ro_input = self.form_ro_input()?;
 
         EccPoint::hash_to_point(
@@ -201,7 +205,7 @@ impl RandomOracle {
     }
 
     /// Consume the random oracle and generate a scalar output
-    pub fn output_scalar(self, curve_type: EccCurveType) -> ThresholdEcdsaResult<EccScalar> {
+    pub fn output_scalar(self, curve_type: EccCurveType) -> CanisterThresholdResult<EccScalar> {
         Ok(self.output_scalars(curve_type, 1)?[0].clone())
     }
 
@@ -213,7 +217,7 @@ impl RandomOracle {
         self,
         curve_type: EccCurveType,
         cnt: usize,
-    ) -> ThresholdEcdsaResult<Vec<EccScalar>> {
+    ) -> CanisterThresholdResult<Vec<EccScalar>> {
         let ro_input = self.form_ro_input()?;
 
         EccScalar::hash_to_several_scalars(

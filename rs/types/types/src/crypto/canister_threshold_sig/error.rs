@@ -80,11 +80,11 @@ impl From<InitialIDkgDealingsValidationError> for ProxyDecodeError {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaGetPublicKeyError {
+pub enum CanisterThresholdGetPublicKeyError {
     InvalidArgument(String),
     InternalError(String),
 }
-impl_display_using_debug!(ThresholdEcdsaGetPublicKeyError);
+impl_display_using_debug!(CanisterThresholdGetPublicKeyError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgCreateTranscriptError {

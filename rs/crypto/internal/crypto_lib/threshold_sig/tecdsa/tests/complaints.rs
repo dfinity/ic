@@ -4,7 +4,7 @@ use rand::Rng;
 use std::collections::BTreeMap;
 
 #[test]
-fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
+fn should_complaint_system_work() -> CanisterThresholdResult<()> {
     use strum::IntoEnumIterator;
     let rng = &mut reproducible_rng();
 
@@ -78,7 +78,7 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
                             associated_data,
                         )
                         .unwrap_err(),
-                    ThresholdEcdsaError::InvalidProof,
+                    CanisterThresholdError::InvalidProof,
                     "failed for {complaint_corrupter:?}"
                 );
             }
@@ -94,7 +94,7 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
                         &rng.gen::<[u8; 32]>(),
                     )
                     .unwrap_err(),
-                ThresholdEcdsaError::InvalidProof
+                CanisterThresholdError::InvalidProof
             );
 
             // the complaint is invalid if we change the complainer public key:
@@ -108,7 +108,7 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
                         associated_data,
                     )
                     .unwrap_err(),
-                ThresholdEcdsaError::InvalidProof
+                CanisterThresholdError::InvalidProof
             );
 
             // the complaint is invalid if we change the dealer ID
@@ -122,7 +122,7 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
                         associated_data,
                     )
                     .unwrap_err(),
-                ThresholdEcdsaError::InvalidProof
+                CanisterThresholdError::InvalidProof
             );
 
             let opener_index = 1;
@@ -183,7 +183,7 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
                     associated_data,
                 )
                 .unwrap_err(),
-            ThresholdEcdsaError::InvalidProof
+            CanisterThresholdError::InvalidProof
         );
     }
 
@@ -191,7 +191,7 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn should_complaint_verification_reject_spurious_complaints() -> ThresholdEcdsaResult<()> {
+fn should_complaint_verification_reject_spurious_complaints() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -228,7 +228,7 @@ fn should_complaint_verification_reject_spurious_complaints() -> ThresholdEcdsaR
             complaint
                 .verify(&dealing, dealer_index, 0, &pk, associated_data)
                 .unwrap_err(),
-            ThresholdEcdsaError::InvalidComplaint
+            CanisterThresholdError::InvalidComplaint
         );
     }
 

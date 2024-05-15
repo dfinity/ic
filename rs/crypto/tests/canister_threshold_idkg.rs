@@ -2601,7 +2601,7 @@ mod verify_dealing_private {
             IDkgVerifyDealingPrivateError::PrivateKeyNotFound,
             // if privately_verify_dealing fails because the algorithm in the params is not supported
             IDkgVerifyDealingPrivateError::InvalidArgument("algorithm not supported".to_string()),
-            // if privately_verify returns a ThresholdEcdsaError (only one as a smoke test here)
+            // if privately_verify returns a CanisterThresholdError (only one as a smoke test here)
             IDkgVerifyDealingPrivateError::InvalidDealing("invalid proof".to_string()),
         ];
         let rng = &mut reproducible_rng();
@@ -2947,7 +2947,7 @@ mod verify_dealing_public {
 
             assert_matches!(
                 result,
-                Err(IDkgVerifyDealingPublicError::InvalidDealing {reason}) if reason.starts_with("ThresholdEcdsaSerializationError")
+                Err(IDkgVerifyDealingPublicError::InvalidDealing {reason}) if reason.starts_with("CanisterThresholdSerializationError")
             );
         }
     }

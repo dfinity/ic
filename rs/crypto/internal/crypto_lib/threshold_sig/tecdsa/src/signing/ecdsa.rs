@@ -4,7 +4,7 @@ use crate::*;
 // This is the conversion function used by ECDSA which returns the
 // x-coordinate of a point reduced modulo the modulus of the scalar
 // field.
-pub(crate) fn ecdsa_conversion_function(pt: &EccPoint) -> ThresholdEcdsaResult<EccScalar> {
+pub(crate) fn ecdsa_conversion_function(pt: &EccPoint) -> CanisterThresholdResult<EccScalar> {
     let x_bytes = pt.affine_x_bytes()?;
     EccScalar::from_bytes_wide(pt.curve_type(), &x_bytes)
 }
@@ -12,13 +12,13 @@ pub(crate) fn ecdsa_conversion_function(pt: &EccPoint) -> ThresholdEcdsaResult<E
 fn convert_hash_to_integer(
     hashed_message: &[u8],
     curve_type: EccCurveType,
-) -> ThresholdEcdsaResult<EccScalar> {
+) -> CanisterThresholdResult<EccScalar> {
     // ECDSA has special rules for converting the hash to a scalar,
     // when the hash is larger than the curve order. If this check is
     // removed make sure these conversions are implemented, and not
     // just doing a reduction mod order using from_bytes_wide
     if hashed_message.len() != curve_type.scalar_bytes() {
-        return Err(ThresholdEcdsaError::InvalidScalar);
+        return Err(CanisterThresholdError::InvalidScalar);
     }
 
     // Even though the same size, the integer representation of the
@@ -33,17 +33,17 @@ fn derive_rho(
     derivation_path: &DerivationPath,
     key_transcript: &IDkgTranscriptInternal,
     presig_transcript: &IDkgTranscriptInternal,
-) -> ThresholdEcdsaResult<(EccScalar, EccScalar, EccScalar, EccPoint)> {
+) -> CanisterThresholdResult<(EccScalar, EccScalar, EccScalar, EccPoint)> {
     let pre_sig = match &presig_transcript.combined_commitment {
         // random + reshare of masked case
         CombinedCommitment::ByInterpolation(PolynomialCommitment::Simple(c)) => c.constant_term(),
         // random unmasked case
         CombinedCommitment::BySummation(PolynomialCommitment::Simple(c)) => c.constant_term(),
-        _ => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
+        _ => return Err(CanisterThresholdError::UnexpectedCommitmentType),
     };
 
     if pre_sig.curve_type() != curve_type {
-        return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+        return Err(CanisterThresholdError::UnexpectedCommitmentType);
     }
 
     let (key_tweak, _chain_key) = derivation_path.derive_tweak(&key_transcript.constant_term())?;
@@ -82,9 +82,9 @@ impl ThresholdEcdsaSigShareInternal {
         kappa_times_lambda: &CommitmentOpening,
         key_times_lambda: &CommitmentOpening,
         curve_type: EccCurveType,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         if !curve_type.valid_for_ecdsa() {
-            return Err(ThresholdEcdsaError::InvalidArguments(format!(
+            return Err(CanisterThresholdError::InvalidArguments(format!(
                 "Curve {} not valid for ECDSA",
                 curve_type
             )));
@@ -107,7 +107,7 @@ impl ThresholdEcdsaSigShareInternal {
 
         let (lambda_value, lambda_mask) = match lambda {
             CommitmentOpening::Pedersen(lambda_value, lambda_mask) => (lambda_value, lambda_mask),
-            _ => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
+            _ => return Err(CanisterThresholdError::UnexpectedCommitmentType),
         };
 
         // Compute shares of sigma's numerator, i.e. openings of
@@ -118,7 +118,7 @@ impl ThresholdEcdsaSigShareInternal {
                 let nu_mask = theta.mul(lambda_mask)?.add(&rho.mul(mask)?)?;
                 CommitmentOpening::Pedersen(nu_value, nu_mask)
             }
-            _ => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
+            _ => return Err(CanisterThresholdError::UnexpectedCommitmentType),
         };
 
         // Compute shares of sigma's denominator, i.e. openings of
@@ -129,7 +129,7 @@ impl ThresholdEcdsaSigShareInternal {
                 let mu_mask = randomizer.mul(lambda_mask)?.add(mask)?;
                 CommitmentOpening::Pedersen(mu_value, mu_mask)
             }
-            _ => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
+            _ => return Err(CanisterThresholdError::UnexpectedCommitmentType),
         };
 
         Ok(Self {
@@ -158,9 +158,9 @@ impl ThresholdEcdsaSigShareInternal {
         kappa_times_lambda: &IDkgTranscriptInternal,
         key_times_lambda: &IDkgTranscriptInternal,
         curve_type: EccCurveType,
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         if !curve_type.valid_for_ecdsa() {
-            return Err(ThresholdEcdsaError::InvalidArguments(format!(
+            return Err(CanisterThresholdError::InvalidArguments(format!(
                 "Curve {} not valid for ECDSA",
                 curve_type
             )));
@@ -197,31 +197,31 @@ impl ThresholdEcdsaSigShareInternal {
         match &self.sigma_numerator {
             CommitmentOpening::Pedersen(v, m) => {
                 if sigma_num != EccPoint::pedersen(v, m)? {
-                    return Err(ThresholdEcdsaError::InvalidCommitment);
+                    return Err(CanisterThresholdError::InvalidCommitment);
                 }
             }
-            _ => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
+            _ => return Err(CanisterThresholdError::UnexpectedCommitmentType),
         }
 
         match &self.sigma_denominator {
             CommitmentOpening::Pedersen(v, m) => {
                 if sigma_den != EccPoint::pedersen(v, m)? {
-                    return Err(ThresholdEcdsaError::InvalidCommitment);
+                    return Err(CanisterThresholdError::InvalidCommitment);
                 }
             }
-            _ => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
+            _ => return Err(CanisterThresholdError::UnexpectedCommitmentType),
         }
 
         Ok(())
     }
 
-    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
-        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+    pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
+        serde_cbor::to_vec(self).map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
     }
 
-    pub fn deserialize(raw: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
+    pub fn deserialize(raw: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(raw)
-            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+            .map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
     }
 }
 
@@ -246,16 +246,16 @@ impl ThresholdEcdsaCombinedSigInternal {
     pub fn deserialize(
         algorithm_id: AlgorithmId,
         bytes: &[u8],
-    ) -> ThresholdEcdsaSerializationResult<Self> {
+    ) -> CanisterThresholdSerializationResult<Self> {
         let curve_type = EccCurveType::from_algorithm(algorithm_id).ok_or_else(|| {
-            ThresholdEcdsaSerializationError(format!(
+            CanisterThresholdSerializationError(format!(
                 "Invalid algorithm {:?} for threshold ECDSA",
                 algorithm_id
             ))
         })?;
 
         if !curve_type.valid_for_ecdsa() {
-            return Err(ThresholdEcdsaSerializationError(format!(
+            return Err(CanisterThresholdSerializationError(format!(
                 "Curve {} not valid for ECDSA",
                 curve_type
             )));
@@ -264,16 +264,16 @@ impl ThresholdEcdsaCombinedSigInternal {
         let slen = curve_type.scalar_bytes();
 
         if bytes.len() != 2 * slen {
-            return Err(ThresholdEcdsaSerializationError(
+            return Err(CanisterThresholdSerializationError(
                 "Bad signature length".to_string(),
             ));
         }
 
         let r = EccScalar::deserialize(curve_type, &bytes[..slen])
-            .map_err(|e| ThresholdEcdsaSerializationError(format!("Invalid r: {:?}", e)))?;
+            .map_err(|e| CanisterThresholdSerializationError(format!("Invalid r: {:?}", e)))?;
 
         let s = EccScalar::deserialize(curve_type, &bytes[slen..])
-            .map_err(|e| ThresholdEcdsaSerializationError(format!("Invalid s: {:?}", e)))?;
+            .map_err(|e| CanisterThresholdSerializationError(format!("Invalid s: {:?}", e)))?;
 
         Ok(Self { r, s })
     }
@@ -290,10 +290,10 @@ impl ThresholdEcdsaCombinedSigInternal {
         reconstruction_threshold: NumberOfNodes,
         sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
         curve_type: EccCurveType,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let reconstruction_threshold = reconstruction_threshold.get() as usize;
         if sig_shares.len() < reconstruction_threshold {
-            return Err(ThresholdEcdsaError::InsufficientDealings);
+            return Err(CanisterThresholdError::InsufficientDealings);
         }
 
         let (rho, _key_tweak, _randomizer, _presig) = derive_rho(
@@ -317,13 +317,13 @@ impl ThresholdEcdsaCombinedSigInternal {
             if let CommitmentOpening::Pedersen(c, _) = &sig_share.sigma_numerator {
                 numerator_samples.push(c.clone());
             } else {
-                return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                return Err(CanisterThresholdError::UnexpectedCommitmentType);
             }
 
             if let CommitmentOpening::Pedersen(c, _) = &sig_share.sigma_denominator {
                 denominator_samples.push(c.clone());
             } else {
-                return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                return Err(CanisterThresholdError::UnexpectedCommitmentType);
             }
         }
 
@@ -333,7 +333,7 @@ impl ThresholdEcdsaCombinedSigInternal {
 
         let denominator_inv = match denominator.invert() {
             Some(s) => s,
-            None => return Err(ThresholdEcdsaError::InterpolationError),
+            None => return Err(CanisterThresholdError::InterpolationError),
         };
 
         let sigma = numerator.mul(&denominator_inv)?;
@@ -372,9 +372,9 @@ impl ThresholdEcdsaCombinedSigInternal {
         presig_transcript: &IDkgTranscriptInternal,
         key_transcript: &IDkgTranscriptInternal,
         curve_type: EccCurveType,
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         if self.r.is_zero() || self.s.is_zero() {
-            return Err(ThresholdEcdsaError::InvalidSignature);
+            return Err(CanisterThresholdError::InvalidSignature);
         }
 
         let msg = convert_hash_to_integer(hashed_message, curve_type)?;
@@ -389,12 +389,12 @@ impl ThresholdEcdsaCombinedSigInternal {
         )?;
 
         if self.r != rho {
-            return Err(ThresholdEcdsaError::InvalidSignature);
+            return Err(CanisterThresholdError::InvalidSignature);
         }
 
         // We require s normalization for all curves
         if self.s.is_high()? {
-            return Err(ThresholdEcdsaError::InvalidSignature);
+            return Err(CanisterThresholdError::InvalidSignature);
         }
 
         let master_public_key = key_transcript.constant_term();
@@ -404,7 +404,7 @@ impl ThresholdEcdsaCombinedSigInternal {
         // This return shouldn't happen because we already checked that s != 0 above
         let s_inv = match self.s.invert() {
             Some(si) => si,
-            None => return Err(ThresholdEcdsaError::InvalidSignature),
+            None => return Err(CanisterThresholdError::InvalidSignature),
         };
 
         let u1 = msg.mul(&s_inv)?;
@@ -413,7 +413,7 @@ impl ThresholdEcdsaCombinedSigInternal {
         let rp = EccPoint::mul_2_points(&EccPoint::generator_g(curve_type), &u1, &public_key, &u2)?;
 
         if rp.is_infinity()? {
-            return Err(ThresholdEcdsaError::InvalidSignature);
+            return Err(CanisterThresholdError::InvalidSignature);
         }
 
         /*
@@ -433,7 +433,7 @@ impl ThresholdEcdsaCombinedSigInternal {
         */
 
         if rp.affine_x_bytes()? != pre_sig.affine_x_bytes()? {
-            return Err(ThresholdEcdsaError::InvalidSignature);
+            return Err(CanisterThresholdError::InvalidSignature);
         }
 
         // accept:

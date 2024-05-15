@@ -9,16 +9,16 @@ mod test_utils;
 
 use crate::test_utils::*;
 
-fn insufficient_dealings(r: Result<ProtocolRound, ThresholdEcdsaError>) {
+fn insufficient_dealings(r: Result<ProtocolRound, CanisterThresholdError>) {
     match r {
-        Err(ThresholdEcdsaError::InsufficientDealings) => {}
+        Err(CanisterThresholdError::InsufficientDealings) => {}
         Err(e) => panic!("Unexpected error {:?}", e),
         Ok(r) => panic!("Unexpected success {:?}", r),
     }
 }
 
 #[test]
-fn should_reshare_masked_random_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
+fn should_reshare_masked_random_transcripts_correctly() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     for cfg in TestConfig::all() {
@@ -84,7 +84,7 @@ fn should_reshare_masked_random_transcripts_correctly() -> Result<(), ThresholdE
 }
 
 #[test]
-fn should_reshare_unmasked_random_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
+fn should_reshare_unmasked_random_transcripts_correctly() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     for cfg in TestConfig::all() {
@@ -119,7 +119,7 @@ fn should_reshare_unmasked_random_transcripts_correctly() -> Result<(), Threshol
 }
 
 #[test]
-fn should_multiply_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
+fn should_multiply_transcripts_correctly() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     for cfg in TestConfig::all() {
@@ -159,7 +159,7 @@ fn should_multiply_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
 }
 
 #[test]
-fn should_multiply_unmasked_random_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
+fn should_multiply_unmasked_random_transcripts_correctly() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     for cfg in TestConfig::all() {
@@ -191,7 +191,7 @@ fn should_multiply_unmasked_random_transcripts_correctly() -> Result<(), Thresho
 }
 
 #[test]
-fn should_reshare_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEcdsaError> {
+fn should_reshare_transcripts_with_dynamic_threshold() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     for cfg in TestConfig::all() {
@@ -235,7 +235,7 @@ fn should_reshare_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEc
 }
 
 #[test]
-fn should_multiply_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEcdsaError> {
+fn should_multiply_transcripts_with_dynamic_threshold() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     for cfg in TestConfig::all() {
@@ -297,11 +297,11 @@ fn random_subset<R: rand::Rng, T: Clone>(
 }
 
 #[test]
-fn should_basic_signing_protocol_work() -> Result<(), ThresholdEcdsaError> {
+fn should_basic_signing_protocol_work() -> Result<(), CanisterThresholdError> {
     fn test_sig_serialization(
         alg: ic_types::crypto::AlgorithmId,
         sig: &ThresholdEcdsaCombinedSigInternal,
-    ) -> Result<(), ThresholdEcdsaError> {
+    ) -> Result<(), CanisterThresholdError> {
         let bytes = sig.serialize();
         let sig2 = ThresholdEcdsaCombinedSigInternal::deserialize(alg, &bytes)
             .expect("Deserialization failed");
@@ -378,7 +378,7 @@ fn should_basic_signing_protocol_work() -> Result<(), ThresholdEcdsaError> {
 }
 
 #[test]
-fn should_be_able_to_perform_bip340_signature() -> Result<(), ThresholdEcdsaError> {
+fn should_be_able_to_perform_bip340_signature() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     let nodes = 13;
@@ -439,7 +439,7 @@ fn should_be_able_to_perform_bip340_signature() -> Result<(), ThresholdEcdsaErro
 }
 
 #[test]
-fn should_be_able_to_perform_ed25519_signature() -> Result<(), ThresholdEcdsaError> {
+fn should_be_able_to_perform_ed25519_signature() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     let nodes = 4;
@@ -490,7 +490,7 @@ fn should_be_able_to_perform_ed25519_signature() -> Result<(), ThresholdEcdsaErr
 }
 
 #[test]
-fn invalid_signatures_are_rejected() -> Result<(), ThresholdEcdsaError> {
+fn invalid_signatures_are_rejected() -> Result<(), CanisterThresholdError> {
     let nodes = 13;
     let threshold = (nodes + 2) / 3;
     let number_of_dealings_corrupted = 0;

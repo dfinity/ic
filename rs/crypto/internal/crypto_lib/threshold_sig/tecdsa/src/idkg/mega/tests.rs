@@ -1,4 +1,6 @@
-use crate::{EccCurveType, IDkgDealingInternal, MEGaPrivateKey, SecretShares, ThresholdEcdsaError};
+use crate::{
+    CanisterThresholdError, EccCurveType, IDkgDealingInternal, MEGaPrivateKey, SecretShares,
+};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
@@ -41,6 +43,6 @@ fn should_fail_if_commitment_check_opening_fails() {
             &sk0,
             &pk0,
         ),
-        Err(ThresholdEcdsaError::InvalidCommitment)
+        Err(CanisterThresholdError::InvalidCommitment)
     );
 }

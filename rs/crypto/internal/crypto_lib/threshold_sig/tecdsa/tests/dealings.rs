@@ -288,7 +288,7 @@ fn invalid_create_dealing_requests() -> Result<(), IdkgCreateDealingInternalErro
 }
 
 #[test]
-fn secret_shares_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
+fn secret_shares_should_redact_logs() -> Result<(), CanisterThresholdError> {
     let curve = EccCurveType::K256;
     let rng = &mut reproducible_rng();
 
@@ -341,7 +341,7 @@ fn flip_curve(s: &EccScalar) -> EccScalar {
 }
 
 #[test]
-fn wrong_curve_reshare_of_unmasked_rejected() -> Result<(), ThresholdEcdsaError> {
+fn wrong_curve_reshare_of_unmasked_rejected() -> Result<(), CanisterThresholdError> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -372,7 +372,7 @@ fn wrong_curve_reshare_of_unmasked_rejected() -> Result<(), ThresholdEcdsaError>
 }
 
 #[test]
-fn wrong_curve_reshare_of_masked_rejected() -> Result<(), ThresholdEcdsaError> {
+fn wrong_curve_reshare_of_masked_rejected() -> Result<(), CanisterThresholdError> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -404,7 +404,7 @@ fn wrong_curve_reshare_of_masked_rejected() -> Result<(), ThresholdEcdsaError> {
 }
 
 #[test]
-fn wrong_curve_mul_share_rejected() -> Result<(), ThresholdEcdsaError> {
+fn wrong_curve_mul_share_rejected() -> Result<(), CanisterThresholdError> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -476,7 +476,7 @@ mod privately_verify {
                     setup.dealer_index,
                     0
                 ),
-                Err(ThresholdEcdsaError::CurveMismatch)
+                Err(CanisterThresholdError::CurveMismatch)
             );
         }
     }
@@ -500,7 +500,7 @@ mod privately_verify {
                     setup.dealer_index,
                     0
                 ),
-                Err(ThresholdEcdsaError::CurveMismatch)
+                Err(CanisterThresholdError::CurveMismatch)
             );
         }
     }
@@ -524,7 +524,7 @@ mod privately_verify {
                     setup.dealer_index,
                     0
                 ),
-                Err(ThresholdEcdsaError::CurveMismatch)
+                Err(CanisterThresholdError::CurveMismatch)
             );
         }
     }
@@ -547,7 +547,7 @@ mod privately_verify {
                     setup.dealer_index,
                     0
                 ),
-                Err(ThresholdEcdsaError::InvalidCommitment)
+                Err(CanisterThresholdError::InvalidCommitment)
             );
         }
     }

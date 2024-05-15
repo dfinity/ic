@@ -1,6 +1,6 @@
 use crate::{
-    EccCurveType, EccPoint, EccScalar, RandomOracle, Seed, ThresholdEcdsaError,
-    ThresholdEcdsaResult,
+    CanisterThresholdError, CanisterThresholdResult, EccCurveType, EccPoint, EccScalar,
+    RandomOracle, Seed,
 };
 use serde::{Deserialize, Serialize};
 
@@ -41,7 +41,7 @@ struct ProofOfEqualOpeningsInstance {
 }
 
 impl ProofOfEqualOpeningsInstance {
-    fn from_witness(secret: &EccScalar, masking: &EccScalar) -> ThresholdEcdsaResult<Self> {
+    fn from_witness(secret: &EccScalar, masking: &EccScalar) -> CanisterThresholdResult<Self> {
         let curve_type = secret.curve_type();
         let g = EccPoint::generator_g(curve_type);
         let h = EccPoint::generator_h(curve_type);
@@ -56,7 +56,7 @@ impl ProofOfEqualOpeningsInstance {
         })
     }
 
-    fn from_commitments(pedersen: &EccPoint, simple: &EccPoint) -> ThresholdEcdsaResult<Self> {
+    fn from_commitments(pedersen: &EccPoint, simple: &EccPoint) -> CanisterThresholdResult<Self> {
         let curve_type = pedersen.curve_type();
         let g = EccPoint::generator_g(curve_type);
         let h = EccPoint::generator_h(curve_type);
@@ -69,7 +69,10 @@ impl ProofOfEqualOpeningsInstance {
         })
     }
 
-    fn recover_commitment(&self, proof: &ProofOfEqualOpenings) -> ThresholdEcdsaResult<EccPoint> {
+    fn recover_commitment(
+        &self,
+        proof: &ProofOfEqualOpenings,
+    ) -> CanisterThresholdResult<EccPoint> {
         let neg_c = proof.challenge.negate();
         let amb = self.a.sub_points(&self.b)?;
         EccPoint::mul_2_points(&self.h, &proof.response, &amb, &neg_c)
@@ -79,7 +82,7 @@ impl ProofOfEqualOpeningsInstance {
         &self,
         commitment: &EccPoint,
         associated_data: &[u8],
-    ) -> ThresholdEcdsaResult<EccScalar> {
+    ) -> CanisterThresholdResult<EccScalar> {
         let mut ro = RandomOracle::new(PROOF_OF_EQUAL_OPENINGS_DST);
         ro.add_bytestring("associated_data", associated_data)?;
         ro.add_point("instance_g", &self.g)?;
@@ -97,7 +100,7 @@ impl ProofOfEqualOpenings {
         secret: &EccScalar,
         masking: &EccScalar,
         associated_data: &[u8],
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let instance = ProofOfEqualOpeningsInstance::from_witness(secret, masking)?;
 
         // Create the blinding commitment
@@ -122,13 +125,13 @@ impl ProofOfEqualOpenings {
         pedersen: &EccPoint,
         simple: &EccPoint,
         associated_data: &[u8],
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         let instance = ProofOfEqualOpeningsInstance::from_commitments(pedersen, simple)?;
 
         let r_com = instance.recover_commitment(self)?;
 
         if self.challenge != instance.hash_to_challenge(&r_com, associated_data)? {
-            return Err(ThresholdEcdsaError::InvalidProof);
+            return Err(CanisterThresholdError::InvalidProof);
         }
 
         Ok(())
@@ -176,7 +179,7 @@ impl ProofOfProductInstance {
         rhs_masking: &EccScalar,
         product: &EccScalar,
         product_masking: &EccScalar,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let curve_type = lhs.curve_type();
         let g = EccPoint::generator_g(curve_type);
         let h = EccPoint::generator_h(curve_type);
@@ -199,7 +202,7 @@ impl ProofOfProductInstance {
         lhs_com: &EccPoint,
         rhs_com: &EccPoint,
         product_com: &EccPoint,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let curve_type = lhs_com.curve_type();
         let g = EccPoint::generator_g(curve_type);
         let h = EccPoint::generator_h(curve_type);
@@ -216,7 +219,7 @@ impl ProofOfProductInstance {
     fn recover_commitment(
         &self,
         proof: &ProofOfProduct,
-    ) -> ThresholdEcdsaResult<(EccPoint, EccPoint)> {
+    ) -> CanisterThresholdResult<(EccPoint, EccPoint)> {
         let neg_c = proof.challenge.negate();
 
         let r1_com = EccPoint::mul_2_points(&self.g, &proof.response1, &self.lhs_com, &neg_c)?;
@@ -234,7 +237,7 @@ impl ProofOfProductInstance {
         c1: &EccPoint,
         c2: &EccPoint,
         associated_data: &[u8],
-    ) -> ThresholdEcdsaResult<EccScalar> {
+    ) -> CanisterThresholdResult<EccScalar> {
         let mut ro = RandomOracle::new(PROOF_OF_PRODUCT_DST);
         ro.add_bytestring("associated_data", associated_data)?;
         ro.add_point("instance_g", &self.g)?;
@@ -257,7 +260,7 @@ impl ProofOfProduct {
         product: &EccScalar,
         product_masking: &EccScalar,
         associated_data: &[u8],
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let instance =
             ProofOfProductInstance::from_witness(lhs, rhs, rhs_masking, product, product_masking)?;
 
@@ -293,13 +296,13 @@ impl ProofOfProduct {
         rhs_com: &EccPoint,
         product_com: &EccPoint,
         associated_data: &[u8],
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         let instance = ProofOfProductInstance::from_commitments(lhs_com, rhs_com, product_com)?;
 
         let (r1_com, r2_com) = instance.recover_commitment(self)?;
 
         if self.challenge != instance.hash_to_challenge(&r1_com, &r2_com, associated_data)? {
-            return Err(ThresholdEcdsaError::InvalidProof);
+            return Err(CanisterThresholdError::InvalidProof);
         }
 
         Ok(())
@@ -329,7 +332,7 @@ struct ProofOfDLogEquivalenceInstance {
 }
 
 impl ProofOfDLogEquivalenceInstance {
-    fn from_witness(g: &EccPoint, h: &EccPoint, x: &EccScalar) -> ThresholdEcdsaResult<Self> {
+    fn from_witness(g: &EccPoint, h: &EccPoint, x: &EccScalar) -> CanisterThresholdResult<Self> {
         let curve_type = x.curve_type();
         let g_x = g.scalar_mul(x)?;
         let h_x = h.scalar_mul(x)?;
@@ -347,7 +350,7 @@ impl ProofOfDLogEquivalenceInstance {
         h: &EccPoint,
         g_x: &EccPoint,
         h_x: &EccPoint,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let curve_type = g.curve_type();
         Ok(Self {
             curve_type,
@@ -361,7 +364,7 @@ impl ProofOfDLogEquivalenceInstance {
     fn recover_commitment(
         &self,
         proof: &ProofOfDLogEquivalence,
-    ) -> ThresholdEcdsaResult<(EccPoint, EccPoint)> {
+    ) -> CanisterThresholdResult<(EccPoint, EccPoint)> {
         let nchallenge = proof.challenge.negate();
 
         let g_r = EccPoint::mul_2_points(&self.g, &proof.response, &self.g_x, &nchallenge)?;
@@ -375,7 +378,7 @@ impl ProofOfDLogEquivalenceInstance {
         c1: &EccPoint,
         c2: &EccPoint,
         associated_data: &[u8],
-    ) -> ThresholdEcdsaResult<EccScalar> {
+    ) -> CanisterThresholdResult<EccScalar> {
         let mut ro = RandomOracle::new(PROOF_OF_DLOG_EQUIV_DST);
         ro.add_bytestring("associated_data", associated_data)?;
         ro.add_point("instance_g", &self.g)?;
@@ -396,7 +399,7 @@ impl ProofOfDLogEquivalence {
         g: &EccPoint,
         h: &EccPoint,
         associated_data: &[u8],
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let instance = ProofOfDLogEquivalenceInstance::from_witness(g, h, x)?;
 
         // Compute blinding commitments:
@@ -425,22 +428,22 @@ impl ProofOfDLogEquivalence {
         g_x: &EccPoint,
         h_x: &EccPoint,
         associated_data: &[u8],
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         let instance = ProofOfDLogEquivalenceInstance::from_commitments(g, h, g_x, h_x)?;
 
         let (r_com_g, r_com_h) = instance.recover_commitment(self)?;
 
         if self.challenge != instance.hash_to_challenge(&r_com_g, &r_com_h, associated_data)? {
-            return Err(ThresholdEcdsaError::InvalidProof);
+            return Err(CanisterThresholdError::InvalidProof);
         }
 
         Ok(())
     }
 
-    pub fn curve_type(&self) -> ThresholdEcdsaResult<EccCurveType> {
+    pub fn curve_type(&self) -> CanisterThresholdResult<EccCurveType> {
         if self.challenge.curve_type() == self.response.curve_type() {
             return Ok(self.challenge.curve_type());
         }
-        Err(ThresholdEcdsaError::CurveMismatch)
+        Err(CanisterThresholdError::CurveMismatch)
     }
 }

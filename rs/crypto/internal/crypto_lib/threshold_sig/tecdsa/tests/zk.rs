@@ -3,7 +3,7 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 
 #[test]
-fn should_zk_equal_openings_proof_work() -> ThresholdEcdsaResult<()> {
+fn should_zk_equal_openings_proof_work() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -31,7 +31,7 @@ fn should_zk_equal_openings_proof_work() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn should_zk_mul_proof_work() -> ThresholdEcdsaResult<()> {
+fn should_zk_mul_proof_work() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -71,7 +71,7 @@ fn should_zk_mul_proof_work() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn should_invalid_zk_mul_proof_be_rejected() -> ThresholdEcdsaResult<()> {
+fn should_invalid_zk_mul_proof_be_rejected() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -107,7 +107,7 @@ fn should_invalid_zk_mul_proof_be_rejected() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn should_zk_dlog_eq_proof_work() -> ThresholdEcdsaResult<()> {
+fn should_zk_dlog_eq_proof_work() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
