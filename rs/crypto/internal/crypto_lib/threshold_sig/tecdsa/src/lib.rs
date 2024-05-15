@@ -3,7 +3,7 @@
 //!
 //! The public interface for the threshold ECDSA implementation is in `src/lib.rs`.
 //!
-//! Internally within the library, the error type `ThresholdEcdsaError` is used. In
+//! Internally within the library, the error type `CanisterThresholdError` is used. In
 //! the public interfaces, this error is mapped onto function specific error types.
 //!
 //! ## Attack Model
@@ -202,7 +202,7 @@ pub use ic_types::crypto::canister_threshold_sig::PublicKey;
 pub use ic_types::NodeIndex;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaError {
+pub enum CanisterThresholdError {
     CurveMismatch,
     InconsistentCiphertext,
     InconsistentOpeningAndCommitment,
@@ -225,13 +225,13 @@ pub enum ThresholdEcdsaError {
     UnexpectedCommitmentType,
 }
 
-pub type ThresholdEcdsaResult<T> = std::result::Result<T, ThresholdEcdsaError>;
+pub type CanisterThresholdResult<T> = std::result::Result<T, CanisterThresholdError>;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ThresholdEcdsaSerializationError(pub String);
+pub struct CanisterThresholdSerializationError(pub String);
 
-pub type ThresholdEcdsaSerializationResult<T> =
-    std::result::Result<T, ThresholdEcdsaSerializationError>;
+pub type CanisterThresholdSerializationResult<T> =
+    std::result::Result<T, CanisterThresholdSerializationError>;
 
 pub mod test_utils;
 
@@ -282,12 +282,12 @@ pub enum IdkgCreateDealingInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for IdkgCreateDealingInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for IdkgCreateDealingInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::InvalidRecipients => Self::InvalidRecipients,
-            ThresholdEcdsaError::InvalidSecretShare => Self::InvalidSecretShare,
-            ThresholdEcdsaError::InvalidThreshold(t, r) => Self::InvalidThreshold(t, r),
+            CanisterThresholdError::InvalidRecipients => Self::InvalidRecipients,
+            CanisterThresholdError::InvalidSecretShare => Self::InvalidSecretShare,
+            CanisterThresholdError::InvalidThreshold(t, r) => Self::InvalidThreshold(t, r),
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -326,18 +326,18 @@ pub enum IDkgCreateTranscriptInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for IDkgCreateTranscriptInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for IDkgCreateTranscriptInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InsufficientDealings => Self::InsufficientDealings,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InsufficientDealings => Self::InsufficientDealings,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
 }
 
-impl From<XmdError> for ThresholdEcdsaError {
+impl From<XmdError> for CanisterThresholdError {
     fn from(e: XmdError) -> Self {
         match e {
             XmdError::InvalidOutputLength(x) => Self::InvalidArguments(format!("{:?}", x)),
@@ -507,12 +507,12 @@ pub enum IDkgVerifyDealingInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for IDkgVerifyDealingInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for IDkgVerifyDealingInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::InvalidProof => Self::InvalidProof,
-            ThresholdEcdsaError::InvalidCommitment => Self::InvalidCommitment,
-            ThresholdEcdsaError::InvalidRecipients => Self::InvalidRecipients,
+            CanisterThresholdError::InvalidProof => Self::InvalidProof,
+            CanisterThresholdError::InvalidCommitment => Self::InvalidCommitment,
+            CanisterThresholdError::InvalidRecipients => Self::InvalidRecipients,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -619,11 +619,11 @@ pub enum ThresholdEcdsaGenerateSigShareInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdEcdsaGenerateSigShareInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdEcdsaGenerateSigShareInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -690,12 +690,12 @@ pub enum ThresholdEcdsaVerifySigShareInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdEcdsaVerifySigShareInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdEcdsaVerifySigShareInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidSignatureShare => Self::InvalidSignatureShare,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidSignatureShare => Self::InvalidSignatureShare,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -755,12 +755,12 @@ pub enum ThresholdEcdsaCombineSigSharesInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdEcdsaCombineSigSharesInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdEcdsaCombineSigSharesInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InsufficientDealings => Self::InsufficientShares,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InsufficientDealings => Self::InsufficientShares,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -805,12 +805,12 @@ pub enum ThresholdEcdsaVerifySignatureInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdEcdsaVerifySignatureInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdEcdsaVerifySignatureInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidSignature => Self::InvalidSignature,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidSignature => Self::InvalidSignature,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -863,11 +863,11 @@ pub enum ThresholdBip340GenerateSigShareInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdBip340GenerateSigShareInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdBip340GenerateSigShareInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -912,12 +912,12 @@ pub enum ThresholdBip340VerifySigShareInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdBip340VerifySigShareInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdBip340VerifySigShareInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidSignatureShare => Self::InvalidSignatureShare,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidSignatureShare => Self::InvalidSignatureShare,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -956,12 +956,12 @@ pub enum ThresholdBip340CombineSigSharesInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdBip340CombineSigSharesInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdBip340CombineSigSharesInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InsufficientDealings => Self::InsufficientShares,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InsufficientDealings => Self::InsufficientShares,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -1000,11 +1000,11 @@ pub enum ThresholdBip340VerifySignatureInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdBip340VerifySignatureInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdBip340VerifySignatureInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::UnexpectedCommitmentType => Self::UnexpectedCommitmentType,
-            ThresholdEcdsaError::InvalidSignature => Self::InvalidSignature,
+            CanisterThresholdError::UnexpectedCommitmentType => Self::UnexpectedCommitmentType,
+            CanisterThresholdError::InvalidSignature => Self::InvalidSignature,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -1043,11 +1043,11 @@ pub enum ThresholdEd25519GenerateSigShareInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdEd25519GenerateSigShareInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdEd25519GenerateSigShareInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -1092,12 +1092,12 @@ pub enum ThresholdEd25519VerifySigShareInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdEd25519VerifySigShareInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdEd25519VerifySigShareInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidSignatureShare => Self::InvalidSignatureShare,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidSignatureShare => Self::InvalidSignatureShare,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -1136,12 +1136,12 @@ pub enum ThresholdEd25519CombineSigSharesInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdEd25519CombineSigSharesInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdEd25519CombineSigSharesInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InsufficientDealings => Self::InsufficientShares,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InsufficientDealings => Self::InsufficientShares,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -1180,11 +1180,11 @@ pub enum ThresholdEd25519VerifySignatureInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdEd25519VerifySignatureInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdEd25519VerifySignatureInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::UnexpectedCommitmentType => Self::UnexpectedCommitmentType,
-            ThresholdEcdsaError::InvalidSignature => Self::InvalidSignature,
+            CanisterThresholdError::UnexpectedCommitmentType => Self::UnexpectedCommitmentType,
+            CanisterThresholdError::InvalidSignature => Self::InvalidSignature,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -1217,34 +1217,34 @@ pub fn verify_threshold_ed25519_signature(
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaDerivePublicKeyError {
+pub enum DeriveThresholdPublicKeyError {
     InvalidArgument(String),
-    InternalError(ThresholdEcdsaError),
+    InternalError(CanisterThresholdError),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdEcdsaDerivePublicKeyError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for DeriveThresholdPublicKeyError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::InvalidArguments(s) => Self::InvalidArgument(s),
-            ThresholdEcdsaError::CurveMismatch
-            | ThresholdEcdsaError::InconsistentCiphertext
-            | ThresholdEcdsaError::InconsistentOpeningAndCommitment
-            | ThresholdEcdsaError::InsufficientDealings
-            | ThresholdEcdsaError::InsufficientOpenings(_, _)
-            | ThresholdEcdsaError::InterpolationError
-            | ThresholdEcdsaError::InvalidCommitment
-            | ThresholdEcdsaError::InvalidComplaint
-            | ThresholdEcdsaError::InvalidFieldElement
-            | ThresholdEcdsaError::InvalidPoint
-            | ThresholdEcdsaError::InvalidProof
-            | ThresholdEcdsaError::InvalidRandomOracleInput
-            | ThresholdEcdsaError::InvalidRecipients
-            | ThresholdEcdsaError::InvalidScalar
-            | ThresholdEcdsaError::InvalidSecretShare
-            | ThresholdEcdsaError::InvalidSignature
-            | ThresholdEcdsaError::InvalidSignatureShare
-            | ThresholdEcdsaError::InvalidThreshold(_, _)
-            | ThresholdEcdsaError::UnexpectedCommitmentType => Self::InternalError(e),
+            CanisterThresholdError::InvalidArguments(s) => Self::InvalidArgument(s),
+            CanisterThresholdError::CurveMismatch
+            | CanisterThresholdError::InconsistentCiphertext
+            | CanisterThresholdError::InconsistentOpeningAndCommitment
+            | CanisterThresholdError::InsufficientDealings
+            | CanisterThresholdError::InsufficientOpenings(_, _)
+            | CanisterThresholdError::InterpolationError
+            | CanisterThresholdError::InvalidCommitment
+            | CanisterThresholdError::InvalidComplaint
+            | CanisterThresholdError::InvalidFieldElement
+            | CanisterThresholdError::InvalidPoint
+            | CanisterThresholdError::InvalidProof
+            | CanisterThresholdError::InvalidRandomOracleInput
+            | CanisterThresholdError::InvalidRecipients
+            | CanisterThresholdError::InvalidScalar
+            | CanisterThresholdError::InvalidSecretShare
+            | CanisterThresholdError::InvalidSignature
+            | CanisterThresholdError::InvalidSignatureShare
+            | CanisterThresholdError::InvalidThreshold(_, _)
+            | CanisterThresholdError::UnexpectedCommitmentType => Self::InternalError(e),
         }
     }
 }
@@ -1255,7 +1255,7 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaDerivePublicKeyError {
 pub fn derive_threshold_public_key(
     master_public_key: &MasterPublicKey,
     derivation_path: &DerivationPath,
-) -> Result<PublicKey, ThresholdEcdsaDerivePublicKeyError> {
+) -> Result<PublicKey, DeriveThresholdPublicKeyError> {
     let expected_curve = match master_public_key.algorithm_id {
         AlgorithmId::EcdsaSecp256k1 => EccCurveType::K256,
         AlgorithmId::ThresholdEcdsaSecp256k1 => EccCurveType::K256,
@@ -1270,12 +1270,10 @@ pub fn derive_threshold_public_key(
         AlgorithmId::ThresholdEd25519 => EccCurveType::Ed25519,
 
         x => {
-            return Err(ThresholdEcdsaDerivePublicKeyError::InvalidArgument(
-                format!(
-                    "Not a known signature algo related to threshold signatures {:?}",
-                    x
-                ),
-            ))
+            return Err(DeriveThresholdPublicKeyError::InvalidArgument(format!(
+                "Not a known signature algo related to threshold signatures {:?}",
+                x
+            )))
         }
     };
 
@@ -1309,9 +1307,9 @@ impl From<IDkgGenerateComplaintsInternalError> for IDkgLoadTranscriptError {
     }
 }
 
-impl From<ThresholdEcdsaError> for IDkgGenerateComplaintsInternalError {
-    fn from(threshold_ecdsa_error: ThresholdEcdsaError) -> Self {
-        type Tee = ThresholdEcdsaError;
+impl From<CanisterThresholdError> for IDkgGenerateComplaintsInternalError {
+    fn from(threshold_ecdsa_error: CanisterThresholdError) -> Self {
+        type Tee = CanisterThresholdError;
         match threshold_ecdsa_error {
             Tee::InvalidArguments(err) => Self::InvalidArguments(err),
             Tee::CurveMismatch => Self::InvalidArguments("curve mismatch".to_string()),
@@ -1358,13 +1356,13 @@ pub enum IDkgVerifyComplaintInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for IDkgVerifyComplaintInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for IDkgVerifyComplaintInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::InvalidProof => Self::InvalidComplaint,
-            ThresholdEcdsaError::InvalidComplaint => Self::InvalidComplaint,
-            ThresholdEcdsaError::CurveMismatch => Self::InvalidComplaint,
-            ThresholdEcdsaError::InvalidArguments(e) => Self::InvalidArgument(e),
+            CanisterThresholdError::InvalidProof => Self::InvalidComplaint,
+            CanisterThresholdError::InvalidComplaint => Self::InvalidComplaint,
+            CanisterThresholdError::CurveMismatch => Self::InvalidComplaint,
+            CanisterThresholdError::InvalidArguments(e) => Self::InvalidArgument(e),
             other => Self::InternalError(format!("{:?}", other)),
         }
     }
@@ -1405,8 +1403,8 @@ pub enum ThresholdOpenDealingInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdOpenDealingInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdOpenDealingInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         Self::InternalError(format!("{:?}", e))
     }
 }
@@ -1448,10 +1446,10 @@ pub enum ThresholdVerifyOpeningInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdVerifyOpeningInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdVerifyOpeningInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::InconsistentOpeningAndCommitment => Self::MismatchingType,
+            CanisterThresholdError::InconsistentOpeningAndCommitment => Self::MismatchingType,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }

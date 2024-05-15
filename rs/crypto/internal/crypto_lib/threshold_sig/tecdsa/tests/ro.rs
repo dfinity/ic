@@ -1,7 +1,7 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 
 #[test]
-fn test_random_oracle_stability() -> ThresholdEcdsaResult<()> {
+fn test_random_oracle_stability() -> CanisterThresholdResult<()> {
     let curve_type = EccCurveType::K256;
     let seed = Seed::from_bytes(&[0x42; 32]);
 
@@ -71,7 +71,7 @@ fn test_random_oracle_stability() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn test_random_oracle_max_outputs() -> ThresholdEcdsaResult<()> {
+fn test_random_oracle_max_outputs() -> CanisterThresholdResult<()> {
     for curve_type in EccCurveType::all() {
         /*
         Our XMD hash_to_scalar construction consumes 256+128 bits per
@@ -98,7 +98,7 @@ fn test_random_oracle_max_outputs() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn test_random_oracle_min_inputs() -> ThresholdEcdsaResult<()> {
+fn test_random_oracle_min_inputs() -> CanisterThresholdResult<()> {
     for curve_type in EccCurveType::all() {
         let ro = RandomOracle::new("ic-test-domain-sep");
         assert!(ro.output_scalar(curve_type).is_err());
@@ -108,7 +108,7 @@ fn test_random_oracle_min_inputs() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn test_random_oracle_max_name_len() -> ThresholdEcdsaResult<()> {
+fn test_random_oracle_max_name_len() -> CanisterThresholdResult<()> {
     let mut ro = RandomOracle::new("ic-test-domain-sep");
 
     let name255 = "YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY";
@@ -121,7 +121,7 @@ fn test_random_oracle_max_name_len() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn test_random_oracle_dup_names_rejected() -> ThresholdEcdsaResult<()> {
+fn test_random_oracle_dup_names_rejected() -> CanisterThresholdResult<()> {
     let mut ro = RandomOracle::new("ic-test-domain-sep");
 
     assert!(ro.add_usize("a", 1).is_ok());
@@ -146,7 +146,7 @@ fn test_random_oracle_dup_names_rejected() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn test_random_oracle_allows_duplicated_inputs() -> ThresholdEcdsaResult<()> {
+fn test_random_oracle_allows_duplicated_inputs() -> CanisterThresholdResult<()> {
     let mut ro = RandomOracle::new("ic-test-domain-sep");
 
     let pt = EccPoint::hash_to_point(EccCurveType::K256, "input".as_bytes(), "dst".as_bytes())?;
@@ -171,7 +171,7 @@ fn test_random_oracle_allows_duplicated_inputs() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn test_random_oracle_empty_name_rejected() -> ThresholdEcdsaResult<()> {
+fn test_random_oracle_empty_name_rejected() -> CanisterThresholdResult<()> {
     let mut ro = RandomOracle::new("ic-test-domain-sep");
 
     assert!(ro.add_usize("", 5).is_err());

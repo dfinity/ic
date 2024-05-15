@@ -52,11 +52,11 @@ impl Debug for SecretShares {
 }
 
 impl TryFrom<(&CommitmentOpeningBytes, Option<&CommitmentOpeningBytes>)> for SecretShares {
-    type Error = ThresholdEcdsaSerializationError;
+    type Error = CanisterThresholdSerializationError;
 
     fn try_from(
         commitments: (&CommitmentOpeningBytes, Option<&CommitmentOpeningBytes>),
-    ) -> ThresholdEcdsaSerializationResult<Self> {
+    ) -> CanisterThresholdSerializationResult<Self> {
         match commitments {
             (CommitmentOpeningBytes::Simple(bytes), None) => {
                 let scalar = EccScalar::try_from(bytes)?;
@@ -79,7 +79,7 @@ impl TryFrom<(&CommitmentOpeningBytes, Option<&CommitmentOpeningBytes>)> for Sec
                     (scalar_2, scalar_3),
                 ))
             }
-            _ => Err(ThresholdEcdsaSerializationError(
+            _ => Err(CanisterThresholdSerializationError(
                 "Unexpected commitment types".to_string(),
             )),
         }
@@ -93,7 +93,7 @@ fn encrypt_and_commit_single_polynomial(
     dealer_index: NodeIndex,
     associated_data: &[u8],
     seed: Seed,
-) -> ThresholdEcdsaResult<(MEGaCiphertext, PolynomialCommitment)> {
+) -> CanisterThresholdResult<(MEGaCiphertext, PolynomialCommitment)> {
     let curve = poly.curve_type();
 
     let mut plaintexts = Vec::with_capacity(recipients.len());
@@ -125,7 +125,7 @@ fn encrypt_and_commit_pair_of_polynomials(
     dealer_index: NodeIndex,
     associated_data: &[u8],
     seed: Seed,
-) -> ThresholdEcdsaResult<(MEGaCiphertext, PolynomialCommitment)> {
+) -> CanisterThresholdResult<(MEGaCiphertext, PolynomialCommitment)> {
     let curve = values.curve_type();
 
     let mut plaintexts = Vec::with_capacity(recipients.len());
@@ -167,9 +167,9 @@ impl IDkgDealingInternal {
         recipients: &[MEGaPublicKey],
         dealer_index: NodeIndex,
         associated_data: &[u8],
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         if threshold == 0 || threshold > recipients.len() {
-            return Err(ThresholdEcdsaError::InvalidThreshold(
+            return Err(CanisterThresholdError::InvalidThreshold(
                 threshold,
                 recipients.len(),
             ));
@@ -216,7 +216,7 @@ impl IDkgDealingInternal {
             }
             SecretShares::ReshareOfUnmasked(secret) => {
                 if secret.curve_type() != signature_curve {
-                    return Err(ThresholdEcdsaError::InvalidSecretShare);
+                    return Err(CanisterThresholdError::InvalidSecretShare);
                 }
 
                 let values =
@@ -237,7 +237,7 @@ impl IDkgDealingInternal {
             SecretShares::ReshareOfMasked(secret, masking) => {
                 if secret.curve_type() != signature_curve || masking.curve_type() != signature_curve
                 {
-                    return Err(ThresholdEcdsaError::InvalidSecretShare);
+                    return Err(CanisterThresholdError::InvalidSecretShare);
                 }
 
                 let values =
@@ -266,7 +266,7 @@ impl IDkgDealingInternal {
                     || right_value.curve_type() != signature_curve
                     || right_masking.curve_type() != signature_curve
                 {
-                    return Err(ThresholdEcdsaError::InvalidSecretShare);
+                    return Err(CanisterThresholdError::InvalidSecretShare);
                 }
 
                 // Generate secret polynomials
@@ -322,9 +322,9 @@ impl IDkgDealingInternal {
         dealer_index: NodeIndex,
         number_of_receivers: NumberOfNodes,
         associated_data: &[u8],
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         if self.commitment.len() != reconstruction_threshold.get() as usize {
-            return Err(ThresholdEcdsaError::InvalidCommitment);
+            return Err(CanisterThresholdError::InvalidCommitment);
         }
 
         self.ciphertext.check_validity(
@@ -391,13 +391,13 @@ impl IDkgDealingInternal {
 
                 match previous_commitment {
                     PolynomialCommitment::Pedersen(_) => {
-                        return Err(ThresholdEcdsaError::UnexpectedCommitmentType)
+                        return Err(CanisterThresholdError::UnexpectedCommitmentType)
                     }
                     PolynomialCommitment::Simple(c) => {
                         let constant_term = self.commitment.constant_term();
 
                         if c.evaluate_at(dealer_index)? != constant_term {
-                            return Err(ThresholdEcdsaError::InvalidCommitment);
+                            return Err(CanisterThresholdError::InvalidCommitment);
                         }
                     }
                 }
@@ -422,7 +422,7 @@ impl IDkgDealingInternal {
 
                 Ok(())
             }
-            (_transcript_type, _proof) => Err(ThresholdEcdsaError::InvalidProof),
+            (_transcript_type, _proof) => Err(CanisterThresholdError::InvalidProof),
         }
     }
 
@@ -436,13 +436,13 @@ impl IDkgDealingInternal {
         associated_data: &[u8],
         dealer_index: NodeIndex,
         recipient_index: NodeIndex,
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         if private_key.curve_type() != key_curve || public_key.curve_type() != key_curve {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         if self.commitment.curve_type() != signature_curve {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         let mega_type = match self.commitment.ctype() {
@@ -465,22 +465,22 @@ impl IDkgDealingInternal {
         Ok(())
     }
 
-    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
-        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+    pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
+        serde_cbor::to_vec(self).map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
     }
 
-    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
+    pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+            .map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
     }
 }
 
 impl TryFrom<&BatchSignedIDkgDealing> for IDkgDealingInternal {
-    type Error = ThresholdEcdsaSerializationError;
+    type Error = CanisterThresholdSerializationError;
 
     fn try_from(
         signed_dealing: &BatchSignedIDkgDealing,
-    ) -> ThresholdEcdsaSerializationResult<Self> {
+    ) -> CanisterThresholdSerializationResult<Self> {
         Self::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)
     }
 }

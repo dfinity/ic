@@ -943,7 +943,7 @@ mod idkg_create_dealing {
         assert_matches!(
             test.run(),
             Err(IDkgCreateDealingVaultError::SerializationError(e))
-            if e.contains("ThresholdEcdsaSerializationError")
+            if e.contains("CanisterThresholdSerializationError")
         );
     }
 
@@ -1942,7 +1942,7 @@ mod idkg_open_dealing {
         assert_matches!(
             test.run(),
             Err(IDkgOpenTranscriptError::InternalError { internal_error })
-            if internal_error.contains("Error deserializing a signed dealing: ThresholdEcdsaSerializationError")
+            if internal_error.contains("Error deserializing a signed dealing: CanisterThresholdSerializationError")
         );
     }
 
