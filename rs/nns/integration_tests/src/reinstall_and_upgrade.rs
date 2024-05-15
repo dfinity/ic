@@ -20,7 +20,7 @@ use ic_nns_gtc::{
 use ic_nns_test_utils::{
     common::{NnsInitPayloads, NnsInitPayloadsBuilder},
     governance::{
-        append_inert, get_pending_proposals, reinstall_nns_canister_by_proposal,
+        bump_gzip_timestamp, get_pending_proposals, reinstall_nns_canister_by_proposal,
         submit_external_update_proposal, upgrade_nns_canister_by_proposal,
         upgrade_nns_canister_with_arg_by_proposal, upgrade_root_canister_by_proposal,
     },
@@ -68,7 +68,7 @@ fn test_reinstall_and_upgrade_canisters_canonical_ordering() {
                             canister,
                             &nns_canisters.governance,
                             &nns_canisters.root,
-                            append_inert(Some(&wasm)),
+                            bump_gzip_timestamp(&wasm),
                             Encode!(&arg).unwrap(),
                         )
                         .await;
@@ -79,7 +79,7 @@ fn test_reinstall_and_upgrade_canisters_canonical_ordering() {
                             &nns_canisters.root,
                             true,
                             // Method fails if wasm stays the same
-                            append_inert(Some(&wasm)),
+                            bump_gzip_timestamp(&wasm),
                             None,
                         )
                         .await;
@@ -281,10 +281,7 @@ fn get_nns_canister_wasm<'a>(
     let encoded_init_state = encode_init_state(init_state);
     vec![
         CanisterInstallInfo {
-            wasm: append_inert(Some(&Project::cargo_bin_maybe_from_env(
-                "ledger-canister",
-                &[],
-            ))),
+            wasm: bump_gzip_timestamp(&Project::cargo_bin_maybe_from_env("ledger-canister", &[])),
             use_root: true,
             canister: &nns_canisters.ledger,
             init_payload: encoded_init_state[0].clone(),
@@ -298,10 +295,10 @@ fn get_nns_canister_wasm<'a>(
             mode: CanisterInstallMode::Upgrade,
         },
         CanisterInstallInfo {
-            wasm: append_inert(Some(&Project::cargo_bin_maybe_from_env(
+            wasm: bump_gzip_timestamp(&Project::cargo_bin_maybe_from_env(
                 "genesis-token-canister",
                 &[],
-            ))),
+            )),
             use_root: true,
             canister: &nns_canisters.genesis_token,
             init_payload: encoded_init_state[1].clone(),
@@ -315,10 +312,10 @@ fn get_nns_canister_wasm<'a>(
             mode: CanisterInstallMode::Upgrade,
         },
         CanisterInstallInfo {
-            wasm: append_inert(Some(&Project::cargo_bin_maybe_from_env(
+            wasm: bump_gzip_timestamp(&Project::cargo_bin_maybe_from_env(
                 "cycles-minting-canister",
                 &[],
-            ))),
+            )),
             use_root: true,
             canister: &nns_canisters.cycles_minting,
             init_payload: encoded_init_state[2].clone(),
@@ -332,7 +329,7 @@ fn get_nns_canister_wasm<'a>(
             mode: CanisterInstallMode::Upgrade,
         },
         CanisterInstallInfo {
-            wasm: append_inert(Some(&Wasm::from_bytes(LIFELINE_CANISTER_WASM))),
+            wasm: bump_gzip_timestamp(&Wasm::from_bytes(LIFELINE_CANISTER_WASM)),
             use_root: true,
             canister: &nns_canisters.lifeline,
             init_payload: encoded_init_state[3].clone(),
@@ -346,10 +343,10 @@ fn get_nns_canister_wasm<'a>(
             mode: CanisterInstallMode::Upgrade,
         },
         CanisterInstallInfo {
-            wasm: append_inert(Some(&Project::cargo_bin_maybe_from_env(
+            wasm: bump_gzip_timestamp(&Project::cargo_bin_maybe_from_env(
                 "governance-canister",
                 &[],
-            ))),
+            )),
             use_root: true,
             canister: &nns_canisters.governance,
             init_payload: encoded_init_state[4].clone(),
@@ -363,10 +360,7 @@ fn get_nns_canister_wasm<'a>(
             mode: CanisterInstallMode::Upgrade,
         },
         CanisterInstallInfo {
-            wasm: append_inert(Some(&Project::cargo_bin_maybe_from_env(
-                "root-canister",
-                &[],
-            ))),
+            wasm: bump_gzip_timestamp(&Project::cargo_bin_maybe_from_env("root-canister", &[])),
             use_root: false,
             canister: &nns_canisters.root,
             init_payload: encoded_init_state[5].clone(),
@@ -380,10 +374,7 @@ fn get_nns_canister_wasm<'a>(
             mode: CanisterInstallMode::Upgrade,
         },
         CanisterInstallInfo {
-            wasm: append_inert(Some(&Project::cargo_bin_maybe_from_env(
-                "registry-canister",
-                &[],
-            ))),
+            wasm: bump_gzip_timestamp(&Project::cargo_bin_maybe_from_env("registry-canister", &[])),
             use_root: true,
             canister: &nns_canisters.registry,
             init_payload: encoded_init_state[6].clone(),

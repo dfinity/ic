@@ -18,7 +18,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::IC_00;
-use ic_replicated_state::{CallOrigin, CanisterState};
+use ic_replicated_state::{num_bytes_try_from, CallOrigin, CanisterState};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
@@ -295,6 +295,28 @@ impl UpdateHelper {
         let mut canister = clean_canister.clone();
 
         validate_message(&canister, &original.method)?;
+
+        if let CanisterCallOrTask::Call(_) = original.call_or_task {
+            // TODO(RUN-957): Enforce the limit in heartbeat and timer after
+            // canister logging ships by removing the `if` above.
+
+            let wasm_memory_usage = canister
+                .execution_state
+                .as_ref()
+                .map_or(NumBytes::new(0), |es| {
+                    num_bytes_try_from(es.wasm_memory.size).unwrap()
+                });
+
+            if let Some(wasm_memory_limit) = clean_canister.system_state.wasm_memory_limit {
+                if wasm_memory_usage > wasm_memory_limit {
+                    let err = HypervisorError::WasmMemoryLimitExceeded {
+                        bytes: wasm_memory_usage,
+                        limit: wasm_memory_limit,
+                    };
+                    return Err(err.into_user_error(&canister.canister_id()));
+                }
+            }
+        }
 
         let call_context_id = canister
             .system_state

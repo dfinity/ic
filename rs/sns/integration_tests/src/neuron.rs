@@ -11,7 +11,9 @@ use ic_ledger_core::{
     Tokens,
 };
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
-use ic_nervous_system_common::{cmc::FakeCmc, i2d, NervousSystemError};
+use ic_nervous_system_common::{
+    cmc::FakeCmc, i2d, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS,
+};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
@@ -40,7 +42,7 @@ use ic_sns_governance::{
         NeuronPermissionType, Proposal, ProposalData, ProposalId, ProposalRewardStatus,
         RewardEvent, Vote, VotingRewardsParameters, WaitForQuietState,
     },
-    types::{test_helpers::NativeEnvironment, Environment, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS},
+    types::{test_helpers::NativeEnvironment, Environment},
 };
 use ic_sns_test_utils::{
     icrc1,

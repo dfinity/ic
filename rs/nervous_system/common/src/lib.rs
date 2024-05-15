@@ -55,7 +55,11 @@ lazy_static! {
 // 10^8
 pub const E8: u64 = 100_000_000;
 
-pub const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
+pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
+
+pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
+pub const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
+pub const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
 
 // Useful as a piece of realistic test data.
 pub const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1641016800;

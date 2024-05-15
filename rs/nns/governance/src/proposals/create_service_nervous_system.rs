@@ -3,7 +3,7 @@ use crate::pb::v1::{
     create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters,
     CreateServiceNervousSystem,
 };
-use ic_nervous_system_common::SECONDS_PER_DAY;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
 use ic_sns_init::pb::v1::{self as sns_init_pb, sns_init_payload, SnsInitPayload};
 use ic_sns_swap::pb::v1::{self as sns_swap_pb, NeuronsFundParticipationConstraints};
@@ -117,18 +117,18 @@ impl CreateServiceNervousSystem {
         // TODO(NNS1-2298): we should also add 27 leap seconds to this, to avoid
         // having the swap start half a minute earlier than expected.
         let midnight_after_swap_approved_timestamp_seconds = swap_approved_timestamp_seconds
-            .saturating_sub(swap_approved_timestamp_seconds % SECONDS_PER_DAY) // floor to midnight
-            .saturating_add(SECONDS_PER_DAY); // add one day
+            .saturating_sub(swap_approved_timestamp_seconds % ONE_DAY_SECONDS) // floor to midnight
+            .saturating_add(ONE_DAY_SECONDS); // add one day
 
         let swap_start_timestamp_seconds = {
             let mut possible_swap_starts = (0..2).map(|i| {
                 midnight_after_swap_approved_timestamp_seconds
-                    .saturating_add(SECONDS_PER_DAY * i)
+                    .saturating_add(ONE_DAY_SECONDS * i)
                     .saturating_add(start_time_of_day)
             });
             // Find the earliest time that's at least 24h after the swap was approved.
             possible_swap_starts
-                .find(|&timestamp| timestamp > swap_approved_timestamp_seconds + SECONDS_PER_DAY)
+                .find(|&timestamp| timestamp > swap_approved_timestamp_seconds + ONE_DAY_SECONDS)
                 .ok_or(format!(
                     "Unable to find a swap start time after the swap was approved. \
                      swap_approved_timestamp_seconds = {}, \

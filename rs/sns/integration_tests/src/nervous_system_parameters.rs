@@ -1,16 +1,14 @@
 use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::Tokens;
+use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_YEAR_SECONDS};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
     TEST_USER5_KEYPAIR,
 };
-use ic_sns_governance::{
-    pb::v1::{
-        proposal::Action, Motion, NervousSystemParameters, NeuronPermissionList,
-        NeuronPermissionType, Proposal,
-    },
-    types::{ONE_DAY_SECONDS, ONE_YEAR_SECONDS},
+use ic_sns_governance::pb::v1::{
+    proposal::Action, Motion, NervousSystemParameters, NeuronPermissionList, NeuronPermissionType,
+    Proposal,
 };
 use ic_sns_test_utils::{
     itest_helpers::{local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder},

@@ -141,7 +141,7 @@ impl SchedulerMetrics {
             ),
             canister_binary_size: memory_histogram(
                 "canister_binary_size_bytes",
-                "Canisters WASM binary size distribution in bytes.",
+                "Canisters Wasm binary size distribution in bytes.",
                 metrics_registry,
             ),
             canister_log_memory_usage: memory_histogram(
@@ -151,7 +151,7 @@ impl SchedulerMetrics {
             ),
             canister_wasm_memory_usage: memory_histogram(
                 "canister_wasm_memory_usage_bytes",
-                "Canisters WASM memory usage distribution in bytes.",
+                "Canisters Wasm memory usage distribution in bytes.",
                 metrics_registry,
             ),
             canister_stable_memory_usage: memory_histogram(

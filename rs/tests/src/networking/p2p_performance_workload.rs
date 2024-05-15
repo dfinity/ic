@@ -6,9 +6,10 @@ use crate::{
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            retry_async, HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
             NnsInstallationBuilder, SshSession, SubnetSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
+        universal_vm::{UniversalVm, UniversalVms},
     },
     retry_with_msg_async,
     util::{agent_observes_canister_module, block_on, spawn_round_robin_workload_engine},
@@ -18,7 +19,10 @@ use anyhow::bail;
 use ic_agent::Agent;
 use ic_registry_subnet_type::SubnetType;
 use slog::{debug, info, Logger};
-use std::time::Duration;
+use std::{
+    net::{IpAddr, SocketAddr},
+    time::Duration,
+};
 
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 const CANISTER_METHOD: &str = "write";
@@ -26,6 +30,8 @@ const CANISTER_METHOD: &str = "write";
 const APP_DURATION_THRESHOLD: Duration = Duration::from_secs(60);
 // Parameters related to workload creation.
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
+
+const JAEGER_VM_NAME: &str = "jaeger-vm";
 
 // Create an IC with two subnets, with variable number of nodes.
 // Install NNS canister on system subnet.
@@ -40,6 +46,23 @@ pub fn config(
         .with_required_host_features(vec![HostFeature::Performance])
         .start(&env)
         .expect("failed to start prometheus VM");
+
+    let path = env.get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
+
+    UniversalVm::new(JAEGER_VM_NAME.to_string())
+        .with_config_img(path)
+        .start(&env)
+        .expect("failed to setup Jaeger Universal VM");
+
+    let deployed_universal_vm = env.get_deployed_universal_vm(JAEGER_VM_NAME).unwrap();
+    let universal_vm = deployed_universal_vm.get_vm().unwrap();
+    let jaeger_ipv6 = universal_vm.ipv6;
+
+    info!(
+        logger,
+        "Jaeger frontend available at: http://[{}]:16686", jaeger_ipv6
+    );
+
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(16)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
@@ -47,6 +70,7 @@ pub fn config(
     };
     InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
+        .with_jaeger_addr(SocketAddr::new(IpAddr::V6(jaeger_ipv6), 4317))
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_default_vm_resources(vm_resources)

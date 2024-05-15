@@ -3734,7 +3734,7 @@ mod tests {
         NeuronsFundParticipants, Params,
     };
     use crate::swap_builder::SwapBuilder;
-    use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+    use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
     use pretty_assertions::assert_eq;
     use proptest::prelude::proptest;
     use std::collections::HashSet;
@@ -4149,7 +4149,7 @@ mod tests {
         #[test]
         fn test_generate_vesting_schedule_proptest(
             count in 1..25_u64,
-            dissolve_delay_interval_seconds in 1..(90 * SECONDS_PER_DAY),
+            dissolve_delay_interval_seconds in 1..(90 * ONE_DAY_SECONDS),
             total_e8s in 1..(100 * E8),
         ) {
             let vesting_schedule = NeuronBasketConstructionParameters {
@@ -4589,7 +4589,7 @@ mod tests {
     #[test]
     fn test_purge_old_tickets() {
         const TEN_MINUTES: u64 = 60 * 10 * 1_000_000_000;
-        const ONE_DAY: u64 = SECONDS_PER_DAY * 1_000_000_000;
+        const ONE_DAY: u64 = ONE_DAY_SECONDS * 1_000_000_000;
         const NUMBER_OF_TICKETS_THRESHOLD: u64 = 10;
         const MAX_AGE_IN_NANOSECONDS: u64 = ONE_DAY * 2;
         const MAX_NUMBER_TO_INSPECT: u64 = 2;

@@ -385,7 +385,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ed25519-dalek": crate.spec(
                 version = "^2.1.1",
-                features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem"],
+                features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem", "hazmat"],
             ),
             "educe": crate.spec(
                 version = "^0.4",
@@ -464,6 +464,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "hex-literal": crate.spec(
                 version = "^0.4.1",
+            ),
+            "hkdf": crate.spec(
+                version = "^0.12",
             ),
             "http": crate.spec(
                 version = "^0.2.9",
@@ -736,6 +739,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.7.8",
                 default_features = False,
             ),
+            "mach2": crate.spec(
+                # Wasmtime depends on 0.4.2 but specifies 0.4.1.
+                # Enforce 0.4.2 using a dummy dependency until
+                # the upstream issue is fixed.
+                version = "^0.4.2",
+            ),
             "maplit": crate.spec(
                 version = "^1.0.2",
             ),
@@ -827,6 +836,25 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.20.0",
                 features = [
                     "metrics",
+                ],
+            ),
+            "opentelemetry_0_21_0": crate.spec(
+                package = "opentelemetry",
+                version = "^0.21.0",
+                features = [
+                    "trace",
+                ],
+            ),
+            "opentelemetry-otlp": crate.spec(
+                version = "^0.14.0",
+                features = [
+                    "grpc-tonic",
+                ],
+            ),
+            "opentelemetry_sdk": crate.spec(
+                version = "^0.21.2",
+                features = [
+                    "trace",
                 ],
             ),
             "opentelemetry-prometheus": crate.spec(
@@ -1144,6 +1172,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "simple_asn1": crate.spec(
                 version = "^0.6.2",
             ),
+            "simple_moving_average": crate.spec(
+                version = "^1.0.2",
+            ),
             "slog": crate.spec(
                 version = "^2.7.0",
                 features = [
@@ -1338,6 +1369,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "tracing-core": crate.spec(
                 version = "^0.1.32",
             ),
+            "tracing-opentelemetry": crate.spec(
+                version = "^0.22.0",
+            ),
             "tracing-serde": crate.spec(
                 version = "^0.1.3",
             ),
@@ -1409,7 +1443,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.50",
             ),
             "wasmtime": crate.spec(
-                version = "^19.0.2",
+                version = "^20.0.2",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1419,10 +1453,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^19.0.2",
+                version = "^20.0.2",
             ),
             "wasmtime-runtime": crate.spec(
-                version = "^19.0.2",
+                version = "^20.0.2",
             ),
             "wast": crate.spec(
                 version = "^53.0.0",

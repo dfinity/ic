@@ -19,6 +19,8 @@ env:
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
   ROOT_PIPELINE_ID: ${{ github.run_id }}
+  BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+  BUILDEVENT_DATASET: "github-ci-dfinity"
 
 jobs:
   bazel-system-test-nightly:

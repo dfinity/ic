@@ -1,7 +1,7 @@
 #!/bin/sh -e
 # Continuously improve `run_wasm_benchmarks_forever.md` file by running
 # the `run_wasm_benchmarks.sh` and taking the minimum results. The produced
-# file is a much more precise WASM instructions costs report in Markdown format
+# file is a much more precise Wasm instructions costs report in Markdown format
 # (see `WASM_BENCHMARKS.md`).
 #
 # Usage: run_wasm_benchmarks_forever.sh

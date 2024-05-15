@@ -597,7 +597,7 @@ fn canister_state_log_visibility_round_trip() {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
 
     for initial in LogVisibility::iter() {
-        let encoded = pb::LogVisibility::from(initial);
+        let encoded = pb::LogVisibility::from(&initial);
         let round_trip = LogVisibility::from(encoded);
 
         assert_eq!(initial, round_trip);
@@ -625,7 +625,7 @@ fn canister_state_canister_log_record_round_trip() {
         timestamp_nanos: 27,
         content: vec![1, 2, 3],
     };
-    let encoded = pb::CanisterLogRecord::from(initial.clone());
+    let encoded = pb::CanisterLogRecord::from(&initial);
     let round_trip = CanisterLogRecord::from(encoded);
 
     assert_eq!(initial, round_trip);

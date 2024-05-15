@@ -141,7 +141,7 @@ impl From<KeyConfig> for pb::KeyConfig {
             max_queue_size,
         } = src;
 
-        let key_id = Some(crypto_pb::MasterPublicKeyId::from(key_id));
+        let key_id = Some(crypto_pb::MasterPublicKeyId::from(&key_id));
 
         let pre_signatures_to_create_in_advance = Some(pre_signatures_to_create_in_advance);
 

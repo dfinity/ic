@@ -130,7 +130,6 @@ impl RegistryReplicator {
         metrics_addr: SocketAddr,
     ) -> (Self, MetricsHttpEndpoint) {
         let replicator = RegistryReplicator::new_from_config(logger.clone(), node_id, config);
-        let crypto = ic_crypto_for_verification_only::new(replicator.get_registry_client());
 
         let metrics_config = MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
@@ -140,8 +139,6 @@ impl RegistryReplicator {
             tokio::runtime::Handle::current(),
             metrics_config,
             MetricsRegistry::global(),
-            replicator.get_registry_client(),
-            Arc::new(crypto),
             &logger.inner_logger.root,
         );
 

@@ -32,6 +32,9 @@ env:
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
   DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
   DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+  CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+  BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+  BUILDEVENT_DATASET: "github-ci-dfinity"
 
 anchors:
   image: &image
@@ -66,13 +69,17 @@ anchors:
       if which docker-bin 2>/dev/null; then
           docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
       fi
-  after-script: &after-script
-    name: After script
-    id: after-script
+  bazel-clean: &bazel-clean
+    name: Bazel Clean
+    if: always()
+    run: bazel clean
+  before-script: &before-script
+    name: Before script
+    if: always()
+    id: before-script
     shell: bash
     run: |
-      bazel clean
-    #  rm -rf "${CI_PROJECT_DIR}/" # this doesn't work, TODO: figure out if and where data gets stored
+      if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -90,9 +97,8 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     <<: *bazel-large-setup
-    outputs:
-      artifacts_produced: ${{ steps.bazel-test-all.outputs.upload_artifacts }}
     steps:
+      - <<: *before-script
       - <<: *checkout
         uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
         if : ${{ github.event_name == 'pull_request' }}
@@ -114,21 +120,21 @@ jobs:
           BAZEL_EXTRA_ARGS: "--keep_going --verbose_failures"
           # run on diff only if it is a pull request, otherwise run all targets
           RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
-      - <<: *after-script
       - name: Upload bazel-targets
         uses: actions/upload-artifact@v3
-        if: ${{ needs.bazel-test-all.outputs.upload_artifacts == 'true' }}
         with:
           name: bazel-targets
           retention-days: 1
           if-no-files-found: error
           path: |
             bazel-targets
+      - <<: *bazel-clean
 
   bazel-build-all-config-check:
     <<: *bazel-large-setup
     name: Bazel Build All Config Check
     steps:
+      - <<: *before-script
       - <<: *checkout
         uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
         if : ${{ github.event_name == 'pull_request' }}
@@ -147,7 +153,7 @@ jobs:
           BAZEL_CI_CONFIG: "--config=check"
           # run on diff only if it is a pull request, otherwise run all targets
           RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
-      - <<: *after-script
+      - <<: *bazel-clean
 
   bazel-test-darwin-x86-64:
     name: Bazel Test Darwin x86-64
@@ -156,6 +162,7 @@ jobs:
     runs-on:
       labels: macos
     steps:
+      - <<: *before-script
       - <<: *checkout
       - uses: dorny/paths-filter@v3
         id: filter
@@ -185,7 +192,8 @@ jobs:
       - name: No run
         if: steps.filter.outputs.bazel-test-darwin-x86-64 == 'false'
         run: echo "No changes, skipping run"
-      - <<: *after-script
+      - name: Purge Bazel Output
+        shell: bash
         run: |
           sudo rm -rf /var/tmp/bazel-output//${ROOT_PIPELINE_ID}
 
@@ -193,6 +201,7 @@ jobs:
     name: Bazel Build Fuzzers
     <<: *bazel-small-setup
     steps:
+      - <<: *before-script
       - <<: *checkout
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
@@ -202,12 +211,13 @@ jobs:
           BAZEL_TARGETS: "//rs/..."
           BAZEL_CI_CONFIG: "--config=ci"
           BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
-      - <<: *after-script
+      - <<: *bazel-clean
 
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     <<: *bazel-small-setup
     steps:
+      - <<: *before-script
       - <<: *checkout
       - name: Run Bazel Build Fuzzers AFL
         id: bazel-build-fuzzers-afl
@@ -217,7 +227,7 @@ jobs:
           BAZEL_TARGETS: "//rs/..."
           BAZEL_CI_CONFIG: "--config=ci"
           BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
-      - <<: *after-script
+      - <<: *bazel-clean
 
   python-ci-tests:
     name: Python CI Tests
@@ -225,6 +235,7 @@ jobs:
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
+      - <<: *before-script
       - <<: *checkout
       - name: Run Python CI Tests
         id: python-ci-tests
@@ -241,9 +252,8 @@ jobs:
   build-ic:
     name: Build IC
     <<: *bazel-large-setup
-    outputs:
-      artifacts_produced: ${{ steps.build-ic.outputs.upload_artifacts }}
     steps:
+      - <<: *before-script
       - <<: *checkout
         uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
         if : ${{ github.event_name == 'pull_request' }}
@@ -269,7 +279,6 @@ jobs:
           BAZEL_COMMAND: "build"
       - name: Upload build-ic.tar
         uses: actions/upload-artifact@v3
-        if: ${{ needs.build-ic.outputs.upload_artifacts == 'true' }}
         with:
           name: build-ic
           retention-days: 1
@@ -281,7 +290,6 @@ jobs:
     name: Build Determinism
     <<: *default-setup
     needs: [build-ic, bazel-test-all]
-    if: ${{ needs.build-ic.outputs.artifacts_produced == 'true' && needs.bazel-test-all.outputs.artifacts_produced == 'true' }}
     strategy:
       matrix:
         include:
@@ -306,6 +314,7 @@ jobs:
             PATH1: "build-ic/icos/setupos"
             SETUPOS_FLAG: "true"
     steps:
+      - <<: *before-script
       - <<: *checkout
       - name: Download bazel-targets [bazel-test-all]
         uses: actions/download-artifact@v3
@@ -333,6 +342,7 @@ jobs:
     name: Cargo Clippy Linux
     <<: *bazel-small-setup
     steps:
+      - <<: *before-script
       - <<: *checkout
       - <<: *cargo-filters
       - name: Run Cargo Clippy Linux
@@ -352,6 +362,7 @@ jobs:
     <<: *bazel-small-setup
     timeout-minutes: 60
     steps:
+      - <<: *before-script
       - <<: *checkout
       - <<: *cargo-filters
       - name: Run Cargo Build Release Linux

@@ -71,7 +71,8 @@ use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
-    cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, SECONDS_PER_DAY,
+    cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
+    ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
@@ -82,6 +83,7 @@ use ic_nns_common::{
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -118,11 +120,6 @@ mod split_neuron;
 pub mod test_data;
 #[cfg(test)]
 mod tests;
-
-// A few helper constants for durations.
-pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
-pub const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
-pub const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
 
 // The limits on NNS proposal title len (in bytes).
 const PROPOSAL_TITLE_BYTES_MIN: usize = 5;
@@ -679,6 +676,9 @@ impl NnsFunction {
                 REGISTRY_CANISTER_ID,
                 "update_ssh_readonly_access_for_all_unassigned_nodes",
             ),
+            NnsFunction::SubnetRentalRequest => {
+                (SUBNET_RENTAL_CANISTER_ID, "execute_rental_request_proposal")
+            }
         };
         Ok((canister_id, method))
     }
@@ -807,6 +807,7 @@ impl Proposal {
                             | NnsFunction::UpdateApiBoundaryNodesVersion => {
                                 Topic::ApiBoundaryNodeManagement
                             }
+                            NnsFunction::SubnetRentalRequest => Topic::SubnetRental,
                         }
                     } else {
                         println!(
@@ -1342,7 +1343,7 @@ impl Topic {
     pub const MIN: Topic = Topic::Unspecified;
     // A unit test will fail if this value does not stay up to date (e.g. when a new value is
     // added).
-    pub const MAX: Topic = Topic::ApiBoundaryNodeManagement;
+    pub const MAX: Topic = Topic::SubnetRental;
 
     /// When voting rewards are distributed, the voting power of
     /// neurons voting on proposals are weighted by this amount. The
@@ -4917,6 +4918,10 @@ impl Governance {
         }
 
         match nns_function {
+            NnsFunction::SubnetRentalRequest => {
+                self.validate_subnet_rental_proposal(&update.payload)
+                    .map_err(invalid_proposal_error)?;
+            }
             NnsFunction::IcpXdrConversionRate => {
                 Self::validate_icp_xdr_conversion_rate_payload(
                     &update.payload,
@@ -4936,9 +4941,32 @@ impl Governance {
                 Self::validate_add_or_remove_data_centers_payload(&update.payload)
                     .map_err(invalid_proposal_error)?;
             }
-
             _ => {}
         };
+
+        Ok(())
+    }
+
+    fn validate_subnet_rental_proposal(&self, payload: &[u8]) -> Result<(), String> {
+        // Must be able to parse the payload.
+        if let Err(e) = Decode!([decoder_config()]; &payload, SubnetRentalRequest) {
+            return Err(format!("Invalid SubnetRentalRequest: {}", e));
+        }
+
+        // No concurrent subnet rental requests are allowed.
+        let other_proposal_ids = self.select_nonfinal_proposal_ids(|action| {
+            let Action::ExecuteNnsFunction(execute_nns_function) = action else {
+                return false;
+            };
+
+            execute_nns_function.nns_function == NnsFunction::SubnetRentalRequest as i32
+        });
+        if !other_proposal_ids.is_empty() {
+            return Err(format!(
+                "There is another open SubnetRentalRequest proposal: {:?}",
+                other_proposal_ids,
+            ));
+        }
 
         Ok(())
     }
@@ -5936,8 +5964,8 @@ impl Governance {
             nid,
             subaccount,
             controller,
-            DissolveStateAndAge::LegacyDissolved {
-                aging_since_timestamp_seconds: now,
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: now,
             },
             now,
         )
@@ -7600,7 +7628,7 @@ impl Governance {
     /// Picks a value at random in [00:00, 23:45] that is a multiple of 15
     /// minutes past midnight.
     pub fn randomly_pick_swap_start(&mut self) -> GlobalTimeOfDay {
-        let time_of_day_seconds = self.env.random_u64() % SECONDS_PER_DAY;
+        let time_of_day_seconds = self.env.random_u64() % ONE_DAY_SECONDS;
 
         // Round down to nearest multiple of 15 min.
         let remainder_seconds = time_of_day_seconds % (15 * 60);
@@ -8047,4 +8075,42 @@ impl FromStr for BitcoinNetwork {
 pub struct BitcoinSetConfigProposal {
     pub network: BitcoinNetwork,
     pub payload: Vec<u8>,
+}
+
+/// A proposal payload for a subnet rental request,
+/// used to deserialize `ExecuteNnsFunction.payload`,
+/// where `ExecuteNnsFunction.nns_function == NnsFunction::SubnetRentalRequest as i32`.
+/// Also used to serialize the subnet rental request payload in `ic-admin`.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug)]
+pub struct SubnetRentalRequest {
+    pub user: PrincipalId,
+    pub rental_condition_id: RentalConditionId,
+}
+
+// The following two Subnet Rental Canister types are copied
+// from the Subnet Rental Canister's repository and used
+// to serialize the payload passed to Subnet Rental Canister's
+// method `execute_rental_request_proposal`.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Copy, Debug)]
+pub enum RentalConditionId {
+    App13CH,
+}
+
+impl FromStr for RentalConditionId {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "App13CH" => Ok(Self::App13CH),
+            other => Err(format!("Unknown rental condition ID {}", other)),
+        }
+    }
+}
+
+#[derive(candid::CandidType, candid::Deserialize)]
+pub struct SubnetRentalProposalPayload {
+    pub user: PrincipalId,
+    pub rental_condition_id: RentalConditionId,
+    pub proposal_id: u64,
+    pub proposal_creation_time_seconds: u64,
 }

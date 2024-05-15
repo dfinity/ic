@@ -6,7 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::LedgerArgument;
 use ic_management_canister_types::{CanisterIdRecord, CanisterInstallMode};
 use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
-use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
+use ic_nervous_system_common::{ledger::compute_neuron_staking_subaccount, DEFAULT_TRANSFER_FEE};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -22,7 +22,7 @@ use ic_sns_governance::{
         GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, Proposal,
         ProposalDecisionStatus, UpgradeSnsToNextVersion,
     },
-    types::{DEFAULT_TRANSFER_FEE, E8S_PER_TOKEN},
+    types::E8S_PER_TOKEN,
 };
 use ic_sns_init::pb::v1::{
     sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
@@ -302,7 +302,7 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
 
     let sns_wasm_to_add = ensure_sns_wasm_gzipped(create_modified_sns_wasm(
         wasm_map.get(&canister_type).unwrap(),
-        Some("Preserve behavior 673_351_772."),
+        Some(42),
     ));
     let new_wasm_hash = sns_wasm_to_add.sha256_hash();
 
@@ -735,7 +735,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
 
     fn filter_wasm(mut sns_wasm: SnsWasm) -> SnsWasm {
         if sns_wasm.canister_type == SnsCanisterType::Archive as i32 {
-            sns_wasm = create_modified_sns_wasm(&sns_wasm, Some("Preserve behavior 160_036_541."))
+            sns_wasm = create_modified_sns_wasm(&sns_wasm, Some(64))
         }
 
         ensure_sns_wasm_gzipped(sns_wasm)
@@ -942,7 +942,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
     // We add a new WASM to the SNS-WASMs (for governance)
     let modified_governance = create_modified_sns_wasm(
         wasm_map.get(&SnsCanisterType::Governance).unwrap(),
-        Some("Preserve behavior 509_230_111."),
+        Some(42),
     );
     let modified_governance = sns_wasm::add_wasm_via_proposal(&machine, modified_governance);
 
@@ -1084,10 +1084,7 @@ fn test_custom_upgrade_path_for_sns() {
     let deployed_version = wasm_map_to_version(&wasm_map);
     // After our deploy, we need to add a bunch of wasms so there's an upgrade path
     fn filter_wasm(sns_wasm: SnsWasm) -> SnsWasm {
-        ensure_sns_wasm_gzipped(create_modified_sns_wasm(
-            &sns_wasm,
-            Some("Preserve behavior 316_348_324."),
-        ))
+        ensure_sns_wasm_gzipped(create_modified_sns_wasm(&sns_wasm, Some(64)))
     }
     let modified_map = sns_wasm::add_freshly_built_sns_wasms(&machine, filter_wasm);
 

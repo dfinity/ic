@@ -1184,6 +1184,24 @@ pub(crate) fn syscalls(
         .unwrap();
 
     linker
+        .func_wrap("ic0", "msg_deadline", {
+            move |mut caller: Caller<'_, StoreData>| {
+                charge_for_cpu(&mut caller, overhead::MSG_DEADLINE)?;
+                if feature_flags.best_effort_responses == FlagStatus::Enabled {
+                    with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
+                } else {
+                    let err = HypervisorError::ContractViolation {
+                        error: "ic0::msg_deadline is not enabled.".to_string(),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    };
+                    Err(process_err(&mut caller, err))
+                }
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("__", "internal_trap", {
             move |mut caller: Caller<'_, StoreData>, err_code: i32| -> Result<(), _> {
                 let err = match InternalErrorCode::from_i32(err_code) {

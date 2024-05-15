@@ -25,8 +25,10 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     state_test_helpers::{
-        list_neurons, nns_add_hot_key, nns_join_community_fund, nns_leave_community_fund,
-        nns_remove_hot_key, setup_nns_canisters, state_machine_builder_for_nns_tests,
+        list_neurons, nns_add_hot_key, nns_claim_or_refresh_neuron, nns_governance_get_full_neuron,
+        nns_governance_get_neuron_info, nns_join_community_fund, nns_leave_community_fund,
+        nns_remove_hot_key, nns_send_icp_to_claim_or_refresh_neuron, setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
 use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
@@ -415,4 +417,57 @@ fn test_hotkey_can_join_and_leave_community_fund() {
         neuron_1_id,
         PrincipalId::new_user_test_id(331_685),
     ));
+}
+
+#[test]
+fn test_claim_neuron() {
+    // Step 1: Prepare the world by setting up NNS canisters and transfer 1 ICP to a Governance
+    // canister subaccount.
+    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let test_user_principal = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let nonce = 123_456;
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_ledger_account(
+            AccountIdentifier::new(test_user_principal, None),
+            Tokens::from_e8s(2_000_000_000),
+        )
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+    nns_send_icp_to_claim_or_refresh_neuron(
+        &state_machine,
+        test_user_principal,
+        Tokens::from_e8s(1_000_000_000),
+        nonce,
+    );
+
+    // Step 2: Call the code under test - claim a neuron.
+    let neuron_id = nns_claim_or_refresh_neuron(&mut state_machine, test_user_principal, nonce);
+
+    // Step 3.1: Inspect the claimed neuron as a full neuron.
+    let full_neuron =
+        nns_governance_get_full_neuron(&mut state_machine, test_user_principal, neuron_id.id)
+            .unwrap();
+    assert_eq!(full_neuron.controller, Some(test_user_principal));
+    let created_timestamp_seconds = full_neuron.created_timestamp_seconds;
+    assert!(created_timestamp_seconds > 0);
+    assert_eq!(
+        full_neuron.dissolve_state,
+        Some(DissolveState::WhenDissolvedTimestampSeconds(
+            created_timestamp_seconds
+        ))
+    );
+    assert_eq!(full_neuron.aging_since_timestamp_seconds, u64::MAX);
+    assert_eq!(full_neuron.cached_neuron_stake_e8s, 1_000_000_000);
+
+    // Step 3.2: Inspect the claimed neuron as neuron info.
+    let neuron_info = nns_governance_get_neuron_info(
+        &mut state_machine,
+        PrincipalId::new_anonymous(),
+        neuron_id.id,
+    )
+    .unwrap();
+    assert_eq!(neuron_info.state, NeuronState::Dissolved as i32);
+    assert_eq!(neuron_info.dissolve_delay_seconds, 0);
+    assert_eq!(neuron_info.age_seconds, 0);
+    assert_eq!(neuron_info.stake_e8s, 1_000_000_000);
 }

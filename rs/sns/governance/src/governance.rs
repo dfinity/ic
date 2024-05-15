@@ -89,7 +89,7 @@ use ic_nervous_system_common::{
     cmc::CMC,
     i2d,
     ledger::{self, compute_distribution_subaccount_bytes},
-    NervousSystemError, SECONDS_PER_DAY,
+    NervousSystemError, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::{
     apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
@@ -139,7 +139,6 @@ pub const EXECUTE_NERVOUS_SYSTEM_FUNCTION_PAYLOAD_LISTING_BYTES_MAX: usize = 100
 
 const MAX_HEAP_SIZE_IN_KIB: usize = 4 * 1024 * 1024;
 const WASM32_PAGE_SIZE_IN_KIB: usize = 64;
-pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
 pub const MATURITY_DISBURSEMENT_DELAY_SECONDS: u64 = 7 * 24 * 3600;
 
 /// The max number of wasm32 pages for the heap after which we consider that there
@@ -4612,7 +4611,7 @@ impl Governance {
             .unwrap_or_default();
 
         let age_seconds = self.env.now() - updated_at_timestamp_seconds;
-        age_seconds >= SECONDS_PER_DAY
+        age_seconds >= ONE_DAY_SECONDS
     }
 
     async fn update_maturity_modulation(&mut self) {
@@ -5552,7 +5551,7 @@ mod tests {
             GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
             GetWasmResponse, SnsCanisterType, SnsVersion, SnsWasm,
         },
-        types::{test_helpers::NativeEnvironment, ONE_DAY_SECONDS},
+        types::test_helpers::NativeEnvironment,
     };
     use assert_matches::assert_matches;
     use async_trait::async_trait;
@@ -5567,7 +5566,7 @@ mod tests {
     };
     use ic_nervous_system_common::{
         assert_is_err, assert_is_ok, cmc::FakeCmc, ledger::compute_neuron_staking_subaccount_bytes,
-        E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
+        E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
     };
     use ic_nervous_system_common_test_keys::{
         TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
@@ -5683,7 +5682,7 @@ mod tests {
             }],
             cached_neuron_stake_e8s: 100 * E8,
             aging_since_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(365 * SECONDS_PER_DAY)),
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(365 * ONE_DAY_SECONDS)),
             voting_power_percentage_multiplier: 100,
             ..Default::default()
         };
@@ -6528,7 +6527,7 @@ mod tests {
             .as_mut()
             .unwrap();
         *voting_rewards_parameters = VotingRewardsParameters {
-            round_duration_seconds: Some(SECONDS_PER_DAY),
+            round_duration_seconds: Some(ONE_DAY_SECONDS),
             reward_rate_transition_duration_seconds: Some(1),
             initial_reward_rate_basis_points: Some(101),
             final_reward_rate_basis_points: Some(100),
@@ -6591,7 +6590,7 @@ mod tests {
         // Step 4.1: Advance time so that the proposal we made earlier becomes
         // ready to settle.
         let wait_days = 9;
-        *now.lock().unwrap() += SECONDS_PER_DAY * wait_days;
+        *now.lock().unwrap() += ONE_DAY_SECONDS * wait_days;
         assert_eq!(
             governance
                 .ready_to_be_settled_proposal_ids()

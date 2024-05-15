@@ -227,12 +227,7 @@ impl BackupHelper {
             .artifacts_guard
             .lock()
             .expect("artifacts mutex lock failed");
-        info!(
-            self.log,
-            "Sync backup data from the node: {} for subnet_id: {}",
-            node_ip,
-            self.subnet_id.to_string()
-        );
+        info!(self.log, "Sync backup data from the node: {}", node_ip,);
         let remote_dir = format!(
             "{}@[{}]:/var/lib/ic/backup/{}/",
             self.username(),
@@ -260,11 +255,10 @@ impl BackupHelper {
     fn rsync_config(&self, node_ip: &IpAddr, replica_version: &ReplicaVersion) {
         info!(
             self.log,
-            "[#{}] Sync ic.json5 from the node: {} for replica: {} and subnet_id: {}",
+            "[#{}] Sync ic.json5 from the node: {} for replica: {}",
             self.thread_id,
             node_ip,
             replica_version,
-            self.subnet_id.to_string()
         );
         let remote_dir = format!(
             "{}@[{}]:/run/ic-node/config/ic.json5",
@@ -323,8 +317,13 @@ impl BackupHelper {
             .sum();
         if 2 * total_succeeded >= nodes.len() {
             let duration = start_time.elapsed();
-            let minutes = duration.as_secs() / 60;
-            self.notification_client.push_metrics_sync_time(minutes);
+            info!(
+                self.log,
+                "Sync succeeded after {} seconds",
+                duration.as_secs()
+            );
+            self.notification_client
+                .push_metrics_sync_time(duration.as_secs() / 60);
         } else {
             self.notification_client
                 .report_failure_slack("Couldn't pull artifacts from the nodes!".to_string());
@@ -450,10 +449,9 @@ impl BackupHelper {
         let start_height = self.last_state_checkpoint();
         info!(
             self.log,
-            "[#{}] Replaying from height #{} of subnet {:?} with version {}",
+            "[#{}] Replaying from height #{} with version {}",
             self.thread_id,
             start_height,
-            self.subnet_id,
             replica_version
         );
         self.download_binaries(replica_version, start_height)?;
@@ -690,8 +688,7 @@ impl BackupHelper {
         self.cold_store_states(max_height)?;
         info!(
             self.log,
-            "Finished moving old artifacts and states of subnet {:?} to the cold storage",
-            self.subnet_id
+            "Finished moving old artifacts and states to the cold storage",
         );
         Ok(())
     }
@@ -703,8 +700,7 @@ impl BackupHelper {
             .expect("artifacts mutex lock failed");
         info!(
             self.log,
-            "Start moving old artifacts and states of subnet {:?} to the cold storage",
-            self.subnet_id
+            "Start moving old artifacts and states to the cold storage",
         );
         let spool_dirs = collect_only_dirs(&self.spool_dir())?;
         let mut dir_heights = BTreeMap::new();
@@ -782,10 +778,7 @@ impl BackupHelper {
             )?;
         }
 
-        info!(
-            self.log,
-            "Remove leftovers of the subnet {:?}", self.subnet_id
-        );
+        info!(self.log, "Remove leftovers");
         remove_dir_all(work_dir).map_err(|err| format!("Error deleting leftovers: {:?}", err))?;
 
         Ok(max_height)

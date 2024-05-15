@@ -1,4 +1,4 @@
-//! Benchmarks for the basic WASM instructions.
+//! Benchmarks for the basic Wasm instructions.
 //!
 //! References:
 //! * https://www.w3.org/TR/wasm-core-2/

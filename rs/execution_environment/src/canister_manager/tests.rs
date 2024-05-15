@@ -87,7 +87,7 @@ const MEMORY_CAPACITY: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024); // 8GiB
 const MAX_CONTROLLERS: usize = 10;
 const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64KiB
 const MAX_NUMBER_OF_CANISTERS: u64 = 0;
-// The simplest valid WASM binary: "(module)"
+// The simplest valid Wasm binary: "(module)"
 const MINIMAL_WASM: [u8; 8] = [
     0, 97, 115, 109, // \0ASM - magic
     1, 0, 0, 0, //  0x01 - version

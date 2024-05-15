@@ -212,7 +212,7 @@ fn scalar_deserializaion_errors_is_over_the_order() {
         assert_eq!(
             EccScalar::deserialize(curve, &bytes[..]),
             Err(ThresholdEcdsaSerializationError(
-                "Invalid point encoding".to_string()
+                "Invalid scalar encoding".to_string()
             ))
         );
     }

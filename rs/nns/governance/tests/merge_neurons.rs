@@ -10,6 +10,7 @@ use comparable::{Changed, MapChange, OptionChange, U64Change};
 use fixtures::NNSStateChange;
 use fixtures::{principal, NNSBuilder, NeuronBuilder};
 use futures::future::FutureExt;
+use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 #[cfg(feature = "test")]
 use ic_nns_governance::{
@@ -17,10 +18,7 @@ use ic_nns_governance::{
     pb::v1::{neuron::DissolveStateChange, GovernanceChange, NeuronChange},
 };
 use ic_nns_governance::{
-    governance::{
-        MAX_DISSOLVE_DELAY_SECONDS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-        ONE_YEAR_SECONDS,
-    },
+    governance::{MAX_DISSOLVE_DELAY_SECONDS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
     pb::v1::{
         governance_error::ErrorType::{self, NotAuthorized, NotFound, PreconditionFailed},
         manage_neuron::{

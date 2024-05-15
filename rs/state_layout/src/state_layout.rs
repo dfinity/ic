@@ -1898,12 +1898,13 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             canister_history: Some((&item.canister_history).into()),
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
             total_query_stats: Some((&item.total_query_stats).into()),
-            log_visibility: pb_canister_state_bits::LogVisibility::from(item.log_visibility).into(),
+            log_visibility: pb_canister_state_bits::LogVisibility::from(&item.log_visibility)
+                .into(),
             canister_log_records: item
                 .canister_log
                 .records()
                 .iter()
-                .map(|record| record.clone().into())
+                .map(|record| record.into())
                 .collect(),
             next_canister_log_record_idx: item.canister_log.next_idx(),
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),

@@ -13,8 +13,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     ErrorCode, IngressStatus, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
+use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities_metrics::fetch_int_counter;
-use ic_types::{ingress::WasmResult, CanisterId, Cycles, NumBytes};
+use ic_types::{ingress::WasmResult, messages::NO_DEADLINE, CanisterId, Cycles, NumBytes, Time};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::{assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
@@ -1627,5 +1628,113 @@ fn toolchain_error_message() {
     build the canister. Please report the error to IC devs on the forum: \
     https://forum.dfinity.org and include which language/CDK was used to \
     create the canister."
+    );
+}
+
+fn helper_best_effort_responses(
+    start_time_seconds: u32,
+    timeout_seconds: Option<u32>,
+    expected_deadline_seconds: u32,
+) {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let mut embedders_config = ic_config::embedders::Config::default();
+    embedders_config.feature_flags.best_effort_responses =
+        ic_config::flag_status::FlagStatus::Enabled;
+
+    let env = StateMachineBuilder::new()
+        .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            HypervisorConfig {
+                embedders_config,
+                ..Default::default()
+            },
+        )))
+        .build();
+
+    let sender: CanisterId = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let receiver: CanisterId = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let call_args = call_args()
+        .other_side(wasm().msg_deadline().reply_int64())
+        .on_reply(wasm().message_payload().append_and_reply());
+
+    let msg = if let Some(timeout_seconds) = timeout_seconds {
+        wasm()
+            .call_simple_with_cycles_and_best_effort_response(
+                receiver,
+                "update",
+                call_args,
+                Cycles::new(0),
+                timeout_seconds,
+            )
+            .build()
+    } else {
+        wasm().call_simple(receiver, "update", call_args).build()
+    };
+
+    // Ingress message is sent to canister `A`, during its execution canister `A`
+    // calls canister `B`. While executing the canister message, canister `B`
+    // invokes `msg_deadline()` and attaches the result to a reply to canister
+    // `A` message. Canister `A` forwards the received response as a reply to
+    // the Ingress message.
+
+    match env.execute_ingress(sender, "update", msg).unwrap() {
+        WasmResult::Reply(result) => assert_eq!(
+            Time::from_secs_since_unix_epoch(expected_deadline_seconds as u64)
+                .unwrap()
+                .as_nanos_since_unix_epoch(),
+            u64::from_le_bytes(result.try_into().unwrap())
+        ),
+        _ => panic!("Unexpected result"),
+    };
+}
+
+#[test]
+fn best_effort_responses_no_timeout() {
+    // When no timeout is set, ic0_msg_deadline() should return constant (=0)
+    // representing that the call is not best-effort call.
+    let start_time_seconds = 100;
+
+    let expected_deadline_seconds = NO_DEADLINE.as_secs_since_unix_epoch();
+
+    helper_best_effort_responses(start_time_seconds, None, expected_deadline_seconds);
+}
+
+#[test]
+fn best_effort_responses_timeout_larger_than_max_allowed() {
+    // `timeout_seconds` should be upper bounded with the `MAX_CALL_TIMEOUT_SECONDS`.
+    let start_time_seconds = 100;
+    let timeout_seconds = 2 * MAX_CALL_TIMEOUT_SECONDS;
+    let expected_deadline_seconds = start_time_seconds + MAX_CALL_TIMEOUT_SECONDS;
+
+    helper_best_effort_responses(
+        start_time_seconds,
+        Some(timeout_seconds),
+        expected_deadline_seconds,
+    );
+}
+
+#[test]
+fn best_effort_responses_valid_timeout() {
+    // When `timeout_seconds` is smaller than `MAX_CALL_TIMEOUT_SECONDS` than the
+    // value of `deadline` should be equal to `start_time_seconds` + `timeout_seconds`.
+    let start_time_seconds = 100;
+    let timeout_seconds = 150;
+    let expected_deadline_seconds = start_time_seconds + timeout_seconds;
+
+    helper_best_effort_responses(
+        start_time_seconds,
+        Some(timeout_seconds),
+        expected_deadline_seconds,
     );
 }

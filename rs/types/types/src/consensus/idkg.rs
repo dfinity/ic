@@ -201,6 +201,16 @@ impl EcdsaPayload {
         }
     }
 
+    /// Return true if this payload uses the new layout supporting multiple key transcripts
+    pub fn is_multiple_keys_layout(&self) -> bool {
+        matches!(self.layout, EcdsaPayloadLayout::MultipleKeyTranscripts)
+    }
+
+    /// Return true if this payload uses the new layout supporting generalized pre-signatures
+    pub fn is_generalized_pre_signatures_layout(&self) -> bool {
+        self.generalized_pre_signatures
+    }
+
     /// Returns the reference to the current key transcript of the given [`MasterPublicKeyId`].
     pub fn current_key_transcript(
         &self,
@@ -496,13 +506,11 @@ impl EcdsaKeyTranscript {
         }
     }
 
-    pub fn get_key_id(&self) -> &EcdsaKeyId {
-        &self.key_id
-    }
-
     // TODO: Adapt this function once `[EcdsaKeyTranscript::master_key_id]` is available.
     pub(crate) fn get_master_public_key_id(&self) -> MasterPublicKeyId {
-        MasterPublicKeyId::Ecdsa(self.key_id.clone())
+        self.master_key_id
+            .clone()
+            .unwrap_or_else(|| MasterPublicKeyId::Ecdsa(self.key_id.clone()))
     }
 
     pub fn get_refs(&self) -> Vec<TranscriptRef> {
@@ -601,7 +609,10 @@ impl From<EcdsaKeyTranscript> for pb::EcdsaKeyTranscript {
                 &transcript.next_in_creation,
             )),
             key_id: Some(crypto_pb::EcdsaKeyId::from(&transcript.key_id)),
-            master_key_id: transcript.master_key_id.clone().map(|key_id| key_id.into()),
+            master_key_id: transcript
+                .master_key_id
+                .as_ref()
+                .map(|key_id| key_id.into()),
         }
     }
 }
@@ -779,8 +790,8 @@ impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
 /// Internal format of the resharing request from execution.
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EcdsaReshareRequest {
-    pub key_id: Option<EcdsaKeyId>,
-    pub master_key_id: MasterPublicKeyId,
+    pub key_id: EcdsaKeyId,
+    pub master_key_id: Option<MasterPublicKeyId>,
     pub receiving_node_ids: Vec<NodeId>,
     pub registry_version: RegistryVersion,
 }
@@ -793,10 +804,10 @@ impl Hash for EcdsaReshareRequest {
             receiving_node_ids,
             registry_version,
         } = self;
-        if let Some(key_id) = key_id {
-            key_id.hash(state);
+        key_id.hash(state);
+        if let Some(master_key_id) = master_key_id {
+            master_key_id.hash(state);
         }
-        master_key_id.hash(state);
         receiving_node_ids.hash(state);
         registry_version.hash(state);
     }
@@ -809,8 +820,8 @@ impl From<&EcdsaReshareRequest> for pb::EcdsaReshareRequest {
             receiving_node_ids.push(node_id_into_protobuf(*node));
         }
         Self {
-            key_id: request.key_id.as_ref().map(|key_id| key_id.into()),
-            master_key_id: Some(request.master_key_id.clone().into()),
+            key_id: Some((&request.key_id).into()),
+            master_key_id: request.master_key_id.as_ref().map(|key_id| key_id.into()),
             receiving_node_ids,
             registry_version: request.registry_version.get(),
         }
@@ -826,17 +837,12 @@ impl TryFrom<&pb::EcdsaReshareRequest> for EcdsaReshareRequest {
             .map(|node| node_id_try_from_option(Some(node.clone())))
             .collect::<Result<Vec<_>, ProxyDecodeError>>()?;
 
-        let key_id = request
-            .key_id
+        let key_id = try_from_option_field(request.key_id.clone(), "EcdsaReshareRequest::key_id")?;
+        let master_key_id = request
+            .master_key_id
             .clone()
             .map(|key_id| key_id.try_into())
             .transpose()?;
-
-        let master_key_id = try_from_option_field(
-            request.master_key_id.clone(),
-            "EcdsaReshareRequest::master_key_id",
-        )?;
-
         Ok(Self {
             key_id,
             master_key_id,
@@ -2148,7 +2154,7 @@ impl HasMasterPublicKeyId for PreSignatureRef {
 
 impl HasMasterPublicKeyId for EcdsaReshareRequest {
     fn key_id(&self) -> MasterPublicKeyId {
-        self.master_key_id.clone()
+        MasterPublicKeyId::Ecdsa(self.key_id.clone())
     }
 }
 

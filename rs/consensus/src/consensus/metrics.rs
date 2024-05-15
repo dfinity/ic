@@ -1,5 +1,6 @@
 use ic_consensus_utils::{get_block_hash_string, pool_reader::PoolReader};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
+use ic_interfaces::ingress_manager::IngressSelector;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
@@ -12,7 +13,7 @@ use ic_types::{
             CompletedReshareRequest, CompletedSignature, EcdsaPayload, HasMasterPublicKeyId,
             KeyTranscriptCreation,
         },
-        Block, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank,
+        Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank,
     },
     CountBytes, Height,
 };
@@ -494,6 +495,12 @@ pub struct ValidatorMetrics {
     pub(crate) validation_random_tape_shares_count: IntGauge,
     pub(crate) validation_random_beacon_shares_count: IntGauge,
     pub(crate) validation_share_batch_size: HistogramVec,
+    // Payload metrics
+    pub(crate) ingress_messages: Histogram,
+    // The number of messages in a block which are not (yet) present in the Ingress Pool.
+    // This is a temporary metrics needed for a hashes in blocks experiment.
+    // TODO(CON-1312): Delete this once not necessary anymore
+    pub(crate) missing_ingress_messages: Histogram,
 }
 
 impl ValidatorMetrics {
@@ -502,7 +509,7 @@ impl ValidatorMetrics {
         Self {
             time_to_receive_block: metrics_registry.histogram_vec(
                 "consensus_time_to_receive_block",
-                "The duration to receive a block since round start, labelled by ranks, in seconds.",
+                "The duration to receive a block since round start, labeled by ranks, in seconds.",
                 vec![
                     0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0,
                     3.5, 4.0, 4.5, 5.0, 6.0, 8.0, 10.0, 15.0, 20.0,
@@ -550,6 +557,46 @@ impl ValidatorMetrics {
                 linear_buckets(1.0, 1.0, 10),
                 &["type"],
             ),
+            ingress_messages: metrics_registry.histogram(
+                "consensus_ingress_messages_in_block",
+                "The number of ingress messages in a validated block",
+                // 0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000
+                decimal_buckets_with_zero(0, 3),
+            ),
+            missing_ingress_messages: metrics_registry.histogram(
+                "consensus_missing_ingress_messages_in_block",
+                "The number of ingress messages in a validated block \
+                which are not present in the ingress pool",
+                // 0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000
+                decimal_buckets_with_zero(0, 3),
+            ),
+        }
+    }
+
+    pub(crate) fn observe_data_payload(
+        &self,
+        proposal: &BlockProposal,
+        ingress_selector: Option<&dyn IngressSelector>,
+    ) {
+        let BlockPayload::Data(payload) = proposal.as_ref().payload.as_ref() else {
+            // Skip if it's a summary block.
+            return;
+        };
+
+        let total_ingress_messages = payload.batch.ingress.message_count();
+        self.ingress_messages.observe(total_ingress_messages as f64);
+
+        if let Some(ingress_selector) = ingress_selector {
+            let missing_ingress_messages = payload
+                .batch
+                .ingress
+                .message_ids()
+                .iter()
+                .filter(|message_id| !ingress_selector.has_message(message_id))
+                .count();
+
+            self.missing_ingress_messages
+                .observe(missing_ingress_messages as f64);
         }
     }
 
@@ -829,6 +876,26 @@ impl EcdsaPayloadMetrics {
         self.payload_metrics_set(
             "xnet_reshare_agreements",
             count_by_master_public_key_id(payload.xnet_reshare_agreements.keys(), &expected_keys),
+        );
+        self.payload_metrics_set_without_key_id_label(
+            "payload_layout_multiple_keys",
+            payload.is_multiple_keys_layout() as usize,
+        );
+        self.payload_metrics_set_without_key_id_label(
+            "payload_layout_generalized_pre_signatures",
+            payload.is_generalized_pre_signatures_layout() as usize,
+        );
+        self.payload_metrics_set_without_key_id_label(
+            "key_transcripts",
+            payload.key_transcripts.len(),
+        );
+        self.payload_metrics_set_without_key_id_label(
+            "key_transcripts_with_master_public_key_id",
+            payload
+                .key_transcripts
+                .values()
+                .filter(|k| k.master_key_id.is_some())
+                .count(),
         );
     }
 

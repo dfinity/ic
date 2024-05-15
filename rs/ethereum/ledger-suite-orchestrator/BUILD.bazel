@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "gzip_compress", "rust_ic_test")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -98,6 +98,7 @@ rust_canister(
         "templates/dashboard.html",
     ],
     crate_name = "ic_ledger_suite_orchestrator_canister",
+    opt = "z",
     proc_macro_deps = [
         "@crate_index//:ic-cdk-macros",
     ],
@@ -113,11 +114,6 @@ rust_canister(
         "@crate_index//:serde",
         "@crate_index//:time",
     ],
-)
-
-gzip_compress(
-    name = "ledger_suite_orchestrator_canister" + ".wasm.gz",
-    srcs = [":ledger_suite_orchestrator_canister"],
 )
 
 rust_ic_test(

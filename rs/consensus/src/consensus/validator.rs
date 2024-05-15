@@ -24,6 +24,7 @@ use ic_interfaces::{
     consensus::{PayloadBuilder, PayloadPermanentError, PayloadTransientError},
     consensus_pool::*,
     dkg::DkgPool,
+    ingress_manager::IngressSelector,
     messaging::MessageRouting,
     time_source::TimeSource,
     validation::{ValidationError, ValidationResult},
@@ -49,7 +50,7 @@ use ic_types::{
 use std::{
     collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 /// The number of seconds spent in unvalidated pool, after which we start
@@ -72,7 +73,7 @@ enum TransientError {
     CryptoError(CryptoError),
     RegistryClientError(RegistryClientError),
     PayloadValidationError(PayloadTransientError),
-    DkgPayloadValidationError(dkg::TransientError),
+    DkgPayloadValidationError(dkg::TransientPayloadValidationError),
     EcdsaPayloadValidationError(ecdsa::TransientError),
     DkgSummaryNotFound(Height),
     RandomBeaconNotFound(Height),
@@ -98,7 +99,7 @@ enum PermanentError {
     SignerNotInThresholdCommittee(NodeId),
     SignerNotInMultiSigCommittee(NodeId),
     PayloadValidationError(PayloadPermanentError),
-    DkgPayloadValidationError(dkg::PermanentError),
+    DkgPayloadValidationError(dkg::PermanentPayloadValidationError),
     EcdsaPayloadValidationError(ecdsa::PermanentError),
     InsufficientSignatures,
     CannotVerifyBlockHeightZero,
@@ -588,10 +589,7 @@ pub struct Validator {
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
     time_source: Arc<dyn TimeSource>,
-    /// Earliest monotonic measurement available for the validator, used for fallback
-    /// during out-of-sync validation. Should ideally represent a time close to the
-    /// start of the replica process.
-    origin_instant: Instant,
+    ingress_selector: Option<Arc<dyn IngressSelector>>,
 }
 
 impl Validator {
@@ -609,6 +607,7 @@ impl Validator {
         log: ReplicaLogger,
         metrics: ValidatorMetrics,
         time_source: Arc<dyn TimeSource>,
+        ingress_selector: Option<Arc<dyn IngressSelector>>,
     ) -> Validator {
         Validator {
             replica_config,
@@ -622,8 +621,8 @@ impl Validator {
             log,
             metrics,
             schedule: RoundRobin::default(),
-            origin_instant: time_source.get_instant(),
             time_source,
+            ingress_selector,
         }
     }
 
@@ -867,6 +866,8 @@ impl Validator {
                         ));
                     } else if verification.is_ok() {
                         if get_notarized_parent(pool_reader, &proposal).is_ok() {
+                            self.metrics
+                                .observe_data_payload(&proposal, self.ingress_selector.as_deref());
                             self.metrics.observe_block(pool_reader, &proposal);
                             known_ranks.insert(proposal.height(), Some(proposal.rank()));
                             change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
@@ -921,6 +922,8 @@ impl Validator {
 
                 match self.check_block_validity(pool_reader, &proposal) {
                     Ok(()) => {
+                        self.metrics
+                            .observe_data_payload(&proposal, self.ingress_selector.as_deref());
                         self.metrics.observe_block(pool_reader, &proposal);
                         known_ranks.insert(proposal.height(), Some(proposal.rank()));
                         change_set.push(ChangeAction::MoveToValidated(proposal.into_message()))
@@ -1036,7 +1039,7 @@ impl Validator {
         // further slowdown for other rounds.
         let parent_block_instant = pool_reader
             .get_block_instant(&proposal.parent)
-            .unwrap_or(self.origin_instant);
+            .unwrap_or(self.time_source.get_origin_instant());
         let duration_since_received_parent = self
             .time_source
             .get_instant()
@@ -1730,6 +1733,7 @@ pub mod test {
                 no_op_logger(),
                 ValidatorMetrics::new(MetricsRegistry::new()),
                 Arc::clone(&dependencies.time_source) as Arc<_>,
+                /*ingress_selector=*/ None,
             );
             Self {
                 validator,

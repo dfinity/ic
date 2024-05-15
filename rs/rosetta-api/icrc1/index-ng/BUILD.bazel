@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "gzip_compress", "rust_ic_test")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -50,6 +50,7 @@ rust_library(
         crate_features = features,
         crate_name = "ic_icrc1_index_ng_canister",
         edition = "2018",
+        opt = "z",
         proc_macro_deps = MACRO_DEPENDENCIES,
         rustc_env = {
             "INDEX_DID_PATH": "$(location :index-ng.did)",
@@ -70,17 +71,6 @@ rust_library(
             ["u256-tokens"],
             ["//rs/rosetta-api/icrc1/tokens_u256"],
         ),
-    ]
-]
-
-[
-    gzip_compress(
-        name = "index_ng_canister" + name_suffix + ".wasm.gz",
-        srcs = [":index_ng_canister" + name_suffix],
-    )
-    for name_suffix in [
-        "",
-        "_u256",
     ]
 ]
 

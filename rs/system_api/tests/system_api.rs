@@ -148,6 +148,7 @@ fn test_canister_init_support() {
     assert_api_not_supported(api.ic0_accept_message());
     assert_api_not_supported(api.ic0_msg_reply());
     assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+    assert_api_not_supported(api.ic0_msg_deadline());
     assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
     assert_api_not_supported(api.ic0_msg_reject_code());
     assert_api_not_supported(api.ic0_msg_reject_msg_size());
@@ -207,6 +208,7 @@ fn test_canister_update_support() {
     assert_api_not_supported(api.ic0_accept_message());
     assert_api_supported(api.ic0_msg_reply());
     assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+    assert_api_supported(api.ic0_msg_deadline());
     assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
     assert_api_not_supported(api.ic0_msg_reject_code());
     assert_api_not_supported(api.ic0_msg_reject_msg_size());
@@ -266,6 +268,7 @@ fn test_canister_replicated_query_support() {
     assert_api_not_supported(api.ic0_accept_message());
     assert_api_supported(api.ic0_msg_reply());
     assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+    assert_api_supported(api.ic0_msg_deadline());
     assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
     assert_api_not_supported(api.ic0_msg_reject_code());
     assert_api_not_supported(api.ic0_msg_reject_msg_size());
@@ -325,6 +328,7 @@ fn test_canister_pure_query_support() {
     assert_api_not_supported(api.ic0_accept_message());
     assert_api_supported(api.ic0_msg_reply());
     assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+    assert_api_supported(api.ic0_msg_deadline());
     assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
     assert_api_not_supported(api.ic0_msg_reject_code());
     assert_api_not_supported(api.ic0_msg_reject_msg_size());
@@ -394,6 +398,7 @@ fn test_canister_stateful_query_support() {
     assert_api_not_supported(api.ic0_accept_message());
     assert_api_supported(api.ic0_msg_reply());
     assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+    assert_api_supported(api.ic0_msg_deadline());
     assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
     assert_api_not_supported(api.ic0_msg_reject_code());
     assert_api_not_supported(api.ic0_msg_reject_msg_size());
@@ -453,6 +458,7 @@ fn test_reply_api_support_on_nns() {
     assert_api_not_supported(api.ic0_accept_message());
     assert_api_supported(api.ic0_msg_reply());
     assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+    assert_api_supported(api.ic0_msg_deadline());
     assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
     assert_api_supported(api.ic0_msg_reject_code());
     assert_api_not_supported(api.ic0_msg_reject_msg_size());
@@ -512,6 +518,7 @@ fn test_reply_api_support_non_nns() {
     assert_api_not_supported(api.ic0_accept_message());
     assert_api_supported(api.ic0_msg_reply());
     assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+    assert_api_supported(api.ic0_msg_deadline());
     assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
     assert_api_supported(api.ic0_msg_reject_code());
     assert_api_not_supported(api.ic0_msg_reject_msg_size());
@@ -572,6 +579,7 @@ fn test_reject_api_support_on_nns() {
     assert_api_not_supported(api.ic0_accept_message());
     assert_api_supported(api.ic0_msg_reply());
     assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+    assert_api_supported(api.ic0_msg_deadline());
     assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
     assert_api_supported(api.ic0_msg_reject_code());
     assert_api_supported(api.ic0_msg_reject_msg_size());
@@ -632,6 +640,7 @@ fn test_reject_api_support_non_nns() {
     assert_api_not_supported(api.ic0_accept_message());
     assert_api_supported(api.ic0_msg_reply());
     assert_api_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+    assert_api_supported(api.ic0_msg_deadline());
     assert_api_supported(api.ic0_msg_reject(0, 0, &[]));
     assert_api_supported(api.ic0_msg_reject_code());
     assert_api_supported(api.ic0_msg_reject_msg_size());
@@ -691,6 +700,7 @@ fn test_pre_upgrade_support() {
     assert_api_not_supported(api.ic0_accept_message());
     assert_api_not_supported(api.ic0_msg_reply());
     assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+    assert_api_not_supported(api.ic0_msg_deadline());
     assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
     assert_api_not_supported(api.ic0_msg_reject_code());
     assert_api_not_supported(api.ic0_msg_reject_msg_size());
@@ -750,6 +760,7 @@ fn test_start_support() {
     assert_api_not_supported(api.ic0_accept_message());
     assert_api_not_supported(api.ic0_msg_reply());
     assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+    assert_api_not_supported(api.ic0_msg_deadline());
     assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
     assert_api_not_supported(api.ic0_msg_reject_code());
     assert_api_not_supported(api.ic0_msg_reject_msg_size());
@@ -813,6 +824,7 @@ fn test_cleanup_support() {
     assert_api_not_supported(api.ic0_msg_reply());
     assert_api_not_supported(api.ic0_accept_message());
     assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+    assert_api_not_supported(api.ic0_msg_deadline());
     assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
     assert_api_not_supported(api.ic0_msg_reject_code());
     assert_api_not_supported(api.ic0_msg_reject_msg_size());
@@ -877,6 +889,7 @@ fn test_inspect_message_support() {
     assert_api_supported(api.ic0_accept_message());
     assert_api_not_supported(api.ic0_msg_reply());
     assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+    assert_api_not_supported(api.ic0_msg_deadline());
     assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
     assert_api_not_supported(api.ic0_msg_reject_code());
     assert_api_not_supported(api.ic0_msg_reject_msg_size());
@@ -937,6 +950,7 @@ fn test_canister_system_task_support() {
     assert_api_not_supported(api.ic0_accept_message());
     assert_api_not_supported(api.ic0_msg_reply());
     assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+    assert_api_not_supported(api.ic0_msg_deadline());
     assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
     assert_api_not_supported(api.ic0_msg_reject_code());
     assert_api_not_supported(api.ic0_msg_reject_msg_size());
@@ -996,6 +1010,7 @@ fn test_canister_system_task_support_nns() {
     assert_api_not_supported(api.ic0_accept_message());
     assert_api_not_supported(api.ic0_msg_reply());
     assert_api_not_supported(api.ic0_msg_reply_data_append(0, 0, &[]));
+    assert_api_not_supported(api.ic0_msg_deadline());
     assert_api_not_supported(api.ic0_msg_reject(0, 0, &[]));
     assert_api_not_supported(api.ic0_msg_reject_code());
     assert_api_not_supported(api.ic0_msg_reject_msg_size());

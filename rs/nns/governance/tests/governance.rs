@@ -23,7 +23,8 @@ use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
 use ic_nervous_system_common::{
-    cmc::CMC, ledger::IcpLedger, NervousSystemError, E8, SECONDS_PER_DAY,
+    cmc::CMC, ledger::IcpLedger, NervousSystemError, E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
+    ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -49,9 +50,8 @@ use ic_nns_governance::{
         validate_proposal_title, Environment, Governance, HeapGrowthPotential,
         EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, MAX_DISSOLVE_DELAY_SECONDS,
         MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
-        ONE_YEAR_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX, REWARD_DISTRIBUTION_PERIOD_SECONDS,
-        WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
+        REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
     governance_proto_builder::GovernanceProtoBuilder,
     init::GovernanceCanisterInitPayloadBuilder,
@@ -4681,7 +4681,7 @@ fn test_claim_or_refresh_neuron_does_not_overflow() {
                 &Configure {
                     operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
                         additional_dissolve_delay_seconds: 6
-                            * ic_nns_governance::governance::ONE_MONTH_SECONDS as u32,
+                            * ic_nervous_system_common::ONE_MONTH_SECONDS as u32,
                     })),
                 },
             )
@@ -4691,12 +4691,12 @@ fn test_claim_or_refresh_neuron_does_not_overflow() {
 
     // Advance the current time, so that the neuron has accumulated
     // some age.
-    driver.advance_time_by(12 * ic_nns_governance::governance::ONE_MONTH_SECONDS);
+    driver.advance_time_by(12 * ic_nervous_system_common::ONE_MONTH_SECONDS);
 
     let neuron_info = gov.get_neuron_info(&nid).unwrap();
     assert_eq!(
         neuron_info.age_seconds,
-        12 * ic_nns_governance::governance::ONE_MONTH_SECONDS,
+        12 * ic_nervous_system_common::ONE_MONTH_SECONDS,
     );
     let previous_stake_e8s = neuron_info.stake_e8s;
 
@@ -7140,15 +7140,15 @@ fn test_default_followees() {
     );
 
     let default_followees2 = hashmap![
-        Topic::ExchangeRate as i32 => Followees { followees: vec![]},
+        Topic::ExchangeRate as i32 => Followees { followees: vec![voter_neuron]},
         Topic::NetworkEconomics as i32 => Followees { followees: vec![voter_neuron]},
-        Topic::Governance as i32 => Followees { followees: vec![]},
-        Topic::SnsAndCommunityFund as i32 => Followees { followees: vec![]},
+        Topic::Governance as i32 => Followees { followees: vec![voter_neuron]},
+        Topic::SnsAndCommunityFund as i32 => Followees { followees: vec![voter_neuron]},
         Topic::NodeAdmin as i32 => Followees { followees: vec![voter_neuron]},
-        Topic::ParticipantManagement as i32 => Followees { followees: vec![]},
+        Topic::ParticipantManagement as i32 => Followees { followees: vec![voter_neuron]},
         Topic::SubnetManagement as i32 => Followees { followees: vec![voter_neuron]},
         Topic::NetworkCanisterManagement as i32 => Followees { followees: vec![voter_neuron]},
-        Topic::Kyc as i32 => Followees { followees: vec![]},
+        Topic::Kyc as i32 => Followees { followees: vec![voter_neuron]},
     ];
 
     // Make a proposal to change the default followees.
@@ -12901,7 +12901,7 @@ fn swap_start_and_due_timestamps_if_start_time_is_before_swap_approved() {
     };
 
     let day_offset = 10;
-    let swap_approved_timestamp_seconds = day_offset * SECONDS_PER_DAY
+    let swap_approved_timestamp_seconds = day_offset * ONE_DAY_SECONDS
         + swap_start_time_of_day.seconds_after_utc_midnight.unwrap()
         - 1;
     let (start, due) = CreateServiceNervousSystem::swap_start_and_due_timestamps(
@@ -12912,9 +12912,9 @@ fn swap_start_and_due_timestamps_if_start_time_is_before_swap_approved() {
     .unwrap();
 
     assert_eq!(
-        day_offset * SECONDS_PER_DAY
+        day_offset * ONE_DAY_SECONDS
             + swap_start_time_of_day.seconds_after_utc_midnight.unwrap()
-            + SECONDS_PER_DAY,
+            + ONE_DAY_SECONDS,
         start
     );
     assert_eq!(start + duration.seconds.unwrap(), due)
@@ -12928,7 +12928,7 @@ fn swap_start_and_due_timestamps_if_start_time_is_after_swap_approved() {
     };
 
     let day_offset = 10;
-    let swap_approved_timestamp_seconds = day_offset * SECONDS_PER_DAY
+    let swap_approved_timestamp_seconds = day_offset * ONE_DAY_SECONDS
         + swap_start_time_of_day.seconds_after_utc_midnight.unwrap()
         + 1;
     let (start, due) = CreateServiceNervousSystem::swap_start_and_due_timestamps(
@@ -12939,10 +12939,10 @@ fn swap_start_and_due_timestamps_if_start_time_is_after_swap_approved() {
     .unwrap();
 
     assert_eq!(
-        day_offset * SECONDS_PER_DAY
+        day_offset * ONE_DAY_SECONDS
             + swap_start_time_of_day.seconds_after_utc_midnight.unwrap()
-            + SECONDS_PER_DAY
-            + SECONDS_PER_DAY,
+            + ONE_DAY_SECONDS
+            + ONE_DAY_SECONDS,
         start
     );
     assert_eq!(start + duration.seconds.unwrap(), due)
@@ -12957,7 +12957,7 @@ fn swap_start_and_due_timestamps_if_start_time_is_when_swap_approved() {
 
     let day_offset = 10;
     let swap_approved_timestamp_seconds =
-        day_offset * SECONDS_PER_DAY + swap_start_time_of_day.seconds_after_utc_midnight.unwrap();
+        day_offset * ONE_DAY_SECONDS + swap_start_time_of_day.seconds_after_utc_midnight.unwrap();
     let (start, due) = CreateServiceNervousSystem::swap_start_and_due_timestamps(
         swap_start_time_of_day,
         duration,
@@ -12966,10 +12966,10 @@ fn swap_start_and_due_timestamps_if_start_time_is_when_swap_approved() {
     .unwrap();
 
     assert_eq!(
-        day_offset * SECONDS_PER_DAY
+        day_offset * ONE_DAY_SECONDS
             + swap_start_time_of_day.seconds_after_utc_midnight.unwrap()
-            + SECONDS_PER_DAY
-            + SECONDS_PER_DAY,
+            + ONE_DAY_SECONDS
+            + ONE_DAY_SECONDS,
         start
     );
     assert_eq!(start + duration.seconds.unwrap(), due)
@@ -12999,7 +12999,7 @@ fn randomly_pick_swap_start() {
     }
 
     // Assert that we hit all possible values.
-    let possible_values_count = SECONDS_PER_DAY / 60 / 15;
+    let possible_values_count = ONE_DAY_SECONDS / 60 / 15;
     assert_eq!(start_time_to_count.len(), possible_values_count as usize);
 
     // Assert that values are multiples of of 15 minutes.

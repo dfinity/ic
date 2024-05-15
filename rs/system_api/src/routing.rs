@@ -7,10 +7,10 @@ use ic_error_types::UserError;
 use ic_management_canister_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
     BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs,
-    ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, Method as Ic00Method, NodeMetricsHistoryArgs, Payload,
-    ProvisionalTopUpCanisterArgs, SignWithECDSAArgs, StoredChunksArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadChunkArgs,
+    ComputeInitialEcdsaDealingsArgs, ComputeInitialIDkgDealingsArgs, ECDSAPublicKeyArgs,
+    EcdsaKeyId, InstallChunkedCodeArgs, InstallCodeArgsV2, MasterPublicKeyId, Method as Ic00Method,
+    NodeMetricsHistoryArgs, Payload, ProvisionalTopUpCanisterArgs, SignWithECDSAArgs,
+    StoredChunksArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_replicated_state::NetworkTopology;
 
@@ -216,6 +216,10 @@ pub(super) fn resolve_destination(
                 EcdsaSubnetKind::OnlyHoldsKey,
             )
         }
+        Ok(Ic00Method::ComputeInitialIDkgDealings) => {
+            let args = ComputeInitialIDkgDealingsArgs::decode(payload)?;
+            route_idkg_message(&args.key_id, network_topology, &Some(args.subnet_id))
+        }
         Ok(Ic00Method::UploadChunk) => {
             let args = UploadChunkArgs::decode(payload)?;
             let canister_id = args.get_canister_id();
@@ -363,6 +367,18 @@ fn route_ecdsa_message(
             }
         }
     }
+}
+
+fn route_idkg_message(
+    _key_id: &MasterPublicKeyId,
+    _network_topology: &NetworkTopology,
+    _requested_subnet: &Option<SubnetId>,
+) -> Result<PrincipalId, ResolveDestinationError> {
+    // TODO(EXC-1599): implement route_idkg_message().
+    Err(ResolveDestinationError::UserError(UserError::new(
+        ic_error_types::ErrorCode::CanisterRejectedMessage,
+        "ComputeInitialIDkgDealings API is not yet implemented",
+    )))
 }
 
 fn route_bitcoin_message(

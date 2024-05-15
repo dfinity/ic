@@ -29,7 +29,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_metrics::{fetch_histogram_stats, HistogramStats};
-use ic_types::messages::CanisterMessage;
+use ic_types::messages::{CanisterMessage, NO_DEADLINE};
 use ic_types::time::CoarseTime;
 use ic_types::Time;
 use ic_types::{
@@ -5069,7 +5069,7 @@ fn call_with_best_effort_response_succeeds() {
             "update",
             wasm()
                 .call_new(canister_id, "update", call_args())
-                .call_with_cycles_and_best_effort_response(10)
+                .call_with_best_effort_response(10)
                 .call_perform()
                 .reply()
                 .build(),
@@ -5093,8 +5093,8 @@ fn call_with_best_effort_response_fails_when_timeout_is_set() {
             "update",
             wasm()
                 .call_new(canister_id, "update", call_args())
-                .call_with_cycles_and_best_effort_response(10)
-                .call_with_cycles_and_best_effort_response(10)
+                .call_with_best_effort_response(10)
+                .call_with_best_effort_response(10)
                 .build(),
         )
         .unwrap_err();
@@ -5169,6 +5169,107 @@ fn call_with_best_effort_response_timeout_is_bounded() {
         call_with_best_effort_response_test_helper(start_time_seconds, requested_timeout_seconds),
         CoarseTime::from_secs_since_unix_epoch(start_time_seconds + bounded_timeout_seconds)
     );
+}
+
+#[test]
+fn ic0_msg_deadline_while_executing_ingress_message() {
+    let start_time_seconds = 100;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+
+    let msg = wasm().msg_deadline().reply_int64().build();
+
+    match test.ingress(canister_id, "update", msg).unwrap() {
+        WasmResult::Reply(result) => assert_eq!(
+            Time::from(NO_DEADLINE).as_nanos_since_unix_epoch(),
+            u64::from_le_bytes(result.try_into().unwrap())
+        ),
+        _ => panic!("Unexpected result"),
+    };
+}
+
+#[test]
+fn ic0_msg_deadline_when_deadline_is_not_set() {
+    let start_time_seconds = 100;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let msg = wasm()
+        .call_simple(
+            b_id,
+            "update",
+            call_args()
+                .other_side(wasm().msg_deadline().reply_int64().build())
+                .on_reply(wasm().message_payload().append_and_reply().build()),
+        )
+        .build();
+
+    // Ingress message is sent to canister `A`, during its execution canister `A`
+    // calls canister `B`. While executing the canister message, canister `B`
+    // invokes `msg_deadline()` and attaches the result to a reply to canister `A`
+    // message. Canister `A` forwards the received response as a reply to the
+    // Ingress message.
+
+    match test.ingress(a_id, "update", msg).unwrap() {
+        WasmResult::Reply(result) => assert_eq!(
+            Time::from(NO_DEADLINE).as_nanos_since_unix_epoch(),
+            u64::from_le_bytes(result.try_into().unwrap())
+        ),
+        _ => panic!("Unexpected result"),
+    };
+}
+
+#[test]
+fn ic0_msg_deadline_when_deadline_is_set() {
+    let start_time_seconds = 100;
+    let timeout_seconds = 200;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let msg = wasm()
+        .call_simple_with_cycles_and_best_effort_response(
+            b_id,
+            "update",
+            call_args()
+                .other_side(wasm().msg_deadline().reply_int64().build())
+                .on_reply(wasm().message_payload().append_and_reply().build()),
+            Cycles::new(0),
+            timeout_seconds,
+        )
+        .build();
+
+    // Ingress message is sent to canister `A`, during its execution canister `A`
+    // calls canister `B` with `best-effort response`. While executing the canister
+    // message, canister `B` invokes `msg_deadline()` and attaches the result to
+    // a reply to canister `A` message. Canister `A` forwards the received response
+    // as a reply to the Ingress message.
+
+    match test.ingress(a_id, "update", msg).unwrap() {
+        WasmResult::Reply(result) => assert_eq!(
+            Time::from_secs_since_unix_epoch((start_time_seconds + timeout_seconds).into())
+                .unwrap()
+                .as_nanos_since_unix_epoch(),
+            u64::from_le_bytes(result.try_into().unwrap())
+        ),
+        _ => panic!("Unexpected result"),
+    };
 }
 
 fn display_page_map(page_map: PageMap, page_range: std::ops::Range<u64>) -> String {
@@ -6979,6 +7080,32 @@ fn wasm_memory_limit_is_enforced_in_updates() {
 }
 
 #[test]
+fn wasm_memory_limit_is_enforced_at_start_of_update() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    // Warm up the canister to make sure that the second update call does not
+    // grow memory.
+    let result = test
+        .ingress(canister_id, "update", use_wasm_memory_and_reply(100))
+        .unwrap();
+    assert_eq!(WasmResult::Reply(100_i32.to_le_bytes().to_vec()), result);
+
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(0))
+        .unwrap();
+
+    let err = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().push_bytes(&[]).append_and_reply().build(),
+        )
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}
+
+#[test]
 fn wasm_memory_limit_is_not_enforced_in_queries() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
@@ -7029,6 +7156,10 @@ fn wasm_memory_limit_is_not_enforced_in_timer() {
     let _ = test.ingress(canister_id, "update", set_timer).unwrap();
 
     test.canister_task(canister_id, CanisterTask::GlobalTimer);
+
+    // Increase the limit to run the update call that fetches the result of the
+    // timer execution.
+    set_wasm_memory_limit(&mut test, canister_id, NumBytes::from(5_000_000));
 
     // The timer task should succeed because the Wasm memory limit is not
     // enforced in system tasks. Note that this will change in future after
@@ -7144,4 +7275,22 @@ fn wasm_memory_limit_is_enforced_in_init() {
     // The canister init is expected to fail.
     let err = test.install_canister(canister_id, wasm).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}
+
+#[test]
+fn wasm_memory_limit_cannot_exceed_256_tb() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    // Setting the limit to 2^48 works.
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1 << 4))
+        .unwrap();
+
+    // Setting the limit above 2^48 fails.
+    let err = test
+        .canister_update_wasm_memory_limit(canister_id, NumBytes::new((1 << 48) + 1))
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
 }

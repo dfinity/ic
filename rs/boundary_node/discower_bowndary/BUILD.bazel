@@ -12,6 +12,8 @@ DEPENDENCIES = [
     "@crate_index//:thiserror",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
+    "@crate_index//:simple_moving_average",
+    "@crate_index//:rand",
 ]
 
 VERSION = "0.1.0"
