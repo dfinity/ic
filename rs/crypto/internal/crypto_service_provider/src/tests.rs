@@ -1,6 +1,5 @@
 #![allow(clippy::unwrap_used)]
 mod csp_tests {
-    use crate::api::CspKeyGenerator;
     use crate::api::CspSigner;
     use crate::api::CspTlsHandshakeSignerProvider;
     use crate::vault::test_utils::ed25519_csp_pubkey_from_tls_pubkey_cert;
@@ -83,6 +82,7 @@ mod csp_tests {
     fn csp_with_node_signing_key_pair() -> (Csp, CspPublicKey) {
         let csp = Csp::builder_for_test().build();
         let public_key = csp
+            .csp_vault
             .gen_node_signing_key_pair()
             .expect("error generating public/private key pair");
         (csp, public_key)
@@ -92,6 +92,7 @@ mod csp_tests {
         const NODE_1: u64 = 4241;
         let csp = Csp::builder_for_test().build();
         let cert = csp
+            .csp_vault
             .gen_tls_key_pair(node_test_id(NODE_1))
             .expect("error generating TLS key pair");
         (csp, cert)
