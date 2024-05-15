@@ -1454,6 +1454,15 @@ impl SystemApiImpl {
     pub fn canister_log(&self) -> &CanisterLog {
         self.sandbox_safe_system_state.canister_log()
     }
+
+    /// Checks if the current API type is an install or upgrade message.
+    /// This is relevant when enforcing the stable memory dirty page limit.
+    pub fn is_install_or_upgrade_message(&self) -> bool {
+        matches!(
+            self.api_type,
+            ApiType::Init { .. } | ApiType::PreUpgrade { .. }
+        )
+    }
 }
 
 impl SystemApi for SystemApiImpl {

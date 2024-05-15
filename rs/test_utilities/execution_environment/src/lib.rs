@@ -1,5 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_config::embedders::MeteringType;
+use ic_config::embedders::{MeteringType, StableMemoryDirtyPageLimit};
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config, flag_status::FlagStatus,
     subnet_config::SchedulerConfig, subnet_config::SubnetConfig,
@@ -1916,11 +1916,16 @@ impl ExecutionTestBuilder {
 
     pub fn with_stable_memory_dirty_page_limit(
         mut self,
-        stable_memory_dirty_page_limit: NumOsPages,
+        stable_memory_dirty_page_limit_message: NumOsPages,
+        stable_memory_dirty_page_limit_upgrade: NumOsPages,
     ) -> Self {
         self.execution_config
             .embedders_config
-            .stable_memory_dirty_page_limit = stable_memory_dirty_page_limit;
+            .stable_memory_dirty_page_limit = StableMemoryDirtyPageLimit {
+            message: stable_memory_dirty_page_limit_message,
+            upgrade: stable_memory_dirty_page_limit_upgrade,
+        };
+
         self
     }
 
