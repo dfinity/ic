@@ -3,7 +3,10 @@ use crate::wasmtime_embedder::{
     StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
 };
 
-use ic_config::{embedders::FeatureFlags, flag_status::FlagStatus};
+use ic_config::{
+    embedders::{FeatureFlags, StableMemoryDirtyPageLimit},
+    flag_status::FlagStatus,
+};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, PerformanceCounterType, StableGrowOutcome, SystemApi,
     TrapCode,
@@ -139,11 +142,18 @@ fn charge_for_stable_write(
     mut overhead: NumInstructions,
     offset: u64,
     size: u64,
-    stable_memory_dirty_page_limit: NumOsPages,
+    dirty_page_limit_message: NumOsPages,
+    dirty_page_limit_upgrade: NumOsPages,
 ) -> HypervisorResult<()> {
     let system_api = caller.data().system_api()?;
     let (new_stable_dirty_pages, dirty_page_cost) =
         system_api.dirty_pages_from_stable_write(offset, size)?;
+
+    let dirty_page_limit = if system_api.is_install_or_upgrade_message() {
+        dirty_page_limit_upgrade
+    } else {
+        dirty_page_limit_message
+    };
 
     overhead = overhead
         .get()
@@ -158,30 +168,24 @@ fn charge_for_stable_write(
     #[allow(non_upper_case_globals)]
     const KiB: u64 = 1024;
 
-    match system_api.subnet_type() {
-        // Do not observe stable dirty pages limit on the system subnets.
-        SubnetType::System => {}
-        SubnetType::Application | SubnetType::VerifiedApplication => {
-            let stable_dirty_pages = &mut caller
-                .data_mut()
-                .num_stable_dirty_pages_from_non_native_writes;
-            let total_pages = NumOsPages::from(
-                stable_dirty_pages
-                    .get()
-                    .saturating_add(new_stable_dirty_pages.get()),
-            );
+    let stable_dirty_pages = &mut caller
+        .data_mut()
+        .num_stable_dirty_pages_from_non_native_writes;
+    let total_pages = NumOsPages::from(
+        stable_dirty_pages
+            .get()
+            .saturating_add(new_stable_dirty_pages.get()),
+    );
 
-            if total_pages > stable_memory_dirty_page_limit {
-                let error = HypervisorError::MemoryAccessLimitExceeded(
+    if total_pages > dirty_page_limit {
+        let error = HypervisorError::MemoryAccessLimitExceeded(
                             format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
-                                stable_memory_dirty_page_limit * (PAGE_SIZE as u64 / KiB),
+                            dirty_page_limit * (PAGE_SIZE as u64 / KiB),
                             ),
                         );
-                return Err(error);
-            }
-            *stable_dirty_pages = total_pages;
-        }
+        return Err(error);
     }
+    *stable_dirty_pages = total_pages;
 
     charge_for_system_api_call(caller, overhead, size)
 }
@@ -298,7 +302,7 @@ fn ic0_performance_counter_helper(
 pub(crate) fn syscalls(
     linker: &mut Linker<StoreData>,
     feature_flags: FeatureFlags,
-    stable_memory_dirty_page_limit: NumOsPages,
+    stable_memory_dirty_page_limit: StableMemoryDirtyPageLimit,
     stable_memory_access_page_limit: NumOsPages,
     main_memory_type: WasmMemoryType,
 ) {
@@ -757,7 +761,8 @@ pub(crate) fn syscalls(
                     overhead::STABLE_WRITE,
                     offset as u64,
                     size as u64,
-                    stable_memory_dirty_page_limit,
+                    stable_memory_dirty_page_limit.message,
+                    stable_memory_dirty_page_limit.upgrade,
                 )
                 .map_err(|e| process_err(&mut caller, e))?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
@@ -827,7 +832,8 @@ pub(crate) fn syscalls(
                     overhead::STABLE64_WRITE,
                     offset,
                     size,
-                    stable_memory_dirty_page_limit,
+                    stable_memory_dirty_page_limit.message,
+                    stable_memory_dirty_page_limit.upgrade,
                 )
                 .map_err(|e| process_err(&mut caller, e))?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
@@ -1216,8 +1222,8 @@ pub(crate) fn syscalls(
                     }
                     InternalErrorCode::MemoryWriteLimitExceeded => {
                         HypervisorError::MemoryAccessLimitExceeded(
-                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
-                                    stable_memory_dirty_page_limit * (PAGE_SIZE as u64 / 1024),
+                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
+                            stable_memory_dirty_page_limit.message.get() * (PAGE_SIZE as u64 / 1024), stable_memory_dirty_page_limit.upgrade.get() * (PAGE_SIZE as u64 / 1024),
                             )
                         )
                     }

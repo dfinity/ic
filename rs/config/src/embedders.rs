@@ -63,12 +63,19 @@ pub(crate) const DIRTY_PAGE_COPY_OVERHEAD: NumInstructions = NumInstructions::ne
 const KiB: u64 = 1024;
 #[allow(non_upper_case_globals)]
 const GiB: u64 = KiB * KiB * KiB;
-// Maximum number of stable memory dirty pages that a single message execution
+
+// Maximum number of stable memory dirty OS pages (4KiB) that an upgrade/install message execution
 // is allowed to produce.
-pub const STABLE_MEMORY_DIRTY_PAGE_LIMIT: u64 = 8 * GiB / (PAGE_SIZE as u64);
+const STABLE_MEMORY_DIRTY_PAGE_LIMIT_UPGRADE: NumOsPages =
+    NumOsPages::new(8 * GiB / (PAGE_SIZE as u64));
+// Maximum number of stable memory dirty OS pages (4KiB) that a regular message (update) execution
+// is allowed to produce.
+const STABLE_MEMORY_DIRTY_PAGE_LIMIT_MESSAGE: NumOsPages =
+    NumOsPages::new(4 * GiB / (PAGE_SIZE as u64));
+
 // Maximum number of stable memory pages that a single message execution
 // is allowed to access.
-pub const STABLE_MEMORY_ACCESSED_PAGE_LIMIT: u64 = 8 * GiB / (PAGE_SIZE as u64);
+const STABLE_MEMORY_ACCESSED_PAGE_LIMIT: NumOsPages = NumOsPages::new(8 * GiB / (PAGE_SIZE as u64));
 
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
@@ -114,6 +121,14 @@ pub enum MeteringType {
     None,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct StableMemoryDirtyPageLimit {
+    // Regular message (e.g., update) execution dirty page limit.
+    pub message: NumOsPages,
+    // Longer message (e.g., upgrade) execution dirty page limit.
+    pub upgrade: NumOsPages,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
     /// The number of threads to use for query execution per canister.
@@ -152,13 +167,14 @@ pub struct Config {
     /// Instruction counting strategy
     pub metering_type: MeteringType,
 
-    // Maximum number of stable memory dirty pages that a single message execution
-    // is allowed to produce.
-    pub stable_memory_dirty_page_limit: NumOsPages,
-
     // Maximum number of stable memory pages that a single message execution
     // can access.
     pub stable_memory_accessed_page_limit: NumOsPages,
+
+    /// Maximum number of stable memory dirty pages that a single message
+    /// execution is allowed to produce.
+    /// The actual limit depends on the subnet type.
+    pub stable_memory_dirty_page_limit: StableMemoryDirtyPageLimit,
 
     /// Sandbox process eviction does not activate if the number of sandbox
     /// processes is below this threshold.
@@ -208,8 +224,11 @@ impl Config {
             num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
             feature_flags: FeatureFlags::const_default(),
             metering_type: MeteringType::New,
-            stable_memory_dirty_page_limit: NumOsPages::new(STABLE_MEMORY_DIRTY_PAGE_LIMIT),
-            stable_memory_accessed_page_limit: NumOsPages::new(STABLE_MEMORY_ACCESSED_PAGE_LIMIT),
+            stable_memory_dirty_page_limit: StableMemoryDirtyPageLimit {
+                message: STABLE_MEMORY_DIRTY_PAGE_LIMIT_MESSAGE,
+                upgrade: STABLE_MEMORY_DIRTY_PAGE_LIMIT_UPGRADE,
+            },
+            stable_memory_accessed_page_limit: STABLE_MEMORY_ACCESSED_PAGE_LIMIT,
             min_sandbox_count: DEFAULT_MIN_SANDBOX_COUNT,
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
