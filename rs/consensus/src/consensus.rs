@@ -199,7 +199,7 @@ impl ConsensusImpl {
                 membership.clone(),
                 crypto.clone(),
                 message_routing.clone(),
-                ingress_selector,
+                ingress_selector.clone(),
                 logger.clone(),
                 metrics_registry.clone(),
             ),
@@ -250,6 +250,7 @@ impl ConsensusImpl {
                 logger.clone(),
                 ValidatorMetrics::new(metrics_registry.clone()),
                 Arc::clone(&time_source),
+                Some(ingress_selector.clone()),
             ),
             aggregator: ShareAggregator::new(
                 membership,

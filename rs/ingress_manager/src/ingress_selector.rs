@@ -413,6 +413,16 @@ impl IngressSelector for IngressManager {
     fn request_purge_finalized_messages(&self, message_ids: Vec<IngressMessageId>) {
         self.messages_to_purge.write().unwrap().push(message_ids)
     }
+
+    fn has_message(&self, message_id: &IngressMessageId) -> bool {
+        self.ingress_pool
+            .as_ref()
+            .read()
+            .unwrap()
+            .validated()
+            .get(message_id)
+            .is_some()
+    }
 }
 
 impl IngressManager {

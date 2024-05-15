@@ -149,6 +149,10 @@ pub trait IngressSelector: Send + Sync {
     ///
     /// The actual purge is not required to happen immediately.
     fn request_purge_finalized_messages(&self, message_ids: Vec<IngressMessageId>);
+
+    /// Returns true if and only if the pool has an ingress message with the given id.
+    // TODO(CON-1312): Remove this when no longer necessary
+    fn has_message(&self, message_id: &IngressMessageId) -> bool;
 }
 
 /*
