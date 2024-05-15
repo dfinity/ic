@@ -67,7 +67,7 @@ pub struct SystemStateChanges {
     // `CyclesBalanceChange::Removed(reserved_cycles)`.
     reserved_cycles: Cycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, Cycles>,
-    call_context_balance_taken: BTreeMap<CallContextId, Cycles>,
+    call_context_balance_taken: Option<(CallContextId, Cycles)>,
     request_slots_used: BTreeMap<CanisterId, usize>,
     requests: Vec<Request>,
     pub(super) new_global_timer: Option<CanisterTimer>,
@@ -82,7 +82,7 @@ impl Default for SystemStateChanges {
             cycles_balance_change: CyclesBalanceChange::zero(),
             reserved_cycles: Cycles::zero(),
             consumed_cycles_by_use_case: BTreeMap::new(),
-            call_context_balance_taken: BTreeMap::new(),
+            call_context_balance_taken: None,
             request_slots_used: BTreeMap::new(),
             requests: vec![],
             new_global_timer: None,
@@ -97,8 +97,9 @@ impl SystemStateChanges {
     fn validate_cycle_change(&self, is_cmc_canister: bool) -> HypervisorResult<()> {
         let mut expected_change = CyclesBalanceChange::zero();
 
-        for accepted in self.call_context_balance_taken.values() {
-            expected_change = expected_change + CyclesBalanceChange::added(*accepted);
+        if let Some((_, call_context_balance_taken)) = self.call_context_balance_taken {
+            expected_change =
+                expected_change + CyclesBalanceChange::added(call_context_balance_taken);
         }
 
         for req in self.requests.iter() {
@@ -297,30 +298,35 @@ impl SystemStateChanges {
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
 
-        // Verify we don't accept more cycles than are available from each call
-        // context and update each call context balance.
-        if !self.call_context_balance_taken.is_empty() {
-            let own_canister_id = system_state.canister_id;
-            let call_context_manager = system_state
-                .call_context_manager_mut()
-                .ok_or_else(|| Self::error("Call context manager does not exist"))?;
-            for (context_id, amount_taken) in &self.call_context_balance_taken {
+        // Verify we don't accept more cycles than are available from call
+        // context and update the call context balance.
+        if let Some((context_id, call_context_balance_taken)) = self.call_context_balance_taken {
+            if call_context_balance_taken != Cycles::zero() {
+                let own_canister_id = system_state.canister_id;
+                let call_context_manager = system_state
+                    .call_context_manager_mut()
+                    .ok_or_else(|| Self::error("Call context manager does not exist"))?;
+
                 let call_context = call_context_manager
-                    .call_context_mut(*context_id)
+                    .call_context_mut(context_id)
                     .ok_or_else(|| {
                         Self::error("Canister accepted cycles from invalid call context")
                     })?;
-                call_context.withdraw_cycles(*amount_taken).map_err(|()| {
-                    Self::error("Canister accepted more cycles than available from call context")
-                })?;
-                if (*amount_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
+                call_context
+                    .withdraw_cycles(call_context_balance_taken)
+                    .map_err(|()| {
+                        Self::error(
+                            "Canister accepted more cycles than available from call context",
+                        )
+                    })?;
+                if (call_context_balance_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
                     match call_context.call_origin() {
                         CallOrigin::CanisterUpdate(origin_canister_id, _, _)
                         | CallOrigin::CanisterQuery(origin_canister_id, _) => info!(
                             logger,
                             "Canister {} accepted {} cycles from canister {}.",
                             own_canister_id,
-                            *amount_taken,
+                            call_context_balance_taken,
                             origin_canister_id
                         ),
                         _ => (),
@@ -553,8 +559,8 @@ pub struct SandboxSafeSystemState {
     initial_cycles_balance: Cycles,
     initial_reserved_balance: Cycles,
     reserved_balance_limit: Option<Cycles>,
-    call_context_balances: BTreeMap<CallContextId, Cycles>,
-    call_context_deadlines: BTreeMap<CallContextId, Option<CoarseTime>>,
+    call_context_balance: Option<Cycles>,
+    call_context_deadline: Option<CoarseTime>,
     cycles_account_manager: CyclesAccountManager,
     // None indicates that we are in a context where the canister cannot
     // register callbacks (e.g. running the `start` method when installing a
@@ -583,8 +589,9 @@ impl SandboxSafeSystemState {
         initial_cycles_balance: Cycles,
         initial_reserved_balance: Cycles,
         reserved_balance_limit: Option<Cycles>,
-        call_context_balances: BTreeMap<CallContextId, Cycles>,
-        call_context_deadlines: BTreeMap<CallContextId, Option<CoarseTime>>,
+        call_context_id: Option<CallContextId>,
+        call_context_balance: Option<Cycles>,
+        call_context_deadline: Option<CoarseTime>,
         cycles_account_manager: CyclesAccountManager,
         next_callback_id: Option<u64>,
         available_request_slots: BTreeMap<CanisterId, usize>,
@@ -611,13 +618,15 @@ impl SandboxSafeSystemState {
             system_state_changes: SystemStateChanges {
                 // Start indexing new batch of canister log records from the given index.
                 canister_log: CanisterLog::new_with_next_index(next_canister_log_record_idx),
+                call_context_balance_taken: call_context_id
+                    .map(|call_context_id| (call_context_id, Cycles::zero())),
                 ..SystemStateChanges::default()
             },
             initial_cycles_balance,
             initial_reserved_balance,
             reserved_balance_limit,
-            call_context_balances,
-            call_context_deadlines,
+            call_context_balance,
+            call_context_deadline,
             cycles_account_manager,
             next_callback_id,
             available_request_slots,
@@ -639,23 +648,20 @@ impl SandboxSafeSystemState {
         compute_allocation: ComputeAllocation,
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
+        call_context_id: Option<CallContextId>,
     ) -> Self {
-        let call_context_balances = match system_state.call_context_manager() {
-            Some(call_context_manager) => call_context_manager
-                .call_contexts()
-                .iter()
-                .map(|(id, context)| (*id, context.available_cycles()))
-                .collect(),
-            None => BTreeMap::new(),
-        };
-        let call_context_deadlines = match system_state.call_context_manager() {
-            Some(call_context_manager) => call_context_manager
-                .call_contexts()
-                .iter()
-                .map(|(id, context)| (*id, context.deadline()))
-                .collect(),
-            None => BTreeMap::new(),
-        };
+        let call_context = call_context_id.and_then(|call_context_id| {
+            system_state
+                .call_context_manager()
+                .and_then(|call_context_manager| {
+                    call_context_manager.call_contexts().get(&call_context_id)
+                })
+        });
+
+        let call_context_balance = call_context.map(|call_context| call_context.available_cycles());
+
+        let call_context_deadline = call_context.and_then(|call_context| call_context.deadline());
+
         let available_request_slots = system_state.available_output_request_slots();
 
         // Compute the available slots for IC_00 requests as the minimum of available
@@ -696,8 +702,9 @@ impl SandboxSafeSystemState {
             system_state.balance(),
             system_state.reserved_balance(),
             system_state.reserved_balance_limit(),
-            call_context_balances,
-            call_context_deadlines,
+            call_context_id,
+            call_context_balance,
+            call_context_deadline,
             cycles_account_manager,
             system_state
                 .call_context_manager()
@@ -784,24 +791,20 @@ impl SandboxSafeSystemState {
         self.initial_reserved_balance + self.system_state_changes.reserved_cycles
     }
 
-    pub(super) fn msg_cycles_available(&self, call_context_id: CallContextId) -> Cycles {
-        let initial_available = *self
-            .call_context_balances
-            .get(&call_context_id)
-            .unwrap_or(&Cycles::zero());
-        let already_taken = *self
+    pub(super) fn msg_cycles_available(&self) -> Cycles {
+        let initial_available = self.call_context_balance.unwrap_or(Cycles::zero());
+
+        let already_taken = self
             .system_state_changes
             .call_context_balance_taken
-            .get(&call_context_id)
-            .unwrap_or(&Cycles::zero());
+            .map_or(Cycles::zero(), |(_, balance_taken)| balance_taken);
+
         initial_available - already_taken
     }
 
     /// Returns the deadline of `CallContext`.
-    pub fn msg_deadline(&self, call_context_id: CallContextId) -> CoarseTime {
-        self.call_context_deadlines
-            .get(&call_context_id)
-            .map_or(NO_DEADLINE, |v| v.unwrap_or(NO_DEADLINE))
+    pub fn msg_deadline(&self) -> CoarseTime {
+        self.call_context_deadline.unwrap_or(NO_DEADLINE)
     }
 
     fn update_balance_change(&mut self, new_balance: Cycles) {
@@ -879,37 +882,39 @@ impl SandboxSafeSystemState {
         self.update_balance_change(new_balance);
     }
 
-    pub(super) fn msg_cycles_accept(
-        &mut self,
-        call_context_id: CallContextId,
-        amount_to_accept: Cycles,
-    ) -> Cycles {
+    pub(super) fn msg_cycles_accept(&mut self, amount_to_accept: Cycles) -> Cycles {
         let mut new_balance = self.cycles_balance();
+
+        // It is safe to unwrap since msg_cycles_accept and msg_cycles_accept128 are
+        // available only forApiType::{Update, RepyCallback, RejectCallBack} and all of
+        // them have CallContextId, hence SystemStateChanges::call_context_balance_taken
+        // will never be `None`.
+        debug_assert!(self
+            .system_state_changes
+            .call_context_balance_taken
+            .is_some());
+
+        let balance_taken = &mut self
+            .system_state_changes
+            .call_context_balance_taken
+            .as_mut()
+            .unwrap()
+            .1;
 
         // Scale amount that can be accepted by what is actually available on
         // the call context.
         let amount_available = Cycles::from(
-            self.call_context_balances
-                .get(&call_context_id)
+            self.call_context_balance
                 .unwrap()
                 .get()
-                .checked_sub(
-                    self.system_state_changes
-                        .call_context_balance_taken
-                        .get(&call_context_id)
-                        .unwrap_or(&Cycles::zero())
-                        .get(),
-                )
+                .checked_sub(balance_taken.get())
                 .unwrap(),
         );
+
         let amount_to_accept = std::cmp::min(amount_available, amount_to_accept);
 
         // Withdraw and accept the cycles
-        *self
-            .system_state_changes
-            .call_context_balance_taken
-            .entry(call_context_id)
-            .or_insert_with(Cycles::zero) += amount_to_accept;
+        *balance_taken += amount_to_accept;
 
         new_balance += amount_to_accept;
 
@@ -1284,7 +1289,7 @@ mod tests {
     use ic_replicated_state::{canister_state::system_state::CyclesUseCase, SystemState};
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
-        messages::{CallContextId, RequestMetadata, NO_DEADLINE},
+        messages::{RequestMetadata, NO_DEADLINE},
         time::CoarseTime,
         CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
     };
@@ -1358,17 +1363,7 @@ mod tests {
         assert_eq!(initial_cycles_balance + added, system_state.balance());
     }
 
-    #[test]
-    fn test_msg_deadline() {
-        let context_no_deadline = CallContextId::new(1);
-        let context_with_deadline = CallContextId::new(2);
-        let deadline = CoarseTime::from_secs_since_unix_epoch(10);
-
-        let mut call_context_deadlines = BTreeMap::new();
-
-        call_context_deadlines.insert(context_no_deadline, None);
-        call_context_deadlines.insert(context_with_deadline, Some(deadline));
-
+    fn helper_msg_deadline(call_context_deadline: Option<CoarseTime>) -> CoarseTime {
         let sandbox_state = SandboxSafeSystemState::new_internal(
             canister_test_id(0),
             CanisterStatusView::Running,
@@ -1378,8 +1373,9 @@ mod tests {
             Cycles::new(1_000_000),
             Cycles::zero(),
             None,
-            BTreeMap::new(),
-            call_context_deadlines,
+            None,
+            None,
+            call_context_deadline,
             CyclesAccountManager::new(
                 NumInstructions::from(1_000_000_000),
                 SubnetType::Application,
@@ -1399,17 +1395,17 @@ mod tests {
             None,
             0,
         );
+        sandbox_state.msg_deadline()
+    }
 
-        // `NO_DEADLINE` is returned when CallContext is unknown.
-        assert_eq!(
-            sandbox_state.msg_deadline(CallContextId::new(123)),
-            NO_DEADLINE
-        );
+    #[test]
+    fn test_msg_deadline() {
+        // `NO_DEADLINE` is returned when CallContext does not have `deadline` set.
+        assert_eq!(helper_msg_deadline(None), NO_DEADLINE);
 
-        // `NO_DEADLINE` is returned when CallContext does not have a deadline set.
-        assert_eq!(sandbox_state.msg_deadline(context_no_deadline), NO_DEADLINE);
+        let deadline = CoarseTime::from_secs_since_unix_epoch(100);
 
-        // The correct deadline is returned when CallContext has a deadline set.
-        assert_eq!(sandbox_state.msg_deadline(context_with_deadline), deadline);
+        // Otherwise the correct `deadline` is returned.
+        assert_eq!(helper_msg_deadline(Some(deadline)), deadline);
     }
 }

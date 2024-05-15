@@ -553,6 +553,40 @@ impl ApiType {
         }
     }
 
+    pub fn call_context_id(&self) -> Option<CallContextId> {
+        match *self {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::InspectMessage { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery {
+                query_kind: NonReplicatedQueryKind::Pure,
+                ..
+            } => None,
+            ApiType::Update {
+                call_context_id, ..
+            }
+            | ApiType::NonReplicatedQuery {
+                query_kind:
+                    NonReplicatedQueryKind::Stateful {
+                        call_context_id, ..
+                    },
+                ..
+            }
+            | ApiType::ReplyCallback {
+                call_context_id, ..
+            }
+            | ApiType::RejectCallback {
+                call_context_id, ..
+            }
+            | ApiType::SystemTask {
+                call_context_id, ..
+            } => Some(call_context_id),
+        }
+    }
+
     /// Returns a string slice representation of the enum variant name for use
     /// e.g. as a metric label.
     pub fn as_str(&self) -> &'static str {
@@ -1252,23 +1286,15 @@ impl SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
-            ApiType::Update {
-                call_context_id, ..
-            }
-            | ApiType::ReplyCallback {
-                call_context_id, ..
-            }
-            | ApiType::RejectCallback {
-                call_context_id, ..
-            } => {
+            ApiType::Update { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => {
                 if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
                     // Non-replicated mode means we are handling a composite query.
                     // Access to this syscall not permitted.
                     Err(self.error_for(method_name))
                 } else {
-                    Ok(self
-                        .sandbox_safe_system_state
-                        .msg_cycles_available(*call_context_id))
+                    Ok(self.sandbox_safe_system_state.msg_cycles_available())
                 }
             }
         }
@@ -1324,23 +1350,15 @@ impl SystemApiImpl {
             | ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for(method_name)),
-            ApiType::Update {
-                call_context_id, ..
-            }
-            | ApiType::ReplyCallback {
-                call_context_id, ..
-            }
-            | ApiType::RejectCallback {
-                call_context_id, ..
-            } => {
+            ApiType::Update { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => {
                 if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
                     // Non-replicated mode means we are handling a composite query.
                     // Access to this syscall not permitted.
                     Err(self.error_for(method_name))
                 } else {
-                    Ok(self
-                        .sandbox_safe_system_state
-                        .msg_cycles_accept(*call_context_id, max_amount))
+                    Ok(self.sandbox_safe_system_state.msg_cycles_accept(max_amount))
                 }
             }
         }
@@ -3164,27 +3182,11 @@ impl SystemApi for SystemApiImpl {
             | ApiType::Cleanup { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_msg_deadline")),
             ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery {
-                query_kind: NonReplicatedQueryKind::Pure,
-                ..
-            } => Ok(0),
-            ApiType::Update {
-                call_context_id, ..
-            }
-            | ApiType::NonReplicatedQuery {
-                query_kind:
-                    NonReplicatedQueryKind::Stateful {
-                        call_context_id, ..
-                    },
-                ..
-            }
-            | ApiType::ReplyCallback {
-                call_context_id, ..
-            }
-            | ApiType::RejectCallback {
-                call_context_id, ..
-            } => {
-                let deadline = self.sandbox_safe_system_state.msg_deadline(call_context_id);
+            | ApiType::Update { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. } => {
+                let deadline = self.sandbox_safe_system_state.msg_deadline();
                 Ok(Time::from(deadline).as_nanos_since_unix_epoch())
             }
         };
