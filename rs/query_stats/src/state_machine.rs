@@ -170,6 +170,7 @@ fn process_payload(
     query_stats: &QueryStatsPayload,
     state: &mut ReplicatedState,
     logger: &ReplicaLogger,
+    metrics: &QueryStatsAggregatorMetrics,
 ) -> bool {
     let state = &mut state.epoch_query_stats;
 
@@ -199,6 +200,7 @@ fn process_payload(
         None => node.entry(query_stats.epoch).or_default(),
     };
 
+    let mut received_stats = QueryStats::default();
     for message in &query_stats.stats {
         let previous_value = stats.insert(
             message.canister_id,
@@ -209,6 +211,8 @@ fn process_payload(
                 egress_payload_size: message.stats.egress_payload_size,
             },
         );
+        received_stats.saturating_accumulate(&message.stats);
+
         if previous_value.is_some() {
             error!(
                 logger,
@@ -219,6 +223,7 @@ fn process_payload(
             );
         }
     }
+    metrics.query_stats_received.add(&received_stats);
 
     true
 }
@@ -331,16 +336,10 @@ fn try_aggregate_one_epoch(
         query_stats_to_be_applied.push((canister_id, aggregated_stats));
     }
 
-    let mut delivered_num_calls = 0;
-    let mut delivered_num_instructions = 0;
-    let mut delivered_request_bytes = 0;
-    let mut delivered_response_bytes = 0;
+    let mut delivered_query_stats = QueryStats::default();
 
     for (canister_id, aggregated_stats) in query_stats_to_be_applied {
-        delivered_num_calls += aggregated_stats.num_calls;
-        delivered_num_instructions += aggregated_stats.num_instructions;
-        delivered_request_bytes += aggregated_stats.ingress_payload_size;
-        delivered_response_bytes += aggregated_stats.egress_payload_size;
+        delivered_query_stats.saturating_accumulate(&aggregated_stats);
 
         apply_query_stats_to_canister(
             &aggregated_stats,
@@ -351,18 +350,7 @@ fn try_aggregate_one_epoch(
         );
     }
 
-    metrics
-        .query_stats_delivered_num_calls
-        .add(delivered_num_calls as i64);
-    metrics
-        .query_stats_delivered_num_instructions
-        .add(delivered_num_instructions as i64);
-    metrics
-        .query_stats_delivered_request_bytes
-        .add(delivered_request_bytes as i64);
-    metrics
-        .query_stats_delivered_response_bytes
-        .add(delivered_response_bytes as i64);
+    metrics.query_stats_delivered.add(&delivered_query_stats);
 
     true
 }
@@ -400,7 +388,7 @@ fn update_metrics(state: &ReplicatedState, metrics: &QueryStatsAggregatorMetrics
     let num_records: usize = state
         .stats
         .values()
-        .map(|records| records.values().len())
+        .map(|epochs| epochs.values().map(|record| record.len()).sum::<usize>())
         .sum();
     metrics
         .query_stats_aggregator_num_records
@@ -416,7 +404,7 @@ pub fn deliver_query_stats(
     logger: &ReplicaLogger,
     metrics: &QueryStatsAggregatorMetrics,
 ) {
-    if process_payload(query_stats, state, logger) {
+    if process_payload(query_stats, state, logger, metrics) {
         // While in theory is is guaranteed that `try_aggregate_one_epoch` will eventually return
         // `false`, the code is relatively complex and we don't want to rely on correct implementation
         // only.
