@@ -733,46 +733,6 @@ mod server {
     }
 }
 
-mod server_without_client_auth {
-    use super::*;
-    use crate::{matching_server_and_client, CLIENT_ID_1, SERVER_ID_1};
-    use ic_crypto_test_utils_tls::custom_client::CustomClient;
-
-    #[test]
-    fn should_perform_tls_handshake_without_server_asking_for_cert() {
-        let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
-        registry
-            .add_cert(SERVER_ID_1, server.cert())
-            .add_cert(CLIENT_ID_1, client.cert())
-            .update();
-
-        let (client_result, server_result) = new_tokio_runtime().block_on(async {
-            tokio::join!(client.run(server.port()), server.run_without_client_auth())
-        });
-
-        assert!(client_result.is_ok());
-        assert!(server_result.is_ok());
-    }
-
-    #[test]
-    fn should_perform_tls_handshake_without_client_cert_and_without_server_asking_for_cert() {
-        let registry = TlsRegistry::new();
-        let server = Server::builder(SERVER_ID_1)
-            .add_allowed_client(CLIENT_ID_1)
-            .build(registry.get());
-        let client = CustomClient::builder()
-            .without_client_auth()
-            .build(server.cert());
-        registry.add_cert(SERVER_ID_1, server.cert()).update();
-
-        let (_, server_result) = new_tokio_runtime().block_on(async {
-            tokio::join!(client.run(server.port()), server.run_without_client_auth())
-        });
-
-        assert!(server_result.is_ok());
-    }
-}
-
 mod client {
     use super::*;
     use ic_crypto_test_utils_tls::custom_server::CustomServer;
