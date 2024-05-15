@@ -1,5 +1,5 @@
 {
-  "checksum": "cb0d1d994cf661d6538e2ba7392859c7e587a5066f26e133c8461b4a1bd0dce8",
+  "checksum": "db26944b54e59819536134e66938c9c4c8d09a96833d8ac163bd117f910b585d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2680,7 +2680,7 @@
               "alias": "dep_humansize"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits",
               "alias": "dep_num_traits"
             },
@@ -2945,7 +2945,7 @@
               "target": "nom"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -8443,7 +8443,7 @@
               "target": "num_bigint"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -9852,7 +9852,7 @@
               "target": "num_bigint"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -10784,7 +10784,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -13808,7 +13808,7 @@
               "target": "itertools"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -16220,7 +16220,7 @@
               "target": "num_bigint"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -17515,7 +17515,7 @@
               "target": "num_rational"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -17849,6 +17849,10 @@
             {
               "id": "simple_asn1 0.6.2",
               "target": "simple_asn1"
+            },
+            {
+              "id": "simple_moving_average 1.0.2",
+              "target": "simple_moving_average"
             },
             {
               "id": "slog 2.7.0",
@@ -19693,7 +19697,7 @@
               "target": "num_bigint"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -21740,7 +21744,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -24569,7 +24573,7 @@
               "target": "byteorder"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -39584,7 +39588,7 @@
               "target": "num_rational"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -39658,7 +39662,7 @@
               "target": "num_integer"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -39748,7 +39752,7 @@
               "target": "num_integer"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -39863,7 +39867,7 @@
               "target": "num_iter"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -39938,7 +39942,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -40062,7 +40066,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -40151,7 +40155,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -40247,7 +40251,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -40341,7 +40345,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -40371,14 +40375,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "num-traits 0.2.15": {
+    "num-traits 0.2.19": {
       "name": "num-traits",
-      "version": "0.2.15",
+      "version": "0.2.19",
       "package_url": "https://github.com/rust-num/num-traits",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/num-traits/0.2.15/download",
-          "sha256": "578ede34cf02f8924ab9447f50c28075b4d3e5b269972345e7e0372b38c6cdcd"
+          "url": "https://static.crates.io/crates/num-traits/0.2.19/download",
+          "sha256": "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
         }
       },
       "targets": [
@@ -40428,14 +40432,14 @@
               "target": "libm"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
-        "edition": "2015",
-        "version": "0.2.15"
+        "edition": "2021",
+        "version": "0.2.19"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -42496,7 +42500,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -42550,7 +42554,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -42604,7 +42608,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             }
           ],
@@ -45378,7 +45382,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -47579,7 +47583,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -49921,7 +49925,7 @@
         "deps": {
           "common": [
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -53046,7 +53050,7 @@
               "target": "num_iter"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -53452,7 +53456,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -59025,7 +59029,7 @@
               "target": "num_bigint"
             },
             {
-              "id": "num-traits 0.2.15",
+              "id": "num-traits 0.2.19",
               "target": "num_traits"
             },
             {
@@ -59113,6 +59117,53 @@
         },
         "edition": "2018",
         "version": "4.3.3"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "simple_moving_average 1.0.2": {
+      "name": "simple_moving_average",
+      "version": "1.0.2",
+      "package_url": "https://github.com/oskargustafsson/moving_average",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/simple_moving_average/1.0.2/download",
+          "sha256": "3a4b144ad185430cd033299e2c93e465d5a7e65fbb858593dc57181fa13cd310"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "simple_moving_average",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "simple_moving_average",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.0.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -77501,7 +77552,7 @@
     "num-bigint-dig 0.8.4",
     "num-integer 0.1.45",
     "num-rational 0.2.4",
-    "num-traits 0.2.15",
+    "num-traits 0.2.19",
     "num_cpus 1.16.0",
     "once_cell 1.19.0",
     "openssh-keys 0.5.0",
@@ -77590,6 +77641,7 @@
     "signal-hook 0.3.17",
     "signature 2.1.0",
     "simple_asn1 0.6.2",
+    "simple_moving_average 1.0.2",
     "slog 2.7.0",
     "slog-async 2.7.0",
     "slog-envlogger 2.2.0",
