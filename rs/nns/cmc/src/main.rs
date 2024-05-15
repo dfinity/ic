@@ -21,6 +21,7 @@ use ic_management_canister_types::{
     BoundedVec, CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
     CreateCanisterArgs, Method, IC_00,
 };
+use ic_nervous_system_common::NNS_DAPP_BACKEND_CANISTER_ID;
 use ic_nervous_system_governance::maturity_modulation::{
     MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
@@ -32,6 +33,7 @@ use icp_ledger::{
     Subaccount, Tokens, TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
+use lazy_static::lazy_static;
 use on_wire::{FromWire, IntoWire, NewType};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -1357,11 +1359,29 @@ async fn notify_mint_cycles(
 
 /// Notify about create canister transaction
 ///
+/// Calling this is the second step in a 2 step canister creation flow, which
+/// goes as follows:
+///
+///   1. ICP is sent to a subaccount of the Cycles Minting Canister
+///      corresponding to creator principal C. Note that while the sender of the
+///      ICP is typically C, it makes no difference who sends the ICP. The only
+///      thing that matters is the destination (sub)account.
+///
+///   2. C calls notify_create_canister.
+///
 /// # Arguments
 ///
 /// * `block_height` -  The height of the block you would like to send a
 ///   notification about.
-/// * `controller` - PrincipalId of the canister controller.
+/// * `controller` - The creator of the canister. Must match caller; otherwise,
+///   Err is returned. This is also used when checking that the creator is
+///   authorized to create canisters in subnets where authorization is required.
+///   This is also used when `settings` does not specify `controllers`.
+/// * `settings` - The settings of the canister. If controllers is not
+///   populated, it will be initialized with a (singleton) vec containing just
+///   `controller`.
+/// * `subnet_selection` - Where to create the canister.
+/// * `subnet_type` - Deprecated. Use subnet_selection instead.
 #[candid_method(update, rename = "notify_create_canister")]
 #[allow(deprecated)]
 async fn notify_create_canister(
@@ -1373,6 +1393,8 @@ async fn notify_create_canister(
         settings,
     }: NotifyCreateCanister,
 ) -> Result<CanisterId, NotifyError> {
+    authorize_caller_to_call_notify_create_canister_on_behalf_of_creator(caller(), controller)?;
+
     let cmc_id = dfn_core::api::id();
     let sub = Subaccount::from(&controller);
     let expected_destination_account = AccountIdentifier::new(cmc_id.get(), Some(sub));
@@ -1437,6 +1459,49 @@ async fn notify_create_canister(
             result
         }
     }
+}
+
+/// Returns Err if caller is not authorized to call notify_create_canister on
+/// behalf of creator.
+///
+/// Of course, a principal can act on its own behalf. In other words, this
+/// allows calls when caller == creator.
+///
+/// In additional to that, there is another case where calls are allowed: the
+/// nns-dapp backend canister is allowed to call notify_create_canister on
+/// behalf of others.
+///
+/// If Err is returned, the value will be NotifyError::Other with code
+/// Unauthorized.
+fn authorize_caller_to_call_notify_create_canister_on_behalf_of_creator(
+    caller: PrincipalId,
+    creator: PrincipalId,
+) -> Result<(), NotifyError> {
+    if caller == creator {
+        return Ok(());
+    }
+
+    lazy_static! {
+        static ref ALLOWED_CALLERS: [PrincipalId; 1] =
+            [PrincipalId::from(*NNS_DAPP_BACKEND_CANISTER_ID),];
+    }
+
+    if ALLOWED_CALLERS.contains(&caller) {
+        return Ok(());
+    }
+
+    // Other is used, because adding a Unauthorized variant to NotifyError would
+    // confuse old clients.
+    let err = NotifyError::Other {
+        error_code: NotifyErrorCode::Unauthorized as u64,
+        error_message: format!(
+            "{} is not authorized to call notify_create_canister on behalf \
+             of {}. (Do not retry, because the same result will occur.)",
+            caller, creator,
+        ),
+    };
+
+    Err(err)
 }
 
 #[candid_method(update, rename = "create_canister")]
@@ -1624,11 +1689,7 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
     let from = AccountIdentifier::new(tn.from, tn.from_subaccount);
 
     let (cycles_response, notification_status) = if tn.memo == MEMO_CREATE_CANISTER {
-        let controller = (&tn
-            .to_subaccount
-            .ok_or_else(|| "Reserving requires a principal.".to_string())?)
-            .try_into()
-            .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
+        let controller = authorize_sender_to_create_canister_via_ledger_notify(&tn)?;
         match process_create_canister(controller, from, tn.amount, None, None).await {
             Ok(canister_id) => (
                 Ok(CyclesResponse::CanisterCreated(canister_id)),
@@ -1691,6 +1752,52 @@ async fn transaction_notification(tn: TransactionNotification) -> Result<CyclesR
     });
 
     cycles_response.map_err(|e| e.to_string())
+}
+
+/// Returns Ok(controller/creator/sender) if sender == creator (aka controller).
+///
+/// That is, we disallow sending ICP on behalf of someone else; whereas, we used to allow it.
+///
+/// The reason for this restriction is that the creator might be authorized to create canisters on
+/// restricted subnets.
+///
+/// The only fields used are
+///     * from: This is taken as the sender.
+///     * to_subaccount: This is used to infer the creator/controller.
+///
+/// It is assumed that memo == MEMO_CREATE_CANISTER. (However, behavior is the same if that
+/// assumption does not hold.)
+fn authorize_sender_to_create_canister_via_ledger_notify(
+    transaction_notification: &TransactionNotification,
+) -> Result<PrincipalId, String> {
+    let sender = transaction_notification.from;
+
+    let creator = {
+        let to_subaccount = transaction_notification.to_subaccount.ok_or_else(|| {
+            format!(
+                "Transfer has no destination subaccount:\n{:#?}",
+                transaction_notification,
+            )
+        })?;
+
+        PrincipalId::try_from(&to_subaccount).map_err(|err| {
+            format!(
+                "Cannot determine creator principal from ICP transfer to Cycles \
+                 Minting Canister destination subaccount {}: {}",
+                to_subaccount, err,
+            )
+        })?
+    };
+
+    if sender == creator {
+        return Ok(creator);
+    }
+
+    Err(format!(
+        "Principal {} sent ICP to the Cycles Minting Canister on behalf of {} \
+         in order to create a canister, but this is not allowed (anymore).",
+        sender, creator,
+    ))
 }
 
 // If conversion fails, log and return an error
@@ -2385,6 +2492,162 @@ mod tests {
         let state2 = State::decode(&bytes).unwrap();
 
         assert_eq!(state, state2);
+    }
+
+    #[test]
+    fn test_authorize_caller_to_call_notify_create_canister_on_behalf_of_creator() {
+        let creator = PrincipalId::new_user_test_id(519_167_122);
+        let authorize = |caller| {
+            authorize_caller_to_call_notify_create_canister_on_behalf_of_creator(caller, creator)
+        };
+
+        let on_behalf_of_self_result = authorize(creator);
+        assert!(
+            on_behalf_of_self_result.is_ok(),
+            "{:#?}",
+            on_behalf_of_self_result,
+        );
+
+        let eve = PrincipalId::new_user_test_id(898_071_769);
+        let on_behalf_of_other_result = authorize(eve);
+        assert!(
+            on_behalf_of_other_result.is_err(),
+            "{:#?}",
+            on_behalf_of_other_result,
+        );
+        let err = on_behalf_of_other_result.unwrap_err();
+        match &err {
+            NotifyError::Other {
+                error_code,
+                error_message,
+            } => {
+                assert_eq!(
+                    *error_code,
+                    NotifyErrorCode::Unauthorized as u64,
+                    "{:#?}",
+                    err,
+                );
+
+                let error_message = error_message.to_lowercase();
+                for key_word in ["authorize", "on behalf"] {
+                    assert!(
+                        error_message.contains(key_word),
+                        "{} not in {:#?}",
+                        key_word,
+                        err,
+                    );
+                }
+            }
+
+            _ => panic!("{:#?}", err),
+        }
+
+        let caller_is_nns_dapp_result = authorize(PrincipalId::from(*NNS_DAPP_BACKEND_CANISTER_ID));
+        assert!(
+            caller_is_nns_dapp_result.is_ok(),
+            "{:#?}",
+            caller_is_nns_dapp_result,
+        );
+    }
+
+    #[test]
+    fn test_authorize_sender_to_create_canister_via_ledger_notify() {
+        // Happy case.
+        let creator = PrincipalId::new_user_test_id(777);
+        let ok_transaction_notification = TransactionNotification {
+            from: creator,
+            to_subaccount: Some(Subaccount::from(&creator)),
+
+            // These are not used.
+            memo: MEMO_CREATE_CANISTER, // Just for realism.
+            from_subaccount: None,
+            to: CanisterId::from_u64(111),
+            block_height: 222,
+            amount: Tokens::from_e8s(333),
+        };
+
+        // Evil case.
+        assert_eq!(
+            authorize_sender_to_create_canister_via_ledger_notify(&ok_transaction_notification,),
+            Ok(creator),
+        );
+
+        let evil = PrincipalId::new_user_test_id(666);
+        let evil_transaction_notification = TransactionNotification {
+            from: evil,
+            ..ok_transaction_notification.clone()
+        };
+
+        let evil_result =
+            authorize_sender_to_create_canister_via_ledger_notify(&evil_transaction_notification);
+
+        let evil_result = match evil_result {
+            Err(err) => err.to_lowercase(),
+            wrong => panic!("Evil result is supposed to be Err, but was {:?}", wrong),
+        };
+        for key_word in ["create", "canister", "on behalf of", "not allowed"] {
+            assert!(
+                evil_result.contains(key_word),
+                "{} not in {:?}",
+                key_word,
+                evil_result
+            );
+        }
+
+        // Invalid transfer case 1: no destination subaccount.
+        let no_destination_subaccount_transaction_notification = TransactionNotification {
+            to_subaccount: None,
+            ..ok_transaction_notification.clone()
+        };
+
+        let no_destination_subaccount_result =
+            authorize_sender_to_create_canister_via_ledger_notify(
+                &no_destination_subaccount_transaction_notification,
+            );
+
+        let no_destination_subaccount_result = match no_destination_subaccount_result {
+            Err(err) => err.to_lowercase(),
+            wrong => panic!(
+                "No destination subaccount result is supposed to be Err, but was {:?}",
+                wrong,
+            ),
+        };
+        for key_word in ["has no", "destination", "subaccount"] {
+            assert!(
+                no_destination_subaccount_result.contains(key_word),
+                "{} not in {:?}",
+                key_word,
+                no_destination_subaccount_result,
+            );
+        }
+
+        // Invalid transfer case 2: destination subaccount present, but does not map to (creator)
+        // principal.
+        let garbage_subaccount = [42_u8; 32];
+        let no_creator_transaction_notification = TransactionNotification {
+            to_subaccount: Some(Subaccount(garbage_subaccount)),
+            ..ok_transaction_notification
+        };
+
+        let no_creator_result = authorize_sender_to_create_canister_via_ledger_notify(
+            &no_creator_transaction_notification,
+        );
+
+        let no_creator_result = match no_creator_result {
+            Err(err) => err.to_lowercase(),
+            wrong => panic!(
+                "No destination subaccount result is supposed to be Err, but was {:?}",
+                wrong,
+            ),
+        };
+        for key_word in ["determine", "creator", "subaccount"] {
+            assert!(
+                no_creator_result.contains(key_word),
+                "{} not in {:?}",
+                key_word,
+                no_creator_result,
+            );
+        }
     }
 
     #[test]
