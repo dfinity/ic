@@ -1682,7 +1682,7 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
         .with_subnet_type(SubnetType::Application)
         .with_wat(&create_debug_print_wat(message_len))
         .build();
-    // Call the WASM method multiple times.
+    // Call the Wasm method multiple times.
     for i in 0..10 {
         let before = instance.instruction_counter();
         instance

@@ -148,12 +148,12 @@ pub struct SystemMetadata {
 
     pub subnet_metrics: SubnetMetrics,
 
-    /// The set of WASM modules we expect to be present in the [`Hypervisor`]'s
+    /// The set of Wasm modules we expect to be present in the [`Hypervisor`]'s
     /// compilation cache. This allows us to deterministically decide when we
     /// expect a compilation to be fast and ignore the compilation cost when
     /// considering the round instruction limit.
     ///
-    /// Each time a canister is installed, its WASM is inserted and the set is
+    /// Each time a canister is installed, its Wasm is inserted and the set is
     /// cleared at each checkpoint.
     pub expected_compiled_wasms: BTreeSet<WasmHash>,
 
