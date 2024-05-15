@@ -1,6 +1,8 @@
+use backoff::{retry_notify, ExponentialBackoff};
 use candid::Principal;
 use ic_tests::driver::{boundary_node::BoundaryNodeVm, test_env::TestEnv};
-use slog::info;
+use slog::{error, info};
+use std::time::Duration;
 
 pub fn get_asset_as_string(
     env: &TestEnv,
@@ -21,10 +23,25 @@ pub fn get_asset_as_string(
     let asset_url = format!("https://{canister_id}.{farm_url}{key}");
     info!(log, "asset url is {asset_url}");
 
-    let client = reqwest::blocking::Client::new();
-    let req = client.get(asset_url);
-    let response = req.send().unwrap();
-    let body = response.text().unwrap();
+    let backoff = ExponentialBackoff {
+        max_elapsed_time: Some(Duration::from_secs(120)),
+        ..Default::default()
+    };
+
+    let notify = |err, dur| {
+        error!(log, "error: {err}");
+        error!(log, "retry in {dur:?}");
+    };
+
+    let operation = || {
+        let client = reqwest::blocking::Client::new();
+        let response = client.get(asset_url.clone()).send()?;
+        let body = response.text()?;
+        Ok(body)
+    };
+
+    let body = retry_notify(backoff, operation, notify).unwrap();
+
     info!(log, "response body: {body}");
     body
 }

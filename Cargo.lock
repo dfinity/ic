@@ -17325,6 +17325,7 @@ name = "sdk-system-tests"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "backoff",
  "candid",
  "ic-registry-subnet-type",
  "reqwest 0.12.3",
