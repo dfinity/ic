@@ -60,7 +60,7 @@ impl Snapshot for HealthBasedSnapshot {
         node: &Node,
         health: HealthCheckResult,
     ) -> Result<bool, NodesSnapshotError> {
-        if health.is_healthy && self.existing_nodes.contains(&node.domain) {
+        if health.is_healthy() && self.existing_nodes.contains(&node.domain) {
             Ok(self.healthy_nodes.insert(node.domain.clone()))
         } else {
             Ok(self.healthy_nodes.remove(&node.domain))
@@ -85,6 +85,7 @@ impl Snapshot for HealthBasedSnapshot {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
     use std::{collections::HashSet, sync::atomic::Ordering};
 
     use crate::snapshot::Snapshot;
@@ -110,7 +111,9 @@ mod tests {
         let mut snapshot = HealthBasedSnapshot::new();
         // Act
         let node = Node::new("api1.com");
-        let health = HealthCheckResult { is_healthy: true };
+        let health = HealthCheckResult {
+            latency: Some(Duration::from_secs(1)),
+        };
         let is_updated = snapshot
             .update_node_health(&node, health)
             .expect("node update failed");
@@ -123,7 +126,9 @@ mod tests {
         // Arrange
         let mut snapshot = HealthBasedSnapshot::new();
         let node = Node::new("api1.com");
-        let health = HealthCheckResult { is_healthy: true };
+        let health = HealthCheckResult {
+            latency: Some(Duration::from_secs(1)),
+        };
         snapshot.existing_nodes.insert(node.domain.clone());
         // Act
         let is_updated = snapshot
@@ -144,7 +149,9 @@ mod tests {
         // Arrange
         let mut snapshot = HealthBasedSnapshot::new();
         let node = Node::new("api1.com");
-        let health = HealthCheckResult { is_healthy: true };
+        let health = HealthCheckResult {
+            latency: Some(Duration::from_secs(1)),
+        };
         // Act
         let is_updated = snapshot
             .update_node_health(&node, health)
@@ -160,7 +167,9 @@ mod tests {
         let mut snapshot = HealthBasedSnapshot::new();
         let node = Node::new("api1.com");
         snapshot.healthy_nodes.insert(node.clone().domain);
-        let health = HealthCheckResult { is_healthy: true };
+        let health = HealthCheckResult {
+            latency: Some(Duration::from_secs(1)),
+        };
         // Act
         let is_updated = snapshot
             .update_node_health(&node, health)

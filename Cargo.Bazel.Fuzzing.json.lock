@@ -1,5 +1,5 @@
 {
-  "checksum": "c9caabbdad373b6447d9b09584cc26ed2a1cf88054519891519d8ab4c73b74e2",
+  "checksum": "fd8c95f3ae2fb9ece7eead84c321c31d8d20b5e6df17f2204be21b28534e1acf",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18016,6 +18016,10 @@
             {
               "id": "simple_asn1 0.6.2",
               "target": "simple_asn1"
+            },
+            {
+              "id": "simple_moving_average 1.0.2",
+              "target": "simple_moving_average"
             },
             {
               "id": "slog 2.7.0",
@@ -59113,6 +59117,53 @@
       ],
       "license_file": "LICENSE"
     },
+    "simple_moving_average 1.0.2": {
+      "name": "simple_moving_average",
+      "version": "1.0.2",
+      "package_url": "https://github.com/oskargustafsson/moving_average",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/simple_moving_average/1.0.2/download",
+          "sha256": "3a4b144ad185430cd033299e2c93e465d5a7e65fbb858593dc57181fa13cd310"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "simple_moving_average",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "simple_moving_average",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "num-traits 0.2.17",
+              "target": "num_traits"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.0.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "simplelog 0.12.1": {
       "name": "simplelog",
       "version": "0.12.1",
@@ -77630,6 +77681,7 @@
     "signal-hook 0.3.17",
     "signature 2.1.0",
     "simple_asn1 0.6.2",
+    "simple_moving_average 1.0.2",
     "slog 2.7.0",
     "slog-async 2.8.0",
     "slog-envlogger 2.2.0",

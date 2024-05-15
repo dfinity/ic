@@ -6,7 +6,7 @@ pub struct FetchedNodes {
     pub nodes: Vec<Node>,
 }
 
-pub struct NodeHealthChanged {
+pub struct NodeHealthUpdate {
     pub node: Node,
     pub health: HealthCheckResult,
 }

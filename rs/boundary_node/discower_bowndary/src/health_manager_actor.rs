@@ -7,7 +7,7 @@ use tracing::{debug, error, warn};
 use crate::{
     check::HealthCheck,
     check_actor::HealthCheckActor,
-    messages::{FetchedNodes, NodeHealthChanged},
+    messages::{FetchedNodes, NodeHealthUpdate},
     node::Node,
     snapshot::{NodesChanged, Snapshot},
     types::{GlobalShared, ReceiverMpsc, ReceiverWatch, SenderMpsc},
@@ -22,8 +22,8 @@ pub struct HealthManagerActor<S> {
     check_period: Duration,
     snapshot: GlobalShared<S>,
     fetch_receiver: ReceiverWatch<FetchedNodes>,
-    check_sender: SenderMpsc<NodeHealthChanged>,
-    check_receiver: ReceiverMpsc<NodeHealthChanged>,
+    check_sender: SenderMpsc<NodeHealthUpdate>,
+    check_receiver: ReceiverMpsc<NodeHealthUpdate>,
     token: CancellationToken,
     nodes_token: CancellationToken,
     nodes_tracker: TaskTracker,
@@ -69,7 +69,7 @@ where
                 }
                 // Read messages from check actors
                 Some(msg) = self.check_receiver.recv() => {
-                    self.handle_health_changed(msg).await;
+                    self.handle_health_update(msg).await;
                 }
                 _ = self.token.cancelled() => {
                     self.stop_checks().await;
@@ -81,7 +81,7 @@ where
         }
     }
 
-    async fn handle_health_changed(&mut self, msg: NodeHealthChanged) {
+    async fn handle_health_update(&mut self, msg: NodeHealthUpdate) {
         let current_snapshot = self.snapshot.load_full();
         let mut new_snapshot = (*current_snapshot).clone();
         if let Err(err) = new_snapshot.update_node_health(&msg.node, msg.health) {
