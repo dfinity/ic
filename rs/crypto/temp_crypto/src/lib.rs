@@ -755,16 +755,6 @@ pub mod internal {
                 .await
         }
 
-        async fn perform_tls_server_handshake_without_client_auth(
-            &self,
-            tcp_stream: TcpStream,
-            registry_version: RegistryVersion,
-        ) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError> {
-            self.crypto_component
-                .perform_tls_server_handshake_without_client_auth(tcp_stream, registry_version)
-                .await
-        }
-
         async fn perform_tls_client_handshake(
             &self,
             tcp_stream: TcpStream,
