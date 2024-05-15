@@ -11,6 +11,7 @@ def bitcoin_core_repository():
         sha256 = "5df67cf42ca3b9a0c38cdafec5bbb517da5b58d251f32c8d2a47511f9be1ebc2",
         strip_prefix = "bitcoin-25.0",
         urls = [
+            "https://bitcoin.org/bin/bitcoin-core-25.0/bitcoin-25.0.tar.gz",
             "https://bitcoincore.org/bin/bitcoin-core-25.0/bitcoin-25.0.tar.gz",
         ],
     )
