@@ -21,6 +21,7 @@ ic-base-types = { path = "../../../../types/base_types" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 wasmprinter = "0.2.45"
+flate2 = { workspace = true }
 candid = { workspace = true }
 dfn_candid = {path="../../../../rust_canisters/dfn_candid"}
 ic-nns-common ={path="../../../common"}

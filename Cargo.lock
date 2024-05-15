@@ -9729,6 +9729,7 @@ dependencies = [
  "dfn_protobuf",
  "flate2",
  "futures",
+ "hex",
  "ic-base-types",
  "ic-btc-interface",
  "ic-canister-client-sender",
@@ -13596,6 +13597,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "dfn_candid",
+ "flate2",
  "ic-base-types",
  "ic-nervous-system-clients",
  "ic-nervous-system-root",

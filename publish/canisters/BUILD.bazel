@@ -8,61 +8,61 @@ load(
 )
 
 CANISTERS = {
-    "candid-test-canister.wasm": "//rs/rust_canisters/dfn_candid:candid-test-canister",
-    "canister-creator-canister.wasm": "//rs/rust_canisters/canister_creator:canister_creator_canister",
-    "cycles-minting-canister.wasm": "//rs/nns/cmc:cycles-minting-canister",
-    "genesis-token-canister.wasm": "//rs/nns/gtc:genesis-token-canister",
-    "governance-canister.wasm": "//rs/nns/governance:governance-canister",
-    "governance-canister_test.wasm": "//rs/nns/governance:governance-canister-test",
-    "governance-mem-test-canister.wasm": "//rs/nns/integration_tests:governance-mem-test-canister",
-    "http_counter.wasm": "//rs/tests/test_canisters/http_counter:http_counter",
-    "ic-ckbtc-minter.wasm": "//rs/bitcoin/ckbtc/minter:ckbtc_minter",
-    "ic-ckbtc-minter_debug.wasm": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
-    "ic-ckbtc-kyt.wasm": "//rs/bitcoin/ckbtc/kyt:kyt_canister",
-    "ic-cketh-minter.wasm": "//rs/ethereum/cketh/minter:cketh_minter",
-    "ic-ledger-suite-orchestrator-canister.wasm": "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister",
-    "ic-icrc1-index.wasm": "//rs/rosetta-api/icrc1/index:index_canister",
-    "ic-icrc1-index-ng.wasm": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister",
-    "ic-icrc1-index-ng-u256.wasm": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256",
-    "ic-icrc1-ledger.wasm": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
-    "ic-icrc1-ledger-u256.wasm": "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256",
-    "ic-nervous-system-common-test-canister.wasm": "//rs/nervous_system/common/test_canister:test_canister",
-    "ic-icp-index-canister.wasm": "//rs/rosetta-api/icp_ledger/index:ic-icp-index-canister",
-    "identity-canister.wasm": "//rs/nns/identity:identity-canister",
-    "inter_canister_error_handling.wasm": "//rs/rust_canisters/tests:inter_canister_error_handling",
-    "kv_store.wasm": "//rs/tests/test_canisters/kv_store:kv_store",
-    "json.wasm": "//rs/rust_canisters/tests:json",
-    "ledger-canister.wasm": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
-    "ledger-canister_notify-method.wasm": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
-    "lifeline_canister.wasm": "//rs/nns/handlers/lifeline/impl:lifeline_canister",
-    "mem-utils-test-canister.wasm": "//rs/nns/integration_tests:mem-utils-test-canister",
-    "memory-test-canister.wasm": "//rs/rust_canisters/memory_test:memory_test_canister",
-    "nan_canonicalized.wasm": "//rs/rust_canisters/tests:nan_canonicalized",
-    "nns-ui-canister.wasm": "//rs/nns/nns-ui:nns-ui-canister",
-    "panics.wasm": "//rs/rust_canisters/tests:panics",
-    "pmap_canister.wasm": "//rs/rust_canisters/pmap:pmap_canister",
-    "proxy_canister.wasm": "//rs/rust_canisters/proxy_canister:proxy_canister",
-    "registry-canister.wasm": "//rs/registry/canister:registry-canister",
-    "response-payload-test-canister.wasm": "//rs/rust_canisters/response_payload_test:response-payload-test-canister",
-    "root-canister.wasm": "//rs/nns/handlers/root/impl:root-canister",
-    "sns-governance-canister.wasm": "//rs/sns/governance:sns-governance-canister",
-    "sns-governance-canister_test.wasm": "//rs/sns/governance:sns-governance-canister-test",
-    "sns-governance-mem-test-canister.wasm": "//rs/sns/integration_tests:sns-governance-mem-test-canister",
-    "sns-root-canister.wasm": "//rs/sns/root:sns-root-canister",
-    "sns-swap-canister.wasm": "//rs/sns/swap:sns-swap-canister",
-    "sns-test-dapp-canister.wasm": "//rs/sns/integration_tests:sns-test-dapp-canister",
-    "sns-wasm-canister.wasm": "//rs/nns/sns-wasm:sns-wasm-canister",
-    "stable.wasm": "//rs/rust_canisters/tests:stable",
-    "statesync-test-canister.wasm": "//rs/rust_canisters/statesync_test:statesync_test_canister",
-    "test-notified.wasm": "//rs/rosetta-api/icp_ledger:test_notified_canister",
-    "time.wasm": "//rs/rust_canisters/tests:time",
-    "upgrade-test-canister.wasm": "//rs/nns/handlers/root/impl:upgrade-test-canister",
-    "wasm.wasm": "//rs/rust_canisters/dfn_core:wasm",
-    "xnet-test-canister.wasm": "//rs/rust_canisters/xnet_test:xnet-test-canister",
-    "cow_safety.wasm": "//rs/tests:src/cow_safety.wasm",
-    "counter.wat": "//rs/workload_generator:src/counter.wat",
-    "xrc-mock-canister.wasm": "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
-    "bitcoin-mock-canister.wasm": "//rs/bitcoin/mock:bitcoin_canister_mock",
+    "candid-test-canister.wasm.gz": "//rs/rust_canisters/dfn_candid:candid-test-canister",
+    "canister-creator-canister.wasm.gz": "//rs/rust_canisters/canister_creator:canister_creator_canister",
+    "cycles-minting-canister.wasm.gz": "//rs/nns/cmc:cycles-minting-canister",
+    "genesis-token-canister.wasm.gz": "//rs/nns/gtc:genesis-token-canister",
+    "governance-canister.wasm.gz": "//rs/nns/governance:governance-canister",
+    "governance-canister_test.wasm.gz": "//rs/nns/governance:governance-canister-test",
+    "governance-mem-test-canister.wasm.gz": "//rs/nns/integration_tests:governance-mem-test-canister",
+    "http_counter.wasm.gz": "//rs/tests/test_canisters/http_counter:http_counter",
+    "ic-ckbtc-minter.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter",
+    "ic-ckbtc-minter_debug.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+    "ic-ckbtc-kyt.wasm.gz": "//rs/bitcoin/ckbtc/kyt:kyt_canister",
+    "ic-cketh-minter.wasm.gz": "//rs/ethereum/cketh/minter:cketh_minter",
+    "ic-ledger-suite-orchestrator-canister.wasm.gz": "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister",
+    "ic-icrc1-index.wasm.gz": "//rs/rosetta-api/icrc1/index:index_canister",
+    "ic-icrc1-index-ng.wasm.gz": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister",
+    "ic-icrc1-index-ng-u256.wasm.gz": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256",
+    "ic-icrc1-ledger.wasm.gz": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+    "ic-icrc1-ledger-u256.wasm.gz": "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256",
+    "ic-nervous-system-common-test-canister.wasm.gz": "//rs/nervous_system/common/test_canister:test_canister",
+    "ic-icp-index-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/index:ic-icp-index-canister",
+    "identity-canister.wasm.gz": "//rs/nns/identity:identity-canister",
+    "inter_canister_error_handling.wasm.gz": "//rs/rust_canisters/tests:inter_canister_error_handling",
+    "kv_store.wasm.gz": "//rs/tests/test_canisters/kv_store:kv_store",
+    "json.wasm.gz": "//rs/rust_canisters/tests:json",
+    "ledger-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
+    "ledger-canister_notify-method.wasm.gz": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+    "lifeline_canister.wasm.gz": "//rs/nns/handlers/lifeline/impl:lifeline_canister",
+    "mem-utils-test-canister.wasm.gz": "//rs/nns/integration_tests:mem-utils-test-canister",
+    "memory-test-canister.wasm.gz": "//rs/rust_canisters/memory_test:memory_test_canister",
+    "nan_canonicalized.wasm.gz": "//rs/rust_canisters/tests:nan_canonicalized",
+    "nns-ui-canister.wasm.gz": "//rs/nns/nns-ui:nns-ui-canister",
+    "panics.wasm.gz": "//rs/rust_canisters/tests:panics",
+    "pmap_canister.wasm.gz": "//rs/rust_canisters/pmap:pmap_canister",
+    "proxy_canister.wasm.gz": "//rs/rust_canisters/proxy_canister:proxy_canister",
+    "registry-canister.wasm.gz": "//rs/registry/canister:registry-canister",
+    "response-payload-test-canister.wasm.gz": "//rs/rust_canisters/response_payload_test:response-payload-test-canister",
+    "root-canister.wasm.gz": "//rs/nns/handlers/root/impl:root-canister",
+    "sns-governance-canister.wasm.gz": "//rs/sns/governance:sns-governance-canister",
+    "sns-governance-canister_test.wasm.gz": "//rs/sns/governance:sns-governance-canister-test",
+    "sns-governance-mem-test-canister.wasm.gz": "//rs/sns/integration_tests:sns-governance-mem-test-canister",
+    "sns-root-canister.wasm.gz": "//rs/sns/root:sns-root-canister",
+    "sns-swap-canister.wasm.gz": "//rs/sns/swap:sns-swap-canister",
+    "sns-test-dapp-canister.wasm.gz": "//rs/sns/integration_tests:sns-test-dapp-canister",
+    "sns-wasm-canister.wasm.gz": "//rs/nns/sns-wasm:sns-wasm-canister",
+    "stable.wasm.gz": "//rs/rust_canisters/tests:stable",
+    "statesync-test-canister.wasm.gz": "//rs/rust_canisters/statesync_test:statesync_test_canister",
+    "test-notified.wasm.gz": "//rs/rosetta-api/icp_ledger:test_notified_canister",
+    "time.wasm.gz": "//rs/rust_canisters/tests:time",
+    "upgrade-test-canister.wasm.gz": "//rs/nns/handlers/root/impl:upgrade-test-canister",
+    "wasm.wasm.gz": "//rs/rust_canisters/dfn_core:wasm",
+    "xnet-test-canister.wasm.gz": "//rs/rust_canisters/xnet_test:xnet-test-canister",
+    "cow_safety.wasm.gz": ":cow_safety.wasm.gz",
+    "counter.wat.gz": ":counter.wat.gz",
+    "xrc-mock-canister.wasm.gz": "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
+    "bitcoin-mock-canister.wasm.gz": "//rs/bitcoin/mock:bitcoin_canister_mock",
 }
 
 DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = "21"
@@ -93,13 +93,15 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(NNS_CANISTERS_MAX_SIZE_COMPRESSED_
 
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(SNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES)
 
-[
-    gzip_compress(
-        name = name + ".gz",
-        srcs = [target],
-    )
-    for (name, target) in CANISTERS.items()
-]
+gzip_compress(
+    name = "counter.wat.gz",
+    srcs = ["//rs/workload_generator:src/counter.wat"],
+)
+
+gzip_compress(
+    name = "cow_safety.wasm.gz",
+    srcs = ["//rs/tests:src/cow_safety.wasm"],
+)
 
 [
     sh_test(
@@ -115,7 +117,7 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(SNS_CANISTERS_MAX_SIZE_COMPRESSED_
         },
     )
     for (name, target) in CANISTERS.items()
-    if name + ".gz" not in CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES
+    if name not in CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES
 ]
 
 [
@@ -138,7 +140,7 @@ COMPRESSED_CANISTERS = {
     "ic-btc-canister.wasm.gz": "@btc_canister//file",
     "ic-icrc1-archive.wasm.gz": "//rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz",
     "ic-icrc1-archive-u256.wasm.gz": "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
-    "ledger-archive-node-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/archive:ledger_archive_node_canister.wasm.gz",
+    "ledger-archive-node-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm.wasm.gz",
 }
 
 # `bazel cquery --output=files` that is used by build-ic script does not show external sources of `filegroup` targets.
@@ -148,12 +150,13 @@ COMPRESSED_CANISTERS = {
         src = target,
         out = compressed_file_name,
     )
-    for (compressed_file_name, target) in COMPRESSED_CANISTERS.items()
+    for (compressed_file_name, target) in CANISTERS.items() + COMPRESSED_CANISTERS.items()
+    if compressed_file_name.endswith(".wasm.gz") and compressed_file_name != "cow_safety.wasm.gz"
 ]
 
 filegroup(
     name = "canisters",
-    srcs = [name + ".gz" for name in CANISTERS] +
+    srcs = [name for name in CANISTERS] +
            [name for name in COMPRESSED_CANISTERS],
     visibility = ["//visibility:public"],
 )
@@ -167,7 +170,7 @@ filegroup(
     )
     for (name, target) in CANISTERS.items()
     if (
-        name.endswith(".wasm") and not target.startswith("//rs/tests") and not target.endswith(".wasm")
+        name.endswith(".wasm.gz") and name != "cow_safety.wasm.gz"
     )
 ]
 
@@ -177,7 +180,7 @@ filegroup(
         n + "-did"
         for n, t in CANISTERS.items()
         if (
-            n.endswith(".wasm") and not t.startswith("//rs/tests") and not t.endswith(".wasm")
+            n.endswith(".wasm.gz") and n != "cow_safety.wasm.gz"
         )
     ],
 )

@@ -2,18 +2,20 @@
 This module defines utilities for building Rust canisters.
 """
 
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:candid.bzl", "did_git_test")
+load("//bazel:defs.bzl", "gzip_compress")
 
-def _wasm_rust_transition_impl(_settings, _attr):
+def _wasm_rust_transition_impl(_settings, attr):
     return {
         "//command_line_option:platforms": "@rules_rust//rust/platform:wasm",
         "@rules_rust//:extra_rustc_flags": [
             "-C",
             "linker-plugin-lto",
             "-C",
-            "opt-level=z",
+            "opt-level=" + attr.opt,
             "-C",
             "debug-assertions=no",
             "-C",
@@ -48,6 +50,7 @@ wasm_rust_binary_rule = rule(
     attrs = {
         "binary": attr.label(mandatory = True, cfg = wasm_rust_transition),
         "_whitelist_function_transition": attr.label(default = "@bazel_tools//tools/whitelists/function_transition_whitelist"),
+        "opt": attr.string(mandatory = True),
     },
 )
 
@@ -60,6 +63,7 @@ def rust_canister(name, service_file, **kwargs):
       **kwargs: additional arguments to pass a rust_binary rule.
     """
     wasm_name = "_wasm_" + name.replace(".", "_")
+    opt = kwargs.pop("opt", "3")
     kwargs.setdefault("visibility", ["//visibility:public"])
     kwargs.setdefault("tags", []).append("canister")
 
@@ -72,6 +76,7 @@ def rust_canister(name, service_file, **kwargs):
     wasm_rust_binary_rule(
         name = name + ".raw",
         binary = ":" + wasm_name,
+        opt = opt,
     )
 
     did_git_test(
@@ -98,9 +103,25 @@ def rust_canister(name, service_file, **kwargs):
     )
 
     inject_version_into_wasm(
-        name = name,
+        name = name + "_with_version.opt",
         src_wasm = name + ".opt",
         version_file = "//bazel:rc_only_version.txt",
+    )
+
+    gzip_compress(
+        name = name + ".wasm",
+        srcs = [name + "_with_version.opt"],
+    )
+
+    copy_file(
+        name = name + "-wasm.gz",
+        src = name + ".wasm",
+        out = name + ".wasm.gz",
+    )
+
+    native.alias(
+        name = name,
+        actual = name + ".wasm",
     )
 
 def motoko_canister(name, entry, deps):
@@ -112,7 +133,7 @@ def motoko_canister(name, entry, deps):
       deps: list of actor dependencies, e.g., external_actor targets from @rules_motoko.
     """
 
-    raw_wasm = entry.replace(".mo", ".wasm")
+    raw_wasm = entry.replace(".mo", ".raw")
     raw_did = entry.replace(".mo", ".did")
 
     motoko_binary(
@@ -129,9 +150,25 @@ def motoko_canister(name, entry, deps):
     )
 
     inject_version_into_wasm(
-        name = name,
+        name = name + "_with_version.opt",
         src_wasm = raw_wasm,
         version_file = "//bazel:rc_only_version.txt",
+    )
+
+    gzip_compress(
+        name = name + ".wasm",
+        srcs = [name + "_with_version.opt"],
+    )
+
+    copy_file(
+        name = name + "-wasm.gz",
+        src = name + ".wasm",
+        out = name + ".wasm.gz",
+    )
+
+    native.alias(
+        name = name,
+        actual = name + ".wasm",
     )
 
 def inject_version_into_wasm(*, name, src_wasm, version_file = "//bazel:version.txt", visibility = None):
