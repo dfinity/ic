@@ -474,10 +474,13 @@ impl Eq for MessagePool {}
 /// constant time.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct MessageStats {
-    /// Sum total of the byte size of all best-effort messages in the pool.
+    /// Total byte size of all messages in the pool.
+    pub(super) size_bytes: usize,
+
+    /// Total byte size of all best-effort messages in the pool.
     pub(super) best_effort_message_bytes: usize,
 
-    /// Sum total of the byte size of all guaranteed responses in the pool.
+    /// Total byte size of all guaranteed responses in the pool.
     pub(super) guaranteed_responses_size_bytes: usize,
 
     /// Sum total of bytes above `MAX_RESPONSE_COUNT_BYTES` per oversized guaranteed
@@ -485,8 +488,8 @@ pub(super) struct MessageStats {
     /// `MAX_RESPONSE_COUNT_BYTES`.
     pub(super) oversized_guaranteed_requests_extra_bytes: usize,
 
-    /// Total size of all messages in the pool, in bytes.
-    pub(super) size_bytes: usize,
+    /// Total byte size of all messages in input queue.
+    pub(super) inbound_size_bytes: usize,
 
     /// Count of messages in input queues.
     pub(super) inbound_message_count: usize,
@@ -494,17 +497,14 @@ pub(super) struct MessageStats {
     /// Count of responses in input queues.
     pub(super) inbound_response_count: usize,
 
-    /// Byte size of input queue messages.
-    pub(super) inbound_size_bytes: usize,
-
-    /// Number of guaranteed response requests in input queues.
+    /// Count of guaranteed response requests in input queues.
     ///
     /// At the end of each round, this plus the number of not yet responded
     /// guaranteed response call contexts must be equal to the number of guaranteed
     /// response memory reservations for inbound calls.
     pub(super) inbound_guaranteed_request_count: usize,
 
-    /// Number of guaranteed responses in input queues.
+    /// Count of guaranteed responses in input queues.
     ///
     /// At the end of each round, the number of guaranteed response callbacks minus
     /// this must be equal to the number of guaranteed response memory reservations
@@ -525,7 +525,7 @@ impl MessageStats {
     }
 
     /// Calculates the change in stats caused by pushing (+) or popping (-) the
-    /// given message.
+    /// given message in the given context.
     fn stats_delta(msg: &RequestOrResponse, context: Context) -> MessageStats {
         match msg {
             RequestOrResponse::Request(req) => Self::request_stats_delta(req, context),
@@ -541,63 +541,63 @@ impl MessageStats {
 
         let size_bytes = req.count_bytes();
         let class = if req.deadline == NO_DEADLINE {
-            Class::GuaranteedResponse
+            GuaranteedResponse
         } else {
-            Class::BestEffort
+            BestEffort
         };
 
-        // Not a response, these stats are all unaffected.
+        // This is a request, response stats are all unaffected.
         let guaranteed_responses_size_bytes = 0;
         let inbound_response_count = 0;
         let inbound_guaranteed_response_count = 0;
 
         match (context, class) {
             (Inbound, GuaranteedResponse) => MessageStats {
+                size_bytes,
                 best_effort_message_bytes: 0,
                 guaranteed_responses_size_bytes,
                 oversized_guaranteed_requests_extra_bytes: size_bytes
                     .saturating_sub(MAX_RESPONSE_COUNT_BYTES),
-                size_bytes,
+                inbound_size_bytes: size_bytes,
                 inbound_message_count: 1,
                 inbound_response_count,
-                inbound_size_bytes: size_bytes,
                 inbound_guaranteed_request_count: 1,
                 inbound_guaranteed_response_count,
                 outbound_message_count: 0,
             },
             (Inbound, BestEffort) => MessageStats {
+                size_bytes,
                 best_effort_message_bytes: size_bytes,
                 guaranteed_responses_size_bytes,
                 oversized_guaranteed_requests_extra_bytes: 0,
-                size_bytes,
+                inbound_size_bytes: size_bytes,
                 inbound_message_count: 1,
                 inbound_response_count,
-                inbound_size_bytes: size_bytes,
                 inbound_guaranteed_request_count: 0,
                 inbound_guaranteed_response_count,
                 outbound_message_count: 0,
             },
             (Outbound, GuaranteedResponse) => MessageStats {
+                size_bytes,
                 best_effort_message_bytes: 0,
                 guaranteed_responses_size_bytes,
                 oversized_guaranteed_requests_extra_bytes: size_bytes
                     .saturating_sub(MAX_RESPONSE_COUNT_BYTES),
-                size_bytes,
+                inbound_size_bytes: 0,
                 inbound_message_count: 0,
                 inbound_response_count,
-                inbound_size_bytes: 0,
                 inbound_guaranteed_request_count: 0,
                 inbound_guaranteed_response_count,
                 outbound_message_count: 1,
             },
             (Outbound, BestEffort) => MessageStats {
+                size_bytes,
                 best_effort_message_bytes: size_bytes,
                 guaranteed_responses_size_bytes,
                 oversized_guaranteed_requests_extra_bytes: 0,
-                size_bytes,
+                inbound_size_bytes: 0,
                 inbound_message_count: 0,
                 inbound_response_count,
-                inbound_size_bytes: 0,
                 inbound_guaranteed_request_count: 0,
                 inbound_guaranteed_response_count,
                 outbound_message_count: 1,
@@ -613,60 +613,60 @@ impl MessageStats {
 
         let size_bytes = rep.count_bytes();
         let class = if rep.deadline == NO_DEADLINE {
-            Class::GuaranteedResponse
+            GuaranteedResponse
         } else {
-            Class::BestEffort
+            BestEffort
         };
 
-        // Not a request, request stats are all unaffected.
+        // This is a response, request stats are all unaffected.
         let oversized_guaranteed_requests_extra_bytes = 0;
         let inbound_guaranteed_request_count = 0;
 
         match (context, class) {
             (Inbound, GuaranteedResponse) => MessageStats {
+                size_bytes,
                 best_effort_message_bytes: 0,
                 guaranteed_responses_size_bytes: size_bytes,
                 oversized_guaranteed_requests_extra_bytes,
-                size_bytes,
+                inbound_size_bytes: size_bytes,
                 inbound_message_count: 1,
                 inbound_response_count: 1,
-                inbound_size_bytes: size_bytes,
                 inbound_guaranteed_request_count,
                 inbound_guaranteed_response_count: 1,
                 outbound_message_count: 0,
             },
             (Inbound, BestEffort) => MessageStats {
+                size_bytes,
                 best_effort_message_bytes: size_bytes,
                 guaranteed_responses_size_bytes: 0,
                 oversized_guaranteed_requests_extra_bytes,
-                size_bytes,
+                inbound_size_bytes: size_bytes,
                 inbound_message_count: 1,
                 inbound_response_count: 1,
-                inbound_size_bytes: size_bytes,
                 inbound_guaranteed_request_count,
                 inbound_guaranteed_response_count: 0,
                 outbound_message_count: 0,
             },
             (Outbound, GuaranteedResponse) => MessageStats {
+                size_bytes,
                 best_effort_message_bytes: 0,
                 guaranteed_responses_size_bytes: size_bytes,
                 oversized_guaranteed_requests_extra_bytes,
-                size_bytes,
+                inbound_size_bytes: 0,
                 inbound_message_count: 0,
                 inbound_response_count: 0,
-                inbound_size_bytes: 0,
                 inbound_guaranteed_request_count,
                 inbound_guaranteed_response_count: 0,
                 outbound_message_count: 1,
             },
             (Outbound, BestEffort) => MessageStats {
+                size_bytes,
                 best_effort_message_bytes: size_bytes,
                 guaranteed_responses_size_bytes: 0,
                 oversized_guaranteed_requests_extra_bytes,
-                size_bytes,
+                inbound_size_bytes: 0,
                 inbound_message_count: 0,
                 inbound_response_count: 0,
-                inbound_size_bytes: 0,
                 inbound_guaranteed_request_count,
                 inbound_guaranteed_response_count: 0,
                 outbound_message_count: 1,
@@ -678,24 +678,24 @@ impl MessageStats {
 impl AddAssign<MessageStats> for MessageStats {
     fn add_assign(&mut self, rhs: MessageStats) {
         let MessageStats {
+            size_bytes,
             best_effort_message_bytes,
             guaranteed_responses_size_bytes,
             oversized_guaranteed_requests_extra_bytes,
-            size_bytes,
+            inbound_size_bytes,
             inbound_message_count,
             inbound_response_count,
-            inbound_size_bytes,
             inbound_guaranteed_request_count,
             inbound_guaranteed_response_count,
             outbound_message_count,
         } = rhs;
+        self.size_bytes += size_bytes;
         self.best_effort_message_bytes += best_effort_message_bytes;
         self.guaranteed_responses_size_bytes += guaranteed_responses_size_bytes;
         self.oversized_guaranteed_requests_extra_bytes += oversized_guaranteed_requests_extra_bytes;
-        self.size_bytes += size_bytes;
+        self.inbound_size_bytes += inbound_size_bytes;
         self.inbound_message_count += inbound_message_count;
         self.inbound_response_count += inbound_response_count;
-        self.inbound_size_bytes += inbound_size_bytes;
         self.inbound_guaranteed_request_count += inbound_guaranteed_request_count;
         self.inbound_guaranteed_response_count += inbound_guaranteed_response_count;
         self.outbound_message_count += outbound_message_count;
@@ -705,24 +705,24 @@ impl AddAssign<MessageStats> for MessageStats {
 impl SubAssign<MessageStats> for MessageStats {
     fn sub_assign(&mut self, rhs: MessageStats) {
         let MessageStats {
+            size_bytes,
             best_effort_message_bytes,
             guaranteed_responses_size_bytes,
             oversized_guaranteed_requests_extra_bytes,
-            size_bytes,
+            inbound_size_bytes,
             inbound_message_count,
             inbound_response_count,
-            inbound_size_bytes,
             inbound_guaranteed_request_count,
             inbound_guaranteed_response_count,
             outbound_message_count,
         } = rhs;
+        self.size_bytes -= size_bytes;
         self.best_effort_message_bytes -= best_effort_message_bytes;
         self.guaranteed_responses_size_bytes -= guaranteed_responses_size_bytes;
         self.oversized_guaranteed_requests_extra_bytes -= oversized_guaranteed_requests_extra_bytes;
-        self.size_bytes -= size_bytes;
+        self.inbound_size_bytes -= inbound_size_bytes;
         self.inbound_message_count -= inbound_message_count;
         self.inbound_response_count -= inbound_response_count;
-        self.inbound_size_bytes -= inbound_size_bytes;
         self.inbound_guaranteed_request_count -= inbound_guaranteed_request_count;
         self.inbound_guaranteed_response_count -= inbound_guaranteed_response_count;
         self.outbound_message_count -= outbound_message_count;

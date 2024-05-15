@@ -688,17 +688,24 @@ fn test_message_stats_best_effort() {
     let _ = pool.insert_outbound_response(response.clone().into());
     stats.adjust_and_check(&pool, Push, Outbound, response.clone().into());
 
-    // The guaranteed memory usage is zero.
+    // Sanity check the absolute values.
+    assert_eq!(
+        MessageStats {
+            size_bytes: 2 * (request_size_bytes + response_size_bytes),
+            best_effort_message_bytes: 2 * (request_size_bytes + response_size_bytes),
+            guaranteed_responses_size_bytes: 0,
+            oversized_guaranteed_requests_extra_bytes: 0,
+            inbound_size_bytes: request_size_bytes + response_size_bytes,
+            inbound_message_count: 2,
+            inbound_response_count: 1,
+            inbound_guaranteed_request_count: 0,
+            inbound_guaranteed_response_count: 0,
+            outbound_message_count: 2
+        },
+        pool.message_stats
+    );
+    // And the guaranteed memory usage is zero.
     assert_eq!(0, pool.message_stats.memory_usage());
-    // Best-effort memory usage and total byte size account for all messages.
-    assert_eq!(
-        2 * (request_size_bytes + response_size_bytes),
-        pool.message_stats.best_effort_message_bytes
-    );
-    assert_eq!(
-        2 * (request_size_bytes + response_size_bytes),
-        pool.message_stats.size_bytes
-    );
 
     //
     // Take one request and one response.
@@ -760,15 +767,24 @@ fn test_message_stats_guaranteed_response() {
     let outbound_response_id = pool.insert_outbound_response(response.clone().into());
     stats.adjust_and_check(&pool, Push, Outbound, response.clone().into());
 
-    // The guaranteed memory usage covers the two responses.
-    assert_eq!(2 * response_size_bytes, pool.message_stats.memory_usage());
-    // Best-effort memory usage is zero.
-    assert_eq!(0, pool.message_stats.best_effort_message_bytes);
-    // Total byte size accounts for all messages.
+    // Sanity check the absolute values.
     assert_eq!(
-        2 * (request_size_bytes + response_size_bytes),
-        pool.message_stats.size_bytes
+        MessageStats {
+            size_bytes: 2 * (request_size_bytes + response_size_bytes),
+            best_effort_message_bytes: 0,
+            guaranteed_responses_size_bytes: 2 * response_size_bytes,
+            oversized_guaranteed_requests_extra_bytes: 0,
+            inbound_size_bytes: request_size_bytes + response_size_bytes,
+            inbound_message_count: 2,
+            inbound_response_count: 1,
+            inbound_guaranteed_request_count: 1,
+            inbound_guaranteed_response_count: 1,
+            outbound_message_count: 2
+        },
+        pool.message_stats
     );
+    // And the guaranteed memory usage covers the two responses.
+    assert_eq!(2 * response_size_bytes, pool.message_stats.memory_usage());
 
     //
     // Take one request and one response.
@@ -840,21 +856,27 @@ fn test_message_stats_oversized_requests() {
     let _ = pool.insert_outbound_request(guaranteed.clone().into(), UNIX_EPOCH);
     stats.adjust_and_check(&pool, Push, Outbound, guaranteed.clone().into());
 
-    // The guaranteed memory usage covers the extra bytes of the two guaranteed
+    // Sanity check the absolute values.
+    assert_eq!(
+        MessageStats {
+            size_bytes: 2 * (best_effort_size_bytes + guaranteed_size_bytes),
+            best_effort_message_bytes: 2 * best_effort_size_bytes,
+            guaranteed_responses_size_bytes: 0,
+            oversized_guaranteed_requests_extra_bytes: 2 * guaranteed_extra_bytes,
+            inbound_size_bytes: best_effort_size_bytes + guaranteed_size_bytes,
+            inbound_message_count: 2,
+            inbound_response_count: 0,
+            inbound_guaranteed_request_count: 1,
+            inbound_guaranteed_response_count: 0,
+            outbound_message_count: 2
+        },
+        pool.message_stats
+    );
+    // And the guaranteed memory usage covers the extra bytes of the two guaranteed
     // requests.
     assert_eq!(
         2 * guaranteed_extra_bytes,
         pool.message_stats.memory_usage()
-    );
-    // Best-effort memory usage covers the two best-effort requests.
-    assert_eq!(
-        2 * best_effort_size_bytes,
-        pool.message_stats.best_effort_message_bytes
-    );
-    // Total byte size accounts for all requests.
-    assert_eq!(
-        2 * (best_effort_size_bytes + guaranteed_size_bytes),
-        pool.message_stats.size_bytes
     );
 
     // Take one best-effort and one guaranteed request.
@@ -1017,16 +1039,16 @@ fn request_stats_delta2(req: &Request, context: Context) -> MessageStats {
         GuaranteedResponse => (0, size_bytes.saturating_sub(MAX_RESPONSE_COUNT_BYTES)),
         BestEffort => (size_bytes, 0),
     };
+    let (inbound_size_bytes, inbound_message_count, outbound_message_count) = if context == Inbound
+    {
+        (size_bytes, 1, 0)
+    } else {
+        (0, 0, 1)
+    };
     let inbound_guaranteed_request_count = if context == Inbound && class == GuaranteedResponse {
         1
     } else {
         0
-    };
-    let (inbound_message_count, inbound_size_bytes, outbound_message_count) = if context == Inbound
-    {
-        (1, size_bytes, 0)
-    } else {
-        (0, 0, 1)
     };
     // Response stats are unaffected.
     let guaranteed_responses_size_bytes = 0;
@@ -1034,13 +1056,13 @@ fn request_stats_delta2(req: &Request, context: Context) -> MessageStats {
     let inbound_guaranteed_response_count = 0;
 
     MessageStats {
+        size_bytes,
         best_effort_message_bytes,
         guaranteed_responses_size_bytes,
         oversized_guaranteed_requests_extra_bytes,
-        size_bytes,
+        inbound_size_bytes,
         inbound_message_count,
         inbound_response_count,
-        inbound_size_bytes,
         inbound_guaranteed_request_count,
         inbound_guaranteed_response_count,
         outbound_message_count,
@@ -1064,30 +1086,30 @@ fn response_stats_delta2(rep: &Response, context: Context) -> MessageStats {
         GuaranteedResponse => (0, size_bytes),
         BestEffort => (size_bytes, 0),
     };
+    let (inbound_size_bytes, inbound_message_count, inbound_response_count, outbound_message_count) =
+        if context == Inbound {
+            (size_bytes, 1, 1, 0)
+        } else {
+            (0, 0, 0, 1)
+        };
     let inbound_guaranteed_response_count = if context == Inbound && class == GuaranteedResponse {
         1
     } else {
         0
     };
-    let (inbound_message_count, inbound_response_count, inbound_size_bytes, outbound_message_count) =
-        if context == Inbound {
-            (1, 1, size_bytes, 0)
-        } else {
-            (0, 0, 0, 1)
-        };
 
     // Request stats are unaffected.
     let oversized_guaranteed_requests_extra_bytes = 0;
     let inbound_guaranteed_request_count = 0;
 
     MessageStats {
+        size_bytes,
         best_effort_message_bytes,
         guaranteed_responses_size_bytes,
         oversized_guaranteed_requests_extra_bytes,
-        size_bytes,
+        inbound_size_bytes,
         inbound_message_count,
         inbound_response_count,
-        inbound_size_bytes,
         inbound_guaranteed_request_count,
         inbound_guaranteed_response_count,
         outbound_message_count,

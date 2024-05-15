@@ -1173,13 +1173,13 @@ fn test_message_stats_oversized_requests() {
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
     // Two best-effort requests, two oversized guaranteed requests, 4 requests in all.
     let expected_pool_mu_stats = message_pool::MessageStats {
+        size_bytes: 2 * (best_effort_size_bytes + guaranteed_size_bytes),
         best_effort_message_bytes: 2 * best_effort_size_bytes,
         guaranteed_responses_size_bytes: 0,
         oversized_guaranteed_requests_extra_bytes: 2 * guaranteed_extra_bytes,
-        size_bytes: 2 * (best_effort_size_bytes + guaranteed_size_bytes),
+        inbound_size_bytes: best_effort_size_bytes + guaranteed_size_bytes,
         inbound_message_count: 2,
         inbound_response_count: 0,
-        inbound_size_bytes: best_effort_size_bytes + guaranteed_size_bytes,
         inbound_guaranteed_request_count: 1,
         inbound_guaranteed_response_count: 0,
         outbound_message_count: 2,
@@ -1220,13 +1220,13 @@ fn test_message_stats_oversized_requests() {
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
     // One best-effort request, one oversized guaranteed request, 2 requests in all.
     let expected_pool_mu_stats = message_pool::MessageStats {
+        size_bytes: best_effort_size_bytes + guaranteed_size_bytes,
         best_effort_message_bytes: best_effort_size_bytes,
         guaranteed_responses_size_bytes: 0,
         oversized_guaranteed_requests_extra_bytes: guaranteed_extra_bytes,
-        size_bytes: best_effort_size_bytes + guaranteed_size_bytes,
+        inbound_size_bytes: 0,
         inbound_message_count: 0,
         inbound_response_count: 0,
-        inbound_size_bytes: 0,
         inbound_guaranteed_request_count: 0,
         inbound_guaranteed_response_count: 0,
         outbound_message_count: 2,
