@@ -9,9 +9,7 @@ use ic_crypto_tls_interfaces::{
     AuthenticatedPeer, SomeOrAllNodes, TlsConfigError, TlsPublicKeyCert, TlsServerHandshakeError,
     TlsStream,
 };
-use ic_crypto_utils_tls::{
-    node_id_from_cert_subject_common_name, tls_pubkey_cert_from_rustls_certs,
-};
+use ic_crypto_utils_tls::node_id_from_rustls_certs;
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
 use std::sync::Arc;
@@ -97,8 +95,23 @@ pub async fn perform_tls_server_handshake<P: CspTlsHandshakeSignerProvider>(
 
     let rustls_stream = accept_connection(tcp_stream, config).await?;
 
-    let client_cert_from_handshake = single_client_cert_from_handshake(&rustls_stream)?;
-    let authenticated_peer = node_id_from_cert_subject_common_name(&client_cert_from_handshake)?;
+    let peer_cert = rustls_stream
+        .get_ref()
+        .1
+        .peer_certificates()
+        .ok_or(TlsServerHandshakeError::HandshakeError {
+            internal_error: "missing peer certificates in session".to_string(),
+        })?
+        .first()
+        .ok_or(TlsServerHandshakeError::HandshakeError {
+            internal_error: "a single cert must be present".to_string(),
+        })?;
+
+    let authenticated_peer = node_id_from_rustls_certs(peer_cert).map_err(|err| {
+        TlsServerHandshakeError::HandshakeError {
+            internal_error: format!("{:?}", err),
+        }
+    })?;
 
     let tls_stream = RustlsTlsStream::new(tokio_rustls::TlsStream::from(rustls_stream));
 
@@ -156,21 +169,6 @@ async fn accept_connection(
         .map_err(|e| TlsServerHandshakeError::HandshakeError {
             internal_error: format!("{}", e),
         })
-}
-
-fn single_client_cert_from_handshake(
-    rustls_stream: &tokio_rustls::server::TlsStream<TcpStream>,
-) -> Result<TlsPublicKeyCert, TlsServerHandshakeError> {
-    let peer_certs = rustls_stream.get_ref().1.peer_certificates().ok_or(
-        TlsServerHandshakeError::HandshakeError {
-            internal_error: "missing peer certificates in session".to_string(),
-        },
-    )?;
-    tls_pubkey_cert_from_rustls_certs(peer_certs).map_err(|e| {
-        TlsServerHandshakeError::HandshakeError {
-            internal_error: format!("failed to parse presented cert: {}", e),
-        }
-    })
 }
 
 fn static_cert_resolver(key: CertifiedKey, scheme: SignatureScheme) -> Arc<dyn ResolvesServerCert> {

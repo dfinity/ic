@@ -1,7 +1,7 @@
 pub mod api_boundary_node;
 pub mod common;
 pub mod complete_canister_migration;
-pub mod do_add_api_boundary_node;
+pub mod do_add_api_boundary_nodes;
 pub mod do_add_node_operator;
 pub mod do_add_nodes_to_subnet;
 mod do_add_or_remove_data_centers;

@@ -78,12 +78,4 @@ actor {
         controllers : [Principal];
 
     };
-
-    type CanisterStatusResult = {
-        status : { #stopped; #stopping; #running };
-        memory_size : Nat;
-        module_hash : ?Blob;
-        cycles : Nat;
-        settings: DefiniteCanisterSettings;
-    };
 }

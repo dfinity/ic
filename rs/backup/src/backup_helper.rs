@@ -28,7 +28,7 @@ const RETRIES_BINARY_DOWNLOAD: u64 = 3;
 const BUCKET_SIZE: u64 = 10000;
 /// For how many days should we keep the states in the hot storage. States older than this number
 /// will be moved to the cold storage.
-const DAYS_TO_KEEP_STATES_IN_HOT_STORAGE: usize = 3;
+const DAYS_TO_KEEP_STATES_IN_HOT_STORAGE: usize = 1;
 
 pub(crate) struct BackupHelper {
     pub(crate) subnet_id: SubnetId,
@@ -86,7 +86,7 @@ impl BackupHelper {
         self.root_dir.join("ic_registry_local_store")
     }
 
-    pub fn data_dir(&self) -> PathBuf {
+    pub(crate) fn data_dir(&self) -> PathBuf {
         self.root_dir.join(format!("data/{}", self.subnet_id))
     }
 
@@ -227,12 +227,7 @@ impl BackupHelper {
             .artifacts_guard
             .lock()
             .expect("artifacts mutex lock failed");
-        info!(
-            self.log,
-            "Sync backup data from the node: {} for subnet_id: {}",
-            node_ip,
-            self.subnet_id.to_string()
-        );
+        info!(self.log, "Sync backup data from the node: {}", node_ip,);
         let remote_dir = format!(
             "{}@[{}]:/var/lib/ic/backup/{}/",
             self.username(),
@@ -260,11 +255,10 @@ impl BackupHelper {
     fn rsync_config(&self, node_ip: &IpAddr, replica_version: &ReplicaVersion) {
         info!(
             self.log,
-            "[#{}] Sync ic.json5 from the node: {} for replica: {} and subnet_id: {}",
+            "[#{}] Sync ic.json5 from the node: {} for replica: {}",
             self.thread_id,
             node_ip,
             replica_version,
-            self.subnet_id.to_string()
         );
         let remote_dir = format!(
             "{}@[{}]:/run/ic-node/config/ic.json5",
@@ -315,7 +309,7 @@ impl BackupHelper {
         }
     }
 
-    pub fn sync_files(&self, nodes: &[IpAddr]) {
+    pub(crate) fn sync_files(&self, nodes: &[IpAddr]) {
         let start_time = Instant::now();
         let total_succeeded: usize = nodes
             .iter()
@@ -323,21 +317,26 @@ impl BackupHelper {
             .sum();
         if 2 * total_succeeded >= nodes.len() {
             let duration = start_time.elapsed();
-            let minutes = duration.as_secs() / 60;
-            self.notification_client.push_metrics_sync_time(minutes);
+            info!(
+                self.log,
+                "Sync succeeded after {} seconds",
+                duration.as_secs()
+            );
+            self.notification_client
+                .push_metrics_sync_time(duration.as_secs() / 60);
         } else {
             self.notification_client
                 .report_failure_slack("Couldn't pull artifacts from the nodes!".to_string());
         }
     }
 
-    pub fn create_spool_dir(&self) {
+    pub(crate) fn create_spool_dir(&self) {
         if !self.spool_dir().exists() {
             create_dir_all(self.spool_dir()).expect("Failure creating a directory");
         }
     }
 
-    pub fn collect_nodes(&self, num_nodes: usize) -> Result<Vec<IpAddr>, String> {
+    pub(crate) fn collect_nodes(&self, num_nodes: usize) -> Result<Vec<IpAddr>, String> {
         let mut shuf_nodes = self.collect_all_subnet_nodes()?;
         shuf_nodes.shuffle(&mut thread_rng());
         Ok(shuf_nodes
@@ -380,11 +379,11 @@ impl BackupHelper {
             .collect()
     }
 
-    pub fn last_state_checkpoint(&self) -> u64 {
+    pub(crate) fn last_state_checkpoint(&self) -> u64 {
         last_checkpoint(&self.state_dir())
     }
 
-    pub fn replay(&self) {
+    pub(crate) fn replay(&self) {
         let start_height = self.last_state_checkpoint();
         let start_time = Instant::now();
         let mut current_replica_version =
@@ -450,10 +449,9 @@ impl BackupHelper {
         let start_height = self.last_state_checkpoint();
         info!(
             self.log,
-            "[#{}] Replaying from height #{} of subnet {:?} with version {}",
+            "[#{}] Replaying from height #{} with version {}",
             self.thread_id,
             start_height,
-            self.subnet_id,
             replica_version
         );
         self.download_binaries(replica_version, start_height)?;
@@ -529,7 +527,7 @@ impl BackupHelper {
         Ok(())
     }
 
-    pub fn retrieve_spool_top_height(&self) -> u64 {
+    pub(crate) fn retrieve_spool_top_height(&self) -> u64 {
         let mut spool_top_height = 0;
         let spool_dirs = collect_spool_dirs(&self.log, self.spool_dir());
         for spool_dir in spool_dirs {
@@ -658,7 +656,7 @@ impl BackupHelper {
         self.log_disk_stats()
     }
 
-    fn log_disk_stats(&self) -> Result<(), String> {
+    pub(crate) fn log_disk_stats(&self) -> Result<(), String> {
         let mut stats = Vec::new();
         for (dir, threshold) in &[
             (&self.root_dir, self.hot_disk_resource_threshold_percentage),
@@ -669,10 +667,6 @@ impl BackupHelper {
         ] {
             let space = self.get_disk_stats(dir, *threshold, DiskStats::Space)?;
             let inodes = self.get_disk_stats(dir, *threshold, DiskStats::Inodes)?;
-            debug!(
-                self.log,
-                "[{:?}] Space: {}% Inodes: {}%", dir, space, inodes
-            );
             stats.push((dir.as_path(), space, inodes));
         }
         self.notification_client
@@ -680,7 +674,7 @@ impl BackupHelper {
         Ok(())
     }
 
-    pub fn need_cold_storage_move(&self) -> Result<bool, String> {
+    pub(crate) fn need_cold_storage_move(&self) -> Result<bool, String> {
         let _guard = self
             .artifacts_guard
             .lock()
@@ -689,13 +683,12 @@ impl BackupHelper {
         Ok(spool_dirs.len() > self.versions_hot)
     }
 
-    pub fn do_move_cold_storage(&self) -> Result<(), String> {
+    pub(crate) fn do_move_cold_storage(&self) -> Result<(), String> {
         let max_height = self.cold_store_artifacts()?;
         self.cold_store_states(max_height)?;
         info!(
             self.log,
-            "Finished moving old artifacts and states of subnet {:?} to the cold storage",
-            self.subnet_id
+            "Finished moving old artifacts and states to the cold storage",
         );
         Ok(())
     }
@@ -707,8 +700,7 @@ impl BackupHelper {
             .expect("artifacts mutex lock failed");
         info!(
             self.log,
-            "Start moving old artifacts and states of subnet {:?} to the cold storage",
-            self.subnet_id
+            "Start moving old artifacts and states to the cold storage",
         );
         let spool_dirs = collect_only_dirs(&self.spool_dir())?;
         let mut dir_heights = BTreeMap::new();
@@ -786,10 +778,7 @@ impl BackupHelper {
             )?;
         }
 
-        info!(
-            self.log,
-            "Remove leftovers of the subnet {:?}", self.subnet_id
-        );
+        info!(self.log, "Remove leftovers");
         remove_dir_all(work_dir).map_err(|err| format!("Error deleting leftovers: {:?}", err))?;
 
         Ok(max_height)
@@ -904,7 +893,7 @@ impl BackupHelper {
     }
 }
 
-pub fn ls_path(log: &Logger, dir: &Path) -> Result<(), String> {
+pub(crate) fn ls_path(log: &Logger, dir: &Path) -> Result<(), String> {
     let mut cmd = Command::new("ls");
     cmd.arg(dir);
     debug!(log, "Will execute: {:?}", cmd);
@@ -1004,7 +993,7 @@ fn collect_spool_dirs(log: &Logger, spool_dir: PathBuf) -> Vec<DirEntry> {
 }
 
 /// Searches in spool a directory that contains a block finishing the last call to ic-replay.
-pub fn retrieve_replica_version_last_replayed(
+pub(crate) fn retrieve_replica_version_last_replayed(
     log: &Logger,
     spool_dir: PathBuf,
     state_dir: PathBuf,
@@ -1202,19 +1191,19 @@ mod tests {
                 .join("states"),
         );
 
-        assert_eq!(cold_storage_dirs, vec!["10".to_string(), "30".to_string()]);
+        assert_eq!(
+            cold_storage_dirs,
+            vec![
+                "10".to_string(),
+                "30".to_string(),
+                "50".to_string(),
+                "70".to_string()
+            ]
+        );
 
         assert_eq!(
             collect_and_sort_dir_entries(&backup_helper.archive_dir()),
-            vec![
-                "100".to_string(),
-                "40".to_string(),
-                "50".to_string(),
-                "60".to_string(),
-                "70".to_string(),
-                "80".to_string(),
-                "90".to_string(),
-            ]
+            vec!["100".to_string(), "80".to_string(), "90".to_string(),]
         );
     }
 
@@ -1228,7 +1217,7 @@ mod tests {
             /*daily_replays=*/ 2,
         );
 
-        for height in [0, 10, 20, 30, 40, 50, 60] {
+        for height in [0, 10, 20] {
             create_dir_all(backup_helper.archive_dir().join(height.to_string())).unwrap();
         }
 
@@ -1238,18 +1227,10 @@ mod tests {
 
         assert!(!cold_stored_states);
 
-        // Assert that old the states remain in the hot storage
+        // Assert that all the states remain in the hot storage
         assert_eq!(
             collect_and_sort_dir_entries(&backup_helper.archive_dir()),
-            vec![
-                "0".to_string(),
-                "10".to_string(),
-                "20".to_string(),
-                "30".to_string(),
-                "40".to_string(),
-                "50".to_string(),
-                "60".to_string(),
-            ]
+            vec!["0".to_string(), "10".to_string(), "20".to_string(),]
         );
     }
 

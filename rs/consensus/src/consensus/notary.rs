@@ -119,13 +119,20 @@ impl Notary {
             height,
             rank,
         )?;
-        if let Some(start_time) = pool.get_round_start_time(height) {
-            let now = self.time_source.get_relative_time();
-            if now >= start_time + adjusted_notary_delay {
-                return Some(now.saturating_duration_since(start_time));
-            }
-        }
-        None
+
+        let now_relative = self.time_source.get_relative_time();
+        let now_instant = self.time_source.get_instant();
+
+        pool.get_round_start_time(height)
+            .filter(|&start| now_relative >= start + adjusted_notary_delay)
+            .map(|start| now_relative.saturating_duration_since(start))
+            // If the relative time indicates that not enough time has passed, we fall
+            // back to the the monotonic round start time. We do this to safeguard
+            // against a stalled relative clock.
+            .or(pool
+                .get_round_start_instant(height, self.time_source.get_origin_instant())
+                .filter(|&start| now_instant >= start + adjusted_notary_delay)
+                .map(|start| now_instant.saturating_duration_since(start)))
     }
 
     /// Return `true` if this node is a member of the notary group for the
@@ -404,6 +411,77 @@ mod tests {
                 }
                 _ => false,
             });
+        })
+    }
+
+    #[test]
+    fn test_out_of_sync_notarization() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let committee = vec![node_test_id(0)];
+            let dkg_interval_length = 30;
+            let Dependencies {
+                mut pool,
+                membership,
+                replica_config,
+                time_source,
+                crypto,
+                state_manager,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .build(),
+                )],
+            );
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(Height::new(0));
+            let metrics_registry = MetricsRegistry::new();
+            let notary = Notary::new(
+                Arc::clone(&time_source) as Arc<_>,
+                replica_config,
+                membership.clone(),
+                crypto,
+                state_manager.clone(),
+                metrics_registry,
+                no_op_logger(),
+            );
+            let run_notary = |pool: &dyn ConsensusPool| {
+                let reader = PoolReader::new(pool);
+                notary.on_state_change(&reader)
+            };
+
+            // Play 5 rounds, finalizing one block per second.
+            for _ in 0..5 {
+                time_source.advance_time(Duration::from_secs(1));
+                pool.advance_round_normal_operation();
+            }
+
+            // Insert new block. Must not get notarized, because no additional
+            // time has passed.
+            let block = pool.make_next_block();
+            pool.insert_validated(block.clone());
+            assert!(run_notary(&pool).is_empty());
+
+            // Stall the relative clock, and only advance monotonic clock past
+            // the notary delay. This should get notarized.
+            time_source.advance_only_monotonic(
+                get_adjusted_notary_delay(
+                    membership.as_ref(),
+                    &PoolReader::new(&pool),
+                    state_manager.as_ref(),
+                    &no_op_logger(),
+                    Height::from(5),
+                    Rank(0),
+                )
+                .unwrap(),
+            );
+            assert!(!run_notary(&pool).is_empty());
         })
     }
 }

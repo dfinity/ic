@@ -1,8 +1,7 @@
 use ic_crypto_internal_csp::api::{
     CspCreateMEGaKeyError, CspIDkgProtocol, CspKeyGenerator, CspPublicAndSecretKeyStoreChecker,
-    CspPublicKeyStore, CspSigVerifier, CspSigner, CspThresholdEcdsaSigVerifier,
-    CspThresholdEcdsaSigner, CspThresholdSignError, CspTlsHandshakeSignerProvider, NiDkgCspClient,
-    ThresholdSignatureCspClient,
+    CspPublicKeyStore, CspSigVerifier, CspSigner, CspThresholdSignError,
+    CspTlsHandshakeSignerProvider, NiDkgCspClient, ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::ExternalPublicKeys;
@@ -20,24 +19,16 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError, CspDkgVerifyDealingError,
     CspDkgVerifyReshareDealingError,
 };
-use ic_crypto_internal_threshold_sig_ecdsa::{
-    IDkgTranscriptInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
-    ThresholdEcdsaSigShareInternal,
-};
+use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
-    ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
-};
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::{AlgorithmId, CryptoResult, CurrentNodePublicKeys};
-use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
+use ic_types::{NodeId, NodeIndex, NumberOfNodes};
 use mockall::predicate::*;
 use mockall::*;
 use std::collections::{BTreeMap, BTreeSet};
@@ -259,52 +250,5 @@ mock! {
 
     impl CspIDkgProtocol for AllCryptoServiceProvider {
         fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
-    }
-
-    impl CspThresholdEcdsaSigner for AllCryptoServiceProvider {
-        fn ecdsa_sign_share(
-            &self,
-            inputs: &ThresholdEcdsaSigInputs,
-        ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
-    }
-
-    impl CspThresholdEcdsaSigVerifier for AllCryptoServiceProvider {
-        fn ecdsa_combine_sig_shares(
-            &self,
-            derivation_path: &ExtendedDerivationPath,
-            hashed_message: &[u8],
-            nonce: &Randomness,
-            key: &IDkgTranscriptInternal,
-            kappa_unmasked: &IDkgTranscriptInternal,
-            reconstruction_threshold: NumberOfNodes,
-            sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
-            algorithm_id: AlgorithmId,
-        ) -> Result<ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaCombineSigSharesError>;
-
-        fn ecdsa_verify_sig_share(
-            &self,
-            share: &ThresholdEcdsaSigShareInternal,
-            signer_index: NodeIndex,
-            derivation_path: &ExtendedDerivationPath,
-            hashed_message: &[u8],
-            nonce: &Randomness,
-            key: &IDkgTranscriptInternal,
-            kappa_unmasked: &IDkgTranscriptInternal,
-            lambda_masked: &IDkgTranscriptInternal,
-            kappa_times_lambda: &IDkgTranscriptInternal,
-            key_times_lambda: &IDkgTranscriptInternal,
-            algorithm_id: AlgorithmId,
-        ) -> Result<(), ThresholdEcdsaVerifySigShareError>;
-
-        fn ecdsa_verify_combined_signature(
-            &self,
-            signature: &ThresholdEcdsaCombinedSigInternal,
-            derivation_path: &ExtendedDerivationPath,
-            hashed_message: &[u8],
-            nonce: &Randomness,
-            key: &IDkgTranscriptInternal,
-            kappa_unmasked: &IDkgTranscriptInternal,
-            algorithm_id: AlgorithmId,
-        ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError>;
     }
 }

@@ -14,30 +14,23 @@ use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterLog, LogVisibility,
 };
-use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
-    state::canister_state_bits::v1 as pb,
-};
-
+use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{
-    messages::{
-        CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress, RejectContext,
-        Request, RequestOrResponse, Response, StopCanisterContext,
-    },
-    nominal_cycles::NominalCycles,
-    CanisterId, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
+use ic_types::messages::{
+    CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress, RejectContext,
+    Request, RequestOrResponse, Response, StopCanisterContext,
 };
+use ic_types::nominal_cycles::NominalCycles;
+use ic_types::{CanisterId, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time};
 use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap,
-    convert::{TryFrom, TryInto},
-};
-use std::{collections::BTreeSet, sync::Arc};
-use std::{collections::VecDeque, str::FromStr};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::convert::{TryFrom, TryInto};
+use std::str::FromStr;
+use std::sync::Arc;
 use strum_macros::EnumIter;
 
 lazy_static! {
@@ -448,46 +441,50 @@ pub struct PausedExecutionId(pub u64);
 /// inputs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExecutionTask {
-    // A heartbeat task exists only within an execution round. It is never
-    // serialized.
+    /// A heartbeat task exists only within an execution round. It is never
+    /// serialized.
     Heartbeat,
 
     /// Canister global timer task.
     /// The task exists only within an execution round, it never gets serialized.
     GlobalTimer,
 
-    // A paused execution task exists only within an epoch (between
-    // checkpoints). It is never serialized, and it turns into `AbortedExecution`
-    // before the checkpoint or when there are too many long-running executions.
-    PausedExecution(PausedExecutionId),
+    /// A paused execution task exists only within an epoch (between
+    /// checkpoints). It is never serialized, and it turns into `AbortedExecution`
+    /// before the checkpoint or when there are too many long-running executions.
+    PausedExecution {
+        id: PausedExecutionId,
+        /// A copy of the message or task whose execution is being paused.
+        input: CanisterMessageOrTask,
+    },
 
-    // A paused `install_code` task exists only within an epoch (between
-    // checkpoints). It is never serialized and turns into `AbortedInstallCode`
-    // before the checkpoint.
+    /// A paused `install_code` task exists only within an epoch (between
+    /// checkpoints). It is never serialized and turns into `AbortedInstallCode`
+    /// before the checkpoint.
     PausedInstallCode(PausedExecutionId),
 
-    // Any paused execution that doesn't finish until the next checkpoint
-    // becomes an aborted execution that should be retried after the checkpoint.
-    // A paused execution can also be aborted to keep the memory usage low if
-    // there are too many long-running executions.
+    /// Any paused execution that doesn't finish until the next checkpoint
+    /// becomes an aborted execution that should be retried after the checkpoint.
+    /// A paused execution can also be aborted to keep the memory usage low if
+    /// there are too many long-running executions.
     AbortedExecution {
         input: CanisterMessageOrTask,
-        // The execution cost that has already been charged from the canister.
-        // Retried execution does not have to pay for it again.
+        /// The execution cost that has already been charged from the canister.
+        /// Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
     },
 
-    // Any paused `install_code` that doesn't finish until the next checkpoint
-    // becomes an aborted `install_code` that should be retried after the
-    // checkpoint. A paused execution can also be aborted to keep the memory
-    // usage low if there are too many long-running executions.
+    /// Any paused `install_code` that doesn't finish until the next checkpoint
+    /// becomes an aborted `install_code` that should be retried after the
+    /// checkpoint. A paused execution can also be aborted to keep the memory
+    /// usage low if there are too many long-running executions.
     AbortedInstallCode {
         message: CanisterCall,
-        // The call id used by the subnet to identify long running install
-        // code messages.
+        /// The call ID used by the subnet to identify long running install
+        /// code messages.
         call_id: InstallCodeCallId,
-        // The execution cost that has already been charged from the canister.
-        // Retried execution does not have to pay for it again.
+        /// The execution cost that has already been charged from the canister.
+        /// Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
     },
 }
@@ -497,7 +494,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
         match item {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::PausedExecution(_)
+            | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_) => {
                 panic!("Attempt to serialize ephemeral task: {:?}.", item);
             }
@@ -874,19 +871,6 @@ impl SystemState {
         self.reserved_balance_limit = Some(limit);
     }
 
-    /// Initializes `reserved_balance_limit` to the given default value if it
-    /// was not already set.
-    pub fn initialize_reserved_balance_limit_if_empty(&mut self, default_limit: Cycles) {
-        if self.reserved_balance_limit.is_none() {
-            self.reserved_balance_limit = Some(default_limit);
-        }
-    }
-
-    /// Sets `reserved_balance_limit` to `None` for testing.
-    pub fn clear_reserved_balance_limit_for_testing(&mut self) {
-        self.reserved_balance_limit = None;
-    }
-
     /// Get new local snapshot ID.
     pub fn new_local_snapshot_id(&mut self) -> u64 {
         let local_snapshot_id = self.next_snapshot_id;
@@ -1208,6 +1192,19 @@ impl SystemState {
 
     /// Returns the memory currently in use by the `SystemState`
     /// for canister messages.
+    ///
+    /// TODO(MR-572): Change this to:
+    ///
+    /// ++ N0: callbacks
+    /// -- N1: responses in input queues
+    /// -- 1:  if first item in task queue is a paused / aborted `Response`
+    /// ++ N2: requests in input queues
+    /// ++ N3: non-responded call contexts
+    /// ++ 1: if first item in task queue is an aborted `Request`
+    ///
+    ///  + S1: size of responses in output queues
+    ///  + S2: size of responses in input queues
+    ///  + S3: oversized requests extra bytes
     pub fn message_memory_usage(&self) -> NumBytes {
         (self.queues.memory_usage() as u64).into()
     }
@@ -1457,6 +1454,81 @@ impl SystemState {
 
     pub fn get_canister_history(&self) -> &CanisterHistory {
         &self.canister_history
+    }
+
+    /// Checks the invariants that should hold at the end of each consensus round.
+    pub fn check_invariants(&self) -> Result<(), StateError> {
+        // Callbacks still awaiting a (potentially already enqueued) response.
+        let pending_callbacks = self
+            .call_context_manager()
+            .map(|ccm| ccm.unresponded_callback_count(self.aborted_or_paused_response()))
+            .unwrap_or_default();
+
+        let num_responses = self.queues.input_queues_response_count();
+        let num_reservations = self.queues.input_queues_reservation_count();
+
+        if pending_callbacks != num_reservations + num_responses {
+            return Err(StateError::InvariantBroken(format!(
+                "Canister {}: Number of callbacks ({}) is different from the accumulated number of reservations and responses ({})",
+                self.canister_id(),
+                pending_callbacks,
+                num_reservations + num_responses
+            )));
+        }
+
+        let unresponded_call_contexts = self
+            .call_context_manager()
+            .map(|ccm| {
+                ccm.unresponded_canister_update_call_contexts(self.aborted_or_paused_request())
+            })
+            .unwrap_or_default();
+
+        let num_requests = self.queues.input_queues_request_count();
+        let output_queue_reservations =
+            self.queues.reserved_slots() - self.queues.input_queues_reservation_count();
+
+        if num_requests + unresponded_call_contexts != output_queue_reservations {
+            return Err(StateError::InvariantBroken(format!(
+                "Canister {}: Number of output queue reservations ({}) is different from the number of input requests plus unresponded call contexts ({})",
+                self.canister_id(),
+                output_queue_reservations,
+                num_requests + unresponded_call_contexts
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Returns the aborted or paused `Response` at the head of the task queue, if
+    /// any.
+    fn aborted_or_paused_response(&self) -> Option<&Response> {
+        match self.task_queue.front() {
+            Some(ExecutionTask::AbortedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                ..
+            })
+            | Some(ExecutionTask::PausedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                ..
+            }) => Some(response),
+            _ => None,
+        }
+    }
+
+    /// Returns the aborted or paused `Request` at the head of the task queue, if
+    /// any.
+    fn aborted_or_paused_request(&self) -> Option<&Request> {
+        match self.task_queue.front() {
+            Some(ExecutionTask::AbortedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
+                ..
+            })
+            | Some(ExecutionTask::PausedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
+                ..
+            }) => Some(request),
+            _ => None,
+        }
     }
 }
 

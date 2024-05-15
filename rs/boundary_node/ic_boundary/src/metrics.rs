@@ -36,6 +36,7 @@ use crate::{
     cache::{Cache, CacheStatus},
     core::Run,
     geoip,
+    http::http_version,
     persist::RouteSubnet,
     retry::RetryResult,
     routes::{ErrorCause, RequestContext, RequestType},
@@ -660,6 +661,8 @@ pub async fn metrics_middleware(
         .get::<SubnetId>()
         .map(|x| x.to_string());
 
+    let http_version = http_version(request.version());
+
     // Perform the request & measure duration
     let start_time = Instant::now();
     let response = next.run(request).await;
@@ -763,27 +766,28 @@ pub async fn metrics_middleware(
             info!(
                 action,
                 request_id,
+                http = http_version,
                 request_type,
                 error_cause,
                 error_details,
                 status = status_code.as_u16(),
                 subnet_id,
                 node_id,
-                country_code,
                 canister_id,
                 canister_id_actual = canister_id_actual.map(|x| x.to_string()),
                 canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
                 sender,
-                method_name = ctx.method_name,
-                proc_duration,
-                full_duration,
+                method = ctx.method_name,
+                duration = proc_duration,
+                duration_full = full_duration,
                 request_size = ctx.request_size,
                 response_size,
                 retry_count = &retry_result.as_ref().map(|x| x.retries),
                 retry_success = &retry_result.map(|x| x.success),
                 %cache_status,
                 cache_bypass_reason = cache_bypass_reason.map(|x| x.to_string()),
-                ip_family,
+                country_code,
+                client_ip_family = ip_family,
             );
         }
     };

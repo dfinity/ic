@@ -144,6 +144,11 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         EventType::QuarantinedDeposit { event_source } => {
             state.record_quarantined_deposit(*event_source);
         }
+        EventType::QuarantinedReimbursement { index } => {
+            state
+                .eth_transactions
+                .record_quarantined_reimbursement(index.clone());
+        }
     }
 }
 

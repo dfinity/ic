@@ -157,6 +157,11 @@ pub const SAMPLE_CONFIG: &str = r#"
     // ================================================
     hypervisor: {
     },
+    // ==================================
+    // Configuration for replica tracing.
+    // ==================================
+    tracing: {
+    },
     // ====================================
     // Configuration of the HTTPS endpoint.
     // ====================================
@@ -348,6 +353,16 @@ pub const SAMPLE_CONFIG: &str = r#"
         max_simultaneous_connections_per_ip_address: 0,
     },
 
+    boundary_node_firewall: {
+        config_file: "/path/to/nftables/config",
+        file_template: "",
+        ipv4_tcp_rule_template: "",
+        ipv4_udp_rule_template: "",
+        ipv6_tcp_rule_template: "",
+        ipv6_udp_rule_template: "",
+        default_rules: [],
+    },
+
     // =================================
     // Configuration of registration parameters.
     // =================================
@@ -367,7 +382,7 @@ pub const SAMPLE_CONFIG: &str = r#"
         bitcoin_testnet_uds_path: "/tmp/bitcoin_uds",
         // IPC socket path for canister http adapter. This UDS path has to be the same as
         // specified in the systemd socket file.
-        // The canister http adapter socket file is: /ic-os/guestos/rootfs/systemd/system/ic-https-outcalls-adapter.socket
+        // The canister http adapter socket file is: ic-https-outcalls-adapter.socket
         https_outcalls_uds_path: "/run/ic-node/https-outcalls-adapter/socket",
     },
     bitcoin_payload_builder_config: {

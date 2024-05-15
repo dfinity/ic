@@ -4,14 +4,15 @@
 //! used to derive additional values (using XMD) or be turned into
 //! a random number generator (ChaCha20).
 
-use crate::xmd::expand_message_xmd;
 use core::fmt::{self, Debug};
 use rand::{CryptoRng, RngCore, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-pub mod xmd;
+mod xmd;
+
+pub use xmd::*;
 
 /// The internal length of a Seed
 ///
@@ -39,7 +40,7 @@ impl Debug for Seed {
 
 impl Seed {
     fn new(input: &[u8], domain_separator: &str) -> Self {
-        let derived = expand_message_xmd(input, domain_separator.as_bytes(), SEED_LEN)
+        let derived = xmd::<ic_crypto_sha2::Sha256>(input, domain_separator.as_bytes(), SEED_LEN)
             .expect("Unable to derive SEED_LEN bytes from XMD");
         Self {
             value: derived.try_into().expect("Unexpected size"),

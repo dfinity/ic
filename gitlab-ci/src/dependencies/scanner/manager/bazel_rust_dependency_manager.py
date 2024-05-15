@@ -65,9 +65,9 @@ class BazelCargoExecutor:
             cargo_bin = f"{cargo_home}/bin/"
             environment["CARGO_HOME"] = cargo_home
             advisory_path = f"{cargo_home}/advisory-db/"
-            command = f"{cargo_bin}cargo tree --edges=no-dev,no-proc-macro --prefix=depth -d {advisory_path} --stale -n -i " + ":".join([vulnerable_dependency.name, vulnerable_dependency.version])
+            command = f"{cargo_bin}cargo tree --edges=no-proc-macro --prefix=depth -d {advisory_path} --stale -n -i " + ":".join([vulnerable_dependency.name, vulnerable_dependency.version])
         else:
-            command = "cargo tree --edges=no-dev,no-proc-macro --prefix=depth -i " + ":".join([vulnerable_dependency.name, vulnerable_dependency.version])
+            command = "cargo tree --edges=no-proc-macro --prefix=depth -i " + ":".join([vulnerable_dependency.name, vulnerable_dependency.version])
 
         try:
             return ProcessExecutor.execute_command(command, path.resolve(), environment)

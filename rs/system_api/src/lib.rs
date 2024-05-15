@@ -53,6 +53,10 @@ const WASM_NATIVE_STABLE_MEMORY_ERROR: &str = "Stable memory cannot be accessed 
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: u64 = 64 * 1024; // 4GiB
 
+/// Upper bound on `timeout` when using calls with
+/// best-effort responses represented in seconds.
+pub const MAX_CALL_TIMEOUT_SECONDS: u32 = 300;
+
 // This macro is used in system calls for tracing.
 macro_rules! trace_syscall {
     ($self:ident, $name:ident, $result:expr $( , $args:expr )*) => {{
@@ -2185,26 +2189,31 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_perform")),
             ApiType::Update {
+                time,
                 call_context_id,
                 outgoing_request,
                 ..
             }
             | ApiType::SystemTask {
+                time,
                 call_context_id,
                 outgoing_request,
                 ..
             }
             | ApiType::ReplyCallback {
+                time,
                 call_context_id,
                 outgoing_request,
                 ..
             }
             | ApiType::RejectCallback {
+                time,
                 call_context_id,
                 outgoing_request,
                 ..
             }
             | ApiType::NonReplicatedQuery {
+                time,
                 query_kind:
                     NonReplicatedQueryKind::Stateful {
                         call_context_id,
@@ -2224,6 +2233,7 @@ impl SystemApi for SystemApiImpl {
                     *call_context_id,
                     &mut self.sandbox_safe_system_state,
                     &self.log,
+                    *time,
                 )?;
 
                 self.push_output_request(
@@ -2988,9 +2998,15 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
-                self.sandbox_safe_system_state
-                    .mint_cycles(Cycles::from(amount))?;
-                Ok(amount)
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    // Non-replicated mode means we are handling a composite query.
+                    // Access to this syscall not permitted.
+                    Err(self.error_for("ic0_mint_cycles"))
+                } else {
+                    self.sandbox_safe_system_state
+                        .mint_cycles(Cycles::from(amount))?;
+                    Ok(amount)
+                }
             }
         };
         trace_syscall!(self, MintCycles, result, amount);
@@ -3076,6 +3092,107 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
+    /// Sets `timeout_seconds` to the provided value if not yet set, making this a best-effort call.
+    /// The timeout is bounded from above by `MAX_CALL_TIMEOUT_SECONDS`.
+    ///
+    /// Fails and returns an error if `set_timeout()` was already called.
+    fn ic0_call_with_best_effort_response(&mut self, timeout_seconds: u32) -> HypervisorResult<()> {
+        let result = match &mut self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery {
+                query_kind: NonReplicatedQueryKind::Pure,
+                ..
+            }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::InspectMessage { .. } => {
+                Err(self.error_for("ic0_call_with_best_effort_response"))
+            }
+            ApiType::Update {
+                outgoing_request, ..
+            }
+            | ApiType::NonReplicatedQuery {
+                query_kind:
+                    NonReplicatedQueryKind::Stateful {
+                        outgoing_request, ..
+                    },
+                ..
+            }
+            | ApiType::SystemTask {
+                outgoing_request, ..
+            }
+            | ApiType::ReplyCallback {
+                outgoing_request, ..
+            }
+            | ApiType::RejectCallback {
+                outgoing_request, ..
+            } => match outgoing_request {
+                None => Err(HypervisorError::ContractViolation{
+                    error: "ic0.call_with_best_effort_response called when no call is under construction."
+                    .to_string(),
+                    suggestion: "".to_string(),
+                    doc_link: "".to_string(),
+                }),
+                Some(request) => {
+                    if request.is_timeout_set() {
+                        Err(HypervisorError::ContractViolation{
+                            error: "ic0_call_with_best_effort_response failed because a timeout is already set.".to_string(),
+                            suggestion: "".to_string(),
+                            doc_link: "".to_string(),
+                        })
+                    } else {
+                        let bounded_timeout =
+                            std::cmp::min(timeout_seconds, MAX_CALL_TIMEOUT_SECONDS);
+                        request.set_timeout(bounded_timeout);
+                        Ok(())
+                    }
+                }
+            },
+        };
+        trace_syscall!(self, CallWithBestEffortResponse, result, timeout_seconds);
+        result
+    }
+
+    fn ic0_msg_deadline(&self) -> HypervisorResult<u64> {
+        let result = match self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_msg_deadline")),
+            ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery {
+                query_kind: NonReplicatedQueryKind::Pure,
+                ..
+            } => Ok(0),
+            ApiType::Update {
+                call_context_id, ..
+            }
+            | ApiType::NonReplicatedQuery {
+                query_kind:
+                    NonReplicatedQueryKind::Stateful {
+                        call_context_id, ..
+                    },
+                ..
+            }
+            | ApiType::ReplyCallback {
+                call_context_id, ..
+            }
+            | ApiType::RejectCallback {
+                call_context_id, ..
+            } => {
+                let deadline = self.sandbox_safe_system_state.msg_deadline(call_context_id);
+                Ok(Time::from(deadline).as_nanos_since_unix_epoch())
+            }
+        };
+
+        trace_syscall!(self, CallWithBestEffortResponse, result);
+        result
+    }
+
     fn ic0_in_replicated_execution(&self) -> HypervisorResult<i32> {
         let result = match &self.api_type {
             ApiType::Start { .. }
@@ -3120,13 +3237,19 @@ impl SystemApi for SystemApiImpl {
             | ApiType::SystemTask { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
-                let cycles = self.sandbox_safe_system_state.cycles_burn128(
-                    amount,
-                    self.memory_usage.current_usage,
-                    self.memory_usage.current_message_usage,
-                );
-                copy_cycles_to_heap(cycles, dst, heap, method_name)?;
-                Ok(())
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    // Non-replicated mode means we are handling a composite query.
+                    // Access to this syscall not permitted.
+                    Err(self.error_for(method_name))
+                } else {
+                    let cycles = self.sandbox_safe_system_state.cycles_burn128(
+                        amount,
+                        self.memory_usage.current_usage,
+                        self.memory_usage.current_message_usage,
+                    );
+                    copy_cycles_to_heap(cycles, dst, heap, method_name)?;
+                    Ok(())
+                }
             }
         };
         trace_syscall!(self, CyclesBurn128, result, amount);

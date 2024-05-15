@@ -30,7 +30,13 @@ pushd "$REPO_ROOT"
 BUILD_ARGS=("${DOCKER_BUILD_ARGS:---rm=true}")
 RUST_VERSION=$(grep channel rust-toolchain.toml | sed -e 's/.*=//' | tr -d '"')
 
-DOCKER_BUILDKIT=1 docker build "${BUILD_ARGS[@]}" \
+if findmnt /hoststorage >/dev/null; then
+    ARGS=(--root /hoststorage/podman-root)
+else
+    ARGS=()
+fi
+
+DOCKER_BUILDKIT=1 docker "${ARGS[@]}" build "${BUILD_ARGS[@]}" \
     -t ic-build:"$DOCKER_IMG_TAG" \
     -t docker.io/dfinity/ic-build:"$DOCKER_IMG_TAG" \
     -t docker.io/dfinity/ic-build:latest \

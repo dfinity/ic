@@ -34,7 +34,7 @@ use ic_nns_governance::{
     decoder_config, encode_metrics,
     governance::{
         BitcoinNetwork, BitcoinSetConfigProposal, Environment, Governance, HeapGrowthPotential,
-        TimeWarp,
+        SubnetRentalProposalPayload, SubnetRentalRequest, TimeWarp,
     },
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{
@@ -58,6 +58,7 @@ use ic_nns_governance::{
     },
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
 };
+use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -254,7 +255,8 @@ impl Environment for CanisterEnv {
         let (canister_id, method) = mt.canister_and_function()?;
         let proposal_timestamp_seconds = governance()
             .get_proposal_data(ProposalId(proposal_id))
-            .map(|data| data.proposal_timestamp_seconds);
+            .map(|data| data.proposal_timestamp_seconds)
+            .ok_or(GovernanceError::new(ErrorType::PreconditionFailed))?;
         let effective_payload =
             get_effective_payload(mt, &update.payload, proposal_id, proposal_timestamp_seconds)?;
         let err = call_with_callbacks(canister_id, method, &effective_payload, reply, reject);
@@ -948,13 +950,13 @@ fn http_request() {
 }
 
 // Processes the payload received and transforms it into a form the intended canister expects.
-// The arguments `_proposal_id` and `_proposal_timestamp_seconds` will be used in the future
-// by subnet rental NNS proposals.
+// The arguments `proposal_id` is used by AddSnsWasm proposals.
+// `_proposal_timestamp_seconds` will be used in the future by subnet rental NNS proposals.
 fn get_effective_payload(
     mt: NnsFunction,
     payload: &[u8],
-    _proposal_id: u64,
-    _proposal_timestamp_seconds: Option<u64>,
+    proposal_id: u64,
+    proposal_timestamp_seconds: u64,
 ) -> Result<Cow<[u8]>, GovernanceError> {
     const BITCOIN_SET_CONFIG_METHOD_NAME: &str = "set_config";
     const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
@@ -984,6 +986,36 @@ fn get_effective_payload(
             .unwrap();
 
             Ok(Cow::Owned(encoded_payload))
+        }
+        NnsFunction::SubnetRentalRequest => {
+            // Decode the payload to `SubnetRentalRequest`.
+            let payload = match Decode!([decoder_config()]; payload, SubnetRentalRequest) {
+              Ok(payload) => payload,
+              Err(_) => {
+                return Err(GovernanceError::new_with_message(ErrorType::InvalidProposal, "Payload must be a valid SubnetRentalRequest."));
+              }
+            };
+
+            // Convert the payload to `SubnetRentalProposalPayload`.
+            let SubnetRentalRequest {
+                user,
+                rental_condition_id,
+            } = payload;
+            let proposal_creation_time_seconds = proposal_timestamp_seconds;
+            let encoded_payload = Encode!(&SubnetRentalProposalPayload {
+                user,
+                rental_condition_id,
+                proposal_id,
+                proposal_creation_time_seconds,
+            }).unwrap();
+
+            Ok(Cow::Owned(encoded_payload))
+        }
+
+        | NnsFunction::AddSnsWasm => {
+            let payload = add_proposal_id_to_add_wasm_request(payload, proposal_id)?;
+
+            Ok(Cow::Owned(payload))
         }
 
         // NOTE: Methods are listed explicitly as opposed to using the `_` wildcard so
@@ -1027,19 +1059,52 @@ fn get_effective_payload(
         | NnsFunction::RerouteCanisterRanges
         | NnsFunction::PrepareCanisterMigration
         | NnsFunction::CompleteCanisterMigration
-        | NnsFunction::AddSnsWasm
         | NnsFunction::UpdateSubnetType
         | NnsFunction::ChangeSubnetTypeAssignment
         | NnsFunction::UpdateAllowedPrincipals
         | NnsFunction::UpdateSnsWasmSnsSubnetIds
         | NnsFunction::InsertSnsWasmUpgradePathEntries
-        | NnsFunction::AddApiBoundaryNode
+        | NnsFunction::AddApiBoundaryNodes
         | NnsFunction::RemoveApiBoundaryNodes
         | NnsFunction::UpdateApiBoundaryNodesVersion // obsolete
         | NnsFunction::DeployGuestosToAllUnassignedNodes
         | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes
         | NnsFunction::DeployGuestosToSomeApiBoundaryNodes => Ok(Cow::Borrowed(payload)),
     }
+}
+
+fn add_proposal_id_to_add_wasm_request(
+    payload: &[u8],
+    proposal_id: u64,
+) -> Result<Vec<u8>, GovernanceError> {
+    let add_wasm_request = match Decode!([decoder_config()]; payload, AddWasmRequest) {
+        Ok(add_wasm_request) => add_wasm_request,
+        Err(e) => {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Payload must be a valid AddWasmRequest. Error: {e}"),
+            ));
+        }
+    };
+
+    let wasm = add_wasm_request
+        .wasm
+        .ok_or(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Payload must contain a wasm.",
+        ))?;
+
+    let add_wasm_request = AddWasmRequest {
+        wasm: Some(SnsWasm {
+            proposal_id: Some(proposal_id),
+            ..wasm
+        }),
+        ..add_wasm_request
+    };
+
+    let payload = Encode!(&add_wasm_request).unwrap();
+
+    Ok(payload)
 }
 
 // This makes this Candid service self-describing, so that for example Candid
@@ -1138,4 +1203,56 @@ fn test_set_time_warp() {
 
     assert!(delta_s >= 1000, "delta_s = {}", delta_s);
     assert!(delta_s < 1005, "delta_s = {}", delta_s);
+}
+
+#[test]
+fn test_get_effective_payload_sets_proposal_id_for_add_wasm() {
+    let mt = NnsFunction::AddSnsWasm;
+    let proposal_id = 42;
+    let wasm = vec![1, 2, 3];
+    let canister_type = 3;
+    let hash = vec![1, 2, 3, 4];
+    let payload = Encode!(&AddWasmRequest {
+        wasm: Some(SnsWasm {
+            proposal_id: None,
+            wasm: wasm.clone(),
+            canister_type,
+        }),
+        hash: hash.clone(),
+    })
+    .unwrap();
+
+    let effective_payload = get_effective_payload(mt, &payload, proposal_id, 0).unwrap();
+
+    let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
+    assert_eq!(
+        decoded,
+        AddWasmRequest {
+            wasm: Some(SnsWasm {
+                proposal_id: Some(proposal_id), // The proposal_id should be set
+                wasm,
+                canister_type
+            }),
+            hash
+        }
+    );
+}
+
+#[test]
+fn test_get_effective_payload_overrides_proposal_id_for_add_wasm() {
+    let mt = NnsFunction::AddSnsWasm;
+    let proposal_id = 42;
+    let payload = Encode!(&AddWasmRequest {
+        wasm: Some(SnsWasm {
+            proposal_id: Some(proposal_id - 1),
+            ..SnsWasm::default()
+        }),
+        ..AddWasmRequest::default()
+    })
+    .unwrap();
+
+    let effective_payload = get_effective_payload(mt, &payload, proposal_id, 0).unwrap();
+
+    let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
+    assert_eq!(decoded.wasm.unwrap().proposal_id.unwrap(), proposal_id);
 }

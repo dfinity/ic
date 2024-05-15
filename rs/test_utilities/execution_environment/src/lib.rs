@@ -1955,6 +1955,14 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_best_effort_responses(mut self, status: FlagStatus) -> Self {
+        self.execution_config
+            .embedders_config
+            .feature_flags
+            .best_effort_responses = status;
+        self
+    }
+
     pub fn with_time(mut self, time: Time) -> Self {
         self.time = time;
         self

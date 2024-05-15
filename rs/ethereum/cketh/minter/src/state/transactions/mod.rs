@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus};
+use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus, WithdrawalStatus};
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::responses::TransactionStatus;
@@ -19,10 +19,18 @@ use crate::tx::{
 };
 use candid::Principal;
 use ic_ethereum_types::Address;
+use icrc_ledger_types::icrc1::account::Account;
 use minicbor::{Decode, Encode};
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum WithdrawalSearchParameter {
+    ByWithdrawalId(LedgerBurnIndex),
+    ByRecipient(Address),
+    BySenderAccount(Account),
+}
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum WithdrawalRequest {
@@ -80,6 +88,17 @@ impl WithdrawalRequest {
             WithdrawalRequest::CkEth(request) => EventType::AcceptedEthWithdrawalRequest(request),
             WithdrawalRequest::CkErc20(request) => {
                 EventType::AcceptedErc20WithdrawalRequest(request)
+            }
+        }
+    }
+
+    pub fn match_parameter(&self, parameter: &WithdrawalSearchParameter) -> bool {
+        use WithdrawalSearchParameter::*;
+        match parameter {
+            ByWithdrawalId(index) => &self.cketh_ledger_burn_index() == index,
+            ByRecipient(address) => &self.payee() == address,
+            BySenderAccount(Account { owner, subaccount }) => {
+                &self.from() == owner && self.from_subaccount() == &subaccount.map(Subaccount)
             }
         }
     }
@@ -155,20 +174,40 @@ pub struct Erc20WithdrawalRequest {
     pub created_at: u64,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Encode, Decode)]
 pub enum ReimbursementIndex {
+    #[n(0)]
     CkEth {
         /// Burn index on the ckETH ledger
+        #[cbor(n(0), with = "crate::cbor::id")]
         ledger_burn_index: LedgerBurnIndex,
     },
-
+    #[n(1)]
     CkErc20 {
+        #[cbor(n(0), with = "crate::cbor::id")]
         cketh_ledger_burn_index: LedgerBurnIndex,
         /// The ckERC20 ledger canister ID identifying the ledger on which the burn to be reimbursed was made.
+        #[cbor(n(1), with = "crate::cbor::principal")]
         ledger_id: Principal,
         /// Burn index on the ckERC20 ledger
+        #[cbor(n(2), with = "crate::cbor::id")]
         ckerc20_ledger_burn_index: LedgerBurnIndex,
     },
+}
+
+impl From<&WithdrawalRequest> for ReimbursementIndex {
+    fn from(value: &WithdrawalRequest) -> Self {
+        match value {
+            WithdrawalRequest::CkEth(request) => ReimbursementIndex::CkEth {
+                ledger_burn_index: request.ledger_burn_index,
+            },
+            WithdrawalRequest::CkErc20(request) => ReimbursementIndex::CkErc20 {
+                cketh_ledger_burn_index: request.cketh_ledger_burn_index,
+                ledger_id: request.ckerc20_ledger_id,
+                ckerc20_ledger_burn_index: request.ckerc20_ledger_burn_index,
+            },
+        }
+    }
 }
 
 impl ReimbursementIndex {
@@ -222,6 +261,17 @@ pub struct Reimbursed {
     pub reimbursed_amount: CkTokenAmount,
     #[n(3)]
     pub transaction_hash: Option<Hash>,
+}
+
+pub type ReimbursedResult = Result<Reimbursed, ReimbursedError>;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum ReimbursedError {
+    /// Whether reimbursement was minted or not is unknown,
+    /// most likely because there was an unexpected panic in the callback.
+    /// The reimbursement request is quarantined to avoid any double minting and
+    /// will not be further processed without manual intervention.
+    Quarantined,
 }
 
 #[derive(Clone, Eq, PartialEq, Encode, Decode)]
@@ -308,7 +358,10 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 ///    withdrawal with the corresponding amount minus fees.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EthTransactions {
-    pub(in crate::state) withdrawal_requests: VecDeque<WithdrawalRequest>,
+    pub(in crate::state) pending_withdrawal_requests: VecDeque<WithdrawalRequest>,
+    // Processed withdrawal requests (transaction created, sent, or finalized).
+    pub(in crate::state) processed_withdrawal_requests:
+        BTreeMap<LedgerBurnIndex, WithdrawalRequest>,
     pub(in crate::state) created_tx:
         MultiKeyMap<TransactionNonce, LedgerBurnIndex, TransactionRequest>,
     pub(in crate::state) sent_tx:
@@ -317,9 +370,9 @@ pub struct EthTransactions {
         MultiKeyMap<TransactionNonce, LedgerBurnIndex, FinalizedEip1559Transaction>,
     pub(in crate::state) next_nonce: TransactionNonce,
 
-    pub(in crate::state) maybe_reimburse: BTreeMap<LedgerBurnIndex, WithdrawalRequest>,
+    pub(in crate::state) maybe_reimburse: BTreeSet<LedgerBurnIndex>,
     pub(in crate::state) reimbursement_requests: BTreeMap<ReimbursementIndex, ReimbursementRequest>,
-    pub(in crate::state) reimbursed: BTreeMap<ReimbursementIndex, Reimbursed>,
+    pub(in crate::state) reimbursed: BTreeMap<ReimbursementIndex, ReimbursedResult>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -344,7 +397,8 @@ pub enum ResubmitTransactionError {
 impl EthTransactions {
     pub fn new(next_nonce: TransactionNonce) -> Self {
         Self {
-            withdrawal_requests: VecDeque::new(),
+            pending_withdrawal_requests: VecDeque::new(),
+            processed_withdrawal_requests: BTreeMap::new(),
             created_tx: MultiKeyMap::default(),
             sent_tx: MultiKeyMap::default(),
             finalized_tx: MultiKeyMap::default(),
@@ -371,18 +425,14 @@ impl EthTransactions {
 
     pub fn reimbursed_transactions_iter(
         &self,
-    ) -> impl Iterator<Item = (&ReimbursementIndex, &Reimbursed)> {
+    ) -> impl Iterator<Item = (&ReimbursementIndex, &ReimbursedResult)> {
         self.reimbursed.iter()
-    }
-
-    pub fn get_reimbursed_transactions(&self) -> Vec<Reimbursed> {
-        self.reimbursed.values().cloned().collect()
     }
 
     fn find_reimbursed_transaction_by_cketh_ledger_burn_index(
         &self,
         searched_burn_index: &LedgerBurnIndex,
-    ) -> Option<&Reimbursed> {
+    ) -> Option<&ReimbursedResult> {
         self.reimbursed
             .iter()
             .find_map(|(index, value)| match index {
@@ -403,7 +453,7 @@ impl EthTransactions {
         let request = request.into();
         let burn_index = request.cketh_ledger_burn_index();
         if self
-            .withdrawal_requests
+            .pending_withdrawal_requests
             .iter()
             .any(|r| r.cketh_ledger_burn_index() == burn_index)
             || self.created_tx.contains_alt(&burn_index)
@@ -412,14 +462,14 @@ impl EthTransactions {
         {
             panic!("BUG: duplicate ckETH ledger burn index {burn_index}");
         }
-        self.withdrawal_requests.push_back(request);
+        self.pending_withdrawal_requests.push_back(request);
     }
 
     /// Move an existing withdrawal request to the back of the queue.
     pub fn reschedule_withdrawal_request<R: Into<WithdrawalRequest>>(&mut self, request: R) {
         let request = request.into();
         assert_eq!(
-            self.withdrawal_requests
+            self.pending_withdrawal_requests
                 .iter()
                 .filter(|r| r.cketh_ledger_burn_index() == request.cketh_ledger_burn_index())
                 .count(),
@@ -437,13 +487,14 @@ impl EthTransactions {
         transaction: Eip1559TransactionRequest,
     ) {
         let withdrawal_request = self
-            .withdrawal_requests
+            .pending_withdrawal_requests
             .iter()
             .find(|req| req.cketh_ledger_burn_index() == withdrawal_id)
             .cloned()
             .unwrap_or_else(|| panic!("BUG: withdrawal request {withdrawal_id} not found"));
         assert!(
-            self.withdrawal_requests.contains(&withdrawal_request),
+            self.pending_withdrawal_requests
+                .contains(&withdrawal_request),
             "BUG: withdrawal request not found"
         );
         assert_eq!(
@@ -492,8 +543,12 @@ impl EthTransactions {
             ),
             Ok(())
         );
-        self.maybe_reimburse
-            .insert(withdrawal_id, withdrawal_request);
+        assert_eq!(
+            self.processed_withdrawal_requests
+                .insert(withdrawal_id, withdrawal_request),
+            None
+        );
+        assert!(self.maybe_reimburse.insert(withdrawal_id));
     }
 
     pub fn record_signed_transaction(
@@ -643,14 +698,20 @@ impl EthTransactions {
             Ok(())
         );
 
-        let maybe_reimburse = self.maybe_reimburse.remove(&ledger_burn_index).expect(
-            "failed to remove entry from maybe_reimburse map with block index: {ledger_burn_index}",
+        assert!(
+            self.maybe_reimburse.remove(&ledger_burn_index),
+            "failed to remove entry from maybe_reimburse with block index: {ledger_burn_index}",
         );
-        match &maybe_reimburse {
+
+        let request = self.processed_withdrawal_requests
+            .get(&ledger_burn_index)
+            .expect("failed to find entry from processed_withdrawal_requests with block index: {ledger_burn_index}");
+        let index = ReimbursementIndex::from(request);
+        match &request {
             WithdrawalRequest::CkEth(request) => {
                 if receipt.status == TransactionStatus::Failure {
                     self.record_reimbursement_request(
-                        ReimbursementIndex::CkEth { ledger_burn_index },
+                        index,
                         ReimbursementRequest {
                             ledger_burn_index,
                             to: request.from,
@@ -664,11 +725,7 @@ impl EthTransactions {
             WithdrawalRequest::CkErc20(request) => {
                 if receipt.status == TransactionStatus::Failure {
                     self.record_reimbursement_request(
-                        ReimbursementIndex::CkErc20 {
-                            cketh_ledger_burn_index: ledger_burn_index,
-                            ledger_id: request.ckerc20_ledger_id,
-                            ckerc20_ledger_burn_index: request.ckerc20_ledger_burn_index,
-                        },
+                        index,
                         ReimbursementRequest {
                             ledger_burn_index: request.ckerc20_ledger_burn_index,
                             reimbursed_amount: request.withdrawal_amount.change_units(),
@@ -688,10 +745,29 @@ impl EthTransactions {
         request: ReimbursementRequest,
     ) {
         assert_eq!(
+            self.maybe_reimburse.get(&index.withdrawal_id()),
+            None,
+            "BUG: withdrawal request still in maybe_reimburse could lead to double minting!"
+        );
+        assert_eq!(
+            self.reimbursed.get(&index),
+            None,
+            "BUG: reimbursement request was already processed"
+        );
+        assert_eq!(
             self.reimbursement_requests.insert(index.clone(), request),
             None,
             "BUG: reimbursement request for withdrawal {index:?} already exists"
         );
+    }
+
+    /// Quarantine the reimbursement request identified by its index to prevent double minting.
+    /// WARNING!: It's crucial that this method does not panic,
+    /// since it's called inside the clean-up callback, when an unexpected panic did occur before.
+    pub fn record_quarantined_reimbursement(&mut self, index: ReimbursementIndex) {
+        self.reimbursement_requests.remove(&index);
+        self.reimbursed
+            .insert(index, Err(ReimbursedError::Quarantined));
     }
 
     pub fn record_finalized_reimbursement(
@@ -707,58 +783,116 @@ impl EthTransactions {
         assert_eq!(
             self.reimbursed.insert(
                 index,
-                Reimbursed {
+                Ok(Reimbursed {
                     burn_in_block,
                     reimbursed_in_block,
                     reimbursed_amount: reimbursement_request.reimbursed_amount,
                     transaction_hash: reimbursement_request.transaction_hash,
-                },
+                }),
             ),
             None
         );
     }
 
+    pub fn withdrawal_status(
+        &self,
+        parameter: &WithdrawalSearchParameter,
+    ) -> Vec<(
+        &WithdrawalRequest,
+        WithdrawalStatus,
+        Option<&Eip1559TransactionRequest>,
+    )> {
+        // Pending requests matching the given search parameter
+        let pending = self.pending_withdrawal_requests.iter().filter_map(|r| {
+            r.match_parameter(parameter)
+                .then_some((r, WithdrawalStatus::Pending, None))
+        });
+
+        // Processed withdrawal requests matching the given search parameter.
+        let processed = self
+            .processed_withdrawal_requests
+            .values()
+            .filter(|r| r.match_parameter(parameter))
+            .map(|request| {
+                match self.processed_transaction_status(&request.cketh_ledger_burn_index()) {
+                    (RetrieveEthStatus::TxCreated, Some(tx)) => {
+                        (request, WithdrawalStatus::TxCreated, Some(tx))
+                    }
+                    (RetrieveEthStatus::TxSent(sent), Some(tx)) => {
+                        (request, WithdrawalStatus::TxSent(sent), Some(tx))
+                    }
+                    (RetrieveEthStatus::TxFinalized(status), Some(tx)) => {
+                        (request, WithdrawalStatus::TxFinalized(status), Some(tx))
+                    }
+                    _ => {
+                        panic!("Status of processed request is not found {:?}", request)
+                    }
+                }
+            });
+
+        pending.chain(processed).collect()
+    }
+
     pub fn transaction_status(&self, burn_index: &LedgerBurnIndex) -> RetrieveEthStatus {
         if self
-            .withdrawal_requests
+            .pending_withdrawal_requests
             .iter()
             .any(|r| &r.cketh_ledger_burn_index() == burn_index)
         {
             return RetrieveEthStatus::Pending;
         }
+        self.processed_transaction_status(burn_index).0
+    }
 
-        if self.created_tx.contains_alt(burn_index) {
-            return RetrieveEthStatus::TxCreated;
+    fn processed_transaction_status(
+        &self,
+        burn_index: &LedgerBurnIndex,
+    ) -> (RetrieveEthStatus, Option<&Eip1559TransactionRequest>) {
+        if let Some(tx) = self.created_tx.get_alt(burn_index) {
+            return (RetrieveEthStatus::TxCreated, Some(tx.as_ref()));
         }
 
         if let Some(tx) = self.sent_tx.get_alt(burn_index).and_then(|txs| txs.last()) {
-            return RetrieveEthStatus::TxSent(EthTransaction::from(tx.as_ref()));
+            return (
+                RetrieveEthStatus::TxSent(EthTransaction::from(tx.as_ref())),
+                Some(tx.as_ref().as_ref()),
+            );
         }
 
         if let Some(tx) = self.finalized_tx.get_alt(burn_index) {
-            if let Some(reimbursed) =
+            if let Some(Ok(reimbursed)) =
                 self.find_reimbursed_transaction_by_cketh_ledger_burn_index(burn_index)
             {
-                return RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
-                    reimbursed_in_block: reimbursed.reimbursed_in_block.get().into(),
-                    transaction_hash: tx.transaction_hash().to_string(),
-                    reimbursed_amount: reimbursed.reimbursed_amount.into(),
-                });
+                return (
+                    RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
+                        reimbursed_in_block: reimbursed.reimbursed_in_block.get().into(),
+                        transaction_hash: tx.transaction_hash().to_string(),
+                        reimbursed_amount: reimbursed.reimbursed_amount.into(),
+                    }),
+                    Some(tx.as_ref()),
+                );
             }
             if tx.transaction_status() == &TransactionStatus::Failure {
-                return RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
-                    EthTransaction {
-                        transaction_hash: tx.transaction_hash().to_string(),
-                    },
-                ));
+                return (
+                    RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
+                        EthTransaction {
+                            transaction_hash: tx.transaction_hash().to_string(),
+                        },
+                    )),
+                    Some(tx.as_ref()),
+                );
             }
 
-            return RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Success(EthTransaction {
-                transaction_hash: tx.transaction_hash().to_string(),
-            }));
+            return (
+                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Success {
+                    transaction_hash: tx.transaction_hash().to_string(),
+                    effective_transaction_fee: Some(tx.effective_transaction_fee().into()),
+                }),
+                Some(tx.as_ref()),
+            );
         }
 
-        RetrieveEthStatus::NotFound
+        (RetrieveEthStatus::NotFound, None)
     }
 
     pub fn withdrawal_requests_batch(&self, requested_batch_size: usize) -> Vec<WithdrawalRequest> {
@@ -781,11 +915,23 @@ impl EthTransactions {
     }
 
     pub fn withdrawal_requests_iter(&self) -> impl Iterator<Item = &WithdrawalRequest> {
-        self.withdrawal_requests.iter()
+        self.pending_withdrawal_requests.iter()
     }
 
     pub fn withdrawal_requests_len(&self) -> usize {
-        self.withdrawal_requests.len()
+        self.pending_withdrawal_requests.len()
+    }
+
+    pub fn maybe_reimburse_requests_iter(&self) -> impl Iterator<Item = &WithdrawalRequest> {
+        self.processed_withdrawal_requests
+            .iter()
+            .filter_map(|(index, request)| {
+                if self.maybe_reimburse.contains(index) {
+                    Some(request)
+                } else {
+                    None
+                }
+            })
     }
 
     pub fn transactions_to_sign_iter(
@@ -845,6 +991,13 @@ impl EthTransactions {
             .map(|(nonce, index, txs)| (nonce, index, txs.iter().map(|tx| tx.as_ref()).collect()))
     }
 
+    pub fn get_finalized_transaction(
+        &self,
+        burn_index: &LedgerBurnIndex,
+    ) -> Option<&FinalizedEip1559Transaction> {
+        self.finalized_tx.get_alt(burn_index)
+    }
+
     pub fn finalized_transactions_iter(
         &self,
     ) -> impl Iterator<
@@ -862,13 +1015,13 @@ impl EthTransactions {
     }
 
     pub fn has_pending_requests(&self) -> bool {
-        !self.withdrawal_requests.is_empty()
+        !self.pending_withdrawal_requests.is_empty()
             || !self.created_tx.is_empty()
             || !self.sent_tx.is_empty()
     }
 
     fn remove_withdrawal_request(&mut self, request: &WithdrawalRequest) {
-        self.withdrawal_requests.retain(|r| r != request);
+        self.pending_withdrawal_requests.retain(|r| r != request);
     }
 
     fn expect_last_sent_tx_entry<'a>(
@@ -907,8 +1060,8 @@ impl EthTransactions {
         // We can reorder request in `reschedule_withdrawal_request`. The audit log won't
         // reflect this change, so we must sort the queues before comparing them.
         ensure_eq!(
-            sorted_requests(&self.withdrawal_requests),
-            sorted_requests(&other.withdrawal_requests)
+            sorted_requests(&self.pending_withdrawal_requests),
+            sorted_requests(&other.pending_withdrawal_requests)
         );
         ensure_eq!(self.created_tx, other.created_tx);
         ensure_eq!(self.sent_tx, other.sent_tx);
@@ -923,9 +1076,8 @@ impl EthTransactions {
     }
 
     pub fn oldest_incomplete_withdrawal_timestamp(&self) -> Option<u64> {
-        self.withdrawal_requests
-            .iter()
-            .chain(self.maybe_reimburse.values())
+        self.withdrawal_requests_iter()
+            .chain(self.maybe_reimburse_requests_iter())
             .flat_map(|req| req.created_at().into_iter())
             .min()
     }

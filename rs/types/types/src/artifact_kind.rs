@@ -11,7 +11,6 @@ use crate::{
         idkg::{EcdsaMessage, EcdsaMessageAttribute},
         ConsensusMessage,
     },
-    crypto::crypto_hash,
     messages::SignedIngress,
     CountBytes,
 };
@@ -43,7 +42,6 @@ impl ArtifactKind for ConsensusArtifact {
             id: ConsensusMessageId::from(msg),
             attribute: (),
             size: bincode::serialized_size(&msg).unwrap() as usize,
-            integrity_hash: crypto_hash(msg).get(),
         }
     }
 }
@@ -72,7 +70,6 @@ impl ArtifactKind for IngressArtifact {
             id: IngressMessageId::from(msg),
             attribute: (),
             size: msg.count_bytes(),
-            integrity_hash: crypto_hash(msg.binary()).get(),
         }
     }
 }
@@ -101,7 +98,6 @@ impl ArtifactKind for CertificationArtifact {
             id: CertificationMessageId::from(msg),
             attribute: (),
             size: bincode::serialized_size(&msg).unwrap() as usize,
-            integrity_hash: crypto_hash(msg).get(),
         }
     }
 }
@@ -130,7 +126,6 @@ impl ArtifactKind for DkgArtifact {
             id: DkgMessageId::from(msg),
             attribute: (),
             size: bincode::serialized_size(&msg).unwrap() as usize,
-            integrity_hash: crypto_hash(msg).get(),
         }
     }
 }
@@ -159,7 +154,6 @@ impl ArtifactKind for EcdsaArtifact {
             id: EcdsaMessageId::from(msg),
             attribute: EcdsaMessageAttribute::from(msg),
             size: bincode::serialized_size(&msg).unwrap() as usize,
-            integrity_hash: crypto_hash(msg).get(),
         }
     }
 }
@@ -188,7 +182,6 @@ impl ArtifactKind for CanisterHttpArtifact {
             id: msg.clone(),
             attribute: (),
             size: bincode::serialized_size(&msg).unwrap() as usize,
-            integrity_hash: crypto_hash(msg).get(),
         }
     }
 }

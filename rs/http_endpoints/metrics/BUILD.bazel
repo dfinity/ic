@@ -5,13 +5,9 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/config",
-    "//rs/crypto/tls_interfaces",
-    "//rs/interfaces/registry",
     "//rs/monitoring/metrics",
-    "//rs/types/types",
     "@crate_index//:hyper_0_14_27",
     "@crate_index//:prometheus",
-    "@crate_index//:serde",
     "@crate_index//:slog",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",

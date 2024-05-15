@@ -16,14 +16,15 @@ use ic_interfaces::ecdsa::EcdsaPool;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
+use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        idkg::{self, EcdsaBlockReader, HasEcdsaKeyId, TranscriptAttributes},
+        idkg::{self, EcdsaBlockReader, EcdsaKeyTranscript, EcdsaPayload, TranscriptAttributes},
         Block, HasHeight,
     },
     crypto::canister_threshold_sig::idkg::InitialIDkgDealings,
@@ -45,85 +46,66 @@ pub(super) mod signatures;
 /// data blocks to create the initial key transcript.
 pub(crate) fn make_bootstrap_summary(
     subnet_id: SubnetId,
-    key_id: EcdsaKeyId,
+    key_ids: Vec<EcdsaKeyId>,
     height: Height,
 ) -> idkg::Summary {
-    Some(idkg::EcdsaPayload {
-        signature_agreements: BTreeMap::new(),
-        deprecated_ongoing_signatures: BTreeMap::new(),
-        available_quadruples: BTreeMap::new(),
-        quadruples_in_creation: BTreeMap::new(),
-        uid_generator: idkg::EcdsaUIDGenerator::new(subnet_id, height),
-        idkg_transcripts: BTreeMap::new(),
-        ongoing_xnet_reshares: BTreeMap::new(),
-        xnet_reshare_agreements: BTreeMap::new(),
-        key_transcript: idkg::EcdsaKeyTranscript {
-            current: None,
-            next_in_creation: idkg::KeyTranscriptCreation::Begin,
-            key_id,
-            master_key_id: None,
-        },
-    })
+    let key_transcripts = key_ids
+        .into_iter()
+        .map(|key_id| EcdsaKeyTranscript::new(key_id, idkg::KeyTranscriptCreation::Begin))
+        .collect();
+
+    Some(EcdsaPayload::empty(height, subnet_id, key_transcripts))
 }
 
 /// Builds the very first ecdsa summary block. This would trigger the subsequent
 /// data blocks to create the initial key transcript.
 pub(crate) fn make_bootstrap_summary_with_initial_dealings(
     subnet_id: SubnetId,
-    key_id: EcdsaKeyId,
     height: Height,
-    initial_dealings: InitialIDkgDealings,
+    initial_dealings_per_key_id: BTreeMap<EcdsaKeyId, InitialIDkgDealings>,
     log: &ReplicaLogger,
 ) -> Result<idkg::Summary, EcdsaPayloadError> {
-    let mut summary_payload = idkg::EcdsaPayload {
-        signature_agreements: BTreeMap::new(),
-        deprecated_ongoing_signatures: BTreeMap::new(),
-        available_quadruples: BTreeMap::new(),
-        quadruples_in_creation: BTreeMap::new(),
-        uid_generator: idkg::EcdsaUIDGenerator::new(subnet_id, height),
-        idkg_transcripts: BTreeMap::new(),
-        ongoing_xnet_reshares: BTreeMap::new(),
-        xnet_reshare_agreements: BTreeMap::new(),
-        key_transcript: idkg::EcdsaKeyTranscript {
-            current: None,
-            next_in_creation: idkg::KeyTranscriptCreation::Begin,
-            key_id,
-            master_key_id: None,
-        },
-    };
+    let mut idkg_transcripts = BTreeMap::new();
+    let mut key_transcripts = Vec::new();
 
-    match idkg::unpack_reshare_of_unmasked_params(height, initial_dealings.params()) {
-        Some((params, transcript)) => {
-            summary_payload
-                .idkg_transcripts
-                .insert(transcript.transcript_id, transcript);
-            summary_payload.key_transcript.next_in_creation =
-                idkg::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((
-                    Box::new(initial_dealings),
-                    params,
+    for (key_id, initial_dealings) in initial_dealings_per_key_id {
+        match idkg::unpack_reshare_of_unmasked_params(height, initial_dealings.params()) {
+            Some((params, transcript)) => {
+                idkg_transcripts.insert(transcript.transcript_id, transcript);
+
+                key_transcripts.push(EcdsaKeyTranscript::new(
+                    key_id,
+                    idkg::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((
+                        Box::new(initial_dealings),
+                        params,
+                    )),
                 ));
+            }
+            None => {
+                // Leave the feature disabled if the initial dealings are incorrect.
+                warn!(
+                    log,
+                    "make_ecdsa_genesis_summary(): failed to unpack initial dealings"
+                );
 
-            info!(
-                log,
-                "make_ecdsa_genesis_summary(): height = {}, key_transcript = [{}]",
-                height,
-                summary_payload.key_transcript
-            );
-        }
-        None => {
-            // Leave the feature disabled if the initial dealings are incorrect.
-            warn!(
-                log,
-                "make_ecdsa_genesis_summary(): failed to unpack initial dealings"
-            );
-
-            return Err(EcdsaPayloadError::InitialIDkgDealingsNotUnmaskedParams(
-                Box::new(initial_dealings),
-            ));
+                return Err(EcdsaPayloadError::InitialIDkgDealingsNotUnmaskedParams(
+                    Box::new(initial_dealings),
+                ));
+            }
         }
     }
 
-    Ok(Some(summary_payload))
+    info!(
+        log,
+        "make_ecdsa_genesis_summary(): height = {}, key_transcript = [{:?}]",
+        height,
+        key_transcripts
+    );
+
+    let mut payload = EcdsaPayload::empty(height, subnet_id, key_transcripts);
+    payload.idkg_transcripts = idkg_transcripts;
+
+    Ok(Some(payload))
 }
 
 /// Creates a threshold ECDSA summary payload.
@@ -171,13 +153,19 @@ pub(crate) fn create_summary_payload(
         // Keys already held by existing subnets can only be re-shared when creating
         // a new subnet, which means the genesis summary ECDSA payload is not empty
         // and we won't reach here.
-        let key_id = ecdsa_config.key_ids[0].clone();
         info!(
             log,
-            "Start to create ECDSA key {} on subnet {} at height {}", key_id, subnet_id, height
+            "Start to create ECDSA keys {:?} on subnet {} at height {}",
+            ecdsa_config.key_ids,
+            subnet_id,
+            height
         );
 
-        return Ok(make_bootstrap_summary(subnet_id, key_id, height));
+        return Ok(make_bootstrap_summary(
+            subnet_id,
+            ecdsa_config.key_ids,
+            height,
+        ));
     };
 
     let block_reader = block_chain_reader(
@@ -208,111 +196,101 @@ fn create_summary_payload_helper(
     height: Height,
     curr_interval_registry_version: RegistryVersion,
     next_interval_registry_version: RegistryVersion,
-    ecdsa_payload: &idkg::EcdsaPayload,
+    ecdsa_payload: &EcdsaPayload,
     ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<idkg::Summary, EcdsaPayloadError> {
-    let current_key_transcript = ecdsa_payload.key_transcript.current.as_ref();
+    let mut key_transcripts = BTreeMap::new();
+    let mut new_key_transcripts = BTreeSet::new();
 
-    let created_key_transcript =
-        key_transcript::get_created_key_transcript(&ecdsa_payload.key_transcript, block_reader)?;
+    for (key_id, key_transcript) in &ecdsa_payload.key_transcripts {
+        let current_key_transcript = key_transcript.current.as_ref();
 
-    // Registry version as recorded in the (new) current key transcript if it exists.
-    // Otherwise use curr_interval_registry_version.
-    let curr_key_registry_version = created_key_transcript
-        .as_ref()
-        .map(idkg::UnmaskedTranscriptWithAttributes::registry_version)
-        .or_else(|| {
-            current_key_transcript.map(idkg::UnmaskedTranscriptWithAttributes::registry_version)
-        })
-        .unwrap_or(curr_interval_registry_version);
+        let created_key_transcript =
+            key_transcript::get_created_key_transcript(key_transcript, block_reader)?;
 
-    if created_key_transcript.is_none() {
-        if let Some(metrics) = ecdsa_payload_metrics {
-            metrics.critical_error_ecdsa_key_transcript_missing.inc();
+        // Registry version as recorded in the (new) current key transcript if it exists.
+        // Otherwise use curr_interval_registry_version.
+        let curr_key_registry_version = created_key_transcript
+            .as_ref()
+            .map(idkg::UnmaskedTranscriptWithAttributes::registry_version)
+            .or_else(|| {
+                current_key_transcript.map(idkg::UnmaskedTranscriptWithAttributes::registry_version)
+            })
+            .unwrap_or(curr_interval_registry_version);
+
+        if created_key_transcript.is_none() {
+            if let Some(metrics) = ecdsa_payload_metrics {
+                metrics.critical_error_ecdsa_key_transcript_missing.inc();
+            }
+
+            error!(
+                log,
+                "{}: Key not created in previous interval, \
+                keep trying in next interval(height = {}), key_transcript = {}",
+                CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING,
+                height,
+                key_transcript
+            );
         }
 
-        error!(
-            log,
-            "{}: Key not created in previous interval, \
-                keep trying in next interval(height = {}), key_transcript = {}",
-            CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING,
-            height,
-            ecdsa_payload.key_transcript
+        let is_new_key_transcript = created_key_transcript.as_ref().is_some_and(|transcript| {
+            Some(transcript.transcript_id())
+                != current_key_transcript.map(idkg::UnmaskedTranscriptWithAttributes::transcript_id)
+        });
+
+        // Check for membership change, start next key creation only when both of the following are
+        // satisfied:
+        // 1. Time to reshare key transcript (either due to membership change, or node key change)
+        // 2. We don't have a key transcript creation in progress.
+        let next_in_creation = if is_time_to_reshare_key_transcript(
+            registry_client,
+            curr_key_registry_version,
+            next_interval_registry_version,
+            subnet_id,
+        )? && created_key_transcript.is_some()
+        {
+            info!(
+                log,
+                "Noticed subnet membership or mega encryption key change for key id {}, \
+                will start key_transcript_creation: height = {} \
+                current_version = {}, next_version = {}",
+                key_id,
+                height,
+                curr_key_registry_version,
+                next_interval_registry_version
+            );
+            idkg::KeyTranscriptCreation::Begin
+        } else {
+            // No change, just carry forward the next_in_creation transcript
+            key_transcript.next_in_creation.clone()
+        };
+
+        key_transcripts.insert(
+            key_id.clone(),
+            key_transcript.update(created_key_transcript, next_in_creation),
         );
+        if is_new_key_transcript {
+            new_key_transcripts.insert(key_id);
+        }
     }
 
-    let is_new_key_transcript = created_key_transcript.as_ref().is_some_and(|transcript| {
-        Some(transcript.transcript_id())
-            != current_key_transcript.map(idkg::UnmaskedTranscriptWithAttributes::transcript_id)
+    let mut ecdsa_summary = ecdsa_payload.clone();
+    ecdsa_summary.key_transcripts = key_transcripts;
+    ecdsa_summary.idkg_transcripts.clear();
+
+    // We keep available pre-signatures for now, even if the key transcript changed, as we don't know if
+    // they are part of ongoing signature requests. Instead we will purge them once the certified
+    // state height catches up with the height of this summary block.
+    // We do purge the pre-signatures in creation, though.
+    ecdsa_summary
+        .pre_signatures_in_creation
+        .retain(|_, pre_sig| !new_key_transcripts.contains(&pre_sig.key_id()));
+    // This will clear the current ongoing reshares, and the execution requests will be restarted
+    // with the new key and different transcript IDs.
+    ecdsa_summary.ongoing_xnet_reshares.retain(|request, _| {
+        !new_key_transcripts.contains(&MasterPublicKeyId::Ecdsa(request.key_id.clone()))
     });
-
-    // Check for membership change, start next key creation only when both of the following are
-    // satisfied:
-    // 1. Time to reshare key transcript (either due to membership change, or node key change)
-    // 2. We don't have a key transcript creation in progress.
-    let next_in_creation = if is_time_to_reshare_key_transcript(
-        registry_client,
-        curr_key_registry_version,
-        next_interval_registry_version,
-        subnet_id,
-    )? && created_key_transcript.is_some()
-    {
-        info!(
-            log,
-            "Noticed subnet membership or mega encryption key change, \
-            will start key_transcript_creation: height = {} \
-            current_version = {}, next_version = {}",
-            height,
-            curr_key_registry_version,
-            next_interval_registry_version
-        );
-        idkg::KeyTranscriptCreation::Begin
-    } else {
-        // No change, just carry forward the next_in_creation transcript
-        ecdsa_payload.key_transcript.next_in_creation.clone()
-    };
-
-    let key_transcript = idkg::EcdsaKeyTranscript {
-        // Keep using previous key transcript if the next hasn't been created
-        current: created_key_transcript.or_else(|| current_key_transcript.cloned()),
-        next_in_creation,
-        key_id: ecdsa_payload.key_transcript.key_id.clone(),
-        master_key_id: None,
-    };
-
-    let mut ecdsa_summary = if is_new_key_transcript {
-        idkg::EcdsaPayload {
-            signature_agreements: ecdsa_payload.signature_agreements.clone(),
-            deprecated_ongoing_signatures: BTreeMap::new(),
-            // We keep available quadruples for now, even if the key transcript
-            // changed, as we don't know if they are part of ongoing signature
-            // requests. Instead we will purge them once the certified state
-            // height catches up with the height of this summary block.
-            available_quadruples: ecdsa_payload.available_quadruples.clone(),
-            quadruples_in_creation: BTreeMap::new(),
-            uid_generator: ecdsa_payload.uid_generator.clone(),
-            // This will clear the current ongoing reshares, and
-            // the execution requests will be restarted with the
-            // new key and different transcript IDs.
-            ongoing_xnet_reshares: BTreeMap::new(),
-            xnet_reshare_agreements: ecdsa_payload.xnet_reshare_agreements.clone(),
-            idkg_transcripts: BTreeMap::new(),
-            key_transcript,
-        }
-    } else {
-        idkg::EcdsaPayload {
-            signature_agreements: ecdsa_payload.signature_agreements.clone(),
-            deprecated_ongoing_signatures: BTreeMap::new(),
-            available_quadruples: ecdsa_payload.available_quadruples.clone(),
-            quadruples_in_creation: ecdsa_payload.quadruples_in_creation.clone(),
-            uid_generator: ecdsa_payload.uid_generator.clone(),
-            ongoing_xnet_reshares: ecdsa_payload.ongoing_xnet_reshares.clone(),
-            xnet_reshare_agreements: ecdsa_payload.xnet_reshare_agreements.clone(),
-            idkg_transcripts: BTreeMap::new(),
-            key_transcript,
-        }
-    };
 
     ecdsa_summary.uid_generator.update_height(height)?;
     update_summary_refs(height, &mut ecdsa_summary, block_reader)?;
@@ -321,7 +299,7 @@ fn create_summary_payload_helper(
 
 fn update_summary_refs(
     height: Height,
-    summary: &mut idkg::EcdsaPayload,
+    summary: &mut EcdsaPayload,
     block_reader: &dyn EcdsaBlockReader,
 ) -> Result<(), EcdsaPayloadError> {
     // Gather the refs and update them to point to the new
@@ -468,23 +446,24 @@ pub(crate) fn create_data_payload(
     )?;
 
     if let Some(ecdsa_payload) = &new_payload {
-        let is_key_transcript_created = |payload: &idkg::EcdsaPayload| {
+        let is_key_transcript_created = |key_transcript: &EcdsaKeyTranscript| {
             matches!(
-                payload.key_transcript.next_in_creation,
+                key_transcript.next_in_creation,
                 idkg::KeyTranscriptCreation::Created(_)
             )
         };
-        if is_key_transcript_created(ecdsa_payload)
-            && !parent_block
-                .payload
-                .as_ref()
-                .as_ecdsa()
-                .is_some_and(is_key_transcript_created)
-        {
-            ecdsa_payload_metrics.payload_metrics_inc(
-                "key_transcripts_created",
-                ecdsa_payload.key_transcript.key_id(),
-            );
+
+        for (key_id, key_transcript) in &ecdsa_payload.key_transcripts {
+            if is_key_transcript_created(key_transcript)
+                && !parent_block
+                    .payload
+                    .as_ref()
+                    .as_ecdsa()
+                    .and_then(|ecdsa_payload| ecdsa_payload.key_transcripts.get(key_id))
+                    .is_some_and(is_key_transcript_created)
+            {
+                ecdsa_payload_metrics.payload_metrics_inc("key_transcripts_created", Some(key_id));
+            }
         }
 
         ecdsa_payload_metrics.report(ecdsa_payload);
@@ -510,7 +489,7 @@ pub(crate) fn create_data_payload_helper(
     registry_client: &dyn RegistryClient,
     ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
     log: &ReplicaLogger,
-) -> Result<Option<idkg::EcdsaPayload>, EcdsaPayloadError> {
+) -> Result<Option<EcdsaPayload>, EcdsaPayloadError> {
     let height = parent_block.height().increment();
     let summary = summary_block.payload.as_ref().as_summary();
 
@@ -574,11 +553,12 @@ pub(crate) fn create_data_payload_helper(
         ecdsa_payload_metrics,
         log,
     )?;
+
     Ok(Some(ecdsa_payload))
 }
 
 pub(crate) fn create_data_payload_helper_2(
-    ecdsa_payload: &mut idkg::EcdsaPayload,
+    ecdsa_payload: &mut EcdsaPayload,
     height: Height,
     context_time: Time,
     ecdsa_config: &EcdsaConfig,
@@ -595,11 +575,11 @@ pub(crate) fn create_data_payload_helper_2(
     log: &ReplicaLogger,
 ) -> Result<(), EcdsaPayloadError> {
     // Check if we are creating a new key, if so, start using it immediately.
-    if ecdsa_payload.key_transcript.current.is_none() {
-        ecdsa_payload.key_transcript.current = key_transcript::get_created_key_transcript(
-            &ecdsa_payload.key_transcript,
-            block_reader,
-        )?;
+    for key_transcript in ecdsa_payload.key_transcripts.values_mut() {
+        if key_transcript.current.is_none() {
+            key_transcript.current =
+                key_transcript::get_created_key_transcript(key_transcript, block_reader)?;
+        }
     }
 
     ecdsa_payload.uid_generator.update_height(height)?;
@@ -623,25 +603,39 @@ pub(crate) fn create_data_payload_helper_2(
 
     // We count the number of quadruples in the payload that were already matched,
     // such that they can be replenished.
-    let matched_quadruples = all_signing_requests
-        .values()
-        .filter_map(|context| context.matched_quadruple.as_ref())
-        .filter(|(qid, _)| ecdsa_payload.available_quadruples.contains_key(qid))
-        .count();
-    quadruples::make_new_quadruples_if_needed(ecdsa_config, ecdsa_payload, matched_quadruples);
+    let mut matched_quadruples_per_key_id = BTreeMap::new();
 
-    let mut new_transcripts =
-        quadruples::update_quadruples_in_creation(ecdsa_payload, transcript_builder, height, log)?;
-    if let Some(new_transcript) = key_transcript::update_next_key_transcript(
-        receivers,
-        next_interval_registry_version,
+    for context in all_signing_requests.values() {
+        if context
+            .matched_quadruple
+            .as_ref()
+            .is_some_and(|(qid, _)| ecdsa_payload.available_pre_signatures.contains_key(qid))
+        {
+            *matched_quadruples_per_key_id
+                .entry(MasterPublicKeyId::Ecdsa(context.key_id.clone()))
+                .or_insert(0) += 1;
+        }
+    }
+
+    quadruples::make_new_quadruples_if_needed(
+        ecdsa_config,
         ecdsa_payload,
-        transcript_builder,
-        height,
-        log,
-    )? {
-        new_transcripts.push(new_transcript);
-    };
+        &matched_quadruples_per_key_id,
+    );
+
+    let new_transcripts = [
+        quadruples::update_quadruples_in_creation(ecdsa_payload, transcript_builder, height, log)?,
+        key_transcript::update_next_key_transcripts(
+            receivers,
+            next_interval_registry_version,
+            ecdsa_payload,
+            transcript_builder,
+            height,
+            log,
+        )?,
+    ]
+    .into_iter()
+    .flatten();
 
     // Drop transcripts from last round and keep only the
     // ones created in this round.
@@ -693,6 +687,7 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
     use ic_types::batch::BatchPayload;
     use ic_types::consensus::dkg::{Dealings, Summary};
+    use ic_types::consensus::idkg::common::PreSignatureRef;
     use ic_types::consensus::idkg::EcdsaPayload;
     use ic_types::consensus::idkg::QuadrupleId;
     use ic_types::consensus::idkg::ReshareOfUnmaskedParams;
@@ -719,10 +714,11 @@ mod tests {
         current_key_transcript: (idkg::UnmaskedTranscript, IDkgTranscript),
     ) -> idkg::EcdsaPayload {
         let mut ret = empty_ecdsa_payload(subnet_id);
-        ret.key_transcript.current = Some(idkg::UnmaskedTranscriptWithAttributes::new(
-            current_key_transcript.1.to_attributes(),
-            current_key_transcript.0,
-        ));
+        ret.single_key_transcript_mut().current =
+            Some(idkg::UnmaskedTranscriptWithAttributes::new(
+                current_key_transcript.1.to_attributes(),
+                current_key_transcript.0,
+            ));
         ret
     }
 
@@ -873,8 +869,8 @@ mod tests {
             ..EcdsaConfig::default()
         };
 
-        assert_eq!(ecdsa_payload.quadruples_in_creation.len(), 0);
-        assert_eq!(ecdsa_payload.available_quadruples.len(), 2);
+        assert_eq!(ecdsa_payload.pre_signatures_in_creation.len(), 0);
+        assert_eq!(ecdsa_payload.available_pre_signatures.len(), 2);
 
         create_data_payload_helper_2(
             &mut ecdsa_payload,
@@ -895,8 +891,8 @@ mod tests {
         )
         .unwrap();
 
-        let num_quadruples_in_creation = ecdsa_payload.quadruples_in_creation.len() as u32;
-        let num_available_quadruples = ecdsa_payload.available_quadruples.len() as u32;
+        let num_quadruples_in_creation = ecdsa_payload.pre_signatures_in_creation.len() as u32;
+        let num_available_quadruples = ecdsa_payload.available_pre_signatures.len() as u32;
         // The two matched quadruples remain
         // in available_quadruples.
         assert_eq!(num_available_quadruples, 2);
@@ -943,7 +939,7 @@ mod tests {
         ]);
 
         assert_eq!(ecdsa_payload.signature_agreements.len(), 0);
-        assert_eq!(ecdsa_payload.available_quadruples.len(), 2);
+        assert_eq!(ecdsa_payload.available_pre_signatures.len(), 2);
 
         let signature_builder = TestEcdsaSignatureBuilder::new();
         signatures::update_signature_agreements(
@@ -969,9 +965,13 @@ mod tests {
         );
 
         // The quadruple matched with the expired context should be deleted
-        assert_eq!(ecdsa_payload.available_quadruples.len(), 1);
+        assert_eq!(ecdsa_payload.available_pre_signatures.len(), 1);
         assert_eq!(
-            ecdsa_payload.available_quadruples.keys().next().unwrap(),
+            ecdsa_payload
+                .available_pre_signatures
+                .keys()
+                .next()
+                .unwrap(),
             &matched_quadruple_id
         );
     }
@@ -1001,7 +1001,7 @@ mod tests {
         ]);
 
         assert_eq!(ecdsa_payload.signature_agreements.len(), 0);
-        assert_eq!(ecdsa_payload.available_quadruples.len(), 2);
+        assert_eq!(ecdsa_payload.available_pre_signatures.len(), 2);
 
         let signature_builder = TestEcdsaSignatureBuilder::new();
         signatures::update_signature_agreements(
@@ -1038,7 +1038,7 @@ mod tests {
         );
 
         // The quadruple matched with the expired context should not be deleted
-        assert_eq!(ecdsa_payload.available_quadruples.len(), 2);
+        assert_eq!(ecdsa_payload.available_pre_signatures.len(), 2);
     }
 
     #[test]
@@ -1186,17 +1186,18 @@ mod tests {
             let key_id = fake_ecdsa_key_id();
             let mut ecdsa_payload =
                 empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
-            ecdsa_payload.key_transcript.current = Some(current_key_transcript.clone());
+            ecdsa_payload.single_key_transcript_mut().current =
+                Some(current_key_transcript.clone());
             let (quadruple_id_1, quadruple_id_2) = (
                 ecdsa_payload.uid_generator.next_quadruple_id(),
                 ecdsa_payload.uid_generator.next_quadruple_id(),
             );
             ecdsa_payload
-                .available_quadruples
-                .insert(quadruple_id_1, quad_1.clone());
+                .available_pre_signatures
+                .insert(quadruple_id_1, PreSignatureRef::Ecdsa(quad_1.clone()));
             ecdsa_payload
-                .available_quadruples
-                .insert(quadruple_id_2, quad_2.clone());
+                .available_pre_signatures
+                .insert(quadruple_id_2, PreSignatureRef::Ecdsa(quad_2.clone()));
 
             let req_1 = create_reshare_request(1, 1);
             ecdsa_payload
@@ -1216,7 +1217,7 @@ mod tests {
                     env.newest_registry_version,
                     &mut ecdsa_payload.uid_generator,
                     key_id.clone(),
-                    &mut ecdsa_payload.quadruples_in_creation,
+                    &mut ecdsa_payload.pre_signatures_in_creation,
                 );
             let kappa_transcript = {
                 let param = kappa_config_ref.as_ref();
@@ -1243,7 +1244,7 @@ mod tests {
             assert_eq!(result.len(), 1);
             add_expected_transcripts(
                 ecdsa_payload
-                    .quadruples_in_creation
+                    .pre_signatures_in_creation
                     .values()
                     .next()
                     .unwrap()
@@ -1251,7 +1252,7 @@ mod tests {
             );
 
             let mut data_payload = ecdsa_payload.clone();
-            data_payload.key_transcript.next_in_creation =
+            data_payload.single_key_transcript_mut().next_in_creation =
                 idkg::KeyTranscriptCreation::Created(key_transcript_ref);
             let parent_block_payload = BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
@@ -1268,8 +1269,9 @@ mod tests {
             // Add a summary block after the payload block
             let new_summary_height = parent_block_height.increment();
             let mut summary = ecdsa_payload.clone();
-            summary.key_transcript.current = Some(current_key_transcript);
-            summary.key_transcript.next_in_creation = idkg::KeyTranscriptCreation::Begin;
+            summary.single_key_transcript_mut().current = Some(current_key_transcript);
+            summary.single_key_transcript_mut().next_in_creation =
+                idkg::KeyTranscriptCreation::Begin;
             assert_ne!(
                 summary
                     .single_key_transcript()
@@ -1280,12 +1282,12 @@ mod tests {
                     .height,
                 new_summary_height
             );
-            for available_quadruple in summary.available_quadruples.values() {
+            for available_quadruple in summary.available_pre_signatures.values() {
                 for transcript_ref in available_quadruple.get_refs() {
                     assert_ne!(transcript_ref.height, new_summary_height);
                 }
             }
-            for quadruple_in_creation in summary.quadruples_in_creation.values() {
+            for quadruple_in_creation in summary.pre_signatures_in_creation.values() {
                 for transcript_ref in quadruple_in_creation.get_refs() {
                     assert_ne!(transcript_ref.height, new_summary_height);
                 }
@@ -1325,12 +1327,12 @@ mod tests {
                     .height,
                 new_summary_height
             );
-            for available_quadruple in summary.available_quadruples.values() {
+            for available_quadruple in summary.available_pre_signatures.values() {
                 for transcript_ref in available_quadruple.get_refs() {
                     assert_eq!(transcript_ref.height, new_summary_height);
                 }
             }
-            for quadruple_in_creation in summary.quadruples_in_creation.values() {
+            for quadruple_in_creation in summary.pre_signatures_in_creation.values() {
                 for transcript_ref in quadruple_in_creation.get_refs() {
                     assert_eq!(transcript_ref.height, new_summary_height);
                 }
@@ -1426,13 +1428,14 @@ mod tests {
             let uid_generator = &mut ecdsa_payload.uid_generator;
             let quadruple_id_1 = uid_generator.next_quadruple_id();
             let quadruple_id_2 = uid_generator.next_quadruple_id();
-            ecdsa_payload.key_transcript.current = Some(current_key_transcript.clone());
+            ecdsa_payload.single_key_transcript_mut().current =
+                Some(current_key_transcript.clone());
             ecdsa_payload
-                .available_quadruples
-                .insert(quadruple_id_1, quad_1);
+                .available_pre_signatures
+                .insert(quadruple_id_1, PreSignatureRef::Ecdsa(quad_1));
             ecdsa_payload
-                .available_quadruples
-                .insert(quadruple_id_2, quad_2);
+                .available_pre_signatures
+                .insert(quadruple_id_2, PreSignatureRef::Ecdsa(quad_2));
 
             let req_1 = create_reshare_request(1, 1);
             ecdsa_payload
@@ -1452,7 +1455,7 @@ mod tests {
                     env.newest_registry_version,
                     &mut ecdsa_payload.uid_generator,
                     key_id.clone(),
-                    &mut ecdsa_payload.quadruples_in_creation,
+                    &mut ecdsa_payload.pre_signatures_in_creation,
                 );
             let kappa_transcript = {
                 let param = kappa_config_ref.as_ref();
@@ -1491,7 +1494,8 @@ mod tests {
             );
 
             let mut data_payload = ecdsa_payload.clone();
-            data_payload.key_transcript.next_in_creation = idkg::KeyTranscriptCreation::Begin;
+            data_payload.single_key_transcript_mut().next_in_creation =
+                idkg::KeyTranscriptCreation::Begin;
             let parent_block_payload = BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
                 dealings: Dealings::new_empty(summary_height),
@@ -1508,7 +1512,7 @@ mod tests {
 
             // Add a summary block after the payload block and update the refs
             let mut summary = ecdsa_payload.clone();
-            summary.key_transcript.current = Some(current_key_transcript);
+            summary.single_key_transcript_mut().current = Some(current_key_transcript);
             let block_reader = block_chain_reader(
                 &pool_reader,
                 &pool_reader.get_highest_summary_block(),
@@ -1544,8 +1548,8 @@ mod tests {
             assert!(!summary.signature_agreements.is_empty());
             assert!(reported > 0);
             assert!(unreported > 0);
-            assert!(!summary.available_quadruples.is_empty());
-            assert!(!summary.quadruples_in_creation.is_empty());
+            assert!(!summary.available_pre_signatures.is_empty());
+            assert!(!summary.pre_signatures_in_creation.is_empty());
             assert!(!summary.idkg_transcripts.is_empty());
             assert!(!summary.ongoing_xnet_reshares.is_empty());
             let (reported, unreported) = {
@@ -1697,8 +1701,8 @@ mod tests {
 
             // Initial bootstrap payload should be created successfully
             let mut payload_0 =
-                make_bootstrap_summary(subnet_id, key_id.clone(), Height::from(0)).unwrap();
-            payload_0.key_transcript = key_transcript;
+                make_bootstrap_summary(subnet_id, vec![key_id.clone()], Height::from(0)).unwrap();
+            *payload_0.single_key_transcript_mut() = key_transcript;
 
             // A new summary payload should be created successfully, with next_in_creation
             // set to Begin (membership changed).
@@ -1733,7 +1737,7 @@ mod tests {
             };
 
             let mut payload_2 = payload_1.clone();
-            payload_2.key_transcript = key_transcript;
+            *payload_2.single_key_transcript_mut() = key_transcript;
 
             block_reader
                 .add_transcript(*reshare_key_transcript_ref.as_ref(), reshare_key_transcript);
@@ -1824,8 +1828,8 @@ mod tests {
             };
 
             let mut payload_0 =
-                make_bootstrap_summary(subnet_id, key_id.clone(), Height::from(0)).unwrap();
-            payload_0.key_transcript = key_transcripts;
+                make_bootstrap_summary(subnet_id, vec![key_id.clone()], Height::from(0)).unwrap();
+            *payload_0.single_key_transcript_mut() = key_transcripts;
 
             // Add some quadruples and xnet reshares
             let derivation_path = ExtendedDerivationPath {
@@ -1845,9 +1849,9 @@ mod tests {
                 &mut rng,
             );
             let test_inputs = TestSigInputs::from(&sig_inputs);
-            payload_0.available_quadruples.insert(
+            payload_0.available_pre_signatures.insert(
                 payload_0.uid_generator.next_quadruple_id(),
-                test_inputs.sig_inputs_ref.presig_quadruple_ref.clone(),
+                PreSignatureRef::Ecdsa(test_inputs.sig_inputs_ref.presig_quadruple_ref.clone()),
             );
             for (transcript_ref, transcript) in test_inputs.idkg_transcripts {
                 block_reader.add_transcript(transcript_ref, transcript);
@@ -1857,7 +1861,7 @@ mod tests {
                 env.newest_registry_version,
                 &mut payload_0.uid_generator,
                 key_id.clone(),
-                &mut payload_0.quadruples_in_creation,
+                &mut payload_0.pre_signatures_in_creation,
             );
             payload_0.ongoing_xnet_reshares.insert(
                 create_reshare_request(1, 1),
@@ -1896,12 +1900,12 @@ mod tests {
             assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 0);
             // Quadruples and xnet reshares should still be unchanged:
             assert_eq!(
-                payload_0.available_quadruples.len(),
-                payload_1.available_quadruples.len()
+                payload_0.available_pre_signatures.len(),
+                payload_1.available_pre_signatures.len()
             );
             assert_eq!(
-                payload_0.quadruples_in_creation.len(),
-                payload_1.quadruples_in_creation.len()
+                payload_0.pre_signatures_in_creation.len(),
+                payload_1.pre_signatures_in_creation.len()
             );
             assert_eq!(
                 payload_0.ongoing_xnet_reshares.len(),
@@ -1946,12 +1950,12 @@ mod tests {
             assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 1);
             // Quadruples and xnet reshares should still be unchanged:
             assert_eq!(
-                payload_2.available_quadruples.len(),
-                payload_1.available_quadruples.len()
+                payload_2.available_pre_signatures.len(),
+                payload_1.available_pre_signatures.len()
             );
             assert_eq!(
-                payload_2.quadruples_in_creation.len(),
-                payload_1.quadruples_in_creation.len()
+                payload_2.pre_signatures_in_creation.len(),
+                payload_1.pre_signatures_in_creation.len()
             );
             assert_eq!(
                 payload_2.ongoing_xnet_reshares.len(),
@@ -1969,7 +1973,7 @@ mod tests {
             let mut key_transcript = payload_2.single_key_transcript().clone();
             key_transcript.next_in_creation = idkg::KeyTranscriptCreation::Created(transcript_ref);
             let mut payload_3 = payload_2.clone();
-            payload_3.key_transcript = key_transcript.clone();
+            *payload_3.single_key_transcript_mut() = key_transcript.clone();
 
             let payload_4 = create_summary_payload_helper(
                 subnet_id,
@@ -2004,13 +2008,13 @@ mod tests {
             assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 1);
 
             // Now, quadruples and xnet reshares should be purged
-            assert!(payload_4.quadruples_in_creation.is_empty());
+            assert!(payload_4.pre_signatures_in_creation.is_empty());
             assert!(payload_4.ongoing_xnet_reshares.is_empty());
             // Available quadruples cannot be purged yet,
             // as we don't know if they are matched to ongoing signature requests.
             assert_eq!(
-                payload_4.available_quadruples.len(),
-                payload_3.available_quadruples.len()
+                payload_4.available_pre_signatures.len(),
+                payload_3.available_pre_signatures.len()
             );
 
             let transcript_builder = TestEcdsaTranscriptBuilder::new();
@@ -2046,8 +2050,8 @@ mod tests {
             // Quadruples still cannot be deleted, as we haven't seen the state
             // at the summary height yet
             assert_eq!(
-                payload_4.available_quadruples.len(),
-                payload_5.available_quadruples.len()
+                payload_4.available_pre_signatures.len(),
+                payload_5.available_pre_signatures.len()
             );
 
             // Create another data payload, this time the referenced certified height
@@ -2072,7 +2076,7 @@ mod tests {
             )
             .unwrap();
             // Now, available quadruples referencing the old key transcript are deleted.
-            assert!(payload_6.available_quadruples.is_empty());
+            assert!(payload_6.available_pre_signatures.is_empty());
         })
     }
 
@@ -2105,7 +2109,7 @@ mod tests {
             };
 
             // Step 1: initial bootstrap payload should be created successfully
-            let payload_0 = make_bootstrap_summary(subnet_id, key_id, Height::from(0));
+            let payload_0 = make_bootstrap_summary(subnet_id, vec![key_id], Height::from(0));
             assert!(payload_0.is_some());
             let payload_0 = payload_0.unwrap();
 
@@ -2249,9 +2253,8 @@ mod tests {
             // Step 1: initial bootstrap payload should be created successfully
             let payload_0 = make_bootstrap_summary_with_initial_dealings(
                 subnet_id,
-                key_id,
                 Height::from(0),
-                initial_dealings,
+                BTreeMap::from([(key_id, initial_dealings)]),
                 &no_op_logger(),
             );
             assert_matches!(payload_0, Ok(Some(_)));

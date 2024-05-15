@@ -1,7 +1,7 @@
 use ic_agent::agent::ApiBoundaryNode;
 use url::Url;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Node {
     pub domain: String,
 }
@@ -14,9 +14,15 @@ impl Node {
     }
 }
 
+impl Node {
+    pub fn to_routing_url(&self) -> Url {
+        Url::parse(&format!("https://{}/api/v2/", self.domain)).expect("failed to parse URL")
+    }
+}
+
 impl From<Node> for Url {
     fn from(node: Node) -> Self {
-        Url::parse(&format!("https://{}/api/v2/", node.domain)).expect("failed to parse URL")
+        Url::parse(&format!("https://{}", node.domain)).expect("failed to parse URL")
     }
 }
 

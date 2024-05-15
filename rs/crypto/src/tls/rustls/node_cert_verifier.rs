@@ -1,9 +1,7 @@
 use crate::tls::tls_cert_from_registry;
 use ic_crypto_tls_cert_validation::ValidTlsCertificate;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsPublicKeyCert};
-use ic_crypto_utils_tls::{
-    node_id_from_cert_subject_common_name, tls_pubkey_cert_from_rustls_certs,
-};
+use ic_crypto_utils_tls::node_id_from_rustls_certs;
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::{NodeId, RegistryVersion, Time};
@@ -155,17 +153,16 @@ fn verify_node_cert(
     current_time: Time,
 ) -> Result<(), TLSError> {
     ensure_intermediate_certs_empty(intermediates)?;
-    let end_entity = tls_pubkey_cert_from_rustls_certs(std::slice::from_ref(end_entity_der))?;
-    let end_entity_node_id = node_id_from_cert_subject_common_name(&end_entity).map_err(|e| {
-        TLSError::General(format!(
-            "The presented certificate subject CN could not be parsed as node ID: {:?}",
-            e
-        ))
-    })?;
+    let end_entity_node_id =
+        node_id_from_rustls_certs(end_entity_der).map_err(TLSError::InvalidCertificate)?;
     ensure_node_id_in_allowed_nodes(end_entity_node_id, allowed_nodes)?;
     let node_cert_from_registry =
         node_cert_from_registry(end_entity_node_id, registry_client, registry_version)?;
-    ensure_certificates_equal(end_entity, end_entity_node_id, node_cert_from_registry)?;
+    ensure_certificates_equal(
+        &end_entity_der.0,
+        end_entity_node_id,
+        node_cert_from_registry.as_der(),
+    )?;
     // It's important to do the validity check after checking equality to the
     // registry cert because the cert validation uses a different parser
     // (`x509_parser` as opposed to OpenSSL that is used above) and it is safer
@@ -213,9 +210,9 @@ fn node_cert_from_registry(
 }
 
 fn ensure_certificates_equal(
-    end_entity_cert: TlsPublicKeyCert,
+    end_entity_cert: &Vec<u8>,
     node_id: NodeId,
-    node_cert_from_registry: TlsPublicKeyCert,
+    node_cert_from_registry: &Vec<u8>,
 ) -> Result<(), TLSError> {
     if node_cert_from_registry != end_entity_cert {
         return Err(TLSError::General(

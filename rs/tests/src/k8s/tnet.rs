@@ -14,7 +14,7 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use k8s_openapi::chrono::DateTime;
 use k8s_openapi::chrono::Duration;
 use k8s_openapi::chrono::Utc;
-use kube::api::PostParams;
+use kube::api::{DeleteParams, PostParams};
 use kube::core::ObjectMeta;
 use kube::ResourceExt;
 use kube::{
@@ -38,6 +38,7 @@ pub struct K8sClient {
     pub(crate) api_dv: Api<DynamicObject>,
     pub(crate) api_vm: Api<DynamicObject>,
     pub(crate) api_vmi: Api<DynamicObject>,
+    pub(crate) api_ipreservation: Api<DynamicObject>,
     pub(crate) api_pvc: Api<PersistentVolumeClaim>,
     pub(crate) api_pod: Api<Pod>,
     pub(crate) api_svc: Api<Service>,
@@ -64,6 +65,10 @@ impl K8sClient {
         let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
         let api_vmi = Api::<DynamicObject>::namespaced_with(client.clone(), &TNET_NAMESPACE, &ar);
 
+        let gvk = GroupVersionKind::gvk("crd.projectcalico.org", "v1", "IPReservation");
+        let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
+        let api_ipreservation = Api::<DynamicObject>::all_with(client.clone(), &ar);
+
         Ok(Self {
             api_dv,
             api_vm,
@@ -72,6 +77,7 @@ impl K8sClient {
             api_pod,
             api_svc,
             api_ingress,
+            api_ipreservation,
         })
     }
 }
@@ -338,11 +344,112 @@ impl TNet {
         )
         .await?;
 
+        let mut ipam_pod: Pod = serde_yaml::from_str(&format!(
+            r#"
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {name}
+spec:
+  containers:
+    - name: nginx
+      image: registry.k8s.io/pause:3.8
+    "#,
+            name = vm_name,
+        ))?;
+        ipam_pod.metadata.owner_references = vec![self.owner_reference()].into();
+
+        (|| async {
+            k8s_client
+                .api_pod
+                .create(&PostParams::default(), &ipam_pod)
+                .await
+        })
+        .retry(&ExponentialBuilder::default())
+        .await?;
+
+        let (ipv4, ipv6) = (|| async {
+            k8s_client
+                .api_pod
+                .get(&vm_name)
+                .await
+                .map_err(|e| anyhow::anyhow!(e))
+                .and_then(|s| s.status.ok_or_else(|| anyhow::anyhow!("missing spec")))
+                .and_then(|s| s.pod_ips.ok_or_else(|| anyhow::anyhow!("missing podIPs")))
+                .and_then(|ips| {
+                    ips.iter()
+                        .map(|ip| {
+                            ip.ip
+                                .as_ref()
+                                .ok_or_else(|| anyhow::anyhow!("no ip"))
+                                .and_then(|ip| {
+                                    Ipv4Addr::from_str(ip).map_err(|e| anyhow::anyhow!(e))
+                                })
+                        })
+                        .find_map(|r| r.ok())
+                        .ok_or_else(|| anyhow::anyhow!("missing ipv4 address"))
+                        .and_then(|ipv4| {
+                            ips.iter()
+                                .map(|ip| {
+                                    ip.ip
+                                        .as_ref()
+                                        .ok_or_else(|| anyhow::anyhow!("no ip"))
+                                        .and_then(|ip| {
+                                            Ipv6Addr::from_str(ip).map_err(|e| anyhow::anyhow!(e))
+                                        })
+                                })
+                                .find_map(|r| r.ok().map(|ipv6| (ipv4, ipv6)))
+                                .ok_or_else(|| anyhow::anyhow!("missing ipv6 address"))
+                        })
+                })
+        })
+        .retry(
+            &ConstantBuilder::default()
+                .with_max_times(60)
+                .with_delay(std::time::Duration::from_secs(1)),
+        )
+        .await?;
+
+        let mut ip_reservation: DynamicObject = serde_yaml::from_str(&format!(
+            r#"
+apiVersion: crd.projectcalico.org/v1
+kind: IPReservation
+metadata:
+  name: {name}
+spec:
+  reservedCIDRs:
+    - {ipv4}
+    - {ipv6}
+    "#,
+            name = vm_name,
+        ))?;
+        ip_reservation.metadata.owner_references = vec![self.owner_reference()].into();
+
+        (|| async {
+            k8s_client
+                .api_ipreservation
+                .create(&PostParams::default(), &ip_reservation)
+                .await
+        })
+        .retry(&ExponentialBuilder::default())
+        .await?;
+
+        (|| async {
+            k8s_client
+                .api_pod
+                .delete(&vm_name, &DeleteParams::default())
+                .await
+        })
+        .retry(&ExponentialBuilder::default())
+        .await?;
+
         create_vm(
             &k8s_client.api_vm,
             &vm_name.clone(),
             &vm_req.vcpus.to_string(),
             &vm_req.memory_kibibytes.to_string(),
+            ipv4,
+            ipv6,
             false,
             self.owner_reference(),
             self.access_key.clone(),
@@ -374,6 +481,7 @@ spec:
       name: grafana
     - port: 4100
       name: port-4100
+      protocol: UDP
     - port: 4444
       name: port-4444
     - port: 7070
@@ -431,37 +539,6 @@ spec:
                 .await
         })
         .retry(&ExponentialBuilder::default())
-        .await?;
-
-        let (ipv4, ipv6) = (|| async {
-            k8s_client
-                .api_svc
-                .get(&vm_name)
-                .await
-                .map_err(|e| anyhow::anyhow!(e))
-                .and_then(|s| s.spec.ok_or_else(|| anyhow::anyhow!("missing spec")))
-                .and_then(|s| {
-                    s.cluster_ips
-                        .ok_or_else(|| anyhow::anyhow!("missing clusterIPs"))
-                })
-                .and_then(|ips| {
-                    ips.iter()
-                        .map(|ip| Ipv4Addr::from_str(ip).map_err(|e| anyhow::anyhow!(e)))
-                        .find_map(|r| r.ok())
-                        .ok_or_else(|| anyhow::anyhow!("missing ipv4 address"))
-                        .and_then(|ipv4| {
-                            ips.iter()
-                                .map(|ip| Ipv6Addr::from_str(ip).map_err(|e| anyhow::anyhow!(e)))
-                                .find_map(|r| r.ok().map(|ipv6| (ipv4, ipv6)))
-                                .ok_or_else(|| anyhow::anyhow!("missing ipv6 address"))
-                        })
-                })
-        })
-        .retry(
-            &ConstantBuilder::default()
-                .with_max_times(60)
-                .with_delay(std::time::Duration::from_secs(1)),
-        )
         .await?;
 
         if vm_type == ImageType::PrometheusImage {

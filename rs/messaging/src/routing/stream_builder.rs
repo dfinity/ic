@@ -28,12 +28,14 @@ use std::sync::{Arc, Mutex};
 mod tests;
 
 struct StreamBuilderMetrics {
-    /// Messages currently enqueued in streams, by destination subnet.
+    /// Messages currently enqueued in streams, by remote subnet.
     pub stream_messages: IntGaugeVec,
-    /// Stream byte size, by destination subnet.
+    /// Stream byte size, by remote subnet.
     pub stream_bytes: IntGaugeVec,
-    /// Stream begin, by destination subnet.
+    /// Stream begin, by remote subnet.
     pub stream_begin: IntGaugeVec,
+    /// Signals end, by remote subnet.
+    pub signals_end: IntGaugeVec,
     /// Routed XNet messages, by type and status.
     pub routed_messages: IntCounterVec,
     /// Successfully routed XNet messages' total payload size.
@@ -61,6 +63,7 @@ const MAX_STREAM_MESSAGES: usize = 50_000;
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
 const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
 const METRIC_STREAM_BEGIN: &str = "mr_stream_begin";
+const METRIC_SIGNALS_END: &str = "mr_signals_end";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 
@@ -83,17 +86,22 @@ impl StreamBuilderMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         let stream_messages = metrics_registry.int_gauge_vec(
             METRIC_STREAM_MESSAGES,
-            "Messages currently enqueued in streams, by destination subnet.",
+            "Messages currently enqueued in streams, by remote subnet.",
             &[LABEL_REMOTE],
         );
         let stream_bytes = metrics_registry.int_gauge_vec(
             METRIC_STREAM_BYTES,
-            "Stream byte size including header, by destination subnet.",
+            "Stream byte size including header, by remote subnet.",
             &[LABEL_REMOTE],
         );
         let stream_begin = metrics_registry.int_gauge_vec(
             METRIC_STREAM_BEGIN,
-            "Stream begin, by destination subnet",
+            "Stream begin, by remote subnet",
+            &[LABEL_REMOTE],
+        );
+        let signals_end = metrics_registry.int_gauge_vec(
+            METRIC_SIGNALS_END,
+            "Signals end, by remote subnet",
             &[LABEL_REMOTE],
         );
         let routed_messages = metrics_registry.int_counter_vec(
@@ -134,6 +142,7 @@ impl StreamBuilderMetrics {
             stream_messages,
             stream_bytes,
             stream_begin,
+            signals_end,
             routed_messages,
             routed_payload_sizes,
             critical_error_infinite_loops,
@@ -475,9 +484,10 @@ impl StreamBuilderImpl {
                     stream.messages().len(),
                     stream.count_bytes(),
                     stream.messages_begin(),
+                    stream.signals_end(),
                 )
             })
-            .for_each(|(subnet, len, size_bytes, begin)| {
+            .for_each(|(subnet, len, size_bytes, begin, signals_end)| {
                 self.metrics
                     .stream_messages
                     .with_label_values(&[&subnet])
@@ -490,6 +500,10 @@ impl StreamBuilderImpl {
                     .stream_begin
                     .with_label_values(&[&subnet])
                     .set(begin.get() as i64);
+                self.metrics
+                    .signals_end
+                    .with_label_values(&[&subnet])
+                    .set(signals_end.get() as i64);
             });
 
         {

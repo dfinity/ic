@@ -2,7 +2,9 @@
 
 use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
-use ic_crypto_internal_threshold_sig_ecdsa_test_utils::verify_bip340_signature_using_third_party;
+use ic_crypto_internal_threshold_sig_ecdsa_test_utils::{
+    verify_bip340_signature_using_third_party, verify_ed25519_signature_using_third_party,
+};
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NumberOfNodes, Randomness};
@@ -1024,21 +1026,21 @@ impl EcdsaSignatureProtocolExecution {
 }
 
 #[derive(Clone, Debug)]
-pub struct Bip340SignatureProtocolSetup {
+pub struct SchnorrSignatureProtocolSetup {
     setup: ProtocolSetup,
     pub key: ProtocolRound,
     pub presig: ProtocolRound,
 }
 
-impl Bip340SignatureProtocolSetup {
+impl SchnorrSignatureProtocolSetup {
     /// Create a key plus a presignature for BIP340 Schnorr signature
     pub fn new(
+        cfg: TestConfig,
         number_of_dealers: usize,
         threshold: usize,
         number_of_dealings_corrupted: usize,
         seed: Seed,
     ) -> ThresholdEcdsaResult<Self> {
-        let cfg = TestConfig::new(EccCurveType::K256);
         let setup = ProtocolSetup::new(cfg, number_of_dealers, threshold, seed)?;
 
         let key = ProtocolRound::random(&setup, number_of_dealers, number_of_dealings_corrupted)?;
@@ -1066,7 +1068,7 @@ impl Bip340SignatureProtocolSetup {
 
 #[derive(Clone, Debug)]
 pub struct Bip340SignatureProtocolExecution {
-    setup: Bip340SignatureProtocolSetup,
+    setup: SchnorrSignatureProtocolSetup,
     signed_message: Vec<u8>,
     random_beacon: Randomness,
     derivation_path: DerivationPath,
@@ -1074,7 +1076,7 @@ pub struct Bip340SignatureProtocolExecution {
 
 impl Bip340SignatureProtocolExecution {
     pub fn new(
-        setup: Bip340SignatureProtocolSetup,
+        setup: SchnorrSignatureProtocolSetup,
         signed_message: Vec<u8>,
         random_beacon: Randomness,
         derivation_path: DerivationPath,
@@ -1160,6 +1162,107 @@ impl Bip340SignatureProtocolExecution {
             &sig.serialize().map_err(|e| {
                 ThresholdBip340VerifySignatureInternalError::InternalError(format!("{e:?}"))
             })?,
+            &self.signed_message
+        ));
+
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Ed25519SignatureProtocolExecution {
+    setup: SchnorrSignatureProtocolSetup,
+    signed_message: Vec<u8>,
+    random_beacon: Randomness,
+    derivation_path: DerivationPath,
+}
+
+impl Ed25519SignatureProtocolExecution {
+    pub fn new(
+        setup: SchnorrSignatureProtocolSetup,
+        signed_message: Vec<u8>,
+        random_beacon: Randomness,
+        derivation_path: DerivationPath,
+    ) -> Self {
+        Self {
+            setup,
+            signed_message,
+            random_beacon,
+            derivation_path,
+        }
+    }
+
+    pub fn generate_shares(
+        &self,
+    ) -> ThresholdEcdsaResult<BTreeMap<u32, ThresholdEd25519SignatureShareInternal>> {
+        let mut shares = BTreeMap::new();
+
+        for node_index in 0..self.setup.setup.receivers {
+            let share = create_ed25519_signature_share(
+                &self.derivation_path,
+                &self.signed_message,
+                self.random_beacon,
+                &self.setup.key.transcript,
+                &self.setup.presig.transcript,
+                &self.setup.key.openings[node_index],
+                &self.setup.presig.openings[node_index],
+            )
+            .expect("Failed to create sig share");
+
+            verify_ed25519_signature_share(
+                &share,
+                &self.derivation_path,
+                &self.signed_message,
+                self.random_beacon,
+                node_index as u32,
+                &self.setup.key.transcript,
+                &self.setup.presig.transcript,
+            )
+            .expect("Signature share verification failed");
+
+            shares.insert(node_index as NodeIndex, share);
+        }
+
+        Ok(shares)
+    }
+
+    pub fn generate_signature(
+        &self,
+        shares: &BTreeMap<NodeIndex, ThresholdEd25519SignatureShareInternal>,
+    ) -> Result<
+        ThresholdEd25519CombinedSignatureInternal,
+        ThresholdEd25519CombineSigSharesInternalError,
+    > {
+        combine_ed25519_signature_shares(
+            &self.derivation_path,
+            &self.signed_message,
+            self.random_beacon,
+            &self.setup.key.transcript,
+            &self.setup.presig.transcript,
+            self.setup.setup.threshold,
+            shares,
+        )
+    }
+
+    pub fn verify_signature(
+        &self,
+        sig: &ThresholdEd25519CombinedSignatureInternal,
+    ) -> Result<(), ThresholdEd25519VerifySignatureInternalError> {
+        verify_threshold_ed25519_signature(
+            sig,
+            &self.derivation_path,
+            &self.signed_message,
+            self.random_beacon,
+            &self.setup.presig.transcript,
+            &self.setup.key.transcript,
+        )?;
+
+        // If verification succeeded, check with a third party lib
+        let pk = self.setup.public_key(&self.derivation_path)?;
+
+        assert!(verify_ed25519_signature_using_third_party(
+            &pk,
+            &sig.serialize(),
             &self.signed_message
         ));
 

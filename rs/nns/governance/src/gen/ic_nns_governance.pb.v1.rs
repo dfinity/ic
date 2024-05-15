@@ -105,9 +105,11 @@ pub struct NeuronStakeTransfer {
     pub from: ::core::option::Option<::ic_base_types::PrincipalId>,
     /// The (optional) subaccount from which the transfer was made.
     #[prost(bytes = "vec", tag = "3")]
+    #[serde(with = "serde_bytes")]
     pub from_subaccount: ::prost::alloc::vec::Vec<u8>,
     /// The subaccount to which the transfer was made.
     #[prost(bytes = "vec", tag = "4")]
+    #[serde(with = "serde_bytes")]
     pub to_subaccount: ::prost::alloc::vec::Vec<u8>,
     /// The amount of stake that was transferred.
     #[prost(uint64, tag = "5")]
@@ -143,6 +145,7 @@ pub struct Neuron {
     /// identifying a public key pair, such that those browsing the ICP
     /// ledger cannot tell which balances belong to neurons.
     #[prost(bytes = "vec", tag = "2")]
+    #[serde(with = "serde_bytes")]
     pub account: ::prost::alloc::vec::Vec<u8>,
     /// The principal that actually controls the neuron. The principal
     /// must identify a public key pair, which acts as a “master key”,
@@ -319,6 +322,7 @@ pub mod neuron {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AbridgedNeuron {
     #[prost(bytes = "vec", tag = "2")]
+    #[serde(with = "serde_bytes")]
     pub account: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "3")]
     pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
@@ -374,6 +378,7 @@ pub struct ExecuteNnsFunction {
     pub nns_function: i32,
     /// The payload of the NNS function.
     #[prost(bytes = "vec", tag = "2")]
+    #[serde(with = "serde_bytes")]
     pub payload: ::prost::alloc::vec::Vec<u8>,
 }
 /// If adopted, a motion should guide the future strategy of the
@@ -976,6 +981,7 @@ pub mod manage_neuron {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum NeuronIdOrSubaccount {
         #[prost(bytes, tag = "11")]
+        #[serde(with = "serde_bytes")]
         Subaccount(::prost::alloc::vec::Vec<u8>),
         #[prost(message, tag = "12")]
         NeuronId(::ic_nns_common::pb::v1::NeuronId),
@@ -1683,6 +1689,7 @@ pub mod swap_background_information {
         #[prost(enumeration = "CanisterStatusType", optional, tag = "1")]
         pub status: ::core::option::Option<i32>,
         #[prost(bytes = "vec", tag = "2")]
+        #[serde(with = "serde_bytes")]
         pub module_hash: ::prost::alloc::vec::Vec<u8>,
         #[prost(message, repeated, tag = "3")]
         pub controllers: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
@@ -3356,6 +3363,8 @@ pub enum Topic {
     SnsAndCommunityFund = 14,
     /// Proposals related to the management of API Boundary Nodes
     ApiBoundaryNodeManagement = 15,
+    /// Proposals related to subnet rental.
+    SubnetRental = 16,
 }
 impl Topic {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3379,6 +3388,7 @@ impl Topic {
             Topic::IcOsVersionElection => "TOPIC_IC_OS_VERSION_ELECTION",
             Topic::SnsAndCommunityFund => "TOPIC_SNS_AND_COMMUNITY_FUND",
             Topic::ApiBoundaryNodeManagement => "TOPIC_API_BOUNDARY_NODE_MANAGEMENT",
+            Topic::SubnetRental => "TOPIC_SUBNET_RENTAL",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3399,6 +3409,7 @@ impl Topic {
             "TOPIC_IC_OS_VERSION_ELECTION" => Some(Self::IcOsVersionElection),
             "TOPIC_SNS_AND_COMMUNITY_FUND" => Some(Self::SnsAndCommunityFund),
             "TOPIC_API_BOUNDARY_NODE_MANAGEMENT" => Some(Self::ApiBoundaryNodeManagement),
+            "TOPIC_SUBNET_RENTAL" => Some(Self::SubnetRental),
             _ => None,
         }
     }
@@ -3762,8 +3773,8 @@ pub enum NnsFunction {
     /// This function is meant as a Break Glass mechanism for when an open call context in
     /// the Root canister is preventing root or another canister from upgrading (in the case of proxied calls).
     HardResetNnsRootToVersion = 42,
-    /// A proposal to add a new API Boundary Node using an assigned node
-    AddApiBoundaryNode = 43,
+    /// A proposal to add a set of new API Boundary Nodes using unassigned nodes
+    AddApiBoundaryNodes = 43,
     /// A proposal to remove a set of API Boundary Nodes, which will designate them as unassigned nodes
     RemoveApiBoundaryNodes = 44,
     /// (obsolete) A proposal to update the version of a set of API Boundary Nodes
@@ -3784,6 +3795,8 @@ pub enum NnsFunction {
     /// Deploy a HostOS version to a given set of nodes. The proposal changes the HostOS version that
     /// is used on the specified nodes.
     DeployHostosToSomeNodes = 51,
+    /// The proposal requests a subnet rental.
+    SubnetRentalRequest = 52,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3845,7 +3858,7 @@ impl NnsFunction {
             }
             NnsFunction::UpdateNodesHostosVersion => "NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION",
             NnsFunction::HardResetNnsRootToVersion => "NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION",
-            NnsFunction::AddApiBoundaryNode => "NNS_FUNCTION_ADD_API_BOUNDARY_NODE",
+            NnsFunction::AddApiBoundaryNodes => "NNS_FUNCTION_ADD_API_BOUNDARY_NODES",
             NnsFunction::RemoveApiBoundaryNodes => "NNS_FUNCTION_REMOVE_API_BOUNDARY_NODES",
             NnsFunction::UpdateApiBoundaryNodesVersion => {
                 "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION"
@@ -3863,6 +3876,7 @@ impl NnsFunction {
                 "NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS"
             }
             NnsFunction::DeployHostosToSomeNodes => "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES",
+            NnsFunction::SubnetRentalRequest => "NNS_FUNCTION_SUBNET_RENTAL_REQUEST",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3921,7 +3935,7 @@ impl NnsFunction {
             }
             "NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION" => Some(Self::UpdateNodesHostosVersion),
             "NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION" => Some(Self::HardResetNnsRootToVersion),
-            "NNS_FUNCTION_ADD_API_BOUNDARY_NODE" => Some(Self::AddApiBoundaryNode),
+            "NNS_FUNCTION_ADD_API_BOUNDARY_NODES" => Some(Self::AddApiBoundaryNodes),
             "NNS_FUNCTION_REMOVE_API_BOUNDARY_NODES" => Some(Self::RemoveApiBoundaryNodes),
             "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION" => {
                 Some(Self::UpdateApiBoundaryNodesVersion)
@@ -3939,6 +3953,7 @@ impl NnsFunction {
                 Some(Self::ReviseElectedHostosVersions)
             }
             "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES" => Some(Self::DeployHostosToSomeNodes),
+            "NNS_FUNCTION_SUBNET_RENTAL_REQUEST" => Some(Self::SubnetRentalRequest),
             _ => None,
         }
     }

@@ -1898,12 +1898,13 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             canister_history: Some((&item.canister_history).into()),
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
             total_query_stats: Some((&item.total_query_stats).into()),
-            log_visibility: pb_canister_state_bits::LogVisibility::from(item.log_visibility).into(),
+            log_visibility: pb_canister_state_bits::LogVisibility::from(&item.log_visibility)
+                .into(),
             canister_log_records: item
                 .canister_log
                 .records()
                 .iter()
-                .map(|record| record.clone().into())
+                .map(|record| record.into())
                 .collect(),
             next_canister_log_record_idx: item.canister_log.next_idx(),
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
@@ -1951,11 +1952,17 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .map(|c| c.into())
             .unwrap_or_else(Cycles::zero);
 
-        let task_queue = value
+        let task_queue: Vec<_> = value
             .task_queue
             .into_iter()
             .map(|v| v.try_into())
             .collect::<Result<_, _>>()?;
+        if task_queue.len() > 1 {
+            return Err(ProxyDecodeError::Other(format!(
+                "Expecting at most one task queue entry. Found {:?}",
+                task_queue
+            )));
+        }
 
         let mut consumed_cycles_since_replica_started_by_use_cases = BTreeMap::new();
         for x in value

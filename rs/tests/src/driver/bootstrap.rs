@@ -49,6 +49,7 @@ pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
 
 const CONF_IMG_FNAME: &str = "config_disk.img";
 const BITCOIND_ADDR_PATH: &str = "bitcoind_addr";
+const JAEGER_ADDR_PATH: &str = "jaeger_addr";
 const SOCKS_PROXY_PATH: &str = "socks_proxy";
 
 fn mk_compressed_img_path() -> std::string::String {
@@ -67,6 +68,10 @@ pub fn init_ic(
 
     if let Some(bitcoind_addr) = &ic.bitcoind_addr {
         test_env.write_json_object(BITCOIND_ADDR_PATH, &bitcoind_addr)?;
+    }
+
+    if let Some(jaeger_addr) = &ic.jaeger_addr {
+        test_env.write_json_object(JAEGER_ADDR_PATH, &jaeger_addr)?;
     }
 
     if let Some(socks_proxy) = &ic.socks_proxy {
@@ -520,6 +525,10 @@ fn create_config_disk_image(
     // --bitcoind_addr indicates the local bitcoin node that the bitcoin adapter should be connected to in the system test environment.
     if let Ok(arg) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
         cmd.arg("--bitcoind_addr").arg(arg);
+    }
+    // --jaeger_addr indicates the local Jaeger node that the nodes should be connected to in the system test environment.
+    if let Ok(arg) = test_env.read_json_object::<String, _>(JAEGER_ADDR_PATH) {
+        cmd.arg("--jaeger_addr").arg(arg);
     }
     // --socks_proxy indicates that a socks proxy is available to the system test environment.
     if let Ok(arg) = test_env.read_json_object::<String, _>(SOCKS_PROXY_PATH) {

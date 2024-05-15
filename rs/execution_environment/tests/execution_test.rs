@@ -13,8 +13,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     ErrorCode, IngressStatus, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
+use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities_metrics::fetch_int_counter;
-use ic_types::{ingress::WasmResult, CanisterId, Cycles, NumBytes};
+use ic_types::{ingress::WasmResult, messages::NO_DEADLINE, CanisterId, Cycles, NumBytes, Time};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::{assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
@@ -1518,58 +1519,84 @@ fn execution_observes_oversize_messages() {
 #[test]
 fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
     // Test consensus queue invariant for the case of exceeding heap delta limit.
-    // Empirical value that has to be below the limit on tick #1 and above the limit on tick #2.
-    let heap_delta_limit = 65_540;
-    let mut subnet_config = SubnetConfig::new(SubnetType::Application);
-    subnet_config.scheduler_config.subnet_heap_delta_capacity = NumBytes::new(heap_delta_limit);
-    let key_id = EcdsaKeyId::from_str("Secp256k1:valid_key").unwrap();
-    let env = StateMachineBuilder::new()
-        .with_checkpoints_enabled(false)
-        .with_config(Some(StateMachineConfig::new(
-            subnet_config,
-            HypervisorConfig::default(),
-        )))
-        .with_ecdsa_key(key_id.clone())
-        .build();
-    let canister_id = env
-        .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
-            vec![],
-            None,
-            Cycles::new(100_000_000_000),
-        )
-        .unwrap();
 
-    // Send SignWithECDSA message to trigger non-empty consensus queue.
-    let _msg_id = env.send_ingress(
-        PrincipalId::new_anonymous(),
-        canister_id,
-        "update",
-        wasm()
-            .call_with_cycles(
-                IC_00,
-                Method::SignWithECDSA,
-                call_args().other_side(
-                    Encode!(&SignWithECDSAArgs {
-                        message_hash: [0; 32],
-                        derivation_path: DerivationPath::new(Vec::new()),
-                        key_id
-                    })
-                    .unwrap(),
-                ),
-                Cycles::new(2_000_000_000),
+    fn setup_test(heap_delta_limit: Option<u64>) -> StateMachine {
+        // This setup creates an environment with the canister that sends a `SignWithECDSA` message.
+        let mut subnet_config = SubnetConfig::new(SubnetType::Application);
+        if let Some(heap_delta_limit) = heap_delta_limit {
+            subnet_config.scheduler_config.subnet_heap_delta_capacity =
+                NumBytes::new(heap_delta_limit);
+        }
+        let key_id = EcdsaKeyId::from_str("Secp256k1:valid_key").unwrap();
+        let env = StateMachineBuilder::new()
+            .with_checkpoints_enabled(false)
+            .with_config(Some(StateMachineConfig::new(
+                subnet_config,
+                HypervisorConfig::default(),
+            )))
+            .with_ecdsa_key(key_id.clone())
+            .build();
+        let canister_id = env
+            .install_canister_with_cycles(
+                UNIVERSAL_CANISTER_WASM.to_vec(),
+                vec![],
+                None,
+                Cycles::new(100_000_000_000),
             )
-            .build(),
-    );
+            .unwrap();
 
-    // Tick #1: heap delta is below the limit, process sign_with_ecdsa message, no response in this round.
-    assert_lt!(env.heap_delta_estimate_bytes(), heap_delta_limit);
-    env.tick();
-    // Tick #2: heap delta is above the limit, the response is added to consensus queue before executing the payload.
-    assert_lt!(heap_delta_limit, env.heap_delta_estimate_bytes());
-    env.tick();
-    // Tick #3: round is executed normally.
-    env.tick();
+        // Send SignWithECDSA message to trigger non-empty consensus queue.
+        let _msg_id = env.send_ingress(
+            PrincipalId::new_anonymous(),
+            canister_id,
+            "update",
+            wasm()
+                .call_with_cycles(
+                    IC_00,
+                    Method::SignWithECDSA,
+                    call_args().other_side(
+                        Encode!(&SignWithECDSAArgs {
+                            message_hash: [0; 32],
+                            derivation_path: DerivationPath::new(Vec::new()),
+                            key_id
+                        })
+                        .unwrap(),
+                    ),
+                    Cycles::new(2_000_000_000),
+                )
+                .build(),
+        );
+        // Expected behavior after the setup:
+        //  - Tick #1: process sign_with_ecdsa message, no response yet in that round
+        //  - Tick #2: the response is added to consensus queue and processed then the round is executed normally
+        //  - Tick #3: consensus queue invariant is checked before executing a regular round
+
+        env
+    }
+
+    // Preparation: find out the heap delta limit.
+    let heap_delta_limit = {
+        let env = setup_test(None);
+        // Tick #1.
+        env.tick();
+        // To trigger the condition heap delta limit must be less than the actual heap delta on tick #2.
+        env.heap_delta_estimate_bytes() - 1
+    };
+
+    // Run the actual test with specific heap delta limit.
+    {
+        let env = setup_test(Some(heap_delta_limit));
+        // Tick #1: heap delta is below the limit, process sign_with_ecdsa message, no response in this round.
+        assert_lt!(env.heap_delta_estimate_bytes(), heap_delta_limit);
+        env.tick();
+
+        // Tick #2: heap delta is above the limit, the response is added to consensus queue before executing the payload.
+        assert_lt!(heap_delta_limit, env.heap_delta_estimate_bytes());
+        env.tick();
+
+        // Tick #3: round is executed normally.
+        env.tick();
+    }
 }
 
 #[test]
@@ -1601,5 +1628,113 @@ fn toolchain_error_message() {
     build the canister. Please report the error to IC devs on the forum: \
     https://forum.dfinity.org and include which language/CDK was used to \
     create the canister."
+    );
+}
+
+fn helper_best_effort_responses(
+    start_time_seconds: u32,
+    timeout_seconds: Option<u32>,
+    expected_deadline_seconds: u32,
+) {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let mut embedders_config = ic_config::embedders::Config::default();
+    embedders_config.feature_flags.best_effort_responses =
+        ic_config::flag_status::FlagStatus::Enabled;
+
+    let env = StateMachineBuilder::new()
+        .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            HypervisorConfig {
+                embedders_config,
+                ..Default::default()
+            },
+        )))
+        .build();
+
+    let sender: CanisterId = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let receiver: CanisterId = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let call_args = call_args()
+        .other_side(wasm().msg_deadline().reply_int64())
+        .on_reply(wasm().message_payload().append_and_reply());
+
+    let msg = if let Some(timeout_seconds) = timeout_seconds {
+        wasm()
+            .call_simple_with_cycles_and_best_effort_response(
+                receiver,
+                "update",
+                call_args,
+                Cycles::new(0),
+                timeout_seconds,
+            )
+            .build()
+    } else {
+        wasm().call_simple(receiver, "update", call_args).build()
+    };
+
+    // Ingress message is sent to canister `A`, during its execution canister `A`
+    // calls canister `B`. While executing the canister message, canister `B`
+    // invokes `msg_deadline()` and attaches the result to a reply to canister
+    // `A` message. Canister `A` forwards the received response as a reply to
+    // the Ingress message.
+
+    match env.execute_ingress(sender, "update", msg).unwrap() {
+        WasmResult::Reply(result) => assert_eq!(
+            Time::from_secs_since_unix_epoch(expected_deadline_seconds as u64)
+                .unwrap()
+                .as_nanos_since_unix_epoch(),
+            u64::from_le_bytes(result.try_into().unwrap())
+        ),
+        _ => panic!("Unexpected result"),
+    };
+}
+
+#[test]
+fn best_effort_responses_no_timeout() {
+    // When no timeout is set, ic0_msg_deadline() should return constant (=0)
+    // representing that the call is not best-effort call.
+    let start_time_seconds = 100;
+
+    let expected_deadline_seconds = NO_DEADLINE.as_secs_since_unix_epoch();
+
+    helper_best_effort_responses(start_time_seconds, None, expected_deadline_seconds);
+}
+
+#[test]
+fn best_effort_responses_timeout_larger_than_max_allowed() {
+    // `timeout_seconds` should be upper bounded with the `MAX_CALL_TIMEOUT_SECONDS`.
+    let start_time_seconds = 100;
+    let timeout_seconds = 2 * MAX_CALL_TIMEOUT_SECONDS;
+    let expected_deadline_seconds = start_time_seconds + MAX_CALL_TIMEOUT_SECONDS;
+
+    helper_best_effort_responses(
+        start_time_seconds,
+        Some(timeout_seconds),
+        expected_deadline_seconds,
+    );
+}
+
+#[test]
+fn best_effort_responses_valid_timeout() {
+    // When `timeout_seconds` is smaller than `MAX_CALL_TIMEOUT_SECONDS` than the
+    // value of `deadline` should be equal to `start_time_seconds` + `timeout_seconds`.
+    let start_time_seconds = 100;
+    let timeout_seconds = 150;
+    let expected_deadline_seconds = start_time_seconds + timeout_seconds;
+
+    helper_best_effort_responses(
+        start_time_seconds,
+        Some(timeout_seconds),
+        expected_deadline_seconds,
     );
 }

@@ -4,7 +4,7 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::EcdsaDealingsContext;
 use ic_types::{
-    consensus::idkg::{self, EcdsaBlockReader, EcdsaReshareRequest},
+    consensus::idkg::{self, EcdsaBlockReader, EcdsaReshareRequest, HasMasterPublicKeyId},
     crypto::canister_threshold_sig::{
         error::InitialIDkgDealingsValidationError, idkg::InitialIDkgDealings,
     },
@@ -15,17 +15,19 @@ use crate::ecdsa::pre_signer::EcdsaTranscriptBuilder;
 
 /// Checks for new reshare requests from execution and initiates the processing
 /// by adding a new [`idkg::ReshareOfUnmaskedParams`] config to ongoing xnet reshares.
-// TODO: in future, we may need to maintain a key transcript per supported key_id,
-// and reshare the one specified by reshare_request.key_id.
 pub(crate) fn initiate_reshare_requests(
     payload: &mut idkg::EcdsaPayload,
     reshare_requests: BTreeSet<idkg::EcdsaReshareRequest>,
 ) {
-    let Some(key_transcript) = &payload.key_transcript.current else {
-        return;
-    };
-
     for request in reshare_requests {
+        let Some(key_transcript) = payload
+            .key_transcripts
+            .get(&request.key_id())
+            .and_then(|key_transcript| key_transcript.current.as_ref())
+        else {
+            continue;
+        };
+
         // Ignore requests we already know about
         if payload.ongoing_xnet_reshares.contains_key(&request)
             || payload.xnet_reshare_agreements.contains_key(&request)
@@ -86,12 +88,12 @@ pub(crate) fn update_completed_reshare_requests(
     transcript_builder: &dyn EcdsaTranscriptBuilder,
     log: &ReplicaLogger,
 ) {
-    if payload.key_transcript.current.is_none() {
-        return;
-    }
-
     let mut completed_reshares = BTreeMap::new();
     for (request, reshare_param) in &payload.ongoing_xnet_reshares {
+        if payload.current_key_transcript(&request.key_id()).is_none() {
+            continue;
+        }
+
         // Get the verified dealings for this transcript
         let transcript_id = reshare_param.as_ref().transcript_id;
         let dealings = transcript_builder.get_validated_dealings(transcript_id);
@@ -120,12 +122,23 @@ pub(crate) fn update_completed_reshare_requests(
         };
     }
 
-    // Changed Unreported to Reported
-    payload
+    // We first clean up the existing xnet_reshare_agreements by keeping those requests
+    // that can still be found in the ecdsa_dealings_contexts for dedup purpose.
+    // We only need to keep the "Reported" status because the agreements would have
+    // already been reported when the previous block became finalized.
+    payload.xnet_reshare_agreements = payload
         .xnet_reshare_agreements
-        .iter_mut()
-        .for_each(|(_, value)| *value = idkg::CompletedReshareRequest::ReportedToExecution);
+        .keys()
+        .filter(|&request| {
+            ecdsa_dealings_contexts
+                .values()
+                .any(|context| *request == reshare_request_from_dealings_context(context))
+        })
+        .cloned()
+        .map(|request| (request, idkg::CompletedReshareRequest::ReportedToExecution))
+        .collect();
 
+    // Insert any newly completed reshares
     for (request, initial_dealings) in completed_reshares {
         if let Some(response) =
             make_reshare_dealings_response(&request, &initial_dealings, ecdsa_dealings_contexts)
@@ -379,7 +392,7 @@ mod tests {
 
         let callback_1 = ic_types::messages::CallbackId::new(1);
         let callback_2 = ic_types::messages::CallbackId::new(2);
-        let contexts = BTreeMap::from([
+        let mut contexts = BTreeMap::from([
             (
                 callback_1,
                 dealings_context_from_reshare_request(request_1.clone()),
@@ -391,7 +404,7 @@ mod tests {
         ]);
 
         // Request 1 dealings are created, it should be moved from in
-        // progress -> completed
+        // progress -> completed (unreported)
         let reshare_params_1 = payload
             .ongoing_xnet_reshares
             .get(&request_1)
@@ -423,7 +436,8 @@ mod tests {
         );
 
         // Request 2 dealings are created, it should be moved from in
-        // progress -> completed
+        // progress -> completed (unreported)
+        // Request 1 should be moved from completed (unreported) -> reported
         let reshare_params_2 = payload
             .ongoing_xnet_reshares
             .get(&request_2)
@@ -457,6 +471,9 @@ mod tests {
             )),
         );
 
+        // Request 2 should be moved from completed (unreported) -> reported
+        // Request 1 was reported last round, but the context still exists,
+        // therefore it should still be kept around for dedup purposes.
         update_completed_reshare_requests(
             &mut payload,
             &contexts,
@@ -470,6 +487,27 @@ mod tests {
             payload.xnet_reshare_agreements.get(&request_1).unwrap(),
             idkg::CompletedReshareRequest::ReportedToExecution
         );
+        assert_matches!(
+            payload.xnet_reshare_agreements.get(&request_2).unwrap(),
+            idkg::CompletedReshareRequest::ReportedToExecution
+        );
+
+        // Agreement for request 1 was reported, and context is removed from state
+        assert!(contexts.remove(&callback_1).is_some());
+
+        // Request 1 was reported, and the corresponding context disappeared,
+        // therefore the agreement can be purged from the payload.
+        // Request 2 was reported last round, but the context still exists,
+        // therefore it should still be kept around for dedup purposes.
+        update_completed_reshare_requests(
+            &mut payload,
+            &contexts,
+            &block_reader,
+            &transcript_builder,
+            &no_op_logger(),
+        );
+        assert!(payload.ongoing_xnet_reshares.is_empty());
+        assert_eq!(payload.xnet_reshare_agreements.len(), 1);
         assert_matches!(
             payload.xnet_reshare_agreements.get(&request_2).unwrap(),
             idkg::CompletedReshareRequest::ReportedToExecution

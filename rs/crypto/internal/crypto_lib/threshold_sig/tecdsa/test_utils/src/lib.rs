@@ -42,3 +42,14 @@ pub fn verify_bip340_signature_using_third_party(sec1_pk: &[u8], sig: &[u8], msg
     let signature = Signature::<Public>::from_bytes(sig_array).unwrap();
     schnorr.verify(&public_key, Message::<Secret>::raw(msg), &signature)
 }
+
+pub fn verify_ed25519_signature_using_third_party(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
+    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+
+    let pk: [u8; 32] = pk.try_into().expect("Public key wrong size");
+    let vk = VerifyingKey::from_bytes(&pk).unwrap();
+
+    let signature = Signature::from_slice(sig).expect("Signature incorrect length");
+
+    vk.verify(msg, &signature).is_ok()
+}

@@ -651,13 +651,14 @@ impl ThresholdSchnorrSigInputs {
     fn check_algorithm_id_validity(
         algorithm_id: AlgorithmId,
     ) -> Result<(), error::ThresholdSchnorrSigInputsCreationError> {
-        match algorithm_id {
-            AlgorithmId::ThresholdSchnorrBip340 => Ok(()),
-            _ => Err(
+        if algorithm_id.is_threshold_schnorr() {
+            Ok(())
+        } else {
+            Err(
                 error::ThresholdSchnorrSigInputsCreationError::UnsupportedAlgorithm(
                     algorithm_id.to_string(),
                 ),
-            ),
+            )
         }
     }
 
@@ -716,7 +717,7 @@ impl SchnorrPreSignatureTranscript {
     fn check_algorithm_id(
         blinder_unmasked: &IDkgTranscript,
     ) -> Result<(), error::ThresholdSchnorrPresignatureTranscriptCreationError> {
-        if blinder_unmasked.algorithm_id != AlgorithmId::ThresholdSchnorrBip340 {
+        if !blinder_unmasked.algorithm_id.is_threshold_schnorr() {
             return Err(
                 error::ThresholdSchnorrPresignatureTranscriptCreationError::UnsupportedAlgorithm(
                     blinder_unmasked.algorithm_id.to_string(),

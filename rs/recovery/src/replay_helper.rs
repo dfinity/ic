@@ -1,16 +1,15 @@
 //! Helper functions calling the `ic-replay` library.
 use crate::RecoveryResult;
-use ic_base_types::CanisterId;
-use ic_base_types::SubnetId;
+use crate::{
+    error::RecoveryError,
+    file_sync_helper::{read_file, write_file},
+};
+use ic_base_types::{CanisterId, SubnetId};
 use ic_replay::{
     cmd::{ClapSubnetId, ReplayToolArgs, SubCommand},
     player::{ReplayError, StateParams},
 };
-use std::path::PathBuf;
-use std::str::FromStr;
-
-use crate::error::RecoveryError;
-use crate::file_sync_helper::{read_file, write_file};
+use std::{path::PathBuf, str::FromStr};
 
 pub const OUTPUT_FILE_NAME: &str = "replay_result.txt";
 

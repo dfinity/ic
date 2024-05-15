@@ -1,16 +1,12 @@
 use crate::pb::v1::{AccountState, Gtc};
 use ic_crypto_sha2::Sha256;
+use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GENESIS_TOKEN_CANISTER_ID;
 use ic_nns_governance::pb::v1::{neuron::DissolveState, Neuron};
 use icp_ledger::Tokens;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use std::{collections::HashMap, time::SystemTime};
-
-/// A few helper constants for durations.
-const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
-const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
-const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
 
 // The age that GTC neurons will be created with
 const GTC_NEURON_PRE_AGE_SECONDS: u64 = 18 * ONE_MONTH_SECONDS;

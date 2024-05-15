@@ -18,6 +18,7 @@ const FILES_TO_SKIP: &[&str] = &["names.wast"];
 
 /// Conversions between wast and wasmtime types.
 mod convert {
+    use wasmtime::Store;
     use wast::{
         core::{HeapType, NanPattern, V128Pattern, WastArgCore},
         token::{Float32, Float64},
@@ -42,7 +43,7 @@ mod convert {
         }
     }
 
-    pub(super) fn arg(arg: WastArg) -> Option<wasmtime::Val> {
+    pub(super) fn arg(arg: WastArg, store: &mut Store<()>) -> Option<wasmtime::Val> {
         match arg {
             WastArg::Core(WastArgCore::I32(i)) => Some(wasmtime::Val::I32(i)),
             WastArg::Core(WastArgCore::I64(i)) => Some(wasmtime::Val::I64(i)),
@@ -52,7 +53,9 @@ mod convert {
                 u128::from_le_bytes(v.to_le_bytes()).into(),
             )),
             WastArg::Core(WastArgCore::RefNull(ty)) => Some(heap_type(ty)),
-            WastArg::Core(WastArgCore::RefExtern(n)) => Some(wasmtime::ExternRef::new(n).into()),
+            WastArg::Core(WastArgCore::RefExtern(n)) => {
+                Some(wasmtime::ExternRef::new(store, n).unwrap().into())
+            }
             WastArg::Component(_) => {
                 println!(
                     "Component feature not enabled. Can't handle WastArg {:?}",
@@ -187,7 +190,7 @@ mod convert {
         }
     }
 
-    fn val_equal(left: &wasmtime::Val, right: &WastRet) -> bool {
+    fn val_equal(left: &wasmtime::Val, right: &WastRet, store: &Store<()>) -> bool {
         use wasmtime::Val as V;
         use wast::core::WastRetCore as R;
         use WastRet::Core as C;
@@ -201,7 +204,7 @@ mod convert {
             (V::ExternRef(None), C(R::RefExtern(_))) => false,
             // `WastArgCore::RefExtern` always stores a `u32`.
             (V::ExternRef(Some(l)), C(R::RefExtern(r))) => {
-                let l = l.data().downcast_ref::<u32>().unwrap();
+                let l = l.data(store).unwrap().downcast_ref::<u32>().unwrap();
                 l == r
             }
             (V::ExternRef(l), C(R::RefNull(_))) => l.is_none(),
@@ -216,9 +219,11 @@ mod convert {
         }
     }
 
-    pub(super) fn vals_equal(left: &[wasmtime::Val], right: &[WastRet]) -> bool {
+    pub(super) fn vals_equal(left: &[wasmtime::Val], right: &[WastRet], store: &Store<()>) -> bool {
         if left.len() == right.len() {
-            left.iter().zip(right.iter()).all(|(l, r)| val_equal(l, r))
+            left.iter()
+                .zip(right.iter())
+                .all(|(l, r)| val_equal(l, r, store))
         } else {
             false
         }
@@ -394,7 +399,10 @@ impl<'a> TestState<'a> {
         params: Vec<WastArg>,
         id: Option<Id<'a>>,
     ) -> Result<Vec<wasmtime::Val>, String> {
-        let params: Vec<_> = params.into_iter().map(convert::arg).collect();
+        let params: Vec<_> = params
+            .into_iter()
+            .map(|x| convert::arg(x, &mut self.store))
+            .collect();
         if params.iter().any(|p| p.is_none()) {
             return Ok(vec![]);
         }
@@ -542,7 +550,7 @@ fn run_directive<'a>(
             match exec {
                 wast::WastExecute::Invoke(invoke) => {
                     let run_results = test_state.run(invoke.name, invoke.args, invoke.module)?;
-                    if !convert::vals_equal(&run_results, &results) {
+                    if !convert::vals_equal(&run_results, &results, &test_state.store) {
                         return Err(format!(
                             "Incorrect result running wasm at {}: Expected {:?} but got {:?}",
                             span_location(span, text, path),

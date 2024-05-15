@@ -1,9 +1,8 @@
-use crate::route_provider::HealthCheckRouteProvider;
 use ic_agent::agent::http_transport::route_provider::RouteProvider;
 use std::collections::HashMap;
 use std::{fmt::Debug, hash::Hash, sync::Arc};
 
-pub fn route_n_times(n: usize, f: Arc<HealthCheckRouteProvider>) -> Vec<String> {
+pub fn route_n_times(n: usize, f: Arc<impl RouteProvider>) -> Vec<String> {
     (0..n)
         .map(|_| f.route().unwrap().domain().unwrap().to_string())
         .collect()

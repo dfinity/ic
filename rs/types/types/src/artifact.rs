@@ -76,21 +76,12 @@ impl std::fmt::Display for ArtifactTag {
 /// Priority of artifact.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter)]
 pub enum Priority {
-    /// Drop the advert, the IC doesn't need the corresponding artifact for
+    /// Drop the advert, the local replica doesn't need the corresponding artifact for
     /// making progress.
     Drop,
-    /// Stash the advert. Processing of this advert is suspended, it's not going
-    /// to be requested even if there is capacity available for download.
+    /// Stash the advert. It may be requested at a later point in time.
     Stash,
-
-    // All downloadable priority classes. Downloads adhere to quota and
-    // bandwidth constraints
-    /// Low priority adverts to be considered for download, given that there is
-    /// enough capacity.
-    Later,
-    /// Normal priority adverts.
-    Fetch,
-    /// High priority adverts.
+    /// High priority adverts, fetch the artifact immediately.
     FetchNow,
 }
 
@@ -151,14 +142,10 @@ pub enum UnvalidatedArtifactMutation<Artifact: ArtifactKind> {
 /// A helper type that represents a type-indexed Advert.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Advert<Artifact: ArtifactKind> {
+    /// The id _must_ contain the integrity hash of the message.
     pub id: Artifact::Id,
     pub attribute: Artifact::Attribute,
     pub size: usize,
-    // IntegrityHash is just a CryptoHash
-    // We don't polimorphise over different Artifacts because it makes no sense,
-    // they are never compared, except in one instance where we compare something
-    // in GossipAdvert and Advert<T>, so we can't make a mistake.
-    pub integrity_hash: CryptoHash,
 }
 
 // -----------------------------------------------------------------------------
@@ -166,7 +153,7 @@ pub struct Advert<Artifact: ArtifactKind> {
 
 /// Consensus message identifier carries both a message hash and a height,
 /// which is used by the consensus pool to help lookup.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ConsensusMessageId {
     pub hash: ConsensusMessageHash,
     pub height: Height,
@@ -180,19 +167,7 @@ impl HasHeight for ConsensusMessageId {
 
 impl HasHash for ConsensusMessageId {
     fn hash(&self) -> &CryptoHash {
-        match &self.hash {
-            ConsensusMessageHash::RandomBeacon(hash) => hash.get_ref(),
-            ConsensusMessageHash::Finalization(hash) => hash.get_ref(),
-            ConsensusMessageHash::Notarization(hash) => hash.get_ref(),
-            ConsensusMessageHash::BlockProposal(hash) => hash.get_ref(),
-            ConsensusMessageHash::RandomBeaconShare(hash) => hash.get_ref(),
-            ConsensusMessageHash::NotarizationShare(hash) => hash.get_ref(),
-            ConsensusMessageHash::FinalizationShare(hash) => hash.get_ref(),
-            ConsensusMessageHash::RandomTape(hash) => hash.get_ref(),
-            ConsensusMessageHash::RandomTapeShare(hash) => hash.get_ref(),
-            ConsensusMessageHash::CatchUpPackage(hash) => hash.get_ref(),
-            ConsensusMessageHash::CatchUpPackageShare(hash) => hash.get_ref(),
-        }
+        self.hash.digest()
     }
 }
 
@@ -219,12 +194,6 @@ impl From<&ConsensusMessage> for ConsensusMessageId {
     fn from(msg: &ConsensusMessage) -> ConsensusMessageId {
         msg.get_id()
     }
-}
-
-/// Consensus message filter is by height.
-#[derive(Default, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ConsensusMessageFilter {
-    pub height: Height,
 }
 
 // -----------------------------------------------------------------------------
@@ -325,12 +294,6 @@ impl From<CertificationMessageId> for pb::CertificationMessageId {
             height: value.height.get(),
         }
     }
-}
-
-/// Certification message filter is by height.
-#[derive(Default, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct CertificationMessageFilter {
-    pub height: Height,
 }
 
 // -----------------------------------------------------------------------------

@@ -1,23 +1,39 @@
 use ic_cdk_macros::{init, post_upgrade, query};
 use ic_ledger_suite_orchestrator::candid::Erc20Contract as CandidErc20Contract;
-use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg};
+use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg, OrchestratorInfo};
 use ic_ledger_suite_orchestrator::lifecycle;
-use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
+use ic_ledger_suite_orchestrator::scheduler::{
+    encode_orchestrator_metrics, Erc20Token, IC_CANISTER_RUNTIME,
+};
 use ic_ledger_suite_orchestrator::state::read_state;
+use ic_ledger_suite_orchestrator::storage::read_wasm_store;
 use ic_ledger_suite_orchestrator::storage::TASKS;
 
 mod dashboard;
 
 #[query]
-async fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
+fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
     let contract = Erc20Token::try_from(contract)
         .unwrap_or_else(|e| ic_cdk::trap(&format!("Invalid ERC-20 contract: {:?}", e)));
     read_state(|s| s.managed_canisters(&contract).cloned()).map(ManagedCanisterIds::from)
 }
 
+#[query]
+fn get_orchestrator_info() -> OrchestratorInfo {
+    read_state(|s| OrchestratorInfo {
+        managed_canisters: s
+            .managed_canisters_iter()
+            .map(|(token, canisters)| (token.clone(), canisters.clone()).into())
+            .collect(),
+        cycles_management: s.cycles_management().clone(),
+        more_controller_ids: s.more_controller_ids().to_vec(),
+        minter_id: s.minter_id().cloned(),
+    })
+}
+
 #[export_name = "canister_global_timer"]
 fn timer() {
-    ic_ledger_suite_orchestrator::scheduler::timer();
+    ic_ledger_suite_orchestrator::scheduler::timer(IC_CANISTER_RUNTIME);
 }
 
 #[init]
@@ -62,7 +78,9 @@ fn http_request(
 
     match req.path() {
         "/dashboard" => {
-            let dashboard = read_state(DashboardTemplate::from_state);
+            let dashboard = read_wasm_store(|wasm_store| {
+                read_state(|s| DashboardTemplate::from_state(s, wasm_store))
+            });
             HttpResponseBuilder::ok()
                 .header("Content-Type", "text/html; charset=utf-8")
                 .with_body_and_content_length(dashboard.render().unwrap())
@@ -185,6 +203,8 @@ fn http_request(
                     num_tasks as f64,
                     "Total number of pending tasks.",
                 )?;
+
+                encode_orchestrator_metrics(w)?;
                 Ok(())
             }
 

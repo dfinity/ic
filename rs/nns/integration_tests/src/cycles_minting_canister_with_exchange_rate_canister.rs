@@ -6,7 +6,7 @@ use ic_nns_common::{
     pb::v1::NeuronId,
     types::{UpdateIcpXdrConversionRatePayload, UpdateIcpXdrConversionRatePayloadReason},
 };
-use ic_nns_constants::EXCHANGE_RATE_CANISTER_ID;
+use ic_nns_constants::{EXCHANGE_RATE_CANISTER_ID, EXCHANGE_RATE_CANISTER_INDEX};
 use ic_nns_governance::{
     init::TEST_NEURON_1_ID,
     pb::v1::{manage_neuron_response, proposal::Action, ExecuteNnsFunction, NnsFunction, Proposal},
@@ -14,11 +14,11 @@ use ic_nns_governance::{
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
-        create_canister, get_icp_xdr_conversion_rate, nns_governance_make_proposal,
-        nns_wait_for_proposal_execution, setup_nns_canisters,
+        create_canister_at_specified_id, get_icp_xdr_conversion_rate, nns_governance_make_proposal,
+        nns_wait_for_proposal_execution, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_state_machine_tests::StateMachine;
 use ic_types::time::GENESIS;
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateError, ExchangeRateMetadata};
 use std::time::Duration;
@@ -28,17 +28,15 @@ const ONE_MINUTE_SECONDS: u64 = 60;
 const FIVE_MINUTES_SECONDS: u64 = 5 * ONE_MINUTE_SECONDS;
 
 /// Sets up the XRC mock canister.
-fn setup_mock_exchange_rate_canister(
-    machine: &StateMachine,
-    payload: XrcMockInitPayload,
-) -> CanisterId {
+fn setup_mock_exchange_rate_canister(machine: &StateMachine, payload: XrcMockInitPayload) {
     let wasm = Wasm::from_location_specified_by_env_var("xrc-mock", &[]);
-    create_canister(
+    create_canister_at_specified_id(
         machine,
+        EXCHANGE_RATE_CANISTER_INDEX,
         wasm.unwrap(),
         Some(Encode!(&payload).unwrap()),
         None,
-    )
+    );
 }
 
 fn reinstall_mock_exchange_rate_canister(
@@ -130,7 +128,9 @@ fn new_icp_cxdr_mock_exchange_rate_canister_init_payload(
 #[test]
 fn test_enable_retrieving_rate_from_exchange_rate_canister() {
     // Step 1: Prepare the world.
-    let state_machine = StateMachineBuilder::new().build();
+    let state_machine = state_machine_builder_for_nns_tests()
+        .with_time(GENESIS)
+        .build();
 
     // Set up NNS.
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -139,14 +139,9 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
     setup_nns_canisters(&state_machine, nns_init_payload);
 
     // Install exchange rate canister.
-    let installed_exchange_rate_canister_id = setup_mock_exchange_rate_canister(
+    setup_mock_exchange_rate_canister(
         &state_machine,
         new_icp_cxdr_mock_exchange_rate_canister_init_payload(25_000_000_000, None, None),
-    );
-    // Make sure the exchange rate canister ID and the installed canister ID match.
-    assert_eq!(
-        EXCHANGE_RATE_CANISTER_ID,
-        installed_exchange_rate_canister_id
     );
 
     // Check that the canister is initialized with the default rate.
@@ -335,7 +330,9 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
 #[test]
 fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rate_proposal() {
     // Step 1: Prepare the world.
-    let mut state_machine = StateMachineBuilder::new().build();
+    let mut state_machine = state_machine_builder_for_nns_tests()
+        .with_time(GENESIS)
+        .build();
 
     // Set up NNS.
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -345,14 +342,9 @@ fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rat
     setup_nns_canisters(&state_machine, nns_init_payload);
 
     // Install exchange rate canister.
-    let installed_exchange_rate_canister_id = setup_mock_exchange_rate_canister(
+    setup_mock_exchange_rate_canister(
         &state_machine,
         new_icp_cxdr_mock_exchange_rate_canister_init_payload(25_000_000_000, None, None),
-    );
-    // Make sure the exchange rate canister ID and the installed canister ID match.
-    assert_eq!(
-        EXCHANGE_RATE_CANISTER_ID,
-        installed_exchange_rate_canister_id
     );
 
     // Check that the canister is initialized with the default rate.

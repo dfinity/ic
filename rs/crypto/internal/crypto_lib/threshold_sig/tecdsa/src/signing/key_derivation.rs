@@ -1,5 +1,5 @@
 use crate::*;
-use ic_crypto_internal_hmac::{Hmac, Sha512};
+use ic_crypto_internal_hmac::{hkdf, Hmac, Sha512};
 
 /// Derivation Index
 ///
@@ -136,6 +136,37 @@ impl DerivationPath {
         }
     }
 
+    fn eddsa_ckd(
+        public_key: &EccPoint,
+        chain_key: &[u8],
+        index: &DerivationIndex,
+    ) -> ThresholdEcdsaResult<(EccPoint, Vec<u8>, EccScalar)> {
+        if public_key.curve_type() != EccCurveType::Ed25519 {
+            return Err(ThresholdEcdsaError::CurveMismatch);
+        }
+
+        let mut ikm = public_key.serialize();
+        ikm.extend_from_slice(&index.0);
+
+        /*
+        We derive the next additive offset and chain code using HKDF,
+        using the parent chain key as the salt, the public key and
+        index as the IKM (input key material) and the constant string
+        "Ed25519" as the info/label field.
+         */
+        let info = "Ed25519".as_bytes();
+
+        // Only way HKDF can fail is if output is too long, which can't
+        // happen here.
+        let okm = hkdf::<Sha512>(96, &ikm, chain_key, info).expect("HKDF failed unexpectedly");
+
+        let key_offset = EccScalar::from_bytes_wide(EccCurveType::Ed25519, &okm[0..64])?;
+        let new_key = public_key.add_points(&EccPoint::mul_by_g(&key_offset))?;
+        let new_chain_key = okm[64..].to_vec();
+
+        Ok((new_key, new_chain_key, key_offset))
+    }
+
     pub fn derive_tweak(
         &self,
         master_public_key: &EccPoint,
@@ -171,8 +202,10 @@ impl DerivationPath {
         let mut derived_offset = EccScalar::zero(curve_type);
 
         for idx in self.path() {
-            let (next_derived_key, next_chain_key, next_offset) =
-                Self::bip32_ckdpub(&derived_key, &derived_chain_key, idx)?;
+            let (next_derived_key, next_chain_key, next_offset) = match curve_type {
+                EccCurveType::Ed25519 => Self::eddsa_ckd(&derived_key, &derived_chain_key, idx)?,
+                _ => Self::bip32_ckdpub(&derived_key, &derived_chain_key, idx)?,
+            };
 
             derived_key = next_derived_key;
             derived_chain_key = next_chain_key;

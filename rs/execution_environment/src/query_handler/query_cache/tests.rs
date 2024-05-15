@@ -1466,6 +1466,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CallNew
         | SystemApiCallId::CallOnCleanup
         | SystemApiCallId::CallPerform
+        | SystemApiCallId::CallWithBestEffortResponse
         | SystemApiCallId::CanisterCycleBalance
         | SystemApiCallId::CanisterCycleBalance128
         | SystemApiCallId::CanisterSelfCopy
@@ -1491,6 +1492,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::MsgCyclesAvailable128
         | SystemApiCallId::MsgCyclesRefunded
         | SystemApiCallId::MsgCyclesRefunded128
+        | SystemApiCallId::MsgDeadline
         | SystemApiCallId::MsgMethodNameCopy
         | SystemApiCallId::MsgMethodNameSize
         | SystemApiCallId::MsgReject

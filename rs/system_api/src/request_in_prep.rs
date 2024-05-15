@@ -1,13 +1,15 @@
 use crate::{sandbox_safe_system_state::SandboxSafeSystemState, valid_subslice};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::ReplicaLogger;
+use ic_types::Time;
 use ic_types::{
     messages::{CallContextId, Request, NO_DEADLINE},
     methods::{Callback, WasmClosure},
+    time::CoarseTime,
     CanisterId, Cycles, NumBytes, PrincipalId,
 };
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
+use std::{convert::TryFrom, time::Duration};
 
 /// Represents an under construction `Request`.
 ///
@@ -47,6 +49,8 @@ pub struct RequestInPrep {
     /// them up creating tricky bugs. Storing this an integer means that the two
     /// limits are stored as different types and are more difficult to mix up.
     multiplier_max_size_local_subnet: u64,
+    /// If `Some(_)`, this is a best-effort call.
+    timeout_seconds: Option<u32>,
 }
 
 impl RequestInPrep {
@@ -114,6 +118,7 @@ impl RequestInPrep {
             method_payload: Vec::new(),
             max_size_remote_subnet,
             multiplier_max_size_local_subnet,
+            timeout_seconds: None,
         })
     }
 
@@ -159,6 +164,14 @@ impl RequestInPrep {
         }
     }
 
+    pub(crate) fn is_timeout_set(&self) -> bool {
+        self.timeout_seconds.is_some()
+    }
+
+    pub(crate) fn set_timeout(&mut self, timeout_seconds: u32) {
+        self.timeout_seconds = Some(timeout_seconds);
+    }
+
     pub(crate) fn add_cycles(&mut self, cycles: Cycles) {
         self.cycles += cycles;
     }
@@ -184,10 +197,12 @@ pub(crate) fn into_request(
         method_payload,
         max_size_remote_subnet,
         multiplier_max_size_local_subnet,
+        timeout_seconds,
     }: RequestInPrep,
     call_context_id: CallContextId,
     sandbox_safe_system_state: &mut SandboxSafeSystemState,
     _logger: &ReplicaLogger,
+    time: Time,
 ) -> HypervisorResult<RequestWithPrepayment> {
     let destination_canister = CanisterId::unchecked_from_principal(callee);
 
@@ -208,9 +223,27 @@ pub(crate) fn into_request(
         sandbox_safe_system_state.prepayment_for_response_execution();
     let prepayment_for_response_transmission =
         sandbox_safe_system_state.prepayment_for_response_transmission();
-    // To eventually be populated by an `ic0.call_with_best_effort_response()` call.
-    // For now, no calls have deadlines.
-    let deadline = NO_DEADLINE;
+
+    let deadline = if let Some(timeout_seconds) = timeout_seconds {
+        match time.checked_add(Duration::from_secs(timeout_seconds.into())) {
+            Some(deadline) => CoarseTime::floor(deadline),
+            None => {
+                debug_assert!(false);
+                return Err(HypervisorError::ContractViolation {
+                    error: format!(
+                        "Request to {}:{} has a timeout of {} seconds, which exceeds the allowed timeout duration.",
+                        destination_canister,
+                        method_name,
+                        timeout_seconds
+                    ).to_string(),
+                    suggestion: "".to_string(),
+                    doc_link: "".to_string(),
+                });
+            }
+        }
+    } else {
+        NO_DEADLINE
+    };
 
     let callback_id = sandbox_safe_system_state.register_callback(Callback::new(
         call_context_id,

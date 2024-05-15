@@ -5,10 +5,12 @@ package(default_visibility = ["//rs/nervous_system:default_visibility"])
 DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/types/base_types",
+    "//rs/utils",
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:prost",
     "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
 ]
 
 LIB_SRCS = glob(

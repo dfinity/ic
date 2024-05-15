@@ -2,7 +2,7 @@ use candid::{Decode, Encode, Nat, Principal};
 use canister_test::{CanisterInstallMode, Wasm};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -1429,7 +1429,7 @@ pub mod sns {
                 .iter()
                 .find(|neuron| {
                     neuron.dissolve_delay_seconds(neuron.created_timestamp_seconds)
-                        >= 6 * 30 * SECONDS_PER_DAY
+                        >= 6 * 30 * ONE_DAY_SECONDS
                 })
                 .map(|sns_neuron| {
                     (

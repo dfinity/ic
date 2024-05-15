@@ -6,7 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::LedgerArgument;
 use ic_management_canister_types::{CanisterIdRecord, CanisterInstallMode};
 use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
-use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
+use ic_nervous_system_common::{ledger::compute_neuron_staking_subaccount, DEFAULT_TRANSFER_FEE};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -22,7 +22,7 @@ use ic_sns_governance::{
         GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, Proposal,
         ProposalDecisionStatus, UpgradeSnsToNextVersion,
     },
-    types::{DEFAULT_TRANSFER_FEE, E8S_PER_TOKEN},
+    types::E8S_PER_TOKEN,
 };
 use ic_sns_init::pb::v1::{
     sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
@@ -85,8 +85,9 @@ fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
     let unstoppable_sns_wasm = SnsWasm {
         wasm: unstoppable_canister_wasm,
         canister_type: canister_type.into(),
+        ..SnsWasm::default()
     };
-    sns_wasm::add_wasm_via_proposal(&machine, unstoppable_sns_wasm.clone());
+    let unstoppable_sns_wasm = sns_wasm::add_wasm_via_proposal(&machine, unstoppable_sns_wasm);
 
     // To get an SNS neuron, we airdrop our new tokens to this user.
     let user = PrincipalId::new_user_test_id(0);
@@ -943,7 +944,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
         wasm_map.get(&SnsCanisterType::Governance).unwrap(),
         Some("Preserve behavior 509_230_111."),
     );
-    sns_wasm::add_wasm_via_proposal(&machine, modified_governance.clone());
+    let modified_governance = sns_wasm::add_wasm_via_proposal(&machine, modified_governance);
 
     // Make a proposal to upgrade (that is auto-executed) with the neuron for our user.
     let neuron_id =

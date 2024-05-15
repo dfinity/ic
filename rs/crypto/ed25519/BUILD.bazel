@@ -5,8 +5,10 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "@crate_index//:curve25519-dalek",
     "@crate_index//:ed25519-dalek",
+    "@crate_index//:hkdf",
     "@crate_index//:pem",
     "@crate_index//:rand",
+    "@crate_index//:sha2",
     "@crate_index//:zeroize",
 ]
 

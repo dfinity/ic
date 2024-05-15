@@ -13,7 +13,7 @@ use ic_cketh_minter::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, LogIndex, TransactionNonce, Wei,
 };
 use ic_cketh_minter::state::transactions::{
-    ReimbursementIndex, TransactionCallData, WithdrawalRequest,
+    ReimbursedError, ReimbursementIndex, TransactionCallData, WithdrawalRequest,
 };
 use ic_cketh_minter::state::{EthBalance, InvalidEventReason, MintedEvent, State};
 use ic_cketh_minter::tx::Eip1559TransactionRequest;
@@ -86,12 +86,33 @@ pub struct DashboardFinalizedTransaction {
 }
 
 #[derive(Clone)]
-pub struct DashboardReimbursedTransaction {
-    pub cketh_ledger_burn_index: LedgerBurnIndex,
-    pub reimbursed_in_block: LedgerMintIndex,
-    pub reimbursed_amount: Nat,
-    pub token_symbol: CkTokenSymbol,
-    pub transaction_hash: Option<Hash>,
+pub enum DashboardReimbursedTransaction {
+    Reimbursed {
+        cketh_ledger_burn_index: LedgerBurnIndex,
+        reimbursed_in_block: LedgerMintIndex,
+        reimbursed_amount: Nat,
+        token_symbol: CkTokenSymbol,
+        transaction_hash: Option<Hash>,
+    },
+    Quarantined {
+        cketh_ledger_burn_index: LedgerBurnIndex,
+        token_symbol: CkTokenSymbol,
+    },
+}
+
+impl DashboardReimbursedTransaction {
+    pub fn cketh_ledger_burn_index(&self) -> LedgerBurnIndex {
+        match self {
+            DashboardReimbursedTransaction::Reimbursed {
+                cketh_ledger_burn_index,
+                ..
+            } => *cketh_ledger_burn_index,
+            DashboardReimbursedTransaction::Quarantined {
+                cketh_ledger_burn_index,
+                ..
+            } => *cketh_ledger_burn_index,
+        }
+    }
 }
 
 impl DashboardPendingDeposit {
@@ -250,32 +271,43 @@ impl DashboardTemplate {
         let mut reimbursed_transactions: Vec<_> = state
             .eth_transactions
             .reimbursed_transactions_iter()
-            .map(|(index, reimbursed)| match index {
-                ReimbursementIndex::CkEth { ledger_burn_index } => DashboardReimbursedTransaction {
-                    cketh_ledger_burn_index: *ledger_burn_index,
-                    reimbursed_in_block: reimbursed.reimbursed_in_block,
-                    reimbursed_amount: reimbursed.reimbursed_amount.into(),
-                    token_symbol: CkTokenSymbol::cketh_symbol_from_state(state),
-                    transaction_hash: reimbursed.transaction_hash,
-                },
-                ReimbursementIndex::CkErc20 {
-                    cketh_ledger_burn_index,
-                    ledger_id,
-                    ckerc20_ledger_burn_index: _,
-                } => DashboardReimbursedTransaction {
-                    cketh_ledger_burn_index: *cketh_ledger_burn_index,
-                    reimbursed_in_block: reimbursed.reimbursed_in_block,
-                    reimbursed_amount: reimbursed.reimbursed_amount.into(),
-                    token_symbol: state
-                        .ckerc20_token_symbol_for_ledger(ledger_id)
-                        .expect("BUG: unknown ERC-20 token")
-                        .clone(),
-                    transaction_hash: reimbursed.transaction_hash,
-                },
+            .map(|(index, result)| {
+                let (cketh_ledger_burn_index, token_symbol) = match index {
+                    ReimbursementIndex::CkEth { ledger_burn_index } => (
+                        *ledger_burn_index,
+                        CkTokenSymbol::cketh_symbol_from_state(state),
+                    ),
+                    ReimbursementIndex::CkErc20 {
+                        cketh_ledger_burn_index,
+                        ledger_id,
+                        ckerc20_ledger_burn_index: _,
+                    } => (
+                        *cketh_ledger_burn_index,
+                        state
+                            .ckerc20_token_symbol_for_ledger(ledger_id)
+                            .expect("BUG: unknown ERC-20 token")
+                            .clone(),
+                    ),
+                };
+                match result {
+                    Ok(reimbursed) => DashboardReimbursedTransaction::Reimbursed {
+                        cketh_ledger_burn_index,
+                        reimbursed_in_block: reimbursed.reimbursed_in_block,
+                        reimbursed_amount: reimbursed.reimbursed_amount.into(),
+                        token_symbol,
+                        transaction_hash: reimbursed.transaction_hash,
+                    },
+                    Err(ReimbursedError::Quarantined) => {
+                        DashboardReimbursedTransaction::Quarantined {
+                            cketh_ledger_burn_index,
+                            token_symbol,
+                        }
+                    }
+                }
             })
             .collect();
         reimbursed_transactions
-            .sort_unstable_by_key(|reimbursed_tx| Reverse(reimbursed_tx.cketh_ledger_burn_index));
+            .sort_unstable_by_key(|reimbursed_tx| Reverse(reimbursed_tx.cketh_ledger_burn_index()));
 
         DashboardTemplate {
             ethereum_network: state.ethereum_network,

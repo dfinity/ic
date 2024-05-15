@@ -10,7 +10,8 @@ use crate::{
     config_parser::{ConfigError, ConfigSource, ConfigValidate},
     crypto::CryptoConfig,
     execution_environment::Config as HypervisorConfig,
-    firewall::Config as FirewallConfig,
+    firewall::BoundaryNodeConfig as BoundaryNodeFirewallConfig,
+    firewall::ReplicaConfig as ReplicaFirewallConfig,
     http_handler::Config as HttpHandlerConfig,
     initial_ipv4_config::IPv4Config,
     logger::Config as LoggerConfig,
@@ -20,6 +21,7 @@ use crate::{
     registration::Config as RegistrationConfig,
     registry_client::Config as RegistryClientConfig,
     state_manager::Config as StateManagerConfig,
+    tracing::Config as TracingConfig,
     transport::TransportConfig,
 };
 use ic_types::malicious_behaviour::MaliciousBehaviour;
@@ -39,6 +41,7 @@ pub struct Config {
     pub artifact_pool: ArtifactPoolTomlConfig,
     pub crypto: CryptoConfig,
     pub logger: LoggerConfig,
+    pub tracing: TracingConfig,
     // If `orchestrator_logger` is not specified in the configuration file, it
     // defaults to the value specified for `logger`.
     pub orchestrator_logger: LoggerConfig,
@@ -47,7 +50,8 @@ pub struct Config {
     pub csp_vault_logger: LoggerConfig,
     pub message_routing: MessageRoutingConfig,
     pub malicious_behaviour: MaliciousBehaviour,
-    pub firewall: FirewallConfig,
+    pub firewall: ReplicaFirewallConfig,
+    pub boundary_node_firewall: BoundaryNodeFirewallConfig,
     pub registration: RegistrationConfig,
     pub nns_registry_replicator: NnsRegistryReplicatorConfig,
     pub adapters_config: AdaptersConfig,
@@ -69,11 +73,13 @@ pub struct ConfigOptional {
     pub artifact_pool: Option<ArtifactPoolTomlConfig>,
     pub crypto: Option<CryptoConfig>,
     pub logger: Option<LoggerConfig>,
+    pub tracing: Option<TracingConfig>,
     pub orchestrator_logger: Option<LoggerConfig>,
     pub csp_vault_logger: Option<LoggerConfig>,
     pub message_routing: Option<MessageRoutingConfig>,
     pub malicious_behaviour: Option<MaliciousBehaviour>,
-    pub firewall: Option<FirewallConfig>,
+    pub firewall: Option<ReplicaFirewallConfig>,
+    pub boundary_node_firewall: Option<BoundaryNodeFirewallConfig>,
     pub registration: Option<RegistrationConfig>,
     pub nns_registry_replicator: Option<NnsRegistryReplicatorConfig>,
     pub adapters_config: Option<AdaptersConfig>,
@@ -100,11 +106,13 @@ impl Config {
             artifact_pool: ArtifactPoolTomlConfig::new(parent_dir.join("consensus_pool"), None),
             crypto: CryptoConfig::new(parent_dir.join("crypto")),
             logger: logger.clone(),
+            tracing: TracingConfig::default(),
             orchestrator_logger: logger.clone(),
             csp_vault_logger: logger,
             message_routing: MessageRoutingConfig::default(),
             malicious_behaviour: MaliciousBehaviour::default(),
-            firewall: FirewallConfig::default(),
+            firewall: ReplicaFirewallConfig::default(),
+            boundary_node_firewall: BoundaryNodeFirewallConfig::default(),
             registration: RegistrationConfig::default(),
             nns_registry_replicator: NnsRegistryReplicatorConfig::default(),
             adapters_config: AdaptersConfig::default(),
@@ -151,6 +159,7 @@ impl Config {
             artifact_pool: cfg.artifact_pool.unwrap_or(default.artifact_pool),
             crypto: cfg.crypto.unwrap_or(default.crypto),
             logger,
+            tracing: cfg.tracing.unwrap_or(default.tracing),
             orchestrator_logger,
             csp_vault_logger,
             message_routing: cfg.message_routing.unwrap_or(default.message_routing),
@@ -158,6 +167,9 @@ impl Config {
                 .malicious_behaviour
                 .unwrap_or(default.malicious_behaviour),
             firewall: cfg.firewall.unwrap_or(default.firewall),
+            boundary_node_firewall: cfg
+                .boundary_node_firewall
+                .unwrap_or(default.boundary_node_firewall),
             registration: cfg.registration.unwrap_or(default.registration),
             nns_registry_replicator: cfg
                 .nns_registry_replicator

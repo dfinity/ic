@@ -157,6 +157,7 @@ impl Registry {
         );
     }
 
+    // TODO(NNS1-3037): Replicate changes to chain key signing list
     fn mutations_to_enable_subnet_signing(
         &self,
         subnet_id: SubnetId,

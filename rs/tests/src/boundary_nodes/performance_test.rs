@@ -146,7 +146,7 @@ pub fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
 }
 
 // Execute update calls (without polling) with an increasing req/s rate, against a counter canister via the boundary node agent.
-// At the moment 300 req/s is the maximum defined by the rate limiter in /ic-os/boundary-guestos/rootfs/etc/nginx/conf.d/000-nginx-global.conf
+// At the moment 300 req/s is the maximum defined by the rate limiter in 000-nginx-global.conf
 
 pub fn update_calls_test(env: TestEnv) {
     let rps_min = 50;
@@ -212,7 +212,7 @@ pub fn update_calls_test(env: TestEnv) {
 }
 
 // Execute query calls with an increasing req/s rate, against a counter canister via the boundary node agent.
-// In order to observe rates>1 req/s on the replica, caching should be disabled in /ic-os/boundary-guestos/rootfs/etc/nginx/conf.d/002-mainnet-nginx.conf
+// In order to observe rates>1 req/s on the replica, caching should be disabled in 002-mainnet-nginx.conf
 
 pub fn query_calls_test(env: TestEnv) {
     let rps_min = 500;

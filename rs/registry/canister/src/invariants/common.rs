@@ -10,12 +10,16 @@ use url::Url;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::registry::{
-    api_boundary_node::v1::ApiBoundaryNodeRecord, crypto::v1::EcdsaSigningSubnetList,
-    hostos_version::v1::HostosVersionRecord, node::v1::NodeRecord, subnet::v1::SubnetListRecord,
+    api_boundary_node::v1::ApiBoundaryNodeRecord,
+    crypto::v1::{ChainKeySigningSubnetList, EcdsaSigningSubnetList},
+    hostos_version::v1::HostosVersionRecord,
+    node::v1::NodeRecord,
+    subnet::v1::SubnetListRecord,
 };
 use ic_registry_keys::{
     get_api_boundary_node_record_node_id, get_node_record_node_id, make_node_record_key,
-    make_subnet_list_record_key, ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX,
+    make_subnet_list_record_key, CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX,
+    ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX,
 };
 
 /// A representation of the data held by the registry.
@@ -71,6 +75,32 @@ pub(crate) fn get_all_ecdsa_signing_subnet_list_records(
                 None => panic!("Cannot fetch EcdsaSigningSubnetList record for an existing key"),
             };
             result.insert(signing_subnet_list_key, ecdsa_signing_subnet_list_record);
+        }
+    }
+    result
+}
+
+// Retrieve all records that serve as lists of subnets that can sign with chain keys
+#[allow(dead_code)]
+pub(crate) fn get_all_chain_key_signing_subnet_list_records(
+    snapshot: &RegistrySnapshot,
+) -> BTreeMap<String, ChainKeySigningSubnetList> {
+    let mut result = BTreeMap::<String, ChainKeySigningSubnetList>::new();
+    for key in snapshot.keys() {
+        let signing_subnet_list_key = String::from_utf8(key.clone()).unwrap();
+        if signing_subnet_list_key.starts_with(CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX) {
+            let chain_key_signing_subnet_list_record = match snapshot.get(key) {
+                Some(chain_key_signing_subnet_list_record) => {
+                    decode_or_panic::<ChainKeySigningSubnetList>(
+                        chain_key_signing_subnet_list_record.clone(),
+                    )
+                }
+                None => panic!("Cannot fetch ChainKeySigningSubnetList record for an existing key"),
+            };
+            result.insert(
+                signing_subnet_list_key,
+                chain_key_signing_subnet_list_record,
+            );
         }
     }
     result

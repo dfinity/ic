@@ -36,8 +36,8 @@ pub async fn main() {
     // metrics socket as FD(4).
     // SAFETY: The process is managed by systemd and is configured to start with at metrics socket.
     // Additionally this function is only called once here.
-    // Systemd Socket config: ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.socket
-    // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.service
+    // Systemd Socket config: ic-https-outcalls-adapter.socket
+    // Systemd Service config: ic-https-outcalls-adapter.service
     if config.incoming_source == IncomingSource::Systemd {
         let stream = unsafe { incoming_from_nth_systemd_socket(2) };
         start_metrics_grpc(metrics_registry.clone(), logger.clone(), stream);

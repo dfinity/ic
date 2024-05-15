@@ -17,6 +17,7 @@ struct FieldElementConfig {
     monty_r3: BigUint,
     p_dash: u64,
     is_p_3_mod_4: bool,
+    is_p_5_mod_8: bool,
     params: BTreeMap<String, BigUint>,
 }
 
@@ -51,6 +52,8 @@ impl FieldElementConfig {
             params.insert("SSWU_C2".to_string(), sswu_c2);
         }
 
+        let is_p_5_mod_8 = modulus.get_limb(0) % 8 == 5;
+
         Self {
             ident,
             limbs,
@@ -61,6 +64,7 @@ impl FieldElementConfig {
             monty_r3,
             p_dash,
             is_p_3_mod_4,
+            is_p_5_mod_8,
             params,
         }
     }
@@ -172,6 +176,10 @@ pub fn derive_field_element(input: proc_macro::TokenStream) -> proc_macro::Token
 
     if config.is_p_3_mod_4 {
         gen.extend(p_3_mod_4_extras(&config));
+    }
+
+    if config.is_p_5_mod_8 && config.params.contains_key("SQRT_NEG_1") {
+        gen.extend(p_5_mod_8_extras(&config));
     }
 
     gen.into()
@@ -544,6 +552,46 @@ fn p_3_mod_4_extras(config: &FieldElementConfig) -> proc_macro2::TokenStream {
 
                 // zero the result if invalid
                 sqrt.ct_assign(&Self::zero(), !is_correct_sqrt);
+
+                (is_correct_sqrt, sqrt)
+            }
+        }
+    }
+}
+
+fn p_5_mod_8_extras(config: &FieldElementConfig) -> proc_macro2::TokenStream {
+    let ident = config.ident.clone();
+    let limbs = config.limbs;
+
+    let q_plus3_div8 = (&config.modulus + BigUint::from_bytes_be(&[3])) >> 3;
+    let q_plus3_div8_limbs = biguint_as_u64s(&q_plus3_div8, limbs);
+
+    let q_minus5_div8 = (&config.modulus - BigUint::from_bytes_be(&[5])) >> 3;
+    let q_minus5_div8_limbs = biguint_as_u64s(&q_minus5_div8, limbs);
+
+    quote! {
+        impl #ident {
+            const Q_PLUS3_DIV8: [u64; #limbs] = [#(#q_plus3_div8_limbs,)*];
+
+            const Q_MINUS5_DIV8: [u64; #limbs] = [#(#q_minus5_div8_limbs,)*];
+
+            /// Return the square root of self mod p, or zero if no square root exists.
+            ///
+            /// The validity of the result is determined by the returned Choice
+            pub fn sqrt(&self) -> (subtle::Choice, Self) {
+                // See https://www.rfc-editor.org/rfc/rfc9380.html#name-sqrt-for-q-5-mod-8
+
+                let tv1 = self.pow_vartime(&Self::Q_PLUS3_DIV8);
+                let tv2 = tv1.mul(&Self::sqrt_neg_1());
+
+                let tv1_ok = tv1.square().ct_eq(self);
+                let tv2_ok = tv2.square().ct_eq(self);
+
+                let mut sqrt = Self::zero();
+                sqrt.ct_assign(&tv1, tv1_ok);
+                sqrt.ct_assign(&tv2, tv2_ok);
+
+                let is_correct_sqrt = tv1_ok | tv2_ok;
 
                 (is_correct_sqrt, sqrt)
             }

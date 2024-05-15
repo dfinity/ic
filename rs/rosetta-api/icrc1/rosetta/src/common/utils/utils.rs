@@ -62,6 +62,9 @@ pub fn get_rosetta_block_from_partial_block_identifier(
     partial_block_identifier: &PartialBlockIdentifier,
     storage_client: &StorageClient,
 ) -> anyhow::Result<RosettaBlock> {
+    if storage_client.get_block_count()? == 0 {
+        bail!("Could not fetch the block, the database is empty!")
+    }
     Ok(
         match (
             partial_block_identifier.index,
@@ -91,7 +94,12 @@ pub fn get_rosetta_block_from_partial_block_identifier(
                 }
                 rosetta_block
             }
-            (None, None) => bail!("Neither block index nor block hash were provided".to_owned(),),
+            (None, None) => storage_client
+                .get_block_with_highest_block_idx()
+                .with_context(|| "Unable to retrieve the latest block".to_string())?
+                .with_context(|| {
+                    "Latest block could not be found, the blockchain is empty".to_string()
+                })?,
         },
     )
 }

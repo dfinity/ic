@@ -21,6 +21,7 @@ ALIASES = {}
 
 rust_library(
     name = "local_csp_vault",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_test_utils_local_csp_vault",

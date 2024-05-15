@@ -1,5 +1,5 @@
 {
-  "checksum": "581e6898b7e455ae50d75c1bd457a3c4343321d548a6048551e7b53733221e60",
+  "checksum": "fd8c95f3ae2fb9ece7eead84c321c31d8d20b5e6df17f2204be21b28534e1acf",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4989,7 +4989,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -5099,7 +5099,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -6221,6 +6221,133 @@
             {
               "id": "prettyplease 0.2.15",
               "target": "prettyplease"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "BSD-3-Clause",
+      "license_ids": [
+        "BSD-3-Clause"
+      ],
+      "license_file": "LICENSE"
+    },
+    "bindgen 0.69.4": {
+      "name": "bindgen",
+      "version": "0.69.4",
+      "package_url": "https://github.com/rust-lang/rust-bindgen",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bindgen/0.69.4/download",
+          "sha256": "a00dc851838a2120612785d195287475a3ac45514741da670b735818822129a0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bindgen",
+            "crate_root": "lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bindgen",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "runtime"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bindgen 0.69.4",
+              "target": "build_script_build"
+            },
+            {
+              "id": "bitflags 2.4.1",
+              "target": "bitflags"
+            },
+            {
+              "id": "cexpr 0.6.0",
+              "target": "cexpr"
+            },
+            {
+              "id": "clang-sys 1.6.1",
+              "target": "clang_sys"
+            },
+            {
+              "id": "itertools 0.12.0",
+              "target": "itertools"
+            },
+            {
+              "id": "lazy_static 1.4.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "lazycell 1.3.0",
+              "target": "lazycell"
+            },
+            {
+              "id": "proc-macro2 1.0.76",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "regex 1.10.2",
+              "target": "regex"
+            },
+            {
+              "id": "rustc-hash 1.1.0",
+              "target": "rustc_hash"
+            },
+            {
+              "id": "shlex 1.3.0",
+              "target": "shlex"
+            },
+            {
+              "id": "syn 2.0.48",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.69.4"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "clang-sys 1.6.1",
+              "target": "clang_sys"
             }
           ],
           "selects": {}
@@ -8302,7 +8429,7 @@
         "deps": {
           "common": [
             {
-              "id": "semver 1.0.20",
+              "id": "semver 1.0.22",
               "target": "semver"
             },
             {
@@ -9505,6 +9632,232 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "canbench 0.1.3": {
+      "name": "canbench",
+      "version": "0.1.3",
+      "package_url": "https://github.com/dfinity/canbench",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/canbench/0.1.3/download",
+          "sha256": "8d8db3022e4aa2e0b00feb4b3789ab01ce6e2f392c85d46e1afa5a60f3d82e55"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "canbench",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "canbench",
+            "crate_root": "src/main.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "canbench",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "canbench-rs 0.1.1",
+              "target": "canbench_rs"
+            },
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "clap 4.4.6",
+              "target": "clap"
+            },
+            {
+              "id": "colored 2.0.4",
+              "target": "colored"
+            },
+            {
+              "id": "flate2 1.0.28",
+              "target": "flate2"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "reqwest 0.11.27",
+              "target": "reqwest"
+            },
+            {
+              "id": "semver 1.0.22",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.195",
+              "target": "serde"
+            },
+            {
+              "id": "serde_yaml 0.9.30",
+              "target": "serde_yaml"
+            },
+            {
+              "id": "sha256 1.5.0",
+              "target": "sha256"
+            },
+            {
+              "id": "tempfile 3.8.0",
+              "target": "tempfile"
+            },
+            {
+              "id": "wasmparser 0.119.0",
+              "target": "wasmparser"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.3"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "canbench-rs 0.1.1": {
+      "name": "canbench-rs",
+      "version": "0.1.1",
+      "package_url": "https://github.com/dfinity/canbench",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/canbench-rs/0.1.1/download",
+          "sha256": "fe5d551419a1547b5064111df7bfa6e87818750e7f6df611067a02e63a9cbb31"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "canbench_rs",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "canbench_rs",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "ic-cdk 0.12.1",
+              "target": "ic_cdk"
+            },
+            {
+              "id": "serde 1.0.195",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "canbench-rs-macros 0.1.0",
+              "target": "canbench_rs_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.1.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "canbench-rs-macros 0.1.0": {
+      "name": "canbench-rs-macros",
+      "version": "0.1.0",
+      "package_url": "https://github.com/dfinity/canbench",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/canbench-rs-macros/0.1.0/download",
+          "sha256": "b5acd4a41fd2e7018508f7442d7ae90957a913c6fa0e4b767e5be9a8cc5848c8"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "canbench_rs_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "canbench_rs_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.76",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
     "candid 0.10.6": {
       "name": "candid",
       "version": "0.10.6",
@@ -9915,7 +10268,7 @@
               "target": "cargo_platform"
             },
             {
-              "id": "semver 1.0.20",
+              "id": "semver 1.0.22",
               "target": "semver"
             },
             {
@@ -11413,14 +11766,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "clocksource 0.6.0": {
+    "clocksource 0.8.1": {
       "name": "clocksource",
-      "version": "0.6.0",
+      "version": "0.8.1",
       "package_url": "https://github.com/pelikan-io/rustcommon",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/clocksource/0.6.0/download",
-          "sha256": "b90cc4cec392a6d97223f008b5da7a3c2c71aa6d5ffdf0e3e14d8b2432738387"
+          "url": "https://static.crates.io/crates/clocksource/0.8.1/download",
+          "sha256": "129026dd5a8a9592d96916258f3a5379589e513ea5e86aeb0bd2530286e44e9e"
         }
       },
       "targets": [
@@ -11454,23 +11807,7 @@
             }
           ],
           "selects": {
-            "cfg(all(not(windows), not(unix), not(target_os = \"macos\"), not(target_os = \"ios\")))": [
-              {
-                "id": "lazy_static 1.4.0",
-                "target": "lazy_static"
-              }
-            ],
-            "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
-              {
-                "id": "mach 0.3.2",
-                "target": "mach"
-              }
-            ],
             "cfg(windows)": [
-              {
-                "id": "lazy_static 1.4.0",
-                "target": "lazy_static"
-              },
               {
                 "id": "winapi 0.3.9",
                 "target": "winapi"
@@ -11479,13 +11816,14 @@
           }
         },
         "edition": "2021",
-        "version": "0.6.0"
+        "version": "0.8.1"
       },
-      "license": "Apache-2.0",
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
-        "Apache-2.0"
+        "Apache-2.0",
+        "MIT"
       ],
-      "license_file": null
+      "license_file": "LICENSE-APACHE"
     },
     "cloudabi 0.0.3": {
       "name": "cloudabi",
@@ -12826,14 +13164,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "cranelift-bforest 0.106.2": {
+    "cranelift-bforest 0.107.2": {
       "name": "cranelift-bforest",
-      "version": "0.106.2",
+      "version": "0.107.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-bforest/0.106.2/download",
-          "sha256": "3b57d4f3ffc28bbd6ef1ca7b50b20126717232f97487efe027d135d9d87eb29c"
+          "url": "https://static.crates.io/crates/cranelift-bforest/0.107.2/download",
+          "sha256": "ebf72ceaf38f7d41194d0cf6748214d8ef7389167fe09aad80f87646dbfa325b"
         }
       },
       "targets": [
@@ -12858,14 +13196,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-entity 0.106.2",
+              "id": "cranelift-entity 0.107.2",
               "target": "cranelift_entity"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.106.2"
+        "version": "0.107.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -12873,14 +13211,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-codegen 0.106.2": {
+    "cranelift-codegen 0.107.2": {
       "name": "cranelift-codegen",
-      "version": "0.106.2",
+      "version": "0.107.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-codegen/0.106.2/download",
-          "sha256": "d1f7d0ac7fd53f2c29db3ff9a063f6ff5a8be2abaa8f6942aceb6e1521e70df7"
+          "url": "https://static.crates.io/crates/cranelift-codegen/0.107.2/download",
+          "sha256": "9ee7fde5cd9173f00ce02c491ee9e306d64740f4b1a697946e0474f389999e13"
         }
       },
       "targets": [
@@ -12919,6 +13257,7 @@
             "gimli",
             "host-arch",
             "std",
+            "trace-log",
             "unwind"
           ],
           "selects": {}
@@ -12930,23 +13269,23 @@
               "target": "bumpalo"
             },
             {
-              "id": "cranelift-bforest 0.106.2",
+              "id": "cranelift-bforest 0.107.2",
               "target": "cranelift_bforest"
             },
             {
-              "id": "cranelift-codegen 0.106.2",
+              "id": "cranelift-codegen 0.107.2",
               "target": "build_script_build"
             },
             {
-              "id": "cranelift-codegen-shared 0.106.2",
+              "id": "cranelift-codegen-shared 0.107.2",
               "target": "cranelift_codegen_shared"
             },
             {
-              "id": "cranelift-control 0.106.2",
+              "id": "cranelift-control 0.107.2",
               "target": "cranelift_control"
             },
             {
-              "id": "cranelift-entity 0.106.2",
+              "id": "cranelift-entity 0.107.2",
               "target": "cranelift_entity"
             },
             {
@@ -12977,7 +13316,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.106.2"
+        "version": "0.107.2"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -12986,11 +13325,11 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen-meta 0.106.2",
+              "id": "cranelift-codegen-meta 0.107.2",
               "target": "cranelift_codegen_meta"
             },
             {
-              "id": "cranelift-isle 0.106.2",
+              "id": "cranelift-isle 0.107.2",
               "target": "cranelift_isle"
             }
           ],
@@ -13003,14 +13342,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-codegen-meta 0.106.2": {
+    "cranelift-codegen-meta 0.107.2": {
       "name": "cranelift-codegen-meta",
-      "version": "0.106.2",
+      "version": "0.107.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-codegen-meta/0.106.2/download",
-          "sha256": "b40bf21460a600178956cb7fd900a7408c6587fbb988a8063f7215361801a1da"
+          "url": "https://static.crates.io/crates/cranelift-codegen-meta/0.107.2/download",
+          "sha256": "b49bec6a517e78d4067500dc16acb558e772491a2bcb37301127448adfb8413c"
         }
       },
       "targets": [
@@ -13035,14 +13374,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen-shared 0.106.2",
+              "id": "cranelift-codegen-shared 0.107.2",
               "target": "cranelift_codegen_shared"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.106.2"
+        "version": "0.107.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -13050,14 +13389,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-codegen-shared 0.106.2": {
+    "cranelift-codegen-shared 0.107.2": {
       "name": "cranelift-codegen-shared",
-      "version": "0.106.2",
+      "version": "0.107.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-codegen-shared/0.106.2/download",
-          "sha256": "d792ecc1243b7ebec4a7f77d9ed428ef27456eeb1f8c780587a6f5c38841be19"
+          "url": "https://static.crates.io/crates/cranelift-codegen-shared/0.107.2/download",
+          "sha256": "ead4ea497b2dc2ac31fcabd6d5d0d5dc25b3964814122e343724bdf65a53c843"
         }
       },
       "targets": [
@@ -13080,7 +13419,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "0.106.2"
+        "version": "0.107.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -13088,14 +13427,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-control 0.106.2": {
+    "cranelift-control 0.107.2": {
       "name": "cranelift-control",
-      "version": "0.106.2",
+      "version": "0.107.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-control/0.106.2/download",
-          "sha256": "cea2808043df964b73ad7582e09afbbe06a31f3fb9db834d53e74b4e16facaeb"
+          "url": "https://static.crates.io/crates/cranelift-control/0.107.2/download",
+          "sha256": "f81e8028c8d711ea7592648e70221f2e54acb8665f7ecd49545f021ec14c3341"
         }
       },
       "targets": [
@@ -13127,7 +13466,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.106.2"
+        "version": "0.107.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -13135,14 +13474,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-entity 0.106.2": {
+    "cranelift-entity 0.107.2": {
       "name": "cranelift-entity",
-      "version": "0.106.2",
+      "version": "0.107.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-entity/0.106.2/download",
-          "sha256": "f1930946836da6f514da87625cd1a0331f3908e0de454628c24a0b97b130c4d4"
+          "url": "https://static.crates.io/crates/cranelift-entity/0.107.2/download",
+          "sha256": "32acd0632ba65c2566e75f64af9ef094bb8d90e58a9fbd33d920977a9d85c054"
         }
       },
       "targets": [
@@ -13191,7 +13530,7 @@
           ],
           "selects": {}
         },
-        "version": "0.106.2"
+        "version": "0.107.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -13199,14 +13538,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-frontend 0.106.2": {
+    "cranelift-frontend 0.107.2": {
       "name": "cranelift-frontend",
-      "version": "0.106.2",
+      "version": "0.107.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-frontend/0.106.2/download",
-          "sha256": "5482a5fcdf98f2f31b21093643bdcfe9030866b8be6481117022e7f52baa0f2b"
+          "url": "https://static.crates.io/crates/cranelift-frontend/0.107.2/download",
+          "sha256": "a395a704934aa944ba8939cac9001174b9ae5236f48bc091f89e33bb968336f6"
         }
       },
       "targets": [
@@ -13238,7 +13577,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.106.2",
+              "id": "cranelift-codegen 0.107.2",
               "target": "cranelift_codegen"
             },
             {
@@ -13257,7 +13596,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.106.2"
+        "version": "0.107.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -13265,14 +13604,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-isle 0.106.2": {
+    "cranelift-isle 0.107.2": {
       "name": "cranelift-isle",
-      "version": "0.106.2",
+      "version": "0.107.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime/tree/main/cranelift/isle",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-isle/0.106.2/download",
-          "sha256": "6f6e1869b6053383bdb356900e42e33555b4c9ebee05699469b7c53cdafc82ea"
+          "url": "https://static.crates.io/crates/cranelift-isle/0.107.2/download",
+          "sha256": "b325ce81c4ee7082dc894537eb342c37898e14230fe7c02ea945691db3e2dd01"
         }
       },
       "targets": [
@@ -13315,14 +13654,14 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-isle 0.106.2",
+              "id": "cranelift-isle 0.107.2",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.106.2"
+        "version": "0.107.2"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -13335,14 +13674,14 @@
       ],
       "license_file": null
     },
-    "cranelift-native 0.106.2": {
+    "cranelift-native 0.107.2": {
       "name": "cranelift-native",
-      "version": "0.106.2",
+      "version": "0.107.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-native/0.106.2/download",
-          "sha256": "a91446e8045f1c4bc164b7bba68e2419c623904580d4b730877a663c6da38964"
+          "url": "https://static.crates.io/crates/cranelift-native/0.107.2/download",
+          "sha256": "ea11f5ac85996fa093075d66397922d4f56085d5d84ec13043d0cd4f159c6818"
         }
       },
       "targets": [
@@ -13374,7 +13713,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.106.2",
+              "id": "cranelift-codegen 0.107.2",
               "target": "cranelift_codegen"
             },
             {
@@ -13392,7 +13731,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.106.2"
+        "version": "0.107.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -13400,14 +13739,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "cranelift-wasm 0.106.2": {
+    "cranelift-wasm 0.107.2": {
       "name": "cranelift-wasm",
-      "version": "0.106.2",
+      "version": "0.107.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/cranelift-wasm/0.106.2/download",
-          "sha256": "f8b17979b862d3b0d52de6ae3294ffe4d86c36027b56ad0443a7c8c8f921d14f"
+          "url": "https://static.crates.io/crates/cranelift-wasm/0.107.2/download",
+          "sha256": "e4f175d4e299a8edabfbd64fa93c7650836cc8ad7f4879f9bd2632575a1f12d0"
         }
       },
       "targets": [
@@ -13439,15 +13778,15 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-codegen 0.106.2",
+              "id": "cranelift-codegen 0.107.2",
               "target": "cranelift_codegen"
             },
             {
-              "id": "cranelift-entity 0.106.2",
+              "id": "cranelift-entity 0.107.2",
               "target": "cranelift_entity"
             },
             {
-              "id": "cranelift-frontend 0.106.2",
+              "id": "cranelift-frontend 0.107.2",
               "target": "cranelift_frontend"
             },
             {
@@ -13463,18 +13802,18 @@
               "target": "smallvec"
             },
             {
-              "id": "wasmparser 0.201.0",
+              "id": "wasmparser 0.202.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-types 19.0.2",
+              "id": "wasmtime-types 20.0.2",
               "target": "wasmtime_types"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.106.2"
+        "version": "0.107.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -16790,6 +17129,14 @@
               "target": "cached"
             },
             {
+              "id": "canbench 0.1.3",
+              "target": "canbench"
+            },
+            {
+              "id": "canbench-rs 0.1.1",
+              "target": "canbench_rs"
+            },
+            {
               "id": "candid 0.10.6",
               "target": "candid"
             },
@@ -16991,6 +17338,10 @@
               "target": "hex_literal"
             },
             {
+              "id": "hkdf 0.12.4",
+              "target": "hkdf"
+            },
+            {
               "id": "http 0.2.9",
               "target": "http"
             },
@@ -17038,9 +17389,13 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "hyper-rustls 0.26.0",
+              "id": "hyper-rustls 0.27.1",
               "target": "hyper_rustls",
-              "alias": "hyper_rustls_0_26_0"
+              "alias": "hyper_rustls_0_27_x"
+            },
+            {
+              "id": "hyper-socks2 0.8.0",
+              "target": "hyper_socks2"
             },
             {
               "id": "hyper-util 0.1.3",
@@ -17259,6 +17614,10 @@
               "target": "lru"
             },
             {
+              "id": "mach2 0.4.2",
+              "target": "mach2"
+            },
+            {
               "id": "maplit 1.0.2",
               "target": "maplit"
             },
@@ -17289,6 +17648,10 @@
             {
               "id": "more-asserts 0.3.1",
               "target": "more_asserts"
+            },
+            {
+              "id": "nftables 0.4.0",
+              "target": "nftables"
             },
             {
               "id": "nix 0.24.3",
@@ -17339,8 +17702,21 @@
               "target": "opentelemetry"
             },
             {
+              "id": "opentelemetry 0.21.0",
+              "target": "opentelemetry",
+              "alias": "opentelemetry_0_21_0"
+            },
+            {
+              "id": "opentelemetry-otlp 0.14.0",
+              "target": "opentelemetry_otlp"
+            },
+            {
               "id": "opentelemetry-prometheus 0.13.0",
               "target": "opentelemetry_prometheus"
+            },
+            {
+              "id": "opentelemetry_sdk 0.21.2",
+              "target": "opentelemetry_sdk"
             },
             {
               "id": "p256 0.13.2",
@@ -17471,7 +17847,7 @@
               "target": "randomkit"
             },
             {
-              "id": "ratelimit 0.7.1",
+              "id": "ratelimit 0.9.1",
               "target": "ratelimit"
             },
             {
@@ -17512,7 +17888,7 @@
               "target": "rlp"
             },
             {
-              "id": "rocksdb 0.21.0",
+              "id": "rocksdb 0.22.0",
               "target": "rocksdb"
             },
             {
@@ -17544,13 +17920,13 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
-              "id": "rustls 0.22.2",
+              "id": "rustls 0.23.5",
               "target": "rustls",
-              "alias": "rustls_0_22_2"
+              "alias": "rustls_0_23_x"
             },
             {
               "id": "rustls-native-certs 0.7.0",
@@ -17585,7 +17961,7 @@
               "target": "scraper"
             },
             {
-              "id": "semver 1.0.20",
+              "id": "semver 1.0.22",
               "target": "semver"
             },
             {
@@ -17642,6 +18018,10 @@
               "target": "simple_asn1"
             },
             {
+              "id": "simple_moving_average 1.0.2",
+              "target": "simple_moving_average"
+            },
+            {
               "id": "slog 2.7.0",
               "target": "slog"
             },
@@ -17692,6 +18072,10 @@
             {
               "id": "syn 1.0.109",
               "target": "syn"
+            },
+            {
+              "id": "sync_wrapper 1.0.1",
+              "target": "sync_wrapper"
             },
             {
               "id": "tar 0.4.40",
@@ -17779,12 +18163,12 @@
             },
             {
               "id": "tower-http 0.4.4",
-              "target": "tower_http"
+              "target": "tower_http",
+              "alias": "tower_http_0_4_4"
             },
             {
-              "id": "tower-http 0.5.1",
-              "target": "tower_http",
-              "alias": "tower_http_0_5_1"
+              "id": "tower-http 0.5.2",
+              "target": "tower_http"
             },
             {
               "id": "tower-request-id 0.3.0",
@@ -17813,6 +18197,10 @@
             {
               "id": "tracing-flame 0.2.0",
               "target": "tracing_flame"
+            },
+            {
+              "id": "tracing-opentelemetry 0.22.0",
+              "target": "tracing_opentelemetry"
             },
             {
               "id": "tracing-serde 0.1.3",
@@ -17879,15 +18267,15 @@
               "target": "wasmprinter"
             },
             {
-              "id": "wasmtime 19.0.2",
+              "id": "wasmtime 20.0.2",
               "target": "wasmtime"
             },
             {
-              "id": "wasmtime-environ 19.0.2",
+              "id": "wasmtime-environ 20.0.2",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wasmtime-runtime 19.0.2",
+              "id": "wasmtime-runtime 20.0.2",
               "target": "wasmtime_runtime"
             },
             {
@@ -18901,6 +19289,7 @@
             "default",
             "digest",
             "fast",
+            "hazmat",
             "merlin",
             "pem",
             "pkcs8",
@@ -24962,6 +25351,54 @@
       ],
       "license_file": null
     },
+    "hkdf 0.12.4": {
+      "name": "hkdf",
+      "version": "0.12.4",
+      "package_url": "https://github.com/RustCrypto/KDFs/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hkdf/0.12.4/download",
+          "sha256": "7b5f8eb2ad728638ea2c7d47a21db23b7b58a72ed6a38256b8a1849f15fbbdf7"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hkdf",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hkdf",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "hmac 0.12.1",
+              "target": "hmac"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.12.4"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "hmac 0.8.1": {
       "name": "hmac",
       "version": "0.8.1",
@@ -26481,7 +26918,7 @@
               "target": "log"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -26549,106 +26986,10 @@
             "native-tokio",
             "ring",
             "rustls-native-certs",
-            "tls12"
+            "tls12",
+            "webpki-roots"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "webpki-roots"
-            ],
-            "aarch64-apple-ios": [
-              "webpki-roots"
-            ],
-            "aarch64-apple-ios-sim": [
-              "webpki-roots"
-            ],
-            "aarch64-fuchsia": [
-              "webpki-roots"
-            ],
-            "aarch64-linux-android": [
-              "webpki-roots"
-            ],
-            "aarch64-pc-windows-msvc": [
-              "webpki-roots"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "webpki-roots"
-            ],
-            "aarch64-unknown-nixos-gnu": [
-              "webpki-roots"
-            ],
-            "aarch64-unknown-nto-qnx710": [
-              "webpki-roots"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "webpki-roots"
-            ],
-            "armv7-linux-androideabi": [
-              "webpki-roots"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "webpki-roots"
-            ],
-            "i686-apple-darwin": [
-              "webpki-roots"
-            ],
-            "i686-linux-android": [
-              "webpki-roots"
-            ],
-            "i686-pc-windows-msvc": [
-              "webpki-roots"
-            ],
-            "i686-unknown-freebsd": [
-              "webpki-roots"
-            ],
-            "i686-unknown-linux-gnu": [
-              "webpki-roots"
-            ],
-            "powerpc-unknown-linux-gnu": [
-              "webpki-roots"
-            ],
-            "riscv32imc-unknown-none-elf": [
-              "webpki-roots"
-            ],
-            "riscv64gc-unknown-none-elf": [
-              "webpki-roots"
-            ],
-            "s390x-unknown-linux-gnu": [
-              "webpki-roots"
-            ],
-            "thumbv7em-none-eabi": [
-              "webpki-roots"
-            ],
-            "thumbv8m.main-none-eabi": [
-              "webpki-roots"
-            ],
-            "x86_64-apple-darwin": [
-              "webpki-roots"
-            ],
-            "x86_64-apple-ios": [
-              "webpki-roots"
-            ],
-            "x86_64-fuchsia": [
-              "webpki-roots"
-            ],
-            "x86_64-linux-android": [
-              "webpki-roots"
-            ],
-            "x86_64-pc-windows-msvc": [
-              "webpki-roots"
-            ],
-            "x86_64-unknown-freebsd": [
-              "webpki-roots"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "webpki-roots"
-            ],
-            "x86_64-unknown-nixos-gnu": [
-              "webpki-roots"
-            ],
-            "x86_64-unknown-none": [
-              "webpki-roots"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -26714,6 +27055,193 @@
         "MIT"
       ],
       "license_file": "LICENSE"
+    },
+    "hyper-rustls 0.27.1": {
+      "name": "hyper-rustls",
+      "version": "0.27.1",
+      "package_url": "https://github.com/rustls/hyper-rustls",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hyper-rustls/0.27.1/download",
+          "sha256": "908bb38696d7a037a01ebcc68a00634112ac2bbf8ca74e30a2c3d2f4f021302b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hyper_rustls",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hyper_rustls",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "http1",
+            "http2",
+            "native-tokio",
+            "ring",
+            "rustls-native-certs",
+            "tls12"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures-util 0.3.30",
+              "target": "futures_util"
+            },
+            {
+              "id": "http 1.0.0",
+              "target": "http"
+            },
+            {
+              "id": "hyper 1.2.0",
+              "target": "hyper"
+            },
+            {
+              "id": "hyper-util 0.1.3",
+              "target": "hyper_util"
+            },
+            {
+              "id": "rustls 0.23.5",
+              "target": "rustls"
+            },
+            {
+              "id": "rustls-native-certs 0.7.0",
+              "target": "rustls_native_certs"
+            },
+            {
+              "id": "rustls-pki-types 1.3.1",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            },
+            {
+              "id": "tokio 1.37.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-rustls 0.26.0",
+              "target": "tokio_rustls"
+            },
+            {
+              "id": "tower-service 0.3.2",
+              "target": "tower_service"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.27.1"
+      },
+      "license": "Apache-2.0 OR ISC OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "ISC",
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "hyper-socks2 0.8.0": {
+      "name": "hyper-socks2",
+      "version": "0.8.0",
+      "package_url": "https://github.com/ark0f/hyper-socks2",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hyper-socks2/0.8.0/download",
+          "sha256": "cc38166fc2732d450e9372388d269eb38ff0b75a3cfb4c542e65b2f6893629c4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hyper_socks2",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hyper_socks2",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "hyper-rustls",
+            "rustls",
+            "rustls-native-certs",
+            "rusttls"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "async-socks5 0.5.1",
+              "target": "async_socks5"
+            },
+            {
+              "id": "futures 0.3.30",
+              "target": "futures"
+            },
+            {
+              "id": "http 0.2.9",
+              "target": "http"
+            },
+            {
+              "id": "hyper 0.14.27",
+              "target": "hyper"
+            },
+            {
+              "id": "hyper-rustls 0.24.2",
+              "target": "hyper_rustls"
+            },
+            {
+              "id": "rustls 0.21.12",
+              "target": "rustls",
+              "alias": "rusttls"
+            },
+            {
+              "id": "rustls-native-certs 0.6.3",
+              "target": "rustls_native_certs"
+            },
+            {
+              "id": "thiserror 1.0.57",
+              "target": "thiserror"
+            },
+            {
+              "id": "tokio 1.37.0",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.8.0"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE.md"
     },
     "hyper-timeout 0.4.1": {
       "name": "hyper-timeout",
@@ -27591,6 +28119,74 @@
       ],
       "license_file": null
     },
+    "ic-cdk 0.12.1": {
+      "name": "ic-cdk",
+      "version": "0.12.1",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk/0.12.1/download",
+          "sha256": "9f3d204af0b11c45715169c997858edb58fa8407d08f4fae78a6b415dd39a362"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_cdk",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "ic0 0.21.1",
+              "target": "ic0"
+            },
+            {
+              "id": "serde 1.0.195",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.14",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ic-cdk-macros 0.8.4",
+              "target": "ic_cdk_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.12.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "ic-cdk 0.13.2": {
       "name": "ic-cdk",
       "version": "0.13.2",
@@ -27652,6 +28248,73 @@
           "selects": {}
         },
         "version": "0.13.2"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk-macros 0.8.4": {
+      "name": "ic-cdk-macros",
+      "version": "0.8.4",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.8.4/download",
+          "sha256": "a5a618e4020cea88e933d8d2f8c7f86d570ec06213506a80d4f2c520a9bba512"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ic_cdk_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "proc-macro2 1.0.76",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "serde 1.0.195",
+              "target": "serde"
+            },
+            {
+              "id": "serde_tokenstream 0.1.7",
+              "target": "serde_tokenstream"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.8.4"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28580,7 +29243,7 @@
               "target": "once_cell"
             },
             {
-              "id": "semver 1.0.20",
+              "id": "semver 1.0.22",
               "target": "semver"
             },
             {
@@ -32426,7 +33089,7 @@
               "target": "rand"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -33936,14 +34599,14 @@
       ],
       "license_file": null
     },
-    "librocksdb-sys 0.11.0+8.1.1": {
+    "librocksdb-sys 0.16.0+8.10.0": {
       "name": "librocksdb-sys",
-      "version": "0.11.0+8.1.1",
+      "version": "0.16.0+8.10.0",
       "package_url": "https://github.com/rust-rocksdb/rust-rocksdb",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/librocksdb-sys/0.11.0+8.1.1/download",
-          "sha256": "d3386f101bcb4bd252d8e9d2fb41ec3b0862a15a62b478c355b2982efa469e3e"
+          "url": "https://static.crates.io/crates/librocksdb-sys/0.16.0+8.10.0/download",
+          "sha256": "ce3d60bc059831dc1c83903fb45c103f75db65c5a7bf22272764d9cc683e348c"
         }
       },
       "targets": [
@@ -33991,14 +34654,14 @@
               "target": "libc"
             },
             {
-              "id": "librocksdb-sys 0.11.0+8.1.1",
+              "id": "librocksdb-sys 0.16.0+8.10.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.11.0+8.1.1"
+        "version": "0.16.0+8.10.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -34007,7 +34670,7 @@
         "deps": {
           "common": [
             {
-              "id": "bindgen 0.65.1",
+              "id": "bindgen 0.69.4",
               "target": "bindgen"
             },
             {
@@ -34471,7 +35134,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.93",
+                "id": "openssl-sys 0.9.102",
                 "target": "openssl_sys"
               }
             ]
@@ -34514,7 +35177,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.93",
+                "id": "openssl-sys 0.9.102",
                 "target": "openssl_sys"
               }
             ]
@@ -35633,69 +36296,14 @@
       ],
       "license_file": null
     },
-    "mach 0.3.2": {
-      "name": "mach",
-      "version": "0.3.2",
-      "package_url": "https://github.com/fitzgen/mach",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/mach/0.3.2/download",
-          "sha256": "b823e83b2affd8f40a9ee8c29dbc56404c1e34cd2710921f2801e2cf29527afa"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "mach",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "mach",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [],
-          "selects": {
-            "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
-              {
-                "id": "libc 0.2.153",
-                "target": "libc"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "0.3.2"
-      },
-      "license": "BSD-2-Clause",
-      "license_ids": [
-        "BSD-2-Clause"
-      ],
-      "license_file": "LICENSE.md"
-    },
-    "mach2 0.4.1": {
+    "mach2 0.4.2": {
       "name": "mach2",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "package_url": "https://github.com/JohnTitor/mach2",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/mach2/0.4.1/download",
-          "sha256": "6d0d1830bcd151a6fc4aea1369af235b36c1528fe976b8ff678683c9995eade8"
+          "url": "https://static.crates.io/crates/mach2/0.4.2/download",
+          "sha256": "19b955cdeb2a02b9117f121ce63aa52d08ade45de53e48fe6a38b39c10f6f709"
         }
       },
       "targets": [
@@ -35735,7 +36343,7 @@
           }
         },
         "edition": "2015",
-        "version": "0.4.1"
+        "version": "0.4.2"
       },
       "license": "BSD-2-Clause OR MIT OR Apache-2.0",
       "license_ids": [
@@ -36726,7 +37334,7 @@
               "target": "reqwest"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -36758,7 +37366,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-http 0.5.1",
+              "id": "tower-http 0.5.2",
               "target": "tower_http"
             },
             {
@@ -37771,7 +38379,8 @@
             "default",
             "future",
             "futures-util",
-            "quanta"
+            "quanta",
+            "sync"
           ],
           "selects": {}
         },
@@ -38310,6 +38919,79 @@
         "MIT"
       ],
       "license_file": "LICENSE-MIT"
+    },
+    "nftables 0.4.0": {
+      "name": "nftables",
+      "version": "0.4.0",
+      "package_url": "https://github.com/namib-project/nftables-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/nftables/0.4.0/download",
+          "sha256": "e689b44b33fc8c2894b6f609701f785a0c1816b7fcf43d05797bd25a513028d1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "nftables",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "nftables",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.195",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.107",
+              "target": "serde_json"
+            },
+            {
+              "id": "serde_path_to_error 0.1.14",
+              "target": "serde_path_to_error"
+            },
+            {
+              "id": "strum 0.26.2",
+              "target": "strum"
+            },
+            {
+              "id": "thiserror 1.0.57",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "strum_macros 0.26.2",
+              "target": "strum_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.4.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "nix 0.24.3": {
       "name": "nix",
@@ -40151,6 +40833,66 @@
         ],
         "crate_features": {
           "common": [
+            "archive",
+            "coff",
+            "elf",
+            "macho",
+            "pe",
+            "read_core",
+            "unaligned"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "memchr 2.6.4",
+              "target": "memchr"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.32.1"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "object 0.33.0": {
+      "name": "object",
+      "version": "0.33.0",
+      "package_url": "https://github.com/gimli-rs/object",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/object/0.33.0/download",
+          "sha256": "d8dd6c0cdf9429bce006e1362bfce61fa1bfd8c898a643ed8d2b471934701d3d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "object",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "object",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
             "coff",
             "elf",
             "macho",
@@ -40162,132 +40904,7 @@
             "write_std",
             "xcoff"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "archive",
-              "unaligned"
-            ],
-            "aarch64-apple-ios": [
-              "archive",
-              "unaligned"
-            ],
-            "aarch64-apple-ios-sim": [
-              "archive",
-              "unaligned"
-            ],
-            "aarch64-fuchsia": [
-              "archive",
-              "unaligned"
-            ],
-            "aarch64-linux-android": [
-              "archive",
-              "unaligned"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "archive",
-              "unaligned"
-            ],
-            "aarch64-unknown-nixos-gnu": [
-              "archive",
-              "unaligned"
-            ],
-            "aarch64-unknown-nto-qnx710": [
-              "archive",
-              "unaligned"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "archive",
-              "unaligned"
-            ],
-            "armv7-linux-androideabi": [
-              "archive",
-              "unaligned"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "archive",
-              "unaligned"
-            ],
-            "i686-apple-darwin": [
-              "archive",
-              "unaligned"
-            ],
-            "i686-linux-android": [
-              "archive",
-              "unaligned"
-            ],
-            "i686-unknown-freebsd": [
-              "archive",
-              "unaligned"
-            ],
-            "i686-unknown-linux-gnu": [
-              "archive",
-              "unaligned"
-            ],
-            "powerpc-unknown-linux-gnu": [
-              "archive",
-              "unaligned"
-            ],
-            "riscv32imc-unknown-none-elf": [
-              "archive",
-              "unaligned"
-            ],
-            "riscv64gc-unknown-none-elf": [
-              "archive",
-              "unaligned"
-            ],
-            "s390x-unknown-linux-gnu": [
-              "archive",
-              "unaligned"
-            ],
-            "thumbv7em-none-eabi": [
-              "archive",
-              "unaligned"
-            ],
-            "thumbv8m.main-none-eabi": [
-              "archive",
-              "unaligned"
-            ],
-            "wasm32-unknown-unknown": [
-              "archive",
-              "unaligned"
-            ],
-            "wasm32-wasi": [
-              "archive",
-              "unaligned"
-            ],
-            "x86_64-apple-darwin": [
-              "archive",
-              "unaligned"
-            ],
-            "x86_64-apple-ios": [
-              "archive",
-              "unaligned"
-            ],
-            "x86_64-fuchsia": [
-              "archive",
-              "unaligned"
-            ],
-            "x86_64-linux-android": [
-              "archive",
-              "unaligned"
-            ],
-            "x86_64-unknown-freebsd": [
-              "archive",
-              "unaligned"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "archive",
-              "unaligned"
-            ],
-            "x86_64-unknown-nixos-gnu": [
-              "archive",
-              "unaligned"
-            ],
-            "x86_64-unknown-none": [
-              "archive",
-              "unaligned"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -40311,7 +40928,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.32.1"
+        "version": "0.33.0"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -40771,14 +41388,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl-sys 0.9.93": {
+    "openssl-sys 0.9.102": {
       "name": "openssl-sys",
-      "version": "0.9.93",
+      "version": "0.9.102",
       "package_url": "https://github.com/sfackler/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl-sys/0.9.93/download",
-          "sha256": "db4d56a4c0478783083cfafcc42493dd4a981d41669da64b4572a2a089b51b1d"
+          "url": "https://static.crates.io/crates/openssl-sys/0.9.102/download",
+          "sha256": "c597637d56fbc83893a35eb0dd04b2b8e7a50c91e64e9493e398b5df4fb45fa2"
         }
       },
       "targets": [
@@ -40819,14 +41436,14 @@
               "target": "libc"
             },
             {
-              "id": "openssl-sys 0.9.93",
+              "id": "openssl-sys 0.9.102",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.9.93"
+        "version": "0.9.102"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -41060,6 +41677,110 @@
       ],
       "license_file": "LICENSE"
     },
+    "opentelemetry-otlp 0.14.0": {
+      "name": "opentelemetry-otlp",
+      "version": "0.14.0",
+      "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-otlp",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/opentelemetry-otlp/0.14.0/download",
+          "sha256": "f24cda83b20ed2433c68241f918d0f6fdec8b1d43b7a9590ab4420c5095ca930"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "opentelemetry_otlp",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "opentelemetry_otlp",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "grpc-tonic",
+            "http",
+            "prost",
+            "tokio",
+            "tonic",
+            "trace"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures-core 0.3.30",
+              "target": "futures_core"
+            },
+            {
+              "id": "http 0.2.9",
+              "target": "http"
+            },
+            {
+              "id": "opentelemetry 0.21.0",
+              "target": "opentelemetry"
+            },
+            {
+              "id": "opentelemetry-proto 0.4.0",
+              "target": "opentelemetry_proto"
+            },
+            {
+              "id": "opentelemetry-semantic-conventions 0.13.0",
+              "target": "opentelemetry_semantic_conventions"
+            },
+            {
+              "id": "opentelemetry_sdk 0.21.2",
+              "target": "opentelemetry_sdk"
+            },
+            {
+              "id": "prost 0.11.9",
+              "target": "prost"
+            },
+            {
+              "id": "thiserror 1.0.57",
+              "target": "thiserror"
+            },
+            {
+              "id": "tokio 1.37.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tonic 0.9.2",
+              "target": "tonic"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.74",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.14.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "opentelemetry-prometheus 0.13.0": {
       "name": "opentelemetry-prometheus",
       "version": "0.13.0",
@@ -41185,6 +41906,75 @@
         },
         "edition": "2021",
         "version": "0.14.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "opentelemetry-proto 0.4.0": {
+      "name": "opentelemetry-proto",
+      "version": "0.4.0",
+      "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-proto",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/opentelemetry-proto/0.4.0/download",
+          "sha256": "a2e155ce5cc812ea3d1dffbd1539aed653de4bf4882d60e6e04dcf0901d674e1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "opentelemetry_proto",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "opentelemetry_proto",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "gen-tonic",
+            "gen-tonic-messages",
+            "prost",
+            "tonic",
+            "trace"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "opentelemetry 0.21.0",
+              "target": "opentelemetry"
+            },
+            {
+              "id": "opentelemetry_sdk 0.21.2",
+              "target": "opentelemetry_sdk"
+            },
+            {
+              "id": "prost 0.11.9",
+              "target": "prost"
+            },
+            {
+              "id": "tonic 0.9.2",
+              "target": "tonic"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.4.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -46962,6 +47752,70 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "prost 0.11.9": {
+      "name": "prost",
+      "version": "0.11.9",
+      "package_url": "https://github.com/tokio-rs/prost",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/prost/0.11.9/download",
+          "sha256": "0b82eaa1d779e9a4bc1c3217db8ffbeabaae1dca241bf70183242128d48681cd"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "prost",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "prost",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "prost-derive",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.6.0",
+              "target": "bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "prost-derive 0.11.9",
+              "target": "prost_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.11.9"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "prost 0.12.2": {
       "name": "prost",
       "version": "0.12.2",
@@ -47127,6 +47981,69 @@
         },
         "edition": "2021",
         "version": "0.12.2"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "prost-derive 0.11.9": {
+      "name": "prost-derive",
+      "version": "0.11.9",
+      "package_url": "https://github.com/tokio-rs/prost",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/prost-derive/0.11.9/download",
+          "sha256": "e5d2d8d10f3c6ded6da8b05b5fb3b8a5082514344d56c9f871412d29b4e075b4"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "prost_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "prost_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.75",
+              "target": "anyhow"
+            },
+            {
+              "id": "itertools 0.10.5",
+              "target": "itertools"
+            },
+            {
+              "id": "proc-macro2 1.0.76",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.11.9"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -47739,13 +48656,13 @@
             ],
             "cfg(target_os = \"ios\")": [
               {
-                "id": "mach2 0.4.1",
+                "id": "mach2 0.4.2",
                 "target": "mach2"
               }
             ],
             "cfg(target_os = \"macos\")": [
               {
-                "id": "mach2 0.4.1",
+                "id": "mach2 0.4.2",
                 "target": "mach2"
               }
             ],
@@ -47984,7 +48901,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -48071,7 +48988,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -49717,14 +50634,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "ratelimit 0.7.1": {
+    "ratelimit 0.9.1": {
       "name": "ratelimit",
-      "version": "0.7.1",
+      "version": "0.9.1",
       "package_url": "https://github.com/pelikan-io/rustcommon",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ratelimit/0.7.1/download",
-          "sha256": "bf5bcfab8fa35f78da44c3ebb3437381c0ae11e9fab355b7a27f581d8d2028a2"
+          "url": "https://static.crates.io/crates/ratelimit/0.9.1/download",
+          "sha256": "6c1bb13e2dcfa2232ac6887157aad8d9b3fe4ca57f7c8d4938ff5ea9be742300"
         }
       },
       "targets": [
@@ -49749,7 +50666,7 @@
         "deps": {
           "common": [
             {
-              "id": "clocksource 0.6.0",
+              "id": "clocksource 0.8.1",
               "target": "clocksource"
             },
             {
@@ -49764,7 +50681,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.7.1"
+        "version": "0.9.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -50247,7 +51164,8 @@
           "common": [
             "checker",
             "default",
-            "std"
+            "std",
+            "trace-log"
           ],
           "selects": {}
         },
@@ -50886,7 +51804,7 @@
                 "target": "pin_project_lite"
               },
               {
-                "id": "rustls 0.21.10",
+                "id": "rustls 0.21.12",
                 "target": "rustls"
               },
               {
@@ -51001,7 +51919,6 @@
             "rustls-tls",
             "rustls-tls-native-roots",
             "rustls-tls-webpki-roots",
-            "socks",
             "stream"
           ],
           "selects": {
@@ -51227,10 +52144,6 @@
               {
                 "id": "tokio-rustls 0.25.0",
                 "target": "tokio_rustls"
-              },
-              {
-                "id": "tokio-socks 0.5.1",
-                "target": "tokio_socks"
               },
               {
                 "id": "tokio-util 0.7.10",
@@ -52086,14 +52999,14 @@
       ],
       "license_file": null
     },
-    "rocksdb 0.21.0": {
+    "rocksdb 0.22.0": {
       "name": "rocksdb",
-      "version": "0.21.0",
+      "version": "0.22.0",
       "package_url": "https://github.com/rust-rocksdb/rust-rocksdb",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rocksdb/0.21.0/download",
-          "sha256": "bb6f170a4041d50a0ce04b0d2e14916d6ca863ea2e422689a5b694395d299ffe"
+          "url": "https://static.crates.io/crates/rocksdb/0.22.0/download",
+          "sha256": "6bd13e55d6d7b8cd0ea569161127567cd587676c99f4472f779a0279aa60a7a7"
         }
       },
       "targets": [
@@ -52122,14 +53035,14 @@
               "target": "libc"
             },
             {
-              "id": "librocksdb-sys 0.11.0+8.1.1",
+              "id": "librocksdb-sys 0.16.0+8.10.0",
               "target": "librocksdb_sys"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.21.0"
+        "version": "0.22.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -52905,7 +53818,7 @@
         "deps": {
           "common": [
             {
-              "id": "semver 1.0.20",
+              "id": "semver 1.0.22",
               "target": "semver"
             }
           ],
@@ -53287,14 +54200,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustls 0.21.10": {
+    "rustls 0.21.12": {
       "name": "rustls",
-      "version": "0.21.10",
+      "version": "0.21.12",
       "package_url": "https://github.com/rustls/rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls/0.21.10/download",
-          "sha256": "f9d5a6813c0759e4609cd494e8e725babae6a2ca7b62a5536a13daaec6fcb7ba"
+          "url": "https://static.crates.io/crates/rustls/0.21.12/download",
+          "sha256": "3f56a14d1f48b391359b22f731fd4bd7e43c97f3c50eee276f3aa09c94784d3e"
         }
       },
       "targets": [
@@ -53350,7 +54263,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "build_script_build"
             },
             {
@@ -53365,7 +54278,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.21.10"
+        "version": "0.21.12"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -53476,6 +54389,114 @@
         },
         "edition": "2021",
         "version": "0.22.2"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "ring 0.17.7",
+              "target": "ring"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "Apache-2.0 OR ISC OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "ISC",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "rustls 0.23.5": {
+      "name": "rustls",
+      "version": "0.23.5",
+      "package_url": "https://github.com/rustls/rustls",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rustls/0.23.5/download",
+          "sha256": "afabcee0551bd1aa3e18e5adbf2c0544722014b899adb31bd186ec638d3da97e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustls",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rustls",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "ring",
+            "std",
+            "tls12"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "ring 0.17.7",
+              "target": "ring"
+            },
+            {
+              "id": "rustls 0.23.5",
+              "target": "build_script_build"
+            },
+            {
+              "id": "rustls-pki-types 1.3.1",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            },
+            {
+              "id": "rustls-webpki 0.102.2",
+              "target": "webpki"
+            },
+            {
+              "id": "subtle 2.5.0",
+              "target": "subtle"
+            },
+            {
+              "id": "zeroize 1.7.0",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.23.5"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -55768,14 +56789,14 @@
       ],
       "license_file": null
     },
-    "semver 1.0.20": {
+    "semver 1.0.22": {
       "name": "semver",
-      "version": "1.0.20",
+      "version": "1.0.22",
       "package_url": "https://github.com/dtolnay/semver",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/semver/1.0.20/download",
-          "sha256": "836fa6a3e1e547f9a2c4040802ec865b5d85f4014efe00555d7090a3dcaa1090"
+          "url": "https://static.crates.io/crates/semver/1.0.22/download",
+          "sha256": "92d43fe69e652f3df9bdc2b85b2854a0825b86e4fb76bc44d945137d053639ca"
         }
       },
       "targets": [
@@ -55820,7 +56841,7 @@
         "deps": {
           "common": [
             {
-              "id": "semver 1.0.20",
+              "id": "semver 1.0.22",
               "target": "build_script_build"
             },
             {
@@ -55831,7 +56852,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.20"
+        "version": "1.0.22"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -57331,6 +58352,83 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "sha256 1.5.0": {
+      "name": "sha256",
+      "version": "1.5.0",
+      "package_url": "https://github.com/baoyachi/sha256-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/sha256/1.5.0/download",
+          "sha256": "18278f6a914fa3070aa316493f7d2ddfb9ac86ebc06fa3b83bffda487e9065b0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "sha256",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "sha256",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "async",
+            "default",
+            "tokio"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.6.0",
+              "target": "bytes"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "sha2 0.10.8",
+              "target": "sha2"
+            },
+            {
+              "id": "tokio 1.37.0",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.74",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "1.5.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "sha3 0.9.1": {
       "name": "sha3",
       "version": "0.9.1",
@@ -58012,6 +59110,53 @@
         },
         "edition": "2018",
         "version": "4.3.3"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "simple_moving_average 1.0.2": {
+      "name": "simple_moving_average",
+      "version": "1.0.2",
+      "package_url": "https://github.com/oskargustafsson/moving_average",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/simple_moving_average/1.0.2/download",
+          "sha256": "3a4b144ad185430cd033299e2c93e465d5a7e65fbb858593dc57181fa13cd310"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "simple_moving_average",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "simple_moving_average",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "num-traits 0.2.17",
+              "target": "num_traits"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.0.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -60935,6 +62080,44 @@
       ],
       "license_file": "LICENSE"
     },
+    "sync_wrapper 1.0.1": {
+      "name": "sync_wrapper",
+      "version": "1.0.1",
+      "package_url": "https://github.com/Actyx/sync_wrapper",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/sync_wrapper/1.0.1/download",
+          "sha256": "a7065abeca94b6a8a577f9bd45aa0867a2238b74e8eb67cf10d492bc39351394"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "sync_wrapper",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "sync_wrapper",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "1.0.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "synstructure 0.12.6": {
       "name": "synstructure",
       "version": "0.12.6",
@@ -63259,7 +64442,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.21.12",
               "target": "rustls"
             },
             {
@@ -63310,139 +64493,12 @@
         ],
         "crate_features": {
           "common": [
+            "default",
             "logging",
+            "ring",
             "tls12"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "default",
-              "ring"
-            ],
-            "aarch64-apple-ios": [
-              "default",
-              "ring"
-            ],
-            "aarch64-apple-ios-sim": [
-              "default",
-              "ring"
-            ],
-            "aarch64-fuchsia": [
-              "default",
-              "ring"
-            ],
-            "aarch64-linux-android": [
-              "default",
-              "ring"
-            ],
-            "aarch64-pc-windows-msvc": [
-              "default",
-              "ring"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "default",
-              "ring"
-            ],
-            "aarch64-unknown-nixos-gnu": [
-              "default",
-              "ring"
-            ],
-            "aarch64-unknown-nto-qnx710": [
-              "default",
-              "ring"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "default",
-              "ring"
-            ],
-            "armv7-linux-androideabi": [
-              "default",
-              "ring"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "default",
-              "ring"
-            ],
-            "i686-apple-darwin": [
-              "default",
-              "ring"
-            ],
-            "i686-linux-android": [
-              "default",
-              "ring"
-            ],
-            "i686-pc-windows-msvc": [
-              "default",
-              "ring"
-            ],
-            "i686-unknown-freebsd": [
-              "default",
-              "ring"
-            ],
-            "i686-unknown-linux-gnu": [
-              "default",
-              "ring"
-            ],
-            "powerpc-unknown-linux-gnu": [
-              "default",
-              "ring"
-            ],
-            "riscv32imc-unknown-none-elf": [
-              "default",
-              "ring"
-            ],
-            "riscv64gc-unknown-none-elf": [
-              "default",
-              "ring"
-            ],
-            "s390x-unknown-linux-gnu": [
-              "default",
-              "ring"
-            ],
-            "thumbv7em-none-eabi": [
-              "default",
-              "ring"
-            ],
-            "thumbv8m.main-none-eabi": [
-              "default",
-              "ring"
-            ],
-            "x86_64-apple-darwin": [
-              "default",
-              "ring"
-            ],
-            "x86_64-apple-ios": [
-              "default",
-              "ring"
-            ],
-            "x86_64-fuchsia": [
-              "default",
-              "ring"
-            ],
-            "x86_64-linux-android": [
-              "default",
-              "ring"
-            ],
-            "x86_64-pc-windows-msvc": [
-              "default",
-              "ring"
-            ],
-            "x86_64-unknown-freebsd": [
-              "default",
-              "ring"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "default",
-              "ring"
-            ],
-            "x86_64-unknown-nixos-gnu": [
-              "default",
-              "ring"
-            ],
-            "x86_64-unknown-none": [
-              "default",
-              "ring"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -63464,6 +64520,69 @@
         },
         "edition": "2021",
         "version": "0.25.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "tokio-rustls 0.26.0": {
+      "name": "tokio-rustls",
+      "version": "0.26.0",
+      "package_url": "https://github.com/rustls/tokio-rustls",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tokio-rustls/0.26.0/download",
+          "sha256": "0c7bc40d0e5a97695bb96e27995cd3a08538541b0a846f65bba7a359f36700d4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tokio_rustls",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tokio_rustls",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "tls12"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "rustls 0.23.5",
+              "target": "rustls"
+            },
+            {
+              "id": "rustls-pki-types 1.3.1",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            },
+            {
+              "id": "tokio 1.37.0",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.26.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -64068,6 +65187,144 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "tonic 0.9.2": {
+      "name": "tonic",
+      "version": "0.9.2",
+      "package_url": "https://github.com/hyperium/tonic",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tonic/0.9.2/download",
+          "sha256": "3082666a3a6433f7f511c7192923fa1fe07c69332d3c6a2e6bb040b569199d5a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tonic",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tonic",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "channel",
+            "codegen",
+            "default",
+            "prost",
+            "transport"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "axum 0.6.20",
+              "target": "axum"
+            },
+            {
+              "id": "base64 0.21.4",
+              "target": "base64"
+            },
+            {
+              "id": "bytes 1.6.0",
+              "target": "bytes"
+            },
+            {
+              "id": "futures-core 0.3.30",
+              "target": "futures_core"
+            },
+            {
+              "id": "futures-util 0.3.30",
+              "target": "futures_util"
+            },
+            {
+              "id": "h2 0.3.26",
+              "target": "h2"
+            },
+            {
+              "id": "http 0.2.9",
+              "target": "http"
+            },
+            {
+              "id": "http-body 0.4.5",
+              "target": "http_body"
+            },
+            {
+              "id": "hyper 0.14.27",
+              "target": "hyper"
+            },
+            {
+              "id": "hyper-timeout 0.4.1",
+              "target": "hyper_timeout"
+            },
+            {
+              "id": "percent-encoding 2.3.0",
+              "target": "percent_encoding"
+            },
+            {
+              "id": "pin-project 1.1.3",
+              "target": "pin_project"
+            },
+            {
+              "id": "prost 0.11.9",
+              "target": "prost"
+            },
+            {
+              "id": "tokio 1.37.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-stream 0.1.14",
+              "target": "tokio_stream"
+            },
+            {
+              "id": "tower 0.4.13",
+              "target": "tower"
+            },
+            {
+              "id": "tower-layer 0.3.2",
+              "target": "tower_layer"
+            },
+            {
+              "id": "tower-service 0.3.2",
+              "target": "tower_service"
+            },
+            {
+              "id": "tracing 0.1.40",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.74",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.9.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "tonic 0.11.0": {
       "name": "tonic",
       "version": "0.11.0",
@@ -64545,14 +65802,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tower-http 0.5.1": {
+    "tower-http 0.5.2": {
       "name": "tower-http",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "package_url": "https://github.com/tower-rs/tower-http",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tower-http/0.5.1/download",
-          "sha256": "0da193277a4e2c33e59e09b5861580c33dd0a637c3883d0fa74ba40c0374af2e"
+          "url": "https://static.crates.io/crates/tower-http/0.5.2/download",
+          "sha256": "1e9cd434a998747dd2c4276bc96ee2e0c7a2eadf3cae88e52be55a05fa9053f5"
         }
       },
       "targets": [
@@ -64664,7 +65921,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.5.1"
+        "version": "0.5.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -65396,6 +66653,101 @@
         },
         "edition": "2018",
         "version": "0.18.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "tracing-opentelemetry 0.22.0": {
+      "name": "tracing-opentelemetry",
+      "version": "0.22.0",
+      "package_url": "https://github.com/tokio-rs/tracing-opentelemetry",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tracing-opentelemetry/0.22.0/download",
+          "sha256": "c67ac25c5407e7b961fafc6f7e9aa5958fd297aada2d20fa2ae1737357e55596"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tracing_opentelemetry",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tracing_opentelemetry",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "metrics",
+            "smallvec",
+            "tracing-log"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "opentelemetry 0.21.0",
+              "target": "opentelemetry"
+            },
+            {
+              "id": "opentelemetry_sdk 0.21.2",
+              "target": "opentelemetry_sdk"
+            },
+            {
+              "id": "smallvec 1.13.2",
+              "target": "smallvec"
+            },
+            {
+              "id": "tracing 0.1.40",
+              "target": "tracing"
+            },
+            {
+              "id": "tracing-core 0.1.32",
+              "target": "tracing_core"
+            },
+            {
+              "id": "tracing-log 0.2.0",
+              "target": "tracing_log"
+            },
+            {
+              "id": "tracing-subscriber 0.3.18",
+              "target": "tracing_subscriber"
+            }
+          ],
+          "selects": {
+            "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
+              {
+                "id": "js-sys 0.3.64",
+                "target": "js_sys"
+              },
+              {
+                "id": "web-time 0.2.4",
+                "target": "web_time"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.22.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -69457,7 +70809,7 @@
               "target": "indexmap"
             },
             {
-              "id": "semver 1.0.20",
+              "id": "semver 1.0.22",
               "target": "semver"
             }
           ],
@@ -69465,6 +70817,61 @@
         },
         "edition": "2021",
         "version": "0.115.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "wasmparser 0.119.0": {
+      "name": "wasmparser",
+      "version": "0.119.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmparser/0.119.0/download",
+          "sha256": "8c35daf77afb4f9b14016625144a391085ec2ca99ca9cc53ed291bb53ab5278d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmparser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.4.1",
+              "target": "bitflags"
+            },
+            {
+              "id": "indexmap 2.1.0",
+              "target": "indexmap"
+            },
+            {
+              "id": "semver 1.0.22",
+              "target": "semver"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.119.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -69512,7 +70919,7 @@
               "target": "indexmap"
             },
             {
-              "id": "semver 1.0.20",
+              "id": "semver 1.0.22",
               "target": "semver"
             }
           ],
@@ -69520,6 +70927,61 @@
         },
         "edition": "2021",
         "version": "0.201.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "wasmparser 0.202.0": {
+      "name": "wasmparser",
+      "version": "0.202.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmparser/0.202.0/download",
+          "sha256": "d6998515d3cf3f8b980ef7c11b29a9b1017d4cf86b99ae93b546992df9931413"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmparser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.4.1",
+              "target": "bitflags"
+            },
+            {
+              "id": "indexmap 2.1.0",
+              "target": "indexmap"
+            },
+            {
+              "id": "semver 1.0.22",
+              "target": "semver"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.202.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -69578,14 +71040,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime 19.0.2": {
+    "wasmtime 20.0.2": {
       "name": "wasmtime",
-      "version": "19.0.2",
+      "version": "20.0.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime/19.0.2/download",
-          "sha256": "4e300c0e3f19dc9064e3b17ce661088646c70dbdde36aab46470ed68ba58db7d"
+          "url": "https://static.crates.io/crates/wasmtime/20.0.2/download",
+          "sha256": "4af5cb32045daee8476711eb12b8b71275c2dd1fc7a58cc2a11b33ce9205f6a2"
         }
       },
       "targets": [
@@ -69651,7 +71113,7 @@
               "target": "log"
             },
             {
-              "id": "object 0.32.1",
+              "id": "object 0.33.0",
               "target": "object"
             },
             {
@@ -69675,27 +71137,27 @@
               "target": "target_lexicon"
             },
             {
-              "id": "wasmparser 0.201.0",
+              "id": "wasmparser 0.202.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-cranelift 19.0.2",
+              "id": "wasmtime-cranelift 20.0.2",
               "target": "wasmtime_cranelift"
             },
             {
-              "id": "wasmtime-environ 19.0.2",
+              "id": "wasmtime-environ 20.0.2",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wasmtime-jit-icache-coherence 19.0.2",
+              "id": "wasmtime-jit-icache-coherence 20.0.2",
               "target": "wasmtime_jit_icache_coherence"
             },
             {
-              "id": "wasmtime-runtime 19.0.2",
+              "id": "wasmtime-runtime 20.0.2",
               "target": "wasmtime_runtime"
             },
             {
-              "id": "wasmtime-slab 19.0.2",
+              "id": "wasmtime-slab 20.0.2",
               "target": "wasmtime_slab"
             }
           ],
@@ -69750,7 +71212,7 @@
           ],
           "selects": {}
         },
-        "version": "19.0.2"
+        "version": "20.0.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -69758,14 +71220,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-asm-macros 19.0.2": {
+    "wasmtime-asm-macros 20.0.2": {
       "name": "wasmtime-asm-macros",
-      "version": "19.0.2",
+      "version": "20.0.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-asm-macros/19.0.2/download",
-          "sha256": "110aa598e02a136fb095ca70fa96367fc16bab55256a131e66f9b58f16c73daf"
+          "url": "https://static.crates.io/crates/wasmtime-asm-macros/20.0.2/download",
+          "sha256": "7515c4d24c8b55c0feab67e3d52a42f999fda8b9cfafbd69a82ed6bcf299d26e"
         }
       },
       "targets": [
@@ -69797,7 +71259,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "19.0.2"
+        "version": "20.0.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -69805,14 +71267,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-cranelift 19.0.2": {
+    "wasmtime-cranelift 20.0.2": {
       "name": "wasmtime-cranelift",
-      "version": "19.0.2",
+      "version": "20.0.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-cranelift/19.0.2/download",
-          "sha256": "e923262451a4b5b39fe02f69f1338d56356db470e289ea1887346b9c7f592738"
+          "url": "https://static.crates.io/crates/wasmtime-cranelift/20.0.2/download",
+          "sha256": "57ec2d9a4b9990bea53a5dfd689d48663dbd19a46903eaf73e2022b3d1ef20d3"
         }
       },
       "targets": [
@@ -69851,27 +71313,27 @@
               "target": "cfg_if"
             },
             {
-              "id": "cranelift-codegen 0.106.2",
+              "id": "cranelift-codegen 0.107.2",
               "target": "cranelift_codegen"
             },
             {
-              "id": "cranelift-control 0.106.2",
+              "id": "cranelift-control 0.107.2",
               "target": "cranelift_control"
             },
             {
-              "id": "cranelift-entity 0.106.2",
+              "id": "cranelift-entity 0.107.2",
               "target": "cranelift_entity"
             },
             {
-              "id": "cranelift-frontend 0.106.2",
+              "id": "cranelift-frontend 0.107.2",
               "target": "cranelift_frontend"
             },
             {
-              "id": "cranelift-native 0.106.2",
+              "id": "cranelift-native 0.107.2",
               "target": "cranelift_native"
             },
             {
-              "id": "cranelift-wasm 0.106.2",
+              "id": "cranelift-wasm 0.107.2",
               "target": "cranelift_wasm"
             },
             {
@@ -69883,7 +71345,7 @@
               "target": "log"
             },
             {
-              "id": "object 0.32.1",
+              "id": "object 0.33.0",
               "target": "object"
             },
             {
@@ -69895,15 +71357,11 @@
               "target": "thiserror"
             },
             {
-              "id": "wasmparser 0.201.0",
+              "id": "wasmparser 0.202.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-cranelift-shared 19.0.2",
-              "target": "wasmtime_cranelift_shared"
-            },
-            {
-              "id": "wasmtime-environ 19.0.2",
+              "id": "wasmtime-environ 20.0.2",
               "target": "wasmtime_environ"
             }
           ],
@@ -69913,13 +71371,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasmtime-versioned-export-macros 19.0.2",
+              "id": "wasmtime-versioned-export-macros 20.0.2",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
           "selects": {}
         },
-        "version": "19.0.2"
+        "version": "20.0.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -69927,89 +71385,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-cranelift-shared 19.0.2": {
-      "name": "wasmtime-cranelift-shared",
-      "version": "19.0.2",
-      "package_url": "https://github.com/bytecodealliance/wasmtime",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-cranelift-shared/19.0.2/download",
-          "sha256": "508898cbbea0df81a5d29cfc1c7c72431a1bc4c9e89fd9514b4c868474c05c7a"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmtime_cranelift_shared",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmtime_cranelift_shared",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "anyhow 1.0.75",
-              "target": "anyhow"
-            },
-            {
-              "id": "cranelift-codegen 0.106.2",
-              "target": "cranelift_codegen"
-            },
-            {
-              "id": "cranelift-control 0.106.2",
-              "target": "cranelift_control"
-            },
-            {
-              "id": "cranelift-native 0.106.2",
-              "target": "cranelift_native"
-            },
-            {
-              "id": "gimli 0.28.0",
-              "target": "gimli"
-            },
-            {
-              "id": "object 0.32.1",
-              "target": "object"
-            },
-            {
-              "id": "target-lexicon 0.12.14",
-              "target": "target_lexicon"
-            },
-            {
-              "id": "wasmtime-environ 19.0.2",
-              "target": "wasmtime_environ"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "19.0.2"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "wasmtime-environ 19.0.2": {
+    "wasmtime-environ 20.0.2": {
       "name": "wasmtime-environ",
-      "version": "19.0.2",
+      "version": "20.0.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-environ/19.0.2/download",
-          "sha256": "d7e3f2aa72dbb64c19708646e1ff97650f34e254598b82bad5578ea9c80edd30"
+          "url": "https://static.crates.io/crates/wasmtime-environ/20.0.2/download",
+          "sha256": "ad72e2e3f7ea5b50fedf66dd36ba24634e4f445c370644683b433d45d88f6126"
         }
       },
       "targets": [
@@ -70033,6 +71416,7 @@
         ],
         "crate_features": {
           "common": [
+            "compile",
             "gc"
           ],
           "selects": {}
@@ -70048,7 +71432,7 @@
               "target": "bincode"
             },
             {
-              "id": "cranelift-entity 0.106.2",
+              "id": "cranelift-entity 0.107.2",
               "target": "cranelift_entity"
             },
             {
@@ -70064,7 +71448,7 @@
               "target": "log"
             },
             {
-              "id": "object 0.32.1",
+              "id": "object 0.33.0",
               "target": "object"
             },
             {
@@ -70080,11 +71464,11 @@
               "target": "thiserror"
             },
             {
-              "id": "wasmparser 0.201.0",
+              "id": "wasmparser 0.202.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmtime-types 19.0.2",
+              "id": "wasmtime-types 20.0.2",
               "target": "wasmtime_types"
             }
           ],
@@ -70100,7 +71484,7 @@
           ],
           "selects": {}
         },
-        "version": "19.0.2"
+        "version": "20.0.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -70108,14 +71492,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-jit-icache-coherence 19.0.2": {
+    "wasmtime-jit-icache-coherence 20.0.2": {
       "name": "wasmtime-jit-icache-coherence",
-      "version": "19.0.2",
+      "version": "20.0.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-jit-icache-coherence/19.0.2/download",
-          "sha256": "c22ca2ef4d87b23d400660373453e274b2251bc2d674e3102497f690135e04b0"
+          "url": "https://static.crates.io/crates/wasmtime-jit-icache-coherence/20.0.2/download",
+          "sha256": "ede45379f3b4d395d8947006de8043801806099a240a26db553919b68e96ab15"
         }
       },
       "targets": [
@@ -70160,7 +71544,7 @@
           }
         },
         "edition": "2021",
-        "version": "19.0.2"
+        "version": "20.0.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -70168,14 +71552,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-runtime 19.0.2": {
+    "wasmtime-runtime 20.0.2": {
       "name": "wasmtime-runtime",
-      "version": "19.0.2",
+      "version": "20.0.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-runtime/19.0.2/download",
-          "sha256": "1806ee242ca4fd183309b7406e4e83ae7739b7569f395d56700de7c7ef9f5eb8"
+          "url": "https://static.crates.io/crates/wasmtime-runtime/20.0.2/download",
+          "sha256": "65019d29d175c567b84173f2adf3b7a3af6d5592f8fe510dccae55d2569ec0d2"
         }
       },
       "targets": [
@@ -70246,24 +71630,20 @@
               "target": "sptr"
             },
             {
-              "id": "wasm-encoder 0.201.0",
-              "target": "wasm_encoder"
-            },
-            {
-              "id": "wasmtime-asm-macros 19.0.2",
+              "id": "wasmtime-asm-macros 20.0.2",
               "target": "wasmtime_asm_macros"
             },
             {
-              "id": "wasmtime-environ 19.0.2",
+              "id": "wasmtime-environ 20.0.2",
               "target": "wasmtime_environ"
             },
             {
-              "id": "wasmtime-runtime 19.0.2",
+              "id": "wasmtime-runtime 20.0.2",
               "target": "build_script_build"
             },
             {
-              "id": "wasmtime-wmemcheck 19.0.2",
-              "target": "wasmtime_wmemcheck"
+              "id": "wasmtime-slab 20.0.2",
+              "target": "wasmtime_slab"
             }
           ],
           "selects": {
@@ -70281,8 +71661,8 @@
             ],
             "cfg(target_os = \"macos\")": [
               {
-                "id": "mach 0.3.2",
-                "target": "mach"
+                "id": "mach2 0.4.2",
+                "target": "mach2"
               }
             ],
             "cfg(target_os = \"windows\")": [
@@ -70307,13 +71687,13 @@
               "target": "paste"
             },
             {
-              "id": "wasmtime-versioned-export-macros 19.0.2",
+              "id": "wasmtime-versioned-export-macros 20.0.2",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
           "selects": {}
         },
-        "version": "19.0.2"
+        "version": "20.0.2"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -70331,7 +71711,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasmtime-versioned-export-macros 19.0.2",
+              "id": "wasmtime-versioned-export-macros 20.0.2",
               "target": "wasmtime_versioned_export_macros"
             }
           ],
@@ -70344,14 +71724,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-slab 19.0.2": {
+    "wasmtime-slab 20.0.2": {
       "name": "wasmtime-slab",
-      "version": "19.0.2",
+      "version": "20.0.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-slab/19.0.2/download",
-          "sha256": "20c58bef9ce877fd06acb58f08d003af17cb05cc51225b455e999fbad8e584c0"
+          "url": "https://static.crates.io/crates/wasmtime-slab/20.0.2/download",
+          "sha256": "ca6585868f5c427c3e9d2a8c0c3354e6d7d4518a0d17723ab25a0c1eebf5d5b4"
         }
       },
       "targets": [
@@ -70374,7 +71754,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "19.0.2"
+        "version": "20.0.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -70382,14 +71762,14 @@
       ],
       "license_file": null
     },
-    "wasmtime-types 19.0.2": {
+    "wasmtime-types 20.0.2": {
       "name": "wasmtime-types",
-      "version": "19.0.2",
+      "version": "20.0.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-types/19.0.2/download",
-          "sha256": "cebe297aa063136d9d2e5b347c1528868aa43c2c8d0e1eb0eec144567e38fe0f"
+          "url": "https://static.crates.io/crates/wasmtime-types/20.0.2/download",
+          "sha256": "84d5381ff174faded38c7b2085fbe430dff59489c87a91403354d710075750fb"
         }
       },
       "targets": [
@@ -70414,7 +71794,7 @@
         "deps": {
           "common": [
             {
-              "id": "cranelift-entity 0.106.2",
+              "id": "cranelift-entity 0.107.2",
               "target": "cranelift_entity"
             },
             {
@@ -70426,7 +71806,7 @@
               "target": "thiserror"
             },
             {
-              "id": "wasmparser 0.201.0",
+              "id": "wasmparser 0.202.0",
               "target": "wasmparser"
             }
           ],
@@ -70442,7 +71822,7 @@
           ],
           "selects": {}
         },
-        "version": "19.0.2"
+        "version": "20.0.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -70450,14 +71830,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasmtime-versioned-export-macros 19.0.2": {
+    "wasmtime-versioned-export-macros 20.0.2": {
       "name": "wasmtime-versioned-export-macros",
-      "version": "19.0.2",
+      "version": "20.0.2",
       "package_url": "https://github.com/bytecodealliance/wasmtime",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-versioned-export-macros/19.0.2/download",
-          "sha256": "ffaafa5c12355b1a9ee068e9295d50c4ca0a400c721950cdae4f5b54391a2da5"
+          "url": "https://static.crates.io/crates/wasmtime-versioned-export-macros/20.0.2/download",
+          "sha256": "0d3b70422fdfa915c903f003b8b42554a8ae1aa0c6208429d8314ebf5721f3ac"
         }
       },
       "targets": [
@@ -70497,45 +71877,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "19.0.2"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "wasmtime-wmemcheck 19.0.2": {
-      "name": "wasmtime-wmemcheck",
-      "version": "19.0.2",
-      "package_url": "https://github.com/bytecodealliance/wasmtime",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmtime-wmemcheck/19.0.2/download",
-          "sha256": "c9a8c62e9df8322b2166d2a6f096fbec195ddb093748fd74170dcf25ef596769"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmtime_wmemcheck",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmtime_wmemcheck",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2021",
-        "version": "19.0.2"
+        "version": "20.0.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -70823,6 +72165,60 @@
         "version": "0.3.64"
       },
       "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "web-time 0.2.4": {
+      "name": "web-time",
+      "version": "0.2.4",
+      "package_url": "https://github.com/daxpedda/web-time",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/web-time/0.2.4/download",
+          "sha256": "aa30049b1c872b72c89866d458eae9f20380ab280ffd1b1e18df2d3e2d98cfe0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "web_time",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "web_time",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(all(target_family = \"wasm\", not(any(target_os = \"emscripten\", target_os = \"wasi\"))))": [
+              {
+                "id": "js-sys 0.3.64",
+                "target": "js_sys"
+              },
+              {
+                "id": "wasm-bindgen 0.2.87",
+                "target": "wasm_bindgen"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.2.4"
+      },
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -74896,6 +76292,7 @@
     }
   },
   "binary_crates": [
+    "canbench 0.1.3",
     "ic-wasm 0.7.1",
     "metrics-proxy 0.1.0"
   ],
@@ -75020,15 +76417,6 @@
       "x86_64-unknown-freebsd",
       "x86_64-unknown-none"
     ],
-    "cfg(all(not(windows), not(unix), not(target_os = \"macos\"), not(target_os = \"ios\")))": [
-      "riscv32imc-unknown-none-elf",
-      "riscv64gc-unknown-none-elf",
-      "thumbv7em-none-eabi",
-      "thumbv8m.main-none-eabi",
-      "wasm32-unknown-unknown",
-      "wasm32-wasi",
-      "x86_64-unknown-none"
-    ],
     "cfg(all(target_arch = \"aarch64\", target_env = \"msvc\", not(windows_raw_dylib)))": [
       "aarch64-pc-windows-msvc"
     ],
@@ -75071,6 +76459,9 @@
     ],
     "cfg(all(target_arch = \"x86_64\", target_env = \"msvc\", not(windows_raw_dylib)))": [
       "x86_64-pc-windows-msvc"
+    ],
+    "cfg(all(target_family = \"wasm\", not(any(target_os = \"emscripten\", target_os = \"wasi\"))))": [
+      "wasm32-unknown-unknown"
     ],
     "cfg(all(unix, not(target_arch = \"wasm32\")))": [
       "aarch64-apple-darwin",
@@ -76060,6 +77451,8 @@
     "byteorder 1.5.0",
     "bytes 1.6.0",
     "cached 0.49.2",
+    "canbench 0.1.3",
+    "canbench-rs 0.1.1",
     "candid 0.10.6",
     "candid_parser 0.1.2",
     "cargo_metadata 0.14.2",
@@ -76111,6 +77504,7 @@
     "hashlink 0.8.4",
     "hex 0.4.3",
     "hex-literal 0.4.1",
+    "hkdf 0.12.4",
     "http 0.2.9",
     "http 1.0.0",
     "http-body 0.4.5",
@@ -76122,7 +77516,8 @@
     "hyper 0.14.27",
     "hyper 1.2.0",
     "hyper-rustls 0.24.2",
-    "hyper-rustls 0.26.0",
+    "hyper-rustls 0.27.1",
+    "hyper-socks2 0.8.0",
     "hyper-util 0.1.3",
     "hyperlocal-next 0.9.0",
     "ic-agent 0.34.0",
@@ -76179,6 +77574,7 @@
     "local-ip-address 0.5.6",
     "log 0.4.20",
     "lru 0.7.8",
+    "mach2 0.4.2",
     "maplit 1.0.2",
     "maxminddb 0.24.0",
     "metrics-proxy 0.1.0",
@@ -76188,6 +77584,7 @@
     "mockito 1.2.0",
     "moka 0.12.1",
     "more-asserts 0.3.1",
+    "nftables 0.4.0",
     "nix 0.24.3",
     "notify 4.0.17",
     "num 0.4.1",
@@ -76200,7 +77597,10 @@
     "once_cell 1.19.0",
     "openssh-keys 0.5.0",
     "opentelemetry 0.20.0",
+    "opentelemetry 0.21.0",
+    "opentelemetry-otlp 0.14.0",
     "opentelemetry-prometheus 0.13.0",
+    "opentelemetry_sdk 0.21.2",
     "p256 0.13.2",
     "pairing 0.22.0",
     "parking_lot 0.12.1",
@@ -76236,7 +77636,7 @@
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
     "randomkit 0.1.1",
-    "ratelimit 0.7.1",
+    "ratelimit 0.9.1",
     "rayon 1.8.0",
     "rcgen 0.11.3",
     "regex 1.10.2",
@@ -76246,7 +77646,7 @@
     "ring 0.17.7",
     "ripemd 0.1.3",
     "rlp 0.5.2",
-    "rocksdb 0.21.0",
+    "rocksdb 0.22.0",
     "rolling-file 0.2.0",
     "rsa 0.9.2",
     "rstack-self 0.3.0",
@@ -76255,8 +77655,8 @@
     "rust_decimal 1.32.0",
     "rust_decimal_macros 1.32.0",
     "rustc-hash 1.1.0",
-    "rustls 0.21.10",
-    "rustls 0.22.2",
+    "rustls 0.21.12",
+    "rustls 0.23.5",
     "rustls-native-certs 0.7.0",
     "rustls-pemfile 1.0.3",
     "rustversion 1.0.14",
@@ -76266,7 +77666,7 @@
     "scoped_threadpool 0.1.9",
     "scopeguard 1.2.0",
     "scraper 0.17.1",
-    "semver 1.0.20",
+    "semver 1.0.22",
     "serde 1.0.195",
     "serde-bytes-repr 0.1.5",
     "serde_bytes 0.11.14",
@@ -76281,6 +77681,7 @@
     "signal-hook 0.3.17",
     "signature 2.1.0",
     "simple_asn1 0.6.2",
+    "simple_moving_average 1.0.2",
     "slog 2.7.0",
     "slog-async 2.8.0",
     "slog-envlogger 2.2.0",
@@ -76295,6 +77696,7 @@
     "substring 1.4.5",
     "subtle 2.5.0",
     "syn 1.0.109",
+    "sync_wrapper 1.0.1",
     "tar 0.4.40",
     "tarpc 0.34.0",
     "tempfile 3.8.0",
@@ -76318,7 +77720,7 @@
     "tonic-build 0.11.0",
     "tower 0.4.13",
     "tower-http 0.4.4",
-    "tower-http 0.5.1",
+    "tower-http 0.5.2",
     "tower-request-id 0.3.0",
     "tower-test 0.4.0",
     "tower_governor 0.1.0",
@@ -76326,6 +77728,7 @@
     "tracing-appender 0.2.3",
     "tracing-core 0.1.32",
     "tracing-flame 0.2.0",
+    "tracing-opentelemetry 0.22.0",
     "tracing-serde 0.1.3",
     "tracing-slog 0.2.0",
     "tracing-subscriber 0.3.18",
@@ -76342,9 +77745,9 @@
     "wasm-smith 0.201.0",
     "wasmparser 0.201.0",
     "wasmprinter 0.2.70",
-    "wasmtime 19.0.2",
-    "wasmtime-environ 19.0.2",
-    "wasmtime-runtime 19.0.2",
+    "wasmtime 20.0.2",
+    "wasmtime-environ 20.0.2",
+    "wasmtime-runtime 20.0.2",
     "wast 53.0.0",
     "wat 1.0.77",
     "wee_alloc 0.4.5",

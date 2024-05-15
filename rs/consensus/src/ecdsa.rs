@@ -525,13 +525,13 @@ fn compute_priority(
             // as the source_height from different subnet cannot be compared
             // anyways.
             if *transcript_id.source_subnet() != subnet_id {
-                return Priority::Fetch;
+                return Priority::FetchNow;
             }
 
             let height = transcript_id.source_height();
             if height <= args.finalized_height {
                 if args.requested_transcripts.contains(transcript_id) {
-                    Priority::Fetch
+                    Priority::FetchNow
                 } else {
                     metrics
                         .dropped_adverts
@@ -540,7 +540,7 @@ fn compute_priority(
                     Priority::Drop
                 }
             } else if height < args.finalized_height + Height::from(LOOK_AHEAD) {
-                Priority::Fetch
+                Priority::FetchNow
             } else {
                 Priority::Stash
             }
@@ -548,7 +548,7 @@ fn compute_priority(
         EcdsaMessageAttribute::EcdsaSigShare(request_id) => {
             if request_id.height <= args.certified_height {
                 if args.requested_signatures.contains(request_id) {
-                    Priority::Fetch
+                    Priority::FetchNow
                 } else {
                     metrics
                         .dropped_adverts
@@ -557,7 +557,7 @@ fn compute_priority(
                     Priority::Drop
                 }
             } else if request_id.height < args.certified_height + Height::from(LOOK_AHEAD) {
-                Priority::Fetch
+                Priority::FetchNow
             } else {
                 Priority::Stash
             }
@@ -569,7 +569,7 @@ fn compute_priority(
                 if args.active_transcripts.contains(transcript_id)
                     || args.requested_transcripts.contains(transcript_id)
                 {
-                    Priority::Fetch
+                    Priority::FetchNow
                 } else {
                     metrics
                         .dropped_adverts
@@ -578,7 +578,7 @@ fn compute_priority(
                     Priority::Drop
                 }
             } else if height < args.finalized_height + Height::from(LOOK_AHEAD) {
-                Priority::Fetch
+                Priority::FetchNow
             } else {
                 Priority::Stash
             }
@@ -671,11 +671,11 @@ mod tests {
             // Signed dealings
             (
                 EcdsaMessageAttribute::EcdsaSignedDealing(xnet_transcript_id),
-                Priority::Fetch,
+                Priority::FetchNow,
             ),
             (
                 EcdsaMessageAttribute::EcdsaSignedDealing(transcript_id_fetch_1),
-                Priority::Fetch,
+                Priority::FetchNow,
             ),
             (
                 EcdsaMessageAttribute::EcdsaSignedDealing(transcript_id_drop),
@@ -683,7 +683,7 @@ mod tests {
             ),
             (
                 EcdsaMessageAttribute::EcdsaSignedDealing(transcript_id_fetch_2),
-                Priority::Fetch,
+                Priority::FetchNow,
             ),
             (
                 EcdsaMessageAttribute::EcdsaSignedDealing(transcript_id_stash),
@@ -692,11 +692,11 @@ mod tests {
             // Dealing support
             (
                 EcdsaMessageAttribute::EcdsaDealingSupport(xnet_transcript_id),
-                Priority::Fetch,
+                Priority::FetchNow,
             ),
             (
                 EcdsaMessageAttribute::EcdsaDealingSupport(transcript_id_fetch_1),
-                Priority::Fetch,
+                Priority::FetchNow,
             ),
             (
                 EcdsaMessageAttribute::EcdsaDealingSupport(transcript_id_drop),
@@ -704,7 +704,7 @@ mod tests {
             ),
             (
                 EcdsaMessageAttribute::EcdsaDealingSupport(transcript_id_fetch_2),
-                Priority::Fetch,
+                Priority::FetchNow,
             ),
             (
                 EcdsaMessageAttribute::EcdsaDealingSupport(transcript_id_stash),
@@ -762,7 +762,7 @@ mod tests {
         let tests = vec![
             (
                 EcdsaMessageAttribute::EcdsaSigShare(request_id_fetch_1.clone()),
-                Priority::Fetch,
+                Priority::FetchNow,
             ),
             (
                 EcdsaMessageAttribute::EcdsaSigShare(request_id_drop.clone()),
@@ -770,7 +770,7 @@ mod tests {
             ),
             (
                 EcdsaMessageAttribute::EcdsaSigShare(request_id_fetch_2.clone()),
-                Priority::Fetch,
+                Priority::FetchNow,
             ),
             (
                 EcdsaMessageAttribute::EcdsaSigShare(request_id_stash.clone()),
@@ -815,7 +815,7 @@ mod tests {
             // Complaints
             (
                 EcdsaMessageAttribute::EcdsaComplaint(transcript_id_fetch_1),
-                Priority::Fetch,
+                Priority::FetchNow,
             ),
             (
                 EcdsaMessageAttribute::EcdsaComplaint(transcript_id_drop),
@@ -823,7 +823,7 @@ mod tests {
             ),
             (
                 EcdsaMessageAttribute::EcdsaComplaint(transcript_id_fetch_2),
-                Priority::Fetch,
+                Priority::FetchNow,
             ),
             (
                 EcdsaMessageAttribute::EcdsaComplaint(transcript_id_stash),
@@ -831,12 +831,12 @@ mod tests {
             ),
             (
                 EcdsaMessageAttribute::EcdsaComplaint(transcript_id_fetch_3),
-                Priority::Fetch,
+                Priority::FetchNow,
             ),
             // Openings
             (
                 EcdsaMessageAttribute::EcdsaOpening(transcript_id_fetch_1),
-                Priority::Fetch,
+                Priority::FetchNow,
             ),
             (
                 EcdsaMessageAttribute::EcdsaOpening(transcript_id_drop),
@@ -844,7 +844,7 @@ mod tests {
             ),
             (
                 EcdsaMessageAttribute::EcdsaOpening(transcript_id_fetch_2),
-                Priority::Fetch,
+                Priority::FetchNow,
             ),
             (
                 EcdsaMessageAttribute::EcdsaOpening(transcript_id_stash),
@@ -852,7 +852,7 @@ mod tests {
             ),
             (
                 EcdsaMessageAttribute::EcdsaOpening(transcript_id_fetch_3),
-                Priority::Fetch,
+                Priority::FetchNow,
             ),
         ];
 

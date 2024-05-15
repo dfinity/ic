@@ -2,7 +2,7 @@
 name = "ic-icrc-rosetta"
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 default-run = "ic-icrc-rosetta"
-version.workspace = true
+version = "1.0.2"
 authors.workspace = true
 edition.workspace = true
 documentation.workspace = true
@@ -30,7 +30,8 @@ ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
-ic-rosetta-api = { path = "../../" }
+ic-rosetta-api = { path = "../.." }
+ic-sys = { path = "../../../sys" }
 icrc-ledger-agent = { path = "../../../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 indicatif = "0.17.3"
@@ -52,7 +53,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = "3.1.0"
 tokio = { workspace = true }
-tower-http = { version = "^0.5.1", features = ["trace"] }
+tower-http = { version = "^0.5.2", features = ["trace"] }
 tower-request-id = "^0.3.0"
 tracing = { workspace = true }
 tracing-appender = { workspace = true }

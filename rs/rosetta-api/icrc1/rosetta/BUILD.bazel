@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/rosetta_core:rosetta-core",
+    "//rs/sys",
     "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:axum",
@@ -49,7 +50,7 @@ DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:tower-request-id",
-    "@crate_index//:tower_http_0_5_1",
+    "@crate_index//:tower-http",
     "@crate_index//:tracing",
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
@@ -58,17 +59,17 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//packages/pocket-ic:pocket-ic",
-    "//rs/test_utilities/load_wasm",
-    "//rs/rosetta-api/icrc1/test_utils",
     "//rs/rosetta-api/icrc1/ledger/sm-tests",
     "//rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client",
     "//rs/rosetta-api/icrc1/rosetta/runner:ic-icrc-rosetta-runner",
+    "//rs/rosetta-api/icrc1/test_utils",
     "//rs/rosetta-api/test_utils",
+    "//rs/test_utilities/load_wasm",
     ":ic-icrc-rosetta",
     "@crate_index//:futures",
     "@crate_index//:ic-utils",
-    "@crate_index//:ring",
     "@crate_index//:once_cell",
+    "@crate_index//:ring",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -81,7 +82,7 @@ MACRO_DEV_DEPENDENCIES = [
 ALIASES = {
 }
 
-ROSETTA_VERSION = "1.0.1"
+ROSETTA_VERSION = "1.0.2"
 
 rust_library(
     name = "ic-icrc-rosetta",

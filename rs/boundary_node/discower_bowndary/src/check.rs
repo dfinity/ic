@@ -3,15 +3,28 @@ use async_trait::async_trait;
 use http::{Method, StatusCode};
 use ic_agent::agent::http_transport::reqwest_transport::reqwest::{Client, Request};
 use std::fmt::Debug;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use thiserror::Error;
+use tracing::error;
 use url::Url;
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum HealthCheckError {}
+const SERVICE_NAME: &str = "HealthCheckImpl";
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Error, Debug, PartialEq, Clone)]
+pub enum HealthCheckError {
+    #[error(r#"Cannot parse url: "{0}""#)]
+    UrlParseError(#[from] url::ParseError),
+}
+
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct HealthCheckResult {
-    pub is_healthy: bool,
+    pub latency: Option<Duration>,
+}
+
+impl HealthCheckResult {
+    pub fn is_healthy(&self) -> bool {
+        self.latency.is_some()
+    }
 }
 
 #[async_trait]
@@ -37,15 +50,31 @@ impl HealthCheckImpl {
 #[async_trait]
 impl HealthCheck for HealthCheckImpl {
     async fn check(&self, node: &Node) -> Result<HealthCheckResult, HealthCheckError> {
-        let url = Url::parse(&format!("https://{}/health", node.domain)).unwrap();
+        let url = Url::parse(&format!("https://{}/health", node.domain))?;
 
-        let mut request = Request::new(Method::GET, url);
+        let mut request = Request::new(Method::GET, url.clone());
         *request.timeout_mut() = Some(self.timeout);
 
-        let is_healthy = match self.http_client.execute(request).await {
-            Ok(response) => matches!(response.status(), StatusCode::NO_CONTENT),
-            Err(_) => false,
+        let start = Instant::now();
+        let response = self.http_client.execute(request).await;
+        let elapsed = start.elapsed();
+
+        // Set latency to Some() only for successful health check.
+        let latency = match response {
+            Ok(res) if res.status() == StatusCode::NO_CONTENT => Some(elapsed),
+            Ok(res) => {
+                error!(
+                    "{SERVICE_NAME}: check() for url={url} received unexpected http status {}",
+                    res.status()
+                );
+                None
+            }
+            Err(err) => {
+                error!("{SERVICE_NAME}: check() failed for url={url}: {err:?}");
+                None
+            }
         };
-        Ok(HealthCheckResult { is_healthy })
+
+        Ok(HealthCheckResult { latency })
     }
 }

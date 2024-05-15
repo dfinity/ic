@@ -3,7 +3,10 @@ use candid::{Nat, Principal};
 use ic_base_types::CanisterId;
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
-use ic_cketh_minter::endpoints::{AddCkErc20Token, CkErc20Token, Erc20Balance, MinterInfo};
+use ic_cketh_minter::endpoints::{
+    AddCkErc20Token, CkErc20Token, Erc20Balance, MinterInfo, WithdrawalDetail,
+    WithdrawalSearchParameter,
+};
 use ic_cketh_minter::memo::MintMemo;
 use ic_cketh_minter::numeric::BlockNumber;
 use ic_cketh_minter::{MINT_RETRY_DELAY, SCRAPPING_ETH_LOGS_INTERVAL};
@@ -15,9 +18,9 @@ use ic_cketh_test_utils::{
     format_ethereum_address_to_eip_55, CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
     DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
     DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
-    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, ERC20_HELPER_CONTRACT_ADDRESS,
-    ETH_HELPER_CONTRACT_ADDRESS, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_ETH_LOGS_BLOCK_RANGE,
-    MINTER_ADDRESS, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE, ERC20_HELPER_CONTRACT_ADDRESS,
+    ETH_HELPER_CONTRACT_ADDRESS, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL,
+    MAX_ETH_LOGS_BLOCK_RANGE, MINTER_ADDRESS, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
 };
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::flow::call_ledger_icrc1_total_supply;
@@ -154,7 +157,9 @@ mod withdraw_erc20 {
     use ic_cketh_minter::endpoints::events::{
         TransactionReceipt, TransactionStatus, UnsignedTransaction,
     };
-    use ic_cketh_minter::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus};
+    use ic_cketh_minter::endpoints::{
+        EthTransaction, RetrieveEthStatus, TxFinalizedStatus, WithdrawalStatus,
+    };
     use ic_cketh_minter::memo::BurnMemo;
     use ic_cketh_minter::PROCESS_REIMBURSEMENT;
     use ic_cketh_test_utils::ckerc20::{
@@ -678,9 +683,10 @@ mod withdraw_erc20 {
             let ckerc20 = match transaction_status {
                 TransactionStatus::Success => ckerc20
                     .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
-                    .expect_finalized_status(TxFinalizedStatus::Success(EthTransaction {
+                    .expect_finalized_status(TxFinalizedStatus::Success {
                         transaction_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.to_string(),
-                    })),
+                        effective_transaction_fee: Some((GAS_USED * EFFECTIVE_GAS_PRICE).into()),
+                    }),
                 TransactionStatus::Failure => ckerc20
                     .wait_and_validate_withdrawal(
                         ProcessWithdrawalParams::default().with_failed_transaction_receipt(),
@@ -858,6 +864,92 @@ mod withdraw_erc20 {
 
         test(TransactionStatus::Success);
         test(TransactionStatus::Failure);
+    }
+
+    #[test]
+    fn should_return_multiple_withdrawal_status() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+        let caller = ckerc20.caller();
+        let ckerc20_tx_fee = DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE;
+
+        let ckerc20 = ckerc20
+            .deposit_cketh_and_ckerc20(
+                EXPECTED_BALANCE,
+                (TWO_USDC + CKERC20_TRANSFER_FEE) * 2,
+                ckusdc.clone(),
+                caller,
+            )
+            .expect_mint()
+            .call_cketh_ledger_approve_minter(caller, ckerc20_tx_fee * 2, None)
+            .call_ckerc20_ledger_approve_minter(
+                ckusdc.ledger_canister_id,
+                caller,
+                TWO_USDC * 2,
+                None,
+            );
+
+        let ckerc20 = ckerc20
+            .call_minter_withdraw_erc20(
+                caller,
+                TWO_USDC,
+                ckusdc.ledger_canister_id,
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_refresh_gas_fee_estimate(identity)
+            .expect_withdrawal_request_accepted();
+
+        let ckerc20 = ckerc20
+            .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
+            .expect_finalized_status(TxFinalizedStatus::Success {
+                transaction_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+                effective_transaction_fee: Some((GAS_USED * EFFECTIVE_GAS_PRICE).into()),
+            });
+
+        let ckerc20 = ckerc20
+            .call_minter_withdraw_erc20(
+                caller,
+                TWO_USDC,
+                ckusdc.ledger_canister_id,
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_refresh_gas_fee_estimate(identity)
+            .expect_withdrawal_request_accepted();
+
+        assert_eq!(
+            ckerc20
+                .setup
+                .cketh
+                .withdrawal_status(&WithdrawalSearchParameter::BySenderAccount(Account {
+                    owner: caller,
+                    subaccount: None
+                })),
+            vec![
+                WithdrawalDetail {
+                    withdrawal_id: 3,
+                    recipient_address: DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+                    from: caller,
+                    from_subaccount: None,
+                    token_symbol: "ckUSDC".to_string(),
+                    withdrawal_amount: Nat::from(2000000_u64),
+                    max_transaction_fee: Some(Nat::from(2145241036770000_u64)),
+                    status: WithdrawalStatus::Pending
+                },
+                WithdrawalDetail {
+                    withdrawal_id: 2,
+                    recipient_address: DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+                    from: caller,
+                    from_subaccount: None,
+                    token_symbol: "ckUSDC".to_string(),
+                    withdrawal_amount: Nat::from(2000000_u64),
+                    max_transaction_fee: Some(Nat::from(2145241036770000_u64)),
+                    status: WithdrawalStatus::TxFinalized(TxFinalizedStatus::Success {
+                        transaction_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+                        effective_transaction_fee: Some(Nat::from(89836391190000_u64))
+                    })
+                }
+            ]
+        )
     }
 
     #[test]
@@ -1059,7 +1151,7 @@ mod withdraw_erc20 {
                     },
                 )
             })
-            .expect_status(RetrieveEthStatus::Pending);
+            .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending);
     }
 }
 
@@ -1354,6 +1446,8 @@ fn should_retrieve_minter_info() {
             eth_balance: Some(Nat::from(0_u8)),
             last_gas_fee_estimate: None,
             erc20_balances: Some(erc20_balances),
+            last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
+            last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
         }
     );
 }
@@ -1477,4 +1571,84 @@ fn should_scrape_from_last_scraped_after_upgrade() {
         .respond_for_all_with(empty_logs())
         .build()
         .expect_rpc_calls(&ckerc20);
+}
+
+#[test]
+fn should_not_scrape_when_no_erc20_token() {
+    let ckerc20 = CkErc20Setup::default();
+
+    // Set latest_finalized_block so that we scrapped twice each time.
+    let latest_finalized_block = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + MAX_ETH_LOGS_BLOCK_RANGE;
+    ckerc20.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(latest_finalized_block))
+        .build()
+        .expect_rpc_calls(&ckerc20);
+
+    // Both ETH and ERC20 last scraped number are at installation time
+    assert_eq!(
+        ckerc20
+            .cketh
+            .get_minter_info()
+            .last_eth_scraped_block_number,
+        Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into())
+    );
+    assert_eq!(
+        ckerc20
+            .cketh
+            .get_minter_info()
+            .last_erc20_scraped_block_number,
+        Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into())
+    );
+
+    // ckETH event logs
+    let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
+    let first_to_block = first_from_block
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE - 1))
+        .unwrap();
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": first_from_block,
+            "toBlock": first_to_block,
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&ckerc20);
+
+    // ckERC20 event logs
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": first_from_block,
+            "toBlock": first_to_block,
+            "address": [ERC20_HELPER_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ERC20_EVENT_TOPIC]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_no_rpc_calls(&ckerc20);
+
+    // Upgrade to see if everything works.
+    ckerc20
+        .cketh
+        .check_audit_logs_and_upgrade_as_ref(Default::default());
+
+    // Scraping ETH log was successful, last_eth_scraped_block_number is updated.
+    assert_eq!(
+        ckerc20
+            .cketh
+            .get_minter_info()
+            .last_eth_scraped_block_number,
+        Some(latest_finalized_block.into())
+    );
+
+    // Because scraping ERC20 log didn't happen, last_erc20_scraped_block_number is unchanged.
+    assert_eq!(
+        ckerc20
+            .cketh
+            .get_minter_info()
+            .last_erc20_scraped_block_number,
+        Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into())
+    );
 }

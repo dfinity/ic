@@ -1494,7 +1494,17 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     fn status_is_healthy(&self) -> Result<bool> {
         match self.status() {
             Ok(s) if s.replica_health_status.is_some() => {
-                Ok(Some(ReplicaHealthStatus::Healthy) == s.replica_health_status)
+                let healthy = Some(ReplicaHealthStatus::Healthy) == s.replica_health_status;
+                if !healthy {
+                    info!(
+                        self.test_env().logger(),
+                        "Replica not yet healthy, status: {}",
+                        s.replica_health_status
+                            .map(|s| s.as_ref().to_string())
+                            .unwrap_or("unknown".to_string())
+                    );
+                }
+                Ok(healthy)
             }
             Ok(_) => {
                 warn!(

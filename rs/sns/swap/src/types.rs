@@ -17,7 +17,7 @@ use crate::{
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{ledger::ICRC1Ledger, SECONDS_PER_DAY};
+use ic_nervous_system_common::{ledger::ICRC1Ledger, ONE_DAY_SECONDS};
 use ic_sns_governance::pb::v1::{ClaimedSwapNeuronStatus, NeuronId};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use std::str::FromStr;
@@ -138,8 +138,8 @@ impl Init {
     }
 
     pub fn environment(&self) -> Result<impl CanisterEnvironment, String> {
+        use ic_nervous_system_clients::ledger_client::LedgerCanister;
         use ic_nervous_system_common::ledger::IcpLedgerCanister;
-        use ic_sns_governance::ledger::LedgerCanister;
 
         let sns_root = {
             let sns_root_canister_id = self
@@ -320,8 +320,8 @@ impl Init {
 }
 
 impl Params {
-    const MIN_SALE_DURATION_SECONDS: u64 = SECONDS_PER_DAY;
-    const MAX_SALE_DURATION_SECONDS: u64 = 14 * SECONDS_PER_DAY;
+    const MIN_SALE_DURATION_SECONDS: u64 = ONE_DAY_SECONDS;
+    const MAX_SALE_DURATION_SECONDS: u64 = 14 * ONE_DAY_SECONDS;
 
     pub fn validate(&self, init: &Init) -> Result<(), String> {
         if self.min_icp_e8s == 0 {
@@ -1176,7 +1176,7 @@ mod tests {
     };
     use ic_base_types::PrincipalId;
     use ic_nervous_system_common::{
-        assert_is_err, assert_is_ok, E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
+        assert_is_err, assert_is_ok, E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
     };
     use lazy_static::lazy_static;
     use std::mem;
@@ -1192,7 +1192,7 @@ mod tests {
         min_direct_participation_icp_e8s: Some(10 * E8),
         sns_token_e8s: 5_000 * E8,
         min_participants: 10,
-        swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS + 14 * SECONDS_PER_DAY,
+        swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS + 14 * ONE_DAY_SECONDS,
         neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
             count: 3,
             dissolve_delay_interval_seconds: 7890000, // 3 months

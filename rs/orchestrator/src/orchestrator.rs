@@ -1,37 +1,45 @@
-use crate::args::OrchestratorArgs;
-use crate::boundary_node::BoundaryNodeManager;
-use crate::catch_up_package_provider::CatchUpPackageProvider;
-use crate::dashboard::{Dashboard, OrchestratorDashboard};
-use crate::firewall::Firewall;
-use crate::hostos_upgrade::HostosUpgrader;
-use crate::ipv4_network::Ipv4Configurator;
-use crate::metrics::OrchestratorMetrics;
-use crate::process_manager::ProcessManager;
-use crate::registration::NodeRegistration;
-use crate::registry_helper::RegistryHelper;
-use crate::ssh_access_manager::SshAccessManager;
-use crate::upgrade::Upgrade;
+use crate::{
+    args::OrchestratorArgs,
+    boundary_node::BoundaryNodeManager,
+    catch_up_package_provider::CatchUpPackageProvider,
+    dashboard::{Dashboard, OrchestratorDashboard},
+    firewall::Firewall,
+    hostos_upgrade::HostosUpgrader,
+    ipv4_network::Ipv4Configurator,
+    metrics::OrchestratorMetrics,
+    process_manager::ProcessManager,
+    registration::NodeRegistration,
+    registry_helper::RegistryHelper,
+    ssh_access_manager::SshAccessManager,
+    upgrade::Upgrade,
+};
 use get_if_addrs::get_if_addrs;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{generate_node_keys_once, NodeKeyGenerationError};
-use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_image_upgrader::ImageUpgrader;
-use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::hostos_version::HostosVersion;
-use ic_types::{ReplicaVersion, SubnetId};
+use ic_types::{hostos_version::HostosVersion, ReplicaVersion, SubnetId};
 use slog_async::AsyncGuard;
-use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::{convert::TryFrom, thread, time::Duration};
-use tokio::sync::watch::{self, Receiver, Sender};
-use tokio::{sync::RwLock, task::JoinHandle};
+use std::{
+    convert::TryFrom,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+    thread,
+    time::Duration,
+};
+use tokio::{
+    sync::{
+        watch::{self, Receiver, Sender},
+        RwLock,
+    },
+    task::JoinHandle,
+};
 
 const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
@@ -179,13 +187,8 @@ impl Orchestrator {
         .unwrap();
 
         let slog_logger = logger.inner_logger.root.clone();
-        let (metrics, _metrics_runtime) = Self::get_metrics(
-            metrics_addr,
-            &slog_logger,
-            &metrics_registry,
-            registry.get_registry_client(),
-            Arc::clone(&crypto) as _,
-        );
+        let (metrics, _metrics_runtime) =
+            Self::get_metrics(metrics_addr, &slog_logger, &metrics_registry);
         let metrics = Arc::new(metrics);
 
         metrics
@@ -281,6 +284,7 @@ impl Orchestrator {
             Arc::clone(&registry),
             Arc::clone(&metrics),
             config.firewall.clone(),
+            config.boundary_node_firewall.clone(),
             cup_provider.clone(),
             logger.clone(),
         );
@@ -292,8 +296,12 @@ impl Orchestrator {
             logger.clone(),
         );
 
-        let ssh_access_manager =
-            SshAccessManager::new(Arc::clone(&registry), Arc::clone(&metrics), logger.clone());
+        let ssh_access_manager = SshAccessManager::new(
+            Arc::clone(&registry),
+            Arc::clone(&metrics),
+            node_id,
+            logger.clone(),
+        );
 
         let subnet_id: Arc<RwLock<Option<SubnetId>>> = Default::default();
 
@@ -566,8 +574,6 @@ impl Orchestrator {
         metrics_addr: SocketAddr,
         logger: &slog::Logger,
         metrics_registry: &MetricsRegistry,
-        registry_client: Arc<dyn RegistryClient>,
-        crypto: Arc<dyn TlsHandshake + Send + Sync>,
     ) -> (OrchestratorMetrics, MetricsHttpEndpoint) {
         let metrics_config = MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
@@ -578,8 +584,6 @@ impl Orchestrator {
             tokio::runtime::Handle::current(),
             metrics_config,
             metrics_registry.clone(),
-            registry_client,
-            crypto,
             logger,
         );
 

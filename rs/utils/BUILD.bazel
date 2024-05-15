@@ -12,6 +12,7 @@ rust_library(
         "@crate_index//:prost",
         "@crate_index//:scoped_threadpool",
         "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
     ],
 )
 

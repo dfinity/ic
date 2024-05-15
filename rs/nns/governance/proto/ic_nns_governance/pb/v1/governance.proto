@@ -122,6 +122,9 @@ enum Topic {
   // Proposals related to the management of API Boundary Nodes
   TOPIC_API_BOUNDARY_NODE_MANAGEMENT = 15;
 
+  // Proposals related to subnet rental.
+  TOPIC_SUBNET_RENTAL = 16;
+
   // Superseded by SNS_COMMUNITY_FUND.
   reserved 11;
   reserved "TOPIC_SNS_DECENTRALIZATION_SALE";
@@ -612,8 +615,8 @@ enum NnsFunction {
   // the Root canister is preventing root or another canister from upgrading (in the case of proxied calls).
   NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION = 42;
 
-  // A proposal to add a new API Boundary Node using an assigned node
-  NNS_FUNCTION_ADD_API_BOUNDARY_NODE = 43;
+  // A proposal to add a set of new API Boundary Nodes using unassigned nodes
+  NNS_FUNCTION_ADD_API_BOUNDARY_NODES = 43;
 
   // A proposal to remove a set of API Boundary Nodes, which will designate them as unassigned nodes
   NNS_FUNCTION_REMOVE_API_BOUNDARY_NODES = 44;
@@ -644,6 +647,9 @@ enum NnsFunction {
   // Deploy a HostOS version to a given set of nodes. The proposal changes the HostOS version that
   // is used on the specified nodes.
   NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES = 51;
+
+  // The proposal requests a subnet rental.
+  NNS_FUNCTION_SUBNET_RENTAL_REQUEST = 52;
 }
 
 // Payload of a proposal that calls a function on another NNS

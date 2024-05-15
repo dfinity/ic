@@ -47,6 +47,8 @@ mod ic0 {
         ) -> ();
         pub fn call_on_cleanup(fun: u32, env: u32) -> ();
         pub fn call_data_append(src: u32, size: u32) -> ();
+        pub fn call_with_best_effort_response(timeout_seconds: u32) -> ();
+        pub fn msg_deadline() -> u64;
         pub fn call_cycles_add(amount: u64) -> ();
         pub fn call_cycles_add128(amount_high: u64, amount_low: u64) -> ();
         pub fn call_perform() -> u32;
@@ -121,6 +123,15 @@ pub fn call_data_append(payload: &[u8]) {
     }
 }
 
+pub fn call_with_best_effort_response(timeout_seconds: u32) {
+    unsafe {
+        ic0::call_with_best_effort_response(timeout_seconds);
+    }
+}
+
+pub fn msg_deadline() -> u64 {
+    unsafe { ic0::msg_deadline() }
+}
 pub fn call_cycles_add(amount: u64) {
     unsafe {
         ic0::call_cycles_add(amount);

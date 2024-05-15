@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "ic-leger-suite-orchestrator"
+name = "ic-ledger-suite-orchestrator"
 path = "src/main.rs"
 
 [dependencies]
@@ -32,6 +32,7 @@ num-traits = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_bytes = { workspace = true }
+time = { workspace = true }
 
 [dev-dependencies]
 ic-ledger-suite-orchestrator-test-utils = { path = "test_utils" }

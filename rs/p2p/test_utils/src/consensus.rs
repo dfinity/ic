@@ -12,7 +12,6 @@ use ic_interfaces::p2p::consensus::{
 use ic_logger::ReplicaLogger;
 use ic_types::{
     artifact::{Advert, ArtifactKind, ArtifactTag, Priority},
-    crypto::CryptoHash,
     NodeId,
 };
 use serde::{Deserialize, Serialize};
@@ -41,7 +40,6 @@ impl ArtifactKind for U64Artifact {
             attribute: (),
             size: msg.len(),
             id,
-            integrity_hash: CryptoHash(vec![]),
         }
     }
 }
@@ -296,6 +294,6 @@ impl PriorityFnAndFilterProducer<U64Artifact, TestConsensus<U64Artifact>>
         <U64Artifact as ArtifactKind>::Id,
         <U64Artifact as ArtifactKind>::Attribute,
     > {
-        Box::new(|_, _| Priority::Fetch)
+        Box::new(|_, _| Priority::FetchNow)
     }
 }

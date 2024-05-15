@@ -344,6 +344,7 @@ fn run_very_slow_method(
     pic: &PocketIc,
     loop_iterations: u64,
     dts_flag: DtsFlag,
+    arg_size: usize,
 ) -> Result<WasmResult, UserError> {
     // Create a canister.
     let t0 = pic.get_time();
@@ -358,7 +359,7 @@ fn run_very_slow_method(
     pic.install_canister(can_id, very_slow_wasm(loop_iterations), vec![], None);
 
     let t0 = pic.get_time();
-    let res = pic.update_call(can_id, Principal::anonymous(), "run", vec![]);
+    let res = pic.update_call(can_id, Principal::anonymous(), "run", vec![42u8; arg_size]);
     let t1 = pic.get_time();
     if let DtsFlag::Enabled = dts_flag {
         assert!(t1 >= t0 + Duration::from_nanos(10)); // DTS takes at least 10 rounds
@@ -370,17 +371,25 @@ fn run_very_slow_method(
 }
 
 #[test]
-fn test_benchmarking_subnet() {
+fn test_benchmarking_app_subnet() {
     let pic = PocketIcBuilder::new()
         .with_benchmarking_application_subnet()
         .build();
-    run_very_slow_method(&pic, 200_000, DtsFlag::Disabled).unwrap();
+    run_very_slow_method(&pic, 200_000, DtsFlag::Disabled, 0).unwrap();
+}
+
+#[test]
+fn test_benchmarking_system_subnet() {
+    let pic = PocketIcBuilder::new()
+        .with_benchmarking_system_subnet()
+        .build();
+    run_very_slow_method(&pic, 200_000, DtsFlag::Disabled, 3_000_000).unwrap();
 }
 
 #[test]
 fn very_slow_method_on_application_subnet() {
     let pic = PocketIcBuilder::new().with_application_subnet().build();
-    run_very_slow_method(&pic, 200_000, DtsFlag::Enabled).unwrap_err();
+    run_very_slow_method(&pic, 200_000, DtsFlag::Enabled, 0).unwrap_err();
 }
 
 fn test_dts(dts_flag: DtsFlag) {
@@ -388,7 +397,7 @@ fn test_dts(dts_flag: DtsFlag) {
         .with_application_subnet()
         .with_dts_flag(dts_flag)
         .build();
-    run_very_slow_method(&pic, 60_000, dts_flag).unwrap();
+    run_very_slow_method(&pic, 60_000, dts_flag, 0).unwrap();
 }
 
 #[test]

@@ -6,7 +6,7 @@ use std::{
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
 use ic_p2p_test_utils::{temp_crypto_component_with_tls_keys, RegistryConsensusHandle};
-use tokio_rustls::rustls::{ClientConfig, ServerConfig};
+use rustls::{ClientConfig, ServerConfig};
 
 pub struct PeerRestrictedTlsConfig {
     allowed_peers: Arc<Mutex<Vec<NodeId>>>,

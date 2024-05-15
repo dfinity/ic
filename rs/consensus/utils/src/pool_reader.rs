@@ -353,16 +353,15 @@ impl<'a> PoolReader<'a> {
     }
 
     /// Get the round start time of a given height, which is the max timestamp
-    /// of first notarization and random beacon of the previous height.
-    /// Return None if a timestamp is not found.
+    /// of first notarization and random beacon of the previous height. Return
+    /// `None` if no suitable artifact indicating a round start has been found.
     pub fn get_round_start_time(&self, height: Height) -> Option<Time> {
         let validated = self.pool.validated();
         let catch_up_height = self.get_catch_up_height();
 
-        let get_random_beacon_time = |h| {
-            self.get_random_beacon(h)
-                .and_then(|x| validated.get_timestamp(&x.get_id()))
-        };
+        if height <= catch_up_height {
+            return None;
+        }
 
         let get_notarization_time = |h| {
             validated
@@ -372,27 +371,69 @@ impl<'a> PoolReader<'a> {
                 .min()
         };
 
-        if height > catch_up_height {
-            let prev_height = height.decrement();
-            // Here we stop early if random beacon time is not available, to avoid doing
-            // a redundant lookup on notarizations.
-            get_random_beacon_time(prev_height)
-                .and_then(|random_beacon_time| {
-                    get_notarization_time(prev_height)
-                        .map(|notarization_time| notarization_time.max(random_beacon_time))
-                })
-                .or_else(|| {
-                    // If notarization has already been purged at catch_up_height, we use the time
-                    // of the CatchUpPackage instead.
-                    if prev_height == catch_up_height {
-                        validated.get_timestamp(&self.get_highest_catch_up_package().get_id())
-                    } else {
-                        None
-                    }
-                })
-        } else {
-            None
+        let prev_height = height.decrement();
+        // Here we stop early if random beacon time is not available, to avoid doing
+        // a redundant lookup on notarizations.
+        self.get_random_beacon(prev_height)
+            .and_then(|x| validated.get_timestamp(&x.get_id()))
+            .and_then(|random_beacon_time| {
+                get_notarization_time(prev_height)
+                    .map(|notarization_time| notarization_time.max(random_beacon_time))
+            })
+            .or_else(|| {
+                // If notarization and random beacon have already been purged at
+                // catch_up_height, we use the time of the CatchUpPackage instead.
+                if prev_height == catch_up_height {
+                    validated.get_timestamp(&self.get_highest_catch_up_package().get_id())
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Get the round start instant of a given height, which is the max instant
+    /// of first notarization and random beacon of the previous height. If either
+    /// of the messages don't have instants, we use the given fallback instance.
+    /// Return `None` if no suitable artifact indicating a round start has been found.
+    ///
+    /// The reason we have a fallback for instants is because they are not persisted
+    /// on disk, so we could lose instants when e.g. the replica restarts due to
+    /// updates or crashes. We also don't collect instants in the uncached pool during
+    /// genesis.
+    pub fn get_round_start_instant(&self, height: Height, fallback: Instant) -> Option<Instant> {
+        let validated = self.pool.validated();
+        let catch_up_height = self.get_catch_up_height();
+
+        if height <= catch_up_height {
+            return None;
         }
+
+        let get_notarization_instant = |h| {
+            validated
+                .notarization()
+                .get_by_height(h)
+                .map(|x| self.pool.message_instant(&x.get_id()).unwrap_or(fallback))
+                .min()
+        };
+
+        let prev_height = height.decrement();
+        // Here we stop early if random beacon time is not available, to avoid doing
+        // a redundant lookup on notarizations.
+        self.get_random_beacon(prev_height)
+            .map(|x| self.pool.message_instant(&x.get_id()).unwrap_or(fallback))
+            .and_then(|random_beacon_time| {
+                get_notarization_instant(prev_height)
+                    .map(|notarization_time| notarization_time.max(random_beacon_time))
+            })
+            .or_else(|| {
+                // If notarization and random beacon have already been purged at
+                // catch_up_height, we use the time of the CatchUpPackage instead.
+                (prev_height == catch_up_height).then(|| {
+                    self.pool
+                        .message_instant(&self.get_highest_catch_up_package().get_id())
+                        .unwrap_or(fallback)
+                })
+            })
     }
 
     /// Get all valid random beacon shares at the given height.

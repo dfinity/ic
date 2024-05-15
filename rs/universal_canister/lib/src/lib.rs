@@ -17,7 +17,7 @@ use universal_canister::Ops;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("68fdfb339cb5ce5351a63ef8910cce62ebc8e00ca8d5a6f01ac2b18d79a04985");
+    hex!("b8501c0a7789bb6c8208a930bc9c03940f96497e1ea73673dbcc759f366f2210");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -267,7 +267,7 @@ impl PayloadBuilder {
         method: S,
         call_args: CallArgs,
     ) -> Self {
-        self = self.call_helper(callee, method, call_args, None);
+        self = self.call_helper(callee, method, call_args, None, None);
         self
     }
 
@@ -278,7 +278,50 @@ impl PayloadBuilder {
         call_args: CallArgs,
         cycles: Cycles,
     ) -> Self {
-        self = self.call_helper(callee, method, call_args, Some(cycles));
+        self = self.call_helper(callee, method, call_args, Some(cycles), None);
+        self
+    }
+
+    pub fn call_simple_with_cycles_and_best_effort_response<P: AsRef<[u8]>, S: ToString>(
+        mut self,
+        callee: P,
+        method: S,
+        call_args: CallArgs,
+        cycles: Cycles,
+        timeout_seconds: u32,
+    ) -> Self {
+        self = self.call_helper(
+            callee,
+            method,
+            call_args,
+            Some(cycles),
+            Some(timeout_seconds),
+        );
+        self
+    }
+
+    pub fn call_new<P: AsRef<[u8]>, S: ToString>(
+        mut self,
+        callee: P,
+        method: S,
+        call_args: CallArgs,
+    ) -> Self {
+        self = self.push_bytes(callee.as_ref());
+        self = self.push_bytes(method.to_string().as_bytes());
+        self = self.push_bytes(call_args.on_reply.as_slice());
+        self = self.push_bytes(call_args.on_reject.as_slice());
+        self.0.push(Ops::CallNew as u8);
+        self
+    }
+
+    pub fn call_with_best_effort_response(mut self, timeout_seconds: u32) -> Self {
+        self = self.push_int(timeout_seconds);
+        self.0.push(Ops::CallWithBestEffortResponse as u8);
+        self
+    }
+
+    pub fn call_perform(mut self) -> Self {
+        self.0.push(Ops::CallPerform as u8);
         self
     }
 
@@ -288,6 +331,7 @@ impl PayloadBuilder {
         method: S,
         call_args: CallArgs,
         cycles: Option<Cycles>,
+        timeout_secounds: Option<u32>,
     ) -> Self {
         self = self.push_bytes(callee.as_ref());
         self = self.push_bytes(method.to_string().as_bytes());
@@ -305,6 +349,10 @@ impl PayloadBuilder {
             self = self.push_int64(high_amount);
             self = self.push_int64(low_amount);
             self.0.push(Ops::CallCyclesAdd128 as u8);
+        }
+        if let Some(timeout) = timeout_secounds {
+            self = self.push_int(timeout);
+            self.0.push(Ops::CallWithBestEffortResponse as u8);
         }
         self.0.push(Ops::CallPerform as u8);
         self
@@ -489,6 +537,12 @@ impl PayloadBuilder {
     /// Pushes the size of the caller data onto the stack.
     pub fn msg_caller_size(mut self) -> Self {
         self.0.push(Ops::MsgCallerSize as u8);
+        self
+    }
+
+    /// Pushes the deadline of the message onto the stack.
+    pub fn msg_deadline(mut self) -> Self {
+        self.0.push(Ops::MsgDeadline as u8);
         self
     }
 

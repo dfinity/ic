@@ -1,8 +1,10 @@
 use ic_btc_types_internal::{GetSuccessorsRequestInitial, SendTransactionRequest};
 use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
+    registry::crypto::v1 as pb_crypto,
+    state::queues::v1 as pb_queues,
     state::system_metadata::v1 as pb_metadata,
 };
 use ic_types::{
@@ -762,6 +764,7 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
     }
 }
 
+// TODO(EXC-1599): remove after generalized version `IDkgDealingsContext` is released.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EcdsaDealingsContext {
     pub request: Request,
@@ -806,6 +809,54 @@ impl TryFrom<(Time, pb_metadata::EcdsaDealingsContext)> for EcdsaDealingsContext
             request,
             key_id,
             nodes,
+            registry_version: RegistryVersion::from(context.registry_version),
+            time: context
+                .time
+                .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IDkgDealingsContext {
+    pub request: Request,
+    pub key_id: MasterPublicKeyId,
+    pub nodes: BTreeSet<NodeId>,
+    pub registry_version: RegistryVersion,
+    pub time: Time,
+}
+
+impl From<&IDkgDealingsContext> for pb_metadata::IDkgDealingsContext {
+    fn from(context: &IDkgDealingsContext) -> Self {
+        Self {
+            request: Some(pb_queues::Request::from(&context.request)),
+            key_id: Some(pb_crypto::MasterPublicKeyId::from(&context.key_id)),
+            nodes: context
+                .nodes
+                .iter()
+                .map(|node_id| node_id_into_protobuf(*node_id))
+                .collect(),
+            registry_version: context.registry_version.get(),
+            time: Some(pb_metadata::Time {
+                time_nanos: context.time.as_nanos_since_unix_epoch(),
+            }),
+        }
+    }
+}
+
+impl TryFrom<(Time, pb_metadata::IDkgDealingsContext)> for IDkgDealingsContext {
+    type Error = ProxyDecodeError;
+    fn try_from(
+        (time, context): (Time, pb_metadata::IDkgDealingsContext),
+    ) -> Result<Self, Self::Error> {
+        Ok(Self {
+            request: try_from_option_field(context.request, "IDkgDealingsContext::request")?,
+            key_id: try_from_option_field(context.key_id, "IDkgDealingsContext::key_id")?,
+            nodes: context
+                .nodes
+                .into_iter()
+                .map(|node_id| node_id_try_from_option(Some(node_id)))
+                .collect::<Result<_, _>>()?,
             registry_version: RegistryVersion::from(context.registry_version),
             time: context
                 .time

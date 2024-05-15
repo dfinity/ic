@@ -15,7 +15,7 @@ use crate::{
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::SECONDS_PER_DAY;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use std::{
     collections::{BTreeSet, HashMap},
@@ -364,26 +364,12 @@ impl Neuron {
     ///
     /// If the neuron is dissolving or dissolved, an error is returned.
     fn start_dissolving(&mut self, now_seconds: u64) -> Result<(), GovernanceError> {
-        if let Some(DissolveState::DissolveDelaySeconds(delay)) = self.dissolve_state {
-            // Neuron is actually not dissolving.
-            if delay > 0 {
-                self.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(
-                    delay + now_seconds,
-                ));
-                // When we start dissolving, we set the neuron age to
-                // zero, and it stays zero until we stop
-                // dissolving. This is represented by setting the
-                // 'aging since' to its maximum possible value, which
-                // will remain in the future until approximately
-                // 292,277,026,596 AD.
-                self.aging_since_timestamp_seconds = u64::MAX;
-                Ok(())
-            } else {
-                // Already dissolved - cannot start dissolving.
-                Err(GovernanceError::new(ErrorType::RequiresNotDissolving))
-            }
+        let dissolve_state_and_age = self.dissolve_state_and_age();
+        if let DissolveStateAndAge::NotDissolving { .. } = dissolve_state_and_age {
+            let new_disolved_state_and_age = dissolve_state_and_age.start_dissolving(now_seconds);
+            self.set_dissolve_state_and_age(new_disolved_state_and_age);
+            Ok(())
         } else {
-            // Already dissolving or dissolved - cannot start dissolving.
             Err(GovernanceError::new(ErrorType::RequiresNotDissolving))
         }
     }
@@ -392,20 +378,13 @@ impl Neuron {
     ///
     /// If the neuron is not dissolving, an error is returned.
     fn stop_dissolving(&mut self, now_seconds: u64) -> Result<(), GovernanceError> {
-        if let Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) = self.dissolve_state {
-            if ts > now_seconds {
-                // Dissolve time is in the future: pause dissolving.
-                self.dissolve_state = Some(DissolveState::DissolveDelaySeconds(ts - now_seconds));
-                self.aging_since_timestamp_seconds = now_seconds;
-                Ok(())
-            } else {
-                // Neuron is already dissolved, so it doesn't
-                // make sense to stop dissolving it.
-                Err(GovernanceError::new(ErrorType::RequiresDissolving))
-            }
-        } else {
-            // The neuron is not in a dissolving state.
+        let dissolve_state_and_age = self.dissolve_state_and_age();
+        let new_disolved_state_and_age = dissolve_state_and_age.stop_dissolving(now_seconds);
+        if new_disolved_state_and_age == dissolve_state_and_age {
             Err(GovernanceError::new(ErrorType::RequiresDissolving))
+        } else {
+            self.set_dissolve_state_and_age(new_disolved_state_and_age);
+            Ok(())
         }
     }
 
@@ -699,26 +678,11 @@ impl Neuron {
             assert!(new_stake_e8s == updated_stake_e8s);
             self.cached_neuron_stake_e8s = new_stake_e8s;
 
-            self.aging_since_timestamp_seconds =
-                if let Some(DissolveState::WhenDissolvedTimestampSeconds(_)) = self.dissolve_state {
-                    // Check if invariant is violated.
-                    if self.aging_since_timestamp_seconds != u64::MAX {
-                        println!(
-                            "{}Neuron {:?} is in state {:?}, so it should not have \
-                         an age, but aging_since_timestamp_seconds = {}",
-                            LOG_PREFIX,
-                            self.id(),
-                            self.state(now),
-                            self.aging_since_timestamp_seconds
-                        );
-                    }
-                    // If, for some reason, the invariant did not already hold, we
-                    // recover by re-establishing it.
-                    u64::MAX
-                } else {
-                    // Only a non-dissolving neurons have a non-zero age.
-                    now.saturating_sub(new_age_seconds)
-                }
+            let new_aging_since_timestamp_seconds = now.saturating_sub(new_age_seconds);
+            let new_disolved_state_and_age = self
+                .dissolve_state_and_age()
+                .adjust_age(new_aging_since_timestamp_seconds);
+            self.set_dissolve_state_and_age(new_disolved_state_and_age);
         }
     }
 
@@ -765,7 +729,7 @@ impl Neuron {
 
         // 3.2: Now, we know when self is "dissolved" (could be in the past, present, or future).
         // Thus, we can evaluate whether that happened sufficiently long ago.
-        let max_dissolved_at_timestamp_seconds_to_be_inactive = now - 2 * 7 * SECONDS_PER_DAY;
+        let max_dissolved_at_timestamp_seconds_to_be_inactive = now - 2 * 7 * ONE_DAY_SECONDS;
         if dissolved_at_timestamp_seconds > max_dissolved_at_timestamp_seconds_to_be_inactive {
             return false;
         }
@@ -805,27 +769,8 @@ impl Neuron {
     /// WhenDissolvedTimestampSeconds(now()), but we didn't. This could be changed for new Neurons,
     /// but there is no intention to do that (yet).
     pub fn dissolved_at_timestamp_seconds(&self) -> Option<u64> {
-        use DissolveState::{DissolveDelaySeconds, WhenDissolvedTimestampSeconds};
-        match self.dissolve_state {
-            None => None,
-            Some(WhenDissolvedTimestampSeconds(result)) => Some(result),
-            Some(DissolveDelaySeconds(_)) => None,
-        }
-    }
-
-    /// Returns an enum representing the dissolve state and age of a neuron.
-    pub fn dissolve_state_and_age(&self) -> DissolveStateAndAge {
-        DissolveStateAndAge::from(StoredDissolvedStateAndAge {
-            dissolve_state: self.dissolve_state.clone(),
-            aging_since_timestamp_seconds: self.aging_since_timestamp_seconds,
-        })
-    }
-
-    /// Sets a neuron's dissolve state and age.
-    pub fn set_dissolve_state_and_age(&mut self, state_and_age: DissolveStateAndAge) {
-        let stored = StoredDissolvedStateAndAge::from(state_and_age);
-        self.dissolve_state = stored.dissolve_state;
-        self.aging_since_timestamp_seconds = stored.aging_since_timestamp_seconds;
+        self.dissolve_state_and_age()
+            .dissolved_at_timestamp_seconds()
     }
 
     pub fn subtract_staked_maturity(&mut self, amount_e8s: u64) {
@@ -883,10 +828,10 @@ impl NeuronInfo {
 mod tests {
     use super::*;
     use crate::{
-        governance::ONE_YEAR_SECONDS,
         neuron::{DissolveStateAndAge, NeuronBuilder},
         pb::v1::manage_neuron::{SetDissolveTimestamp, StartDissolving},
     };
+    use ic_nervous_system_common::ONE_YEAR_SECONDS;
 
     use ic_nervous_system_common::E8;
     use icp_ledger::Subaccount;
@@ -1189,7 +1134,7 @@ mod tests {
         // Test cases
         for current_aging_since_timestamp_seconds in [0, NOW - 1, NOW, NOW + 1, NOW + 2000] {
             for current_dissolve_delay_seconds in
-                [1, 10, 100, NOW, NOW + 1000, (SECONDS_PER_DAY * 365 * 8)]
+                [1, 10, 100, NOW, NOW + 1000, (ONE_DAY_SECONDS * 365 * 8)]
             {
                 test_increase_dissolve_delay_by_1_for_non_dissolving_neuron(
                     current_aging_since_timestamp_seconds,
@@ -1228,7 +1173,7 @@ mod tests {
 
         for current_aging_since_timestamp_seconds in [0, NOW - 1, NOW, NOW + 1, NOW + 2000] {
             for dissolved_at_timestamp_seconds in
-                [NOW + 1, NOW + 1000, NOW + (SECONDS_PER_DAY * 365 * 8)]
+                [NOW + 1, NOW + 1000, NOW + (ONE_DAY_SECONDS * 365 * 8)]
             {
                 test_increase_dissolve_delay_by_1_for_dissolving_neuron(
                     current_aging_since_timestamp_seconds,

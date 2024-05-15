@@ -808,7 +808,7 @@ fn state_equivalence() {
         Eip1559Signature, Eip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
     };
     use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
-    use maplit::btreemap;
+    use maplit::{btreemap, btreeset};
 
     fn source(txhash: &str, index: u64) -> EventSource {
         EventSource {
@@ -847,12 +847,25 @@ fn state_equivalence() {
         ..withdrawal_request1.clone()
     };
     let eth_transactions = EthTransactions {
-        withdrawal_requests: vec![
+        pending_withdrawal_requests: vec![
             withdrawal_request1.clone().into(),
             withdrawal_request2.clone().into(),
         ]
         .into_iter()
         .collect(),
+        processed_withdrawal_requests: btreemap! {
+            LedgerBurnIndex::new(4) => EthWithdrawalRequest {
+                withdrawal_amount: Wei::new(1_000_000_000_000),
+                ledger_burn_index: LedgerBurnIndex::new(4),
+                destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52".parse().unwrap(),
+                from: "ezu3d-2mifu-k3bh4-oqhrj-mbrql-5p67r-pp6pr-dbfra-unkx5-sxdtv-rae"
+                    .parse()
+                    .unwrap(),
+                from_subaccount: None,
+                created_at: Some(1699527697000000000),
+            }.into(),
+           withdrawal_request1.ledger_burn_index  => withdrawal_request1.clone().into(),
+        },
         created_tx: singleton_map(
             2,
             4,
@@ -943,18 +956,7 @@ fn state_equivalence() {
             .expect("valid receipt"),
         ),
         next_nonce: TransactionNonce::new(3),
-        maybe_reimburse: btreemap! {
-            LedgerBurnIndex::new(4) => EthWithdrawalRequest {
-                withdrawal_amount: Wei::new(1_000_000_000_000),
-                ledger_burn_index: LedgerBurnIndex::new(4),
-                destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52".parse().unwrap(),
-                from: "ezu3d-2mifu-k3bh4-oqhrj-mbrql-5p67r-pp6pr-dbfra-unkx5-sxdtv-rae"
-                    .parse()
-                    .unwrap(),
-                from_subaccount: None,
-                created_at: Some(1699527697000000000),
-            }.into()
-        },
+        maybe_reimburse: btreeset! { LedgerBurnIndex::new(4) },
         reimbursement_requests: btreemap! {
             ReimbursementIndex::CkEth { ledger_burn_index: LedgerBurnIndex::new(3) } => ReimbursementRequest {
                 transaction_hash: Some("0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d"
@@ -967,12 +969,12 @@ fn state_equivalence() {
             }
         },
         reimbursed: btreemap! {
-           ReimbursementIndex::CkEth { ledger_burn_index: LedgerBurnIndex::new(6) } => Reimbursed {
+           ReimbursementIndex::CkEth { ledger_burn_index: LedgerBurnIndex::new(6) } => Ok(Reimbursed {
                 transaction_hash: Some("0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d".parse().unwrap()),
                 reimbursed_in_block: LedgerMintIndex::new(150),
                 reimbursed_amount: CkTokenAmount::new(10_000_000_000_000),
                 burn_in_block: LedgerBurnIndex::new(6),
-            },
+            }),
         },
     };
     let mut ckerc20_tokens = MultiKeyMap::default();
@@ -1145,7 +1147,7 @@ fn state_equivalence() {
         Ok(()),
         state.is_equivalent_to(&State {
             eth_transactions: EthTransactions {
-                withdrawal_requests: vec![
+                pending_withdrawal_requests: vec![
                     withdrawal_request2.clone().into(),
                     withdrawal_request1.clone().into()
                 ]
@@ -1162,7 +1164,7 @@ fn state_equivalence() {
         Ok(()),
         state.is_equivalent_to(&State {
             eth_transactions: EthTransactions {
-                withdrawal_requests: vec![withdrawal_request1.into()].into_iter().collect(),
+                pending_withdrawal_requests: vec![withdrawal_request1.into()].into_iter().collect(),
                 ..eth_transactions.clone()
             },
             ..state.clone()

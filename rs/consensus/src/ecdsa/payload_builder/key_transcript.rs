@@ -2,7 +2,9 @@ use std::collections::BTreeSet;
 
 use ic_logger::{info, ReplicaLogger};
 use ic_types::{
-    consensus::idkg::{self, EcdsaBlockReader, TranscriptAttributes},
+    consensus::idkg::{
+        self, EcdsaBlockReader, EcdsaKeyTranscript, EcdsaUIDGenerator, TranscriptAttributes,
+    },
     crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
     Height, NodeId, RegistryVersion,
 };
@@ -31,19 +33,44 @@ pub(super) fn get_created_key_transcript(
 ///
 /// Note that when creating next key transcript we must use the registry version
 /// that is going to be put into the next DKG summary.
-pub(super) fn update_next_key_transcript(
+pub(super) fn update_next_key_transcripts(
     receivers: &[NodeId],
     registry_version: RegistryVersion,
     ecdsa_payload: &mut idkg::EcdsaPayload,
     transcript_cache: &dyn EcdsaTranscriptBuilder,
     height: Height,
     log: &ReplicaLogger,
+) -> Result<Vec<IDkgTranscript>, EcdsaPayloadError> {
+    let mut new_transcripts = Vec::new();
+
+    for key_transcript in ecdsa_payload.key_transcripts.values_mut() {
+        if let Some(new_transcript) = update_next_key_transcript(
+            key_transcript,
+            &mut ecdsa_payload.uid_generator,
+            receivers,
+            registry_version,
+            transcript_cache,
+            height,
+            log,
+        )? {
+            new_transcripts.push(new_transcript);
+        }
+    }
+
+    Ok(new_transcripts)
+}
+
+pub(super) fn update_next_key_transcript(
+    key_transcript: &mut EcdsaKeyTranscript,
+    uid_generator: &mut EcdsaUIDGenerator,
+    receivers: &[NodeId],
+    registry_version: RegistryVersion,
+    transcript_cache: &dyn EcdsaTranscriptBuilder,
+    height: Height,
+    log: &ReplicaLogger,
 ) -> Result<Option<IDkgTranscript>, EcdsaPayloadError> {
     let mut new_transcript = None;
-    match (
-        &ecdsa_payload.key_transcript.current,
-        &ecdsa_payload.key_transcript.next_in_creation,
-    ) {
+    match (&key_transcript.current, &key_transcript.next_in_creation) {
         (Some(transcript), idkg::KeyTranscriptCreation::Begin) => {
             // We have an existing key transcript, need to reshare it to create next
             // Create a new reshare config when there is none
@@ -56,16 +83,15 @@ pub(super) fn update_next_key_transcript(
                 receivers,
                 height,
             );
-            ecdsa_payload.key_transcript.next_in_creation =
-                idkg::KeyTranscriptCreation::ReshareOfUnmaskedParams(
-                    idkg::ReshareOfUnmaskedParams::new(
-                        ecdsa_payload.uid_generator.next_transcript_id(),
-                        receivers_set,
-                        registry_version,
-                        transcript,
-                        transcript.unmasked_transcript(),
-                    ),
-                );
+            key_transcript.next_in_creation = idkg::KeyTranscriptCreation::ReshareOfUnmaskedParams(
+                idkg::ReshareOfUnmaskedParams::new(
+                    uid_generator.next_transcript_id(),
+                    receivers_set,
+                    registry_version,
+                    transcript,
+                    transcript.unmasked_transcript(),
+                ),
+            );
         }
 
         (Some(_), idkg::KeyTranscriptCreation::ReshareOfUnmaskedParams(config)) => {
@@ -82,7 +108,7 @@ pub(super) fn update_next_key_transcript(
                     height,
                 );
                 let transcript_ref = idkg::UnmaskedTranscript::try_from((height, &transcript))?;
-                ecdsa_payload.key_transcript.next_in_creation =
+                key_transcript.next_in_creation =
                     idkg::KeyTranscriptCreation::Created(transcript_ref);
                 new_transcript = Some(transcript);
             }
@@ -91,19 +117,18 @@ pub(super) fn update_next_key_transcript(
         (None, idkg::KeyTranscriptCreation::Begin) => {
             // The first ECDSA key transcript has to be created, starting from a random
             // config. Here receivers and dealers are the same set.
-            let transcript_id = ecdsa_payload.uid_generator.next_transcript_id();
+            let transcript_id = uid_generator.next_transcript_id();
             let receivers_set = receivers.iter().copied().collect::<BTreeSet<_>>();
             let dealers_set = receivers_set.clone();
-            ecdsa_payload.key_transcript.next_in_creation =
-                idkg::KeyTranscriptCreation::RandomTranscriptParams(
-                    idkg::RandomTranscriptParams::new(
-                        transcript_id,
-                        dealers_set,
-                        receivers_set,
-                        registry_version,
-                        AlgorithmId::ThresholdEcdsaSecp256k1,
-                    ),
-                );
+            key_transcript.next_in_creation = idkg::KeyTranscriptCreation::RandomTranscriptParams(
+                idkg::RandomTranscriptParams::new(
+                    transcript_id,
+                    dealers_set,
+                    receivers_set,
+                    registry_version,
+                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                ),
+            );
         }
 
         (None, idkg::KeyTranscriptCreation::RandomTranscriptParams(config)) => {
@@ -113,10 +138,10 @@ pub(super) fn update_next_key_transcript(
             {
                 let receivers_set = receivers.iter().copied().collect::<BTreeSet<_>>();
                 let transcript_ref = idkg::MaskedTranscript::try_from((height, &transcript))?;
-                ecdsa_payload.key_transcript.next_in_creation =
+                key_transcript.next_in_creation =
                     idkg::KeyTranscriptCreation::ReshareOfMaskedParams(
                         idkg::ReshareOfMaskedParams::new(
-                            ecdsa_payload.uid_generator.next_transcript_id(),
+                            uid_generator.next_transcript_id(),
                             receivers_set,
                             registry_version,
                             &transcript,
@@ -141,7 +166,7 @@ pub(super) fn update_next_key_transcript(
                     height,
                 );
                 let transcript_ref = idkg::UnmaskedTranscript::try_from((height, &transcript))?;
-                ecdsa_payload.key_transcript.next_in_creation =
+                key_transcript.next_in_creation =
                     idkg::KeyTranscriptCreation::Created(transcript_ref);
                 new_transcript = Some(transcript);
             }
@@ -163,7 +188,7 @@ pub(super) fn update_next_key_transcript(
                     height,
                 );
                 let transcript_ref = idkg::UnmaskedTranscript::try_from((height, &transcript))?;
-                ecdsa_payload.key_transcript.next_in_creation =
+                key_transcript.next_in_creation =
                     idkg::KeyTranscriptCreation::Created(transcript_ref);
                 new_transcript = Some(transcript);
             }
@@ -292,15 +317,16 @@ mod tests {
 
         // 1. Nothing initially, masked transcript creation should start
         let cur_height = Height::new(10);
-        let result = update_next_key_transcript(
+        let result = update_next_key_transcripts(
             &subnet_nodes,
             registry_version,
             &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
-        );
-        matches!(result, Ok(None));
+        )
+        .expect("Should update next key transcripts");
+        assert_eq!(result.len(), 0);
         assert_eq!(payload.peek_next_transcript_id().id(), 1);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 1);
         assert_eq!(config_ids(&payload), [0]);
@@ -320,19 +346,20 @@ mod tests {
         };
         transcript_builder
             .add_transcript(masked_transcript.transcript_id, masked_transcript.clone());
-        let result = update_next_key_transcript(
+        let result = update_next_key_transcripts(
             &subnet_nodes,
             registry_version,
             &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
-        );
-        let completed_transcript = result.unwrap().unwrap();
-        assert_eq!(completed_transcript, masked_transcript);
+        )
+        .expect("Should successfully update next key transcripts");
+        let completed_transcript = result.first().unwrap();
+        assert_eq!(*completed_transcript, masked_transcript);
         block_reader.add_transcript(
             idkg::TranscriptRef::new(cur_height, completed_transcript.transcript_id),
-            completed_transcript,
+            completed_transcript.clone(),
         );
         assert_eq!(payload.peek_next_transcript_id().id(), 2);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 1);
@@ -354,23 +381,24 @@ mod tests {
             unmasked_transcript.transcript_id,
             unmasked_transcript.clone(),
         );
-        let result = update_next_key_transcript(
+        let result = update_next_key_transcripts(
             &subnet_nodes,
             registry_version,
             &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
-        );
-        let completed_transcript = result.unwrap().unwrap();
-        assert_eq!(completed_transcript, unmasked_transcript);
+        )
+        .expect("Should successfully update next key transcripts");
+        let completed_transcript = result.first().unwrap();
+        assert_eq!(*completed_transcript, unmasked_transcript);
         let current_key_transcript = idkg::UnmaskedTranscriptWithAttributes::new(
             completed_transcript.to_attributes(),
             idkg::UnmaskedTranscript::try_from((cur_height, &unmasked_transcript)).unwrap(),
         );
         block_reader.add_transcript(
             idkg::TranscriptRef::new(cur_height, completed_transcript.transcript_id),
-            completed_transcript,
+            completed_transcript.clone(),
         );
         assert_eq!(payload.peek_next_transcript_id().id(), 2);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 0);
@@ -385,17 +413,18 @@ mod tests {
 
         // 4. Reshare the current key transcript to get the next one
         let cur_height = Height::new(40);
-        payload.key_transcript.current = Some(current_key_transcript.clone());
-        payload.key_transcript.next_in_creation = idkg::KeyTranscriptCreation::Begin;
-        let result = update_next_key_transcript(
+        payload.single_key_transcript_mut().current = Some(current_key_transcript.clone());
+        payload.single_key_transcript_mut().next_in_creation = idkg::KeyTranscriptCreation::Begin;
+        let result = update_next_key_transcripts(
             &subnet_nodes,
             registry_version,
             &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
-        );
-        matches!(result, Ok(None));
+        )
+        .expect("Should update next key transcripts");
+        assert_eq!(result.len(), 0);
         assert_eq!(payload.peek_next_transcript_id().id(), 3);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 1);
         assert_eq!(config_ids(&payload), [2]);
@@ -416,16 +445,17 @@ mod tests {
             unmasked_transcript.transcript_id,
             unmasked_transcript.clone(),
         );
-        let result = update_next_key_transcript(
+        let result = update_next_key_transcripts(
             &subnet_nodes,
             registry_version,
             &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
-        );
-        let completed_transcript = result.unwrap().unwrap();
-        assert_eq!(completed_transcript, unmasked_transcript);
+        )
+        .expect("Should successfully update next key transcripts");
+        let completed_transcript = result.first().unwrap();
+        assert_eq!(*completed_transcript, unmasked_transcript);
         assert_eq!(payload.peek_next_transcript_id().id(), 3);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 0);
         assert!(config_ids(&payload).is_empty());
@@ -468,15 +498,16 @@ mod tests {
 
         // 1. Nothing initially, masked transcript creation should start
         let cur_height = Height::new(10);
-        let result = update_next_key_transcript(
+        let result = update_next_key_transcripts(
             &subnet_nodes_ids,
             registry_version,
             &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
-        );
-        matches!(result, Ok(None));
+        )
+        .expect("Should update the next key transcript successfully");
+        assert_eq!(result.len(), 0);
         assert_eq!(payload.peek_next_transcript_id().id(), 1);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 1);
         assert_eq!(config_ids(&payload), [0]);
@@ -496,19 +527,20 @@ mod tests {
         };
         transcript_builder
             .add_transcript(masked_transcript.transcript_id, masked_transcript.clone());
-        let result = update_next_key_transcript(
+        let result = update_next_key_transcripts(
             &subnet_nodes_ids,
             registry_version,
             &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
-        );
-        let completed_transcript = result.unwrap().unwrap();
-        assert_eq!(completed_transcript, masked_transcript);
+        )
+        .expect("Should successfully update next key transcripts");
+        let completed_transcript = result.first().unwrap();
+        assert_eq!(*completed_transcript, masked_transcript);
         block_reader.add_transcript(
             idkg::TranscriptRef::new(cur_height, completed_transcript.transcript_id),
-            completed_transcript,
+            completed_transcript.clone(),
         );
         assert_eq!(payload.peek_next_transcript_id().id(), 2);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 1);
@@ -530,19 +562,20 @@ mod tests {
             unmasked_transcript.transcript_id,
             unmasked_transcript.clone(),
         );
-        let result = update_next_key_transcript(
+        let result = update_next_key_transcripts(
             &subnet_nodes_ids,
             registry_version,
             &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
-        );
-        let completed_transcript = result.unwrap().unwrap();
-        assert_eq!(completed_transcript, unmasked_transcript);
+        )
+        .expect("Should successfully update next key transcripts");
+        let completed_transcript = result.first().unwrap();
+        assert_eq!(*completed_transcript, unmasked_transcript);
         block_reader.add_transcript(
             idkg::TranscriptRef::new(cur_height, completed_transcript.transcript_id),
-            completed_transcript,
+            completed_transcript.clone(),
         );
         assert_eq!(payload.peek_next_transcript_id().id(), 2);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 0);
@@ -569,7 +602,7 @@ mod tests {
             idkg::TranscriptRef::new(cur_height, transcript.transcript_id),
             transcript,
         );
-        payload.key_transcript.next_in_creation =
+        payload.single_key_transcript_mut().next_in_creation =
             idkg::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((
                 Box::new(dummy_initial_idkg_dealing_for_tests(
                     AlgorithmId::ThresholdEcdsaSecp256k1,
@@ -577,15 +610,16 @@ mod tests {
                 )),
                 params,
             ));
-        let result = update_next_key_transcript(
+        let result = update_next_key_transcripts(
             &subnet_nodes_ids,
             registry_version,
             &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
-        );
-        matches!(result, Ok(None));
+        )
+        .expect("Should update next key transcripts");
+        assert_eq!(result.len(), 0);
         assert_eq!(payload.peek_next_transcript_id().id(), 2);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 1);
         assert_eq!(config_ids(&payload), [reshare_params.transcript_id().id()]);
@@ -614,16 +648,17 @@ mod tests {
             unmasked_transcript.transcript_id,
             unmasked_transcript.clone(),
         );
-        let result = update_next_key_transcript(
+        let result = update_next_key_transcripts(
             &target_subnet_nodes_ids,
             registry_version,
             &mut payload,
             &transcript_builder,
             cur_height,
             &no_op_logger(),
-        );
-        let completed_transcript = result.unwrap().unwrap();
-        assert_eq!(completed_transcript, unmasked_transcript);
+        )
+        .expect("Should successfully update next key transcripts");
+        let completed_transcript = result.first().unwrap();
+        assert_eq!(*completed_transcript, unmasked_transcript);
         assert_eq!(payload.peek_next_transcript_id().id(), 2);
         assert_eq!(payload.iter_transcript_configs_in_creation().count(), 0);
         assert!(config_ids(&payload).is_empty());

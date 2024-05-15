@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use crate::driver::test_env::TestEnvAttribute;
 use crate::driver::test_env_api::{HasPublicApiUrl, HasRegistryLocalStore};
 use crate::driver::test_setup::GroupSetup;
@@ -10,7 +8,7 @@ use crate::driver::{
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use slog::info;
 
-use ic_registry_local_store::{compact_delta_to_changelog, Changelog, LocalStoreImpl};
+use ic_registry_local_store::{compact_delta_to_changelog, Changelog};
 use ic_registry_local_store_artifacts;
 
 const PRODUCTION_IC_NAME: &str = "mercury";
@@ -21,25 +19,6 @@ pub fn get_mainnet_delta_6d_c1() -> Changelog {
     compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
         .expect("Could not read mainnet delta 00-6d-c1")
         .1
-}
-
-/// this method uses unsafe writes. as a result, after a power outage, it is
-/// possible that the latest version is lower than the highest version in
-/// `changelog`, even if the call returned successfully. we deem this acceptable
-/// in this particular case, as this method is only used on startup and the
-/// missing versions will be fetched through subsequent updates of the local
-/// store.
-pub fn create_local_store_from_changelog<P: AsRef<Path>>(
-    path: P,
-    changelog: Changelog,
-) -> LocalStoreImpl {
-    let store = LocalStoreImpl::new(path.as_ref());
-    for (v, changelog_entry) in changelog.into_iter().enumerate() {
-        store
-            .write_changelog_entry_unsafe((v + 1) as u64, changelog_entry)
-            .unwrap();
-    }
-    store
 }
 
 pub fn mainnet_config(env: TestEnv) {
@@ -61,8 +40,6 @@ pub fn mainnet_config(env: TestEnv) {
     let local_store_path = env
         .registry_local_store_path(PRODUCTION_IC_NAME)
         .expect("corrupted ic-prep directory structure");
-    let _store =
-        create_local_store_from_changelog(local_store_path.clone(), get_mainnet_delta_6d_c1());
     info!(&log, "Obtained old registry snapshot");
 
     let topology_snapshot = env.topology_snapshot_by_name(PRODUCTION_IC_NAME);

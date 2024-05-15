@@ -12,6 +12,9 @@ use std::convert::TryFrom;
 
 use crate::canister_manager::CanisterManagerError;
 
+/// These limit comes from the spec and is not expected to change,
+/// which is why it is not part of the replica config.
+const MAX_WASM_MEMORY_LIMIT: u64 = 1 << 48;
 /// Struct used for decoding CanisterSettingsArgs
 #[derive(Default)]
 pub(crate) struct CanisterSettings {
@@ -117,13 +120,18 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
         };
 
         let wasm_memory_limit = match input.wasm_memory_limit {
-            Some(limit) => Some(
-                limit
+            Some(limit) => {
+                let limit = limit
                     .0
                     .to_u64()
-                    .ok_or(UpdateSettingsError::WasmMemoryLimitOutOfRange { provided: limit })?
-                    .into(),
-            ),
+                    .ok_or(UpdateSettingsError::WasmMemoryLimitOutOfRange { provided: limit })?;
+                if limit > MAX_WASM_MEMORY_LIMIT {
+                    return Err(UpdateSettingsError::WasmMemoryLimitOutOfRange {
+                        provided: limit.into(),
+                    });
+                }
+                Some(limit.into())
+            }
             None => None,
         };
 

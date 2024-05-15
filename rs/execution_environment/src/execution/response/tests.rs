@@ -1,6 +1,8 @@
 use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
+use ic_config::flag_status::FlagStatus;
 use ic_error_types::ErrorCode;
+use ic_error_types::UserError;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_management_canister_types::CanisterStatusType;
 use ic_replicated_state::canister_state::NextExecution;
@@ -11,6 +13,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::messages::ResponseBuilder;
+use ic_types::messages::NO_DEADLINE;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, MessageId},
@@ -2934,4 +2937,91 @@ fn test_call_context_performance_counter_correctly_reported_on_cleanup() {
 
     assert!(counters[0] < counters[1]);
     assert!(counters[1] < counters[2]);
+}
+
+fn test_best_effort_responses_feature_flag(flag: FlagStatus) -> Result<WasmResult, UserError> {
+    let mut test = ExecutionTestBuilder::new()
+        .with_best_effort_responses(flag)
+        .build();
+
+    let a_id = test
+        .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
+        .unwrap();
+    let b_id = test
+        .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
+        .unwrap();
+
+    test.ingress(
+        b_id,
+        "update",
+        wasm()
+            .call_simple_with_cycles_and_best_effort_response(
+                a_id,
+                "update",
+                call_args().other_side(wasm().accept_cycles(Cycles::new(6_000_000))),
+                Cycles::new(6_000_000),
+                100,
+            )
+            .reply()
+            .build(),
+    )
+}
+
+#[test]
+fn test_best_effort_responses_feature_flag_enabled() {
+    match test_best_effort_responses_feature_flag(FlagStatus::Enabled) {
+        Ok(result) => assert_eq!(result, WasmResult::Reply(vec![])),
+        _ => panic!("Unexpected result"),
+    };
+}
+
+#[test]
+fn test_best_effort_responses_feature_flag_disabled() {
+    match test_best_effort_responses_feature_flag(FlagStatus::Disabled) {
+        Err(e) => {
+            assert_eq!(e.code(), ErrorCode::CanisterContractViolation);
+            assert!(e
+                .description()
+                .ends_with("ic0::call_with_best_effort_response is not enabled."));
+        }
+        _ => panic!("Unexpected result"),
+    };
+}
+
+fn helper_ic0_msg_deadline_best_effort_responses_feature_flag(
+    flag: FlagStatus,
+) -> Result<WasmResult, UserError> {
+    let mut test = ExecutionTestBuilder::new()
+        .with_best_effort_responses(flag)
+        .build();
+
+    let canister_id = test
+        .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
+        .unwrap();
+
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().msg_deadline().reply_int64().build(),
+    )
+}
+
+#[test]
+fn test_ic0_msg_deadline_best_effort_responses_feature_flag_enabled() {
+    let no_deadline = Time::from(NO_DEADLINE).as_nanos_since_unix_epoch();
+    assert_eq!(
+        helper_ic0_msg_deadline_best_effort_responses_feature_flag(FlagStatus::Enabled).unwrap(),
+        WasmResult::Reply(no_deadline.to_le_bytes().into())
+    );
+}
+
+#[test]
+fn test_ic0_msg_deadline_best_effort_responses_feature_flag_disabled() {
+    let err = helper_ic0_msg_deadline_best_effort_responses_feature_flag(FlagStatus::Disabled)
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert!(err
+        .description()
+        .ends_with("ic0::msg_deadline is not enabled."));
 }

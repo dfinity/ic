@@ -12,6 +12,7 @@ DEPENDENCIES = [
 
 rust_library(
     name = "test_utils",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_canonical_state_tree_hash_test_utils",
     rustc_flags = select({

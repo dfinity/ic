@@ -44,6 +44,7 @@ pub struct InternetComputer {
     pub ssh_readonly_access_to_unassigned_nodes: Vec<String>,
     name: String,
     pub bitcoind_addr: Option<SocketAddr>,
+    pub jaeger_addr: Option<SocketAddr>,
     pub socks_proxy: Option<String>,
     use_specified_ids_allocation_range: bool,
     /// Indicates whether this `InternetComputer` instance should be installed with
@@ -175,6 +176,11 @@ impl InternetComputer {
 
     pub fn with_bitcoind_addr(mut self, bitcoind_addr: SocketAddr) -> Self {
         self.bitcoind_addr = Some(bitcoind_addr);
+        self
+    }
+
+    pub fn with_jaeger_addr(mut self, jaeger_addr: SocketAddr) -> Self {
+        self.jaeger_addr = Some(jaeger_addr);
         self
     }
 

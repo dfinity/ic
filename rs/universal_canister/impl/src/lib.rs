@@ -109,5 +109,7 @@ try_from_u8!(
         BlobLength = 79,
         PushEqualBytes = 80,
         InReplicatedExecution = 81,
+        CallWithBestEffortResponse = 82,
+        MsgDeadline = 83,
     }
 );

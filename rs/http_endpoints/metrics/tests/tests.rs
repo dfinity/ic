@@ -58,7 +58,7 @@ async fn test_connection_read_timeout() {
             ..Default::default()
         };
         let metrics_registry = MetricsRegistry::default();
-        let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
+        let _metrics_endpoint = MetricsHttpEndpoint::new(
             rt_handle,
             config.clone(),
             metrics_registry,
@@ -145,7 +145,7 @@ async fn test_load_shedding() {
         let metrics_registry = MetricsRegistry::default();
         let (tx, mut rx) = channel(1);
         let blocking_collector = metrics_registry.register(BlockingCollector::new(tx));
-        let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
+        let _metrics_endpoint = MetricsHttpEndpoint::new(
             rt_handle,
             config.clone(),
             metrics_registry,
@@ -216,7 +216,7 @@ async fn test_request_timeout() {
         let metrics_registry = MetricsRegistry::default();
         let (tx, mut rx) = channel(1);
         let _blocking_collector = metrics_registry.register(BlockingCollector::new(tx));
-        let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
+        let _metrics_endpoint = MetricsHttpEndpoint::new(
             rt_handle,
             config.clone(),
             metrics_registry,
@@ -260,7 +260,7 @@ async fn test_connection_is_alive_with_slow_downstream() {
         let metrics_registry = MetricsRegistry::default();
         let (tx, mut rx) = channel(1);
         let _blocking_collector = metrics_registry.register(BlockingCollector::new(tx));
-        let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
+        let _metrics_endpoint = MetricsHttpEndpoint::new(
             rt_handle,
             config.clone(),
             metrics_registry,

@@ -83,6 +83,9 @@ pub struct FeatureFlags {
     pub canister_logging: FlagStatus,
     /// Indicates whether the support for 64 bit main memory is enabled
     pub wasm64: FlagStatus,
+    // TODO(IC-1674): remove this flag once the feature is enabled by default.
+    /// Indicates whether the best-effort responses feature is enabled.
+    pub best_effort_responses: FlagStatus,
 }
 
 impl FeatureFlags {
@@ -93,6 +96,7 @@ impl FeatureFlags {
             wasm_native_stable_memory: FlagStatus::Enabled,
             canister_logging: FlagStatus::Disabled,
             wasm64: FlagStatus::Disabled,
+            best_effort_responses: FlagStatus::Disabled,
         }
     }
 }

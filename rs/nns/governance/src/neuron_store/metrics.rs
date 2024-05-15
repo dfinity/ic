@@ -1,7 +1,6 @@
 use super::NeuronStore;
-use crate::{
-    governance::ONE_MONTH_SECONDS, pb::v1::NeuronState, storage::with_stable_neuron_store,
-};
+use crate::{pb::v1::NeuronState, storage::with_stable_neuron_store};
+use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use std::collections::HashMap;
 
 /// Metrics calculated based on neurons in the neuron store.
@@ -80,7 +79,6 @@ impl NeuronStore {
             }
 
             let dissolve_delay_seconds = neuron.dissolve_delay_seconds(now_seconds);
-            println!("Neuron dissolve delay seconds: {}", dissolve_delay_seconds);
 
             if dissolve_delay_seconds < 6 * ONE_MONTH_SECONDS {
                 metrics.neurons_with_less_than_6_months_dissolve_delay_count += 1;
@@ -220,11 +218,11 @@ fn increment_count_bucket(buckets: &mut HashMap<u64, u64>, bucket: u64) {
 mod tests {
     use super::*;
     use crate::{
-        governance::{ONE_DAY_SECONDS, ONE_YEAR_SECONDS},
         neuron::{DissolveStateAndAge, NeuronBuilder},
         pb::v1::NeuronType,
     };
     use ic_base_types::PrincipalId;
+    use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_YEAR_SECONDS};
     use ic_nns_common::pb::v1::NeuronId;
     use icp_ledger::Subaccount;
     use maplit::hashmap;

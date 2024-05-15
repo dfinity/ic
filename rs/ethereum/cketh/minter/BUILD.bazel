@@ -9,7 +9,6 @@ package(default_visibility = ["//visibility:public"])
 sol_binary(
     name = "contracts",
     srcs = [
-        "ERC20DepositHelper.sol",
         "EthDepositHelper.sol",
     ],
 )

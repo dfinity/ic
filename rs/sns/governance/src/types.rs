@@ -11,23 +11,26 @@ use crate::{
             claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
             get_neuron_response,
             governance::{
-                self, neuron_in_flight_command, neuron_in_flight_command::SyncCommand, SnsMetadata,
+                self,
+                neuron_in_flight_command::{self, SyncCommand},
+                SnsMetadata,
             },
             governance_error::ErrorType,
-            manage_neuron, manage_neuron_response,
+            manage_neuron,
             manage_neuron_response::{
-                DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
+                self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
             neuron::Followees,
             proposal::Action,
             ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
             DefaultFollowees, DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction,
-            GovernanceError, ManageDappCanisterSettings, ManageNeuronResponse, MintSnsTokens,
-            Motion, NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId,
-            NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
-            RegisterDappCanisters, RewardEvent, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            GovernanceError, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
+            NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+            NeuronPermissionType, ProposalId, RegisterDappCanisters, RewardEvent,
+            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+            VotingRewardsParameters,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -36,13 +39,18 @@ use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
-use ic_ledger_core::tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY};
+use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
+use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
 use ic_management_canister_types::CanisterInstallModeError;
-use ic_nervous_system_common::{validate_proposal_url, NervousSystemError, SECONDS_PER_DAY};
+use ic_nervous_system_common::{
+    ledger_validation::MAX_LOGO_LENGTH, validate_proposal_url, NervousSystemError,
+    DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+};
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
 use ic_sns_governance_proposal_criticality::{
     ProposalCriticality, VotingDurationParameters, VotingPowerThresholds,
 };
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::{
@@ -51,12 +59,6 @@ use std::{
     fmt,
 };
 use strum::IntoEnumIterator;
-
-pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
-
-pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
-pub const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
-pub const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
 
 #[allow(dead_code)]
 /// TODO Use to validate the size of the payload 70 KB (for executing
@@ -1345,10 +1347,6 @@ impl SnsMetadata {
     /// The minimum number of characters allowed for a SNS url.
     pub const MIN_URL_LENGTH: usize = 10;
 
-    /// The maximum number of characters allowed for a SNS logo encoding.
-    /// Roughly 256Kb
-    pub const MAX_LOGO_LENGTH: usize = 341334;
-
     /// The maximum number of characters allowed for a SNS name.
     pub const MAX_NAME_LENGTH: usize = 255;
 
@@ -1394,10 +1392,10 @@ impl SnsMetadata {
     pub fn validate_logo(logo: &str) -> Result<(), String> {
         const PREFIX: &str = "data:image/png;base64,";
         // TODO: Should we check that it's a valid PNG?
-        if logo.len() > Self::MAX_LOGO_LENGTH {
+        if logo.len() > MAX_LOGO_LENGTH {
             return Err(format!(
                 "SnsMetadata.logo must be less than {} characters, roughly 256 Kb",
-                Self::MAX_LOGO_LENGTH
+                MAX_LOGO_LENGTH
             ));
         }
         if !logo.starts_with(PREFIX) {
@@ -1514,6 +1512,12 @@ impl Action {
             Action::ExecuteGenericNervousSystemFunction(action) => {
                 Action::ExecuteGenericNervousSystemFunction(action.limited_for_list_proposals())
             }
+            Action::ManageSnsMetadata(action) => {
+                Action::ManageSnsMetadata(action.limited_for_list_proposals())
+            }
+            Action::ManageLedgerParameters(action) => {
+                Action::ManageLedgerParameters(action.limited_for_list_proposals())
+            }
             action => action.clone(),
         }
     }
@@ -1550,11 +1554,11 @@ impl Action {
 
                 VotingDurationParameters {
                     initial_voting_period: PbDuration {
-                        seconds: Some(initial_voting_period_seconds.max(5 * SECONDS_PER_DAY)),
+                        seconds: Some(initial_voting_period_seconds.max(5 * ONE_DAY_SECONDS)),
                     },
                     wait_for_quiet_deadline_increase: PbDuration {
                         seconds: Some(wait_for_quiet_deadline_increase_seconds.max(
-                            2 * SECONDS_PER_DAY + SECONDS_PER_DAY / 2, // 2.5 days
+                            2 * ONE_DAY_SECONDS + ONE_DAY_SECONDS / 2, // 2.5 days
                         )),
                     },
                 }
@@ -1671,6 +1675,30 @@ impl ExecuteGenericNervousSystemFunction {
     }
 }
 
+impl ManageSnsMetadata {
+    /// Returns a clone of self, except that the logo is cleared because it can be large.
+    pub(crate) fn limited_for_list_proposals(&self) -> Self {
+        Self {
+            url: self.url.clone(),
+            name: self.name.clone(),
+            description: self.description.clone(),
+            logo: None,
+        }
+    }
+}
+
+impl ManageLedgerParameters {
+    /// Returns a clone of self, except that the logo is cleared because it can be large.
+    pub(crate) fn limited_for_list_proposals(&self) -> Self {
+        Self {
+            transfer_fee: self.transfer_fee,
+            token_name: self.token_name.clone(),
+            token_symbol: self.token_symbol.clone(),
+            token_logo: None,
+        }
+    }
+}
+
 /// If blob is of length <= 64 (bytes), a copy is returned. Otherwise, a (UTF-8
 /// encoded) human-readable textual summary is returned. This summary is
 /// guaranteed to be of length > 64. Therefore, it is always possible to
@@ -1755,6 +1783,29 @@ pub fn is_registered_function_id(
     match nervous_system_functions.get(&function_id) {
         None => false,
         Some(function) => function != &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
+    }
+}
+
+impl From<ManageLedgerParameters> for LedgerUpgradeArgs {
+    fn from(manage_ledger_parameters: ManageLedgerParameters) -> Self {
+        let ManageLedgerParameters {
+            transfer_fee,
+            token_name,
+            token_symbol,
+            token_logo,
+        } = manage_ledger_parameters;
+        let metadata = [("icrc1:logo", token_logo.map(MetadataValue::Text))]
+            .into_iter()
+            .filter_map(|(k, v)| v.map(|v| (k.to_string(), v)))
+            .collect();
+
+        LedgerUpgradeArgs {
+            transfer_fee: transfer_fee.map(|tf| tf.into()),
+            token_name,
+            token_symbol,
+            metadata: Some(metadata),
+            ..LedgerUpgradeArgs::default()
+        }
     }
 }
 
@@ -2174,6 +2225,7 @@ impl From<ManageDappCanisterSettings> for ManageDappCanisterSettingsRequest {
             freezing_threshold,
             reserved_cycles_limit,
             log_visibility,
+            wasm_memory_limit,
         } = manage_dapp_canister_settings;
 
         ManageDappCanisterSettingsRequest {
@@ -2183,6 +2235,7 @@ impl From<ManageDappCanisterSettings> for ManageDappCanisterSettingsRequest {
             freezing_threshold,
             reserved_cycles_limit,
             log_visibility,
+            wasm_memory_limit,
         }
     }
 }
@@ -2508,18 +2561,18 @@ pub(crate) mod tests {
         let critical_action = Action::TransferSnsTreasuryFunds(Default::default());
 
         let normal_nervous_system_parameters = NervousSystemParameters {
-            initial_voting_period_seconds: Some(4 * SECONDS_PER_DAY),
-            wait_for_quiet_deadline_increase_seconds: Some(2 * SECONDS_PER_DAY),
+            initial_voting_period_seconds: Some(4 * ONE_DAY_SECONDS),
+            wait_for_quiet_deadline_increase_seconds: Some(2 * ONE_DAY_SECONDS),
             ..Default::default()
         };
         assert_eq!(
             non_critical_action.voting_duration_parameters(&normal_nervous_system_parameters),
             VotingDurationParameters {
                 initial_voting_period: PbDuration {
-                    seconds: Some(4 * SECONDS_PER_DAY),
+                    seconds: Some(4 * ONE_DAY_SECONDS),
                 },
                 wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(2 * SECONDS_PER_DAY),
+                    seconds: Some(2 * ONE_DAY_SECONDS),
                 }
             },
         );
@@ -2527,10 +2580,10 @@ pub(crate) mod tests {
             critical_action.voting_duration_parameters(&normal_nervous_system_parameters),
             VotingDurationParameters {
                 initial_voting_period: PbDuration {
-                    seconds: Some(5 * SECONDS_PER_DAY),
+                    seconds: Some(5 * ONE_DAY_SECONDS),
                 },
                 wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(2 * SECONDS_PER_DAY + SECONDS_PER_DAY / 2),
+                    seconds: Some(2 * ONE_DAY_SECONDS + ONE_DAY_SECONDS / 2),
                 }
             },
         );
@@ -2539,18 +2592,18 @@ pub(crate) mod tests {
         // quiet) for critical proposals. Therefore, these values are used for both normal and
         // critical proposals.
         let slow_nervous_system_parameters = NervousSystemParameters {
-            initial_voting_period_seconds: Some(7 * SECONDS_PER_DAY),
-            wait_for_quiet_deadline_increase_seconds: Some(4 * SECONDS_PER_DAY),
+            initial_voting_period_seconds: Some(7 * ONE_DAY_SECONDS),
+            wait_for_quiet_deadline_increase_seconds: Some(4 * ONE_DAY_SECONDS),
             ..Default::default()
         };
         assert_eq!(
             non_critical_action.voting_duration_parameters(&slow_nervous_system_parameters),
             VotingDurationParameters {
                 initial_voting_period: PbDuration {
-                    seconds: Some(7 * SECONDS_PER_DAY),
+                    seconds: Some(7 * ONE_DAY_SECONDS),
                 },
                 wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(4 * SECONDS_PER_DAY),
+                    seconds: Some(4 * ONE_DAY_SECONDS),
                 }
             },
         );
@@ -2558,10 +2611,10 @@ pub(crate) mod tests {
             critical_action.voting_duration_parameters(&slow_nervous_system_parameters),
             VotingDurationParameters {
                 initial_voting_period: PbDuration {
-                    seconds: Some(7 * SECONDS_PER_DAY),
+                    seconds: Some(7 * ONE_DAY_SECONDS),
                 },
                 wait_for_quiet_deadline_increase: PbDuration {
-                    seconds: Some(4 * SECONDS_PER_DAY),
+                    seconds: Some(4 * ONE_DAY_SECONDS),
                 }
             },
         );
@@ -3150,7 +3203,7 @@ pub(crate) mod tests {
                 ..default.clone()
             },
             SnsMetadata {
-                logo: Some("X".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1)),
+                logo: Some("X".repeat(MAX_LOGO_LENGTH + 1)),
                 ..default.clone()
             },
             SnsMetadata {

@@ -13,6 +13,7 @@ use dfn_candid::candid_one;
 use dfn_http::types::{HttpRequest, HttpResponse};
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_management_canister_types::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     UpdateSettingsArgs,
@@ -20,7 +21,10 @@ use ic_management_canister_types::{
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
-use ic_nervous_system_common::{ledger::compute_neuron_staking_subaccount, SECONDS_PER_DAY};
+use ic_nervous_system_common::{
+    ledger::{compute_neuron_staking_subaccount, compute_neuron_staking_subaccount_bytes},
+    DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
+};
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
@@ -28,7 +32,8 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID,
     LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID,
-    SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET, SUBNET_RENTAL_CANISTER_ID,
+    SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_governance::pb::v1::{
     self as nns_governance_pb,
@@ -48,22 +53,20 @@ use ic_nns_governance::pb::v1::{
     RewardNodeProviders, Vote,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayload;
-use ic_sns_governance::{
-    pb::v1::{
-        self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
-    },
-    types::DEFAULT_TRANSFER_FEE,
+use ic_registry_subnet_type::SubnetType;
+use ic_sns_governance::pb::v1::{
+    self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
 };
 use ic_sns_swap::pb::v1::{GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse};
 use ic_sns_wasm::{
     init::SnsWasmCanisterInitPayload,
     pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse},
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
-use ic_types::{ingress::WasmResult, Cycles};
+use ic_types::{ingress::WasmResult, Cycles, NumInstructions};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, Memo, SendArgs, Tokens};
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -75,8 +78,29 @@ use prost::Message;
 use serde::Serialize;
 use std::{convert::TryInto, env, time::Duration};
 
+/// A `StateMachine` builder setting the IC time to the current time
+/// and using the canister ranges of both the NNS and II subnets.
+/// Note. The last canister ID in the canister range of the II subnet
+/// is omitted so that the canister range of the II subnet is not used
+/// for automatic generation of new canister IDs.
 pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
-    StateMachineBuilder::new().with_current_time()
+    // TODO, remove when this is the value set in the normal IC build
+    // This is to uncover issues in testing that might affect performance in production
+    const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2_000_000_000); // 2 Billion is the value used in app subnets
+
+    let mut subnet_config = SubnetConfig::new(SubnetType::System);
+    subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
+
+    StateMachineBuilder::new()
+        .with_current_time()
+        .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
+            CanisterId::from_u64(0x2100000),
+            CanisterId::from_u64(0x21FFFFE),
+        ))
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            Config::default(),
+        )))
 }
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
@@ -101,6 +125,33 @@ pub fn create_canister(
             canister_settings,
         )
         .unwrap()
+}
+
+/// Creates a canister with a specified canister ID, wasm, payload, and optionally settings on a StateMachine
+/// DO NOT USE this function for specified canister IDs within the main (NNS) subnet canister range:
+/// `CanisterId::from_u64(0x00000)` until `CanisterId::from_u64(0xFFFFF)`.
+/// Use the function `create_canister_id_at_position` for that canister range instead.
+pub fn create_canister_at_specified_id(
+    machine: &StateMachine,
+    specified_id: u64,
+    wasm: Wasm,
+    initial_payload: Option<Vec<u8>>,
+    canister_settings: Option<CanisterSettingsArgs>,
+) {
+    assert!(specified_id >= 0x100000);
+    let canister_id = CanisterId::from_u64(specified_id);
+    machine.create_canister_with_cycles(
+        Some(canister_id.into()),
+        Cycles::zero(),
+        canister_settings,
+    );
+    machine
+        .install_existing_canister(
+            canister_id,
+            wasm.bytes(),
+            initial_payload.unwrap_or_default(),
+        )
+        .unwrap();
 }
 
 /// Creates a canister with cycles, wasm, payload, and optionally settings on a StateMachine
@@ -759,6 +810,34 @@ pub fn nns_governance_get_proposal_info(
     Decode!(&result, Option<ProposalInfo>).unwrap().unwrap()
 }
 
+pub fn nns_send_icp_to_claim_or_refresh_neuron(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    amount: Tokens,
+    destination_neuron_nonce: u64,
+) {
+    icrc1_transfer(
+        state_machine,
+        LEDGER_CANISTER_ID,
+        sender,
+        TransferArg {
+            amount: amount.into(),
+            fee: Some(Nat::from(DEFAULT_TRANSFER_FEE)),
+            from_subaccount: None,
+            to: Account {
+                owner: PrincipalId::from(GOVERNANCE_CANISTER_ID).into(),
+                subaccount: Some(compute_neuron_staking_subaccount_bytes(
+                    sender,
+                    destination_neuron_nonce,
+                )),
+            },
+            created_at_time: None,
+            memo: None,
+        },
+    )
+    .unwrap();
+}
+
 #[must_use]
 fn manage_neuron(
     state_machine: &mut StateMachine,
@@ -862,7 +941,7 @@ pub fn nns_create_super_powerful_neuron(
         state_machine,
         controller,
         neuron_id,
-        8 * 365 * SECONDS_PER_DAY,
+        8 * 365 * ONE_DAY_SECONDS,
     );
     // assert ok.
     match increase_dissolve_delay_result {
@@ -1434,6 +1513,29 @@ pub fn icrc1_transfer(
     }
 }
 
+pub fn icrc1_token_name(machine: &StateMachine, ledger_id: CanisterId) -> String {
+    let result = query(machine, ledger_id, "icrc1_name", Encode!(&()).unwrap()).unwrap();
+    Decode!(&result, String).unwrap()
+}
+
+pub fn icrc1_token_symbol(machine: &StateMachine, ledger_id: CanisterId) -> String {
+    let result = query(machine, ledger_id, "icrc1_symbol", Encode!(&()).unwrap()).unwrap();
+    Decode!(&result, String).unwrap()
+}
+
+pub fn icrc1_token_logo(machine: &StateMachine, ledger_id: CanisterId) -> Option<String> {
+    let result = query(machine, ledger_id, "icrc1_metadata", Encode!(&()).unwrap()).unwrap();
+    use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
+    Decode!(&result, Vec<(String, MetadataValue)>)
+        .unwrap()
+        .into_iter()
+        .find(|(key, _)| key == "icrc1:logo")
+        .map(|(_key, value)| match value {
+            MetadataValue::Text(s) => s,
+            m => panic!("Unexpected metadata value {m:?}"),
+        })
+}
+
 /// Claim a staked neuron for an SNS StateMachine test
 // Note: Should be moved to sns/test_helpers/state_test_helpers.rs when dependency graph is cleaned up
 pub fn sns_claim_staked_neuron(
@@ -1803,4 +1905,31 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
             arg,
         )
         .expect("Installing cycles ledger failed");
+}
+
+pub fn setup_subnet_rental_canister_with_correct_canister_id(state_machine: &StateMachine) {
+    let canister_id = create_canister_id_at_position(
+        state_machine,
+        SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![ROOT_CANISTER_ID.get()])
+                .with_memory_allocation(memory_allocation_of(SUBNET_RENTAL_CANISTER_ID))
+                .build(),
+        ),
+    );
+    assert_eq!(canister_id, SUBNET_RENTAL_CANISTER_ID);
+
+    let subnet_rental_canister_wasm = std::fs::read(
+        std::env::var("SUBNET_RENTAL_CANISTER_WASM_PATH")
+            .expect("SUBNET_RENTAL_CANISTER_WASM_PATH not set"),
+    )
+    .unwrap();
+    let arg = Encode!(&()).unwrap();
+    state_machine
+        .install_existing_canister(SUBNET_RENTAL_CANISTER_ID, subnet_rental_canister_wasm, arg)
+        .expect("Installing subnet rental canister failed");
+
+    // Subnet Rental Canister needs cycles to call XRC
+    state_machine.add_cycles(canister_id, 100_000_000_000_000);
 }

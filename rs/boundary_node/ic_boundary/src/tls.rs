@@ -18,7 +18,6 @@ use axum::{
 use axum_server::{accept::Accept, tls_rustls::RustlsAcceptor};
 use futures_util::future::BoxFuture;
 use instant_acme::{Account, AccountCredentials, LetsEncrypt, NewAccount};
-use lazy_static::lazy_static;
 use mockall::automock;
 use prometheus::Registry;
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
@@ -33,7 +32,7 @@ use tokio::{
     sync::RwLock,
 };
 use tokio_rustls::server::TlsStream;
-use tracing::{info, warn};
+use tracing::{debug, warn};
 use x509_parser::prelude::{Pem, Validity};
 
 use crate::{
@@ -45,11 +44,6 @@ use crate::{
 };
 
 const DAY: Duration = Duration::from_secs(24 * 3600);
-
-lazy_static! {
-    pub static ref HOSTNAME_REGEX: Regex =
-        Regex::new(r"^([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*$").unwrap();
-}
 
 // Public + Private key pair
 #[derive(Clone, Debug, PartialEq)]
@@ -208,7 +202,7 @@ impl Provision for Provisioner {
             .order(name)
             .await
             .context("failed to create ACME order")?;
-        info!("TLS: Order created");
+        debug!("TLS: Order created");
 
         // Set the challenge token
         self.token_owner
@@ -220,7 +214,7 @@ impl Provision for Provisioner {
             .ready(&mut order)
             .await
             .context("failed to mark ACME order as ready")?;
-        info!("TLS: Order marked as ready");
+        debug!("TLS: Order marked as ready");
 
         // Create a certificate for the ACME provider to sign
         let cert = Certificate::from_params({
@@ -229,20 +223,20 @@ impl Provision for Provisioner {
             params
         })
         .context("failed to generate certificate")?;
-        info!("TLS: Certificate generated");
+        debug!("TLS: Certificate generated");
 
         // Create a Certificate Signing Request for the ACME provider
         let csr = cert
             .serialize_request_der()
             .context("failed to create certificate signing request")?;
-        info!("TLS: CSR created");
+        debug!("TLS: CSR created");
 
         // Attempt to finalize the order by having the ACME provider sign our certificate
         self.acme_finalize
             .finalize(&mut order, &csr)
             .await
             .context("failed to finalize ACME order")?;
-        info!("TLS: Order finalized");
+        debug!("TLS: Order finalized");
 
         // Obtain the signed certificate chain from the ACME provider
         let cert_chain_pem = self
@@ -506,12 +500,12 @@ async fn prepare_acme_provisioner(
     let tls_provisioner = WithLoad(tls_provisioner, tls_loader, renew_before);
     let tls_provisioner = Box::new(tls_provisioner);
 
-    info!("TLS: Using ACME provisioner");
+    warn!("TLS: Using ACME provisioner");
     Ok(tls_provisioner)
 }
 
 fn prepare_static_provisioner(loader: Loader) -> Result<Box<dyn Provision>, Error> {
-    info!("TLS: Using static provisioner");
+    warn!("TLS: Using static provisioner");
     Ok(Box::new(ProvisionerStatic(loader.load()?)))
 }
 
@@ -528,14 +522,21 @@ pub async fn prepare_tls(
     let token_owner = Arc::new(TokenOwner::new());
 
     // Use the ACME provisioner if the credentials file was specified.
-    // Otherwise use static provisioner that just uses the certificates from files on disk.
+    // Otherwise use static provisioner that just uses the certificates from the files on disk.
     let tls_provisioner = if let Some(v) = &cli.tls.acme_credentials_path {
-        if fs::metadata(v)?.len() == 0 {
-            // If the file is empty - then use static provisioner also.
-            // This is needed to run integration tests where we can't manipulate arguments easily
-            prepare_static_provisioner(tls_loader)?
+        let meta = fs::metadata(v);
+
+        // If the file exists and is empty - then use static provisioner also.
+        // This is needed to run integration tests where we can't manipulate arguments easily.
+        if meta.is_ok() && meta.unwrap().len() == 0 {
+            prepare_static_provisioner(tls_loader)
+                .context("unable to prepare static provisioner")?
         } else {
-            if !HOSTNAME_REGEX.is_match(&cli.tls.hostname) {
+            let hostname_regex = Regex::new(
+                r"^([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*$",
+            )?;
+
+            if !hostname_regex.is_match(&cli.tls.hostname) {
                 return Err(anyhow!(
                     "'{}' does not look like a valid hostname",
                     cli.tls.hostname,
@@ -548,10 +549,11 @@ pub async fn prepare_tls(
                 tls_loader,
                 token_owner.clone(),
             )
-            .await?
+            .await
+            .context("unable to prepare ACME provisioner")?
         }
     } else {
-        prepare_static_provisioner(tls_loader)?
+        prepare_static_provisioner(tls_loader).context("unable to prepare static provisioner")?
     };
 
     // TLS (Ingress) Configurator
@@ -571,10 +573,7 @@ pub async fn prepare_tls(
     };
 
     // Configuration
-    let configuration_runner = ConfigurationRunner::new(
-        cli.tls.hostname.clone(),
-        svc_configurator, // configurator
-    );
+    let configuration_runner = ConfigurationRunner::new(cli.tls.hostname.clone(), svc_configurator);
     let configuration_runner = WithMetrics(
         configuration_runner,
         MetricParams::new(registry, "run_configuration"),

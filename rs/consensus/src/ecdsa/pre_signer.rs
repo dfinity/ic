@@ -850,7 +850,9 @@ impl EcdsaPreSignerImpl {
             .validated()
             .dealing_support_by_prefix(prefix)
             .any(|(_, support)| {
-                support.dealing_hash == *dealing_hash && support.sig_share.signer == *signer_id
+                support.dealing_hash == *dealing_hash
+                    && support.sig_share.signer == *signer_id
+                    && support.transcript_id == *transcript_id
             })
     }
 
