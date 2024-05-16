@@ -118,15 +118,15 @@ impl RosettaTestingClient {
         let mut network_status = self.network_status_or_trap().await;
         let mut attempts = 0;
         while network_status.current_block_identifier.index < block_index {
-            network_status = self.network_status_or_trap().await;
-            sleep(DURATION_BETWEEN_ATTEMPTS);
-            attempts += 1;
             if attempts >= MAX_ATTEMPTS {
                 panic!(
                     "Rosetta was unable to sync up to block index: {}. Last network status was: {:#?}",
                     block_index, network_status
                 );
             }
+            attempts += 1;
+            sleep(DURATION_BETWEEN_ATTEMPTS);
+            network_status = self.network_status_or_trap().await;
         }
     }
 }
