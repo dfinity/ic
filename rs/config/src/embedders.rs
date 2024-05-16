@@ -101,7 +101,7 @@ impl FeatureFlags {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
             wasm_native_stable_memory: FlagStatus::Enabled,
-            canister_logging: FlagStatus::Disabled,
+            canister_logging: FlagStatus::Enabled,
             wasm64: FlagStatus::Disabled,
             best_effort_responses: FlagStatus::Disabled,
         }
