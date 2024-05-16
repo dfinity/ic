@@ -56,7 +56,11 @@ pub async fn start_rosetta(
     );
     let port_file = state_directory.join("port");
     if port_file.exists() {
-        std::fs::remove_file(port_file.clone()).expect("Unable to remote port_file");
+        if let Err(e) = std::fs::remove_file(port_file.clone()) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                panic!("Unable to remove port file: {:?}", e);
+            }
+        }
     }
     let store_location = state_directory.join("data");
     let mut cmd = Command::new(rosetta_bin);
