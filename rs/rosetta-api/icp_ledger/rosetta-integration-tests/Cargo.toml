@@ -11,6 +11,7 @@ candid = { workspace = true }
 ic-agent = { workspace = true }
 ic-icrc1 = { path = "../../icrc1" }
 ic-icrc-rosetta-client = { path = "../../icrc1/rosetta/client" }
+ic-icrc-rosetta = { path = "../../icrc1/rosetta" }
 ic-ledger-test-utils = { path = "../test_utils" }
 ic-rosetta-api = { path = "../.." }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }

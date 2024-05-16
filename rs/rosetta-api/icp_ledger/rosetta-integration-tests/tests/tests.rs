@@ -2,6 +2,7 @@ use candid::{Encode, Principal};
 use ic_agent::agent::http_transport::reqwest_transport::ReqwestTransport;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::{Agent, Identity};
+use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_ledger_test_utils::pocket_ic_helpers;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
@@ -181,6 +182,17 @@ impl TestEnv {
     }
 }
 
+fn is_blockchain_is_empty_error(error: &rosetta_core::miscellaneous::Error) -> bool {
+    error.code == 700
+        && error.details.is_some()
+        && error
+            .details
+            .as_ref()
+            .unwrap()
+            .get("error_message")
+            .map_or(false, |e| e == "Blockchain is empty")
+}
+
 // Create a [TestEnv] and then pass it to the test logic.
 //
 // This is required because `PocketIc` doesn't support
@@ -239,6 +251,40 @@ where
             false,
         )
         .await;
+
+        let mut networks = rosetta_client
+            .network_list()
+            .await
+            .expect("Unable to call /network/list")
+            .network_identifiers;
+        assert_eq!(
+            networks.len(),
+            1,
+            "The ICP Rosetta node should always return a list of networks with 1 element!"
+        );
+        let network = networks.remove(0);
+
+        // Rosetta may not be synced with the Ledger for a while after it started.
+        // If the test calls /network/status while it is syncing, Rosetta will reply
+        // with an error `Error { code: 700, message: "Internal server error",
+        // description: None, retriable: false, details: Some({"error_message":
+        // String("Blockchain is empty")}) }` while then fails the test.
+        // The following code waits until network status doesn't return that error anymore.
+        let mut retries = 100;
+        while retries > 0 {
+            match rosetta_client.network_status(network.clone()).await {
+                Ok(_) => break,
+                Err(Error(err)) if is_blockchain_is_empty_error(&err) => {
+                    const WAIT_BETWEEN_RETRIES: Duration = Duration::from_millis(100);
+                    println!("Found \"Blockchain is empty\" error, retrying in {WAIT_BETWEEN_RETRIES:?} (retries: {retries})");
+                    retries -= 1;
+                    sleep(WAIT_BETWEEN_RETRIES);
+                }
+                Err(Error(err)) => {
+                    panic!("Unable to call /network/status: {err:?}")
+                }
+            }
+        }
 
         let mut env = TestEnv::new(pocket_ic, ledger_agent, rosetta_context, rosetta_client);
 
