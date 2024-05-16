@@ -3449,17 +3449,14 @@ mod reshare_key_transcript {
     #[test]
     fn should_reshare_initial_dealings_to_another_subnet() {
         let rng = &mut reproducible_rng();
-        let even_subnet_size = (1..=10)
-            .map(|n| n * 2)
-            .choose(rng)
-            .expect("non-empty iterator");
+        let total_num_nodes = rng.gen_range(2..=20);
+        let partition_index = rng.gen_range(1..total_num_nodes);
 
         for alg in all_canister_threshold_algorithms() {
-            let env = CanisterThresholdSigTestEnvironment::new(even_subnet_size, rng);
+            let env = CanisterThresholdSigTestEnvironment::new(total_num_nodes, rng);
             let (source_subnet_nodes, target_subnet_nodes) = env
                 .nodes
-                .partition(|(index, _node)| *index < even_subnet_size / 2);
-            assert_eq!(source_subnet_nodes.len(), target_subnet_nodes.len());
+                .partition(|(index, _node)| *index < partition_index);
             let (source_dealers, source_receivers) = source_subnet_nodes
                 .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
             let source_key_transcript = {
@@ -3544,17 +3541,14 @@ mod reshare_key_transcript {
     #[test]
     fn should_reshare_key_transcript_to_another_subnet() {
         let rng = &mut reproducible_rng();
-        let even_subnet_size = (1..=10)
-            .map(|n| n * 2)
-            .choose(rng)
-            .expect("non-empty iterator");
+        let total_num_nodes = rng.gen_range(2..=20);
+        let partition_index = rng.gen_range(1..total_num_nodes);
 
         for alg in all_canister_threshold_algorithms() {
-            let env = CanisterThresholdSigTestEnvironment::new(even_subnet_size, rng);
+            let env = CanisterThresholdSigTestEnvironment::new(total_num_nodes, rng);
             let (source_subnet_nodes, target_subnet_nodes) = env
                 .nodes
-                .partition(|(index, _node)| *index < even_subnet_size / 2);
-            assert_eq!(source_subnet_nodes.len(), target_subnet_nodes.len());
+                .partition(|(index, _node)| *index < partition_index);
             let (source_dealers, source_receivers) = source_subnet_nodes
                 .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
             let source_key_transcript = {
@@ -3610,17 +3604,14 @@ mod reshare_key_transcript {
     #[test]
     fn should_reshare_random_unmasked_transcript_to_new_receivers() {
         let rng = &mut reproducible_rng();
-        let even_subnet_size = (1..=10)
-            .map(|n| n * 2)
-            .choose(rng)
-            .expect("non-empty iterator");
+        let total_num_nodes = rng.gen_range(2..=20);
+        let partition_index = rng.gen_range(1..total_num_nodes);
 
         for alg in all_canister_threshold_algorithms() {
-            let env = CanisterThresholdSigTestEnvironment::new(even_subnet_size, rng);
+            let env = CanisterThresholdSigTestEnvironment::new(total_num_nodes, rng);
             let (source_subnet_nodes, target_subnet_nodes) = env
                 .nodes
-                .partition(|(index, _node)| *index < even_subnet_size / 2);
-            assert_eq!(source_subnet_nodes.len(), target_subnet_nodes.len());
+                .partition(|(index, _node)| *index < partition_index);
             let (source_dealers, source_receivers) = source_subnet_nodes
                 .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
             let source_key_transcript = {
