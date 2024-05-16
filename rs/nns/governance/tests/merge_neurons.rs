@@ -659,20 +659,16 @@ fn do_test_merge_neurons(
     nns.advance_time_by(ONE_YEAR_SECONDS);
 
     // First simulate
-    let simulate_neuron_response = nns
-        .governance
-        .simulate_manage_neuron(
-            &principal(1),
-            ManageNeuron {
-                id: Some(NeuronId { id: 2 }),
-                neuron_id_or_subaccount: None,
-                command: Some(Command::Merge(Merge {
-                    source_neuron_id: Some(NeuronId { id: 1 }),
-                })),
-            },
-        )
-        .now_or_never()
-        .unwrap();
+    let simulate_neuron_response = nns.governance.simulate_manage_neuron(
+        &principal(1),
+        ManageNeuron {
+            id: Some(NeuronId { id: 2 }),
+            neuron_id_or_subaccount: None,
+            command: Some(Command::Merge(Merge {
+                source_neuron_id: Some(NeuronId { id: 1 }),
+            })),
+        },
+    );
 
     // Assert no changes (except time) after simulate.
     #[cfg(feature = "test")]
