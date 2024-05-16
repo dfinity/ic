@@ -18684,10 +18684,15 @@ name = "testnets"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "candid",
+ "ic-base-types",
  "ic-mainnet-nns-recovery",
+ "ic-registry-subnet-features",
  "ic-registry-subnet-type",
+ "ic-xrc-types",
  "slog",
  "tests",
+ "xrc-mock",
 ]
 
 [[package]]

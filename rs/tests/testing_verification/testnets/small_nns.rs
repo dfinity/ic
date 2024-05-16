@@ -47,7 +47,7 @@ use ic_tests::driver::{
     test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCanisterWasmStrategy},
 };
 use ic_tests::nns_dapp::{
-    install_ii_and_nns_dapp, nns_dapp_customizations, set_authorized_subnets,
+    install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 
@@ -82,7 +82,7 @@ pub fn setup(env: TestEnv) {
         .use_real_certs_and_dns()
         .start(&env)
         .expect("failed to setup BoundaryNode VM");
-    install_ii_and_nns_dapp(&env, BOUNDARY_NODE_NAME, None);
+    install_ii_nns_dapp_and_subnet_rental(&env, BOUNDARY_NODE_NAME, None);
     set_authorized_subnets(&env);
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)

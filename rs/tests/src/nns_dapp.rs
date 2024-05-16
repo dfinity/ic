@@ -6,7 +6,7 @@ use crate::driver::{
         NnsCustomizations,
     },
 };
-use crate::nns::set_authorized_subnetwork_list;
+use crate::nns::{set_authorized_subnetwork_list, update_xdr_per_icp};
 use crate::sns_client::add_subnet_to_sns_deploy_whitelist;
 use crate::util::{block_on, create_canister, install_canister, runtime_from_url};
 use candid::Principal;
@@ -14,6 +14,7 @@ use candid::{CandidType, Encode};
 use ic_base_types::SubnetId;
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_ledger_core::Tokens;
+use ic_nns_constants::SUBNET_RENTAL_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use icp_ledger::AccountIdentifier;
 use serde::{Deserialize, Serialize};
@@ -47,6 +48,13 @@ pub struct CanisterArguments {
     pub schema: Option<SchemaLabel>,
 }
 
+/// Initializes the ICP ledger canister with 1e9 ICP on an account
+/// controlled by a secret key with the following PEM file:
+/// -----BEGIN EC PRIVATE KEY-----
+/// MHQCAQEEICJxApEbuZznKFpV+VKACRK30i6+7u5Z13/DOl18cIC+oAcGBSuBBAAK
+/// oUQDQgAEPas6Iag4TUx+Uop+3NhE6s3FlayFtbwdhRVjvOar0kPTfE/N8N6btRnd
+/// 74ly5xXEBNSXiENyxhEuzOZrIWMCNQ==
+/// -----END EC PRIVATE KEY-----
 pub fn nns_dapp_customizations() -> NnsCustomizations {
     let mut ledger_balances = HashMap::new();
     ledger_balances.insert(
@@ -107,7 +115,11 @@ pub fn install_sns_aggregator(
     })
 }
 
-pub fn install_ii_and_nns_dapp(
+/// Installs II, NNS dapp, and Subnet Rental Canister.
+/// The Subnet Rental Canister is installed since otherwise
+/// the canister ID of the ckETH ledger (required by the NNS dapp)
+/// would conflict with the Subnet Rental Canister ID on mainnet.
+pub fn install_ii_nns_dapp_and_subnet_rental(
     env: &TestEnv,
     boundary_node_name: &str,
     sns_aggregator_canister_id: Option<Principal>,
@@ -119,23 +131,29 @@ pub fn install_ii_and_nns_dapp(
         .unwrap();
     let farm_url = boundary_node.get_playnet().unwrap();
     let https_farm_url = format!("https://{}", farm_url);
+
+    // deploy the II canister
     let topology = env.topology_snapshot();
-
     let nns_node = topology.root_subnet().nodes().next().unwrap();
-    let nns_agent = nns_node.build_default_agent();
-
     let ii_canister_id =
         nns_node.create_and_install_canister_with_arg(INTERNET_IDENTITY_WASM, None);
+
+    // create the NNS dapp canister so that its canister ID is allocated
+    // and the Subnet Rental Canister gets its mainnet canister ID in the next step
+    // it can't be installed yet since we need to get the ckETH ledger canister ID first
+    let nns_agent = nns_node.build_default_agent();
     let nns_dapp_canister_id =
         block_on(
             async move { create_canister(&nns_agent, nns_node.effective_canister_id()).await },
         );
 
+    // deploy the Subnet Rental Canister
     let nns_node = topology.root_subnet().nodes().next().unwrap();
-    let nns_agent = nns_node.build_default_agent();
+    let subnet_rental_canister_id =
+        nns_node.create_and_install_canister_with_arg(SUBNET_RENTAL_CANISTER_WASM, None);
+    assert_eq!(subnet_rental_canister_id, SUBNET_RENTAL_CANISTER_ID.into());
 
-    nns_node.create_and_install_canister_with_arg(SUBNET_RENTAL_CANISTER_WASM, None);
-
+    // deploy the ckETH ledger canister (ICRC1-ledger with "ckETH" as token symbol and name) required by NNS dapp
     let cketh_init_args = InitArgsBuilder::for_tests()
         .with_token_symbol("ckETH".to_string())
         .with_token_name("ckETH".to_string())
@@ -145,6 +163,8 @@ pub fn install_ii_and_nns_dapp(
         Some(Encode!(&(LedgerArgument::Init(cketh_init_args))).unwrap()),
     );
 
+    // now that we know all required canister IDs, install the NNS dapp
+    let nns_agent = nns_node.build_default_agent();
     let nns_dapp_wasm = env.load_wasm(NNS_DAPP_WASM);
     let logger = env.logger();
     block_on(async move {
@@ -189,6 +209,21 @@ pub fn install_ii_and_nns_dapp(
         );
         (ii_canister_id, nns_dapp_canister_id)
     })
+}
+
+pub fn set_icp_xdr_exchange_rate(env: &TestEnv, xdr_permyriad_per_icp: u64) {
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    block_on(async move {
+        update_xdr_per_icp(&nns, timestamp, xdr_permyriad_per_icp)
+            .await
+            .unwrap();
+    });
 }
 
 pub fn set_authorized_subnets(env: &TestEnv) {
