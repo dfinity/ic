@@ -13,7 +13,6 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::{
     AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, SignableMock, UserPublicKey, DOMAIN_IC_REQUEST,
 };
-use ic_types::messages::MessageId;
 use ic_types::{NodeId, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2};
 
@@ -23,6 +22,8 @@ use std::sync::Arc;
 use strum::IntoEnumIterator;
 
 const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(3);
+// \[small, medium, large\]
+const MSG_SIZES: [usize; 3] = [32, 10_000, 1_000_000];
 
 #[derive(strum_macros::EnumIter, PartialEq, Copy, Clone, Default)]
 enum VaultType {
@@ -42,60 +43,59 @@ impl std::fmt::Debug for VaultType {
 
 fn crypto_basicsig_ed25519(criterion: &mut Criterion) {
     let algorithm_id = AlgorithmId::Ed25519;
+    let rng = &mut reproducible_rng();
 
-    for vault_type in VaultType::iter() {
-        let group = &mut criterion
-            .benchmark_group(format!("crypto_basicsig_{vault_type:?}/{:?}", algorithm_id));
+    for msg_size in MSG_SIZES {
+        for vault_type in VaultType::iter() {
+            let group =
+                &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
 
-        let rng = &mut reproducible_rng();
+            if vault_type == VaultType::default() {
+                crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
+                crypto_ed25519_basicsig_verify(group, msg_size, rng, vault_type);
+            }
 
-        if vault_type == VaultType::default() {
-            crypto_basicsig_verifybypubkey(group, algorithm_id, rng, vault_type);
-            crypto_ed25519_basicsig_verify(group, rng, vault_type);
+            crypto_ed25519_basicsig_sign(group, msg_size, rng, vault_type);
         }
-
-        crypto_ed25519_basicsig_sign(group, rng, vault_type);
     }
 }
 
 fn crypto_basicsig_p256(criterion: &mut Criterion) {
     let algorithm_id = AlgorithmId::EcdsaP256;
-
-    let vault_type = VaultType::default();
-    let group = &mut criterion
-        .benchmark_group(format!("crypto_basicsig_{vault_type:?}/{:?}", algorithm_id));
-
     let rng = &mut reproducible_rng();
+    let vault_type = VaultType::default();
 
-    crypto_basicsig_verifybypubkey(group, algorithm_id, rng, vault_type);
+    for msg_size in MSG_SIZES {
+        let group = &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
+        crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
+    }
 }
 
 fn crypto_basicsig_secp256k1(criterion: &mut Criterion) {
     let algorithm_id = AlgorithmId::EcdsaSecp256k1;
-
-    let vault_type = VaultType::default();
-    let group = &mut criterion
-        .benchmark_group(format!("crypto_basicsig_{vault_type:?}/{:?}", algorithm_id));
-
     let rng = &mut reproducible_rng();
+    let vault_type = VaultType::default();
 
-    crypto_basicsig_verifybypubkey(group, algorithm_id, rng, vault_type);
+    for msg_size in MSG_SIZES {
+        let group = &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
+        crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
+    }
 }
 
 fn crypto_basicsig_rsasha256(criterion: &mut Criterion) {
     let algorithm_id = AlgorithmId::RsaSha256;
-
-    let vault_type = VaultType::default();
-    let group = &mut criterion
-        .benchmark_group(format!("crypto_basicsig_{vault_type:?}/{:?}", algorithm_id));
-
     let rng = &mut reproducible_rng();
+    let vault_type = VaultType::default();
 
-    crypto_basicsig_verifybypubkey(group, algorithm_id, rng, vault_type);
+    for msg_size in MSG_SIZES {
+        let group = &mut criterion.benchmark_group(group_name(algorithm_id, msg_size, vault_type));
+        crypto_basicsig_verifybypubkey(group, algorithm_id, msg_size, rng, vault_type);
+    }
 }
 
 fn crypto_ed25519_basicsig_verify<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
+    msg_size: usize,
     rng: &mut R,
     vault_type: VaultType,
 ) {
@@ -103,16 +103,15 @@ fn crypto_ed25519_basicsig_verify<M: Measurement, R: Rng + CryptoRng>(
     // (other basic-sig key types aren't held in the registry).
     let (temp_crypto, registry_data, registry) = temp_crypto(NODE_1, rng, vault_type);
 
-    let request_id = MessageId::from(rng.gen::<[u8; 32]>());
-    let (signature, public_key) =
-        request_id_signature_from_random_keypair(&request_id, AlgorithmId::Ed25519, rng);
+    let msg = random_signable_message_of_size(msg_size, rng);
+    let (signature, public_key) = signature_from_random_keypair(&msg, AlgorithmId::Ed25519, rng);
 
     add_node_signing_pubkey_to_registry(NODE_2, &public_key.key, &registry, &registry_data);
 
-    group.bench_function("verification", |bench| {
+    group.bench_function("verify", |bench| {
         bench.iter(|| {
             assert!(temp_crypto
-                .verify_basic_sig(&signature, &request_id, NODE_2, REGISTRY_VERSION,)
+                .verify_basic_sig(&signature, &msg, NODE_2, REGISTRY_VERSION,)
                 .is_ok());
         })
     });
@@ -120,6 +119,7 @@ fn crypto_ed25519_basicsig_verify<M: Measurement, R: Rng + CryptoRng>(
 
 fn crypto_ed25519_basicsig_sign<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
+    msg_size: usize,
     rng: &mut R,
     vault_type: VaultType,
 ) {
@@ -128,7 +128,7 @@ fn crypto_ed25519_basicsig_sign<M: Measurement, R: Rng + CryptoRng>(
 
     let (temp_crypto, _registry_data, _registry) = temp_crypto(NODE_1, rng, vault_type);
 
-    let message = SignableMock::new(rng.gen::<[u8; 32]>().to_vec());
+    let message = random_signable_message_of_size(msg_size, rng);
 
     group.bench_function("sign", |bench| {
         bench.iter(|| {
@@ -142,19 +142,19 @@ fn crypto_ed25519_basicsig_sign<M: Measurement, R: Rng + CryptoRng>(
 fn crypto_basicsig_verifybypubkey<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     algorithm_id: AlgorithmId,
+    msg_size: usize,
     rng: &mut R,
     vault_type: VaultType,
 ) {
     let (temp_crypto, _registry_data, _registry) = temp_crypto(NODE_1, rng, vault_type);
 
-    let request_id = MessageId::from(rng.gen::<[u8; 32]>());
-    let (signature, public_key) =
-        request_id_signature_from_random_keypair(&request_id, algorithm_id, rng);
+    let msg = random_signable_message_of_size(msg_size, rng);
+    let (signature, public_key) = signature_from_random_keypair(&msg, algorithm_id, rng);
 
-    group.bench_function("request_id_sig_verification", |bench| {
+    group.bench_function("verifybypubkey", |bench| {
         bench.iter(|| {
             assert!(temp_crypto
-                .verify_basic_sig_by_public_key(&signature, &request_id, &public_key,)
+                .verify_basic_sig_by_public_key(&signature, &msg, &public_key,)
                 .is_ok());
         })
     });
@@ -230,15 +230,15 @@ fn add_node_signing_pubkey_to_registry(
     registry.reload();
 }
 
-fn request_id_signature_from_random_keypair<R: Rng + CryptoRng>(
-    request_id: &MessageId,
+fn signature_from_random_keypair<R: Rng + CryptoRng>(
+    msg: &SignableMock,
     algorithm_id: AlgorithmId,
     rng: &mut R,
-) -> (BasicSigOf<MessageId>, UserPublicKey) {
+) -> (BasicSigOf<SignableMock>, UserPublicKey) {
     let bytes_to_sign = {
         let mut buf = vec![];
-        buf.extend_from_slice(DOMAIN_IC_REQUEST);
-        buf.extend_from_slice(request_id.as_bytes());
+        buf.extend_from_slice(&msg.domain);
+        buf.extend_from_slice(&msg.signed_bytes_without_domain);
         buf
     };
 
@@ -257,7 +257,7 @@ fn request_id_signature_from_random_keypair<R: Rng + CryptoRng>(
         _ => panic!("Unexpected signature algorithm"),
     };
 
-    let signature: BasicSigOf<MessageId> = BasicSigOf::new(BasicSig(signature_bytes));
+    let signature: BasicSigOf<SignableMock> = BasicSigOf::new(BasicSig(signature_bytes));
     let public_key = UserPublicKey {
         key: public_key_bytes,
         algorithm_id,
@@ -315,4 +315,23 @@ fn generate_rsa_key_and_sig<R: Rng + CryptoRng>(
         .expect("failed signing with RSA key");
 
     (signature, pub_key_bytes)
+}
+
+fn random_signable_message_of_size<R: Rng + CryptoRng>(
+    bytes_size: usize,
+    rng: &mut R,
+) -> SignableMock {
+    let mut signed_bytes_without_domain = vec![0; bytes_size];
+    rng.fill_bytes(&mut signed_bytes_without_domain);
+    // It shouldn't practically make a big difference if we use the domain
+    // separator or not, but since we've used it before, it's better to keep it
+    // for consistency with previous benchmark results.
+    SignableMock {
+        domain: DOMAIN_IC_REQUEST.to_vec(),
+        signed_bytes_without_domain,
+    }
+}
+
+fn group_name(algorithm_id: AlgorithmId, msg_size: usize, vault_type: VaultType) -> String {
+    format!("crypto_basicsig_msg_size_{msg_size}_{vault_type:?}/{algorithm_id:?}")
 }
