@@ -87,6 +87,7 @@ impl TryFrom<(&CommitmentOpeningBytes, Option<&CommitmentOpeningBytes>)> for Sec
 }
 
 fn encrypt_and_commit_single_polynomial(
+    alg: CanisterThresholdSignatureAlgorithm,
     poly: &Polynomial,
     num_coefficients: usize,
     recipients: &[MEGaPublicKey],
@@ -106,6 +107,7 @@ fn encrypt_and_commit_single_polynomial(
 
     let ciphertext = MEGaCiphertextSingle::encrypt(
         seed,
+        alg,
         &plaintexts,
         recipients,
         dealer_index,
@@ -118,6 +120,7 @@ fn encrypt_and_commit_single_polynomial(
 }
 
 fn encrypt_and_commit_pair_of_polynomials(
+    alg: CanisterThresholdSignatureAlgorithm,
     values: &Polynomial,
     mask: &Polynomial,
     num_coefficients: usize,
@@ -137,8 +140,14 @@ fn encrypt_and_commit_pair_of_polynomials(
         plaintexts.push((v_s, m_s))
     }
 
-    let ciphertext =
-        MEGaCiphertextPair::encrypt(seed, &plaintexts, recipients, dealer_index, associated_data)?;
+    let ciphertext = MEGaCiphertextPair::encrypt(
+        seed,
+        alg,
+        &plaintexts,
+        recipients,
+        dealer_index,
+        associated_data,
+    )?;
 
     let commitment = PedersenCommitment::create(values, mask, num_coefficients)?;
 
@@ -161,7 +170,7 @@ pub struct IDkgDealingInternal {
 impl IDkgDealingInternal {
     pub fn new(
         shares: &SecretShares,
-        signature_curve: EccCurveType,
+        alg: CanisterThresholdSignatureAlgorithm,
         seed: Seed,
         threshold: usize,
         recipients: &[MEGaPublicKey],
@@ -175,6 +184,7 @@ impl IDkgDealingInternal {
             ));
         }
 
+        let signature_curve = alg.curve();
         let num_coefficients = threshold;
 
         let mut poly_rng = seed
@@ -189,6 +199,7 @@ impl IDkgDealingInternal {
                 let mask = Polynomial::random(signature_curve, num_coefficients, &mut poly_rng); // omega' in paper
 
                 let (ciphertext, commitment) = encrypt_and_commit_pair_of_polynomials(
+                    alg,
                     &values,
                     &mask,
                     num_coefficients,
@@ -204,6 +215,7 @@ impl IDkgDealingInternal {
                 let values = Polynomial::random(signature_curve, num_coefficients, &mut poly_rng);
 
                 let (ciphertext, commitment) = encrypt_and_commit_single_polynomial(
+                    alg,
                     &values,
                     num_coefficients,
                     recipients,
@@ -223,6 +235,7 @@ impl IDkgDealingInternal {
                     Polynomial::random_with_constant(secret, num_coefficients, &mut poly_rng)?;
 
                 let (ciphertext, commitment) = encrypt_and_commit_single_polynomial(
+                    alg,
                     &values,
                     num_coefficients,
                     recipients,
@@ -244,6 +257,7 @@ impl IDkgDealingInternal {
                     Polynomial::random_with_constant(secret, num_coefficients, &mut poly_rng)?;
 
                 let (ciphertext, commitment) = encrypt_and_commit_single_polynomial(
+                    alg,
                     &values,
                     num_coefficients,
                     recipients,
@@ -253,7 +267,8 @@ impl IDkgDealingInternal {
                 )?;
 
                 let proof = ZkProof::ProofOfMaskedResharing(zk::ProofOfEqualOpenings::create(
-                    seed.derive(zk::PROOF_OF_EQUAL_OPENINGS_DST),
+                    seed.derive(&DomainSep::SeedForProofOfEqualOpenings(alg).to_string()),
+                    alg,
                     secret,
                     masking,
                     associated_data,
@@ -283,6 +298,7 @@ impl IDkgDealingInternal {
                 )?;
 
                 let (ciphertext, commitment) = encrypt_and_commit_pair_of_polynomials(
+                    alg,
                     &values,
                     &mask,
                     num_coefficients,
@@ -293,7 +309,8 @@ impl IDkgDealingInternal {
                 )?;
 
                 let proof = ZkProof::ProofOfProduct(zk::ProofOfProduct::create(
-                    seed.derive(zk::PROOF_OF_PRODUCT_DST),
+                    seed.derive(&DomainSep::SeedForProofOfProduct(alg).to_string()),
+                    alg,
                     left_value,
                     right_value,
                     right_masking,
@@ -316,7 +333,7 @@ impl IDkgDealingInternal {
     pub fn publicly_verify(
         &self,
         key_curve: EccCurveType,
-        signature_curve: EccCurveType,
+        alg: CanisterThresholdSignatureAlgorithm,
         transcript_type: &IDkgTranscriptOperationInternal,
         reconstruction_threshold: NumberOfNodes,
         dealer_index: NodeIndex,
@@ -327,7 +344,10 @@ impl IDkgDealingInternal {
             return Err(CanisterThresholdError::InvalidCommitment);
         }
 
+        let signature_curve = alg.curve();
+
         self.ciphertext.check_validity(
+            alg,
             number_of_receivers.get() as usize,
             associated_data,
             dealer_index,
@@ -371,6 +391,7 @@ impl IDkgDealingInternal {
                 )?;
 
                 proof.verify(
+                    alg,
                     &previous_commitment.evaluate_at(dealer_index)?,
                     &self.commitment.constant_term(),
                     associated_data,
@@ -414,6 +435,7 @@ impl IDkgDealingInternal {
                 rhs.verify_is(PolynomialCommitmentType::Pedersen, signature_curve)?;
 
                 proof.verify(
+                    alg,
                     &lhs.evaluate_at(dealer_index)?,
                     &rhs.evaluate_at(dealer_index)?,
                     &self.commitment.constant_term(),
@@ -430,13 +452,15 @@ impl IDkgDealingInternal {
     pub fn privately_verify(
         &self,
         key_curve: EccCurveType,
-        signature_curve: EccCurveType,
+        signature_alg: CanisterThresholdSignatureAlgorithm,
         private_key: &MEGaPrivateKey,
         public_key: &MEGaPublicKey,
         associated_data: &[u8],
         dealer_index: NodeIndex,
         recipient_index: NodeIndex,
     ) -> CanisterThresholdResult<()> {
+        let signature_curve = signature_alg.curve();
+
         if private_key.curve_type() != key_curve || public_key.curve_type() != key_curve {
             return Err(CanisterThresholdError::CurveMismatch);
         }

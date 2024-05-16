@@ -48,7 +48,13 @@ fn derive_rho(
 
     let (key_tweak, _chain_key) = derivation_path.derive_tweak(&key_transcript.constant_term())?;
 
-    let mut ro = RandomOracle::new("ic-crypto-tecdsa-rerandomize-presig");
+    let alg = match curve_type {
+        EccCurveType::K256 => CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
+        EccCurveType::P256 => CanisterThresholdSignatureAlgorithm::EcdsaSecp256r1,
+        _ => return Err(CanisterThresholdError::CurveMismatch),
+    };
+
+    let mut ro = RandomOracle::new(DomainSep::RerandomizePresig(alg));
     ro.add_bytestring("randomness", &randomness.get())?;
     ro.add_bytestring("hashed_message", hashed_message)?;
     ro.add_point("pre_sig", &pre_sig)?;
@@ -247,12 +253,15 @@ impl ThresholdEcdsaCombinedSigInternal {
         algorithm_id: AlgorithmId,
         bytes: &[u8],
     ) -> CanisterThresholdSerializationResult<Self> {
-        let curve_type = EccCurveType::from_algorithm(algorithm_id).ok_or_else(|| {
-            CanisterThresholdSerializationError(format!(
-                "Invalid algorithm {:?} for threshold ECDSA",
-                algorithm_id
-            ))
-        })?;
+        let alg =
+            CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id).ok_or_else(|| {
+                CanisterThresholdSerializationError(format!(
+                    "Invalid algorithm {:?} for threshold ECDSA",
+                    algorithm_id
+                ))
+            })?;
+
+        let curve_type = alg.curve();
 
         if !curve_type.valid_for_ecdsa() {
             return Err(CanisterThresholdSerializationError(format!(

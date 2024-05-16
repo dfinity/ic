@@ -19,31 +19,10 @@ pub enum MEGaCiphertextType {
 }
 
 impl MEGaCiphertextType {
-    fn encryption_domain_sep(&self) -> &'static str {
+    pub(crate) fn tag(&self) -> &'static str {
         match self {
-            Self::Single => "ic-crypto-tecdsa-mega-encryption-single-encrypt",
-            Self::Pairs => "ic-crypto-tecdsa-mega-encryption-pair-encrypt",
-        }
-    }
-
-    fn pop_base_domain_sep(&self) -> &'static str {
-        match self {
-            Self::Single => "ic-crypto-tecdsa-mega-encryption-single-pop-base",
-            Self::Pairs => "ic-crypto-tecdsa-mega-encryption-pair-pop-base",
-        }
-    }
-
-    fn pop_proof_domain_sep(&self) -> &'static str {
-        match self {
-            Self::Single => "ic-crypto-tecdsa-mega-encryption-single-pop-proof",
-            Self::Pairs => "ic-crypto-tecdsa-mega-encryption-pair-pop-proof",
-        }
-    }
-
-    fn ephemeral_key_domain_sep(&self) -> &'static str {
-        match self {
-            Self::Single => "ic-crypto-tecdsa-mega-encryption-single-ephemeral-key",
-            Self::Pairs => "ic-crypto-tecdsa-mega-encryption-pair-ephemeral-key",
+            Self::Single => "single",
+            Self::Pairs => "pair",
         }
     }
 }
@@ -193,6 +172,7 @@ impl MEGaCiphertext {
     /// recipients.
     pub fn check_validity(
         &self,
+        alg: CanisterThresholdSignatureAlgorithm,
         expected_recipients: usize,
         associated_data: &[u8],
         dealer_index: NodeIndex,
@@ -202,8 +182,8 @@ impl MEGaCiphertext {
         }
 
         match self {
-            MEGaCiphertext::Single(c) => c.verify_pop(associated_data, dealer_index),
-            MEGaCiphertext::Pairs(c) => c.verify_pop(associated_data, dealer_index),
+            MEGaCiphertext::Single(c) => c.verify_pop(alg, associated_data, dealer_index),
+            MEGaCiphertext::Pairs(c) => c.verify_pop(alg, associated_data, dealer_index),
         }
     }
 
@@ -393,7 +373,11 @@ fn mega_hash_to_scalars(
         MEGaCiphertextType::Pairs => 2,
     };
 
-    let mut ro = RandomOracle::new(ctype.encryption_domain_sep());
+    let mut ro = RandomOracle::new(DomainSep::MegaEncryption(
+        ctype,
+        plaintext_curve,
+        public_key.curve_type(),
+    ));
     ro.add_usize("dealer_index", dealer_index as usize)?;
     ro.add_usize("recipient_index", recipient_index as usize)?;
     ro.add_bytestring("associated_data", associated_data)?;
@@ -409,13 +393,14 @@ fn mega_hash_to_scalars(
 /// for the sender to prove to recipients that it knew the discrete
 /// log of the ephemeral key.
 fn compute_pop_base(
+    alg: CanisterThresholdSignatureAlgorithm,
     ctype: MEGaCiphertextType,
     curve_type: EccCurveType,
     associated_data: &[u8],
     dealer_index: NodeIndex,
     ephemeral_key: &EccPoint,
 ) -> CanisterThresholdResult<EccPoint> {
-    let mut ro = RandomOracle::new(ctype.pop_base_domain_sep());
+    let mut ro = RandomOracle::new(DomainSep::MegaPopBase(ctype, alg, curve_type));
     ro.add_bytestring("associated_data", associated_data)?;
     ro.add_u32("dealer_index", dealer_index)?;
     ro.add_point("ephemeral_key", ephemeral_key)?;
@@ -424,6 +409,7 @@ fn compute_pop_base(
 
 /// Verify the Proof Of Possession (PoP)
 fn verify_pop(
+    alg: CanisterThresholdSignatureAlgorithm,
     ctype: MEGaCiphertextType,
     associated_data: &[u8],
     dealer_index: NodeIndex,
@@ -434,6 +420,7 @@ fn verify_pop(
     let curve_type = ephemeral_key.curve_type();
 
     let pop_base = compute_pop_base(
+        alg,
         ctype,
         curve_type,
         associated_data,
@@ -442,6 +429,7 @@ fn verify_pop(
     )?;
 
     pop_proof.verify(
+        alg,
         &EccPoint::generator_g(curve_type),
         &pop_base,
         ephemeral_key,
@@ -462,19 +450,22 @@ fn verify_pop(
 /// discrete logarithms of `pop_public_key` and `v` are the same value (`beta`)
 /// in the respective bases.
 fn compute_eph_key_and_pop(
+    alg: CanisterThresholdSignatureAlgorithm,
     ctype: MEGaCiphertextType,
     curve_type: EccCurveType,
     seed: Seed,
     associated_data: &[u8],
     dealer_index: NodeIndex,
 ) -> CanisterThresholdResult<(EccScalar, EccPoint, EccPoint, zk::ProofOfDLogEquivalence)> {
-    let beta = EccScalar::from_seed(curve_type, seed.derive(ctype.ephemeral_key_domain_sep()));
+    let domain_sep = DomainSep::SeedForMegaEncryption(ctype, alg, curve_type);
+    let beta = EccScalar::from_seed(curve_type, seed.derive(&domain_sep.to_string()));
     let v = EccPoint::mul_by_g(&beta);
 
-    let pop_base = compute_pop_base(ctype, curve_type, associated_data, dealer_index, &v)?;
+    let pop_base = compute_pop_base(alg, ctype, curve_type, associated_data, dealer_index, &v)?;
     let pop_public_key = pop_base.scalar_mul(&beta)?;
     let pop_proof = zk::ProofOfDLogEquivalence::create(
-        seed.derive(ctype.pop_proof_domain_sep()),
+        seed.derive(&DomainSep::SeedForMegaPopProof(ctype, alg, curve_type).to_string()),
+        alg,
         &beta,
         &EccPoint::generator_g(curve_type),
         &pop_base,
@@ -487,6 +478,7 @@ fn compute_eph_key_and_pop(
 impl MEGaCiphertextSingle {
     pub fn encrypt(
         seed: Seed,
+        alg: CanisterThresholdSignatureAlgorithm,
         plaintexts: &[EccScalar],
         recipients: &[MEGaPublicKey],
         dealer_index: NodeIndex,
@@ -497,7 +489,7 @@ impl MEGaCiphertextSingle {
         let ctype = MEGaCiphertextType::Single;
 
         let (beta, v, pop_public_key, pop_proof) =
-            compute_eph_key_and_pop(ctype, key_curve, seed, associated_data, dealer_index)?;
+            compute_eph_key_and_pop(alg, ctype, key_curve, seed, associated_data, dealer_index)?;
 
         let mut ctexts = Vec::with_capacity(recipients.len());
 
@@ -530,10 +522,12 @@ impl MEGaCiphertextSingle {
 
     pub fn verify_pop(
         &self,
+        alg: CanisterThresholdSignatureAlgorithm,
         associated_data: &[u8],
         dealer_index: NodeIndex,
     ) -> CanisterThresholdResult<()> {
         verify_pop(
+            alg,
             MEGaCiphertextType::Single,
             associated_data,
             dealer_index,
@@ -601,6 +595,7 @@ impl MEGaCiphertextSingle {
 impl MEGaCiphertextPair {
     pub fn encrypt(
         seed: Seed,
+        alg: CanisterThresholdSignatureAlgorithm,
         plaintexts: &[(EccScalar, EccScalar)],
         recipients: &[MEGaPublicKey],
         dealer_index: NodeIndex,
@@ -611,7 +606,7 @@ impl MEGaCiphertextPair {
         let ctype = MEGaCiphertextType::Pairs;
 
         let (beta, v, pop_public_key, pop_proof) =
-            compute_eph_key_and_pop(ctype, key_curve, seed, associated_data, dealer_index)?;
+            compute_eph_key_and_pop(alg, ctype, key_curve, seed, associated_data, dealer_index)?;
 
         let mut ctexts = Vec::with_capacity(recipients.len());
 
@@ -645,10 +640,12 @@ impl MEGaCiphertextPair {
 
     pub fn verify_pop(
         &self,
+        alg: CanisterThresholdSignatureAlgorithm,
         associated_data: &[u8],
         dealer_index: NodeIndex,
     ) -> CanisterThresholdResult<()> {
         verify_pop(
+            alg,
             MEGaCiphertextType::Pairs,
             associated_data,
             dealer_index,

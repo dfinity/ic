@@ -1,12 +1,8 @@
 use crate::{
-    CanisterThresholdError, CanisterThresholdResult, EccCurveType, EccPoint, EccScalar,
-    RandomOracle, Seed,
+    CanisterThresholdError, CanisterThresholdResult, CanisterThresholdSignatureAlgorithm,
+    DomainSep, EccCurveType, EccPoint, EccScalar, RandomOracle, Seed,
 };
 use serde::{Deserialize, Serialize};
-
-pub const PROOF_OF_DLOG_EQUIV_DST: &str = "ic-crypto-tecdsa-zk-proof-of-dlog-eq";
-pub const PROOF_OF_EQUAL_OPENINGS_DST: &str = "ic-crypto-tecdsa-zk-proof-of-equal-openings";
-pub const PROOF_OF_PRODUCT_DST: &str = "ic-crypto-tecdsa-zk-proof-of-product";
 
 /// A ZK proof that a Simple and Pedersen commitment are committing
 /// to the same value.
@@ -80,10 +76,11 @@ impl ProofOfEqualOpeningsInstance {
 
     fn hash_to_challenge(
         &self,
+        alg: CanisterThresholdSignatureAlgorithm,
         commitment: &EccPoint,
         associated_data: &[u8],
     ) -> CanisterThresholdResult<EccScalar> {
-        let mut ro = RandomOracle::new(PROOF_OF_EQUAL_OPENINGS_DST);
+        let mut ro = RandomOracle::new(DomainSep::ZkProofOfEqualOpening(alg));
         ro.add_bytestring("associated_data", associated_data)?;
         ro.add_point("instance_g", &self.g)?;
         ro.add_point("instance_h", &self.h)?;
@@ -97,6 +94,7 @@ impl ProofOfEqualOpeningsInstance {
 impl ProofOfEqualOpenings {
     pub fn create(
         seed: Seed,
+        alg: CanisterThresholdSignatureAlgorithm,
         secret: &EccScalar,
         masking: &EccScalar,
         associated_data: &[u8],
@@ -109,7 +107,7 @@ impl ProofOfEqualOpenings {
         let r_com = instance.h.scalar_mul(&r)?;
 
         // Create challenge
-        let challenge = instance.hash_to_challenge(&r_com, associated_data)?;
+        let challenge = instance.hash_to_challenge(alg, &r_com, associated_data)?;
 
         // Create opening
         let response = masking.mul(&challenge)?.add(&r)?;
@@ -122,6 +120,7 @@ impl ProofOfEqualOpenings {
 
     pub fn verify(
         &self,
+        alg: CanisterThresholdSignatureAlgorithm,
         pedersen: &EccPoint,
         simple: &EccPoint,
         associated_data: &[u8],
@@ -130,7 +129,7 @@ impl ProofOfEqualOpenings {
 
         let r_com = instance.recover_commitment(self)?;
 
-        if self.challenge != instance.hash_to_challenge(&r_com, associated_data)? {
+        if self.challenge != instance.hash_to_challenge(alg, &r_com, associated_data)? {
             return Err(CanisterThresholdError::InvalidProof);
         }
 
@@ -234,11 +233,12 @@ impl ProofOfProductInstance {
 
     fn hash_to_challenge(
         &self,
+        alg: CanisterThresholdSignatureAlgorithm,
         c1: &EccPoint,
         c2: &EccPoint,
         associated_data: &[u8],
     ) -> CanisterThresholdResult<EccScalar> {
-        let mut ro = RandomOracle::new(PROOF_OF_PRODUCT_DST);
+        let mut ro = RandomOracle::new(DomainSep::ZkProofOfProduct(alg));
         ro.add_bytestring("associated_data", associated_data)?;
         ro.add_point("instance_g", &self.g)?;
         ro.add_point("instance_h", &self.h)?;
@@ -254,6 +254,7 @@ impl ProofOfProductInstance {
 impl ProofOfProduct {
     pub fn create(
         seed: Seed,
+        alg: CanisterThresholdSignatureAlgorithm,
         lhs: &EccScalar,
         rhs: &EccScalar,
         rhs_masking: &EccScalar,
@@ -274,7 +275,7 @@ impl ProofOfProduct {
         let r2_com = EccPoint::mul_2_points(&instance.rhs_com, &r1, &instance.h, &r2)?;
 
         // Compute the challenge:
-        let challenge = instance.hash_to_challenge(&r1_com, &r2_com, associated_data)?;
+        let challenge = instance.hash_to_challenge(alg, &r1_com, &r2_com, associated_data)?;
 
         // Compute the openings:
         let response1 = lhs.mul(&challenge)?.add(&r1)?;
@@ -292,6 +293,7 @@ impl ProofOfProduct {
 
     pub fn verify(
         &self,
+        alg: CanisterThresholdSignatureAlgorithm,
         lhs_com: &EccPoint,
         rhs_com: &EccPoint,
         product_com: &EccPoint,
@@ -301,7 +303,7 @@ impl ProofOfProduct {
 
         let (r1_com, r2_com) = instance.recover_commitment(self)?;
 
-        if self.challenge != instance.hash_to_challenge(&r1_com, &r2_com, associated_data)? {
+        if self.challenge != instance.hash_to_challenge(alg, &r1_com, &r2_com, associated_data)? {
             return Err(CanisterThresholdError::InvalidProof);
         }
 
@@ -375,11 +377,12 @@ impl ProofOfDLogEquivalenceInstance {
 
     fn hash_to_challenge(
         &self,
+        alg: CanisterThresholdSignatureAlgorithm,
         c1: &EccPoint,
         c2: &EccPoint,
         associated_data: &[u8],
     ) -> CanisterThresholdResult<EccScalar> {
-        let mut ro = RandomOracle::new(PROOF_OF_DLOG_EQUIV_DST);
+        let mut ro = RandomOracle::new(DomainSep::ZkProofOfDLogEq(alg));
         ro.add_bytestring("associated_data", associated_data)?;
         ro.add_point("instance_g", &self.g)?;
         ro.add_point("instance_h", &self.h)?;
@@ -395,6 +398,7 @@ impl ProofOfDLogEquivalence {
     /// Create a dlog equivalence proof
     pub fn create(
         seed: Seed,
+        alg: CanisterThresholdSignatureAlgorithm,
         x: &EccScalar,
         g: &EccPoint,
         h: &EccPoint,
@@ -409,7 +413,7 @@ impl ProofOfDLogEquivalence {
         let r_com_h = h.scalar_mul(&r)?;
 
         // Compute the challenge:
-        let challenge = instance.hash_to_challenge(&r_com_g, &r_com_h, associated_data)?;
+        let challenge = instance.hash_to_challenge(alg, &r_com_g, &r_com_h, associated_data)?;
 
         // Computing the opening:
         let response = x.mul(&challenge)?.add(&r)?;
@@ -423,6 +427,7 @@ impl ProofOfDLogEquivalence {
     /// Verify a dlog equivalence proof
     pub fn verify(
         &self,
+        alg: CanisterThresholdSignatureAlgorithm,
         g: &EccPoint,
         h: &EccPoint,
         g_x: &EccPoint,
@@ -433,7 +438,7 @@ impl ProofOfDLogEquivalence {
 
         let (r_com_g, r_com_h) = instance.recover_commitment(self)?;
 
-        if self.challenge != instance.hash_to_challenge(&r_com_g, &r_com_h, associated_data)? {
+        if self.challenge != instance.hash_to_challenge(alg, &r_com_g, &r_com_h, associated_data)? {
             return Err(CanisterThresholdError::InvalidProof);
         }
 

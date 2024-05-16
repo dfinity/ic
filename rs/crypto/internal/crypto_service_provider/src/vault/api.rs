@@ -771,6 +771,7 @@ pub trait IDkgProtocolCspVault {
     /// if necessary.
     fn idkg_load_transcript(
         &self,
+        algorithm_id: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         context_data: Vec<u8>,
         receiver_index: NodeIndex,

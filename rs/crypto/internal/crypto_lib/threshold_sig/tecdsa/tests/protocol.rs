@@ -396,7 +396,10 @@ fn should_be_able_to_perform_bip340_signature() -> Result<(), CanisterThresholdE
 
         let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
-        let cfg = TestConfig::new(EccCurveType::K256);
+        let cfg = TestConfig::new(
+            CanisterThresholdSignatureAlgorithm::Bip340,
+            EccCurveType::K256,
+        );
 
         let setup = SchnorrSignatureProtocolSetup::new(
             cfg,
@@ -454,7 +457,10 @@ fn should_be_able_to_perform_ed25519_signature() -> Result<(), CanisterThreshold
     let random_seed = Seed::from_rng(&mut rng);
 
     // Ed25519 signatures using secp256k1 MEGa keys
-    let cfg = TestConfig::new_mixed(EccCurveType::Ed25519, EccCurveType::K256);
+    let cfg = TestConfig::new(
+        CanisterThresholdSignatureAlgorithm::Ed25519,
+        EccCurveType::K256,
+    );
 
     let setup =
         SchnorrSignatureProtocolSetup::new(cfg, nodes, threshold, corrupted_dealings, random_seed)?;
@@ -551,7 +557,7 @@ fn invalid_signatures_are_rejected() -> Result<(), CanisterThresholdError> {
         assert!(proto.verify_signature(&sig_with_s_eq_zero).is_err());
 
         let sig_with_high_s = {
-            let s = EccScalar::deserialize(cfg.signature_curve(), &sig[half_sig..])
+            let s = EccScalar::deserialize(cfg.signature_alg().curve(), &sig[half_sig..])
                 .unwrap()
                 .negate();
 
@@ -589,7 +595,7 @@ fn should_fail_on_hashed_message_length_mismatch() {
         let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
         let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
 
-        let message_with_wrong_length = vec![0; cfg.signature_curve().scalar_bytes() + 1];
+        let message_with_wrong_length = vec![0; cfg.signature_alg().curve().scalar_bytes() + 1];
 
         let sign_share_result_with_wrong_msg_length = create_ecdsa_signature_share(
             &derivation_path,

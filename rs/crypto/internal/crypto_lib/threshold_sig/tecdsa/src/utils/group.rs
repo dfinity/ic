@@ -99,16 +99,6 @@ impl EccCurveType {
         }
     }
 
-    pub fn from_algorithm(alg_id: ic_types::crypto::AlgorithmId) -> Option<Self> {
-        match alg_id {
-            AlgorithmId::ThresholdEcdsaSecp256k1 => Some(EccCurveType::K256),
-            AlgorithmId::ThresholdEcdsaSecp256r1 => Some(EccCurveType::P256),
-            AlgorithmId::ThresholdSchnorrBip340 => Some(EccCurveType::K256),
-            AlgorithmId::ThresholdEd25519 => Some(EccCurveType::Ed25519),
-            _ => None,
-        }
-    }
-
     pub(crate) fn valid_for_ecdsa(&self) -> bool {
         match self {
             EccCurveType::K256 => true,

@@ -2,13 +2,15 @@ use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 use std::collections::BTreeMap;
+use strum::IntoEnumIterator;
 
 #[test]
 fn should_complaint_system_work() -> CanisterThresholdResult<()> {
     use strum::IntoEnumIterator;
     let rng = &mut reproducible_rng();
 
-    for curve in EccCurveType::all() {
+    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+        let curve = alg.curve();
         let associated_data = b"assoc_data_test";
 
         let sk0 = MEGaPrivateKey::generate(curve, rng);
@@ -22,7 +24,7 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
 
         let dealing = IDkgDealingInternal::new(
             &SecretShares::Random,
-            curve,
+            alg,
             Seed::from_rng(rng),
             threshold,
             &[pk0.clone(), pk1.clone()],
@@ -40,6 +42,7 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
         );
 
         let complaints = generate_complaints(
+            alg.to_algorithm_id(),
             &dealings,
             associated_data,
             corruption_target,
@@ -57,6 +60,7 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
             // the complaint is valid:
             complaint
                 .verify(
+                    alg,
                     dealing,
                     dealer_index,
                     corruption_target,
@@ -71,6 +75,7 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
                 assert_eq!(
                     corrupted_complaint
                         .verify(
+                            alg,
                             dealing,
                             dealer_index,
                             corruption_target,
@@ -87,6 +92,7 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
             assert_eq!(
                 complaint
                     .verify(
+                        alg,
                         dealing,
                         dealer_index,
                         corruption_target,
@@ -101,6 +107,7 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
             assert_eq!(
                 complaint
                     .verify(
+                        alg,
                         dealing,
                         dealer_index,
                         corruption_target,
@@ -115,6 +122,7 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
             assert_eq!(
                 complaint
                     .verify(
+                        alg,
                         dealings.get(&dealer_index).unwrap(),
                         dealer_index + 1,
                         corruption_target,
@@ -157,7 +165,7 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
 
         let dealing2 = IDkgDealingInternal::new(
             &SecretShares::Random,
-            curve,
+            alg,
             Seed::from_rng(rng),
             threshold,
             &[pk0.clone(), pk1],
@@ -176,6 +184,7 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
                 .get(&0)
                 .unwrap()
                 .verify(
+                    alg,
                     &bad_key_dealing,
                     dealer_index,
                     corruption_target,
@@ -194,7 +203,8 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
 fn should_complaint_verification_reject_spurious_complaints() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
-    for curve in EccCurveType::all() {
+    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+        let curve = alg.curve();
         let associated_data = b"assoc_data_test";
 
         let sk = MEGaPrivateKey::generate(curve, rng);
@@ -206,7 +216,7 @@ fn should_complaint_verification_reject_spurious_complaints() -> CanisterThresho
 
         let dealing = IDkgDealingInternal::new(
             &SecretShares::Random,
-            curve,
+            alg,
             Seed::from_rng(rng),
             threshold,
             &[pk.clone()],
@@ -216,6 +226,7 @@ fn should_complaint_verification_reject_spurious_complaints() -> CanisterThresho
 
         let complaint = IDkgComplaintInternal::new(
             Seed::from_rng(rng),
+            alg,
             &dealing,
             dealer_index,
             receiver_index,
@@ -226,7 +237,7 @@ fn should_complaint_verification_reject_spurious_complaints() -> CanisterThresho
 
         assert_eq!(
             complaint
-                .verify(&dealing, dealer_index, 0, &pk, associated_data)
+                .verify(alg, &dealing, dealer_index, 0, &pk, associated_data)
                 .unwrap_err(),
             CanisterThresholdError::InvalidComplaint
         );

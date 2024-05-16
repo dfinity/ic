@@ -13,32 +13,37 @@ use std::collections::BTreeMap;
 
 #[derive(Copy, Clone, Debug)]
 pub struct TestConfig {
-    signature_curve: EccCurveType,
+    signature_alg: CanisterThresholdSignatureAlgorithm,
     key_curve: EccCurveType,
 }
 
 impl TestConfig {
     pub fn all() -> Vec<Self> {
         vec![
-            Self::new(EccCurveType::K256),
-            Self::new(EccCurveType::P256),
-            Self::new_mixed(EccCurveType::P256, EccCurveType::K256),
+            Self::new(
+                CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
+                EccCurveType::K256,
+            ),
+            Self::new(
+                CanisterThresholdSignatureAlgorithm::EcdsaSecp256r1,
+                EccCurveType::K256,
+            ),
+            Self::new(
+                CanisterThresholdSignatureAlgorithm::EcdsaSecp256r1,
+                EccCurveType::P256,
+            ),
         ]
     }
 
-    pub fn new(curve: EccCurveType) -> Self {
-        Self::new_mixed(curve, curve)
-    }
-
-    pub fn new_mixed(signature_curve: EccCurveType, key_curve: EccCurveType) -> Self {
+    pub fn new(alg: CanisterThresholdSignatureAlgorithm, key_curve: EccCurveType) -> Self {
         Self {
-            signature_curve,
+            signature_alg: alg,
             key_curve,
         }
     }
 
-    pub fn signature_curve(&self) -> EccCurveType {
-        self.signature_curve
+    pub fn signature_alg(&self) -> CanisterThresholdSignatureAlgorithm {
+        self.signature_alg
     }
 
     pub fn key_curve(&self) -> EccCurveType {
@@ -91,11 +96,7 @@ impl ProtocolSetup {
         threshold: usize,
         seed: Seed,
     ) -> Result<Self, CanisterThresholdError> {
-        let alg = match cfg.signature_curve() {
-            EccCurveType::K256 => AlgorithmId::ThresholdEcdsaSecp256k1,
-            EccCurveType::P256 => AlgorithmId::ThresholdEcdsaSecp256r1,
-            EccCurveType::Ed25519 => AlgorithmId::ThresholdEd25519,
-        };
+        let alg = cfg.signature_alg().to_algorithm_id();
 
         let rng = &mut seed.into_rng();
         let ad = rng.gen::<[u8; 32]>().to_vec();
@@ -124,8 +125,8 @@ impl ProtocolSetup {
         })
     }
 
-    pub fn signature_curve(&self) -> EccCurveType {
-        self.cfg.signature_curve()
+    pub fn signature_alg(&self) -> CanisterThresholdSignatureAlgorithm {
+        self.cfg.signature_alg()
     }
 
     pub fn key_curve(&self) -> EccCurveType {
@@ -480,6 +481,7 @@ impl ProtocolRound {
             } else {
                 // Generate a complaint:
                 let complaints = generate_complaints(
+                    setup.alg,
                     dealings,
                     &setup.ad,
                     receiver as NodeIndex,
@@ -491,11 +493,14 @@ impl ProtocolRound {
 
                 let mut provided_openings = BTreeMap::new();
 
+                let ctsa = CanisterThresholdSignatureAlgorithm::from_algorithm(setup.alg).unwrap();
+
                 for (dealer_index, complaint) in &complaints {
                     let dealing = dealings.get(dealer_index).unwrap();
                     // the complaints must be valid
                     assert!(complaint
                         .verify(
+                            ctsa,
                             dealing,
                             *dealer_index,
                             receiver as NodeIndex, /* complainer index */
@@ -721,7 +726,7 @@ impl ProtocolRound {
         dealing
             .publicly_verify(
                 setup.key_curve(),
-                setup.signature_curve(),
+                setup.signature_alg(),
                 transcript_type,
                 setup.threshold,
                 dealer_index,
@@ -734,7 +739,7 @@ impl ProtocolRound {
         assert_eq!(
             dealing.publicly_verify(
                 setup.key_curve(),
-                setup.signature_curve(),
+                setup.signature_alg(),
                 transcript_type,
                 setup.threshold,
                 dealer_index + 1,
@@ -748,7 +753,7 @@ impl ProtocolRound {
         assert_eq!(
             dealing.publicly_verify(
                 setup.key_curve(),
-                setup.signature_curve(),
+                setup.signature_alg(),
                 transcript_type,
                 setup.threshold,
                 dealer_index,
@@ -762,7 +767,7 @@ impl ProtocolRound {
         assert_eq!(
             dealing.publicly_verify(
                 setup.key_curve(),
-                setup.signature_curve(),
+                setup.signature_alg(),
                 transcript_type,
                 setup.threshold,
                 dealer_index,
