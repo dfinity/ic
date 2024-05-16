@@ -511,9 +511,12 @@ pub(crate) struct GetWasmResponse {
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub(crate) struct SnsWasm {
     #[prost(bytes = "vec", tag = "1")]
+    #[serde(with = "serde_bytes")]
     pub wasm: ::prost::alloc::vec::Vec<u8>,
     #[prost(enumeration = "SnsCanisterType", tag = "2")]
     pub canister_type: i32,
+    #[prost(uint64, optional, tag = "3")]
+    pub proposal_id: ::core::option::Option<u64>,
 }
 /// Copied from ic-sns-wasm
 /// The type of canister a particular WASM is intended to be installed on.
