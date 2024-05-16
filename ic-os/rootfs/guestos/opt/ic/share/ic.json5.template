@@ -379,9 +379,15 @@ table ip6 filter {\n\
     flags dynamic\n\
   }\n\
 \n\
+  set blackhole {\n\
+    type ipv4_addr\n\
+    size 65535\n\
+  }\n\
+\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
+    ip saddr @blackhole drop\n\
     ct state new add @rate_limit { ip saddr limit rate over 2000/minute burst 1000 packets } log prefix \"Drop - rate limit: \" drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
@@ -424,9 +430,15 @@ table ip6 filter {\n\
     flags dynamic\n\
   }\n\
 \n\
+  set blackhole6 {\n\
+    type ipv6_addr\n\
+    size 65535\n\
+  }\n\
+\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
+    ip6 saddr @blackhole6 drop\n\
     ct state new add @rate_limit { ip6 saddr limit rate over 2000/minute burst 1000 packets } log prefix \"Drop - rate limit: \" drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip6 address.\n\
