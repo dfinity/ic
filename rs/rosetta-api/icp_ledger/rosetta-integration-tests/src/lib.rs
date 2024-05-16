@@ -8,6 +8,9 @@ use url::Url;
 
 use ic_icrc_rosetta_client::RosettaClient;
 
+const NUM_TRIES: u64 = 100;
+const WAIT_BETWEEN_ATTEMPTS: Duration = Duration::from_millis(100);
+
 struct KillOnDrop(Child);
 
 pub struct RosettaContext {
@@ -86,9 +89,9 @@ pub async fn start_rosetta(
         )
     }));
 
-    let mut tries_left = 100;
+    let mut tries_left = NUM_TRIES;
     while tries_left > 0 && !port_file.exists() {
-        sleep(Duration::from_millis(100)).await;
+        sleep(WAIT_BETWEEN_ATTEMPTS).await;
         tries_left -= 1;
     }
 
@@ -99,9 +102,9 @@ pub async fn start_rosetta(
         .expect("Unable to create the RosettaClient");
 
     // wait because rosetta may be recovering from existing state
-    let mut tries_left = 100;
+    let mut tries_left = NUM_TRIES;
     while tries_left > 0 && rosetta_client.network_list().await.is_err() {
-        sleep(Duration::from_millis(100)).await;
+        sleep(WAIT_BETWEEN_ATTEMPTS).await;
         tries_left -= 1;
     }
 
