@@ -166,6 +166,12 @@ impl BoundaryNodeManager {
             format!("--local-store-path=/var/lib/ic/data/ic_registry_local_store"),
             format!("--log-journald"),
             format!("--metrics-addr=[::]:9324"),
+            format!("--bouncer-enable"),
+            format!("--bouncer-ratelimit=600"),
+            format!("--bouncer-burst-size=1200"),
+            format!("--bouncer-ban-seconds=300"),
+            format!("--bouncer-max-buckets=30000"),
+            format!("--bouncer-bucket-ttl=60"),
         ];
 
         process
