@@ -45,7 +45,16 @@ impl RandomOracle {
     /// The domain separator should be unique for this usage. The
     /// &'static annotation is to help ensure that this value is a
     /// constant and not generated dynamically.
-    pub fn new(domain_separator: &'static str) -> Self {
+    pub fn new_with_string_dst(domain_separator: &'static str) -> Self {
+        Self {
+            domain_separator: domain_separator.to_string(),
+            input_size: 0,
+            inputs: BTreeMap::new(),
+        }
+    }
+
+    /// Create a new RandomOracle instance
+    pub(crate) fn new(domain_separator: DomainSep) -> Self {
         Self {
             domain_separator: domain_separator.to_string(),
             input_size: 0,

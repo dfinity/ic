@@ -128,7 +128,10 @@ fn verify_protocol_output_remains_unchanged_over_time_k256() -> Result<(), Canis
     let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed");
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(EccCurveType::K256),
+        TestConfig::new(
+            CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
+            EccCurveType::K256,
+        ),
         nodes,
         threshold,
         0,
@@ -248,7 +251,10 @@ fn verify_protocol_output_remains_unchanged_over_time_k256_unmasked_kappa(
         Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed-for-k256-unmasked-kappa-stability-test");
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(EccCurveType::K256),
+        TestConfig::new(
+            CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
+            EccCurveType::K256,
+        ),
         nodes,
         threshold,
         0,
@@ -366,7 +372,10 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Canis
     let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed-for-p256-stability-test");
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(EccCurveType::P256),
+        TestConfig::new(
+            CanisterThresholdSignatureAlgorithm::EcdsaSecp256r1,
+            EccCurveType::P256,
+        ),
         nodes,
         threshold,
         0,
@@ -485,7 +494,10 @@ fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
     let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed-for-p256-sig-and-k256-mega");
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new_mixed(EccCurveType::P256, EccCurveType::K256),
+        TestConfig::new(
+            CanisterThresholdSignatureAlgorithm::EcdsaSecp256r1,
+            EccCurveType::K256,
+        ),
         nodes,
         threshold,
         0,
@@ -604,7 +616,10 @@ fn verify_protocol_output_remains_unchanged_over_time_bip340_sig_with_k256_mega(
     let seed = Seed::from_bytes(b"ic-crypto-fixed-seed-for-bip340-with-k256-mega");
 
     let setup = SchnorrSignatureProtocolSetup::new(
-        TestConfig::new_mixed(EccCurveType::K256, EccCurveType::K256),
+        TestConfig::new(
+            CanisterThresholdSignatureAlgorithm::Bip340,
+            EccCurveType::K256,
+        ),
         nodes,
         threshold,
         0,
@@ -684,7 +699,10 @@ fn verify_protocol_output_remains_unchanged_over_time_ed25519_sig_with_k256_mega
     let seed = Seed::from_bytes(b"ic-crypto-fixed-seed-for-ed25519-with-k256-mega");
 
     let setup = SchnorrSignatureProtocolSetup::new(
-        TestConfig::new_mixed(EccCurveType::Ed25519, EccCurveType::K256),
+        TestConfig::new(
+            CanisterThresholdSignatureAlgorithm::Ed25519,
+            EccCurveType::K256,
+        ),
         nodes,
         threshold,
         0,
@@ -955,7 +973,10 @@ fn bip340_combined_share_serialization_roundtrip_works_correctly() {
     let random_beacon = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
-    let cfg = TestConfig::new(EccCurveType::K256);
+    let cfg = TestConfig::new(
+        CanisterThresholdSignatureAlgorithm::Bip340,
+        EccCurveType::K256,
+    );
 
     let seed = Seed::from_bytes(&random_bytes(rng));
     let setup = SchnorrSignatureProtocolSetup::new(cfg, nodes, threshold, 0, seed).unwrap();
@@ -990,7 +1011,10 @@ fn ed25519_combined_share_serialization_roundtrip_works_correctly() {
     let random_beacon = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
-    let cfg = TestConfig::new(EccCurveType::Ed25519);
+    let cfg = TestConfig::new(
+        CanisterThresholdSignatureAlgorithm::Ed25519,
+        EccCurveType::K256,
+    );
 
     let seed = Seed::from_bytes(&random_bytes(rng));
     let setup =

@@ -192,6 +192,7 @@ use ic_types::crypto::AlgorithmId;
 use ic_types::{NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use strum::EnumIter;
 
 pub use ic_crypto_internal_seed::Seed;
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -233,11 +234,61 @@ pub struct CanisterThresholdSerializationError(pub String);
 pub type CanisterThresholdSerializationResult<T> =
     std::result::Result<T, CanisterThresholdSerializationError>;
 
+#[derive(Copy, Clone, Debug, EnumIter)]
+pub enum CanisterThresholdSignatureAlgorithm {
+    EcdsaSecp256k1,
+    EcdsaSecp256r1,
+    Bip340,
+    Ed25519,
+}
+
+impl CanisterThresholdSignatureAlgorithm {
+    pub fn from_algorithm(alg_id: ic_types::crypto::AlgorithmId) -> Option<Self> {
+        match alg_id {
+            AlgorithmId::ThresholdEcdsaSecp256k1 => Some(Self::EcdsaSecp256k1),
+            AlgorithmId::ThresholdEcdsaSecp256r1 => Some(Self::EcdsaSecp256r1),
+            AlgorithmId::ThresholdSchnorrBip340 => Some(Self::Bip340),
+            AlgorithmId::ThresholdEd25519 => Some(Self::Ed25519),
+            _ => None,
+        }
+    }
+
+    pub fn to_algorithm_id(&self) -> AlgorithmId {
+        match self {
+            Self::EcdsaSecp256k1 => AlgorithmId::ThresholdEcdsaSecp256k1,
+            Self::EcdsaSecp256r1 => AlgorithmId::ThresholdEcdsaSecp256r1,
+            Self::Bip340 => AlgorithmId::ThresholdSchnorrBip340,
+            Self::Ed25519 => AlgorithmId::ThresholdEd25519,
+        }
+    }
+
+    pub fn to_string(&self) -> &'static str {
+        match self {
+            Self::EcdsaSecp256k1 => "ecdsa-secp256k1",
+            Self::EcdsaSecp256r1 => "ecdsa-secp256r1",
+            Self::Bip340 => "bip340",
+            Self::Ed25519 => "ed25519",
+        }
+    }
+
+    pub fn curve(&self) -> EccCurveType {
+        match self {
+            Self::EcdsaSecp256k1 => EccCurveType::K256,
+            Self::EcdsaSecp256r1 => EccCurveType::P256,
+            Self::Bip340 => EccCurveType::K256,
+            Self::Ed25519 => EccCurveType::Ed25519,
+        }
+    }
+}
+
 pub mod test_utils;
 
+mod domain_sep;
 mod idkg;
 mod signing;
 mod utils;
+
+use domain_sep::DomainSep;
 
 pub use crate::idkg::mega::*;
 
@@ -295,7 +346,7 @@ impl From<CanisterThresholdError> for IdkgCreateDealingInternalError {
 
 /// Create an IDKG dealing
 pub fn create_dealing(
-    algorithm_id: ic_types::crypto::AlgorithmId,
+    algorithm_id: AlgorithmId,
     associated_data: &[u8],
     dealer_index: NodeIndex,
     threshold: NumberOfNodes,
@@ -303,12 +354,12 @@ pub fn create_dealing(
     shares: &SecretShares,
     seed: Seed,
 ) -> Result<IDkgDealingInternal, IdkgCreateDealingInternalError> {
-    let signature_curve = EccCurveType::from_algorithm(algorithm_id)
+    let alg = CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id)
         .ok_or(IdkgCreateDealingInternalError::UnsupportedAlgorithm)?;
 
     IDkgDealingInternal::new(
         shares,
-        signature_curve,
+        alg,
         seed,
         threshold.get() as usize,
         recipients,
@@ -352,11 +403,11 @@ pub fn create_transcript(
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     operation_mode: &IDkgTranscriptOperationInternal,
 ) -> Result<IDkgTranscriptInternal, IDkgCreateTranscriptInternalError> {
-    let curve = EccCurveType::from_algorithm(algorithm_id)
+    let alg = CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id)
         .ok_or(IDkgCreateTranscriptInternalError::UnsupportedAlgorithm)?;
 
     IDkgTranscriptInternal::new(
-        curve,
+        alg.curve(),
         reconstruction_threshold.get() as usize,
         verified_dealings,
         operation_mode,
@@ -549,13 +600,13 @@ pub fn publicly_verify_dealing(
 ) -> Result<(), IDkgVerifyDealingInternalError> {
     let key_curve = EccCurveType::K256;
 
-    let signature_curve = EccCurveType::from_algorithm(algorithm_id)
+    let alg = CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id)
         .ok_or(IDkgVerifyDealingInternalError::UnsupportedAlgorithm)?;
 
     dealing
         .publicly_verify(
             key_curve,
-            signature_curve,
+            alg,
             transcript_type,
             reconstruction_threshold,
             dealer_index,
@@ -580,7 +631,7 @@ pub fn privately_verify_dealing(
     dealer_index: NodeIndex,
     recipient_index: NodeIndex,
 ) -> Result<(), IDkgVerifyDealingInternalError> {
-    let signature_curve = EccCurveType::from_algorithm(algorithm_id)
+    let signature_alg = CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id)
         .ok_or(IDkgVerifyDealingInternalError::UnsupportedAlgorithm)?;
 
     let key_curve = private_key.curve_type();
@@ -588,7 +639,7 @@ pub fn privately_verify_dealing(
     dealing
         .privately_verify(
             key_curve,
-            signature_curve,
+            signature_alg,
             private_key,
             public_key,
             associated_data,
@@ -781,7 +832,7 @@ pub fn combine_ecdsa_signature_shares(
     sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
     algorithm_id: AlgorithmId,
 ) -> Result<ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaCombineSigSharesInternalError> {
-    let curve = EccCurveType::from_algorithm(algorithm_id)
+    let alg = CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id)
         .ok_or(ThresholdEcdsaCombineSigSharesInternalError::UnsupportedAlgorithm)?;
 
     crate::signing::ecdsa::ThresholdEcdsaCombinedSigInternal::new(
@@ -792,7 +843,7 @@ pub fn combine_ecdsa_signature_shares(
         presig_transcript,
         reconstruction_threshold,
         sig_shares,
-        curve,
+        alg.curve(),
     )
     .map_err(ThresholdEcdsaCombineSigSharesInternalError::from)
 }
@@ -1292,15 +1343,19 @@ pub fn derive_threshold_public_key(
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum IDkgGenerateComplaintsInternalError {
+    UnsupportedAlgorithm,
     InvalidArguments(String),
     InternalError(String),
 }
 
 impl From<IDkgGenerateComplaintsInternalError> for IDkgLoadTranscriptError {
-    fn from(generate_complaints_internal_error: IDkgGenerateComplaintsInternalError) -> Self {
+    fn from(e: IDkgGenerateComplaintsInternalError) -> Self {
         type Igcie = IDkgGenerateComplaintsInternalError;
         type Ilte = IDkgLoadTranscriptError;
-        match generate_complaints_internal_error {
+        match e {
+            Igcie::UnsupportedAlgorithm => Ilte::InvalidArguments {
+                internal_error: format!("{:?}", e),
+            },
             Igcie::InvalidArguments(internal_error) => Ilte::InvalidArguments { internal_error },
             Igcie::InternalError(internal_error) => Ilte::InternalError { internal_error },
         }
@@ -1332,6 +1387,7 @@ impl From<CanisterThresholdError> for IDkgGenerateComplaintsInternalError {
 /// This function assumes there is at least one erroneous dealing that
 /// requires complaining.
 pub fn generate_complaints(
+    algorithm_id: AlgorithmId,
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     associated_data: &[u8],
     receiver_index: NodeIndex,
@@ -1339,7 +1395,11 @@ pub fn generate_complaints(
     public_key: &MEGaPublicKey,
     seed: Seed,
 ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgGenerateComplaintsInternalError> {
+    let alg = CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id)
+        .ok_or(IDkgGenerateComplaintsInternalError::UnsupportedAlgorithm)?;
+
     Ok(idkg::complaints::generate_complaints(
+        alg,
         verified_dealings,
         associated_data,
         receiver_index,
@@ -1351,6 +1411,7 @@ pub fn generate_complaints(
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum IDkgVerifyComplaintInternalError {
+    UnsupportedAlgorithm,
     InvalidComplaint,
     InvalidArgument(String),
     InternalError(String),
@@ -1373,6 +1434,9 @@ impl From<IDkgVerifyComplaintInternalError> for IDkgVerifyComplaintError {
         type Vcie = IDkgVerifyComplaintInternalError;
         type Vce = IDkgVerifyComplaintError;
         match verify_complaint_internal_error {
+            Vcie::UnsupportedAlgorithm => Vce::InvalidArgument {
+                internal_error: "Unsupported algorithm".to_string(),
+            },
             Vcie::InvalidComplaint => Vce::InvalidComplaint,
             Vcie::InternalError(internal_error) => Vce::InternalError { internal_error },
             Vcie::InvalidArgument(internal_error) => Vce::InvalidArgument { internal_error },
@@ -1382,6 +1446,7 @@ impl From<IDkgVerifyComplaintInternalError> for IDkgVerifyComplaintError {
 
 /// Verifies a complaint against a dealing.
 pub fn verify_complaint(
+    algorithm_id: AlgorithmId,
     complaint: &IDkgComplaintInternal,
     complainer_index: NodeIndex,
     complainer_key: &MEGaPublicKey,
@@ -1389,7 +1454,11 @@ pub fn verify_complaint(
     dealer_index: NodeIndex,
     associated_data: &[u8],
 ) -> Result<(), IDkgVerifyComplaintInternalError> {
+    let alg = CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id)
+        .ok_or(IDkgVerifyComplaintInternalError::UnsupportedAlgorithm)?;
+
     Ok(complaint.verify(
+        alg,
         dealing,
         dealer_index,
         complainer_index,
@@ -1506,7 +1575,10 @@ pub fn verify_mega_public_key(
 // Returns None if the AlgorithmId does not map to threshold ECDSA
 fn ecdsa_signature_parameters(algorithm_id: AlgorithmId) -> Option<(EccCurveType, usize)> {
     if algorithm_id.is_threshold_ecdsa() {
-        EccCurveType::from_algorithm(algorithm_id).map(|curve| (curve, curve.scalar_bytes()))
+        CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id).map(|alg| {
+            let curve = alg.curve();
+            (curve, curve.scalar_bytes())
+        })
     } else {
         None
     }

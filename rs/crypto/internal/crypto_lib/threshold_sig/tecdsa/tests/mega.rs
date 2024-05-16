@@ -1,6 +1,7 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use std::convert::TryFrom;
+use strum::IntoEnumIterator;
 
 #[test]
 fn mega_key_generation() -> CanisterThresholdResult<()> {
@@ -73,7 +74,8 @@ fn mega_key_validity() -> CanisterThresholdResult<()> {
 fn mega_single_smoke_test() -> Result<(), CanisterThresholdError> {
     let rng = &mut reproducible_rng();
 
-    for curve in EccCurveType::all() {
+    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+        let curve = alg.curve();
         let a_sk = MEGaPrivateKey::generate(curve, rng);
         let b_sk = MEGaPrivateKey::generate(curve, rng);
 
@@ -91,6 +93,7 @@ fn mega_single_smoke_test() -> Result<(), CanisterThresholdError> {
 
         let ctext = MEGaCiphertextSingle::encrypt(
             seed,
+            alg,
             &[ptext_for_a.clone(), ptext_for_b.clone()],
             &[a_pk.clone(), b_pk.clone()],
             dealer_index,
@@ -119,7 +122,8 @@ fn mega_single_smoke_test() -> Result<(), CanisterThresholdError> {
 fn mega_pair_smoke_test() -> Result<(), CanisterThresholdError> {
     let rng = &mut reproducible_rng();
 
-    for curve in EccCurveType::all() {
+    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+        let curve = alg.curve();
         let a_sk = MEGaPrivateKey::generate(curve, rng);
         let b_sk = MEGaPrivateKey::generate(curve, rng);
 
@@ -137,6 +141,7 @@ fn mega_pair_smoke_test() -> Result<(), CanisterThresholdError> {
 
         let ctext = MEGaCiphertextPair::encrypt(
             seed,
+            alg,
             &[ptext_for_a.clone(), ptext_for_b.clone()],
             &[a_pk.clone(), b_pk.clone()],
             dealer_index,
@@ -157,7 +162,8 @@ fn mega_pair_smoke_test() -> Result<(), CanisterThresholdError> {
 fn mega_should_reject_invalid_pop() -> Result<(), CanisterThresholdError> {
     let rng = &mut reproducible_rng();
 
-    for curve in EccCurveType::all() {
+    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+        let curve = alg.curve();
         let a_sk = MEGaPrivateKey::generate(curve, rng);
         let b_sk = MEGaPrivateKey::generate(curve, rng);
 
@@ -175,6 +181,7 @@ fn mega_should_reject_invalid_pop() -> Result<(), CanisterThresholdError> {
 
         let ctext = MEGaCiphertextSingle::encrypt(
             seed,
+            alg,
             &[ptext_for_a, ptext_for_b],
             &[a_pk, b_pk.clone()],
             dealer_index,
@@ -183,21 +190,21 @@ fn mega_should_reject_invalid_pop() -> Result<(), CanisterThresholdError> {
 
         assert!(ctext.decrypt(ad, dealer_index, 1, &b_sk, &b_pk).is_ok());
         assert_eq!(
-            ctext.verify_pop(b"wrong_ad", dealer_index),
+            ctext.verify_pop(alg, b"wrong_ad", dealer_index),
             Err(CanisterThresholdError::InvalidProof)
         );
 
         let mut bad_pop_pk = ctext.clone();
         bad_pop_pk.pop_public_key = ctext.ephemeral_key.clone();
         assert_eq!(
-            bad_pop_pk.verify_pop(ad, dealer_index),
+            bad_pop_pk.verify_pop(alg, ad, dealer_index),
             Err(CanisterThresholdError::InvalidProof)
         );
 
         let mut bad_eph_key = ctext;
         bad_eph_key.ephemeral_key = EccPoint::hash_to_point(curve, b"input", b"dst")?;
         assert_eq!(
-            bad_eph_key.verify_pop(ad, dealer_index),
+            bad_eph_key.verify_pop(alg, ad, dealer_index),
             Err(CanisterThresholdError::InvalidProof)
         );
     }
@@ -238,7 +245,6 @@ fn mega_private_key_bytes_should_redact_logs() -> Result<(), CanisterThresholdEr
 mod mega_cipher_text {
     use super::*;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
-    use strum::IntoEnumIterator;
 
     #[test]
     fn should_decrypt_to_different_plaintext_when_secret_key_wrong() {
@@ -269,9 +275,12 @@ mod mega_cipher_text {
             let invalid_dealer_index = 47;
 
             assert_eq!(
-                setup
-                    .ctext
-                    .check_validity(1, setup.associated_data, invalid_dealer_index),
+                setup.ctext.check_validity(
+                    setup.alg,
+                    1,
+                    setup.associated_data,
+                    invalid_dealer_index
+                ),
                 Err(CanisterThresholdError::InvalidProof)
             );
         }
@@ -381,11 +390,13 @@ mod mega_cipher_text {
         ptext: MEGaPlaintext,
         dealer_index: NodeIndex,
         ctext: MEGaCiphertext,
+        alg: CanisterThresholdSignatureAlgorithm,
     }
 
     impl Setup {
         fn new(rng: &mut ReproducibleRng, ctext_type: MEGaCiphertextType) -> Setup {
-            let curve = EccCurveType::K256;
+            let alg = CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1;
+            let curve = alg.curve();
             let a_sk = MEGaPrivateKey::generate(curve, rng);
             let b_sk = MEGaPrivateKey::generate(curve, rng);
             let a_pk = a_sk.public_key();
@@ -399,6 +410,7 @@ mod mega_cipher_text {
                     let ctext = MEGaCiphertext::Single(
                         MEGaCiphertextSingle::encrypt(
                             seed,
+                            alg,
                             &[ptext.clone()],
                             &[a_pk.clone()],
                             dealer_index,
@@ -413,6 +425,7 @@ mod mega_cipher_text {
                     let ctext = MEGaCiphertext::Pairs(
                         MEGaCiphertextPair::encrypt(
                             seed,
+                            alg,
                             &[ptext.clone()],
                             &[a_pk.clone()],
                             dealer_index,
@@ -433,6 +446,7 @@ mod mega_cipher_text {
                 ptext,
                 dealer_index,
                 ctext,
+                alg,
             }
         }
     }

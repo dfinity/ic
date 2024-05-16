@@ -167,6 +167,7 @@ pub fn load_transcript(
     )?;
 
     let internal_complaints = vault.idkg_load_transcript(
+        transcript.algorithm_id,
         transcript.verified_dealings.clone(),
         transcript.context_data(),
         self_index,

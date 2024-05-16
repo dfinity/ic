@@ -1390,6 +1390,7 @@ mod idkg_load_transcript {
             let mut remaining_iterations = 1 + self.load_twice as usize;
             loop {
                 let result = loader_vault.idkg_load_transcript(
+                    self.algorithm_id,
                     signed_dealings.clone(),
                     self.context_data.clone(),
                     DEALER_RECEIVER_INDEX,
