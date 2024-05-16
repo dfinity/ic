@@ -16,7 +16,7 @@ function log_and_halt_installation_on_error() {
         echo "                       INTERNET COMPUTER - SETUP - FAILED"
         echo "--------------------------------------------------------------------------------"
         echo -e "\n\n\n\n"
-        echo "        Please contact the Node Provider Matrix channel for support."
+        echo "        Please consult the wiki guide: Troubleshooting Node Deployment Errors."
         echo -e "\n\n\n\n"
         echo "--------------------------------------------------------------------------------"
         echo "                                     ERROR"
