@@ -491,6 +491,7 @@ mod test {
             /* store_max_blocks = */ None,
             /* verification_info = */ None,
             Box::new(NopMetrics {}),
+            false,
         )
         .await
         .unwrap()
