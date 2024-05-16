@@ -235,6 +235,18 @@ pub fn decentralization_test(env: TestEnv) {
         .expect("API BNs didn't report healthy");
     }
 
+    info!(
+        log,
+        "Checking nftables with firewall settings enabled on API BNs ..."
+    );
+    for node in unassigned_nodes.iter() {
+        let rules = node
+            .block_on_bash_script("sudo nft list ruleset")
+            .expect("unable to read nft ruleset");
+        assert!(rules.contains("ct state new add @rate_limit"));
+        assert!(rules.contains("ct state new add @connection_limit"));
+    }
+
     info!(log, "Installing counter canisters ...");
     let canister_values: Vec<u32> = vec![1, 3];
     let canister_ids: Vec<Principal> = block_on(install_canisters(
