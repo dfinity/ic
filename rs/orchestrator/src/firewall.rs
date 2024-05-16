@@ -537,6 +537,10 @@ impl FirewallConfigTemplate for BoundaryNodeFirewallConfig {
                     ],
                 ),
             )
+            .replace(
+                "<<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>>",
+                &self.max_simultaneous_connections_per_ip_address.to_string(),
+            )
     }
 }
 
