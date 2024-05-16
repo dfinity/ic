@@ -7070,7 +7070,8 @@ mod tests {
             Ok(Encode!(&GetWasmResponse {
                 wasm: Some(SnsWasm {
                     wasm: vec![9, 8, 7, 6, 5, 4, 3, 2],
-                    canister_type: expected_canister_to_be_upgraded.into() // Governance
+                    canister_type: expected_canister_to_be_upgraded.into(), // Governance
+                    proposal_id: None,
                 })
             })
             .unwrap()),

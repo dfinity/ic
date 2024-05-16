@@ -1,3 +1,4 @@
+use crate::sns_upgrade::{get_wasm, SnsWasm};
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     governance::{
@@ -1082,7 +1083,7 @@ async fn validate_and_render_upgrade_sns_to_next_version(
 ) -> Result<String, String> {
     let UpgradeSnsParams {
         next_version,
-        canister_type_to_upgrade: _,
+        canister_type_to_upgrade,
         new_wasm_hash,
         canister_ids_to_upgrade,
     } = get_upgrade_params(env, root_canister_id, &current_version)
@@ -1093,6 +1094,18 @@ async fn validate_and_render_upgrade_sns_to_next_version(
                 e
             )
         })?;
+
+    let proposal_id_message = get_wasm(env, new_wasm_hash.to_vec(), canister_type_to_upgrade)
+        .await
+        .ok()
+        .and_then(|SnsWasm { proposal_id, .. }| proposal_id)
+        .map(|id| {
+            format!(
+                "## Proposal ID of the NNS proposal that blessed this WASM version: NNS Proposal {}",
+                id
+            )
+        })
+        .unwrap_or_default();
 
     // TODO display the hashes for current version and new version
     Ok(format!(
@@ -1106,6 +1119,7 @@ async fn validate_and_render_upgrade_sns_to_next_version(
 
 ## Canisters to be upgraded: {}
 ## Upgrade Version: {}
+{proposal_id_message}
 ",
         render_version(&current_version),
         render_version(&next_version),
@@ -3118,7 +3132,8 @@ mod tests {
             Ok(Encode!(&GetWasmResponse {
                 wasm: Some(SnsWasm {
                     wasm: vec![9, 8, 7, 6, 5, 4, 3, 2],
-                    canister_type: expected_canister_to_be_upgraded.into() // Governance
+                    canister_type: expected_canister_to_be_upgraded.into(), // Governance
+                    proposal_id: Some(2),
                 })
             })
             .unwrap()),
@@ -3170,6 +3185,7 @@ Version {
 
 ## Canisters to be upgraded: q7t5l-saaaa-aaaaa-aah2a-cai
 ## Upgrade Version: 67586e98fad27da0b9968bc039a1ef34c939b9b8e523a8bef89d478608c5ecf6
+## Proposal ID of the NNS proposal that blessed this WASM version: NNS Proposal 2
 ";
         assert_eq!(actual_text, expected_text);
     }
