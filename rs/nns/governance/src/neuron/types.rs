@@ -158,33 +158,6 @@ impl Neuron {
         self.dissolve_state = stored.dissolve_state;
         self.aging_since_timestamp_seconds = stored.aging_since_timestamp_seconds;
     }
-
-    /// Returns the dissolve state. Deprecated and only used by the old merge neurons flow and will
-    /// be cleaned up.
-    pub fn depregated_dissolve_state(&self) -> Option<NeuronDissolveState> {
-        self.dissolve_state.clone()
-    }
-
-    /// Sets the dissolve state. Deprecated and only used by the old merge neurons flow and will
-    /// be cleaned up.
-    pub fn deprecated_set_dissolve_state(&mut self, dissolve_state: NeuronDissolveState) {
-        self.dissolve_state = Some(dissolve_state);
-    }
-
-    /// Returns the aging since timestamp in seconds. Deprecated and only used by the old merge
-    /// neurons flow and will be cleaned up.
-    pub fn deprecated_aging_since_timestamp_seconds(&self) -> u64 {
-        self.aging_since_timestamp_seconds
-    }
-
-    /// Sets the aging since timestamp in seconds. Deprecated and only used by the old merge neurons
-    /// flow and will be cleaned up.
-    pub fn deprecated_set_aging_since_timestamp_seconds(
-        &mut self,
-        aging_since_timestamp_seconds: u64,
-    ) {
-        self.aging_since_timestamp_seconds = aging_since_timestamp_seconds;
-    }
 }
 
 impl From<Neuron> for NeuronProto {
