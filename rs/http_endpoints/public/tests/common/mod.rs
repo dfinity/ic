@@ -7,7 +7,7 @@ use hyper_util::rt::TokioIo;
 use ic_agent::Agent;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsConfig;
-use ic_crypto_tls_interfaces_mocks::{MockTlsConfig, MockTlsHandshake};
+use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_error_types::UserError;
 use ic_http_endpoints_public::start_server;
@@ -456,7 +456,6 @@ impl HttpEndpointBuilder {
         let nns_subnet_id = subnet_test_id(1);
         let node_id = node_test_id(1);
 
-        let tls_handshake = Arc::new(MockTlsHandshake::new());
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
 
@@ -478,7 +477,6 @@ impl HttpEndpointBuilder {
             crypto as Arc<_>,
             self.registry_client,
             self.tls_config,
-            tls_handshake,
             sig_verifier,
             node_id,
             subnet_id,

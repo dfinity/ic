@@ -17,15 +17,6 @@ mod status;
 mod threads;
 mod tracing_flamegraph;
 
-use axum_server::{
-    accept::{Accept, NoDelayAcceptor},
-    tls_rustls::{RustlsAcceptor, RustlsConfig},
-};
-pub use call::CallServiceBuilder;
-use futures_util::{future::BoxFuture, FutureExt};
-use prometheus::HistogramTimer;
-pub use query::QueryServiceBuilder;
-
 cfg_if::cfg_if! {
     if #[cfg(feature = "fuzzing_code")] {
         pub mod validator_executor;
@@ -38,19 +29,27 @@ cfg_if::cfg_if! {
     }
 }
 
+pub use call::CallServiceBuilder;
+pub use common::cors_layer;
+pub use query::QueryServiceBuilder;
+pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
+
 use crate::{
     catch_up_package::CatchUpPackageService,
     common::{get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response},
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
-    metrics::{LABEL_STATUS, REQUESTS_LABEL_NAMES, STATUS_ERROR, STATUS_SUCCESS},
+    metrics::{
+        HttpHandlerMetrics, LABEL_INSECURE, LABEL_IO_ERROR, LABEL_SECURE, LABEL_STATUS,
+        LABEL_TIMEOUT_ERROR, LABEL_TLS_ERROR, LABEL_UNKNOWN, REQUESTS_LABEL_NAMES, STATUS_ERROR,
+        STATUS_SUCCESS,
+    },
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
     read_state::subnet::SubnetReadStateService,
     state_reader_executor::StateReaderExecutor,
     status::StatusService,
     tracing_flamegraph::TracingFlamegraphService,
 };
-pub use common::cors_layer;
 
 use axum::{
     body::Body,
@@ -61,7 +60,12 @@ use axum::{
     routing::get,
     Router,
 };
+use axum_server::{
+    accept::{Accept, NoDelayAcceptor},
+    tls_rustls::{RustlsAcceptor, RustlsConfig},
+};
 use crossbeam::atomic::AtomicCell;
+use futures_util::{future::BoxFuture, FutureExt};
 use http_body_util::{BodyExt, Full, LengthLimitError};
 use hyper::{Request, StatusCode};
 use hyper_util::rt::TokioIo;
@@ -69,7 +73,7 @@ use ic_async_utils::start_tcp_listener;
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_crypto_tls_interfaces::{TlsConfig, TlsHandshake};
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces::{
@@ -101,12 +105,9 @@ use ic_types::{
     time::expiry_time_from_now,
     NodeId, SubnetId,
 };
-use metrics::{
-    HttpHandlerMetrics, LABEL_INSECURE, LABEL_IO_ERROR, LABEL_SECURE, LABEL_TIMEOUT_ERROR,
-    LABEL_TLS_ERROR, LABEL_UNKNOWN,
-};
+use prometheus::HistogramTimer;
 use rand::Rng;
-pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
+use rustls::client::ServerName;
 use std::{
     convert::TryFrom,
     io::{ErrorKind, Write},
@@ -123,6 +124,7 @@ use tokio::{
     sync::mpsc::UnboundedSender,
     time::{sleep, timeout, Instant},
 };
+use tokio_rustls::TlsConnector;
 use tower::{limit::GlobalConcurrencyLimitLayer, BoxError, ServiceBuilder};
 use tower_http::limit::RequestBodyLimitLayer;
 
@@ -171,7 +173,7 @@ fn start_server_initialization(
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     rt_handle: tokio::runtime::Handle,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig + Send + Sync>,
 ) {
     let rt_handle_clone = rt_handle.clone();
     rt_handle.spawn(async move {
@@ -205,7 +207,7 @@ fn start_server_initialization(
             subnet_id,
             nns_subnet_id,
             registry_client.as_ref(),
-            tls_handshake.as_ref(),
+            tls_config.as_ref(),
         )
         .await;
         if let Some(delegation) = loaded_delegation {
@@ -283,7 +285,6 @@ pub fn start_server(
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     node_id: NodeId,
     subnet_id: SubnetId,
@@ -393,7 +394,7 @@ pub fn start_server(
         Arc::clone(&delegation_from_nns),
         Arc::clone(&health_status),
         rt_handle.clone(),
-        tls_handshake.clone(),
+        tls_config.clone(),
     );
 
     let http_handler = HttpHandler {
@@ -835,7 +836,7 @@ async fn load_root_delegation(
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
-    tls_handshake: &(dyn TlsHandshake + Send + Sync),
+    tls_config: &(dyn TlsConfig + Send + Sync),
 ) -> Option<CertificateDelegation> {
     if subnet_id == nns_subnet_id {
         info!(log, "On the NNS subnet. Skipping fetching the delegation.");
@@ -862,7 +863,7 @@ async fn load_root_delegation(
             &subnet_id,
             &nns_subnet_id,
             registry_client,
-            tls_handshake,
+            tls_config,
         )
         .await
         {
@@ -892,7 +893,7 @@ async fn try_fetch_delegation_from_nns(
     subnet_id: &SubnetId,
     nns_subnet_id: &SubnetId,
     registry_client: &dyn RegistryClient,
-    tls_handshake: &(dyn TlsHandshake + Send + Sync),
+    tls_config: &(dyn TlsConfig + Send + Sync),
 ) -> Result<CertificateDelegation, BoxError> {
     let (peer_id, node) =
         match get_random_node_from_nns_subnet(registry_client, *nns_subnet_id).await {
@@ -939,17 +940,31 @@ async fn try_fetch_delegation_from_nns(
 
     let addr = SocketAddr::new(ip_addr, node.port as u16);
 
+    let tls_client_config = tls_config
+        .client_config(peer_id, registry_version)
+        .map_err(|err| format!("Retrieving TLS client config failed: {:?}.", err))?;
+
     let tcp_stream: TcpStream = TcpStream::connect(addr)
         .await
         .map_err(|err| format!("Could not connect to node {}. {:?}.", addr, err))?;
 
-    let tls_handshake = tls_handshake
-        .perform_tls_client_handshake(tcp_stream, peer_id, registry_version)
+    let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
+    // TODO: ideally the expect should run at compile time
+    let irrelevant_domain =
+        ServerName::try_from("domain.is-irrelevant-as-hostname-verification-is.disabled")
+            .expect("failed to create domain");
+    let tls_stream = tls_connector
+        .connect(irrelevant_domain, tcp_stream)
         .await
-        .map_err(|err| format!("TLS handshake failed: {:?}.", err))?;
+        .map_err(|err| {
+            format!(
+                "Could not establish TLS stream to node {}. {:?}.",
+                addr, err
+            )
+        })?;
 
     let (mut request_sender, connection) =
-        hyper::client::conn::http1::handshake(TokioIo::new(tls_handshake)).await?;
+        hyper::client::conn::http1::handshake(TokioIo::new(tls_stream)).await?;
 
     let log_clone = log.clone();
 

@@ -51,6 +51,7 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:rand",
+    "@crate_index//:rustls",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:slog",
@@ -58,6 +59,7 @@ DEPENDENCIES = [
     "@crate_index//:threadpool",
     "@crate_index//:tokio",
     "@crate_index//:tokio-io-timeout",
+    "@crate_index//:tokio-rustls",
     "@crate_index//:tower",
     "@crate_index//:tower-http",
     "@crate_index//:url",
@@ -100,7 +102,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:tower-test",
     "@crate_index//:reqwest",
-    "@crate_index//:rustls",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
