@@ -20,7 +20,7 @@ SetupOS validates, sanitizes, and copies all of its configuration files to the H
 HostOS builds the "bootstrap config image". Refer to link:../scripts/build-bootstrap-config-image.sh[build-bootstrap-config-image.sh]
 
 The bootstrap config image contains a tar file with the GuestOS configuration files.
-When the HostOS launches the GuestOS, the bootstrap config image is attached to the GuestOS as a virtual USB. Refer to link:../rootfs/hostos/opt/ic/share/guestos.xml.template[guestos.xml.template]
+When the HostOS launches the GuestOS, the bootstrap config image is attached to the GuestOS as a virtual USB. Refer to link:../rootfs/hostos-scripts/guestos/guestos.xml.template[guestos.xml.template]
 
 When the GuestOS boots, it checks for available removable media devices (i.e. the bootstrap config image). If such a device is found, the media must contain a VFAT filesystem and a single file called `ic-bootstrap.tar`.
 
