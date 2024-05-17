@@ -1929,6 +1929,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_wasm64(mut self) -> Self {
+        self.execution_config.embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
+        self
+    }
+
     pub fn with_metering_type(mut self, metering_type: MeteringType) -> Self {
         self.execution_config.embedders_config.metering_type = metering_type;
         self
