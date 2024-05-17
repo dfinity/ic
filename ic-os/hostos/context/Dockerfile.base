@@ -20,7 +20,7 @@
 # First build stage:
 # - Download 3rd party tools
 #
-FROM ubuntu:20.04 AS download
+FROM ubuntu:24.04 AS download
 
 USER root:root
 
@@ -48,7 +48,7 @@ RUN cd /tmp/ && \
 # Second build stage:
 # - Compile downloaded archives from first build stage
 #
-FROM ubuntu:20.04 AS build
+FROM ubuntu:24.04 AS build
 
 USER root:root
 
@@ -81,7 +81,7 @@ RUN cd /tmp/ && \
 # - Install and cache upstream packages from built-in Ubuntu repositories.
 # - Install compiled packages from the second stage.
 #
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 
 USER root:root
 
