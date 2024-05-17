@@ -393,7 +393,7 @@ table ip6 filter {\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
     #   - The rule drops all new connections that goes over the configured limit.\n\
     ct state new add @connection_limit { ip saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } log prefix \"Drop - connection limit: \" drop\n\
-    icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded, parameter-problem } accept\n\
+    icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded } accept\n\
     ct state invalid drop\n\
     ct state { established, related } accept\n\
     ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport { 80, 443 } accept\n\
@@ -409,7 +409,7 @@ table ip6 filter {\n\
   chain OUTPUT {\n\
     type filter hook output priority 0; policy drop;\n\
     oif \"lo\" accept\n\
-    icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded, parameter-problem } accept\n\
+    icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded } accept\n\
     ct state invalid drop\n\
     ct state { established, related } accept\n\
     ct state new tcp dport { 53, 80, 443, 8080 } accept\n\
@@ -444,7 +444,7 @@ table ip6 filter {\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip6 address.\n\
     #   - The rule drops all new connections that goes over the configured limit.\n\
     ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } log prefix \"Drop - connection limit: \" drop\n\
-    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
+    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\
     ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport { 80, 443 } accept\n\
@@ -460,7 +460,7 @@ table ip6 filter {\n\
   chain OUTPUT {\n\
     type filter hook output priority 0; policy drop;\n\
     oif \"lo\" accept\n\
-    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, echo-reply, nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
+    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
     ct state invalid drop\n\
     ct state { established, related } accept\n\
     ct state new tcp dport { 53, 80, 443, 8080 } accept\n\
