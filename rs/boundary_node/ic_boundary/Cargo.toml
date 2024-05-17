@@ -68,6 +68,7 @@ maxminddb = "0.24"
 mockall = { workspace = true }
 moka = { version = "0.12", features = ["sync", "future"] }
 nftables = "0.4"
+nix = { workspace = true }
 prometheus = { workspace = true }
 rand = "0.8.4"
 ratelimit = "0.9.1"

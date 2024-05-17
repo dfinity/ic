@@ -5450,6 +5450,7 @@ dependencies = [
  "mockall",
  "moka",
  "nftables",
+ "nix 0.24.3",
  "prometheus",
  "rand 0.8.5",
  "ratelimit",
