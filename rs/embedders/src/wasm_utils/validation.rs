@@ -49,7 +49,6 @@ struct FunctionSignature {
     pub return_type: Vec<ValType>,
 }
 
-const METHOD_MODULE: &str = "method";
 pub(super) const API_VERSION_IC0: &str = "ic0";
 
 // Constructs a map of function name -> HashMap<String,
@@ -60,7 +59,117 @@ pub(super) const API_VERSION_IC0: &str = "ic0";
 // user tries to import a function that doesn't exist in any of the expected
 // modules vs the case where the function exists but is imported from the wrong
 // module.
-fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>> {
+// Returns system api functions available only in wasm32 mode
+fn get_valid_system_apis_32_only() -> HashMap<String, HashMap<String, FunctionSignature>> {
+    let valid_system_apis = vec![
+        (
+            "call_cycles_add",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "stable_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        (
+            "stable_grow",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I32],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        (
+            "stable_read",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "stable_write",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "canister_cycle_balance",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![ValType::I64],
+                },
+            )],
+        ),
+        (
+            "msg_cycles_available",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![ValType::I64],
+                },
+            )],
+        ),
+        (
+            "msg_cycles_refunded",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![ValType::I64],
+                },
+            )],
+        ),
+        (
+            "msg_cycles_accept",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64],
+                    return_type: vec![ValType::I64],
+                },
+            )],
+        ),
+    ];
+
+    valid_system_apis
+        .into_iter()
+        .map(|(func_name, signatures)| {
+            (
+                func_name.to_string(),
+                signatures
+                    .into_iter()
+                    .map(|(module, signature)| (module.to_string(), signature))
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+// Returns system api functions available both in wasm32 and wasm64
+fn get_valid_system_apis_common() -> HashMap<String, HashMap<String, FunctionSignature>> {
     let valid_system_apis = vec![
         (
             // Public methods
@@ -215,16 +324,6 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
         ),
         // Inter-canister method calls
         (
-            "public",
-            vec![(
-                METHOD_MODULE,
-                FunctionSignature {
-                    param_types: vec![ValType::I64, ValType::I32, ValType::I32],
-                    return_type: vec![ValType::I64],
-                },
-            )],
-        ),
-        (
             "call_new",
             vec![(
                 API_VERSION_IC0,
@@ -264,16 +363,6 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             )],
         ),
         (
-            "call_cycles_add",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I64],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
             "call_perform",
             vec![(
                 API_VERSION_IC0,
@@ -290,46 +379,6 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValType::I32, ValType::I32],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "stable_size",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I32],
-                },
-            )],
-        ),
-        (
-            "stable_grow",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I32],
-                    return_type: vec![ValType::I32],
-                },
-            )],
-        ),
-        (
-            "stable_read",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "stable_write",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
                     return_type: vec![],
                 },
             )],
@@ -421,46 +470,6 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 FunctionSignature {
                     param_types: vec![ValType::I32, ValType::I32],
                     return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "canister_cycle_balance",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I64],
-                },
-            )],
-        ),
-        (
-            "msg_cycles_available",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I64],
-                },
-            )],
-        ),
-        (
-            "msg_cycles_refunded",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I64],
-                },
-            )],
-        ),
-        (
-            "msg_cycles_accept",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I64],
-                    return_type: vec![ValType::I64],
                 },
             )],
         ),
@@ -768,7 +777,8 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
     let mut imports_details = WasmImportsDetails::default();
 
     if !module.imports.is_empty() {
-        let valid_system_apis = get_valid_system_apis();
+        let mut valid_system_apis = get_valid_system_apis_32_only();
+        valid_system_apis.extend(get_valid_system_apis_common());
         for entry in &module.imports {
             let import_module = entry.module;
             let field = entry.name;
