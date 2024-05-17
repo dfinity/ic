@@ -20,7 +20,8 @@ use crate::wasmtime_embedder::{
 };
 use crate::{
     wasm_utils::instrumentation::{
-        ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+        main_memory_type, WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
+        DIRTY_PAGES_COUNTER_GLOBAL_NAME,
     },
     MAX_WASM_STACK_SIZE, MIN_GUARD_REGION_SIZE,
 };
@@ -954,24 +955,45 @@ fn validate_export_section(
 // expression. Required because of OP. See also:
 // instrumentation.rs
 fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
-    fn validate_segment(s: &DataSegment) -> Result<(), WasmValidationError> {
-        match &s.kind {
-            DataSegmentKind::Passive => Ok(()),
-            DataSegmentKind::Active {
-                memory_index: _,
-                offset_expr,
-            } => match offset_expr {
+    fn validate_segment(
+        s: &DataSegment,
+        mem_type: WasmMemoryType,
+    ) -> Result<(), WasmValidationError> {
+        match (&s.kind, mem_type) {
+            (DataSegmentKind::Passive, _) => Ok(()),
+            (
+                DataSegmentKind::Active {
+                    memory_index: _,
+                    offset_expr,
+                },
+                WasmMemoryType::Wasm32,
+            ) => match offset_expr {
                 Operator::I32Const { .. } => Ok(()),
                 _ => Err(WasmValidationError::InvalidDataSection(format!(
-                    "Invalid offset expression in data segment: {:?}",
+                    "Invalid offset expression in data segment for 32bit memory: {:?}",
+                    offset_expr
+                ))),
+            },
+            (
+                DataSegmentKind::Active {
+                    memory_index: _,
+                    offset_expr,
+                },
+                WasmMemoryType::Wasm64,
+            ) => match offset_expr {
+                Operator::I64Const { .. } => Ok(()),
+                _ => Err(WasmValidationError::InvalidDataSection(format!(
+                    "Invalid offset expression in data segment for 64bit memory: {:?}",
                     offset_expr
                 ))),
             },
         }
     }
 
+    let mem_type = main_memory_type(module);
+
     for d in &module.data {
-        validate_segment(d)?;
+        validate_segment(d, mem_type)?;
     }
     Ok(())
 }

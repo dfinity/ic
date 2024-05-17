@@ -259,6 +259,57 @@ fn make_module_wat_for_api_calls(heap_size: usize) -> String {
     )
 }
 
+fn make_module64_wat_for_api_calls(heap_size: usize) -> String {
+    format!(
+        r#"
+    (module
+      (import "ic0" "msg_reply" (func $msg_reply))
+      (import "ic0" "msg_reply_data_append"
+        (func $msg_reply_data_append (param i32) (param i32)))
+      (import "ic0" "msg_arg_data_copy"
+        (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
+      (import "ic0" "msg_arg_data_size"
+        (func $ic0_msg_arg_data_size (result i32)))
+      (import "ic0" "msg_caller_copy"
+        (func $ic0_msg_caller_copy (param i32) (param i32) (param i32)))
+      (import "ic0" "msg_caller_size"
+        (func $ic0_msg_caller_size (result i32)))
+      (import "ic0" "canister_self_copy"
+        (func $ic0_canister_self_copy (param i32) (param i32) (param i32)))
+      (import "ic0" "canister_self_size"
+        (func $ic0_canister_self_size (result i32)))
+
+      (import "ic0" "canister_cycle_balance128"
+        (func $ic0_canister_cycle_balance128 (param i32)))
+
+      (import "ic0" "stable_grow"
+        (func $ic0_stable_grow (param $pages i32) (result i32)))
+      (import "ic0" "stable64_read"
+        (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+      (import "ic0" "stable64_write"
+        (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+
+      (func $touch_heap_with_api_calls
+        (call $ic0_msg_caller_copy (i32.const 4096) (i32.const 0) (call $ic0_msg_caller_size))
+        (call $ic0_msg_arg_data_copy (i32.const 12288) (i32.const 0) (call $ic0_msg_arg_data_size))
+        (call $ic0_canister_self_copy (i32.const 20480) (i32.const 0) (call $ic0_canister_self_size))
+        (call $ic0_canister_cycle_balance128 (i32.const 36864))
+
+        (; Write some data to page 10 using stable_read, by first copying 4
+        bytes from the second page to stable memory, then copying back ;)
+        (drop (call $ic0_stable_grow (i32.const 1)))
+        (call $ic0_stable64_write (i64.const 0) (i64.const 4096) (i64.const 4))
+        (call $ic0_stable64_read (i64.const 40960) (i64.const 0) (i64.const 4))
+      )
+
+      (memory $memory i64 {HEAP_SIZE})
+      (export "memory" (memory $memory))
+      (export "canister_update touch_heap_with_api_calls" (func $touch_heap_with_api_calls))
+    )"#,
+        HEAP_SIZE = heap_size
+    )
+}
+
 fn make_module_wat_with_write_fun(heap_size: usize, write_fun: &str) -> String {
     format!(
         r#"
@@ -1337,6 +1388,62 @@ mod tests {
             let wat = make_module_wat_for_api_calls(TEST_NUM_PAGES);
             let wasm = wat2wasm(&wat).unwrap();
             let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), log);
+            let (embedder_cache, result) = compile(&embedder, &wasm);
+            result.unwrap();
+
+            let mut dirty_pages: BTreeSet<u64> = BTreeSet::new();
+
+            let payload = vec![0, 1, 2, 3, 4, 5, 6, 7];
+
+            let api = test_api_for_update(
+                no_op_logger(),
+                None,
+                payload,
+                SubnetType::Application,
+                MAX_NUM_INSTRUCTIONS,
+            );
+            let instruction_limit = api.slice_instruction_limit();
+            let mut instance = embedder
+                .new_instance(
+                    canister_test_id(1),
+                    &embedder_cache,
+                    None,
+                    &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
+                    &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
+                    ModificationTracking::Track,
+                    Some(api),
+                )
+                .map_err(|r| r.0)
+                .expect("Failed to create instance");
+            instance.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
+
+            let result = instance
+                .run(FuncRef::Method(WasmMethod::Update(
+                    "touch_heap_with_api_calls".to_string(),
+                )))
+                .expect("call to touch_heap_with_api_calls failed");
+            dirty_pages.extend(result.dirty_pages.iter().map(|x| x.get()));
+
+            let mut expected_dirty_pages: BTreeSet<u64> = BTreeSet::new();
+            expected_dirty_pages.insert(1); // caller_copy
+            expected_dirty_pages.insert(3); // data_copy
+            expected_dirty_pages.insert(5); // canister_self_copy
+            expected_dirty_pages.insert(9); // canister_cycle_balance128
+            expected_dirty_pages.insert(9); // msg_cycles_available128
+            expected_dirty_pages.insert(10); // stable_read
+
+            assert_eq!(expected_dirty_pages, dirty_pages);
+        });
+    }
+
+    #[test]
+    fn touch_heap64_with_api_calls() {
+        with_test_replica_logger(|log| {
+            let wat = make_module64_wat_for_api_calls(TEST_NUM_PAGES);
+            let wasm = wat2wasm(&wat).unwrap();
+            let mut config = EmbeddersConfig::default();
+            config.feature_flags.wasm64 = FlagStatus::Enabled;
+            let embedder = WasmtimeEmbedder::new(config, log);
             let (embedder_cache, result) = compile(&embedder, &wasm);
             result.unwrap();
 

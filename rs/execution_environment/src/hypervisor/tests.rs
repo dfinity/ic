@@ -1439,6 +1439,42 @@ fn ic0_msg_reject_works() {
 }
 
 #[test]
+fn wasm64_active_data_segments() {
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update test")
+                (if (i64.ne
+                         (i64.load8_u (i64.const 0))
+                         (i64.const 112) ;; p
+                    )
+                    (then (unreachable))
+                )
+                (if (i64.ne
+                         (i64.load8_u (i64.const 1))
+                         (i64.const 0)
+                    )
+                    (then (unreachable))
+                )
+                (if (i64.ne
+                         (i64.load8_u (i64.const 2))
+                         (i64.const 97) ;; a
+                    )
+                    (then (unreachable))
+                )
+                (call $msg_reply)
+            )
+            (memory i64 1 1)
+            (data (i64.const 0) "p")
+            (data (i64.const 2) "a")
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(WasmResult::Reply(vec![]), result);
+}
+
+#[test]
 fn ic0_msg_caller_size_works_in_reply_callback() {
     let mut test = ExecutionTestBuilder::new().build();
     let caller_id = test.universal_canister().unwrap();
