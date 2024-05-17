@@ -4,7 +4,6 @@ PUBLIC_EXPORTS = [
     "opt/ic/share/ic.json5.template",
     "dev-certs/canister_http_test_ca.cert",
     "dev-certs/canister_http_test_ca.key",
-    "opt/ic/bin/validate-replica-config.sh",
 ]
 
 exports_files(

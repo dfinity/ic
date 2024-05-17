@@ -129,5 +129,4 @@ rootfs_files = {
     Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys.sh"): "/opt/ic/bin/setup-node_exporter-keys.sh",
     Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys.service"): "/etc/systemd/system/setup-node_exporter-keys.service",
     Label("hostos-scripts/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
-    Label("ic/validate-replica-config.sh"): "/opt/ic/bin/validate-replica-config.sh",
 }
