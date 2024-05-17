@@ -27,41 +27,6 @@ pub use dissolve_state_and_age::*;
 pub mod types;
 pub use types::*;
 
-fn neuron_state(
-    now_seconds: u64,
-    spawn_at_timestamp_seconds: &Option<u64>,
-    dissolve_state: &Option<DissolveState>,
-) -> NeuronState {
-    if spawn_at_timestamp_seconds.is_some() {
-        return NeuronState::Spawning;
-    }
-    match dissolve_state {
-        Some(DissolveState::DissolveDelaySeconds(d)) => {
-            if *d > 0 {
-                NeuronState::NotDissolving
-            } else {
-                NeuronState::Dissolved
-            }
-        }
-        Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) => {
-            if *ts > now_seconds {
-                NeuronState::Dissolving
-            } else {
-                NeuronState::Dissolved
-            }
-        }
-        None => NeuronState::Dissolved,
-    }
-}
-
-fn neuron_dissolve_delay_seconds(now_seconds: u64, dissolve_state: &Option<DissolveState>) -> u64 {
-    match dissolve_state {
-        Some(DissolveState::DissolveDelaySeconds(d)) => *d,
-        Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) => (*ts).saturating_sub(now_seconds),
-        None => 0,
-    }
-}
-
 fn neuron_stake_e8s(
     cached_neuron_stake_e8s: u64,
     neuron_fees_e8s: u64,
@@ -75,15 +40,40 @@ fn neuron_stake_e8s(
 // The following methods are conceptually methods for the API type of the neuron.
 impl NeuronProto {
     pub fn state(&self, now_seconds: u64) -> NeuronState {
-        neuron_state(
-            now_seconds,
-            &self.spawn_at_timestamp_seconds,
-            &self.dissolve_state,
-        )
+        if self.spawn_at_timestamp_seconds.is_some() {
+            return NeuronState::Spawning;
+        }
+        match self.dissolve_state {
+            Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)) => {
+                if dissolve_delay_seconds > 0 {
+                    NeuronState::NotDissolving
+                } else {
+                    NeuronState::Dissolved
+                }
+            }
+            Some(DissolveState::WhenDissolvedTimestampSeconds(
+                when_dissolved_timestamp_seconds,
+            )) => {
+                if when_dissolved_timestamp_seconds > now_seconds {
+                    NeuronState::Dissolving
+                } else {
+                    NeuronState::Dissolved
+                }
+            }
+            None => NeuronState::Dissolved,
+        }
     }
 
     pub fn dissolve_delay_seconds(&self, now_seconds: u64) -> u64 {
-        neuron_dissolve_delay_seconds(now_seconds, &self.dissolve_state)
+        match self.dissolve_state {
+            Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)) => {
+                dissolve_delay_seconds
+            }
+            Some(DissolveState::WhenDissolvedTimestampSeconds(
+                when_dissolved_timestamp_seconds,
+            )) => when_dissolved_timestamp_seconds.saturating_sub(now_seconds),
+            None => 0,
+        }
     }
 
     pub fn stake_e8s(&self) -> u64 {
