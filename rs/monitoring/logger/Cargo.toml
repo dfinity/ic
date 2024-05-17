@@ -11,6 +11,7 @@ chrono = { workspace = true }
 ic-config = { path = "../../config" }
 ic-context-logger = { path = "../context_logger" }
 ic-protobuf = { path = "../../protobuf" }
+ic-utils = { path = "../../utils" }
 serde = { workspace = true }
 slog = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }

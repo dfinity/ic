@@ -11,6 +11,7 @@ rust_library(
         "//rs/config",
         "//rs/monitoring/context_logger",
         "//rs/protobuf",
+        "//rs/utils",
         "@crate_index//:chrono",
         "@crate_index//:serde",
         "@crate_index//:slog",
