@@ -38,6 +38,7 @@ use ic_nervous_system_common::{
     DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
+use ic_protobuf::types::v1::CanisterInstallMode;
 use ic_sns_governance_proposals_amount_total_limit::{
     // TODO(NNS1-2982): Uncomment. mint_sns_tokens_7_day_total_upper_bound_tokens,
     transfer_sns_treasury_funds_7_day_total_upper_bound_tokens,
@@ -991,6 +992,21 @@ fn validate_and_render_upgrade_sns_controlled_canister(
 ) -> Result<String, String> {
     let mut defects = vec![];
 
+    let UpgradeSnsControlledCanister {
+        canister_id: _,
+        new_canister_wasm,
+        canister_upgrade_arg,
+        mode,
+    } = upgrade;
+    // Make sure `mode` is not None, and not an invalid/unknown value.
+    if let Some(mode) = mode {
+        if let Err(err) = CanisterInstallMode::try_from(*mode) {
+            defects.push(format!("Invalid mode: {}", err));
+        }
+    }
+    // Assume mode is the default if it is not set
+    let mode = upgrade.mode_or_upgrade();
+
     // Inspect canister_id.
     let mut canister_id = PrincipalId::new_user_test_id(0xDEADBEEF); // Initialize to garbage. This won't get used later.
     match validate_required_field("canister_id", &upgrade.canister_id) {
@@ -1011,20 +1027,19 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     const MIN_WASM_LEN: usize = 8;
     if let Err(err) = validate_len(
         "new_canister_wasm",
-        &upgrade.new_canister_wasm,
+        new_canister_wasm,
         MIN_WASM_LEN,
         usize::MAX,
     ) {
         defects.push(err);
-    } else if upgrade.new_canister_wasm[..4] != RAW_WASM_HEADER[..]
-        && upgrade.new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
+    } else if new_canister_wasm[..4] != RAW_WASM_HEADER[..]
+        && new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
     {
         defects.push("new_canister_wasm lacks the magic value in its header.".into());
     }
 
-    if upgrade.new_canister_wasm.len()
-        + upgrade
-            .canister_upgrade_arg
+    if new_canister_wasm.len()
+        + canister_upgrade_arg
             .as_ref()
             .map(|arg| arg.len())
             .unwrap_or_default()
@@ -1042,7 +1057,7 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     }
 
     let mut state = Sha256::new();
-    state.write(&upgrade.new_canister_wasm);
+    state.write(new_canister_wasm);
     let sha = state.finish();
 
     Ok(format!(
@@ -1050,9 +1065,12 @@ fn validate_and_render_upgrade_sns_controlled_canister(
 
 ## Canister id: {:?}
 
-## Canister wasm sha256: {}",
+## Canister wasm sha256: {}
+
+## Mode: {:?}",
         canister_id,
-        hex::encode(sha)
+        hex::encode(sha),
+        mode
     ))
 }
 
@@ -2596,6 +2614,41 @@ mod tests {
             proposal::Action::Motion(motion) => assert_is_err(validate_and_render_motion(motion)),
             _ => panic!("proposal.action is not Motion."),
         }
+    }
+
+    #[test]
+    fn render_upgrade_sns_controlled_canister_proposal() {
+        let upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_principal_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_upgrade_arg: None,
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
+        };
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap();
+
+        assert_eq!(
+            text,
+            r#"# Proposal to upgrade SNS controlled canister:
+
+## Canister id: bg4sm-wzk
+
+## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
+
+## Mode: Upgrade"#
+                .to_string()
+        );
+    }
+
+    #[test]
+    fn render_upgrade_sns_controlled_canister_proposal_validates_mode() {
+        let upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_principal_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_upgrade_arg: None,
+            mode: Some(100), // 100 is not a valid mode
+        };
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap_err();
+        assert!(text.contains("Invalid mode"));
     }
 
     fn basic_upgrade_sns_controlled_canister_proposal() -> Proposal {

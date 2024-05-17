@@ -2306,6 +2306,17 @@ impl From<MintSnsTokens> for Action {
     }
 }
 
+impl UpgradeSnsControlledCanister {
+    // Gets the install mode if it is set, otherwise defaults to Upgrade.
+    // This function is not called `mode_or_default` because `or_default` usually
+    // returns the default value for the type.
+    pub fn mode_or_upgrade(&self) -> ic_protobuf::types::v1::CanisterInstallMode {
+        self.mode
+            .and_then(|mode| ic_protobuf::types::v1::CanisterInstallMode::try_from(mode).ok())
+            .unwrap_or(ic_protobuf::types::v1::CanisterInstallMode::Upgrade)
+    }
+}
+
 pub mod test_helpers {
     use super::*;
     use ic_crypto_sha2::Sha256;
