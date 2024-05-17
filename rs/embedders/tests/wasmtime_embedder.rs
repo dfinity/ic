@@ -755,7 +755,7 @@ fn stable_read_accessed_pages_allowance() {
     use HypervisorError::*;
 
     let mut config = Config {
-        stable_memory_accessed_page_limit: ic_types::NumPages::new(3),
+        stable_memory_accessed_page_limit: ic_types::NumOsPages::new(3),
         ..Default::default()
     };
     config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
@@ -846,7 +846,7 @@ fn stable64_read_accessed_pages_allowance() {
     use HypervisorError::*;
 
     let mut config = Config {
-        stable_memory_accessed_page_limit: ic_types::NumPages::new(3),
+        stable_memory_accessed_page_limit: ic_types::NumOsPages::new(3),
         ..Default::default()
     };
     config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
@@ -1682,7 +1682,7 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
         .with_subnet_type(SubnetType::Application)
         .with_wat(&create_debug_print_wat(message_len))
         .build();
-    // Call the WASM method multiple times.
+    // Call the Wasm method multiple times.
     for i in 0..10 {
         let before = instance.instruction_counter();
         instance

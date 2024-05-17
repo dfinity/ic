@@ -1,3 +1,4 @@
+use crate::sns_upgrade::{get_wasm, SnsWasm};
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     governance::{
@@ -37,6 +38,7 @@ use ic_nervous_system_common::{
     DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
+use ic_protobuf::types::v1::CanisterInstallMode;
 use ic_sns_governance_proposals_amount_total_limit::{
     // TODO(NNS1-2982): Uncomment. mint_sns_tokens_7_day_total_upper_bound_tokens,
     transfer_sns_treasury_funds_7_day_total_upper_bound_tokens,
@@ -990,6 +992,21 @@ fn validate_and_render_upgrade_sns_controlled_canister(
 ) -> Result<String, String> {
     let mut defects = vec![];
 
+    let UpgradeSnsControlledCanister {
+        canister_id: _,
+        new_canister_wasm,
+        canister_upgrade_arg,
+        mode,
+    } = upgrade;
+    // Make sure `mode` is not None, and not an invalid/unknown value.
+    if let Some(mode) = mode {
+        if let Err(err) = CanisterInstallMode::try_from(*mode) {
+            defects.push(format!("Invalid mode: {}", err));
+        }
+    }
+    // Assume mode is the default if it is not set
+    let mode = upgrade.mode_or_upgrade();
+
     // Inspect canister_id.
     let mut canister_id = PrincipalId::new_user_test_id(0xDEADBEEF); // Initialize to garbage. This won't get used later.
     match validate_required_field("canister_id", &upgrade.canister_id) {
@@ -1010,20 +1027,19 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     const MIN_WASM_LEN: usize = 8;
     if let Err(err) = validate_len(
         "new_canister_wasm",
-        &upgrade.new_canister_wasm,
+        new_canister_wasm,
         MIN_WASM_LEN,
         usize::MAX,
     ) {
         defects.push(err);
-    } else if upgrade.new_canister_wasm[..4] != RAW_WASM_HEADER[..]
-        && upgrade.new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
+    } else if new_canister_wasm[..4] != RAW_WASM_HEADER[..]
+        && new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
     {
         defects.push("new_canister_wasm lacks the magic value in its header.".into());
     }
 
-    if upgrade.new_canister_wasm.len()
-        + upgrade
-            .canister_upgrade_arg
+    if new_canister_wasm.len()
+        + canister_upgrade_arg
             .as_ref()
             .map(|arg| arg.len())
             .unwrap_or_default()
@@ -1041,7 +1057,7 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     }
 
     let mut state = Sha256::new();
-    state.write(&upgrade.new_canister_wasm);
+    state.write(new_canister_wasm);
     let sha = state.finish();
 
     Ok(format!(
@@ -1049,9 +1065,12 @@ fn validate_and_render_upgrade_sns_controlled_canister(
 
 ## Canister id: {:?}
 
-## Canister wasm sha256: {}",
+## Canister wasm sha256: {}
+
+## Mode: {:?}",
         canister_id,
-        hex::encode(sha)
+        hex::encode(sha),
+        mode
     ))
 }
 
@@ -1082,7 +1101,7 @@ async fn validate_and_render_upgrade_sns_to_next_version(
 ) -> Result<String, String> {
     let UpgradeSnsParams {
         next_version,
-        canister_type_to_upgrade: _,
+        canister_type_to_upgrade,
         new_wasm_hash,
         canister_ids_to_upgrade,
     } = get_upgrade_params(env, root_canister_id, &current_version)
@@ -1093,6 +1112,18 @@ async fn validate_and_render_upgrade_sns_to_next_version(
                 e
             )
         })?;
+
+    let proposal_id_message = get_wasm(env, new_wasm_hash.to_vec(), canister_type_to_upgrade)
+        .await
+        .ok()
+        .and_then(|SnsWasm { proposal_id, .. }| proposal_id)
+        .map(|id| {
+            format!(
+                "## Proposal ID of the NNS proposal that blessed this WASM version: NNS Proposal {}",
+                id
+            )
+        })
+        .unwrap_or_default();
 
     // TODO display the hashes for current version and new version
     Ok(format!(
@@ -1106,6 +1137,7 @@ async fn validate_and_render_upgrade_sns_to_next_version(
 
 ## Canisters to be upgraded: {}
 ## Upgrade Version: {}
+{proposal_id_message}
 ",
         render_version(&current_version),
         render_version(&next_version),
@@ -2584,6 +2616,41 @@ mod tests {
         }
     }
 
+    #[test]
+    fn render_upgrade_sns_controlled_canister_proposal() {
+        let upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_principal_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_upgrade_arg: None,
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
+        };
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap();
+
+        assert_eq!(
+            text,
+            r#"# Proposal to upgrade SNS controlled canister:
+
+## Canister id: bg4sm-wzk
+
+## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
+
+## Mode: Upgrade"#
+                .to_string()
+        );
+    }
+
+    #[test]
+    fn render_upgrade_sns_controlled_canister_proposal_validates_mode() {
+        let upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_principal_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_upgrade_arg: None,
+            mode: Some(100), // 100 is not a valid mode
+        };
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap_err();
+        assert!(text.contains("Invalid mode"));
+    }
+
     fn basic_upgrade_sns_controlled_canister_proposal() -> Proposal {
         let upgrade = UpgradeSnsControlledCanister {
             canister_id: Some(basic_principal_id()),
@@ -3118,7 +3185,8 @@ mod tests {
             Ok(Encode!(&GetWasmResponse {
                 wasm: Some(SnsWasm {
                     wasm: vec![9, 8, 7, 6, 5, 4, 3, 2],
-                    canister_type: expected_canister_to_be_upgraded.into() // Governance
+                    canister_type: expected_canister_to_be_upgraded.into(), // Governance
+                    proposal_id: Some(2),
                 })
             })
             .unwrap()),
@@ -3170,6 +3238,7 @@ Version {
 
 ## Canisters to be upgraded: q7t5l-saaaa-aaaaa-aah2a-cai
 ## Upgrade Version: 67586e98fad27da0b9968bc039a1ef34c939b9b8e523a8bef89d478608c5ecf6
+## Proposal ID of the NNS proposal that blessed this WASM version: NNS Proposal 2
 ";
         assert_eq!(actual_text, expected_text);
     }

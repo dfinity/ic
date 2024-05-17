@@ -54,7 +54,7 @@ fn main() -> io::Result<()> {
     let module = <ICWasmModule as Arbitrary>::arbitrary_take_rest(unstrucutred)
         .expect("Unable to extract wasm from Unstructured data");
     let mut wasm = module.module.to_bytes();
-    println!("WASM extraction successful!");
+    println!("Wasm extraction successful!");
 
     let instrumentation = CommandLineArgs::parse().inst;
     if instrumentation {
@@ -79,7 +79,7 @@ fn main() -> io::Result<()> {
     let wat = CommandLineArgs::parse().wat;
     let print = CommandLineArgs::parse().print;
     if wat || print {
-        let wat_string = print_bytes(wasm).expect("couldn't translate WASM to wat");
+        let wat_string = print_bytes(wasm).expect("couldn't translate Wasm to wat");
 
         if print {
             println!("{}", wat_string);
@@ -112,7 +112,7 @@ fn main() -> io::Result<()> {
 
         let mut file = File::create(ws_path.clone())?;
         file.write_all(wasm.as_slice())?;
-        println!("WASM written to {}", ws_path.display());
+        println!("Wasm written to {}", ws_path.display());
     }
     Ok(())
 }

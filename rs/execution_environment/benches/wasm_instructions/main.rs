@@ -1,5 +1,5 @@
 //!
-//! Benchmark WASM instructions using `execute_update()`.
+//! Benchmark Wasm instructions using `execute_update()`.
 //!
 //! To run a specific benchmark:
 //!

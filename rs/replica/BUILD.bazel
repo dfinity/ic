@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/consensus",
     "//rs/crypto",
     "//rs/crypto/sha2",
-    "//rs/crypto/tls_interfaces",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/http_endpoints/metrics",
@@ -56,6 +55,10 @@ DEPENDENCIES = [
     "@crate_index//:tracing",
     "@crate_index//:tracing-flame",
     "@crate_index//:tracing-subscriber",
+    "@crate_index//:tracing-opentelemetry",
+    "@crate_index//:opentelemetry_0_21_0",
+    "@crate_index//:opentelemetry-otlp",
+    "@crate_index//:opentelemetry_sdk",
 ] + select({
     "@rules_rust//rust/platform:linux": [
         "//rs/monitoring/backtrace",

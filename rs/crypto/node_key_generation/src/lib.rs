@@ -1,14 +1,14 @@
 //! Static crypto utility methods.
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::CspCreateMEGaKeyError;
-use ic_crypto_internal_csp::vault::api::ValidatePksAndSksError;
-use ic_crypto_internal_csp::CryptoServiceProvider;
-use ic_crypto_internal_csp::Csp;
+use ic_crypto_internal_csp::vault::api::{CspVault, ValidatePksAndSksError};
+use ic_crypto_internal_csp::vault::vault_from_config;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_utils_basic_sig::conversions as basicsig_conversions;
 use ic_interfaces::crypto::ErrorReproducibility;
+use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::NodeId;
 use std::sync::Arc;
@@ -21,15 +21,15 @@ fn derive_node_id(node_signing_pk: &PublicKeyProto) -> NodeId {
         .expect("Node signing public key should be valid")
 }
 
-pub fn generate_node_signing_keys<T: CryptoServiceProvider>(csp: &T) -> PublicKeyProto {
-    let generated = csp
+pub fn generate_node_signing_keys(vault: &dyn CspVault) -> PublicKeyProto {
+    let generated = vault
         .gen_node_signing_key_pair()
         .expect("Could not generate node signing keys");
     ic_crypto_internal_csp::keygen::utils::node_signing_pk_to_proto(generated)
 }
 
-pub fn generate_committee_signing_keys<T: CryptoServiceProvider>(csp: &T) -> PublicKeyProto {
-    let generated = csp
+pub fn generate_committee_signing_keys(vault: &dyn CspVault) -> PublicKeyProto {
+    let generated = vault
         .gen_committee_signing_key_pair()
         .expect("Could not generate committee signing keys");
     ic_crypto_internal_csp::keygen::utils::committee_signing_pk_to_proto(generated)
@@ -40,11 +40,11 @@ pub fn generate_committee_signing_keys<T: CryptoServiceProvider>(csp: &T) -> Pub
 ///
 /// The secret key is stored in the key store of the provided `csp`, while the corresponding
 /// public key is returned by this function.
-pub fn generate_dkg_dealing_encryption_keys<T: CryptoServiceProvider>(
-    csp: &T,
+pub fn generate_dkg_dealing_encryption_keys(
+    vault: &dyn CspVault,
     node_id: NodeId,
 ) -> PublicKeyProto {
-    let (pubkey, pop) = csp
+    let (pubkey, pop) = vault
         .gen_dealing_encryption_key_pair(node_id)
         .expect("Failed to generate DKG dealing encryption keys");
     ic_crypto_internal_csp::keygen::utils::dkg_dealing_encryption_pk_to_proto(pubkey, pop)
@@ -59,10 +59,10 @@ pub fn generate_dkg_dealing_encryption_keys<T: CryptoServiceProvider>(
 /// * `IDkgDealingEncryptionKeysGenerationError::InternalError` if an unrecoverable error occurs
 /// * `IDkgDealingEncryptionKeysGenerationError::TransientInternalError` if a transient error (e.g.,
 ///   an RPC timeout, or an error persisting the secret key store) occurs
-pub fn generate_idkg_dealing_encryption_keys<T: CryptoServiceProvider>(
-    csp: &T,
+pub fn generate_idkg_dealing_encryption_keys(
+    vault: &dyn CspVault,
 ) -> Result<PublicKeyProto, IDkgDealingEncryptionKeysGenerationError> {
-    let pubkey = csp
+    let pubkey = vault
         .idkg_gen_dealing_encryption_key_pair()
         .map_err(|e| match e {
             CspCreateMEGaKeyError::TransientInternalError { internal_error } => {
@@ -98,8 +98,9 @@ impl ErrorReproducibility for IDkgDealingEncryptionKeysGenerationError {
 /// The certificate's notAfter date will be set according to RFC5280 (section 4.1.2.5; see
 /// https://tools.ietf.org/html/rfc5280#section-4.1.2.5) to indicate that the certificate has no
 /// well-defined expiration date.
-pub fn generate_tls_keys<T: CryptoServiceProvider>(csp: &T, node: NodeId) -> TlsPublicKeyCert {
-    csp.gen_tls_key_pair(node)
+pub fn generate_tls_keys(vault: &dyn CspVault, node: NodeId) -> TlsPublicKeyCert {
+    vault
+        .gen_tls_key_pair(node)
         .expect("error generating TLS key pair")
 }
 
@@ -137,18 +138,23 @@ pub fn generate_node_keys_once(
     config: &CryptoConfig,
     tokio_runtime_handle: Option<tokio::runtime::Handle>,
 ) -> Result<ValidNodePublicKeys, NodeKeyGenerationError> {
-    let csp = csp_for_config(config, tokio_runtime_handle);
-    generate_node_keys_once_internal(&csp)
+    let vault = vault_from_config(
+        config,
+        tokio_runtime_handle,
+        no_op_logger(),
+        Arc::new(CryptoMetrics::none()),
+    );
+    generate_node_keys_once_internal(vault.as_ref())
 }
 
-fn generate_node_keys_once_internal<T: CryptoServiceProvider>(
-    csp: &T,
+fn generate_node_keys_once_internal(
+    vault: &dyn CspVault,
 ) -> Result<ValidNodePublicKeys, NodeKeyGenerationError> {
-    match csp.validate_pks_and_sks() {
+    match vault.validate_pks_and_sks() {
         Ok(valid_public_keys) => Ok(valid_public_keys),
         Err(ValidatePksAndSksError::EmptyPublicKeyStore) => {
-            generate_all_node_keys(csp);
-            csp.validate_pks_and_sks().map_err(|error| match error {
+            generate_all_node_keys(vault);
+            vault.validate_pks_and_sks().map_err(|error| match error {
                 ValidatePksAndSksError::TransientInternalError(transient_error) => {
                     NodeKeyGenerationError::TransientInternalError(transient_error)
                 }
@@ -162,13 +168,13 @@ fn generate_node_keys_once_internal<T: CryptoServiceProvider>(
     }
 }
 
-fn generate_all_node_keys<T: CryptoServiceProvider>(csp: &T) {
-    let node_signing_public_key = generate_node_signing_keys(csp);
+fn generate_all_node_keys(vault: &dyn CspVault) {
+    let node_signing_public_key = generate_node_signing_keys(vault);
     let node_id = derive_node_id(&node_signing_public_key);
-    let _committee_signing_public_key = generate_committee_signing_keys(csp);
-    let _tls_certificate = generate_tls_keys(csp, node_id);
-    let _dkg_dealing_encryption_public_key = generate_dkg_dealing_encryption_keys(csp, node_id);
-    let _idkg_dealing_encryption_public_key = generate_idkg_dealing_encryption_keys(csp)
+    let _committee_signing_public_key = generate_committee_signing_keys(vault);
+    let _tls_certificate = generate_tls_keys(vault, node_id);
+    let _dkg_dealing_encryption_public_key = generate_dkg_dealing_encryption_keys(vault, node_id);
+    let _idkg_dealing_encryption_public_key = generate_idkg_dealing_encryption_keys(vault)
         .unwrap_or_else(|e| panic!("Error generating I-DKG dealing encryption keys: {:?}", e));
 }
 
@@ -184,16 +190,4 @@ impl ErrorReproducibility for NodeKeyGenerationError {
             NodeKeyGenerationError::TransientInternalError(_) => false,
         }
     }
-}
-
-fn csp_for_config(
-    config: &CryptoConfig,
-    tokio_runtime_handle: Option<tokio::runtime::Handle>,
-) -> Csp {
-    Csp::new_from_config(
-        config,
-        tokio_runtime_handle,
-        None,
-        Arc::new(CryptoMetrics::none()),
-    )
 }

@@ -77,7 +77,7 @@ fn get_canister_info(
     }
 }
 
-/// returns a StateMachine, the test canister WASM, and its module hash
+/// Returns a StateMachine, the test canister Wasm, and its module hash.
 fn test_setup(
     subnet_type: SubnetType,
     now: std::time::SystemTime,

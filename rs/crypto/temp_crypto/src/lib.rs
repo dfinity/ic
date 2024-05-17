@@ -310,7 +310,7 @@ pub mod internal {
                 .unwrap_or_else(NodeKeysToGenerate::none);
             let node_signing_pk = node_keys_to_generate
                 .generate_node_signing_keys
-                .then(|| generate_node_signing_keys(&csp));
+                .then(|| generate_node_signing_keys(local_vault.as_ref()));
             let node_id = self
                 .node_id
                 .unwrap_or_else(|| match node_signing_pk.as_ref() {
@@ -320,20 +320,20 @@ pub mod internal {
                 });
             let committee_signing_pk = node_keys_to_generate
                 .generate_committee_signing_keys
-                .then(|| generate_committee_signing_keys(&csp));
+                .then(|| generate_committee_signing_keys(local_vault.as_ref()));
             let dkg_dealing_encryption_pk = node_keys_to_generate
                 .generate_dkg_dealing_encryption_keys
-                .then(|| generate_dkg_dealing_encryption_keys(&csp, node_id));
+                .then(|| generate_dkg_dealing_encryption_keys(local_vault.as_ref(), node_id));
             let idkg_dealing_encryption_pk = node_keys_to_generate
                 .generate_idkg_dealing_encryption_keys
                 .then(|| {
-                    generate_idkg_dealing_encryption_keys(&csp).unwrap_or_else(|e| {
-                        panic!("Error generating I-DKG dealing encryption keys: {:?}", e)
-                    })
+                    generate_idkg_dealing_encryption_keys(local_vault.as_ref()).unwrap_or_else(
+                        |e| panic!("Error generating I-DKG dealing encryption keys: {:?}", e),
+                    )
                 });
             let tls_certificate = node_keys_to_generate
                 .generate_tls_keys_and_certificate
-                .then(|| generate_tls_keys(&csp, node_id).to_proto());
+                .then(|| generate_tls_keys(local_vault.as_ref(), node_id).to_proto());
 
             let is_registry_data_provided = self.registry_data.is_some();
             let registry_data = self
@@ -752,16 +752,6 @@ pub mod internal {
         ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError> {
             self.crypto_component
                 .perform_tls_server_handshake(tcp_stream, allowed_clients, registry_version)
-                .await
-        }
-
-        async fn perform_tls_server_handshake_without_client_auth(
-            &self,
-            tcp_stream: TcpStream,
-            registry_version: RegistryVersion,
-        ) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError> {
-            self.crypto_component
-                .perform_tls_server_handshake_without_client_auth(tcp_stream, registry_version)
                 .await
         }
 

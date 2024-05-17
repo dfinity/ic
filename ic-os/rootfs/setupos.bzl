@@ -5,14 +5,12 @@ Enumerate every rootfs file dependency for SetupOS
 rootfs_files = {
     Label("setupos/etc/default/locale"): "/etc/default/locale",
     Label("setupos/etc/fstab"): "/etc/fstab",
-    Label("setupos/etc/hostname"): "/etc/hostname",
     Label("setupos/etc/hosts"): "/etc/hosts",
     Label("setupos/etc/initramfs-tools/initramfs.conf"): "/etc/initramfs-tools/initramfs.conf",
     Label("setupos/etc/resolv.conf"): "/etc/resolv.conf",
     Label("setupos/etc/systemd/resolved.conf.d/fallback.conf"): "/etc/systemd/resolved.conf.d/fallback.conf",
     Label("setupos/etc/systemd/system/config.service"): "/etc/systemd/system/config.service",
     Label("setupos/etc/systemd/system/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",
-    Label("setupos/etc/systemd/system/serial-getty@.service"): "/etc/systemd/system/serial-getty@.service",
     Label("setupos/etc/systemd/system/setupos.service"): "/etc/systemd/system/setupos.service",
     Label("setupos/opt/ic/bin/check-setupos-age.sh"): "/opt/ic/bin/check-setupos-age.sh",
     Label("setupos/opt/ic/bin/config.sh"): "/opt/ic/bin/config.sh",
@@ -25,6 +23,8 @@ rootfs_files = {
     Label("setupos/opt/ic/bin/network.sh"): "/opt/ic/bin/network.sh",
     Label("setupos/opt/ic/bin/output-wrapper.sh"): "/opt/ic/bin/output-wrapper.sh",
     Label("setupos/opt/ic/bin/setupos.sh"): "/opt/ic/bin/setupos.sh",
+
+    # prep files:
     Label("setupos/prep/fscontext-fixes/fscontext-fixes.fc"): "/prep/fscontext-fixes/fscontext-fixes.fc",
     Label("setupos/prep/fscontext-fixes/fscontext-fixes.if"): "/prep/fscontext-fixes/fscontext-fixes.if",
     Label("setupos/prep/fscontext-fixes/fscontext-fixes.te"): "/prep/fscontext-fixes/fscontext-fixes.te",
@@ -35,6 +35,8 @@ rootfs_files = {
     Label("setupos/prep/systemd-fixes/systemd-fixes.te"): "/prep/systemd-fixes/systemd-fixes.te",
 
     # consolidated files:
-    Label("utils/setupos/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",
+    Label("misc/fetch-property/setupos/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
+    Label("misc/serial-getty@/setupos/serial-getty@.service"): "/etc/systemd/system/serial-getty@.service",
+    Label("early-boot/setup-hostname/hostname-setupos"): "/etc/hostname",
 }

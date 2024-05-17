@@ -137,6 +137,7 @@ pub fn get_system_api(
         execution_parameters().compute_allocation,
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
+        api_type.call_context_id(),
     );
     SystemApiImpl::new(
         api_type,

@@ -1439,6 +1439,42 @@ fn ic0_msg_reject_works() {
 }
 
 #[test]
+fn wasm64_active_data_segments() {
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update test")
+                (if (i64.ne
+                         (i64.load8_u (i64.const 0))
+                         (i64.const 112) ;; p
+                    )
+                    (then (unreachable))
+                )
+                (if (i64.ne
+                         (i64.load8_u (i64.const 1))
+                         (i64.const 0)
+                    )
+                    (then (unreachable))
+                )
+                (if (i64.ne
+                         (i64.load8_u (i64.const 2))
+                         (i64.const 97) ;; a
+                    )
+                    (then (unreachable))
+                )
+                (call $msg_reply)
+            )
+            (memory i64 1 1)
+            (data (i64.const 0) "p")
+            (data (i64.const 2) "a")
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(WasmResult::Reply(vec![]), result);
+}
+
+#[test]
 fn ic0_msg_caller_size_works_in_reply_callback() {
     let mut test = ExecutionTestBuilder::new().build();
     let caller_id = test.universal_canister().unwrap();
@@ -7080,6 +7116,32 @@ fn wasm_memory_limit_is_enforced_in_updates() {
 }
 
 #[test]
+fn wasm_memory_limit_is_enforced_at_start_of_update() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    // Warm up the canister to make sure that the second update call does not
+    // grow memory.
+    let result = test
+        .ingress(canister_id, "update", use_wasm_memory_and_reply(100))
+        .unwrap();
+    assert_eq!(WasmResult::Reply(100_i32.to_le_bytes().to_vec()), result);
+
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(0))
+        .unwrap();
+
+    let err = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().push_bytes(&[]).append_and_reply().build(),
+        )
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}
+
+#[test]
 fn wasm_memory_limit_is_not_enforced_in_queries() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
@@ -7130,6 +7192,10 @@ fn wasm_memory_limit_is_not_enforced_in_timer() {
     let _ = test.ingress(canister_id, "update", set_timer).unwrap();
 
     test.canister_task(canister_id, CanisterTask::GlobalTimer);
+
+    // Increase the limit to run the update call that fetches the result of the
+    // timer execution.
+    set_wasm_memory_limit(&mut test, canister_id, NumBytes::from(5_000_000));
 
     // The timer task should succeed because the Wasm memory limit is not
     // enforced in system tasks. Note that this will change in future after
@@ -7245,4 +7311,22 @@ fn wasm_memory_limit_is_enforced_in_init() {
     // The canister init is expected to fail.
     let err = test.install_canister(canister_id, wasm).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}
+
+#[test]
+fn wasm_memory_limit_cannot_exceed_256_tb() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    // Setting the limit to 2^48 works.
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1 << 4))
+        .unwrap();
+
+    // Setting the limit above 2^48 fails.
+    let err = test
+        .canister_update_wasm_memory_limit(canister_id, NumBytes::new((1 << 48) + 1))
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
 }

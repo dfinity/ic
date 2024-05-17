@@ -142,6 +142,16 @@ pub(crate) enum WasmMemoryType {
     Wasm64,
 }
 
+pub(crate) fn main_memory_type(module: &Module<'_>) -> WasmMemoryType {
+    let mut mem_type = WasmMemoryType::Wasm32;
+    if let Some(mem) = module.memories.first() {
+        if mem.memory64 {
+            mem_type = WasmMemoryType::Wasm64;
+        }
+    }
+    mem_type
+}
+
 // The indices of injected function imports.
 pub(crate) enum InjectedImports {
     OutOfInstructions = 0,
@@ -442,7 +452,7 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
         Operator::RefFunc { .. } => 130,
 
         ////////////////////////////////////////////////////////////////
-        // WASM SIMD Operators
+        // Wasm SIMD Operators
         Operator::V128Load { .. } => 1,
         Operator::V128Load8x8S { .. } => 1,
         Operator::V128Load8x8U { .. } => 1,
@@ -908,12 +918,7 @@ pub(super) fn instrument(
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
-    let mut main_memory_type = WasmMemoryType::Wasm32;
-    if let Some(mem) = module.memories.first() {
-        if mem.memory64 {
-            main_memory_type = WasmMemoryType::Wasm64;
-        }
-    }
+    let main_memory_type = main_memory_type(&module);
     let stable_memory_index;
     let mut module = inject_helper_functions(module, wasm_native_stable_memory, main_memory_type);
     module = export_table(module);
@@ -1012,6 +1017,7 @@ pub(super) fn instrument(
             special_indices,
             subnet_type,
             dirty_page_overhead,
+            main_memory_type,
         )
     }
 
@@ -1095,6 +1101,7 @@ fn replace_system_api_functions(
     special_indices: SpecialIndices,
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
+    main_memory_type: WasmMemoryType,
 ) {
     let api_indexes = calculate_api_indexes(module);
     let number_of_func_imports = module
@@ -1106,9 +1113,12 @@ fn replace_system_api_functions(
     // Collect a single map of all the function indexes that need to be
     // replaced.
     let mut func_index_replacements = BTreeMap::new();
-    for (api, (ty, body)) in
-        replacement_functions(special_indices, subnet_type, dirty_page_overhead)
-    {
+    for (api, (ty, body)) in replacement_functions(
+        special_indices,
+        subnet_type,
+        dirty_page_overhead,
+        main_memory_type,
+    ) {
         if let Some(old_index) = api_indexes.get(&api) {
             let type_idx = add_func_type(module, ty);
             let new_index = (number_of_func_imports + module.functions.len()) as u32;
@@ -1825,6 +1835,7 @@ fn get_data(
                     offset_expr,
                 } => match offset_expr {
                     Operator::I32Const { value } => *value as usize,
+                    Operator::I64Const { value } => *value as usize,
                     _ => return Some(Err(WasmInstrumentationError::WasmDeserializeError(WasmError::new(
                         "complex initialization expressions for data segments are not supported!".into()
                     )))),

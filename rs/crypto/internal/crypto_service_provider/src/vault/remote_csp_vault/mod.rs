@@ -180,6 +180,7 @@ pub trait TarpcCspVault {
 
     // Corresponds to `IDkgProtocolCspVault.idkg_load_transcript`
     async fn idkg_load_transcript(
+        algorithm_id: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         context_data: ByteBuf,
         receiver_index: NodeIndex,

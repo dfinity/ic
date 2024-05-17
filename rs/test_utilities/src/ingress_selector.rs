@@ -102,4 +102,8 @@ impl IngressSelector for FakeIngressSelector {
     }
 
     fn request_purge_finalized_messages(&self, _message_ids: Vec<IngressMessageId>) {}
+
+    fn has_message(&self, _message_id: &IngressMessageId) -> bool {
+        true
+    }
 }

@@ -143,6 +143,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn idkg_load_transcript(
         &self,
+        algorithm_id: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         context_data: Vec<u8>,
         receiver_index: NodeIndex,
@@ -156,6 +157,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 internal_error: format!("failed to deserialize internal transcript: {:?}", e.0),
             })?;
         let result = self.idkg_load_transcript_internal(
+            algorithm_id,
             &internal_dealings,
             &context_data,
             receiver_index,
@@ -327,6 +329,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn idkg_load_transcript_internal(
         &self,
+        alg: AlgorithmId,
         dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
         context_data: &[u8],
         receiver_index: NodeIndex,
@@ -378,6 +381,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 Err(IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued) => {
                     let seed = Seed::from_rng(&mut *self.rng_write_lock());
                     let complaints = generate_complaints(
+                        alg,
                         dealings,
                         context_data,
                         receiver_index,

@@ -38,7 +38,7 @@ use std::time::Duration;
 
 mod errors;
 mod key_transcript;
-mod quadruples;
+mod pre_signatures;
 pub(super) mod resharing;
 pub(super) mod signatures;
 
@@ -598,7 +598,7 @@ pub(crate) fn create_data_payload_helper_2(
     );
 
     if matches!(certified_height, CertifiedHeight::ReachedSummaryHeight) {
-        quadruples::purge_old_key_quadruples(ecdsa_payload, all_signing_requests);
+        pre_signatures::purge_old_key_quadruples(ecdsa_payload, all_signing_requests);
     }
 
     // We count the number of quadruples in the payload that were already matched,
@@ -617,14 +617,19 @@ pub(crate) fn create_data_payload_helper_2(
         }
     }
 
-    quadruples::make_new_quadruples_if_needed(
+    pre_signatures::make_new_pre_signatures_if_needed(
         ecdsa_config,
         ecdsa_payload,
         &matched_quadruples_per_key_id,
     );
 
     let new_transcripts = [
-        quadruples::update_quadruples_in_creation(ecdsa_payload, transcript_builder, height, log)?,
+        pre_signatures::update_quadruples_in_creation(
+            ecdsa_payload,
+            transcript_builder,
+            height,
+            log,
+        )?,
         key_transcript::update_next_key_transcripts(
             receivers,
             next_interval_registry_version,
@@ -664,8 +669,8 @@ pub(crate) fn create_data_payload_helper_2(
 mod tests {
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_sign_with_ecdsa_calls;
-    use crate::ecdsa::payload_builder::quadruples::test_utils::create_available_quadruple;
-    use crate::ecdsa::payload_builder::quadruples::test_utils::create_new_quadruple_in_creation;
+    use crate::ecdsa::payload_builder::pre_signatures::test_utils::create_available_quadruple;
+    use crate::ecdsa::payload_builder::pre_signatures::test_utils::create_new_quadruple_in_creation;
     use crate::ecdsa::test_utils::*;
     use crate::ecdsa::utils::block_chain_reader;
     use crate::ecdsa::utils::get_context_request_id;
@@ -1212,7 +1217,7 @@ mod tests {
             // Add some quadruples in creation
             let block_reader = TestEcdsaBlockReader::new();
             let (kappa_config_ref, _lambda_config_ref) =
-                quadruples::test_utils::create_new_quadruple_in_creation(
+                pre_signatures::test_utils::create_new_quadruple_in_creation(
                     &subnet_nodes,
                     env.newest_registry_version,
                     &mut ecdsa_payload.uid_generator,
@@ -1234,7 +1239,7 @@ mod tests {
                 .idkg_transcripts
                 .insert(kappa_config_ref.as_ref().transcript_id, kappa_transcript);
             let parent_block_height = Height::new(15);
-            let result = quadruples::update_quadruples_in_creation(
+            let result = pre_signatures::update_quadruples_in_creation(
                 &mut ecdsa_payload,
                 &transcript_builder,
                 parent_block_height,
@@ -1450,7 +1455,7 @@ mod tests {
             // Add some quadruples in creation
             let block_reader = TestEcdsaBlockReader::new();
             let (kappa_config_ref, _lambda_config_ref) =
-                quadruples::test_utils::create_new_quadruple_in_creation(
+                pre_signatures::test_utils::create_new_quadruple_in_creation(
                     &subnet_nodes,
                     env.newest_registry_version,
                     &mut ecdsa_payload.uid_generator,
@@ -1472,7 +1477,7 @@ mod tests {
                 .idkg_transcripts
                 .insert(kappa_config_ref.as_ref().transcript_id, kappa_transcript);
             let parent_block_height = Height::new(15);
-            let result = quadruples::update_quadruples_in_creation(
+            let result = pre_signatures::update_quadruples_in_creation(
                 &mut ecdsa_payload,
                 &transcript_builder,
                 parent_block_height,

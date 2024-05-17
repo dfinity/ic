@@ -1,5 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_config::embedders::MeteringType;
+use ic_config::embedders::{MeteringType, StableMemoryDirtyPageLimit};
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config, flag_status::FlagStatus,
     subnet_config::SchedulerConfig, subnet_config::SubnetConfig,
@@ -54,7 +54,7 @@ use ic_types::{
         RequestOrResponse, Response, UserQuery, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     time::UNIX_EPOCH,
-    CanisterId, Cycles, Height, NumInstructions, NumPages, QueryStatsEpoch, Time, UserId,
+    CanisterId, Cycles, Height, NumInstructions, NumOsPages, QueryStatsEpoch, Time, UserId,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
@@ -1916,11 +1916,21 @@ impl ExecutionTestBuilder {
 
     pub fn with_stable_memory_dirty_page_limit(
         mut self,
-        stable_memory_dirty_page_limit: NumPages,
+        stable_memory_dirty_page_limit_message: NumOsPages,
+        stable_memory_dirty_page_limit_upgrade: NumOsPages,
     ) -> Self {
         self.execution_config
             .embedders_config
-            .stable_memory_dirty_page_limit = stable_memory_dirty_page_limit;
+            .stable_memory_dirty_page_limit = StableMemoryDirtyPageLimit {
+            message: stable_memory_dirty_page_limit_message,
+            upgrade: stable_memory_dirty_page_limit_upgrade,
+        };
+
+        self
+    }
+
+    pub fn with_wasm64(mut self) -> Self {
+        self.execution_config.embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
         self
     }
 

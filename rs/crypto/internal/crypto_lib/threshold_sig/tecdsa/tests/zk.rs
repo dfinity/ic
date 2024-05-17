@@ -1,12 +1,14 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
+use strum::IntoEnumIterator;
 
 #[test]
-fn should_zk_equal_openings_proof_work() -> ThresholdEcdsaResult<()> {
+fn should_zk_equal_openings_proof_work() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
-    for curve in EccCurveType::all() {
+    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+        let curve = alg.curve();
         let ad = rng.gen::<[u8; 32]>();
 
         let seed = Seed::from_rng(rng);
@@ -17,24 +19,25 @@ fn should_zk_equal_openings_proof_work() -> ThresholdEcdsaResult<()> {
         let pedersen = EccPoint::pedersen(&secret, &masking)?;
         let simple = EccPoint::mul_by_g(&secret);
 
-        let proof = zk::ProofOfEqualOpenings::create(seed, &secret, &masking, &ad)?;
+        let proof = zk::ProofOfEqualOpenings::create(seed, alg, &secret, &masking, &ad)?;
 
-        assert!(proof.verify(&pedersen, &simple, &ad).is_ok());
+        assert!(proof.verify(alg, &pedersen, &simple, &ad).is_ok());
 
         // basic test that obviously incorrect values are not accepted:
-        assert!(proof.verify(&simple, &simple, &ad).is_err());
-        assert!(proof.verify(&simple, &pedersen, &ad).is_err());
-        assert!(proof.verify(&pedersen, &pedersen, &ad).is_err());
+        assert!(proof.verify(alg, &simple, &simple, &ad).is_err());
+        assert!(proof.verify(alg, &simple, &pedersen, &ad).is_err());
+        assert!(proof.verify(alg, &pedersen, &pedersen, &ad).is_err());
     }
 
     Ok(())
 }
 
 #[test]
-fn should_zk_mul_proof_work() -> ThresholdEcdsaResult<()> {
+fn should_zk_mul_proof_work() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
-    for curve in EccCurveType::all() {
+    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+        let curve = alg.curve();
         let ad = rng.gen::<[u8; 32]>();
 
         let seed = Seed::from_rng(rng);
@@ -52,6 +55,7 @@ fn should_zk_mul_proof_work() -> ThresholdEcdsaResult<()> {
 
         let proof = zk::ProofOfProduct::create(
             seed,
+            alg,
             &lhs,
             &rhs,
             &masking,
@@ -60,21 +64,22 @@ fn should_zk_mul_proof_work() -> ThresholdEcdsaResult<()> {
             &ad,
         )?;
 
-        assert!(proof.verify(&lhs_c, &rhs_c, &product_c, &ad).is_ok());
+        assert!(proof.verify(alg, &lhs_c, &rhs_c, &product_c, &ad).is_ok());
 
         // basic test that obviously incorrect values are not accepted:
-        assert!(proof.verify(&rhs_c, &lhs_c, &product_c, &ad).is_err());
-        assert!(proof.verify(&lhs_c, &rhs_c, &lhs_c, &ad).is_err());
+        assert!(proof.verify(alg, &rhs_c, &lhs_c, &product_c, &ad).is_err());
+        assert!(proof.verify(alg, &lhs_c, &rhs_c, &lhs_c, &ad).is_err());
     }
 
     Ok(())
 }
 
 #[test]
-fn should_invalid_zk_mul_proof_be_rejected() -> ThresholdEcdsaResult<()> {
+fn should_invalid_zk_mul_proof_be_rejected() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
-    for curve in EccCurveType::all() {
+    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+        let curve = alg.curve();
         let ad = rng.gen::<[u8; 32]>();
 
         let seed = Seed::from_rng(rng);
@@ -92,6 +97,7 @@ fn should_invalid_zk_mul_proof_be_rejected() -> ThresholdEcdsaResult<()> {
 
         let proof = zk::ProofOfProduct::create(
             seed,
+            alg,
             &lhs,
             &rhs,
             &masking,
@@ -100,17 +106,18 @@ fn should_invalid_zk_mul_proof_be_rejected() -> ThresholdEcdsaResult<()> {
             &ad,
         )?;
 
-        assert!(proof.verify(&lhs_c, &rhs_c, &product_c, &ad).is_err());
+        assert!(proof.verify(alg, &lhs_c, &rhs_c, &product_c, &ad).is_err());
     }
 
     Ok(())
 }
 
 #[test]
-fn should_zk_dlog_eq_proof_work() -> ThresholdEcdsaResult<()> {
+fn should_zk_dlog_eq_proof_work() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
-    for curve in EccCurveType::all() {
+    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+        let curve = alg.curve();
         let ad = rng.gen::<[u8; 32]>();
 
         let seed = Seed::from_rng(rng);
@@ -122,11 +129,11 @@ fn should_zk_dlog_eq_proof_work() -> ThresholdEcdsaResult<()> {
         let g_x = g.scalar_mul(&x)?;
         let h_x = h.scalar_mul(&x)?;
 
-        let proof = zk::ProofOfDLogEquivalence::create(seed, &x, &g, &h, &ad)?;
+        let proof = zk::ProofOfDLogEquivalence::create(seed, alg, &x, &g, &h, &ad)?;
 
-        assert!(proof.verify(&g, &h, &g_x, &h_x, &ad).is_ok());
-        assert!(proof.verify(&h, &g, &h_x, &g_x, &ad).is_err());
-        assert!(proof.verify(&g, &h, &h_x, &g_x, &ad).is_err());
+        assert!(proof.verify(alg, &g, &h, &g_x, &h_x, &ad).is_ok());
+        assert!(proof.verify(alg, &h, &g, &h_x, &g_x, &ad).is_err());
+        assert!(proof.verify(alg, &g, &h, &h_x, &g_x, &ad).is_err());
     }
 
     Ok(())

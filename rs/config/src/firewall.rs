@@ -69,6 +69,9 @@ pub struct BoundaryNodeConfig {
     pub ipv6_udp_rule_template: String,
     #[cfg_attr(test, proptest(strategy = "any::<String>().prop_map(|_x| vec![])"))]
     pub default_rules: Vec<FirewallRule>,
+    /// We allow a maximum of `max_simultaneous_connections_per_ip_address` persistent connections to any ip address.
+    /// Any ip address with `max_simultaneous_connections_per_ip_address` connections will be dropped if a new connection is attempted.
+    pub max_simultaneous_connections_per_ip_address: u32,
 }
 
 impl Default for BoundaryNodeConfig {
@@ -81,6 +84,7 @@ impl Default for BoundaryNodeConfig {
             ipv4_udp_rule_template: String::default(),
             ipv6_udp_rule_template: String::default(),
             default_rules: Vec::default(),
+            max_simultaneous_connections_per_ip_address: 0,
         }
     }
 }

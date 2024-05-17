@@ -1,7 +1,30 @@
 table filter {
+  set rate_limit {
+    type ipv4_addr
+    size 65535
+    flags dynamic
+  }
+
+  set connection_limit {
+    type ipv4_addr
+    size 65535
+    flags dynamic
+  }
+
+  set blackhole {
+    type ipv4_addr
+    size 65535
+  }
+
   chain INPUT {
     type filter hook input priority 0; policy drop;
     iif lo accept
+    ip saddr @blackhole drop
+    ct state new add @rate_limit { ip saddr limit rate over 2000/minute burst 1000 packets } log prefix "Drop - rate limit: " drop
+    #  Notes about the rule below:
+    #   - The rule allows a maximum of 400 persistent connections to any ip address.
+    #   - The rule drops all new connections that goes over the configured limit.
+    ct state new add @connection_limit { ip saddr ct count over 400 } log prefix "Drop - connection limit: " drop
     icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded, parameter-problem } accept
     ct state invalid drop
     ct state { established, related } accept
@@ -29,9 +52,32 @@ ip saddr {6.6.6.6} ct state { new } tcp dport {1006} accept # global
 }
 
 table ip6 filter {
+  set rate_limit {
+    type ipv6_addr
+    size 65535
+    flags dynamic
+  }
+
+  set connection_limit {
+    type ipv6_addr
+    size 65535
+    flags dynamic
+  }
+
+  set blackhole6 {
+    type ipv6_addr
+    size 65535
+  }
+
   chain INPUT {
     type filter hook input priority 0; policy drop;
     iif lo accept
+    ip6 saddr @blackhole6 drop
+    ct state new add @rate_limit { ip6 saddr limit rate over 2000/minute burst 1000 packets } log prefix "Drop - rate limit: " drop
+    #  Notes about the rule below:
+    #   - The rule allows a maximum of 400 persistent connections to any ip6 address.
+    #   - The rule drops all new connections that goes over the configured limit.
+    ct state new add @connection_limit { ip6 saddr ct count over 400 } log prefix "Drop - connection limit: " drop
     icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept
     ct state { invalid } drop
     ct state { established, related } accept

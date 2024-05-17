@@ -35,6 +35,7 @@ pub fn verify_complaint(
         index_and_dealing_of_dealer(complaint.dealer_id, transcript)?;
 
     Ok(idkg_verify_complaint(
+        transcript.algorithm_id,
         &internal_complaint,
         complainer_index,
         &complainer_mega_pubkey,

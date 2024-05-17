@@ -227,6 +227,13 @@ container_pull(
 )
 
 container_pull(
+    name = "jaeger",
+    digest = "sha256:f421219dbd77248301fc42ac6e8ba5026f4bada9448ab33ac89061e21cfe3fea",
+    registry = "docker.io",
+    repository = "jaegertracing/all-in-one",
+)
+
+container_pull(
     name = "minica",
     digest = "sha256:c67e2c1885d438b5927176295d41aaab8a72dd9e1272ba85054bfc78191d05b0",
     registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
@@ -560,8 +567,8 @@ http_file(
 http_file(
     name = "ii_dev_canister",
     downloaded_file_path = "internet_identity_dev.wasm.gz",
-    sha256 = "f8594235c4f715bce683ccef5f18484bedc97bbd27c4043c0f5276c2c3c67d53",
-    url = "https://github.com/dfinity/internet-identity/releases/download/release-2023-07-21/internet_identity_dev.wasm.gz",
+    sha256 = "2357d822cd451f25c0edab3e45db52ab140a2ac8c4b0170201c78acc5bc11779",
+    url = "https://github.com/dfinity/internet-identity/releases/download/release-2024-05-13/internet_identity_dev.wasm.gz",
 )
 
 # NNS frontend dapp canister
@@ -569,8 +576,8 @@ http_file(
 http_file(
     name = "nns_dapp_canister",
     downloaded_file_path = "nns_dapp_canister.wasm.gz",
-    sha256 = "257c84120a20aa9469388f0afc7b49e6bcb554c93b968081c40fc17ffbfb402b",
-    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-126904/nns-dapp_test.wasm.gz",
+    sha256 = "f4c5df6fdb8ee3aa043419ed4e4cc1fafdb07b4fde1c7faeb2a6730dfa04127f",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-129618/nns-dapp_test.wasm.gz",
 )
 
 # SNS aggregator canister
@@ -578,8 +585,8 @@ http_file(
 http_file(
     name = "sns_aggregator",
     downloaded_file_path = "sns_aggregator_dev.wasm.gz",
-    sha256 = "fb50fbd91ca28373a1dd9207dee7cab22b5d73fde66fe1cc8a9dac63b9549da1",
-    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/sns_aggregator_dev.wasm.gz",
+    sha256 = "8a18ab37807605fe912080b4a072fc7735b4657e9d22b3867c345250c6e77d91",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-129618/sns_aggregator_dev.wasm.gz",
 )
 
 # Cycles Ledger canister

@@ -157,6 +157,11 @@ pub const SAMPLE_CONFIG: &str = r#"
     // ================================================
     hypervisor: {
     },
+    // ==================================
+    // Configuration for replica tracing.
+    // ==================================
+    tracing: {
+    },
     // ====================================
     // Configuration of the HTTPS endpoint.
     // ====================================
@@ -356,6 +361,7 @@ pub const SAMPLE_CONFIG: &str = r#"
         ipv6_tcp_rule_template: "",
         ipv6_udp_rule_template: "",
         default_rules: [],
+        max_simultaneous_connections_per_ip_address: 0,
     },
 
     // =================================

@@ -23,8 +23,8 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
-        block_maker::SubnetRecords, dkg, hashed, Block, BlockPayload, BlockProposal, DataPayload,
-        HasHeight, HasRank, HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
+        block_maker::SubnetRecords, dkg, hashed, Block, BlockMetadata, BlockPayload, BlockProposal,
+        DataPayload, HasHeight, HasRank, HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
     },
     replica_config::ReplicaConfig,
     time::current_time,
@@ -404,9 +404,10 @@ impl BlockMaker {
         );
         let block = Block::new(parent.get_hash().clone(), payload, height, rank, context);
         let hashed_block = hashed::Hashed::new(ic_types::crypto::crypto_hash, block);
+        let metadata = BlockMetadata::from_block(&hashed_block, &self.replica_config);
         match self
             .crypto
-            .sign(&hashed_block, self.replica_config.node_id, registry_version)
+            .sign(&metadata, self.replica_config.node_id, registry_version)
         {
             Ok(signature) => Some(BlockProposal {
                 signature,

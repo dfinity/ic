@@ -24,6 +24,7 @@ use ic_interfaces::{
     consensus::{PayloadBuilder, PayloadPermanentError, PayloadTransientError},
     consensus_pool::*,
     dkg::DkgPool,
+    ingress_manager::IngressSelector,
     messaging::MessageRouting,
     time_source::TimeSource,
     validation::{ValidationError, ValidationResult},
@@ -35,10 +36,10 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        Block, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage, CatchUpShareContent,
-        Committee, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasCommittee,
-        HasHeight, HasRank, HasVersion, Notarization, NotarizationContent, RandomBeacon,
-        RandomBeaconShare, RandomTape, RandomTapeShare, Rank,
+        Block, BlockMetadata, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage,
+        CatchUpShareContent, Committee, ConsensusMessage, ConsensusMessageHashable,
+        FinalizationContent, HasCommittee, HasHeight, HasRank, HasVersion, Notarization,
+        NotarizationContent, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare, Rank,
     },
     crypto::{threshold_sig::ni_dkg::NiDkgId, CryptoError, CryptoHashOf, Signed},
     registry::RegistryClientError,
@@ -159,6 +160,7 @@ trait SignatureVerify: HasHeight {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError>;
 }
 
@@ -168,6 +170,7 @@ impl SignatureVerify for BlockProposal {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let previous_beacon = get_previous_beacon(pool, height)?;
@@ -181,7 +184,8 @@ impl SignatureVerify for BlockProposal {
             )));
         }
         let registry_version = get_registry_version(pool, height)?;
-        crypto.verify(self, registry_version)?;
+        let signed_metadata = BlockMetadata::signed_from_proposal(self, cfg);
+        crypto.verify(&signed_metadata, registry_version)?;
         Ok(())
     }
 }
@@ -192,6 +196,7 @@ impl SignatureVerify for RandomTape {
         _membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let transcript = active_low_threshold_transcript(pool.as_cache(), self.height())
             .ok_or_else(|| TransientError::DkgSummaryNotFound(self.height()))?;
@@ -210,6 +215,7 @@ impl SignatureVerify for RandomTapeShare {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let transcript = active_low_threshold_transcript(pool.as_cache(), height)
@@ -231,6 +237,7 @@ impl SignatureVerify for RandomBeacon {
         _membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let transcript = active_low_threshold_transcript(pool.as_cache(), self.height())
             .ok_or_else(|| TransientError::DkgSummaryNotFound(self.height()))?;
@@ -249,6 +256,7 @@ impl SignatureVerify for RandomBeaconShare {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let transcript = active_low_threshold_transcript(pool.as_cache(), height)
@@ -271,6 +279,7 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let transcript = active_high_threshold_transcript(pool.as_cache(), height)
@@ -292,6 +301,7 @@ impl SignatureVerify for CatchUpPackage {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         _pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         crypto
             .verify_combined_threshold_sig_by_public_key(
@@ -429,6 +439,7 @@ impl<T: NotaryIssued> SignatureVerify for Signed<T, MultiSignature<T>> {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let previous_beacon = get_previous_beacon(pool, height)?;
@@ -454,6 +465,7 @@ impl<T: NotaryIssued> SignatureVerify for Signed<T, MultiSignatureShare<T>> {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let previous_beacon = get_previous_beacon(pool, height)?;
@@ -588,6 +600,7 @@ pub struct Validator {
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
     time_source: Arc<dyn TimeSource>,
+    ingress_selector: Option<Arc<dyn IngressSelector>>,
 }
 
 impl Validator {
@@ -605,6 +618,7 @@ impl Validator {
         log: ReplicaLogger,
         metrics: ValidatorMetrics,
         time_source: Arc<dyn TimeSource>,
+        ingress_selector: Option<Arc<dyn IngressSelector>>,
     ) -> Validator {
         Validator {
             replica_config,
@@ -619,6 +633,7 @@ impl Validator {
             metrics,
             schedule: RoundRobin::default(),
             time_source,
+            ingress_selector,
         }
     }
 
@@ -677,7 +692,12 @@ impl Validator {
     ) -> ValidationResult<ValidatorError> {
         check_protocol_version(artifact.version())
             .map_err(|_| PermanentError::ReplicaVersionMismatch)?;
-        artifact.verify_signature(self.membership.as_ref(), self.crypto.as_ref(), pool_reader)
+        artifact.verify_signature(
+            self.membership.as_ref(),
+            self.crypto.as_ref(),
+            pool_reader,
+            &self.replica_config,
+        )
     }
 
     /// Return a `ChangeSet` of `Finalization`s. See `validate_notary_issued`
@@ -862,6 +882,8 @@ impl Validator {
                         ));
                     } else if verification.is_ok() {
                         if get_notarized_parent(pool_reader, &proposal).is_ok() {
+                            self.metrics
+                                .observe_data_payload(&proposal, self.ingress_selector.as_deref());
                             self.metrics.observe_block(pool_reader, &proposal);
                             known_ranks.insert(proposal.height(), Some(proposal.rank()));
                             change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
@@ -916,6 +938,8 @@ impl Validator {
 
                 match self.check_block_validity(pool_reader, &proposal) {
                     Ok(()) => {
+                        self.metrics
+                            .observe_data_payload(&proposal, self.ingress_selector.as_deref());
                         self.metrics.observe_block(pool_reader, &proposal);
                         known_ranks.insert(proposal.height(), Some(proposal.rank()));
                         change_set.push(ChangeAction::MoveToValidated(proposal.into_message()))
@@ -1725,6 +1749,7 @@ pub mod test {
                 no_op_logger(),
                 ValidatorMetrics::new(MetricsRegistry::new()),
                 Arc::clone(&dependencies.time_source) as Arc<_>,
+                /*ingress_selector=*/ None,
             );
             Self {
                 validator,

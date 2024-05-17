@@ -26,9 +26,8 @@ pub use crate::vault::remote_csp_vault::run_csp_vault_server;
 pub use crate::vault::remote_csp_vault::RemoteCspVault;
 
 use crate::api::{
-    CspIDkgProtocol, CspKeyGenerator, CspPublicAndSecretKeyStoreChecker, CspPublicKeyStore,
-    CspSigVerifier, CspSigner, CspTlsHandshakeSignerProvider, NiDkgCspClient,
-    ThresholdSignatureCspClient,
+    CspPublicAndSecretKeyStoreChecker, CspPublicKeyStore, CspSigVerifier, CspSigner,
+    CspTlsHandshakeSignerProvider, NiDkgCspClient, ThresholdSignatureCspClient,
 };
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicKey, ExternalPublicKeys};
@@ -53,10 +52,8 @@ mod tests;
 pub trait CryptoServiceProvider:
     CspSigner
     + CspSigVerifier
-    + CspKeyGenerator
     + ThresholdSignatureCspClient
     + NiDkgCspClient
-    + CspIDkgProtocol
     + CspPublicAndSecretKeyStoreChecker
     + CspTlsHandshakeSignerProvider
     + CspPublicKeyStore
@@ -66,9 +63,7 @@ pub trait CryptoServiceProvider:
 impl<T> CryptoServiceProvider for T where
     T: CspSigner
         + CspSigVerifier
-        + CspKeyGenerator
         + ThresholdSignatureCspClient
-        + CspIDkgProtocol
         + NiDkgCspClient
         + CspPublicAndSecretKeyStoreChecker
         + CspTlsHandshakeSignerProvider

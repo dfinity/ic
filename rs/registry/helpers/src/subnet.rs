@@ -14,7 +14,7 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_node_record_key, make_replica_version_key,
     make_subnet_list_record_key, make_subnet_record_key, ROOT_SUBNET_ID_KEY,
 };
-use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
+use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
 use ic_types::{
     registry::RegistryClientError::DecodeError, Height, NodeId, PrincipalId,
     PrincipalIdBlobParseError, RegistryVersion, ReplicaVersion, SubnetId,
@@ -89,6 +89,13 @@ pub trait SubnetRegistry {
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> RegistryClientResult<EcdsaConfig>;
+
+    /// Returns chain key config
+    fn get_chain_key_config(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<ChainKeyConfig>;
 
     /// Returns notarization delay settings:
     /// - the unit delay for blockmaker;
@@ -284,6 +291,21 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
         let subnet = deserialize_registry_value::<SubnetRecord>(bytes)?;
         Ok(subnet.and_then(|subnet| subnet.ecdsa_config.map(|config| config.try_into().unwrap())))
+    }
+
+    fn get_chain_key_config(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<ChainKeyConfig> {
+        let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
+        let subnet = deserialize_registry_value::<SubnetRecord>(bytes)?;
+        subnet
+            .and_then(|subnet| subnet.chain_key_config.map(ChainKeyConfig::try_from))
+            .transpose()
+            .map_err(|err| DecodeError {
+                error: format!("get_chain_key_config() failed with {}", err),
+            })
     }
 
     fn get_notarization_delay_settings(

@@ -117,8 +117,8 @@ cat $SHA256SUMS0
 echo "$PATH1/SHA256SUMS:"
 cat $SHA256SUMS1
 
-# ignore *.wasm.did files
-sed -i -e '/.wasm.did/d' $SHA256SUMS0 $SHA256SUMS1
+# ignore *.wasm.gz.did files
+sed -i -e '/.wasm.gz.did/d' $SHA256SUMS0 $SHA256SUMS1
 
 echo "Full diff before dropping artifacts allowed non-determinism"
 diff -u "$SHA256SUMS0" "$SHA256SUMS1" || true

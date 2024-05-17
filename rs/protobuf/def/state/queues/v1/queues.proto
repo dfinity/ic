@@ -64,7 +64,8 @@ message Request {
 }
 
 message RejectContext {
-  uint64 reject_code_old = 1;
+  reserved 1;
+  reserved "reject_code_old";
   types.v1.RejectCode reject_code = 3;
   string reject_message = 2;
 }

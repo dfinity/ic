@@ -30,7 +30,7 @@ use ic_replicated_state::{
 use ic_sys::PAGE_SIZE;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
-    CanisterId, NumInstructions, NumPages, MAX_STABLE_MEMORY_IN_BYTES,
+    CanisterId, NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
@@ -354,13 +354,28 @@ impl WasmtimeEmbedder {
             Err(err) => return Err((err.clone(), system_api)),
         };
 
+        // Compute dirty page limit based on the message type.
+        let current_dirty_page_limit = match system_api {
+            Some(ref system_api) => {
+                if system_api.is_install_or_upgrade_message() {
+                    self.config.stable_memory_dirty_page_limit.upgrade
+                } else {
+                    self.config.stable_memory_dirty_page_limit.message
+                }
+            }
+            // If system api is not present, then this function has been called from
+            // get_initial_globals_and_memory(). In this case, the number of
+            // dirty pages does not matter as the canister is not running.
+            None => self.config.stable_memory_dirty_page_limit.message,
+        };
+
         let mut store = Store::new(
             instance_pre.module().engine(),
             StoreData {
                 system_api,
                 num_instructions_global: None,
                 log: self.log.clone(),
-                num_stable_dirty_pages_from_non_native_writes: NumPages::from(0),
+                num_stable_dirty_pages_from_non_native_writes: NumOsPages::from(0),
                 limits: StoreLimitsBuilder::new()
                     .memory_size(MAX_STABLE_MEMORY_IN_BYTES as usize)
                     .tables(MAX_STORE_TABLES)
@@ -451,7 +466,7 @@ impl WasmtimeEmbedder {
         if self.config.feature_flags.wasm_native_stable_memory == FlagStatus::Enabled {
             instance.get_global(&mut store, DIRTY_PAGES_COUNTER_GLOBAL_NAME)
                 .expect("Counter for dirty pages global should have been added with native stable memory enabled.")
-                .set(&mut store, Val::I64(self.config.stable_memory_dirty_page_limit.get() as i64))
+                .set(&mut store, Val::I64(current_dirty_page_limit.get() as i64))
                 .expect("Couldn't set dirty page counter global");
             instance.get_global(&mut store, ACCESSED_PAGES_COUNTER_GLOBAL_NAME)
                 .expect("Counter for accessed pages global should have been added with native stable memory enabled.")
@@ -483,7 +498,7 @@ impl WasmtimeEmbedder {
             modification_tracking,
             dirty_page_overhead: self.config.dirty_page_overhead,
             #[cfg(debug_assertions)]
-            stable_memory_dirty_page_limit: self.config.stable_memory_dirty_page_limit,
+            stable_memory_dirty_page_limit: current_dirty_page_limit,
         })
     }
 
@@ -664,7 +679,7 @@ pub struct StoreData {
     pub num_instructions_global: Option<wasmtime::Global>,
     pub log: ReplicaLogger,
     /// Tracks the number of dirty pages in stable memory in non-native stable mode
-    pub num_stable_dirty_pages_from_non_native_writes: NumPages,
+    pub num_stable_dirty_pages_from_non_native_writes: NumOsPages,
     pub limits: StoreLimits,
 }
 
@@ -720,7 +735,7 @@ pub struct WasmtimeInstance {
     modification_tracking: ModificationTracking,
     dirty_page_overhead: NumInstructions,
     #[cfg(debug_assertions)]
-    stable_memory_dirty_page_limit: ic_types::NumPages,
+    stable_memory_dirty_page_limit: ic_types::NumOsPages,
 }
 
 impl WasmtimeInstance {

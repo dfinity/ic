@@ -74,7 +74,7 @@ impl TranscriptInCreation {
 impl From<&TranscriptInCreation> for pb::TranscriptInCreation {
     fn from(pre_signature: &TranscriptInCreation) -> Self {
         Self {
-            key_id: Some(pre_signature.key_id.clone().into()),
+            key_id: Some((&pre_signature.key_id).into()),
             blinder_unmasked_config: Some((&pre_signature.blinder_unmasked_config).into()),
             blinder_unmasked: pre_signature
                 .blinder_unmasked
@@ -168,7 +168,7 @@ impl PreSignatureTranscriptRef {
 impl From<&PreSignatureTranscriptRef> for pb::PreSignatureTranscriptRef {
     fn from(pre_signature_ref: &PreSignatureTranscriptRef) -> Self {
         Self {
-            key_id: Some(pre_signature_ref.key_id.clone().into()),
+            key_id: Some((&pre_signature_ref.key_id).into()),
             blinder_unmasked_ref: Some((&pre_signature_ref.blinder_unmasked_ref).into()),
             key_unmasked_ref: Some((&pre_signature_ref.key_unmasked_ref).into()),
         }

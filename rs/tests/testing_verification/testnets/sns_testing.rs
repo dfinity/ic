@@ -49,7 +49,7 @@ use ic_tests::driver::{
     },
 };
 use ic_tests::nns_dapp::{
-    install_ii_and_nns_dapp, install_sns_aggregator, nns_dapp_customizations,
+    install_ii_nns_dapp_and_subnet_rental, install_sns_aggregator, nns_dapp_customizations,
     set_authorized_subnets, set_sns_subnet,
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
@@ -110,7 +110,11 @@ pub fn setup(env: TestEnv) {
     info!(logger, "Use {} as effective canister ID when creating canisters for your dapp, e.g., using --provisional-create-canister-effective-canister-id {} with DFX", app_effective_canister_id, app_effective_canister_id);
 
     let sns_aggregator_canister_id = install_sns_aggregator(&env, BOUNDARY_NODE_NAME, sns_node);
-    install_ii_and_nns_dapp(&env, BOUNDARY_NODE_NAME, Some(sns_aggregator_canister_id));
+    install_ii_nns_dapp_and_subnet_rental(
+        &env,
+        BOUNDARY_NODE_NAME,
+        Some(sns_aggregator_canister_id),
+    );
     set_authorized_subnets(&env);
     set_sns_subnet(&env, sns_subnet.subnet_id);
     add_all_wasms_to_sns_wasm(&env, NnsCanisterWasmStrategy::TakeBuiltFromSources);

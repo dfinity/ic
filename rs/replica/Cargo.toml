@@ -17,7 +17,6 @@ ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
@@ -62,6 +61,10 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-flame = "0.2.0"
 tracing-subscriber = { workspace = true }
+opentelemetry = { version = "^0.21.0", features = ["trace"] }
+opentelemetry-otlp = { version = "^0.14.0", features = ["grpc-tonic"] }
+opentelemetry_sdk = { version = "^0.21.2", features = ["trace"] }
+tracing-opentelemetry = "^0.22.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # this library uses libunwind, which is only applicable to Linux

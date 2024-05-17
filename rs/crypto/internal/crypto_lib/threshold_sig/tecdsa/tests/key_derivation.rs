@@ -10,14 +10,18 @@ use crate::test_utils::*;
 use assert_matches::assert_matches;
 
 #[test]
-fn verify_bip32_extended_key_derivation_max_length_enforced() -> Result<(), ThresholdEcdsaError> {
+fn verify_bip32_extended_key_derivation_max_length_enforced() -> Result<(), CanisterThresholdError>
+{
     let nodes = 3;
     let threshold = nodes / 3;
 
     let seed = Seed::from_bytes(b"verify_bip32_extended_key_derivation_max_length");
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(EccCurveType::K256),
+        TestConfig::new(
+            CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
+            EccCurveType::K256,
+        ),
         nodes,
         threshold,
         threshold,
@@ -34,7 +38,7 @@ fn verify_bip32_extended_key_derivation_max_length_enforced() -> Result<(), Thre
         let path = vec![i as u32; i];
         assert_matches!(
             setup.public_key(&DerivationPath::new_bip32(&path)),
-            Err(ThresholdEcdsaError::InvalidArguments(_))
+            Err(CanisterThresholdError::InvalidArguments(_))
         );
     }
 
@@ -355,14 +359,17 @@ fn check_key_derivation_ed25519_test_vectors() {
 }
 
 #[test]
-fn verify_bip32_secp256k1_extended_key_derivation() -> Result<(), ThresholdEcdsaError> {
+fn verify_bip32_secp256k1_extended_key_derivation() -> Result<(), CanisterThresholdError> {
     let nodes = 10;
     let threshold = nodes / 3;
 
     let seed = Seed::from_bytes(b"verify_bip32_extended_key_derivation");
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(EccCurveType::K256),
+        TestConfig::new(
+            CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
+            EccCurveType::K256,
+        ),
         nodes,
         threshold,
         threshold,
@@ -417,7 +424,7 @@ fn verify_bip32_secp256k1_extended_key_derivation() -> Result<(), ThresholdEcdsa
 }
 
 #[test]
-fn should_secp256k1_derivation_match_external_bip32_lib() -> Result<(), ThresholdEcdsaError> {
+fn should_secp256k1_derivation_match_external_bip32_lib() -> Result<(), CanisterThresholdError> {
     let nodes = 7;
     let threshold = nodes / 3;
 
@@ -425,7 +432,10 @@ fn should_secp256k1_derivation_match_external_bip32_lib() -> Result<(), Threshol
     let random_seed = Seed::from_rng(rng);
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(EccCurveType::K256),
+        TestConfig::new(
+            CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
+            EccCurveType::K256,
+        ),
         nodes,
         threshold,
         threshold,
@@ -486,6 +496,6 @@ fn key_derivation_on_unsupported_alg_fails() {
 
     assert_matches!(
         derived,
-        Err(ThresholdEcdsaDerivePublicKeyError::InvalidArgument(_))
+        Err(DeriveThresholdPublicKeyError::InvalidArgument(_))
     );
 }

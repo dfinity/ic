@@ -9,7 +9,7 @@ use ic_interfaces::execution_environment::{
     SubnetAvailableMemory, SystemApi, TrapCode,
 };
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::{DataSize, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE};
+use ic_management_canister_types::DataSize;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     testing::CanisterQueuesTesting, CallOrigin, Memory, NetworkTopology, SystemState,
@@ -33,6 +33,7 @@ use ic_types::{
     time,
     time::UNIX_EPOCH,
     CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, Time,
+    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
 };
 use std::{
     collections::BTreeSet,
@@ -1537,6 +1538,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         execution_parameters().compute_allocation,
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
+        api_type.call_context_id(),
     );
     let mut api = SystemApiImpl::new(
         api_type,
@@ -1592,6 +1594,7 @@ fn push_output_request_respects_memory_limits() {
         execution_parameters().compute_allocation,
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
+        api_type.call_context_id(),
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -1701,6 +1704,7 @@ fn push_output_request_oversized_request_memory_limits() {
         execution_parameters().compute_allocation,
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
+        api_type.call_context_id(),
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
