@@ -12,10 +12,7 @@ use ic_types::{
     consensus::idkg::PreSigId,
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressStatus, WasmResult},
-    messages::{
-        AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, MessageId, Query,
-        SignedIngressContent,
-    },
+    messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
     CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
@@ -456,10 +453,6 @@ pub enum ExecutionMode {
 }
 
 pub type HypervisorResult<T> = Result<T, HypervisorError>;
-
-/// Interface for the component to execute internal queries triggered by IC.
-pub type AnonymousQueryService =
-    BoxCloneService<AnonymousQuery, AnonymousQueryResponse, Infallible>;
 
 /// Interface for the component to filter out ingress messages that
 /// the canister is not willing to accept.

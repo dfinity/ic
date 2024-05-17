@@ -1,4 +1,3 @@
-mod anonymous_query_handler;
 mod bitcoin;
 mod canister_manager;
 mod canister_settings;
@@ -15,7 +14,6 @@ mod scheduler;
 mod types;
 pub mod util;
 
-use crate::anonymous_query_handler::AnonymousQueryHandler;
 use crate::ingress_filter::IngressFilterServiceImpl;
 pub use execution_environment::{
     as_num_instructions, as_round_instructions, execute_canister, CompilationCostHandling,
@@ -26,7 +24,6 @@ pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces::execution_environment::{
     IngressFilterService, IngressHistoryReader, IngressHistoryWriter, QueryExecutionService,
     Scheduler,
@@ -83,7 +80,6 @@ pub struct ExecutionServices {
     pub ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     pub ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_execution_service: QueryExecutionService,
-    pub anonymous_query_handler: AnonymousQueryService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
 }
@@ -175,12 +171,6 @@ impl ExecutionServices {
             Arc::clone(&exec_env),
             ingress_filter_metrics.clone(),
         );
-        let anonymous_query_handler = AnonymousQueryHandler::new_service(
-            query_scheduler,
-            Arc::clone(&state_reader),
-            Arc::clone(&exec_env),
-            scheduler_config.max_instructions_per_message_without_dts,
-        );
 
         let scheduler = Box::new(SchedulerImpl::new(
             scheduler_config,
@@ -201,7 +191,6 @@ impl ExecutionServices {
             ingress_history_writer,
             ingress_history_reader,
             query_execution_service,
-            anonymous_query_handler,
             scheduler,
             query_stats_payload_builder,
         }
@@ -215,7 +204,6 @@ impl ExecutionServices {
         Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         Box<dyn IngressHistoryReader>,
         QueryExecutionService,
-        AnonymousQueryService,
         Box<dyn Scheduler<State = ReplicatedState>>,
     ) {
         (
@@ -223,7 +211,6 @@ impl ExecutionServices {
             self.ingress_history_writer,
             self.ingress_history_reader,
             self.query_execution_service,
-            self.anonymous_query_handler,
             self.scheduler,
         )
     }
