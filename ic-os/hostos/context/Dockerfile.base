@@ -20,7 +20,8 @@
 # First build stage:
 # - Download 3rd party tools
 #
-FROM ubuntu:20.04 AS download
+# noble-20240423
+FROM ubuntu@sha256:28a2b328825ac02db5c29d9356bfba80ba6c4b6ebfcac5a91a4656fa3453775a AS download
 
 USER root:root
 
@@ -48,7 +49,8 @@ RUN cd /tmp/ && \
 # Second build stage:
 # - Compile downloaded archives from first build stage
 #
-FROM ubuntu:20.04 AS build
+# noble-20240423
+FROM ubuntu@sha256:28a2b328825ac02db5c29d9356bfba80ba6c4b6ebfcac5a91a4656fa3453775a AS build
 
 USER root:root
 
@@ -81,7 +83,8 @@ RUN cd /tmp/ && \
 # - Install and cache upstream packages from built-in Ubuntu repositories.
 # - Install compiled packages from the second stage.
 #
-FROM ubuntu:20.04
+# noble-20240423
+FROM ubuntu@sha256:28a2b328825ac02db5c29d9356bfba80ba6c4b6ebfcac5a91a4656fa3453775a
 
 USER root:root
 

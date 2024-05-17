@@ -18,7 +18,8 @@
 # First build stage:
 # - Download 3rd party tools
 #
-FROM ubuntu:20.04 as download
+# noble-20240423
+FROM ubuntu@sha256:28a2b328825ac02db5c29d9356bfba80ba6c4b6ebfcac5a91a4656fa3453775a as download
 
 USER root:root
 
@@ -48,7 +49,8 @@ RUN cd /tmp/ && \
 # - Install and cache upstream packages from built-in Ubuntu repositories
 # - Copy downloaded archives from first build stage into the target image
 #
-FROM ubuntu:20.04
+# noble-20240423
+FROM ubuntu@sha256:28a2b328825ac02db5c29d9356bfba80ba6c4b6ebfcac5a91a4656fa3453775a
 
 USER root:root
 
