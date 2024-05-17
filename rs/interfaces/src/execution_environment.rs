@@ -24,6 +24,7 @@ use std::{
     convert::{Infallible, TryFrom},
     fmt, ops,
 };
+use strum_macros::EnumIter;
 use tower::util::BoxCloneService;
 
 /// Instance execution statistics. The stats are cumulative and
@@ -86,6 +87,7 @@ pub enum PerformanceCounterType {
 }
 
 /// System API call ids to track their execution (in alphabetical order).
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, EnumIter)]
 pub enum SystemApiCallId {
     /// Tracker for `ic0.accept_message())`
     AcceptMessage,
@@ -129,6 +131,8 @@ pub enum SystemApiCallId {
     DebugPrint,
     /// Tracker for `ic0.global_timer_set()`
     GlobalTimerSet,
+    /// Tracker for `ic0.in_replicated_execution()`
+    InReplicatedExecution,
     /// Tracker for `ic0.is_controller()`
     IsController,
     /// Tracker for `ic0.mint_cycles()`

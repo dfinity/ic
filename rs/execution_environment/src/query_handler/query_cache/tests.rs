@@ -1480,6 +1480,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::DataCertificateSize
         | SystemApiCallId::DebugPrint
         | SystemApiCallId::GlobalTimerSet
+        | SystemApiCallId::InReplicatedExecution
         | SystemApiCallId::IsController
         | SystemApiCallId::MintCycles
         | SystemApiCallId::MsgArgDataCopy
