@@ -14,7 +14,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, SubnetTopology, SystemState};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    ExecutionParameters, InstructionLimits, SystemApiImpl,
+    ExecutionParameters, InstructionLimits, NonReplicatedQueryKind, SystemApiImpl,
 };
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{
@@ -33,7 +33,7 @@ pub const CANISTER_CURRENT_MESSAGE_MEMORY_USAGE: NumBytes = NumBytes::new(0);
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
-pub fn execution_parameters() -> ExecutionParameters {
+pub fn execution_parameters(execution_mode: ExecutionMode) -> ExecutionParameters {
     ExecutionParameters {
         instruction_limits: InstructionLimits::new(
             FlagStatus::Disabled,
@@ -45,7 +45,7 @@ pub fn execution_parameters() -> ExecutionParameters {
         memory_allocation: MemoryAllocation::default(),
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
-        execution_mode: ExecutionMode::Replicated,
+        execution_mode,
         subnet_memory_saturation: ResourceSaturation::default(),
     }
 }
@@ -97,6 +97,31 @@ impl ApiTypeBuilder {
         )
     }
 
+    pub fn build_non_replicated_query_api() -> ApiType {
+        ApiType::non_replicated_query(
+            UNIX_EPOCH,
+            user_test_id(1).get(),
+            subnet_test_id(1),
+            vec![],
+            Some(vec![1]),
+            NonReplicatedQueryKind::Pure,
+        )
+    }
+
+    pub fn build_composite_query_api() -> ApiType {
+        ApiType::non_replicated_query(
+            UNIX_EPOCH,
+            user_test_id(1).get(),
+            subnet_test_id(1),
+            vec![],
+            Some(vec![1]),
+            NonReplicatedQueryKind::Stateful {
+                call_context_id: CallContextId::from(1),
+                outgoing_request: None,
+            },
+        )
+    }
+
     pub fn build_reply_api(incoming_cycles: Cycles) -> ApiType {
         ApiType::reply_callback(
             UNIX_EPOCH,
@@ -106,6 +131,19 @@ impl ApiTypeBuilder {
             CallContextId::new(1),
             false,
             ExecutionMode::Replicated,
+            0.into(),
+        )
+    }
+
+    pub fn build_composite_reply_api(incoming_cycles: Cycles) -> ApiType {
+        ApiType::reply_callback(
+            UNIX_EPOCH,
+            PrincipalId::new_anonymous(),
+            vec![],
+            incoming_cycles,
+            CallContextId::new(1),
+            false,
+            ExecutionMode::NonReplicated,
             0.into(),
         )
     }
@@ -122,6 +160,19 @@ impl ApiTypeBuilder {
             0.into(),
         )
     }
+
+    pub fn build_composite_reject_api(reject_context: RejectContext) -> ApiType {
+        ApiType::reject_callback(
+            UNIX_EPOCH,
+            PrincipalId::new_anonymous(),
+            reject_context,
+            Cycles::zero(),
+            call_context_test_id(1),
+            false,
+            ExecutionMode::NonReplicated,
+            0.into(),
+        )
+    }
 }
 
 pub fn get_system_api(
@@ -129,12 +180,13 @@ pub fn get_system_api(
     system_state: &SystemState,
     cycles_account_manager: CyclesAccountManager,
 ) -> SystemApiImpl {
+    let execution_mode = api_type.execution_mode();
     let sandbox_safe_system_state = SandboxSafeSystemState::new(
         system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
-        execution_parameters().compute_allocation,
+        execution_parameters(execution_mode.clone()).compute_allocation,
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
         api_type.call_context_id(),
@@ -144,7 +196,7 @@ pub fn get_system_api(
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
-        execution_parameters(),
+        execution_parameters(execution_mode),
         SubnetAvailableMemory::new(
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,

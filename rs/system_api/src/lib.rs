@@ -355,6 +355,7 @@ pub enum ApiType {
     Cleanup {
         caller: PrincipalId,
         time: Time,
+        execution_mode: ExecutionMode,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
     },
@@ -549,6 +550,22 @@ impl ApiType {
             | ApiType::PreUpgrade { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Cleanup { .. } => ModificationTracking::Track,
+        }
+    }
+
+    pub fn execution_mode(&self) -> ExecutionMode {
+        match self {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::Update { .. }
+            | ApiType::ReplicatedQuery { .. } => ExecutionMode::Replicated,
+            ApiType::NonReplicatedQuery { .. } => ExecutionMode::NonReplicated,
+            ApiType::ReplyCallback { execution_mode, .. } => execution_mode.clone(),
+            ApiType::RejectCallback { execution_mode, .. } => execution_mode.clone(),
+            ApiType::PreUpgrade { .. } => ExecutionMode::Replicated,
+            ApiType::InspectMessage { .. } => ExecutionMode::NonReplicated,
+            ApiType::Cleanup { execution_mode, .. } => execution_mode.clone(),
         }
     }
 

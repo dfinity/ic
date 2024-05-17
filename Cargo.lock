@@ -8626,6 +8626,8 @@ dependencies = [
  "proptest",
  "prost 0.12.3",
  "serde",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "thiserror",
  "tower",
 ]
@@ -11599,6 +11601,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "slog",
+ "strum 0.26.2",
 ]
 
 [[package]]

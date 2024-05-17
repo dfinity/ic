@@ -32,7 +32,6 @@ pub fn test(env: TestEnv) {
         None,
         vec![
             "($0 ~ /NNS canisters/)",
-            "($0 ~ /API availability/)",
             "($0 ~ /canister history/)",
             "($0 ~ /canister version/)",
             "($0 ~ /canister global timer/)",
