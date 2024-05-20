@@ -256,7 +256,6 @@ pub enum ApiType {
         #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
         response_status: ResponseStatus,
-        data_certificate: Option<Vec<u8>>,
         max_reply_size: NumBytes,
     },
 
@@ -410,19 +409,13 @@ impl ApiType {
         }
     }
 
-    pub fn replicated_query(
-        time: Time,
-        incoming_payload: Vec<u8>,
-        caller: PrincipalId,
-        data_certificate: Option<Vec<u8>>,
-    ) -> Self {
+    pub fn replicated_query(time: Time, incoming_payload: Vec<u8>, caller: PrincipalId) -> Self {
         Self::ReplicatedQuery {
             time,
             incoming_payload,
             caller,
             response_data: vec![],
             response_status: ResponseStatus::NotRepliedYet,
-            data_certificate,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
         }
     }
@@ -2827,11 +2820,9 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::Update { .. }
-            | ApiType::SystemTask { .. } => Ok(0),
-            ApiType::ReplicatedQuery {
-                data_certificate, ..
-            }
-            | ApiType::NonReplicatedQuery {
+            | ApiType::SystemTask { .. }
+            | ApiType::ReplicatedQuery { .. } => Ok(0),
+            ApiType::NonReplicatedQuery {
                 data_certificate, ..
             } => match data_certificate {
                 Some(_) => Ok(1),
@@ -2852,11 +2843,9 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback { .. }
             | ApiType::Cleanup { .. }
             | ApiType::PreUpgrade { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_data_certificate_size")),
-            ApiType::ReplicatedQuery {
-                data_certificate, ..
-            }
-            | ApiType::NonReplicatedQuery {
+            | ApiType::InspectMessage { .. }
+            | ApiType::ReplicatedQuery { .. } => Err(self.error_for("ic0_data_certificate_size")),
+            ApiType::NonReplicatedQuery {
                 data_certificate, ..
             } => match data_certificate {
                 Some(data_certificate) => Ok(data_certificate.len() as i32),
@@ -2884,11 +2873,9 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback { .. }
             | ApiType::Cleanup { .. }
             | ApiType::PreUpgrade { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_data_certificate_copy")),
-            ApiType::ReplicatedQuery {
-                data_certificate, ..
-            }
-            | ApiType::NonReplicatedQuery {
+            | ApiType::InspectMessage { .. }
+            | ApiType::ReplicatedQuery { .. } => Err(self.error_for("ic0_data_certificate_copy")),
+            ApiType::NonReplicatedQuery {
                 data_certificate, ..
             } => {
                 match data_certificate {
@@ -2897,9 +2884,18 @@ impl SystemApi for SystemApiImpl {
 
                         let (upper_bound, overflow) = offset.overflowing_add(size);
                         if overflow || upper_bound > data_certificate.len() {
-                            return Err(ContractViolation{error: format!( "ic0_data_certificate_copy failed because offset + size is out \
+                            return Err(ContractViolation {
+                                error: format!(
+                            "ic0_data_certificate_copy failed because offset + size is out \
                         of bounds. Found offset = {} and size = {} while offset + size \
-                        must be <= {}", offset, size, data_certificate.len()), suggestion: "".to_string(), doc_link: "".to_string()});
+                        must be <= {}",
+                            offset,
+                            size,
+                            data_certificate.len()
+                        ),
+                                suggestion: "".to_string(),
+                                doc_link: "".to_string(),
+                            });
                         }
 
                         let (upper_bound, overflow) = dst.overflowing_add(size);
@@ -2925,7 +2921,7 @@ impl SystemApi for SystemApiImpl {
                         );
                         Ok(())
                     }
-                    None => Err(self.error_for("ic0_data_certificate_size")),
+                    None => Err(self.error_for("ic0_data_certificate_copy")),
                 }
             }
         };
@@ -3230,16 +3226,9 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::Update { .. }
-            | ApiType::SystemTask { .. } => Ok(1),
-            ApiType::ReplicatedQuery {
-                data_certificate, ..
-            }
-            | ApiType::NonReplicatedQuery {
-                data_certificate, ..
-            } => match data_certificate {
-                None => Ok(1),
-                Some(_) => Ok(0),
-            },
+            | ApiType::SystemTask { .. }
+            | ApiType::ReplicatedQuery { .. } => Ok(1),
+            ApiType::NonReplicatedQuery { .. } => Ok(0),
         };
         trace_syscall!(self, ic0_in_replicated_execution, result);
         result

@@ -288,7 +288,6 @@ mod tests {
             Time::from_nanos_since_unix_epoch(0),
             incoming_payload.to_vec(),
             PrincipalId::try_from([0].as_ref()).unwrap(),
-            None,
         );
         let caller = api_type.caller();
         let call_context_id = api_type.call_context_id();

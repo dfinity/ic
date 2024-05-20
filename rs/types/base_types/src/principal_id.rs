@@ -169,7 +169,7 @@ impl std::str::FromStr for PrincipalId {
 }
 
 /// Some principal ids have special classes (system-generated,
-/// self-authenticating, derived), see <https://sdk.dfinity.org/docs/interface-spec/index.html#id-classes>
+/// self-authenticating, derived), see <https://internetcomputer.org/docs/current/references/ic-interface-spec#id-classes>
 ///
 /// The following functions allow creating and testing for the special forms.
 impl PrincipalId {

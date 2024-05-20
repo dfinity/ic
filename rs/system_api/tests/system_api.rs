@@ -165,7 +165,7 @@ fn update_api() -> ApiType {
 }
 
 fn replicated_query_api() -> ApiType {
-    ApiType::replicated_query(UNIX_EPOCH, vec![], user_test_id(1).get(), None)
+    ApiType::replicated_query(UNIX_EPOCH, vec![], user_test_id(1).get())
 }
 
 fn non_replicated_query_api() -> ApiType {
@@ -1135,11 +1135,13 @@ fn data_certificate_copy() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let system_state = SystemStateBuilder::default().build();
     let mut api = get_system_api(
-        ApiType::replicated_query(
+        ApiType::non_replicated_query(
             UNIX_EPOCH,
-            vec![],
             user_test_id(1).get(),
+            subnet_test_id(1),
+            vec![],
             Some(vec![1, 2, 3, 4, 5, 6]),
+            ic_system_api::NonReplicatedQueryKind::Pure,
         ),
         &system_state,
         cycles_account_manager,
