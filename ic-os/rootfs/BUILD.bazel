@@ -10,7 +10,6 @@ exports_files(
 #     "guestos/opt/ic/share/ic.json5.template",
 #     "guestos/dev-certs/canister_http_test_ca.cert",
 #     "guestos/dev-certs/canister_http_test_ca.key",
-#     "guestos/opt/ic/bin/validate-replica-config.sh",
 # ]
 
 # exports_files(
