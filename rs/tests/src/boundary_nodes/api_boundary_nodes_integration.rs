@@ -45,6 +45,7 @@ use anyhow::bail;
 use ic_agent::{
     agent::http_transport::{
         reqwest_transport::reqwest::{redirect::Policy, ClientBuilder},
+        route_provider::RouteProvider,
         ReqwestTransport,
     },
     export::Principal,
@@ -88,8 +89,9 @@ pub fn decentralization_test(env: TestEnv) {
         log,
         "Asserting that no API BNs are present in the state tree"
     );
-    let api_bns = block_on(agent_with_identity.fetch_api_boundary_nodes(eff_canister_id))
-        .expect("failed to fetch API BNs");
+    let api_bns =
+        block_on(agent_with_identity.fetch_api_boundary_nodes_by_canister_id(eff_canister_id))
+            .expect("failed to fetch API BNs");
     assert!(api_bns.is_empty());
 
     info!(
@@ -173,7 +175,7 @@ pub fn decentralization_test(env: TestEnv) {
         Duration::from_secs(5),
         || async {
             let api_bns = agent_with_identity
-                .fetch_api_boundary_nodes(nns_node.effective_canister_id().into())
+                .fetch_api_boundary_nodes_by_canister_id(nns_node.effective_canister_id().into())
                 .await
                 .expect("failed to fetch API BNs");
             if api_bns.len() != 2 {
@@ -298,16 +300,17 @@ pub fn decentralization_test(env: TestEnv) {
         //     vec!["api1.com".into(), "api2.com".into()],
         //     3,
         // );
-        // TODO: remove this once ic-agent 0.35.0 is released + call route_provider.stop() at the end
-        Arc::try_unwrap(route_provider).unwrap()
+        route_provider
     };
 
     let api_bn_agent = {
         // This agent routes directly via ipv6 addresses and doesn't employ domain names.
         // Ideally, domains with valid certificates should be used in testing.
-        let transport =
-            ReqwestTransport::create_with_client_route(Box::new(route_provider), http_client)
-                .unwrap();
+        let transport = ReqwestTransport::create_with_client_route(
+            Arc::clone(&route_provider) as Arc<dyn RouteProvider>,
+            http_client,
+        )
+        .unwrap();
         let agent = Agent::builder()
             .with_transport(transport)
             .with_identity(AnonymousIdentity {})

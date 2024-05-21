@@ -43,7 +43,9 @@ impl NodesFetcher for NodesFetcherImpl {
         let transport = ReqwestTransport::create_with_client(url, self.http_client.clone())?;
         let agent = Agent::builder().with_transport(transport).build()?;
         agent.fetch_root_key().await?;
-        let api_bns = agent.fetch_api_boundary_nodes(self.canister_id).await?;
+        let api_bns = agent
+            .fetch_api_boundary_nodes_by_canister_id(self.canister_id)
+            .await?;
         let nodes: Vec<Node> = api_bns.iter().map(|node| node.into()).collect();
         Ok(nodes)
     }

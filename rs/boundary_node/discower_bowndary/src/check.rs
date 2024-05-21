@@ -1,6 +1,6 @@
 use crate::node::Node;
 use async_trait::async_trait;
-use http::{Method, StatusCode};
+use ic_agent::agent::http_transport::hyper_transport::hyper::{Method, StatusCode};
 use ic_agent::agent::http_transport::reqwest_transport::reqwest::{Client, Request};
 use std::fmt::Debug;
 use std::time::{Duration, Instant};

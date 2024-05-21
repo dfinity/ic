@@ -15,7 +15,10 @@ use futures::FutureExt;
 use ic_agent::export::Principal;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::{
-    agent::{http_transport::reqwest_transport::ReqwestTransport, RejectCode, RejectResponse},
+    agent::{
+        http_transport::reqwest_transport::{reqwest, ReqwestTransport},
+        RejectCode, RejectResponse,
+    },
     Agent, AgentError, Identity, RequestId,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};

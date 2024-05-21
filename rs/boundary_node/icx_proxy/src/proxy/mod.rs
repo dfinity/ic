@@ -206,7 +206,7 @@ pub fn setup_unix_socket<C: HyperService<Body> + 'static>(
     let provider = RouteProvider(url);
 
     let transport =
-        HyperReplicaV2Transport::create_with_service_route(Box::new(provider), args.client)
+        HyperReplicaV2Transport::create_with_service_route(Arc::new(provider), args.client)
             .context("failed to create transport")?
             .with_max_response_body_size(RESPONSE_BODY_SIZE_LIMIT);
 
