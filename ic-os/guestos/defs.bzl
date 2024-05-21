@@ -44,8 +44,8 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",
             "//publish/binaries:vsock_guest": "/opt/ic/bin/vsock_guest:0755",
-            "//ic-os/utils:infogetty": "/opt/ic/bin/infogetty:0755",
-            "//ic-os/utils:prestorecon": "/opt/ic/bin/prestorecon:0755",
+            "//ic-os/cpp:infogetty": "/opt/ic/bin/infogetty:0755",
+            "//ic-os/cpp:prestorecon": "/opt/ic/bin/prestorecon:0755",
 
             # additional libraries to install
             "//publish/binaries:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",
