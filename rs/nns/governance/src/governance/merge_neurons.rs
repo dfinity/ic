@@ -622,6 +622,7 @@ mod tests {
     use crate::{
         neuron::{DissolveStateAndAge, NeuronBuilder},
         pb::v1::{neuron::Followees, proposal::Action, ManageNeuron, NeuronType, Proposal, Topic},
+        storage::reset_stable_memory,
     };
     use assert_matches::assert_matches;
     use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
@@ -693,12 +694,13 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_effect_source_neuron_not_found() {
+    fn test_calculate_effect_source_or_target_not_found() {
         let mut neuron_store = NeuronStore::new(BTreeMap::new());
         neuron_store
             .add_neuron(create_model_neuron_builder(2).build())
             .unwrap();
 
+        // Source not found.
         let error = calculate_merge_neurons_effect(
             &NeuronId { id: 2 },
             &Merge {
@@ -710,21 +712,13 @@ mod tests {
             NOW_SECONDS,
         )
         .unwrap_err();
-
         assert_matches!(error, MergeNeuronsError::SourceNeuronNotFound);
-    }
 
-    #[test]
-    fn test_calculate_effect_target_neuron_not_found() {
-        let mut neuron_store = NeuronStore::new(BTreeMap::new());
-        neuron_store
-            .add_neuron(create_model_neuron_builder(1).build())
-            .unwrap();
-
+        // Target not found.
         let error = calculate_merge_neurons_effect(
-            &NeuronId { id: 2 },
+            &NeuronId { id: 1 },
             &Merge {
-                source_neuron_id: Some(NeuronId { id: 1 }),
+                source_neuron_id: Some(NeuronId { id: 2 }),
             },
             &PRINCIPAL_ID,
             &neuron_store,
@@ -732,12 +726,11 @@ mod tests {
             NOW_SECONDS,
         )
         .unwrap_err();
-
         assert_matches!(error, MergeNeuronsError::TargetNeuronNotFound);
     }
 
     #[test]
-    fn test_calculate_effect_source_not_authorized() {
+    fn test_calculate_effect_source_or_target_not_authorized() {
         let mut neuron_store = NeuronStore::new(BTreeMap::new());
         let neuron_not_authorized = create_model_neuron_builder(1)
             .with_controller(PrincipalId::new_user_test_id(2))
@@ -747,6 +740,7 @@ mod tests {
             .add_neuron(create_model_neuron_builder(2).build())
             .unwrap();
 
+        // Source not authorized.
         let error = calculate_merge_neurons_effect(
             &NeuronId { id: 2 },
             &Merge {
@@ -758,25 +752,13 @@ mod tests {
             NOW_SECONDS,
         )
         .unwrap_err();
-
         assert_matches!(error, MergeNeuronsError::SourceNeuronNotHotKeyOrController);
-    }
 
-    #[test]
-    fn test_calculate_effect_target_not_authorized() {
-        let mut neuron_store = NeuronStore::new(BTreeMap::new());
-        neuron_store
-            .add_neuron(create_model_neuron_builder(1).build())
-            .unwrap();
-        let neuron_not_authorized = create_model_neuron_builder(2)
-            .with_controller(PrincipalId::new_user_test_id(2))
-            .build();
-        neuron_store.add_neuron(neuron_not_authorized).unwrap();
-
+        // Target not authorized.
         let error = calculate_merge_neurons_effect(
-            &NeuronId { id: 2 },
+            &NeuronId { id: 1 },
             &Merge {
-                source_neuron_id: Some(NeuronId { id: 1 }),
+                source_neuron_id: Some(NeuronId { id: 2 }),
             },
             &PRINCIPAL_ID,
             &neuron_store,
@@ -784,12 +766,11 @@ mod tests {
             NOW_SECONDS,
         )
         .unwrap_err();
-
         assert_matches!(error, MergeNeuronsError::TargetNeuronNotHotKeyOrController);
     }
 
     #[test]
-    fn test_calculate_effect_source_spawning() {
+    fn test_calculate_effect_source_or_target_spawning() {
         let mut neuron_store = NeuronStore::new(BTreeMap::new());
         let neuron_spawning = create_model_neuron_builder(1)
             .with_spawn_at_timestamp_seconds(NOW_SECONDS - 1)
@@ -799,6 +780,7 @@ mod tests {
             .add_neuron(create_model_neuron_builder(2).build())
             .unwrap();
 
+        // Source spawning.
         let error = calculate_merge_neurons_effect(
             &NeuronId { id: 2 },
             &Merge {
@@ -810,25 +792,13 @@ mod tests {
             NOW_SECONDS,
         )
         .unwrap_err();
-
         assert_matches!(error, MergeNeuronsError::SourceNeuronSpawning);
-    }
 
-    #[test]
-    fn test_calculate_effect_target_spawning() {
-        let mut neuron_store = NeuronStore::new(BTreeMap::new());
-        neuron_store
-            .add_neuron(create_model_neuron_builder(1).build())
-            .unwrap();
-        let neuron_spawning = create_model_neuron_builder(2)
-            .with_spawn_at_timestamp_seconds(NOW_SECONDS - 1)
-            .build();
-        neuron_store.add_neuron(neuron_spawning).unwrap();
-
+        // Target spawning.
         let error = calculate_merge_neurons_effect(
-            &NeuronId { id: 2 },
+            &NeuronId { id: 1 },
             &Merge {
-                source_neuron_id: Some(NeuronId { id: 1 }),
+                source_neuron_id: Some(NeuronId { id: 2 }),
             },
             &PRINCIPAL_ID,
             &neuron_store,
@@ -836,68 +806,82 @@ mod tests {
             NOW_SECONDS,
         )
         .unwrap_err();
-
         assert_matches!(error, MergeNeuronsError::TargetNeuronSpawning);
     }
 
     #[test]
-    fn test_calculate_effect_source_dissolving() {
-        let mut neuron_store = NeuronStore::new(BTreeMap::new());
-        let neuron_dissolving = create_model_neuron_builder(1)
-            .with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+    fn test_calculate_effect_source_or_target_dissolving_or_dissolved() {
+        let dissolve_state_and_age_invalid_for_merge_cases = vec![
+            DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: NOW_SECONDS + 1,
-            })
-            .build();
-        neuron_store.add_neuron(neuron_dissolving).unwrap();
-        neuron_store
-            .add_neuron(create_model_neuron_builder(2).build())
-            .unwrap();
-
-        let error = calculate_merge_neurons_effect(
-            &NeuronId { id: 2 },
-            &Merge {
-                source_neuron_id: Some(NeuronId { id: 1 }),
             },
-            &PRINCIPAL_ID,
-            &neuron_store,
-            TRANSACTION_FEES_E8S,
-            NOW_SECONDS,
-        )
-        .unwrap_err();
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW_SECONDS - 1,
+            },
+            DissolveStateAndAge::LegacyDissolved {
+                aging_since_timestamp_seconds: NOW_SECONDS - 1,
+            },
+            DissolveStateAndAge::LegacyDissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW_SECONDS + 1,
+                aging_since_timestamp_seconds: NOW_SECONDS - 1,
+            },
+            DissolveStateAndAge::LegacyDissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW_SECONDS - 1,
+                aging_since_timestamp_seconds: NOW_SECONDS - 1,
+            },
+            DissolveStateAndAge::LegacyNoneDissolveState {
+                aging_since_timestamp_seconds: NOW_SECONDS - 1,
+            },
+        ];
 
-        assert_matches!(error, MergeNeuronsError::SourceNeuronDissolving);
+        for dissolve_state_and_age_invalid_for_merge in
+            dissolve_state_and_age_invalid_for_merge_cases
+        {
+            // Reset stable memory for each case so that neuron store is empty.
+            reset_stable_memory();
+            let mut neuron_store = NeuronStore::new(BTreeMap::new());
+            let neuron_invalid = create_model_neuron_builder(1)
+                .with_dissolve_state_and_age(dissolve_state_and_age_invalid_for_merge)
+                .build();
+            neuron_store.add_neuron(neuron_invalid).unwrap();
+            neuron_store
+                .add_neuron(create_model_neuron_builder(2).build())
+                .unwrap();
+
+            // Source neuron dissolving or dissolved.
+            let error = calculate_merge_neurons_effect(
+                &NeuronId { id: 2 },
+                &Merge {
+                    source_neuron_id: Some(NeuronId { id: 1 }),
+                },
+                &PRINCIPAL_ID,
+                &neuron_store,
+                TRANSACTION_FEES_E8S,
+                NOW_SECONDS,
+            )
+            .unwrap_err();
+
+            assert_matches!(error, MergeNeuronsError::SourceNeuronDissolving);
+
+            // Target neuron dissolving or dissolved.
+            let error = calculate_merge_neurons_effect(
+                &NeuronId { id: 1 },
+                &Merge {
+                    source_neuron_id: Some(NeuronId { id: 2 }),
+                },
+                &PRINCIPAL_ID,
+                &neuron_store,
+                TRANSACTION_FEES_E8S,
+                NOW_SECONDS,
+            )
+            .unwrap_err();
+
+            assert_matches!(error, MergeNeuronsError::TargetNeuronDissolving);
+        }
     }
 
     #[test]
-    fn test_calculate_effect_target_dissolving() {
-        let mut neuron_store = NeuronStore::new(BTreeMap::new());
-        neuron_store
-            .add_neuron(create_model_neuron_builder(1).build())
-            .unwrap();
-        let neuron_dissolving = create_model_neuron_builder(2)
-            .with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
-                when_dissolved_timestamp_seconds: NOW_SECONDS + 1,
-            })
-            .build();
-        neuron_store.add_neuron(neuron_dissolving).unwrap();
-
-        let error = calculate_merge_neurons_effect(
-            &NeuronId { id: 2 },
-            &Merge {
-                source_neuron_id: Some(NeuronId { id: 1 }),
-            },
-            &PRINCIPAL_ID,
-            &neuron_store,
-            TRANSACTION_FEES_E8S,
-            NOW_SECONDS,
-        )
-        .unwrap_err();
-
-        assert_matches!(error, MergeNeuronsError::TargetNeuronDissolving);
-    }
-
-    #[test]
-    fn test_calculate_effect_source_in_neurons_fund() {
+    fn test_calculate_effect_source_or_target_in_neurons_fund() {
         let mut neuron_store = NeuronStore::new(BTreeMap::new());
         let neuron_in_neurons_fund = create_model_neuron_builder(1)
             .with_joined_community_fund_timestamp_seconds(Some(NOW_SECONDS - 1))
@@ -907,6 +891,7 @@ mod tests {
             .add_neuron(create_model_neuron_builder(2).build())
             .unwrap();
 
+        // Source neuron in neurons fund.
         let error = calculate_merge_neurons_effect(
             &NeuronId { id: 2 },
             &Merge {
@@ -920,23 +905,12 @@ mod tests {
         .unwrap_err();
 
         assert_matches!(error, MergeNeuronsError::SourceNeuronInNeuronsFund);
-    }
 
-    #[test]
-    fn test_calculate_effect_target_in_neurons_fund() {
-        let mut neuron_store = NeuronStore::new(BTreeMap::new());
-        neuron_store
-            .add_neuron(create_model_neuron_builder(1).build())
-            .unwrap();
-        let neuron_in_neurons_fund = create_model_neuron_builder(2)
-            .with_joined_community_fund_timestamp_seconds(Some(NOW_SECONDS - 1))
-            .build();
-        neuron_store.add_neuron(neuron_in_neurons_fund).unwrap();
-
+        // Target neuron in neurons fund.
         let error = calculate_merge_neurons_effect(
-            &NeuronId { id: 2 },
+            &NeuronId { id: 1 },
             &Merge {
-                source_neuron_id: Some(NeuronId { id: 1 }),
+                source_neuron_id: Some(NeuronId { id: 2 }),
             },
             &PRINCIPAL_ID,
             &neuron_store,
@@ -1082,6 +1056,8 @@ mod tests {
         let mut neuron_store = NeuronStore::new(BTreeMap::new());
 
         let source_neuron = create_model_neuron_builder(1)
+            .with_controller(PrincipalId::new_user_test_id(2))
+            .with_hot_keys(vec![*PRINCIPAL_ID])
             .with_cached_neuron_stake_e8s(300 * E8 + 10 * E8 + TRANSACTION_FEES_E8S)
             .with_neuron_fees_e8s(10 * E8)
             .with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
@@ -1090,14 +1066,26 @@ mod tests {
             })
             .with_maturity_e8s_equivalent(50 * E8)
             .with_staked_maturity_e8s_equivalent(40 * E8)
+            .with_followees(hashmap! {
+                Topic::NeuronManagement as i32 => Followees {
+                    followees: vec![NeuronId { id: 101 }],
+                }
+            })
             .build();
         neuron_store.add_neuron(source_neuron).unwrap();
 
         let target_neuron = create_model_neuron_builder(2)
+            .with_controller(PrincipalId::new_user_test_id(2))
+            .with_hot_keys(vec![*PRINCIPAL_ID])
             .with_cached_neuron_stake_e8s(100 * E8)
             .with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
                 dissolve_delay_seconds: 100 * ONE_DAY_SECONDS,
                 aging_since_timestamp_seconds: NOW_SECONDS - 300 * ONE_DAY_SECONDS,
+            })
+            .with_followees(hashmap! {
+                Topic::NeuronManagement as i32 => Followees {
+                    followees: vec![NeuronId { id: 101 }],
+                }
             })
             .build();
         neuron_store.add_neuron(target_neuron).unwrap();
