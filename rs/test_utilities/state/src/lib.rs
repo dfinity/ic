@@ -137,6 +137,7 @@ impl ReplicatedStateBuilder {
                 subnet_type: self.subnet_type,
                 subnet_features: self.subnet_features,
                 ecdsa_keys_held: BTreeSet::new(),
+                idkg_keys_held: BTreeSet::new(),
             },
         );
 

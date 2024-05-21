@@ -862,6 +862,9 @@ impl BatchProcessorImpl {
                 .transpose()?
                 .unwrap_or_default();
 
+            // TODO(EXC-1601): propagate the iDKG keys held from the registry.
+            let idkg_keys_held = Default::default();
+
             subnets.insert(
                 *subnet_id,
                 SubnetTopology {
@@ -870,6 +873,7 @@ impl BatchProcessorImpl {
                     subnet_type,
                     subnet_features,
                     ecdsa_keys_held,
+                    idkg_keys_held,
                 },
             );
         }
@@ -896,12 +900,16 @@ impl BatchProcessorImpl {
             .map_err(|err| registry_error("ECDSA signing subnets", None, err))?
             .unwrap_or_default();
 
+        // TODO(EXC-1601): propagate the iDKG keys held from the registry.
+        let idkg_signing_subnets = Default::default();
+
         Ok(NetworkTopology {
             subnets,
             routing_table: Arc::new(routing_table),
             nns_subnet_id,
             canister_migrations: Arc::new(canister_migrations),
             ecdsa_signing_subnets,
+            idkg_signing_subnets,
             bitcoin_testnet_canister_id: self.bitcoin_config.testnet_canister_id,
             bitcoin_mainnet_canister_id: self.bitcoin_config.mainnet_canister_id,
         })
