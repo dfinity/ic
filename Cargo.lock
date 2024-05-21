@@ -11657,7 +11657,6 @@ dependencies = [
 name = "ic-test-utilities"
 version = "0.9.0"
 dependencies = [
- "async-trait",
  "hex-literal",
  "ic-artifact-pool",
  "ic-btc-types-internal",
@@ -12284,6 +12283,7 @@ dependencies = [
  "crossbeam-channel",
  "hyper 0.14.26",
  "ic-crypto-tls-interfaces",
+ "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
  "ic-interfaces-registry",
  "ic-interfaces-registry-mocks",
@@ -12318,10 +12318,13 @@ version = "0.9.0"
 dependencies = [
  "hyper 0.14.26",
  "ic-crypto-tls-interfaces",
+ "ic-crypto-utils-tls",
  "ic-interfaces-registry",
  "ic-xnet-uri",
+ "rustls 0.21.12",
  "socket2 0.5.6",
  "tokio",
+ "tokio-rustls 0.24.1",
 ]
 
 [[package]]
@@ -12338,6 +12341,7 @@ dependencies = [
  "ic-config",
  "ic-constants",
  "ic-crypto-tls-interfaces",
+ "ic-crypto-tls-interfaces-mocks",
  "ic-crypto-tree-hash",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",

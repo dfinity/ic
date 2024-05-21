@@ -410,7 +410,7 @@ pub trait TlsConfig {
     ) -> Result<ClientConfig, TlsConfigError>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum TlsConfigError {
     RegistryError(RegistryClientError),
     CertificateNotInRegistry {

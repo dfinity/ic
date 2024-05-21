@@ -28,6 +28,7 @@ url = "2.1.1"
 
 [dev-dependencies]
 bytes = { workspace = true }
+ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-registry-keys = { path = "../../registry/keys" }

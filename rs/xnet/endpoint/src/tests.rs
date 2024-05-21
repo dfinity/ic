@@ -1,12 +1,11 @@
 use super::*;
 use bytes::Bytes;
+use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_protobuf::{messaging::xnet::v1 as pb, proxy::ProtoProxy};
 use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
-use ic_test_utilities::{
-    crypto::fake_tls_handshake::FakeTlsHandshake, state_manager::FakeStateManager,
-};
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, metric_vec, HistogramStats, MetricVec,
@@ -33,7 +32,7 @@ pub(crate) struct EndpointTestFixture {
     pub state_manager: Arc<FakeStateManager>,
     pub registry_client: Arc<MockRegistryClient>,
     pub metrics: MetricsRegistry,
-    pub tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+    pub tls_handshake: Arc<dyn TlsConfig + Send + Sync>,
 }
 
 impl EndpointTestFixture {
@@ -67,7 +66,7 @@ impl Default for EndpointTestFixture {
             metrics: MetricsRegistry::new(),
             state_manager: Arc::new(FakeStateManager::new()),
             registry_client: Arc::new(MockRegistryClient::new()),
-            tls_handshake: Arc::new(FakeTlsHandshake::new()),
+            tls_handshake: Arc::new(MockTlsConfig::new()),
         }
     }
 }
