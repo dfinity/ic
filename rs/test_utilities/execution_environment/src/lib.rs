@@ -100,6 +100,7 @@ pub fn generate_subnets(
                 subnet_type,
                 subnet_features: SubnetFeatures::default(),
                 ecdsa_keys_held: BTreeSet::new(),
+                idkg_keys_held: BTreeSet::new(),
             },
         );
     }

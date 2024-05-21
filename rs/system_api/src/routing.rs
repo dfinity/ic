@@ -24,6 +24,7 @@ pub(super) enum ResolveDestinationError {
     SubnetNotFound(CanisterId, Ic00Method),
     AlreadyResolved(PrincipalId),
     EcdsaKeyError(String),
+    IDkgKeyError(String),
 }
 
 impl From<UserError> for ResolveDestinationError {
@@ -218,7 +219,12 @@ pub(super) fn resolve_destination(
         }
         Ok(Ic00Method::ComputeInitialIDkgDealings) => {
             let args = ComputeInitialIDkgDealingsArgs::decode(payload)?;
-            route_idkg_message(&args.key_id, network_topology, &Some(args.subnet_id))
+            route_idkg_message(
+                &args.key_id,
+                network_topology,
+                &Some(args.subnet_id),
+                IDkgSubnetKind::OnlyHoldsKey,
+            )
         }
         Ok(Ic00Method::UploadChunk) => {
             let args = UploadChunkArgs::decode(payload)?;
@@ -287,7 +293,7 @@ fn route_ecdsa_message(
     key_id: &EcdsaKeyId,
     network_topology: &NetworkTopology,
     requested_subnet: &Option<SubnetId>,
-    signing_must_be_enabled: EcdsaSubnetKind,
+    ecdsa_subnet_kind: EcdsaSubnetKind,
 ) -> Result<PrincipalId, ResolveDestinationError> {
     fn format_keys<'a>(mut found_keys: impl Iterator<Item = &'a EcdsaKeyId>) -> String {
         let mut keys = "[".to_string();
@@ -309,7 +315,7 @@ fn route_ecdsa_message(
             ))),
             Some(subnet_topology) => {
                 if subnet_topology.ecdsa_keys_held.contains(key_id) {
-                    match signing_must_be_enabled {
+                    match ecdsa_subnet_kind {
                         EcdsaSubnetKind::HoldsAndSignWithKey => {
                             if network_topology
                                 .ecdsa_signing_subnets(key_id)
@@ -342,7 +348,7 @@ fn route_ecdsa_message(
             }
             // Otherwise either return an error, or look through all subnets to
             // find one with the key if signing isn't required.
-            match signing_must_be_enabled {
+            match ecdsa_subnet_kind {
                 EcdsaSubnetKind::HoldsAndSignWithKey => {
                     let keys = format_keys(network_topology.ecdsa_signing_subnets.keys());
                     Err(ResolveDestinationError::EcdsaKeyError(format!(
@@ -369,16 +375,100 @@ fn route_ecdsa_message(
     }
 }
 
+enum IDkgSubnetKind {
+    OnlyHoldsKey,
+    // TODO: remove this clippy warning suppression once we have a use case for it.
+    #[allow(dead_code)]
+    HoldsAndSignWithKey,
+}
+
+/// Routes to the `requested_subnet` if it holds the key (and fails if that
+/// subnet doesn't hold the key).  If a `requested_subnet` is not provided,
+/// route to the first subnet enabled to sign with the given key.
 fn route_idkg_message(
-    _key_id: &MasterPublicKeyId,
-    _network_topology: &NetworkTopology,
-    _requested_subnet: &Option<SubnetId>,
+    key_id: &MasterPublicKeyId,
+    network_topology: &NetworkTopology,
+    requested_subnet: &Option<SubnetId>,
+    idkg_subnet_kind: IDkgSubnetKind,
 ) -> Result<PrincipalId, ResolveDestinationError> {
-    // TODO(EXC-1599): implement route_idkg_message().
-    Err(ResolveDestinationError::UserError(UserError::new(
-        ic_error_types::ErrorCode::CanisterRejectedMessage,
-        "ComputeInitialIDkgDealings API is not yet implemented",
-    )))
+    fn format_keys<'a>(mut found_keys: impl Iterator<Item = &'a MasterPublicKeyId>) -> String {
+        let mut keys = "[".to_string();
+        if let Some(key) = found_keys.next() {
+            write!(keys, "{}", key).unwrap();
+        }
+        for key in found_keys {
+            write!(keys, ", {}", key).unwrap();
+        }
+        keys.push(']');
+        keys
+    }
+
+    match requested_subnet {
+        Some(subnet_id) => match network_topology.subnets.get(subnet_id) {
+            None => Err(ResolveDestinationError::IDkgKeyError(format!(
+                "Requested iDKG key {} from unknown subnet {}",
+                key_id, subnet_id
+            ))),
+            Some(subnet_topology) => {
+                if subnet_topology.idkg_keys_held.contains(key_id) {
+                    match idkg_subnet_kind {
+                        IDkgSubnetKind::HoldsAndSignWithKey => {
+                            if network_topology
+                                .idkg_signing_subnets(key_id)
+                                .contains(subnet_id)
+                            {
+                                Ok((*subnet_id).get())
+                            } else {
+                                Err(ResolveDestinationError::IDkgKeyError(format!(
+                                    "Subnet {} is not enabled to sign with iDKG key {}",
+                                    subnet_id, key_id,
+                                )))
+                            }
+                        }
+                        IDkgSubnetKind::OnlyHoldsKey => Ok((*subnet_id).get()),
+                    }
+                } else {
+                    Err(ResolveDestinationError::IDkgKeyError(format!(
+                        "Requested unknown iDGK key {} on subnet {}, subnet has keys: {}",
+                        key_id,
+                        subnet_id,
+                        format_keys(subnet_topology.idkg_keys_held.iter())
+                    )))
+                }
+            }
+        },
+        None => {
+            // If some subnet is enabled to sign for the key we can immediately return it.
+            if let Some(subnet_id) = network_topology.idkg_signing_subnets(key_id).first() {
+                return Ok((*subnet_id).get());
+            }
+            // Otherwise either return an error, or look through all subnets to
+            // find one with the key if signing isn't required.
+            match idkg_subnet_kind {
+                IDkgSubnetKind::HoldsAndSignWithKey => {
+                    let keys = format_keys(network_topology.idkg_signing_subnets.keys());
+                    Err(ResolveDestinationError::IDkgKeyError(format!(
+                        "Requested unknown iDKG key: {}, existing keys with signing enabled: {}",
+                        key_id, keys
+                    )))
+                }
+                IDkgSubnetKind::OnlyHoldsKey => {
+                    let mut keys = BTreeSet::new();
+                    for (subnet_id, topology) in &network_topology.subnets {
+                        if topology.idkg_keys_held.contains(key_id) {
+                            return Ok((*subnet_id).get());
+                        }
+                        keys.extend(topology.idkg_keys_held.iter().cloned());
+                    }
+                    let keys = format_keys(keys.iter());
+                    Err(ResolveDestinationError::IDkgKeyError(format!(
+                        "Requested unknown iDKG key: {}, existing keys: {}",
+                        key_id, keys
+                    )))
+                }
+            }
+        }
+    }
 }
 
 fn route_bitcoin_message(
@@ -410,7 +500,8 @@ mod tests {
     use candid::Encode;
     use ic_base_types::RegistryVersion;
     use ic_management_canister_types::{
-        ComputeInitialEcdsaDealingsArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, SignWithECDSAArgs,
+        ComputeInitialEcdsaDealingsArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm,
+        SchnorrKeyId, SignWithECDSAArgs,
     };
     use ic_replicated_state::SubnetTopology;
     use ic_test_utilities_types::ids::{canister_test_id, node_test_id, subnet_test_id};
@@ -419,18 +510,39 @@ mod tests {
 
     use super::*;
 
-    fn key_id1() -> EcdsaKeyId {
+    fn ecdsa_key_id1() -> EcdsaKeyId {
         EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "some_key".to_string(),
         }
     }
 
-    fn key_id2() -> EcdsaKeyId {
+    fn ecdsa_key_id2() -> EcdsaKeyId {
         EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "other_key".to_string(),
         }
+    }
+
+    fn idkg_tschnorr_key_id1() -> MasterPublicKeyId {
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Ed25519,
+            name: "some_key".to_string(),
+        })
+    }
+
+    fn idkg_tschnorr_key_id2() -> MasterPublicKeyId {
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Ed25519,
+            name: "other_key".to_string(),
+        })
+    }
+
+    fn idkg_tschnorr_key_id3() -> MasterPublicKeyId {
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Ed25519,
+            name: "yet_another_key".to_string(),
+        })
     }
 
     /// Two subnets have key_id1, but only one of the subnets is enabled
@@ -441,17 +553,17 @@ mod tests {
         NetworkTopology {
             // Only subnet 0 can sign with the first key.
             ecdsa_signing_subnets: btreemap! {
-                key_id1() => vec![subnet_id0],
+                ecdsa_key_id1() => vec![subnet_id0],
             },
             subnets: btreemap! {
                 // Subnet 0 holds both keys
                 subnet_id0 => SubnetTopology {
-                    ecdsa_keys_held: vec![key_id1(), key_id2()].into_iter().collect(),
+                    ecdsa_keys_held: vec![ecdsa_key_id1(), ecdsa_key_id2()].into_iter().collect(),
                     ..SubnetTopology::default()
                 },
                 // Subnet 1 holds only the first key.
                 subnet_test_id(1) => SubnetTopology {
-                    ecdsa_keys_held: vec![key_id1()].into_iter().collect(),
+                    ecdsa_keys_held: vec![ecdsa_key_id1()].into_iter().collect(),
                     ..SubnetTopology::default()
                 },
                 subnet_test_id(2) => SubnetTopology::default(),
@@ -460,7 +572,34 @@ mod tests {
         }
     }
 
-    fn network_without_ecdsa_subnet() -> NetworkTopology {
+    /// Two subnets have key_id1, but only one of the subnets is enabled
+    /// to sign with it.
+    /// Only one subnet has key_id2, and it isn't enabled to sign with it.
+    fn network_with_idkg_subnets() -> NetworkTopology {
+        let subnet_id0 = subnet_test_id(0);
+        NetworkTopology {
+            // Only subnet 0 can sign with the first key.
+            idkg_signing_subnets: btreemap! {
+                idkg_tschnorr_key_id1() => vec![subnet_id0],
+            },
+            subnets: btreemap! {
+                // Subnet 0 holds both keys
+                subnet_id0 => SubnetTopology {
+                    idkg_keys_held: vec![idkg_tschnorr_key_id1(), idkg_tschnorr_key_id2()].into_iter().collect(),
+                    ..SubnetTopology::default()
+                },
+                // Subnet 1 holds only the first key.
+                subnet_test_id(1) => SubnetTopology {
+                    idkg_keys_held: vec![idkg_tschnorr_key_id1()].into_iter().collect(),
+                    ..SubnetTopology::default()
+                },
+                subnet_test_id(2) => SubnetTopology::default(),
+            },
+            ..NetworkTopology::default()
+        }
+    }
+
+    fn network_without_ecdsa_or_idkg_subnet() -> NetworkTopology {
         NetworkTopology::default()
     }
 
@@ -498,7 +637,7 @@ mod tests {
             resolve_destination(
                 &network_with_ecdsa_subnets(),
                 &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
-                &compute_initial_ecdsa_dealings_req(key_id1(), subnet_test_id(1)),
+                &compute_initial_ecdsa_dealings_req(ecdsa_key_id1(), subnet_test_id(1)),
                 subnet_test_id(2),
             )
             .unwrap(),
@@ -512,13 +651,13 @@ mod tests {
             resolve_destination(
                 &network_with_ecdsa_subnets(),
                 &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
-                &compute_initial_ecdsa_dealings_req(key_id1(), subnet_test_id(2)),
+                &compute_initial_ecdsa_dealings_req(ecdsa_key_id1(), subnet_test_id(2)),
                 subnet_test_id(2),
             )
             .unwrap_err(),
             ResolveDestinationError::EcdsaKeyError(err) => assert_eq!(
                 err,
-                format!("Requested ECDSA key {} on subnet {}, subnet has keys: []", key_id1(), subnet_test_id(2))
+                format!("Requested ECDSA key {} on subnet {}, subnet has keys: []", ecdsa_key_id1(), subnet_test_id(2))
             )
         )
     }
@@ -529,13 +668,13 @@ mod tests {
             resolve_destination(
                 &network_with_ecdsa_subnets(),
                 &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
-                &compute_initial_ecdsa_dealings_req(key_id1(), subnet_test_id(3)),
+                &compute_initial_ecdsa_dealings_req(ecdsa_key_id1(), subnet_test_id(3)),
                 subnet_test_id(2),
             )
             .unwrap_err(),
             ResolveDestinationError::EcdsaKeyError(err) => assert_eq!(
                 err,
-                format!("Requested ECDSA key {} from unknown subnet {}", key_id1(), subnet_test_id(3))
+                format!("Requested ECDSA key {} from unknown subnet {}", ecdsa_key_id1(), subnet_test_id(3))
             )
         )
     }
@@ -547,14 +686,14 @@ mod tests {
                     &network_with_ecdsa_subnets(),
                     &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
                     // Subnet 2 doesn't have the requested key.
-                    &compute_initial_ecdsa_dealings_req(key_id1(), subnet_test_id(2)),
+                    &compute_initial_ecdsa_dealings_req(ecdsa_key_id1(), subnet_test_id(2)),
                     subnet_test_id(2),
                 )
                 .unwrap_err(),
                 ResolveDestinationError::EcdsaKeyError(err) => assert_eq!(
                     err,
                     format!("Requested ECDSA key {} on subnet {}, subnet has keys: []",
-                        key_id1(),
+                        ecdsa_key_id1(),
                         subnet_test_id(2),
                 )
             )
@@ -568,14 +707,14 @@ mod tests {
                     &network_with_ecdsa_subnets(),
                     &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
                     // Subnet 3 doesn't exist
-                    &compute_initial_ecdsa_dealings_req(key_id1(), subnet_test_id(3)),
+                    &compute_initial_ecdsa_dealings_req(ecdsa_key_id1(), subnet_test_id(3)),
                     subnet_test_id(2),
                 )
                 .unwrap_err(),
                 ResolveDestinationError::EcdsaKeyError(err) => assert_eq!(
                     err,
                     format!("Requested ECDSA key {} from unknown subnet {}",
-                        key_id1(),
+                        ecdsa_key_id1(),
                         subnet_test_id(3),
                 )
             )
@@ -588,7 +727,7 @@ mod tests {
             resolve_destination(
                 &network_with_ecdsa_subnets(),
                 &Ic00Method::SignWithECDSA.to_string(),
-                &ecdsa_sign_req(key_id1()),
+                &ecdsa_sign_req(ecdsa_key_id1()),
                 subnet_test_id(1),
             )
             .unwrap(),
@@ -599,15 +738,15 @@ mod tests {
     #[test]
     fn resolve_ecdsa_sign_error() {
         assert_matches!(resolve_destination(
-            &network_without_ecdsa_subnet(),
+            &network_without_ecdsa_or_idkg_subnet(),
             &Ic00Method::SignWithECDSA.to_string(),
-            &ecdsa_sign_req(key_id1()),
+            &ecdsa_sign_req(ecdsa_key_id1()),
             subnet_test_id(1),
         )
         .unwrap_err(),
         ResolveDestinationError::EcdsaKeyError(err) => assert_eq!(
                 err,
-                format!("Requested ECDSA key: {}, existing keys with signing enabled: []", key_id1())
+                format!("Requested ECDSA key: {}, existing keys with signing enabled: []", ecdsa_key_id1())
             )
         )
     }
@@ -618,7 +757,7 @@ mod tests {
             resolve_destination(
                 &network_with_ecdsa_subnets(),
                 &Ic00Method::ECDSAPublicKey.to_string(),
-                &public_key_req(key_id2()),
+                &public_key_req(ecdsa_key_id2()),
                 subnet_test_id(1),
             )
             .unwrap(),
@@ -632,7 +771,7 @@ mod tests {
             resolve_destination(
                 &network_with_ecdsa_subnets(),
                 &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
-                &compute_initial_ecdsa_dealings_req(key_id2(), subnet_test_id(0)),
+                &compute_initial_ecdsa_dealings_req(ecdsa_key_id2(), subnet_test_id(0)),
                 subnet_test_id(1),
             )
             .unwrap(),
@@ -642,10 +781,10 @@ mod tests {
 
     #[test]
     fn route_ecdsa_message_subnet_can_sign() {
-        // subnet_test_id(0) is enabled to sign with key_id1()
+        // subnet_test_id(0) is enabled to sign with ecdsa_key_id1()
         assert_eq!(
             route_ecdsa_message(
-                &key_id1(),
+                &ecdsa_key_id1(),
                 &network_with_ecdsa_subnets(),
                 &Some(subnet_test_id(0)),
                 EcdsaSubnetKind::HoldsAndSignWithKey
@@ -657,8 +796,8 @@ mod tests {
 
     #[test]
     fn route_ecdsa_message_subnet_cannot_sign() {
-        // subnet_test_id(1) is not enabled to sign with key_id1()
-        let key_id = key_id1();
+        // subnet_test_id(1) is not enabled to sign with ecdsa_key_id1()
+        let key_id = ecdsa_key_id1();
         let subnet_id = subnet_test_id(1);
         match route_ecdsa_message(
             &key_id,
@@ -671,6 +810,120 @@ mod tests {
                 format!(
                     "Subnet {} is not enabled to sign with ECDSA key {}",
                     subnet_id, key_id,
+                )
+            ),
+            _ => panic!("Unexpected result."),
+        };
+    }
+
+    #[test]
+    fn route_idkg_message_subnet_can_sign() {
+        // subnet_test_id(0) is enabled to sign with idkg_tschnorr_key_id1()
+        assert_eq!(
+            route_idkg_message(
+                &idkg_tschnorr_key_id1(),
+                &network_with_idkg_subnets(),
+                &Some(subnet_test_id(0)),
+                IDkgSubnetKind::HoldsAndSignWithKey
+            )
+            .unwrap(),
+            subnet_test_id(0).get()
+        );
+    }
+
+    #[test]
+    fn route_idkg_message_subnet_cannot_sign() {
+        // subnet_test_id(1) is not enabled to sign with idkg_tschnorr_key_id1()
+        let key_id = idkg_tschnorr_key_id1();
+        let subnet_id = subnet_test_id(1);
+        match route_idkg_message(
+            &key_id,
+            &network_with_idkg_subnets(),
+            &Some(subnet_id),
+            IDkgSubnetKind::HoldsAndSignWithKey,
+        ) {
+            Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
+                msg,
+                format!(
+                    "Subnet {} is not enabled to sign with iDKG key {}",
+                    subnet_id, key_id,
+                )
+            ),
+            _ => panic!("Unexpected result."),
+        };
+    }
+
+    #[test]
+    fn route_idkg_message_subnet_cannot_sign_unknown_subnet() {
+        let key_id = idkg_tschnorr_key_id1();
+        let unknown_subnet_id = subnet_test_id(3);
+        match route_idkg_message(
+            &key_id,
+            &network_with_idkg_subnets(),
+            &Some(unknown_subnet_id),
+            IDkgSubnetKind::HoldsAndSignWithKey,
+        ) {
+            Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
+                msg,
+                format!("Requested iDKG key {key_id} from unknown subnet {unknown_subnet_id}",)
+            ),
+            _ => panic!("Unexpected result."),
+        };
+    }
+
+    #[test]
+    fn route_idkg_message_subnet_cannot_sign_unknown_key() {
+        let key_id = idkg_tschnorr_key_id1();
+        let subnet_id = subnet_test_id(2);
+        match route_idkg_message(
+            &key_id,
+            &network_with_idkg_subnets(),
+            &Some(subnet_id),
+            IDkgSubnetKind::HoldsAndSignWithKey,
+        ) {
+            Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
+                msg,
+                format!("Requested unknown iDGK key {key_id} on subnet {subnet_id}, subnet has keys: []",)
+            ),
+            _ => panic!("Unexpected result."),
+        };
+    }
+
+    #[test]
+    fn route_idkg_message_subnet_cannot_sign_no_requested_subnet_unknown_key() {
+        let known_key_id = idkg_tschnorr_key_id1();
+        let unknown_key_id = idkg_tschnorr_key_id3();
+        match route_idkg_message(
+            &unknown_key_id,
+            &network_with_idkg_subnets(),
+            &None,
+            IDkgSubnetKind::HoldsAndSignWithKey,
+        ) {
+            Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
+                msg,
+                format!(
+                    "Requested unknown iDKG key: {unknown_key_id}, existing keys with signing enabled: [{known_key_id}]",
+                )
+            ),
+            _ => panic!("Unexpected result."),
+        };
+    }
+
+    #[test]
+    fn route_idkg_message_subnet_cannot_sign_no_required_signing_unknown_key() {
+        let key_id1 = idkg_tschnorr_key_id1();
+        let key_id2 = idkg_tschnorr_key_id2();
+        let unknown_key_id = idkg_tschnorr_key_id3();
+        match route_idkg_message(
+            &unknown_key_id,
+            &network_with_idkg_subnets(),
+            &None,
+            IDkgSubnetKind::OnlyHoldsKey,
+        ) {
+            Err(ResolveDestinationError::IDkgKeyError(msg)) => assert_eq!(
+                msg,
+                format!(
+                    "Requested unknown iDKG key: {unknown_key_id}, existing keys: [{key_id2}, {key_id1}]",
                 )
             ),
             _ => panic!("Unexpected result."),
