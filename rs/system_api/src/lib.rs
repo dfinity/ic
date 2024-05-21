@@ -3252,11 +3252,24 @@ impl SystemApi for SystemApiImpl {
 
 /// The default implementation of the `OutOfInstructionHandler` trait.
 /// It simply returns an out-of-instructions error.
-pub struct DefaultOutOfInstructionsHandler {}
+#[derive(Default)]
+pub struct DefaultOutOfInstructionsHandler {
+    message_instruction_limit: NumInstructions,
+}
+
+impl DefaultOutOfInstructionsHandler {
+    pub fn new(message_instruction_limit: NumInstructions) -> Self {
+        Self {
+            message_instruction_limit,
+        }
+    }
+}
 
 impl OutOfInstructionsHandler for DefaultOutOfInstructionsHandler {
     fn out_of_instructions(&self, _instruction_counter: i64) -> HypervisorResult<i64> {
-        Err(HypervisorError::InstructionLimitExceeded)
+        Err(HypervisorError::InstructionLimitExceeded(
+            self.message_instruction_limit,
+        ))
     }
 
     fn yield_for_dirty_memory_copy(&self, _instruction_counter: i64) -> HypervisorResult<i64> {

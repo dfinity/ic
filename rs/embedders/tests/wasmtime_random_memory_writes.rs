@@ -110,7 +110,7 @@ fn test_api_for_update(
             .wasm_native_stable_memory,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Rc::new(DefaultOutOfInstructionsHandler {}),
+        Rc::new(DefaultOutOfInstructionsHandler::new(instruction_limit)),
         log,
     )
 }
@@ -771,7 +771,9 @@ mod tests {
                     max_num_instructions,
                     subnet_type,
                 ),
-                Err(HypervisorError::InstructionLimitExceeded)
+                Err(HypervisorError::InstructionLimitExceeded(
+                    max_num_instructions
+                ))
             )
         })
     }

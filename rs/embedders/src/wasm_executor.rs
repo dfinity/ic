@@ -229,7 +229,7 @@ impl WasmExecutor for WasmExecutorImpl {
             &execution_state.exported_globals,
             self.log.clone(),
             wasm_reserved_pages,
-            Rc::new(DefaultOutOfInstructionsHandler {}),
+            Rc::new(DefaultOutOfInstructionsHandler::default()),
         );
 
         // Collect logs only when the flag is enabled to avoid producing too much data.

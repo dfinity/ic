@@ -11,7 +11,7 @@ use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     methods::{FuncRef, WasmClosure, WasmMethod},
     time::UNIX_EPOCH,
-    NumBytes,
+    NumBytes, NumInstructions,
 };
 
 #[cfg(target_os = "linux")]
@@ -104,6 +104,7 @@ fn correctly_count_instructions() {
 #[test]
 fn instruction_limit_traps() {
     let data_size = 1024;
+    let instruction_limit = NumInstructions::from(1000);
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(
             format!(
@@ -127,7 +128,7 @@ fn instruction_limit_traps() {
             vec![0; 1024],
             user_test_id(24).get(),
         ))
-        .with_num_instructions(1000.into())
+        .with_num_instructions(instruction_limit)
         .build();
 
     let result = instance.run(ic_types::methods::FuncRef::Method(
@@ -136,7 +137,7 @@ fn instruction_limit_traps() {
 
     assert_eq!(
         result.err(),
-        Some(HypervisorError::InstructionLimitExceeded)
+        Some(HypervisorError::InstructionLimitExceeded(instruction_limit))
     );
 }
 

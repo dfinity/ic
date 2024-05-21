@@ -1718,3 +1718,37 @@ fn test_call_context_performance_counter_correctly_reported_on_composite_query()
     assert!(counters[1] < counters[2]);
     assert!(counters[2] < counters[3]);
 }
+
+#[test]
+fn query_call_exceeds_instructions_limit() {
+    let instructions_limit = 4;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit_without_dts(instructions_limit)
+        .build();
+
+    let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let output = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister,
+            method_name: "query".to_string(),
+            method_payload: wasm().stable_grow(10).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    assert_eq!(
+        output,
+        Err(UserError::new(
+            ErrorCode::CanisterInstructionLimitExceeded,
+            format!(
+                "Error from Canister {}: Canister exceeded the limit of {} instructions for single message execution.",
+                canister,
+                instructions_limit
+            )
+        ))
+    );
+}
