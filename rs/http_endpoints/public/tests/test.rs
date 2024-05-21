@@ -24,6 +24,7 @@ use ic_certification_test_utils::{
     serialize_to_cbor, Certificate, CertificateBuilder, CertificateData,
 };
 use ic_config::http_handler::Config;
+use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tree_hash::{
     flatmap, Label as CryptoTreeHashLabel, LabeledTree, MixedHashTree, Path,
 };
@@ -39,7 +40,7 @@ use ic_protobuf::registry::crypto::v1::{
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_state::ReplicatedStateBuilder;
-use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id, NODE_1};
 use ic_types::{
     consensus::certification::{Certification, CertificationContent},
     crypto::{
@@ -57,6 +58,10 @@ use ic_types::{
 };
 use prost::Message;
 use reqwest::header::CONTENT_TYPE;
+use rustls::{
+    client::{ServerCertVerified, ServerCertVerifier},
+    ClientConfig,
+};
 use serde_bytes::ByteBuf;
 use serde_cbor::value::Value as CBOR;
 use std::{
@@ -69,9 +74,11 @@ use std::{
     },
 };
 use tokio::{
+    net::TcpSocket,
     runtime::Runtime,
     time::{sleep, Duration},
 };
+use tokio_rustls::TlsConnector;
 
 const TEXT_PLAIN: &str = "text/plain; charset=utf-8";
 
@@ -883,6 +890,61 @@ fn test_http_2_requests_are_accepted() {
         response
     );
     assert_eq!(response.version(), reqwest::Version::HTTP_2);
+}
+
+/// Assert that the alpn protocol negotiation results in h2.
+#[test]
+fn test_http_2_alpn_header_is_set() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let server_crypto = TempCryptoComponent::builder()
+        .with_node_id(NODE_1)
+        .with_keys(NodeKeysToGenerate::only_tls_key_and_cert())
+        .build();
+    HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_tls_config(server_crypto)
+        .run();
+
+    let socket = TcpSocket::new_v4().unwrap();
+
+    struct NoVerify;
+    impl ServerCertVerifier for NoVerify {
+        fn verify_server_cert(
+            &self,
+            _end_entity: &rustls::Certificate,
+            _intermediates: &[rustls::Certificate],
+            _server_name: &rustls::ServerName,
+            _scts: &mut dyn Iterator<Item = &[u8]>,
+            _ocsp_response: &[u8],
+            _now: std::time::SystemTime,
+        ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+            Ok(ServerCertVerified::assertion())
+        }
+    }
+
+    let mut accept_any_config = ClientConfig::builder()
+        .with_safe_defaults()
+        .with_custom_certificate_verifier(Arc::new(NoVerify))
+        .with_no_client_auth();
+
+    // Offer both h2 and http/1.1
+    accept_any_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    rt.block_on(async move {
+        let stream = socket.connect(addr).await.unwrap();
+        let tls_connector = TlsConnector::from(Arc::new(accept_any_config));
+        let tls = tls_connector
+            .connect("lgtm".try_into().unwrap(), stream)
+            .await
+            .unwrap();
+        let tls_data = tls.into_inner().1;
+        let alpn = tls_data.alpn_protocol();
+        assert_eq!(alpn, Some(b"h2".to_vec()).as_deref());
+    });
 }
 
 /// Assert that the endpoint accepts HTTP/1.1 requests.

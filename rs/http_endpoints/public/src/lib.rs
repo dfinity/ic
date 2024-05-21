@@ -60,15 +60,10 @@ use axum::{
     routing::get,
     Router,
 };
-use axum_server::{
-    accept::{Accept, NoDelayAcceptor},
-    tls_rustls::{RustlsAcceptor, RustlsConfig},
-};
 use crossbeam::atomic::AtomicCell;
-use futures_util::{future::BoxFuture, FutureExt};
 use http_body_util::{BodyExt, Full, LengthLimitError};
-use hyper::{Request, StatusCode};
-use hyper_util::rt::TokioIo;
+use hyper::{body::Incoming, Request, StatusCode};
+use hyper_util::rt::{TokioExecutor, TokioIo};
 use ic_async_utils::start_tcp_listener;
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
@@ -105,15 +100,13 @@ use ic_types::{
     time::expiry_time_from_now,
     NodeId, SubnetId,
 };
-use prometheus::HistogramTimer;
 use rand::Rng;
 use rustls::client::ServerName;
 use std::{
     convert::TryFrom,
-    io::{ErrorKind, Write},
+    io::Write,
     net::SocketAddr,
     path::PathBuf,
-    pin::Pin,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -125,7 +118,7 @@ use tokio::{
     time::{sleep, timeout, Instant},
 };
 use tokio_rustls::TlsConnector;
-use tower::{limit::GlobalConcurrencyLimitLayer, BoxError, ServiceBuilder};
+use tower::{limit::GlobalConcurrencyLimitLayer, BoxError, Service, ServiceBuilder};
 use tower_http::limit::RequestBodyLimitLayer;
 
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
@@ -137,6 +130,10 @@ const ALPN_HTTP2: &[u8; 2] = b"h2";
 /// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/1.1` ID][spec]
 /// [spec]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids)
 const ALPN_HTTP1_1: &[u8; 8] = b"http/1.1";
+
+/// To indicate a TLS handshake the first byte of the TLS record (also known as Content Type) is set to 22.
+/// Defined in RFC 5246 for TLS 1.2 and RFC 8446 for TLS 1.3
+const TLS_HANDHAKE_BYTES: u8 = 22;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HttpError {
@@ -425,188 +422,110 @@ pub fn start_server(
         create_port_file(path, local_addr.port());
     }
 
+    let read_timeout = Duration::from_secs(config.connection_read_timeout_seconds);
     rt_handle.spawn(async move {
-        axum_server::Server::from_tcp(tcp_listener.into_std().unwrap())
-            .acceptor(HttpEndpointAcceptor::new(
-                tls_config.clone(),
-                registry_client.clone(),
-                Duration::from_secs(config.connection_read_timeout_seconds),
-                metrics.clone(),
-            ))
-            .serve(router.into_make_service())
-            .await
-            .unwrap();
+        loop {
+            let (stream, _remote_addr) = tcp_listener.accept().await.unwrap();
+
+            let router = router.clone();
+            let tls_config = tls_config.clone();
+            let log = log.clone();
+            let registry_client = registry_client.clone();
+            let metrics = metrics.clone();
+
+            tokio::spawn(async move {
+                metrics.connections_total.inc();
+                let timer = Instant::now();
+                // Set `NODELAY`
+                if stream.set_nodelay(true).is_err() {
+                    warn!(log, "Failed to set NODELAY option on tcp stream");
+                }
+
+                // Peek to know if it is TLS connection.
+                let mut b = [0_u8; 1];
+                match timeout(read_timeout, stream.peek(&mut b)).await {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(_)) => {
+                        metrics
+                            .connection_setup_duration
+                            .with_label_values(&[STATUS_ERROR, LABEL_IO_ERROR])
+                            .observe(timer.elapsed().as_secs_f64());
+                        return;
+                    }
+                    Err(_) => {
+                        metrics
+                            .connection_setup_duration
+                            .with_label_values(&[STATUS_ERROR, LABEL_TIMEOUT_ERROR])
+                            .observe(timer.elapsed().as_secs_f64());
+                        return;
+                    }
+                }
+                let mut stream = tokio_io_timeout::TimeoutStream::new(stream);
+                stream.set_read_timeout(Some(read_timeout));
+                let stream = Box::pin(stream);
+
+                if b[0] == TLS_HANDHAKE_BYTES {
+                    let _timer = metrics
+                        .connection_duration
+                        .with_label_values(&[LABEL_SECURE])
+                        .start_timer();
+                    let mut config = match tls_config
+                        .server_config_without_client_auth(registry_client.get_latest_version())
+                    {
+                        Ok(c) => c,
+                        Err(err) => {
+                            warn!(log, "Failed to get server config from crypto {err}");
+                            return;
+                        }
+                    };
+                    config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
+                    let tls_acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
+
+                    match tls_acceptor.accept(stream).await {
+                        Ok(stream) => {
+                            metrics
+                                .connection_setup_duration
+                                .with_label_values(&[STATUS_SUCCESS, LABEL_SECURE])
+                                .observe(timer.elapsed().as_secs_f64());
+                            if let Err(err) = serve_http(stream, router).await {
+                                warn!(log, "failed to serve connection: {err}");
+                            }
+                        }
+                        Err(_) => {
+                            metrics
+                                .connection_setup_duration
+                                .with_label_values(&[STATUS_ERROR, LABEL_TLS_ERROR])
+                                .observe(timer.elapsed().as_secs_f64());
+                        }
+                    }
+                } else {
+                    let _timer = metrics
+                        .connection_duration
+                        .with_label_values(&[LABEL_INSECURE])
+                        .start_timer();
+                    metrics
+                        .connection_setup_duration
+                        .with_label_values(&[STATUS_SUCCESS, LABEL_INSECURE])
+                        .observe(timer.elapsed().as_secs_f64());
+                    if let Err(err) = serve_http(stream, router).await {
+                        warn!(log, "failed to serve connection: {err}");
+                    }
+                };
+            });
+        }
     });
 }
 
-#[derive(Clone)]
-struct HttpEndpointAcceptor {
-    tls: Arc<dyn TlsConfig + Send + Sync>,
-    registry: Arc<dyn RegistryClient>,
-    read_timeout: Duration,
-    metrics: HttpHandlerMetrics,
-}
-
-impl HttpEndpointAcceptor {
-    fn new(
-        tls: Arc<dyn TlsConfig + Send + Sync>,
-        registry: Arc<dyn RegistryClient>,
-        read_timeout: Duration,
-        metrics: HttpHandlerMetrics,
-    ) -> Self {
-        Self {
-            tls,
-            registry,
-            read_timeout,
-            metrics,
-        }
-    }
-}
-
-trait TokioRW: AsyncRead + AsyncWrite + Send + Unpin {}
-impl<T> TokioRW for T where T: AsyncRead + AsyncWrite + Send + Unpin {}
-
-struct StreamWithTimer {
-    inner: Box<dyn TokioRW>,
-    _timer: HistogramTimer,
-}
-
-impl AsyncRead for StreamWithTimer {
-    fn poll_read(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        Pin::new(&mut self.inner).poll_read(cx, buf)
-    }
-}
-
-impl AsyncWrite for StreamWithTimer {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        Pin::new(&mut self.inner).poll_write(cx, buf)
-    }
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut self.inner).poll_flush(cx)
-    }
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut self.inner).poll_shutdown(cx)
-    }
-}
-
-impl<S: Send + 'static> Accept<TcpStream, S> for HttpEndpointAcceptor {
-    type Stream = StreamWithTimer;
-    type Service = S;
-    type Future = BoxFuture<'static, Result<(Self::Stream, Self::Service), std::io::Error>>;
-    fn accept(&self, stream: TcpStream, service: S) -> Self::Future {
-        let tls = self.tls.clone();
-        let registry_client = self.registry.clone();
-        let read_timeout = self.read_timeout;
-        let metrics = self.metrics.clone();
-
-        async move {
-            metrics.connections_total.inc();
-            let timer = Instant::now();
-
-            // Peek first byte to determine if TLS connection or not.
-            let mut b = [0_u8; 1];
-            match timeout(read_timeout, stream.peek(&mut b)).await {
-                Ok(Ok(_)) => {}
-                Ok(Err(e)) => {
-                    metrics
-                        .connection_setup_duration
-                        .with_label_values(&[STATUS_ERROR, LABEL_IO_ERROR])
-                        .observe(timer.elapsed().as_secs_f64());
-                    Err(e)?
-                }
-                Err(_) => {
-                    metrics
-                        .connection_setup_duration
-                        .with_label_values(&[STATUS_ERROR, LABEL_TIMEOUT_ERROR])
-                        .observe(timer.elapsed().as_secs_f64());
-                    Err(std::io::Error::new(
-                        ErrorKind::TimedOut,
-                        "Failed to read first byte of tcp stream",
-                    ))
-                }?,
-            }
-            // Set no delay on the socket
-            let (stream, service) = NoDelayAcceptor::new().accept(stream, service).await?;
-            // Set read timeout on the socket such that connection get closed if idle for long.
-            let mut stream = tokio_io_timeout::TimeoutStream::new(stream);
-            stream.set_read_timeout(Some(read_timeout));
-            let stream = Box::pin(stream);
-
-            if b[0] == 22 {
-                let _timer = metrics
-                    .connection_duration
-                    .with_label_values(&[LABEL_SECURE])
-                    .start_timer();
-                let mut config = tls
-                    .server_config_without_client_auth(registry_client.get_latest_version())
-                    .map_err(|err| {
-                        std::io::Error::new(
-                            ErrorKind::Other,
-                            format!("Failed to get tls config from registry: {err}"),
-                        )
-                    })?;
-                config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
-                let mut tls = RustlsAcceptor::new(RustlsConfig::from_config(Arc::new(config)));
-                tls = tls.handshake_timeout(read_timeout);
-                let res = tls.accept(stream, service).await.map(|(stream, svc)| {
-                    (
-                        StreamWithTimer {
-                            inner: Box::new(stream) as Box<_>,
-                            _timer,
-                        },
-                        svc,
-                    )
-                });
-                match res {
-                    Ok(s) => {
-                        metrics
-                            .connection_setup_duration
-                            .with_label_values(&[STATUS_SUCCESS, LABEL_SECURE])
-                            .observe(timer.elapsed().as_secs_f64());
-                        Ok(s)
-                    }
-                    Err(e) => {
-                        metrics
-                            .connection_setup_duration
-                            .with_label_values(&[STATUS_ERROR, LABEL_TLS_ERROR])
-                            .observe(timer.elapsed().as_secs_f64());
-                        Err(e)
-                    }
-                }
-            } else {
-                let _timer = metrics
-                    .connection_duration
-                    .with_label_values(&[LABEL_INSECURE])
-                    .start_timer();
-                metrics
-                    .connection_setup_duration
-                    .with_label_values(&[STATUS_SUCCESS, LABEL_INSECURE])
-                    .observe(timer.elapsed().as_secs_f64());
-                Ok((
-                    StreamWithTimer {
-                        inner: Box::new(stream) as Box<_>,
-                        _timer,
-                    },
-                    service,
-                ))
-            }
-        }
-        .boxed()
-    }
+async fn serve_http<S: AsyncRead + AsyncWrite + Send + Unpin + 'static>(
+    stream: S,
+    router: Router,
+) -> Result<(), BoxError> {
+    let stream = TokioIo::new(stream);
+    let hyper_service =
+        hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
+    hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+        .serve_connection_with_upgrades(stream, hyper_service)
+        .await
 }
 
 fn make_router(

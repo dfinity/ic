@@ -10,7 +10,6 @@ documentation.workspace = true
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
-axum-server = { version = "^0.6.0", features = ["tls-rustls"] }
 bytes = { workspace = true }
 byte-unit = "4.0.14"
 cfg-if = "1.0.0"
@@ -74,6 +73,7 @@ ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canonical-state = { path = "../../canonical_state" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
+ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
 ic-interfaces-mocks = { path = "../../interfaces/mocks" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
