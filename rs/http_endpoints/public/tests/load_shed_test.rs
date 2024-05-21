@@ -11,11 +11,8 @@ use axum::body::Body;
 use hyper::{Method, Request, StatusCode};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_agent::{
-    agent::{http_transport::reqwest_transport::ReqwestTransport, QueryBuilder},
-    agent_error::HttpErrorPayload,
-    export::Principal,
-    hash_tree::Label,
-    Agent, AgentError,
+    agent::http_transport::reqwest_transport::ReqwestTransport, agent_error::HttpErrorPayload,
+    export::Principal, hash_tree::Label, Agent, AgentError,
 };
 use ic_config::http_handler::Config;
 use ic_interfaces_state_manager_mocks::MockStateManager;
@@ -43,43 +40,23 @@ fn test_load_shedding_query() {
         ..Default::default()
     };
 
-    let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
-
     let (_, _, mut query_handler) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let query_exec_running = Arc::new(Notify::new());
     let load_shedder_returned = Arc::new(Notify::new());
 
-    let ok_agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .with_verify_query_signatures(false)
-        .build()
-        .unwrap();
-
-    let query = QueryBuilder::new(&ok_agent, canister, "test".to_string())
-        .with_effective_canister_id(canister)
-        .sign()
-        .unwrap();
-
-    let agent_clone = ok_agent.clone();
-    let query_clone = query.clone();
     let load_shedder_returned_clone = load_shedder_returned.clone();
     let query_exec_running_clone = query_exec_running.clone();
 
-    // This agent's request will be load shedded.
-    let load_shedded_agent = rt.spawn(async move {
+    // This request will be load shedded.
+    let load_shedded_request = rt.spawn(async move {
         query_exec_running_clone.notified().await;
 
-        let resp = agent_clone
-            .query_signed(
-                query_clone.effective_canister_id,
-                query_clone.signed_query.clone(),
-            )
-            .await;
+        let response = test_agent::Query::default().query(addr).await;
 
         load_shedder_returned_clone.notify_one();
 
-        resp
+        response
     });
 
     // Mock query exec service
@@ -97,24 +74,22 @@ fn test_load_shedding_query() {
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let resp = ok_agent
-            .query_signed(query.effective_canister_id, query.signed_query.clone())
-            .await;
+        let response = test_agent::Query::default().query(addr).await;
 
-        assert!(resp.is_ok(), "Received unexpected response: {:?}", resp);
+        assert_eq!(
+            StatusCode::OK,
+            response.status(),
+            "Received unexpected response: {:?}",
+            response
+        );
 
-        let resp = load_shedded_agent.await.unwrap();
-        let expected_resp = StatusCode::TOO_MANY_REQUESTS;
+        let response = load_shedded_request.await.unwrap();
 
-        match resp {
-            Err(AgentError::HttpError(HttpErrorPayload { status, .. })) => {
-                assert_eq!(expected_resp, status)
-            }
-            _ => panic!(
-                "Load shedder did not kick in. Received unexpected response: {:?}",
-                resp
-            ),
-        }
+        assert_eq!(
+            StatusCode::TOO_MANY_REQUESTS,
+            response.status(),
+            "Concurrent request was not load shedded.",
+        );
     });
 }
 

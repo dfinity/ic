@@ -475,7 +475,10 @@ impl HttpEndpointBuilder {
 pub mod test_agent {
     use super::*;
     use ic_types::{
-        messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
+        messages::{
+            Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope,
+            HttpUserQuery,
+        },
         time::current_time,
         PrincipalId,
     };
@@ -575,6 +578,57 @@ pub mod test_agent {
             let body = serde_cbor::to_vec(&envelope).unwrap();
             let url = format!(
                 "http://{}/api/v2/canister/{}/call",
+                addr, self.effective_canister_id
+            );
+
+            reqwest::Client::new()
+                .post(url)
+                .body(body)
+                .header(CONTENT_TYPE, APPLICATION_CBOR)
+                .send()
+                .await
+                .unwrap()
+        }
+    }
+    #[derive(Default)]
+    pub struct Query {
+        canister_id: PrincipalId,
+        effective_canister_id: PrincipalId,
+    }
+
+    impl Query {
+        pub fn new(canister_id: PrincipalId, effective_canister_id: PrincipalId) -> Self {
+            Self {
+                canister_id,
+                effective_canister_id,
+            }
+        }
+
+        pub async fn query(self, addr: SocketAddr) -> reqwest::Response {
+            let ingress_expiry =
+                (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
+
+            let call_content = HttpQueryContent::Query {
+                query: HttpUserQuery {
+                    canister_id: Blob(self.canister_id.into_vec()),
+                    method_name: METHOD_NAME.to_string(),
+                    arg: Blob(ARG),
+                    sender: Blob(SENDER.into_vec()),
+                    ingress_expiry,
+                    nonce: None,
+                },
+            };
+
+            let envelope = HttpRequestEnvelope {
+                content: call_content,
+                sender_pubkey: None,
+                sender_sig: None,
+                sender_delegation: None,
+            };
+
+            let body = serde_cbor::to_vec(&envelope).unwrap();
+            let url = format!(
+                "http://{}/api/v2/canister/{}/query",
                 addr, self.effective_canister_id
             );
 
