@@ -17,7 +17,10 @@ use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
-    subnet::v1::{CatchUpPackageContents, EcdsaConfig, InitialNiDkgTranscriptRecord, SubnetRecord},
+    subnet::v1::{
+        CatchUpPackageContents, ChainKeyConfig, EcdsaConfig, InitialNiDkgTranscriptRecord,
+        SubnetRecord,
+    },
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -96,6 +99,9 @@ pub struct SubnetConfig {
 
     /// Optional ecdsa configuration for this subnet.
     pub ecdsa_config: Option<EcdsaConfig>,
+
+    /// Optional chain key configuration for this subnet.
+    pub chain_key_config: Option<ChainKeyConfig>,
 
     /// The number of canisters allowed to be created on this subnet.
     pub max_number_of_canisters: u64,
@@ -225,6 +231,7 @@ impl SubnetConfig {
         max_instructions_per_install_code: Option<u64>,
         features: Option<SubnetFeatures>,
         ecdsa_config: Option<EcdsaConfig>,
+        chain_key_config: Option<ChainKeyConfig>,
         max_number_of_canisters: Option<u64>,
         ssh_readonly_access: Vec<String>,
         ssh_backup_access: Vec<String>,
@@ -258,6 +265,7 @@ impl SubnetConfig {
                 .unwrap_or_else(|| scheduler_config.max_instructions_per_install_code.get()),
             features: features.unwrap_or_default(),
             ecdsa_config,
+            chain_key_config,
             max_number_of_canisters: max_number_of_canisters.unwrap_or(0),
             ssh_readonly_access,
             ssh_backup_access,
@@ -318,8 +326,8 @@ impl SubnetConfig {
             ssh_readonly_access: self.ssh_readonly_access,
             ssh_backup_access: self.ssh_backup_access,
             ecdsa_config: self.ecdsa_config,
+            chain_key_config: self.chain_key_config,
             // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
-            chain_key_config: None,
         };
 
         let dkg_dealing_encryption_pubkeys: BTreeMap<_, _> = initialized_nodes
