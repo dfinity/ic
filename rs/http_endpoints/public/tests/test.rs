@@ -17,11 +17,8 @@ use http_body_util::StreamBody;
 use hyper::{body::Incoming, Method, Request, StatusCode};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_agent::{
-    agent::{http_transport::reqwest_transport::ReqwestTransport, QueryBuilder},
-    agent_error::HttpErrorPayload,
-    export::Principal,
-    hash_tree::Label,
-    Agent, AgentError,
+    agent::http_transport::reqwest_transport::ReqwestTransport, agent_error::HttpErrorPayload,
+    export::Principal, hash_tree::Label, Agent, AgentError,
 };
 use ic_canister_client::{parse_subnet_read_state_response, prepare_read_state};
 use ic_canister_client_sender::Sender;
@@ -78,6 +75,8 @@ use tokio::{
     runtime::Runtime,
     time::{sleep, Duration},
 };
+
+const TEXT_PLAIN: &str = "text/plain; charset=utf-8";
 
 #[test]
 fn test_healthy_behind() {
@@ -172,7 +171,7 @@ fn test_unauthorized_controller() {
 
     let expected_error = AgentError::HttpError(HttpErrorPayload {
         status: 400,
-        content_type: Some("text/plain; charset=utf-8".to_string()),
+        content_type: Some(TEXT_PLAIN.to_string()),
         content: format!(
             "Effective principal id in URL {} does not match requested principal id: {}.",
             canister1, canister2
@@ -201,14 +200,8 @@ fn test_unauthorized_query() {
 
     let (_, _, mut query_handler) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
-    let agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .with_verify_query_signatures(false)
-        .build()
-        .unwrap();
-
-    let canister1 = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
-    let canister2 = Principal::from_text("224lq-3aaaa-aaaaf-ase7a-cai").unwrap();
+    let canister1 = "223xb-saaaa-aaaaf-arlqa-cai".parse().unwrap();
+    let canister2 = "224lq-3aaaa-aaaaf-ase7a-cai".parse().unwrap();
 
     // Query mock that returns empty Ok("success") response.
     rt.spawn(async move {
@@ -221,46 +214,43 @@ fn test_unauthorized_query() {
         }
     });
 
-    // Query call tests.
-    let mut query_tests = Vec::new();
+    rt.block_on(async {
+        wait_for_status_healthy(&addr)
+            .await
+            .expect("Service should become healthy");
+    });
 
     // Valid query call with canister_id = effective_canister_id
-    let query = QueryBuilder::new(&agent, canister1, "test".to_string())
-        .with_effective_canister_id(canister1)
-        .with_arg(Vec::new())
-        .sign()
-        .unwrap();
-    let expected_resp = "success".into();
-    query_tests.push((query, Ok(expected_resp)));
+    rt.block_on(async move {
+        let response = test_agent::Query::new(canister1, canister1)
+            .query(addr)
+            .await;
+
+        assert_eq!(StatusCode::OK, response.status());
+    });
 
     // Invalid query call with canister_id != effective_canister_id
-    let query = QueryBuilder::new(&agent, canister1, "test".to_string())
-        .with_effective_canister_id(canister2)
-        .with_arg(Vec::new())
-        .sign()
-        .unwrap();
-    let expected_resp = AgentError::HttpError(HttpErrorPayload {
-        status: 400,
-        content_type: Some("text/plain; charset=utf-8".to_string()),
-        content: format!(
-            "Specified CanisterId {} does not match effective canister id in URL {}",
-            canister1, canister2
-        )
-        .as_bytes()
-        .to_vec(),
-    });
-    query_tests.push((query, Err(expected_resp)));
+    rt.block_on(async move {
+        let response = test_agent::Query::new(canister1, canister2)
+            .query(addr)
+            .await;
 
-    rt.block_on(async {
-        wait_for_status_healthy(&addr).await.unwrap();
-        for (query, expected_resp) in query_tests {
-            assert_eq!(
-                agent
-                    .query_signed(query.effective_canister_id, query.signed_query)
-                    .await,
-                expected_resp
-            );
-        }
+        assert_eq!(StatusCode::BAD_REQUEST, response.status());
+
+        let content_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .expect("Content type is set.");
+
+        assert_eq!(TEXT_PLAIN, content_type);
+
+        assert_eq!(
+            format!(
+                "Specified CanisterId {} does not match effective canister id in URL {}",
+                canister1, canister2
+            ),
+            response.text().await.unwrap()
+        )
     });
 }
 
@@ -319,7 +309,7 @@ fn test_unauthorized_call() {
             .get(CONTENT_TYPE)
             .expect("Content type is set.");
 
-        assert_eq!("text/plain; charset=utf-8", content_type);
+        assert_eq!(TEXT_PLAIN, content_type);
 
         assert_eq!(
             format!(
@@ -396,19 +386,6 @@ fn test_request_timeout() {
 
     let (_, _, mut query_handler) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
-    let agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .with_verify_query_signatures(false)
-        .build()
-        .unwrap();
-
-    let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
-    let query = QueryBuilder::new(&agent, canister, "test".to_string())
-        .with_effective_canister_id(canister)
-        .with_arg(Vec::new())
-        .sign()
-        .unwrap();
-
     rt.spawn(async move {
         loop {
             let (_, resp) = query_handler.next_request().await.unwrap();
@@ -421,21 +398,9 @@ fn test_request_timeout() {
     });
 
     rt.block_on(async {
-        loop {
-            let resp = agent
-                .query_signed(query.effective_canister_id, query.signed_query.clone())
-                .await;
-            if let Err(ic_agent::AgentError::HttpError(ref http_error)) = resp {
-                match StatusCode::from_u16(http_error.status).unwrap() {
-                    StatusCode::GATEWAY_TIMEOUT => break,
-                    // the service may be unhealthy due to initialization, retry
-                    StatusCode::SERVICE_UNAVAILABLE => sleep(Duration::from_millis(250)).await,
-                    _ => panic!("Received unexpeceted response: {:?}", resp),
-                }
-            } else {
-                panic!("Received unexpeceted response: {:?}", resp);
-            }
-        }
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = test_agent::Query::default().query(addr).await;
+        assert_eq!(StatusCode::GATEWAY_TIMEOUT, response.status());
     });
 }
 
@@ -628,7 +593,7 @@ fn test_too_long_paths_are_rejected() {
 
     let expected_error_response = AgentError::HttpError(HttpErrorPayload {
         status: 404,
-        content_type: Some("text/plain; charset=utf-8".to_string()),
+        content_type: Some(TEXT_PLAIN.to_string()),
         content: b"Invalid path requested.".to_vec(),
     });
 
@@ -655,14 +620,6 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state() {
 
     let (_, _, mut query_handler) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
-    let agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .with_verify_query_signatures(false)
-        .build()
-        .unwrap();
-
-    let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
-
     // Mock the query handler to return CertifiedStateUnavailable.
     rt.spawn(async move {
         loop {
@@ -671,29 +628,13 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state() {
         }
     });
 
-    let query = QueryBuilder::new(&agent, canister, "test".to_string())
-        .with_effective_canister_id(canister)
-        .sign()
-        .unwrap();
-
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let response = agent
-            .query_signed(query.effective_canister_id, query.signed_query.clone())
-            .await;
-
+        let response = test_agent::Query::default().query(addr).await;
         let expected_status_code = StatusCode::SERVICE_UNAVAILABLE;
 
-        match response {
-            Err(AgentError::HttpError(HttpErrorPayload { status, .. })) => {
-                assert_eq!(expected_status_code, status, "received the wrong")
-            }
-            _ => panic!(
-                "Received unexpected response: {:?}. Expected an HTTP error with status code: {:?}.",
-                response, expected_status_code
-            ),
-        }
+        assert_eq!(expected_status_code, response.status());
     })
 }
 
