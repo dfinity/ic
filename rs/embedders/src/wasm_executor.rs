@@ -709,7 +709,7 @@ pub fn process(
         NumWasmPages::from(wasmtime_environ::WASM32_MAX_PAGES as usize) - wasm_reserved_pages;
 
     if wasm_heap_size_after > wasm_heap_limit {
-        wasm_result = Err(HypervisorError::WasmReservedPages);
+        wasm_result = Err(HypervisorError::ReservedPagesForOldMotoko);
     }
 
     let mut allocated_bytes = NumBytes::from(0);

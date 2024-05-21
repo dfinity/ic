@@ -1111,7 +1111,7 @@ impl SystemApiImpl {
     }
 
     fn error_for(&self, method_name: &str) -> HypervisorError {
-        HypervisorError::ContractViolation {
+        HypervisorError::UserContractViolation {
             error: format!(
                 "\"{}\" cannot be executed in {} mode",
                 method_name, self.api_type
@@ -1242,13 +1242,11 @@ impl SystemApiImpl {
                 }
 
                 match outgoing_request {
-                    None => Err(HypervisorError::ContractViolation {
+                    None => Err(HypervisorError::ToolchainContractViolation {
                         error: format!(
                             "{} called when no call is under construction.",
                             method_name
                         ),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     }),
                     Some(request) => {
                         self.sandbox_safe_system_state
@@ -1778,10 +1776,8 @@ impl SystemApi for SystemApiImpl {
                 message_accepted, ..
             } => {
                 if *message_accepted {
-                    Err(ContractViolation {
+                    Err(ToolchainContractViolation {
                         error: "ic0.accept_message: the function was already called.".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     })
                 } else {
                     *message_accepted = true;
@@ -1804,10 +1800,8 @@ impl SystemApi for SystemApiImpl {
                     Ok(())
                 }
                 ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => {
-                    Err(ContractViolation {
+                    Err(ToolchainContractViolation {
                         error: "ic0.msg_reply: the call is already replied".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     })
                 }
             },
@@ -1829,11 +1823,11 @@ impl SystemApi for SystemApiImpl {
                     let payload_size = (data.len() + size as usize) as u64;
                     if payload_size > max_reply_size.get() {
                         let string = format!(
-                            "ic0.msg_reply_data_append: application payload size ({}) cannot be larger than {}",
+                            "ic0.msg_reply_data_append: application payload size ({}) cannot be larger than {}.",
                             payload_size,
                             max_reply_size,
                         );
-                        return Err(ContractViolation {
+                        return Err(UserContractViolation {
                             error: string,
                             suggestion: "".to_string(),
                             doc_link: "".to_string(),
@@ -1843,10 +1837,9 @@ impl SystemApi for SystemApiImpl {
                     Ok(())
                 }
                 ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => {
-                    Err(ContractViolation {
-                        error: "ic0.msg_reply_data_append: the call is already replied".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
+                    Err(ToolchainContractViolation {
+                        error: "ic0.msg_reply_data_append: the call is already replied."
+                            .to_string(),
                     })
                 }
             },
@@ -1869,31 +1862,28 @@ impl SystemApi for SystemApiImpl {
                 ResponseStatus::NotRepliedYet => {
                     if size as u64 > max_reply_size.get() {
                         let string = format!(
-                        "ic0.msg_reject: application payload size ({}) cannot be larger than {}",
+                        "ic0.msg_reject: application payload size ({}) cannot be larger than {}.",
                         size, max_reply_size
                     );
-                        return Err(ContractViolation {
+                        return Err(UserContractViolation {
                             error: string,
                             suggestion: "".to_string(),
                             doc_link: "".to_string(),
                         });
                     }
                     let msg_bytes = valid_subslice("ic0.msg_reject", src, size, heap)?;
-                    let msg =
-                        String::from_utf8(msg_bytes.to_vec()).map_err(|_| ContractViolation {
+                    let msg = String::from_utf8(msg_bytes.to_vec()).map_err(|_| {
+                        ToolchainContractViolation {
                             error: "ic0.msg_reject: invalid UTF-8 string provided".to_string(),
-                            suggestion: "".to_string(),
-                            doc_link: "".to_string(),
-                        })?;
+                        }
+                    })?;
                     *response_status =
                         ResponseStatus::JustRepliedWith(Some(WasmResult::Reject(msg)));
                     Ok(())
                 }
                 ResponseStatus::AlreadyReplied | ResponseStatus::JustRepliedWith(_) => {
-                    Err(ContractViolation {
+                    Err(ToolchainContractViolation {
                         error: "ic0.msg_reject: the call is already replied".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     })
                 }
             },
@@ -2134,11 +2124,9 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback {
                 outgoing_request, ..
             } => match outgoing_request {
-                None => Err(HypervisorError::ContractViolation {
+                None => Err(HypervisorError::ToolchainContractViolation {
                     error: "ic0.call_data_append called when no call is under construction."
                         .to_string(),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
                 }),
                 Some(request) => request.extend_method_payload(src, size, heap),
             },
@@ -2178,11 +2166,9 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback {
                 outgoing_request, ..
             } => match outgoing_request {
-                None => Err(HypervisorError::ContractViolation {
+                None => Err(HypervisorError::ToolchainContractViolation {
                     error: "ic0.call_on_cleanup called when no call is under construction."
                         .to_string(),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
                 }),
                 Some(request) => request.set_on_cleanup(WasmClosure::new(fun, env)),
             },
@@ -2257,12 +2243,13 @@ impl SystemApi for SystemApiImpl {
                     },
                 ..
             } => {
-                let req_in_prep = outgoing_request.take().ok_or_else(|| ContractViolation {
-                    error: "ic0.call_perform called when no call is under construction."
-                        .to_string(),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
-                })?;
+                let req_in_prep =
+                    outgoing_request
+                        .take()
+                        .ok_or_else(|| ToolchainContractViolation {
+                            error: "ic0.call_perform called when no call is under construction."
+                                .to_string(),
+                        })?;
 
                 let req = into_request(
                     req_in_prep,
@@ -2884,7 +2871,7 @@ impl SystemApi for SystemApiImpl {
 
                         let (upper_bound, overflow) = offset.overflowing_add(size);
                         if overflow || upper_bound > data_certificate.len() {
-                            return Err(ContractViolation {
+                            return Err(ToolchainContractViolation {
                                 error: format!(
                             "ic0_data_certificate_copy failed because offset + size is out \
                         of bounds. Found offset = {} and size = {} while offset + size \
@@ -2893,14 +2880,12 @@ impl SystemApi for SystemApiImpl {
                             size,
                             data_certificate.len()
                         ),
-                                suggestion: "".to_string(),
-                                doc_link: "".to_string(),
                             });
                         }
 
                         let (upper_bound, overflow) = dst.overflowing_add(size);
                         if overflow || upper_bound > heap.len() {
-                            return Err(ContractViolation {
+                            return Err(ToolchainContractViolation {
                                 error: format!(
                                     "ic0_data_certificate_copy failed because dst + size is out \
                         of bounds. Found dst = {} and size = {} while dst + size \
@@ -2909,8 +2894,6 @@ impl SystemApi for SystemApiImpl {
                                     size,
                                     heap.len()
                                 ),
-                                suggestion: "".to_string(),
-                                doc_link: "".to_string(),
                             });
                         }
 
@@ -2956,11 +2939,11 @@ impl SystemApi for SystemApiImpl {
                 }
 
                 if size > CERTIFIED_DATA_MAX_LENGTH {
-                    return Err(ContractViolation {
+                    return Err(UserContractViolation {
                         error: format!(
                             "ic0_certified_data_set failed because the passed data must be \
-                    no larger than 32 bytes. Found {} bytes",
-                            size
+                    no larger than {} bytes. Found {} bytes.",
+                            CERTIFIED_DATA_MAX_LENGTH, size
                         ),
                         suggestion: "".to_string(),
                         doc_link: "".to_string(),
@@ -2970,7 +2953,7 @@ impl SystemApi for SystemApiImpl {
                 let (src, size) = (src as usize, size as usize);
                 let (upper_bound, overflow) = src.overflowing_add(size);
                 if overflow || upper_bound > heap.len() {
-                    return Err(ContractViolation {
+                    return Err(ToolchainContractViolation {
                         error: format!(
                             "ic0_certified_data_set failed because src + size is out \
                     of bounds. Found src = {} and size = {} while src + size \
@@ -2979,8 +2962,6 @@ impl SystemApi for SystemApiImpl {
                             size,
                             heap.len()
                         ),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     });
                 }
 
@@ -3168,18 +3149,14 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback {
                 outgoing_request, ..
             } => match outgoing_request {
-                None => Err(HypervisorError::ContractViolation{
+                None => Err(HypervisorError::ToolchainContractViolation{
                     error: "ic0.call_with_best_effort_response called when no call is under construction."
                     .to_string(),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
                 }),
                 Some(request) => {
                     if request.is_timeout_set() {
-                        Err(HypervisorError::ContractViolation{
+                        Err(HypervisorError::ToolchainContractViolation{
                             error: "ic0_call_with_best_effort_response failed because a timeout is already set.".to_string(),
-                            suggestion: "".to_string(),
-                            doc_link: "".to_string(),
                         })
                     } else {
                         let bounded_timeout =
@@ -3303,7 +3280,7 @@ pub(crate) fn copy_cycles_to_heap(
     let dst = dst as usize;
     let (upper_bound, overflow) = dst.overflowing_add(size);
     if overflow || upper_bound > heap.len() {
-        return Err(ContractViolation {
+        return Err(ToolchainContractViolation {
             error: format!(
                 "{} failed because dst + size is out of bounds.\
         Found dst = {} and size = {} while must be <= {}",
@@ -3312,8 +3289,6 @@ pub(crate) fn copy_cycles_to_heap(
                 size,
                 heap.len()
             ),
-            suggestion: "".to_string(),
-            doc_link: "".to_string(),
         });
     }
     deterministic_copy_from_slice(&mut heap[dst..dst + size], &bytes);
@@ -3329,7 +3304,7 @@ pub(crate) fn valid_subslice<'a>(
     let len = len as usize;
     let src = src as usize;
     if slice.len() < src + len {
-        return Err(ContractViolation {
+        return Err(ToolchainContractViolation {
             error: format!(
                 "{}: src={} + length={} exceeds the slice size={}",
                 ctx,
@@ -3337,8 +3312,6 @@ pub(crate) fn valid_subslice<'a>(
                 len,
                 slice.len()
             ),
-            suggestion: "".to_string(),
-            doc_link: "".to_string(),
         });
     }
     Ok(&slice[src..src + len])
