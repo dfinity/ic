@@ -7,7 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-async-trait = { workspace = true }
 hex-literal = "0.4.1"
 ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-config = { path = "../config" }
