@@ -688,7 +688,6 @@ bazel-system-test-hourly:
   tags:
     - dfinity-ic
     - bazel
-    - zh
   timeout: 120 minutes
   variables:
     BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"

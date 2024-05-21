@@ -198,7 +198,6 @@ bazel-system-test-hourly:
   tags:
     - dfinity-ic
     - bazel
-    - zh
   variables:
     BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_hourly"
   timeout: 120 minutes
