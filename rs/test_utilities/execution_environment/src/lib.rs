@@ -244,6 +244,10 @@ impl ExecutionTest {
         self.state().canister_state(&canister_id).unwrap()
     }
 
+    pub fn install_code_instructions_limit(&self) -> NumInstructions {
+        self.install_code_instruction_limits.message()
+    }
+
     pub fn canister_state_mut(&mut self, canister_id: CanisterId) -> &mut CanisterState {
         self.state_mut().canister_state_mut(&canister_id).unwrap()
     }

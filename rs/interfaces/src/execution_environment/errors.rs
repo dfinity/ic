@@ -93,7 +93,7 @@ pub enum HypervisorError {
         doc_link: String,
     },
     /// Wasm execution consumed too many instructions.
-    InstructionLimitExceeded,
+    InstructionLimitExceeded(NumInstructions),
     /// We could not validate the wasm module
     InvalidWasm(WasmValidationError),
     /// We could not instrument the wasm module
@@ -208,9 +208,10 @@ impl std::fmt::Display for HypervisorError {
             Self::UserContractViolation { error, .. } => {
                 write!(f, "Canister violated contract: {}", error)
             }
-            Self::InstructionLimitExceeded => write!(
+            Self::InstructionLimitExceeded(limit) => write!(
                 f,
-                "Canister exceeded the instruction limit for single message execution.",
+                "Canister exceeded the limit of {} instructions for single message execution.",
+                limit
             ),
             Self::InvalidWasm(err) => write!(f, "Canister's Wasm module is not valid: {}", err),
             Self::InstrumentationFailed(err) => {
@@ -353,7 +354,7 @@ impl AsErrorHelp for HypervisorError {
                 suggestion: "Check that the method being called is exported by the target canister.".to_string(),
                 doc_link: "http://internetcomputer.org/docs/current/references/execution-errors#method-not-found".to_string(),
             },
-            Self::InstructionLimitExceeded
+            Self::InstructionLimitExceeded(_)
             | Self::Trapped(_)
             | Self::CalledTrap(_)
             | Self::WasmModuleNotFound
@@ -401,7 +402,7 @@ impl HypervisorError {
             Self::MethodNotFound(_) => E::CanisterMethodNotFound,
             Self::ToolchainContractViolation { .. } => E::CanisterContractViolation,
             Self::UserContractViolation { .. } => E::CanisterContractViolation,
-            Self::InstructionLimitExceeded => E::CanisterInstructionLimitExceeded,
+            Self::InstructionLimitExceeded(_) => E::CanisterInstructionLimitExceeded,
             Self::InvalidWasm(_) => E::CanisterInvalidWasm,
             Self::InstrumentationFailed(_) => E::CanisterInvalidWasm,
             Self::Trapped(_) => E::CanisterTrapped,
@@ -442,7 +443,7 @@ impl HypervisorError {
             HypervisorError::MethodNotFound(_) => "MethodNotFound",
             HypervisorError::ToolchainContractViolation { .. } => "ToolchainContractViolation",
             HypervisorError::UserContractViolation { .. } => "UserContractViolation",
-            HypervisorError::InstructionLimitExceeded => "InstructionLimitExceeded",
+            HypervisorError::InstructionLimitExceeded(_) => "InstructionLimitExceeded",
             HypervisorError::InvalidWasm(_) => "InvalidWasm",
             HypervisorError::InstrumentationFailed(_) => "InstrumentationFailed",
             HypervisorError::Trapped(_) => "Trapped",

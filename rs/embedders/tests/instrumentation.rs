@@ -351,7 +351,10 @@ fn metering_plain() {
     // Now run the same with insufficient instructions
     let mut instance = new_instance(&wat, instructions_used - 1);
     let err = instance.run(func_ref("test")).unwrap_err();
-    assert_eq!(err, HypervisorError::InstructionLimitExceeded);
+    assert_eq!(
+        err,
+        HypervisorError::InstructionLimitExceeded(NumInstructions::from(instructions_used - 1))
+    );
 
     // with early return
     let wat = format!(
@@ -385,7 +388,10 @@ fn metering_plain() {
     // Now run the same with insufficient instructions
     let mut instance = new_instance(&wat, instructions_used - 1);
     let err = instance.run(func_ref("test")).unwrap_err();
-    assert_eq!(err, HypervisorError::InstructionLimitExceeded);
+    assert_eq!(
+        err,
+        HypervisorError::InstructionLimitExceeded(NumInstructions::from(instructions_used - 1))
+    );
 
     // with early trap
     let wat = format!(

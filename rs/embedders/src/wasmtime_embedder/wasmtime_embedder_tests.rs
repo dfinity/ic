@@ -91,7 +91,7 @@ fn test_wasmtime_system_api() {
             .wasm_native_stable_memory,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Rc::new(DefaultOutOfInstructionsHandler {}),
+        Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );
     let mut store = Store::new(

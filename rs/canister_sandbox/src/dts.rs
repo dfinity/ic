@@ -188,7 +188,9 @@ impl DeterministicTimeSlicing {
         let mut state = self.state.lock().unwrap();
         assert_eq!(state.execution_status, ExecutionStatus::Running);
         if state.is_last_slice() {
-            return Err(HypervisorError::InstructionLimitExceeded);
+            return Err(HypervisorError::InstructionLimitExceeded(
+                NumInstructions::from(state.total_instruction_limit as u64),
+            ));
         }
 
         let newly_executed = state.newly_executed(instruction_counter);

@@ -840,8 +840,9 @@ fn install_code_running_out_of_instructions() {
         Err(UserError::new(
             ErrorCode::CanisterInstructionLimitExceeded,
             format!(
-                "Error from Canister {}: Canister exceeded the instruction limit for single message execution.",
-                canister_id
+                "Error from Canister {}: Canister exceeded the limit of {} instructions for single message execution.",
+                canister_id,
+                test.install_code_instructions_limit(),
             )
         ))
     );
