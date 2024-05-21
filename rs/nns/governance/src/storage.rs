@@ -179,15 +179,11 @@ where
 // Clears and initializes stable memory and stable structures before testing. Typically only needed
 // in proptest! where stable storage data needs to be accessed in multiple iterations within one
 // thread.
-#[cfg(feature = "test")]
+#[cfg(any(feature = "test", test))]
 pub fn reset_stable_memory() {
     MEMORY_MANAGER.with(|mm| *mm.borrow_mut() = MemoryManager::init(DefaultMemoryImpl::default()));
     STATE.with(|cell| *cell.borrow_mut() = State::new());
 }
-
-// Do nothing when feature = "test" is not enabled.
-#[cfg(not(feature = "test"))]
-pub fn reset_stable_memory() {}
 
 pub fn grow_upgrades_memory_to(target_pages: u64) {
     with_upgrades_memory(|upgrades_memory| {
