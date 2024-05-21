@@ -69,7 +69,10 @@ fn assert_trap_supported<T>(res: HypervisorResult<T>) {
 
 fn assert_api_not_supported<T>(res: HypervisorResult<T>) {
     match res {
-        Err(HypervisorError::ContractViolation { error, .. }) => {
+        Err(HypervisorError::UserContractViolation { error, .. }) => {
+            assert!(error.contains("cannot be executed"), "{}", error)
+        }
+        Err(HypervisorError::ToolchainContractViolation { error }) => {
             assert!(error.contains("cannot be executed"), "{}", error)
         }
         _ => unreachable!("Expected api to be unsupported."),

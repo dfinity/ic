@@ -98,10 +98,8 @@ fn mark_writes_on_bytemap(
         _ => {
             return Err(process_err(
                 caller,
-                HypervisorError::ContractViolation {
+                HypervisorError::ToolchainContractViolation {
                     error: "Failed to access heap bitmap".to_string(),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
                 },
             ))
         }
@@ -291,7 +289,7 @@ fn ic0_performance_counter_helper(
         1 => caller.data().system_api()?.ic0_performance_counter(
             PerformanceCounterType::CallContextInstructions(instruction_counter),
         ),
-        _ => Err(HypervisorError::ContractViolation {
+        _ => Err(HypervisorError::UserContractViolation {
             error: format!("Error getting performance counter type {}", counter_type),
             suggestion: "".to_string(),
             doc_link: "".to_string(),
@@ -330,17 +328,13 @@ pub(crate) fn syscalls(
     ) -> Result<T, anyhow::Error> {
         caller
             .get_export(WASM_HEAP_MEMORY_NAME)
-            .ok_or_else(|| HypervisorError::ContractViolation {
+            .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                 error: "WebAssembly module must define memory".to_string(),
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
             })
             .and_then(|ext| {
                 ext.into_memory()
-                    .ok_or_else(|| HypervisorError::ContractViolation {
+                    .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                         error: "export 'memory' is not a memory".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     })
             })
             .and_then(|mem| {
@@ -1178,7 +1172,7 @@ pub(crate) fn syscalls(
                         system_api.ic0_call_with_best_effort_response(timeout_seconds)
                     })
                 } else {
-                    let err = HypervisorError::ContractViolation {
+                    let err = HypervisorError::UserContractViolation {
                         error: "ic0::call_with_best_effort_response is not enabled.".to_string(),
                         suggestion: "".to_string(),
                         doc_link: "".to_string(),
@@ -1196,7 +1190,7 @@ pub(crate) fn syscalls(
                 if feature_flags.best_effort_responses == FlagStatus::Enabled {
                     with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
                 } else {
-                    let err = HypervisorError::ContractViolation {
+                    let err = HypervisorError::UserContractViolation {
                         error: "ic0::msg_deadline is not enabled.".to_string(),
                         suggestion: "".to_string(),
                         doc_link: "".to_string(),

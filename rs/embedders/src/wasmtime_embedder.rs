@@ -86,10 +86,8 @@ fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
                 })
                 .unwrap_or(false);
             if message.contains("argument type mismatch") || arguments_or_results_mismatch {
-                return HypervisorError::ContractViolation {
+                return HypervisorError::ToolchainContractViolation {
                     error: BAD_SIGNATURE_MESSAGE.to_string(),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
                 };
             }
             HypervisorError::Trapped(TrapCode::Other)
@@ -102,10 +100,8 @@ fn trap_code_to_hypervisor_error(trap: wasmtime::Trap) -> HypervisorError {
         wasmtime::Trap::StackOverflow => HypervisorError::Trapped(TrapCode::StackOverflow),
         wasmtime::Trap::MemoryOutOfBounds => HypervisorError::Trapped(TrapCode::HeapOutOfBounds),
         wasmtime::Trap::TableOutOfBounds => HypervisorError::Trapped(TrapCode::TableOutOfBounds),
-        wasmtime::Trap::BadSignature => HypervisorError::ContractViolation {
+        wasmtime::Trap::BadSignature => HypervisorError::ToolchainContractViolation {
             error: BAD_SIGNATURE_MESSAGE.to_string(),
-            suggestion: "".to_string(),
-            doc_link: "".to_string(),
         },
         wasmtime::Trap::IntegerDivisionByZero => {
             HypervisorError::Trapped(TrapCode::IntegerDivByZero)
@@ -758,10 +754,8 @@ impl WasmtimeInstance {
                 HypervisorError::MethodNotFound(WasmMethod::try_from(export.to_string()).unwrap())
             })?
             .into_func()
-            .ok_or_else(|| HypervisorError::ContractViolation {
+            .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                 error: "export is not a function".to_string(),
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
             })?
             .call(&mut self.store, args, &mut [])
             .map_err(wasmtime_error_to_hypervisor_error)
@@ -844,16 +838,12 @@ impl WasmtimeInstance {
             Some(export) => {
                 export
                     .into_memory()
-                    .ok_or_else(|| HypervisorError::ContractViolation {
+                    .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                         error: format!("export '{}' is not a memory", name),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     })
             }
-            None => Err(HypervisorError::ContractViolation {
+            None => Err(HypervisorError::ToolchainContractViolation {
                 error: format!("export '{}' not found", name),
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
             }),
         }
     }
@@ -868,29 +858,21 @@ impl WasmtimeInstance {
             FuncRef::QueryClosure(closure) | FuncRef::UpdateClosure(closure) => self
                 .instance
                 .get_export(&mut self.store, "table")
-                .ok_or_else(|| HypervisorError::ContractViolation {
+                .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                     error: "table not found".to_string(),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
                 })?
                 .into_table()
-                .ok_or_else(|| HypervisorError::ContractViolation {
+                .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                     error: "export 'table' is not a table".to_string(),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
                 })?
                 .get(&mut self.store, closure.func_idx)
                 .ok_or(HypervisorError::FunctionNotFound(0, closure.func_idx))?
                 .as_func()
-                .ok_or_else(|| HypervisorError::ContractViolation {
+                .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                     error: "not a function reference".to_string(),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
                 })?
-                .ok_or_else(|| HypervisorError::ContractViolation {
+                .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                     error: "unexpected null function reference".to_string(),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
                 })?
                 .call(&mut self.store, &[Val::I32(closure.env as i32)], &mut [])
                 .map_err(wasmtime_error_to_hypervisor_error),
@@ -995,10 +977,8 @@ impl WasmtimeInstance {
         if let Ok(heap_memory) = self.get_memory(memory_name) {
             let bytemap = self.get_memory(bytemap_name)?.data(&self.store);
             let tracker = self.memory_trackers.get(&memory_type).ok_or_else(|| {
-                HypervisorError::ContractViolation {
+                HypervisorError::ToolchainContractViolation {
                     error: format!("No {} memory tracker", memory_type),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
                 }
             })?;
             let tracker = tracker.lock().unwrap();
@@ -1044,10 +1024,8 @@ impl WasmtimeInstance {
                         *previous_page_marked_written = false;
                         Ok(())
                     }
-                    _ => Err(HypervisorError::ContractViolation {
+                    _ => Err(HypervisorError::ToolchainContractViolation {
                         error: format!("Bytemap contains invalid value {}", written),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     }),
                 }
             }

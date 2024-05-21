@@ -795,7 +795,7 @@ fn cannot_run_method_on_empty_canister() {
                 assert_eq!(err.code(), ErrorCode::CanisterWasmModuleNotFound);
                 assert_eq!(
                     err.description(),
-                    "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Attempt to execute a message, but the canister contains no Wasm module"
+                    "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Attempted to execute a message, but the canister contains no Wasm module."
                 );
             }
             rest => panic!("Unexpected behaviour {:?}", rest),
