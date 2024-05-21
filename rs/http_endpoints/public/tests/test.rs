@@ -16,7 +16,6 @@ use http_body::Frame;
 use http_body_util::StreamBody;
 use hyper::{body::Incoming, Method, Request, StatusCode};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
-use ic_agent::{agent::http_transport::reqwest_transport::ReqwestTransport, Agent};
 use ic_canister_client::{parse_subnet_read_state_response, prepare_read_state};
 use ic_canister_client_sender::Sender;
 use ic_canonical_state::encoding::types::{Cycles, SubnetMetrics};
@@ -120,21 +119,39 @@ fn test_healthy_behind() {
         .with_consensus_cache(mock_consensus_cache)
         .run();
 
-    let agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .build()
-        .unwrap();
-
-    let status = rt.block_on(async {
+    rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
         healthy.store(true, Ordering::SeqCst);
-        agent.status().await.unwrap()
-    });
 
-    assert_eq!(
-        status.replica_health_status,
-        Some("certified_state_behind".to_string())
-    );
+        let url = format!("http://{}/api/v2/status", addr);
+
+        let response = reqwest::Client::new()
+            .get(url)
+            .header(CONTENT_TYPE, test_agent::APPLICATION_CBOR)
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(StatusCode::OK, response.status());
+
+        let response_body = response.bytes().await.unwrap();
+
+        let replica_status = serde_cbor::from_slice::<CBOR>(&response_body)
+            .expect("Status endpoint is a valid CBOR.");
+
+        let CBOR::Map(replica_status) = replica_status else {
+            panic!("Expected a map, got {:?}", replica_status);
+        };
+
+        let replica_health_status = replica_status
+            .get(&CBOR::Text("replica_health_status".to_string()))
+            .expect("replica_health_status is present.");
+
+        assert_eq!(
+            replica_health_status,
+            &CBOR::Text("certified_state_behind".to_string())
+        );
+    })
 }
 
 // Check spec enforcement for read_state requests. https://internetcomputer.org/docs/current/references/ic-interface-spec#http-read-state

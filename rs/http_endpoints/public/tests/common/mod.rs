@@ -492,7 +492,7 @@ pub mod test_agent {
     const METHOD_NAME: &str = "test";
     const SENDER: PrincipalId = PrincipalId::new_anonymous();
     const ARG: Vec<u8> = vec![];
-    const APPLICATION_CBOR: &str = "application/cbor";
+    pub const APPLICATION_CBOR: &str = "application/cbor";
 
     pub async fn wait_for_status_healthy(addr: &SocketAddr) -> Result<(), &'static str> {
         let fut = async {
