@@ -1,8 +1,9 @@
 use crate::{
-    neuron::{DecomposedNeuron, Neuron},
+    neuron::{DecomposedNeuron, DissolveStateAndAge, Neuron, StoredDissolveStateAndAge},
     neuron_store::NeuronStoreError,
     pb::v1::{
-        neuron::Followees, AbridgedNeuron, BallotInfo, KnownNeuronData, NeuronStakeTransfer, Topic,
+        neuron::DissolveState as NeuronDissolveState, neuron::Followees, AbridgedNeuron,
+        BallotInfo, KnownNeuronData, NeuronStakeTransfer, Topic,
     },
     storage::validate_stable_btree_map,
 };
@@ -339,6 +340,21 @@ where
         validate_stable_btree_map(&self.transfer_map);
     }
 
+    /// Returns all neuron ids of the neurons with legacy dissolve state and age.
+    // TODO(NNS1-3068): clean up after the migration is performed.
+    pub fn neuron_ids_with_legacy_dissolve_state_and_age(&self) -> Vec<NeuronId> {
+        self.main
+            .iter()
+            .filter_map(|(id, abridged_neuron)| {
+                if abridged_neuron.has_legacy_dissolve_state_and_age() {
+                    Some(id)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     /// Internal function to take what's in the main map and fill in the remaining data from
     /// the other stable storage maps.
     fn reconstitute_neuron(&self, neuron_id: NeuronId, main_neuron_part: AbridgedNeuron) -> Neuron {
@@ -478,6 +494,21 @@ pub(crate) fn new_heap_based() -> StableNeuronStore<VectorMemory> {
         transfer: VectorMemory::default(),
     }
     .build()
+}
+
+impl AbridgedNeuron {
+    /// Returns true if the neuron has legacy dissolve state and age. We use AbridgedNeuron and
+    /// reconstruct the DissolveStateAndAge instead of converting it to Neuron, so that we can avoid
+    /// reading all the repeated fields from the stable storage.
+    // TODO(NNS1-3068): clean up after the migration is performed.
+    fn has_legacy_dissolve_state_and_age(&self) -> bool {
+        let stored_dissolve_state_and_age = StoredDissolveStateAndAge {
+            dissolve_state: self.dissolve_state.clone().map(NeuronDissolveState::from),
+            aging_since_timestamp_seconds: self.aging_since_timestamp_seconds,
+        };
+        let dissolve_state_and_age = DissolveStateAndAge::from(stored_dissolve_state_and_age);
+        dissolve_state_and_age.is_legacy()
+    }
 }
 
 // impl Storable for $ProtoMessage

@@ -1605,11 +1605,11 @@ mod tests {
             } else {
                 panic!("Source neuron should not stop dissolving after merging");
             }
-            let target_state_and_age = effect.target_neuron_dissolve_state_and_age;
+            let target_dissolve_state_and_age = effect.target_neuron_dissolve_state_and_age;
             if let DissolveStateAndAge::NotDissolving {
                 dissolve_delay_seconds,
                 aging_since_timestamp_seconds,
-            } = target_state_and_age
+            } = target_dissolve_state_and_age
             {
                 prop_assert!(dissolve_delay_seconds >= target_dissolve_delay_seconds);
                 // The resulted age should be between the source and target ages.
