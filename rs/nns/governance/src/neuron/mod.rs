@@ -356,8 +356,9 @@ impl Neuron {
     fn start_dissolving(&mut self, now_seconds: u64) -> Result<(), GovernanceError> {
         let dissolve_state_and_age = self.dissolve_state_and_age();
         if let DissolveStateAndAge::NotDissolving { .. } = dissolve_state_and_age {
-            let new_disolved_state_and_age = dissolve_state_and_age.start_dissolving(now_seconds);
-            self.set_dissolve_state_and_age(new_disolved_state_and_age);
+            let new_disolved_dissolve_state_and_age =
+                dissolve_state_and_age.start_dissolving(now_seconds);
+            self.set_dissolve_state_and_age(new_disolved_dissolve_state_and_age);
             Ok(())
         } else {
             Err(GovernanceError::new(ErrorType::RequiresNotDissolving))
@@ -369,11 +370,12 @@ impl Neuron {
     /// If the neuron is not dissolving, an error is returned.
     fn stop_dissolving(&mut self, now_seconds: u64) -> Result<(), GovernanceError> {
         let dissolve_state_and_age = self.dissolve_state_and_age();
-        let new_disolved_state_and_age = dissolve_state_and_age.stop_dissolving(now_seconds);
-        if new_disolved_state_and_age == dissolve_state_and_age {
+        let new_disolved_dissolve_state_and_age =
+            dissolve_state_and_age.stop_dissolving(now_seconds);
+        if new_disolved_dissolve_state_and_age == dissolve_state_and_age {
             Err(GovernanceError::new(ErrorType::RequiresDissolving))
         } else {
-            self.set_dissolve_state_and_age(new_disolved_state_and_age);
+            self.set_dissolve_state_and_age(new_disolved_dissolve_state_and_age);
             Ok(())
         }
     }
@@ -669,10 +671,10 @@ impl Neuron {
             self.cached_neuron_stake_e8s = new_stake_e8s;
 
             let new_aging_since_timestamp_seconds = now.saturating_sub(new_age_seconds);
-            let new_disolved_state_and_age = self
+            let new_disolved_dissolve_state_and_age = self
                 .dissolve_state_and_age()
                 .adjust_age(new_aging_since_timestamp_seconds);
-            self.set_dissolve_state_and_age(new_disolved_state_and_age);
+            self.set_dissolve_state_and_age(new_disolved_dissolve_state_and_age);
         }
     }
 

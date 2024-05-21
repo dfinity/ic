@@ -1,13 +1,17 @@
 use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::neuron::Followees,
-    storage::with_stable_neuron_indexes,
+    pb::v1::{audit_event::Payload, neuron::Followees},
+    storage::{with_audit_events_log, with_stable_neuron_indexes},
 };
+use assert_matches::assert_matches;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use maplit::{btreemap, hashmap, hashset};
+use maplit::{btreemap, btreeset, hashmap, hashset};
 use num_traits::bounds::LowerBounded;
+use std::collections::BTreeSet;
+
+static CREATED_TIMESTAMP_SECONDS: u64 = 123_456_789;
 
 fn simple_neuron_builder(id: u64) -> NeuronBuilder {
     // Make sure different neurons have different accounts.
@@ -24,7 +28,7 @@ fn simple_neuron_builder(id: u64) -> NeuronBuilder {
             dissolve_delay_seconds: 1,
             aging_since_timestamp_seconds: 0,
         },
-        123_456_789,
+        CREATED_TIMESTAMP_SECONDS,
     )
 }
 
@@ -631,5 +635,113 @@ fn test_get_neuron_ids_readable_by_caller() {
     assert_eq!(
         neuron_store.get_neuron_ids_readable_by_caller(PrincipalId::new_user_test_id(4)),
         hashset! {}
+    );
+}
+
+#[test]
+fn test_normalize_neurons_dissolve_state_and_age() {
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    let now = neuron_store.now();
+    // We consider a neuron dissolved sufficiently long ago if it dissolved more than 14 days ago,
+    // and such neuron might be considered inactive.
+    let dissolved_at_sufficiently_long_ago = now - 15 * ONE_DAY_SECONDS;
+
+    let not_dissolving = simple_neuron_builder(1)
+        .with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 1000,
+            aging_since_timestamp_seconds: now - 100,
+        })
+        .build();
+    let dissolving = simple_neuron_builder(2)
+        .with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now + 100,
+        })
+        .build();
+    let dissolved = simple_neuron_builder(3)
+        .with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now - 100,
+        })
+        .build();
+
+    let legacy_dissolving_with_age = simple_neuron_builder(4)
+        .with_dissolve_state_and_age(DissolveStateAndAge::LegacyDissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now + 2000,
+            aging_since_timestamp_seconds: now - 100,
+        })
+        .build();
+    let legacy_long_dissolved_with_age_funded = simple_neuron_builder(5)
+        .with_dissolve_state_and_age(DissolveStateAndAge::LegacyDissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: dissolved_at_sufficiently_long_ago,
+            aging_since_timestamp_seconds: now - 100,
+        })
+        .with_cached_neuron_stake_e8s(1)
+        .build();
+    let legacy_long_dissolved_with_age_unfunded = simple_neuron_builder(6)
+        .with_dissolve_state_and_age(DissolveStateAndAge::LegacyDissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: dissolved_at_sufficiently_long_ago,
+            aging_since_timestamp_seconds: now - 100,
+        })
+        .with_cached_neuron_stake_e8s(0)
+        .build();
+    let legacy_dissolved = simple_neuron_builder(7)
+        .with_dissolve_state_and_age(DissolveStateAndAge::LegacyDissolved {
+            aging_since_timestamp_seconds: now - 100,
+        })
+        .build();
+    let legacy_none_dissolve_state = simple_neuron_builder(8)
+        .with_dissolve_state_and_age(DissolveStateAndAge::LegacyNoneDissolveState {
+            aging_since_timestamp_seconds: now - 100,
+        })
+        .build();
+
+    let neurons = vec![
+        not_dissolving.clone(),
+        dissolving.clone(),
+        dissolved.clone(),
+        legacy_dissolving_with_age.clone(),
+        legacy_long_dissolved_with_age_funded.clone(),
+        legacy_long_dissolved_with_age_unfunded.clone(),
+        legacy_dissolved.clone(),
+        legacy_none_dissolve_state.clone(),
+    ];
+    for neuron in neurons.iter() {
+        neuron_store.add_neuron(neuron.clone()).unwrap();
+    }
+
+    // Call the code under test.
+    neuron_store.normalize_neurons_dissolve_state_and_age(now);
+
+    // Verify that the neurons have been normalized.
+    for neuron in neurons.iter() {
+        let dissove_dissolve_state_and_age = neuron_store
+            .with_neuron(&neuron.id(), |neuron| neuron.dissolve_state_and_age())
+            .unwrap();
+        assert_matches!(
+            dissove_dissolve_state_and_age,
+            DissolveStateAndAge::NotDissolving { .. }
+                | DissolveStateAndAge::DissolvingOrDissolved { .. }
+        );
+    }
+
+    let neurons_logged = with_audit_events_log(|log| {
+        log.iter()
+            .map(|audit_event| {
+                let payload = audit_event.payload.unwrap();
+                match payload {
+                    Payload::NormalizeDissolveStateAndAge(payload) => payload.neuron_id.unwrap(),
+                    _ => panic!("Unexpected audit event"),
+                }
+            })
+            .collect::<BTreeSet<_>>()
+    });
+    assert_eq!(
+        neurons_logged,
+        btreeset! {
+            legacy_dissolving_with_age.id().id,
+            legacy_long_dissolved_with_age_funded.id().id,
+            legacy_long_dissolved_with_age_unfunded.id().id,
+            legacy_dissolved.id().id,
+            legacy_none_dissolve_state.id().id,
+        }
     );
 }

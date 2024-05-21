@@ -1,4 +1,7 @@
-use crate::{governance::MAX_DISSOLVE_DELAY_SECONDS, pb::v1::NeuronState};
+use crate::{
+    governance::MAX_DISSOLVE_DELAY_SECONDS,
+    pb::v1::{audit_event::NeuronLegacyCase, NeuronState},
+};
 
 /// An enum to represent different combinations of a neurons dissolve_state and
 /// aging_since_timestamp_seconds. Currently, the back-and-forth conversions should make sure the
@@ -38,6 +41,16 @@ pub enum DissolveStateAndAge {
 }
 
 impl DissolveStateAndAge {
+    /// Returns true if the neuron is in a legacy state.
+    pub fn is_legacy(self) -> bool {
+        match self {
+            Self::NotDissolving { .. } | Self::DissolvingOrDissolved { .. } => false,
+            Self::LegacyDissolvingOrDissolved { .. }
+            | Self::LegacyDissolved { .. }
+            | Self::LegacyNoneDissolveState { .. } => true,
+        }
+    }
+
     /// Returns the current state given the current time. Mainly for differentiating between
     /// dissolving and dissolved neurons.
     pub fn current_state(self, now_seconds: u64) -> NeuronState {
@@ -323,6 +336,41 @@ impl DissolveStateAndAge {
             },
         }
     }
+
+    /// Returns the normalized neuron dissolve state and age. If the neuron is in a legacy state, it
+    /// returns the valid state, as well as the audit event log for logging purposes. Otherwise it
+    /// returns the existing state and None.
+    pub fn normalize(self, created_timestamp_seconds: u64) -> Option<(Self, NeuronLegacyCase)> {
+        match self {
+            Self::NotDissolving { .. } | Self::DissolvingOrDissolved { .. } => None,
+
+            Self::LegacyDissolvingOrDissolved {
+                when_dissolved_timestamp_seconds,
+                aging_since_timestamp_seconds: _,
+            } => Some((
+                Self::DissolvingOrDissolved {
+                    when_dissolved_timestamp_seconds,
+                },
+                NeuronLegacyCase::DissolvingOrDissolved,
+            )),
+
+            Self::LegacyDissolved { .. } => Some((
+                Self::DissolvingOrDissolved {
+                    when_dissolved_timestamp_seconds: created_timestamp_seconds,
+                },
+                NeuronLegacyCase::Dissolved,
+            )),
+
+            // This case should be impossible, but treating it the same way as LegacyDissolved is
+            // also reasonable.
+            Self::LegacyNoneDissolveState { .. } => Some((
+                Self::DissolvingOrDissolved {
+                    when_dissolved_timestamp_seconds: created_timestamp_seconds,
+                },
+                NeuronLegacyCase::NoneDissolveState,
+            )),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -568,7 +616,7 @@ mod tests {
 
     #[test]
     fn test_increase_dissolve_delay_for_dissolved_neurons() {
-        for dissolved_state_and_age in [
+        for dissolve_state_and_age in [
             // Valid cases
             DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: NOW,
@@ -624,7 +672,7 @@ mod tests {
             },
         ] {
             assert_increase_dissolve_delay(
-                dissolved_state_and_age,
+                dissolve_state_and_age,
                 1,
                 DissolveStateAndAge::NotDissolving {
                     dissolve_delay_seconds: 1,
@@ -634,7 +682,7 @@ mod tests {
 
             // Test that the dissolve delay is capped at MAX_DISSOLVE_DELAY_SECONDS.
             assert_increase_dissolve_delay(
-                dissolved_state_and_age,
+                dissolve_state_and_age,
                 MAX_DISSOLVE_DELAY_SECONDS as u32 + 1000,
                 DissolveStateAndAge::NotDissolving {
                     dissolve_delay_seconds: MAX_DISSOLVE_DELAY_SECONDS,
@@ -909,5 +957,76 @@ mod tests {
                 when_dissolved_timestamp_seconds: NOW + 1000
             }
         );
+    }
+
+    #[test]
+    fn test_normalize() {
+        let created_timestamp_seconds = 123_456_789;
+
+        {
+            let normal_cases = vec![
+                DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 1000,
+                    aging_since_timestamp_seconds: NOW - 100,
+                },
+                DissolveStateAndAge::DissolvingOrDissolved {
+                    when_dissolved_timestamp_seconds: NOW + 1000,
+                },
+                DissolveStateAndAge::DissolvingOrDissolved {
+                    when_dissolved_timestamp_seconds: NOW - 1000,
+                },
+            ];
+            for normal_case in normal_cases {
+                assert_eq!(normal_case.normalize(created_timestamp_seconds), None);
+            }
+        }
+
+        // In the legacy dissolving/dissolved case, we remove the age bonus.
+        let legacy_dissolving_or_dissolved = DissolveStateAndAge::LegacyDissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: NOW + 1000,
+            aging_since_timestamp_seconds: NOW - 1000,
+        };
+        let (normalized, legacy_case) = legacy_dissolving_or_dissolved
+            .normalize(created_timestamp_seconds)
+            .unwrap();
+        assert_eq!(
+            normalized,
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW + 1000
+            }
+        );
+        assert_eq!(legacy_case, NeuronLegacyCase::DissolvingOrDissolved);
+
+        // In the legacy dissolved case, we normalize it to dissolving/dissolved case while setting
+        // the dissolved timestamp to the creation timestamp.
+        let legacy_dissolved = DissolveStateAndAge::LegacyDissolved {
+            aging_since_timestamp_seconds: NOW - 1000,
+        };
+        let (normalized, legacy_case) = legacy_dissolved
+            .normalize(created_timestamp_seconds)
+            .unwrap();
+        assert_eq!(
+            normalized,
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: created_timestamp_seconds
+            }
+        );
+        assert_eq!(legacy_case, NeuronLegacyCase::Dissolved);
+
+        // In the legacy none-dissolve state case, we normalize it to dissolving/dissolved case while setting
+        // the dissolved timestamp to the creation timestamp.
+        let legacy_none_dissolve_state = DissolveStateAndAge::LegacyNoneDissolveState {
+            aging_since_timestamp_seconds: NOW - 1000,
+        };
+        let (normalized, legacy_case) = legacy_none_dissolve_state
+            .normalize(created_timestamp_seconds)
+            .unwrap();
+        assert_eq!(
+            normalized,
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: created_timestamp_seconds
+            }
+        );
+        assert_eq!(legacy_case, NeuronLegacyCase::NoneDissolveState);
     }
 }
