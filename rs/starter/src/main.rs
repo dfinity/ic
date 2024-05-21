@@ -90,7 +90,7 @@ fn main() -> Result<()> {
         subnet_nodes.insert(
             NODE_INDEX,
             NodeConfiguration {
-                xnet_api: SocketAddr::from_str("0.0.0.0:0").unwrap(),
+                xnet_api: SocketAddr::from_str("127.0.0.1:0").unwrap(),
                 public_api: config.http_listen_addr,
                 node_operator_principal_id: None,
                 secret_key_store: None,
