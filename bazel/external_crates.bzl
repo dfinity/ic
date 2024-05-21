@@ -15,6 +15,7 @@ def sanitize_external_crates(sanitizers_enabled):
         "wasmtime": FUZZING_ANNOTATION,
         "bitcoin": FUZZING_ANNOTATION,
         "bincode": FUZZING_ANNOTATION,
+        "ic-stable-structures": FUZZING_ANNOTATION,
     }
 
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
