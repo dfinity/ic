@@ -474,10 +474,12 @@ impl HttpEndpointBuilder {
 
 pub mod test_agent {
     use super::*;
+    use ic_crypto_tree_hash::{Label, Path};
+
     use ic_types::{
         messages::{
-            Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope,
-            HttpUserQuery,
+            Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
+            HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery,
         },
         time::current_time,
         PrincipalId,
@@ -629,6 +631,64 @@ pub mod test_agent {
             let body = serde_cbor::to_vec(&envelope).unwrap();
             let url = format!(
                 "http://{}/api/v2/canister/{}/query",
+                addr, self.effective_canister_id
+            );
+
+            reqwest::Client::new()
+                .post(url)
+                .body(body)
+                .header(CONTENT_TYPE, APPLICATION_CBOR)
+                .send()
+                .await
+                .unwrap()
+        }
+    }
+
+    pub struct CanisterReadState {
+        paths: Vec<Path>,
+        effective_canister_id: PrincipalId,
+    }
+
+    impl Default for CanisterReadState {
+        fn default() -> Self {
+            Self {
+                paths: vec![Path::from(Label::from("time"))],
+                effective_canister_id: PrincipalId::default(),
+            }
+        }
+    }
+
+    impl CanisterReadState {
+        pub fn new(paths: Vec<Path>, effective_canister_id: PrincipalId) -> Self {
+            Self {
+                paths,
+                effective_canister_id,
+            }
+        }
+
+        pub async fn read_state(self, addr: SocketAddr) -> reqwest::Response {
+            let ingress_expiry =
+                (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
+
+            let call_content = HttpReadStateContent::ReadState {
+                read_state: HttpReadState {
+                    paths: self.paths,
+                    sender: Blob(SENDER.into_vec()),
+                    ingress_expiry,
+                    nonce: None,
+                },
+            };
+
+            let envelope = HttpRequestEnvelope {
+                content: call_content,
+                sender_pubkey: None,
+                sender_sig: None,
+                sender_delegation: None,
+            };
+
+            let body = serde_cbor::to_vec(&envelope).unwrap();
+            let url = format!(
+                "http://{}/api/v2/canister/{}/read_state",
                 addr, self.effective_canister_id
             );
 

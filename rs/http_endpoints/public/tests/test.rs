@@ -16,10 +16,7 @@ use http_body::Frame;
 use http_body_util::StreamBody;
 use hyper::{body::Incoming, Method, Request, StatusCode};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
-use ic_agent::{
-    agent::http_transport::reqwest_transport::ReqwestTransport, agent_error::HttpErrorPayload,
-    export::Principal, hash_tree::Label, Agent, AgentError,
-};
+use ic_agent::{agent::http_transport::reqwest_transport::ReqwestTransport, Agent};
 use ic_canister_client::{parse_subnet_read_state_response, prepare_read_state};
 use ic_canister_client_sender::Sender;
 use ic_canonical_state::encoding::types::{Cycles, SubnetMetrics};
@@ -155,35 +152,32 @@ fn test_unauthorized_controller() {
 
     HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
-    let agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .build()
-        .unwrap();
+    let canister1: PrincipalId = "223xb-saaaa-aaaaf-arlqa-cai".parse().unwrap();
+    let canister2: PrincipalId = "224lq-3aaaa-aaaaf-ase7a-cai".parse().unwrap();
 
-    let canister1 = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
-    let canister2 = Principal::from_text("224lq-3aaaa-aaaaf-ase7a-cai").unwrap();
-    let paths: Vec<Vec<Label<Vec<u8>>>> = vec![vec![
+    let path: Path = vec![
         "canister".into(),
         canister2.as_slice().into(),
         "metadata".into(),
         "time".into(),
-    ]];
+    ]
+    .into();
 
-    let expected_error = AgentError::HttpError(HttpErrorPayload {
-        status: 400,
-        content_type: Some(TEXT_PLAIN.to_string()),
-        content: format!(
-            "Effective principal id in URL {} does not match requested principal id: {}.",
-            canister1, canister2
-        )
-        .as_bytes()
-        .to_vec(),
-    });
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
+
+        let response = test_agent::CanisterReadState::new(vec![path], canister1)
+            .read_state(addr)
+            .await;
+
+        assert_eq!(StatusCode::BAD_REQUEST, response.status());
+        assert_eq!(TEXT_PLAIN, response.headers().get(CONTENT_TYPE).unwrap());
         assert_eq!(
-            agent.read_state_raw(paths.clone(), canister1).await,
-            Err(expected_error)
+            format!(
+                "Effective principal id in URL {} does not match requested principal id: {}.",
+                canister1, canister2
+            ),
+            response.text().await.unwrap()
         );
     });
 }
@@ -419,6 +413,8 @@ fn test_payload_too_large() {
 
     let request = |body: Vec<u8>| {
         rt.block_on(async {
+            wait_for_status_healthy(&addr).await.unwrap();
+
             let client = Client::builder(TokioExecutor::new()).build_http();
 
             let req = Request::builder()
@@ -500,6 +496,7 @@ fn test_status_code_when_ingress_filter_fails() {
     });
 
     rt.block_on(async move {
+        wait_for_status_healthy(&addr).await.unwrap();
         let call_response = test_agent::Call::default().call(addr).await;
 
         assert_eq!(
@@ -581,28 +578,22 @@ fn test_too_long_paths_are_rejected() {
 
     HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
-    let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
+    let long_path: Path = (0..100)
+        .map(|i| format!("hallo{}", i).into())
+        .collect::<Vec<CryptoTreeHashLabel>>()
+        .into();
 
-    let agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .build()
-        .unwrap();
-
-    let long_path: Vec<Label<Vec<u8>>> = (0..100).map(|i| format!("hallo{}", i).into()).collect();
-    let paths = vec![long_path];
-
-    let expected_error_response = AgentError::HttpError(HttpErrorPayload {
-        status: 404,
-        content_type: Some(TEXT_PLAIN.to_string()),
-        content: b"Invalid path requested.".to_vec(),
-    });
-
-    let actual_response = rt.block_on(async {
+    rt.block_on(async move {
         wait_for_status_healthy(&addr).await.unwrap();
-        agent.read_state_raw(paths.clone(), canister).await
-    });
 
-    assert_eq!(Err(expected_error_response), actual_response);
+        let response = test_agent::CanisterReadState::new(vec![long_path], PrincipalId::default())
+            .read_state(addr)
+            .await;
+
+        assert_eq!(StatusCode::NOT_FOUND, response.status());
+        assert_eq!(TEXT_PLAIN, response.headers().get(CONTENT_TYPE).unwrap());
+        assert_eq!("Invalid path requested.", response.text().await.unwrap());
+    });
 }
 
 /// This test verifies that the http endpoint returns 503 (SERVICE_UNAVAILABLE) when the
@@ -876,6 +867,8 @@ fn test_http_2_requests_are_accepted() {
         .unwrap();
 
     let response = rt.block_on(async move {
+        wait_for_status_healthy(&addr).await.unwrap();
+
         client
             .get(format!("http://{}/api/v2/status", addr))
             .header("Content-Type", "application/cbor")
@@ -907,6 +900,8 @@ fn test_http_1_requests_are_accepted() {
     let client = reqwest::ClientBuilder::new().http1_only().build().unwrap();
 
     let response = rt.block_on(async move {
+        wait_for_status_healthy(&addr).await.unwrap();
+
         client
             .get(format!("http://{}/api/v2/status", addr))
             .header("Content-Type", "application/cbor")
