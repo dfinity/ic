@@ -54,6 +54,8 @@ DEV_DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde_cbor",
 ]
 
 rust_fuzz_test_binary_afl(
