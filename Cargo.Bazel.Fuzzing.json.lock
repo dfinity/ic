@@ -1,5 +1,5 @@
 {
-  "checksum": "fd8c95f3ae2fb9ece7eead84c321c31d8d20b5e6df17f2204be21b28534e1acf",
+  "checksum": "84c3df3056f377067743829e65abe87ce88c2de2be27656c0aab273164d2f817",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -29038,6 +29038,28 @@
           "selects": {}
         },
         "edition": "2021",
+        "rustc_flags": {
+          "common": [
+            "-Cpasses=sancov-module",
+            "-Cllvm-args=-sanitizer-coverage-level=4",
+            "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+            "-Cllvm-args=-sanitizer-coverage-pc-table",
+            "-Cllvm-args=-sanitizer-coverage-trace-compares",
+            "-Cllvm-args=-sanitizer-coverage-stack-depth",
+            "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+            "-Ctarget-cpu=native",
+            "-Coverflow_checks",
+            "-Copt-level=3",
+            "-Clink-dead-code",
+            "-Cinstrument-coverage",
+            "-Cdebug-assertions",
+            "-Ccodegen-units=1",
+            "-Zextra-const-ub-checks",
+            "-Zstrict-init-checks",
+            "-Zsanitizer=address"
+          ],
+          "selects": {}
+        },
         "version": "0.6.4"
       },
       "license": "Apache-2.0",
