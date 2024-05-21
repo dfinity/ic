@@ -1,8 +1,6 @@
 use super::*;
 
-use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
-
-use crate::test_utils::create_fake_registry_client;
+use crate::test_utils::{create_fake_registry_client, valid_tls_certificate_and_validation_time};
 
 #[tokio::test]
 async fn test_routing_table() -> Result<(), Error> {
