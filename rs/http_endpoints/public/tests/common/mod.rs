@@ -4,7 +4,6 @@ use hyper::{
     Method, Request, StatusCode,
 };
 use hyper_util::rt::TokioIo;
-use ic_agent::Agent;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
@@ -63,10 +62,7 @@ use ic_types::{
 };
 use mockall::{mock, predicate::*};
 use prost::Message;
-use std::{
-    collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc, sync::RwLock,
-    time::Duration,
-};
+use std::{collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc, sync::RwLock};
 use tokio::{
     net::{TcpSocket, TcpStream},
     sync::mpsc::UnboundedReceiver,
@@ -318,24 +314,6 @@ pub fn basic_registry_client() -> MockRegistryClient {
     mock_registry_client
 }
 
-pub async fn wait_for_status_healthy(agent: &Agent) -> Result<(), &'static str> {
-    let fut = async {
-        loop {
-            let result = agent.status().await;
-            match result {
-                Ok(status) if status.replica_health_status == Some("healthy".to_string()) => {
-                    break;
-                }
-                _ => {}
-            }
-            tokio::time::sleep(Duration::from_millis(250)).await;
-        }
-    };
-    tokio::time::timeout(Duration::from_secs(10), fut)
-        .await
-        .map_err(|_| "Timeout while waiting for http endpoint to be healthy")
-}
-
 // Get a free port on this host to which we can connect transport to.
 pub fn get_free_localhost_socket_addr() -> SocketAddr {
     let socket = TcpSocket::new_v4().unwrap();
@@ -490,5 +468,122 @@ impl HttpEndpointBuilder {
             ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
         );
         (ingress_filter_handle, ingress_rx, query_exe_handler)
+    }
+}
+
+pub mod test_agent {
+    use super::*;
+    use ic_types::{
+        messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
+        time::current_time,
+        PrincipalId,
+    };
+    use reqwest::header::CONTENT_TYPE;
+    use serde_cbor::Value as CBOR;
+    use std::{net::SocketAddr, time::Duration};
+
+    const INGRESS_EXPIRY_DURATION: Duration = Duration::from_secs(300);
+    const METHOD_NAME: &str = "test";
+    const SENDER: PrincipalId = PrincipalId::new_anonymous();
+    const ARG: Vec<u8> = vec![];
+    const APPLICATION_CBOR: &str = "application/cbor";
+
+    pub async fn wait_for_status_healthy(addr: &SocketAddr) -> Result<(), &'static str> {
+        let fut = async {
+            loop {
+                let url = format!("http://{}/api/v2/status", addr);
+
+                let response = reqwest::Client::new()
+                    .get(url)
+                    .header(CONTENT_TYPE, APPLICATION_CBOR)
+                    .send()
+                    .await;
+
+                let Ok(response) = response else {
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                    continue;
+                };
+
+                if response.status() != StatusCode::OK {
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                    continue;
+                }
+
+                let Ok(response) = response.bytes().await else {
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                    continue;
+                };
+
+                let replica_status = serde_cbor::from_slice::<CBOR>(&response)
+                    .expect("Status endpoint is a valid CBOR.");
+
+                if let CBOR::Map(map) = replica_status {
+                    if let Some(CBOR::Text(status)) =
+                        map.get(&CBOR::Text("replica_health_status".to_string()))
+                    {
+                        if status == "healthy" {
+                            return;
+                        }
+                    }
+                }
+
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(10), fut)
+            .await
+            .map_err(|_| "Timeout while waiting for http endpoint to be healthy")
+    }
+
+    #[derive(Default)]
+    pub struct Call {
+        canister_id: PrincipalId,
+        effective_canister_id: PrincipalId,
+    }
+
+    impl Call {
+        pub fn new(canister_id: PrincipalId, effective_canister_id: PrincipalId) -> Self {
+            Self {
+                canister_id,
+                effective_canister_id,
+            }
+        }
+
+        pub async fn call(self, addr: SocketAddr) -> reqwest::Response {
+            let ingress_expiry =
+                (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
+
+            let call_content = HttpCallContent::Call {
+                update: HttpCanisterUpdate {
+                    canister_id: Blob(self.canister_id.into_vec()),
+                    method_name: METHOD_NAME.to_string(),
+                    ingress_expiry,
+                    arg: Blob(ARG),
+                    sender: Blob(SENDER.into_vec()),
+                    nonce: None,
+                },
+            };
+
+            let envelope = HttpRequestEnvelope {
+                content: call_content,
+                sender_pubkey: None,
+                sender_sig: None,
+                sender_delegation: None,
+            };
+
+            let body = serde_cbor::to_vec(&envelope).unwrap();
+            let url = format!(
+                "http://{}/api/v2/canister/{}/call",
+                addr, self.effective_canister_id
+            );
+
+            reqwest::Client::new()
+                .post(url)
+                .body(body)
+                .header(CONTENT_TYPE, APPLICATION_CBOR)
+                .send()
+                .await
+                .unwrap()
+        }
     }
 }

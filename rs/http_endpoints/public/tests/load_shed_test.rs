@@ -2,7 +2,8 @@ pub mod common;
 
 use crate::common::{
     default_certified_state_reader, default_get_latest_state, default_latest_certified_height,
-    default_read_certified_state, get_free_localhost_socket_addr, wait_for_status_healthy,
+    default_read_certified_state, get_free_localhost_socket_addr,
+    test_agent::{self, wait_for_status_healthy},
     HttpEndpointBuilder,
 };
 use async_trait::async_trait;
@@ -94,7 +95,7 @@ fn test_load_shedding_query() {
     });
 
     rt.block_on(async {
-        wait_for_status_healthy(&ok_agent).await.unwrap();
+        wait_for_status_healthy(&addr).await.unwrap();
 
         let resp = ok_agent
             .query_signed(query.effective_canister_id, query.signed_query.clone())
@@ -214,7 +215,7 @@ fn test_load_shedding_read_state() {
     });
 
     rt.block_on(async {
-        wait_for_status_healthy(&ok_agent).await.unwrap();
+        wait_for_status_healthy(&addr).await.unwrap();
         service_is_healthy.store(true, Ordering::Relaxed);
 
         let response = ok_agent.read_state_raw(paths, canister).await;
@@ -356,7 +357,7 @@ fn test_load_shedding_pprof() {
 /// we return 429.
 /// Test scenario:
 /// 1. Set the concurrency limiter for the call service, `max_call_concurrent_requests`, to 1.
-/// 2. Use [`Agent`]  to make an update calls where we wait with responding for the update call
+/// 2. Send an ingress message where we wait with responding for the update call
 /// inside the ingress filter service handle.
 /// 3. Concurrently make another update call, and assert it hits the load shedder.
 #[test]
@@ -370,32 +371,20 @@ fn test_load_shedding_update_call() {
         ..Default::default()
     };
 
-    let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
-
     let (mut ingress_filter, _ingress_rx, _) =
         HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let ingress_filter_running = Arc::new(Notify::new());
     let load_shedder_returned = Arc::new(Notify::new());
 
-    let ok_agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .build()
-        .unwrap();
-
-    let load_shedded_agent = ok_agent.clone();
-
     let ingress_filter_running_clone = ingress_filter_running.clone();
     let load_shedder_returned_clone = load_shedder_returned.clone();
 
-    let load_shedded_agent_handle = rt.spawn(async move {
+    let load_shedded_request_handle = rt.spawn(async move {
         ingress_filter_running_clone.notified().await;
-        let resp = load_shedded_agent
-            .update(&canister, "some method")
-            .call()
-            .await;
+        let response = test_agent::Call::default().call(addr).await;
         load_shedder_returned_clone.notify_one();
-        resp
+        response
     });
 
     // Mock ingress filter
@@ -407,22 +396,20 @@ fn test_load_shedding_update_call() {
     });
 
     rt.block_on(async {
-        wait_for_status_healthy(&ok_agent).await.unwrap();
-        let resp = ok_agent.update(&canister, "some method").call().await;
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = test_agent::Call::default().call(addr).await;
+        assert_eq!(
+            response.status(),
+            StatusCode::ACCEPTED,
+            "{:?}",
+            response.text().await.unwrap()
+        );
 
-        assert!(resp.is_ok(), "Received unexpected response: {:?}", resp);
+        let load_shedded_response = load_shedded_request_handle.await.unwrap();
 
-        let resp = load_shedded_agent_handle.await.unwrap();
-        let expected_resp = StatusCode::TOO_MANY_REQUESTS;
-
-        match resp {
-            Err(AgentError::HttpError(HttpErrorPayload { status, .. })) => {
-                assert_eq!(expected_resp, status)
-            }
-            _ => panic!(
-                "Load shedder did not kick in. Received unexpected response: {:?}",
-                resp
-            ),
-        }
-    });
+        assert_eq!(
+            StatusCode::TOO_MANY_REQUESTS,
+            load_shedded_response.status()
+        );
+    })
 }

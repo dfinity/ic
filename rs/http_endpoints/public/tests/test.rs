@@ -5,7 +5,9 @@ pub mod common;
 
 use crate::common::{
     create_conn_and_send_request, default_get_latest_state, default_latest_certified_height,
-    get_free_localhost_socket_addr, wait_for_status_healthy, HttpEndpointBuilder,
+    get_free_localhost_socket_addr,
+    test_agent::{self, wait_for_status_healthy},
+    HttpEndpointBuilder,
 };
 use axum::body::{to_bytes, Body};
 use bytes::Bytes;
@@ -15,14 +17,10 @@ use http_body_util::StreamBody;
 use hyper::{body::Incoming, Method, Request, StatusCode};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_agent::{
-    agent::{
-        http_transport::reqwest_transport::ReqwestTransport, QueryBuilder, RejectResponse,
-        UpdateBuilder,
-    },
+    agent::{http_transport::reqwest_transport::ReqwestTransport, QueryBuilder},
     agent_error::HttpErrorPayload,
     export::Principal,
     hash_tree::Label,
-    identity::AnonymousIdentity,
     Agent, AgentError,
 };
 use ic_canister_client::{parse_subnet_read_state_response, prepare_read_state};
@@ -35,7 +33,7 @@ use ic_config::http_handler::Config;
 use ic_crypto_tree_hash::{
     flatmap, Label as CryptoTreeHashLabel, LabeledTree, MixedHashTree, Path,
 };
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::QueryExecutionError;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_interfaces_registry_mocks::MockRegistryClient;
@@ -64,8 +62,11 @@ use ic_types::{
     CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
 };
 use prost::Message;
+use reqwest::header::CONTENT_TYPE;
 use serde_bytes::ByteBuf;
+use serde_cbor::value::Value as CBOR;
 use std::{
+    collections::BTreeMap,
     convert::Infallible,
     net::TcpStream,
     sync::{
@@ -129,7 +130,7 @@ fn test_healthy_behind() {
         .unwrap();
 
     let status = rt.block_on(async {
-        wait_for_status_healthy(&agent).await.unwrap();
+        wait_for_status_healthy(&addr).await.unwrap();
         healthy.store(true, Ordering::SeqCst);
         agent.status().await.unwrap()
     });
@@ -180,7 +181,7 @@ fn test_unauthorized_controller() {
         .to_vec(),
     });
     rt.block_on(async {
-        wait_for_status_healthy(&agent).await.unwrap();
+        wait_for_status_healthy(&addr).await.unwrap();
         assert_eq!(
             agent.read_state_raw(paths.clone(), canister1).await,
             Err(expected_error)
@@ -251,7 +252,7 @@ fn test_unauthorized_query() {
     query_tests.push((query, Err(expected_resp)));
 
     rt.block_on(async {
-        wait_for_status_healthy(&agent).await.unwrap();
+        wait_for_status_healthy(&addr).await.unwrap();
         for (query, expected_resp) in query_tests {
             assert_eq!(
                 agent
@@ -276,14 +277,8 @@ fn test_unauthorized_call() {
     let (mut ingress_filter, _ingress_rx, _) =
         HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
-    let agent = Agent::builder()
-        .with_identity(AnonymousIdentity)
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .build()
-        .unwrap();
-
-    let canister1 = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
-    let canister2 = Principal::from_text("224lq-3aaaa-aaaaf-ase7a-cai").unwrap();
+    let canister1 = "223xb-saaaa-aaaaf-arlqa-cai".parse().unwrap();
+    let canister2 = "224lq-3aaaa-aaaaf-ase7a-cai".parse().unwrap();
 
     // Ingress filter mock that returns empty Ok(()) response.
     rt.spawn(async move {
@@ -293,61 +288,73 @@ fn test_unauthorized_call() {
         }
     });
 
-    // Query call tests.
-    let mut update_tests = Vec::new();
+    // Wait for the endpoint to be healthy.
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+    });
 
     // Valid update call with canister_id = effective_canister_id
-    let update = UpdateBuilder::new(&agent, canister1, "test".to_string())
-        .with_effective_canister_id(canister1)
-        .with_arg(Vec::new())
-        .sign()
-        .unwrap();
-    update_tests.push((update.clone(), Ok(update.request_id)));
+    rt.block_on(async move {
+        let valid_update_call = test_agent::Call::new(canister1, canister1).call(addr).await;
+
+        assert_eq!(
+            StatusCode::ACCEPTED,
+            valid_update_call.status(),
+            "Valid update with, canister_id = effective_canister_id, failed."
+        );
+    });
 
     // Invalid update call with canister_id != effective_canister_id
-    let update = UpdateBuilder::new(&agent, canister1, "test".to_string())
-        .with_effective_canister_id(canister2)
-        .with_arg(Vec::new())
-        .sign()
-        .unwrap();
-    let expected_resp = AgentError::HttpError(HttpErrorPayload {
-        status: 400,
-        content_type: Some("text/plain; charset=utf-8".to_string()),
-        content: format!(
-            "Specified CanisterId {} does not match effective canister id in URL {}",
-            canister1, canister2
-        )
-        .as_bytes()
-        .to_vec(),
+    rt.block_on(async move {
+        let invalid_update_call = test_agent::Call::new(canister1, canister2).call(addr).await;
+
+        assert_eq!(
+            StatusCode::BAD_REQUEST,
+            invalid_update_call.status(),
+            "Invalid update with, canister_id != effective_canister_id, succeeded."
+        );
+
+        let content_type = invalid_update_call
+            .headers()
+            .get(CONTENT_TYPE)
+            .expect("Content type is set.");
+
+        assert_eq!("text/plain; charset=utf-8", content_type);
+
+        assert_eq!(
+            format!(
+                "Specified CanisterId {} does not match effective canister id in URL {}",
+                canister1, canister2
+            ),
+            invalid_update_call.text().await.unwrap()
+        );
     });
-    update_tests.push((update, Err(expected_resp)));
 
-    // Update call to mgmt canister with different effective canister id.
-    let update = UpdateBuilder::new(&agent, Principal::management_canister(), "test".to_string())
-        .with_effective_canister_id(canister2)
-        .with_arg(Vec::new())
-        .sign()
-        .unwrap();
-    update_tests.push((update.clone(), Ok(update.request_id)));
+    let management_canister = PrincipalId::default();
+    // Update call to management canister with different effective canister id.
+    rt.block_on(async move {
+        let valid_update_call = test_agent::Call::new(management_canister, canister2)
+            .call(addr)
+            .await;
 
-    // Update call to mgmt canister.
-    let update = UpdateBuilder::new(&agent, Principal::management_canister(), "test".to_string())
-        .with_effective_canister_id(Principal::management_canister())
-        .with_arg(Vec::new())
-        .sign()
-        .unwrap();
-    update_tests.push((update.clone(), Ok(update.request_id)));
+        assert_eq!(
+            StatusCode::ACCEPTED,
+            valid_update_call.status(),
+            "Update call to management canister with different effective canister id failed."
+        );
+    });
 
-    rt.block_on(async {
-        wait_for_status_healthy(&agent).await.unwrap();
-        for (update, expected_resp) in update_tests {
-            assert_eq!(
-                agent
-                    .update_signed(update.effective_canister_id, update.signed_update)
-                    .await,
-                expected_resp
-            );
-        }
+    // Update call to management canister.
+    rt.block_on(async move {
+        let valid_update_call = test_agent::Call::new(management_canister, management_canister)
+            .call(addr)
+            .await;
+
+        assert_eq!(
+            StatusCode::ACCEPTED,
+            valid_update_call.status(),
+            "Update call to management canister with same effective canister id failed."
+        );
     });
 }
 
@@ -483,13 +490,9 @@ fn test_request_too_slow() {
         ..Default::default()
     };
     HttpEndpointBuilder::new(rt.handle().clone(), config).run();
-    let agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .build()
-        .unwrap();
 
     rt.block_on(async {
-        wait_for_status_healthy(&agent).await.unwrap();
+        wait_for_status_healthy(&addr).await.unwrap();
         let initial_fut: BoxFuture<'static, Result<Frame<Bytes>, Infallible>> =
             async { Ok(Frame::data(Bytes::from("hello".as_bytes()))) }.boxed();
         let body =
@@ -522,13 +525,6 @@ fn test_status_code_when_ingress_filter_fails() {
 
     let (mut ingress_filter, _, _) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
-    let agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .build()
-        .unwrap();
-
-    let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
-
     // handle the update call
     rt.spawn(async move {
         let request = ingress_filter.next_request().await;
@@ -538,21 +534,37 @@ fn test_status_code_when_ingress_filter_fails() {
         send_response.send_response(Err(response));
     });
 
-    // send update call
-    let response = rt.block_on(async {
-        agent
-            .update(&canister, "provisional_create_canister_with_cycles")
-            .call()
-            .await
+    rt.block_on(async move {
+        let call_response = test_agent::Call::default().call(addr).await;
+
+        assert_eq!(
+            call_response.status(),
+            StatusCode::OK,
+            "{:?}",
+            call_response.text().await.unwrap()
+        );
+
+        let expected_response: CBOR = CBOR::Map(BTreeMap::from([
+            (
+                CBOR::Text("error_code".to_string()),
+                CBOR::Text("IC0204".to_string()),
+            ),
+            (
+                CBOR::Text("reject_message".to_string()),
+                CBOR::Text("Test reject message".to_string()),
+            ),
+            (
+                CBOR::Text("reject_code".to_string()),
+                CBOR::Integer(RejectCode::SysTransient as i128),
+            ),
+        ]));
+
+        let response_body = call_response.bytes().await.unwrap();
+        let cbor_decoded_body = serde_cbor::from_slice::<CBOR>(&response_body)
+            .expect("Failed to decode response body.");
+
+        assert_eq!(expected_response, cbor_decoded_body)
     });
-
-    let expected_response = Err(AgentError::UncertifiedReject(RejectResponse {
-        reject_code: ic_agent::agent::RejectCode::SysTransient,
-        reject_message: "Test reject message".to_string(),
-        error_code: Some("IC0204".to_string()),
-    }));
-
-    assert_eq!(expected_response, response);
 }
 
 /// This test verifies that the endpoint can be shutdown gracefully by dropping the runtime.
@@ -569,12 +581,7 @@ fn test_graceful_shutdown_of_the_endpoint() {
 
     HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
-    let agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .build()
-        .unwrap();
-
-    rt.block_on(wait_for_status_healthy(&agent)).unwrap();
+    rt.block_on(wait_for_status_healthy(&addr)).unwrap();
 
     let connection_to_endpoint = TcpStream::connect(addr);
     assert!(
@@ -626,7 +633,7 @@ fn test_too_long_paths_are_rejected() {
     });
 
     let actual_response = rt.block_on(async {
-        wait_for_status_healthy(&agent).await.unwrap();
+        wait_for_status_healthy(&addr).await.unwrap();
         agent.read_state_raw(paths.clone(), canister).await
     });
 
@@ -670,7 +677,7 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state() {
         .unwrap();
 
     rt.block_on(async {
-        wait_for_status_healthy(&agent).await.unwrap();
+        wait_for_status_healthy(&addr).await.unwrap();
 
         let response = agent
             .query_signed(query.effective_canister_id, query.signed_query.clone())
@@ -699,11 +706,6 @@ fn can_retrieve_subnet_metrics() {
         max_request_size_bytes: 2048,
         ..Default::default()
     };
-
-    let agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .build()
-        .unwrap();
 
     let subnet_id = subnet_test_id(1);
 
@@ -824,7 +826,7 @@ fn can_retrieve_subnet_metrics() {
 
     let request = |body: Vec<u8>| {
         rt.block_on(async {
-            wait_for_status_healthy(&agent).await.unwrap();
+            wait_for_status_healthy(&addr).await.unwrap();
             let client = Client::builder(TokioExecutor::new()).build_http();
 
             let req = Request::builder()
@@ -876,18 +878,13 @@ fn subnet_metrics_not_supported_via_canister_read_state() {
         ..Default::default()
     };
 
-    let agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .build()
-        .unwrap();
-
     HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let subnet_id = subnet_test_id(1);
 
     let request = |body: Vec<u8>| {
         rt.block_on(async {
-            wait_for_status_healthy(&agent).await.unwrap();
+            wait_for_status_healthy(&addr).await.unwrap();
             let client = Client::builder(TokioExecutor::new()).build_http();
 
             let req = Request::builder()
