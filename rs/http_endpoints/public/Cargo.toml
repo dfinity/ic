@@ -68,7 +68,6 @@ url = "2.1.1"
 ic-backtrace = { path = "../../monitoring/backtrace" }
 
 [dev-dependencies]
-ic-agent = { workspace = true }
 ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canonical-state = { path = "../../canonical_state" }

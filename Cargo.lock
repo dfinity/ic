@@ -7939,7 +7939,6 @@ dependencies = [
  "http-body-util",
  "hyper 1.2.0",
  "hyper-util",
- "ic-agent",
  "ic-async-utils",
  "ic-backtrace",
  "ic-canister-client",
