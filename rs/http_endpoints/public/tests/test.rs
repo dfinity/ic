@@ -57,6 +57,7 @@ use ic_types::{
 };
 use prost::Message;
 use reqwest::header::CONTENT_TYPE;
+use rstest::rstest;
 use rustls::{
     client::{ServerCertVerified, ServerCertVerifier},
     ClientConfig,
@@ -272,9 +273,57 @@ fn test_unauthorized_query() {
     });
 }
 
+/// Tests that the HTTP endpoints accepts update calls to the management canister,
+/// regardless of the effective canister id.
+#[rstest]
+fn test_update_call_to_management_canister(
+    #[values(test_agent::Call::V2)] endpoint: test_agent::Call,
+    #[values(PrincipalId::default(), "224lq-3aaaa-aaaaf-ase7a-cai")]
+    effective_canister_id: PrincipalId,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let management_canister = PrincipalId::default();
+
+    let (mut ingress_filter, _ingress_rx, _) =
+        HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+
+    // Ingress filter mock that returns empty Ok(()) response.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(()))
+        }
+    });
+
+    // Wait for the endpoint to be healthy.
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+
+        let response = endpoint
+            .call_canister_id(addr, management_canister, effective_canister_id)
+            .await;
+
+        assert_eq!(
+            StatusCode::ACCEPTED,
+            response.status(),
+            "Update call to management canister failed."
+        );
+    });
+}
+
 // Test that that http endpoint rejects calls with mismatch between canister id an effective canister id.
-#[test]
-fn test_unauthorized_call() {
+#[rstest]
+#[case::version_2_endpoint(test_agent::Call::V2, StatusCode::ACCEPTED)]
+fn test_unauthorized_call(
+    #[case] endpoint: test_agent::Call,
+    #[case] expected_success_status_code: StatusCode,
+) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -303,10 +352,10 @@ fn test_unauthorized_call() {
 
     // Valid update call with canister_id = effective_canister_id
     rt.block_on(async move {
-        let valid_update_call = test_agent::Call::new(canister1, canister1).call(addr).await;
+        let valid_update_call = endpoint.call_canister_id(addr, canister1, canister1).await;
 
         assert_eq!(
-            StatusCode::ACCEPTED,
+            expected_success_status_code,
             valid_update_call.status(),
             "Valid update with, canister_id = effective_canister_id, failed."
         );
@@ -314,7 +363,7 @@ fn test_unauthorized_call() {
 
     // Invalid update call with canister_id != effective_canister_id
     rt.block_on(async move {
-        let invalid_update_call = test_agent::Call::new(canister1, canister2).call(addr).await;
+        let invalid_update_call = endpoint.call_canister_id(addr, canister1, canister2).await;
 
         assert_eq!(
             StatusCode::BAD_REQUEST,
@@ -335,33 +384,6 @@ fn test_unauthorized_call() {
                 canister1, canister2
             ),
             invalid_update_call.text().await.unwrap()
-        );
-    });
-
-    let management_canister = PrincipalId::default();
-    // Update call to management canister with different effective canister id.
-    rt.block_on(async move {
-        let valid_update_call = test_agent::Call::new(management_canister, canister2)
-            .call(addr)
-            .await;
-
-        assert_eq!(
-            StatusCode::ACCEPTED,
-            valid_update_call.status(),
-            "Update call to management canister with different effective canister id failed."
-        );
-    });
-
-    // Update call to management canister.
-    rt.block_on(async move {
-        let valid_update_call = test_agent::Call::new(management_canister, management_canister)
-            .call(addr)
-            .await;
-
-        assert_eq!(
-            StatusCode::ACCEPTED,
-            valid_update_call.status(),
-            "Update call to management canister with same effective canister id failed."
         );
     });
 }
@@ -499,8 +521,25 @@ fn test_request_too_slow() {
     })
 }
 
-#[test]
-fn test_status_code_when_ingress_filter_fails() {
+#[rstest]
+#[case(test_agent::Call::V2, CBOR::Map(BTreeMap::from([
+            (
+                CBOR::Text("error_code".to_string()),
+                CBOR::Text("IC0204".to_string()),
+            ),
+            (
+                CBOR::Text("reject_message".to_string()),
+                CBOR::Text("Test reject message".to_string()),
+            ),
+            (
+                CBOR::Text("reject_code".to_string()),
+                CBOR::Integer(RejectCode::SysTransient as i128),
+            ),
+        ])))]
+fn test_status_code_when_ingress_filter_fails(
+    #[case] endpoint: test_agent::Call,
+    #[case] expected_response: CBOR,
+) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -521,29 +560,13 @@ fn test_status_code_when_ingress_filter_fails() {
 
     rt.block_on(async move {
         wait_for_status_healthy(&addr).await.unwrap();
-        let call_response = test_agent::Call::default().call(addr).await;
-
+        let call_response = endpoint.call_default_canister(addr).await;
         assert_eq!(
             call_response.status(),
             StatusCode::OK,
             "{:?}",
             call_response.text().await.unwrap()
         );
-
-        let expected_response: CBOR = CBOR::Map(BTreeMap::from([
-            (
-                CBOR::Text("error_code".to_string()),
-                CBOR::Text("IC0204".to_string()),
-            ),
-            (
-                CBOR::Text("reject_message".to_string()),
-                CBOR::Text("Test reject message".to_string()),
-            ),
-            (
-                CBOR::Text("reject_code".to_string()),
-                CBOR::Integer(RejectCode::SysTransient as i128),
-            ),
-        ]));
 
         let response_body = call_response.bytes().await.unwrap();
         let cbor_decoded_body = serde_cbor::from_slice::<CBOR>(&response_body)

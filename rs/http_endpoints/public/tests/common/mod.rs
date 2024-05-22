@@ -541,27 +541,24 @@ pub mod test_agent {
             .map_err(|_| "Timeout while waiting for http endpoint to be healthy")
     }
 
-    #[derive(Default)]
-    pub struct Call {
-        canister_id: PrincipalId,
-        effective_canister_id: PrincipalId,
+    #[derive(Debug, Clone, Copy)]
+    pub enum Call {
+        V2,
     }
 
     impl Call {
-        pub fn new(canister_id: PrincipalId, effective_canister_id: PrincipalId) -> Self {
-            Self {
-                canister_id,
-                effective_canister_id,
-            }
-        }
-
-        pub async fn call(self, addr: SocketAddr) -> reqwest::Response {
+        pub async fn call_canister_id(
+            &self,
+            addr: SocketAddr,
+            canister_id: PrincipalId,
+            effective_canister_id: PrincipalId,
+        ) -> reqwest::Response {
             let ingress_expiry =
                 (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
 
             let call_content = HttpCallContent::Call {
                 update: HttpCanisterUpdate {
-                    canister_id: Blob(self.canister_id.into_vec()),
+                    canister_id: Blob(canister_id.into_vec()),
                     method_name: METHOD_NAME.to_string(),
                     ingress_expiry,
                     arg: Blob(ARG),
@@ -578,9 +575,13 @@ pub mod test_agent {
             };
 
             let body = serde_cbor::to_vec(&envelope).unwrap();
+            let version = match self {
+                Call::V2 => "v2",
+            };
+
             let url = format!(
-                "http://{}/api/v2/canister/{}/call",
-                addr, self.effective_canister_id
+                "http://{}/api/{}/canister/{}/call",
+                addr, version, effective_canister_id
             );
 
             reqwest::Client::new()
@@ -591,7 +592,13 @@ pub mod test_agent {
                 .await
                 .unwrap()
         }
+
+        pub async fn call_default_canister(self, addr: SocketAddr) -> reqwest::Response {
+            let canister_id = PrincipalId::default();
+            self.call_canister_id(addr, canister_id, canister_id).await
+        }
     }
+
     #[derive(Default)]
     pub struct Query {
         canister_id: PrincipalId,

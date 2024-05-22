@@ -91,3 +91,4 @@ proptest = "1.0.0"
 serde_bytes = { workspace = true }
 tower-test = "0.4.0"
 reqwest = { workspace = true }
+rstest = { workspace = true }

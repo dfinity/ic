@@ -520,6 +520,7 @@ reqwest = { version = "0.12.3", default-features = false, features = [
     "socks",
     "stream",
 ] }
+rstest = "0.19.0"
 rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
