@@ -28,6 +28,9 @@ pub struct EthereumNetwork(#[n(0)] pub u64);
 impl EthereumNetwork {
     pub const MAINNET: EthereumNetwork = EthereumNetwork(1);
     pub const SEPOLIA: EthereumNetwork = EthereumNetwork(11155111);
+    pub const ARBITRUM: EthereumNetwork = EthereumNetwork(42161);
+    pub const BASE: EthereumNetwork = EthereumNetwork(8453);
+    pub const OPTIMISM: EthereumNetwork = EthereumNetwork(10);
 
     pub fn chain_id(&self) -> u64 {
         self.0

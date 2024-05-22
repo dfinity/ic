@@ -16,6 +16,24 @@ pub(crate) const SEPOLIA_PROVIDERS: &[RpcService] = &[
     RpcService::EthSepolia(EthSepoliaService::PublicNode),
 ];
 
+pub(crate) const ARBITRUM_PROVIDERS: &[RpcService] = &[
+    RpcService::ArbitrumMainnet(L2MainnetService::Alchemy),
+    RpcService::ArbitrumMainnet(L2MainnetService::Ankr),
+    RpcService::ArbitrumMainnet(L2MainnetService::PublicNode),
+];
+
+pub(crate) const BASE_PROVIDERS: &[RpcService] = &[
+    RpcService::BaseMainnet(L2MainnetService::Alchemy),
+    RpcService::BaseMainnet(L2MainnetService::Ankr),
+    RpcService::BaseMainnet(L2MainnetService::PublicNode),
+];
+
+pub(crate) const OPTIMISM_PROVIDERS: &[RpcService] = &[
+    RpcService::OptimismMainnet(L2MainnetService::Alchemy),
+    RpcService::OptimismMainnet(L2MainnetService::Ankr),
+    RpcService::OptimismMainnet(L2MainnetService::PublicNode),
+];
+
 // Default RPC services for unknown EVM network
 pub(crate) const UNKNOWN_PROVIDERS: &[RpcService] = &[];
 
@@ -27,21 +45,27 @@ pub struct RpcApi {
 
 #[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType)]
 pub enum RpcService {
-    EthMainnet(EthMainnetService),
-    EthSepolia(EthSepoliaService),
     Chain(u64),
     Provider(u64),
     Custom(RpcApi),
+    EthMainnet(EthMainnetService),
+    EthSepolia(EthSepoliaService),
+    ArbitrumMainnet(L2MainnetService),
+    BaseMainnet(L2MainnetService),
+    OptimismMainnet(L2MainnetService),
 }
 
 impl std::fmt::Debug for RpcService {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RpcService::EthMainnet(service) => write!(f, "{:?}", service),
-            RpcService::EthSepolia(service) => write!(f, "{:?}", service),
             RpcService::Chain(chain_id) => write!(f, "Chain({})", chain_id),
             RpcService::Provider(provider_id) => write!(f, "Provider({})", provider_id),
             RpcService::Custom(_) => write!(f, "Custom(..)"), // Redact credentials
+            RpcService::EthMainnet(service) => write!(f, "{:?}", service),
+            RpcService::EthSepolia(service) => write!(f, "{:?}", service),
+            RpcService::ArbitrumMainnet(service)
+            | RpcService::BaseMainnet(service)
+            | RpcService::OptimismMainnet(service) => write!(f, "{:?}", service),
         }
     }
 }
@@ -61,6 +85,16 @@ pub enum EthMainnetService {
     Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType,
 )]
 pub enum EthSepoliaService {
+    Alchemy,
+    Ankr,
+    BlockPi,
+    PublicNode,
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, CandidType,
+)]
+pub enum L2MainnetService {
     Alchemy,
     Ankr,
     BlockPi,
