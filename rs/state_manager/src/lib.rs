@@ -2956,10 +2956,10 @@ impl StateManager for StateManagerImpl {
     ///    the latest checkpoint ≤ H passed to `remove_states_below`.
     ///  * *LSH* stands for "Latest State Height". This is the latest state that
     ///    the state manager has.
-    ///  * *LCH* stands for "Latest Checkpoint Height*. This is the height of
+    ///  * *LCH* stands for "Latest Checkpoint Height". This is the height of
     ///    the latest checkpoint that the state manager created.
     ///  * *CHS* stands for "CHeckpoint Heights". These are heights of all the
-    ///    checkpoints available.
+    ///    verified checkpoints available.
     ///
     /// # Heuristic
     ///
@@ -2996,20 +2996,28 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["remove_states_below"])
             .start_timer();
 
-        let checkpoint_heights: BTreeSet<Height> = self.checkpoint_heights().drain(..).collect();
-
+        let verified_checkpoint_heights = self
+            .state_layout()
+            .verified_checkpoint_heights()
+            .unwrap_or_else(|err| {
+                fatal!(
+                    self.log,
+                    "Failed to gather verified checkpoint heights: {:?}",
+                    err
+                )
+            });
         // The latest state must be kept.
         let latest_state_height = self.latest_state_height();
         let oldest_height_to_keep = latest_state_height
             .min(requested_height)
             .max(Height::new(1));
 
-        let oldest_checkpoint_to_keep = if checkpoint_heights.is_empty() {
+        let oldest_checkpoint_to_keep = if verified_checkpoint_heights.is_empty() {
             Self::INITIAL_STATE_HEIGHT
         } else {
             // The latest checkpoint below or at the requested height will also be kept
             // because the state manager needs to load from it when restarting.
-            let oldest_checkpoint_to_keep = checkpoint_heights
+            let oldest_checkpoint_to_keep = verified_checkpoint_heights
                 .iter()
                 .filter(|x| **x <= requested_height)
                 .max()
@@ -3017,7 +3025,7 @@ impl StateManager for StateManagerImpl {
                 .unwrap_or(requested_height);
 
             // Keep extra checkpoints for state sync.
-            checkpoint_heights
+            verified_checkpoint_heights
                 .iter()
                 .rev()
                 .take(EXTRA_CHECKPOINTS_TO_KEEP + 1)

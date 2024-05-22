@@ -815,9 +815,10 @@ impl IncompleteState {
             Err(err) => {
                 fatal!(
                     log,
-                    "Failed to created a checkpoint marker for state {} at path {}",
+                    "Failed to created a checkpoint marker for state {} at path {}: {}",
                     height,
-                    scratchpad_layout.raw_path().display()
+                    scratchpad_layout.raw_path().display(),
+                    err,
                 );
             }
         }

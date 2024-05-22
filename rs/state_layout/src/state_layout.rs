@@ -673,6 +673,15 @@ impl StateLayout {
         Ok(())
     }
 
+    pub fn checkpoint_untracked(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        let cp_name = Self::checkpoint_name(height);
+        let path = self.checkpoints().join(cp_name);
+        if !path.exists() {
+            return Err(LayoutError::NotFound(height));
+        }
+        CheckpointLayout::new_untracked(path, height)
+    }
+
     /// Returns the layout of the checkpoint with the given height (if
     /// there is one).
     pub fn checkpoint(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
@@ -761,6 +770,19 @@ impl StateLayout {
         })?;
 
         parse_and_sort_checkpoint_heights(&names[..])
+    }
+
+    pub fn verified_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
+        let heights = self.checkpoint_heights()?;
+        let mut verified_heights = vec![];
+        for h in heights {
+            if let Ok(cp) = self.checkpoint_untracked(h) {
+                if !cp.is_marked_as_unverified() {
+                    verified_heights.push(h);
+                }
+            }
+        }
+        Ok(verified_heights)
     }
 
     /// Returns a sorted in ascended order list of `Height`s of checkpoints that were marked as
@@ -863,7 +885,7 @@ impl StateLayout {
     /// Postcondition:
     ///   height ∉ self.checkpoint_heights()[0:-1]
     fn remove_checkpoint_if_not_the_latest<T>(&self, height: Height, drop_after_rename: T) {
-        match self.checkpoint_heights() {
+        match self.verified_checkpoint_heights() {
             Err(err) => {
                 error!(self.log, "Failed to get checkpoint heights: {}", err);
                 self.metrics
@@ -875,7 +897,7 @@ impl StateLayout {
                 if heights.is_empty() {
                     error!(
                         self.log,
-                        "Trying to remove non-existing checkpoint {}. The CheckpoinLayout was invalid",
+                        "Trying to remove non-existing checkpoint {}. The CheckpointLayout was invalid",
                         height,
                     );
                     self.metrics
