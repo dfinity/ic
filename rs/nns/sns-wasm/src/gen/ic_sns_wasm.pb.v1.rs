@@ -360,7 +360,8 @@ pub struct PrettySnsVersion {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetNextSnsVersionRequest {
-    /// The current version recorded on the SNS (in Governance, the "deployed_version" field)
+    /// The current version recorded on the SNS (in Governance, the "deployed_version" field). This
+    /// field is still required when governance_canister_id is provided.
     #[prost(message, optional, tag = "1")]
     pub current_version: ::core::option::Option<SnsVersion>,
     /// If supplied, will replace "caller" to allow verifying the response a particular
