@@ -6,6 +6,7 @@ use crate::eth_rpc::{
 use crate::eth_rpc_client::eth_rpc::HEADER_SIZE_LIMIT;
 use crate::eth_rpc_client::providers::{
     RpcService, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS, UNKNOWN_PROVIDERS,
+    ARBITRUM_PROVIDERS, BASE_PROVIDERS, OPTIMISM_PROVIDERS,
 };
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
 use crate::eth_rpc_client::responses::TransactionReceipt;
@@ -103,6 +104,9 @@ impl<T: RpcTransport> EthRpcClient<T> {
             None => match self.chain {
                 EthereumNetwork::MAINNET => MAINNET_PROVIDERS,
                 EthereumNetwork::SEPOLIA => SEPOLIA_PROVIDERS,
+                EthereumNetwork::ARBITRUM => ARBITRUM_PROVIDERS,
+                EthereumNetwork::BASE => BASE_PROVIDERS,
+                EthereumNetwork::OPTIMISM => OPTIMISM_PROVIDERS,
                 _ => UNKNOWN_PROVIDERS,
             },
         }
