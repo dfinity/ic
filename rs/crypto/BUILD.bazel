@@ -49,7 +49,6 @@ DEPENDENCIES = [
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
-    "@crate_index//:tokio-rustls",
 ]
 
 MACRO_DEPENDENCIES = [
