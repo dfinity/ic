@@ -17,7 +17,7 @@ where
         &self,
         allowed_clients: SomeOrAllNodes,
         registry_version: RegistryVersion,
-    ) -> Result<tokio_rustls::rustls::ServerConfig, TlsConfigError> {
+    ) -> Result<::rustls::ServerConfig, TlsConfigError> {
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -55,7 +55,7 @@ where
     fn server_config_without_client_auth(
         &self,
         registry_version: RegistryVersion,
-    ) -> Result<tokio_rustls::rustls::ServerConfig, TlsConfigError> {
+    ) -> Result<::rustls::ServerConfig, TlsConfigError> {
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -93,7 +93,7 @@ where
         &self,
         server: NodeId,
         registry_version: RegistryVersion,
-    ) -> Result<tokio_rustls::rustls::ClientConfig, TlsConfigError> {
+    ) -> Result<::rustls::ClientConfig, TlsConfigError> {
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,

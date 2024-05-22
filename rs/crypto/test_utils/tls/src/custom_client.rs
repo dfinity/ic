@@ -9,10 +9,10 @@ use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
 use rand::{CryptoRng, Rng};
+use rustls;
 use rustls::{ClientConfig, ServerName};
 use std::sync::Arc;
 use tokio::net::TcpStream;
-use tokio_rustls::rustls;
 use tokio_rustls::TlsConnector;
 
 static DEFAULT_PROTOCOL_VERSIONS: &[TlsVersion] = &[TlsVersion::TLS1_3];

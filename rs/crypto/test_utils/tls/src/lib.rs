@@ -4,7 +4,6 @@ use ic_interfaces::crypto::KeyManager;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
 use std::sync::Arc;
-use tokio_rustls::rustls;
 
 pub mod custom_client;
 pub mod custom_server;

@@ -2,10 +2,10 @@
 use crate::tls::rustls::cert_resolver::KeyIncompatibleWithSigSchemeError;
 use crate::tls::rustls::cert_resolver::StaticCertResolver;
 use assert_matches::assert_matches;
+use rustls::sign::{CertifiedKey, Signer, SigningKey};
+use rustls::SignatureAlgorithm;
+use rustls::{Certificate, Error as TLSError, SignatureScheme};
 use std::sync::Arc;
-use tokio_rustls::rustls::sign::{CertifiedKey, Signer, SigningKey};
-use tokio_rustls::rustls::SignatureAlgorithm;
-use tokio_rustls::rustls::{Certificate, Error as TLSError, SignatureScheme};
 
 mod instantiation {
     use super::*;
@@ -24,7 +24,7 @@ mod instantiation {
 
 mod client_side {
     use super::*;
-    use tokio_rustls::rustls::{client::ResolvesClientCert, SignatureScheme};
+    use rustls::{client::ResolvesClientCert, SignatureScheme};
 
     #[test]
     fn should_resolve_to_static_certified_key() {
