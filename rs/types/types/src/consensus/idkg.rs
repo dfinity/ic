@@ -196,8 +196,8 @@ impl EcdsaPayload {
             idkg_transcripts: BTreeMap::new(),
             ongoing_xnet_reshares: BTreeMap::new(),
             xnet_reshare_agreements: BTreeMap::new(),
-            layout: EcdsaPayloadLayout::SingleKeyTranscript,
-            generalized_pre_signatures: false,
+            layout: EcdsaPayloadLayout::MultipleKeyTranscripts,
+            generalized_pre_signatures: true,
         }
     }
 
@@ -206,9 +206,17 @@ impl EcdsaPayload {
         matches!(self.layout, EcdsaPayloadLayout::MultipleKeyTranscripts)
     }
 
+    pub fn use_multiple_keys_layout(&mut self) {
+        self.layout = EcdsaPayloadLayout::MultipleKeyTranscripts;
+    }
+
     /// Return true if this payload uses the new layout supporting generalized pre-signatures
     pub fn is_generalized_pre_signatures_layout(&self) -> bool {
         self.generalized_pre_signatures
+    }
+
+    pub fn use_generalized_pre_signatures_layout(&mut self) {
+        self.generalized_pre_signatures = true;
     }
 
     /// Returns the reference to the current key transcript of the given [`MasterPublicKeyId`].
