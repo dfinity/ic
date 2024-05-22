@@ -101,7 +101,6 @@ use ic_types::{
     NodeId, SubnetId,
 };
 use rand::Rng;
-use rustls::client::ServerName;
 use std::{
     convert::TryFrom,
     io::Write,
@@ -868,12 +867,15 @@ async fn try_fetch_delegation_from_nns(
         .map_err(|err| format!("Could not connect to node {}. {:?}.", addr, err))?;
 
     let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
-    // TODO: ideally the expect should run at compile time
-    let irrelevant_domain =
-        ServerName::try_from("domain.is-irrelevant-as-hostname-verification-is.disabled")
-            .expect("failed to create domain");
+    let irrelevant_domain = "domain.is-irrelevant-as-hostname-verification-is.disabled";
     let tls_stream = tls_connector
-        .connect(irrelevant_domain, tcp_stream)
+        .connect(
+            irrelevant_domain
+                .try_into()
+                // TODO: ideally the expect should run at compile time
+                .expect("failed to create domain"),
+            tcp_stream,
+        )
         .await
         .map_err(|err| {
             format!(
