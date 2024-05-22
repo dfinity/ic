@@ -1,8 +1,7 @@
 use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
+use rustls::{sign::CertifiedKey, Certificate};
 use std::sync::Arc;
-use tokio_rustls::rustls::sign::CertifiedKey;
-use tokio_rustls::rustls::Certificate;
 
 mod cert_resolver;
 pub mod client_handshake;

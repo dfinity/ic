@@ -6508,7 +6508,6 @@ dependencies = [
  "strum_macros 0.26.2",
  "tempfile",
  "tokio",
- "tokio-rustls 0.24.1",
 ]
 
 [[package]]
@@ -7513,7 +7512,6 @@ dependencies = [
 name = "ic-crypto-tls-interfaces-mocks"
 version = "0.9.0"
 dependencies = [
- "async-trait",
  "ic-base-types",
  "ic-crypto-tls-interfaces",
  "mockall",
@@ -14895,7 +14893,6 @@ dependencies = [
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-crypto-tls-interfaces",
  "ic-dashboard",
  "ic-http-endpoints-metrics",
  "ic-http-utils",
