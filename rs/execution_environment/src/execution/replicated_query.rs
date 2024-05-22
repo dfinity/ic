@@ -118,8 +118,7 @@ pub fn execute_replicated_query(
     let memory_usage = canister.memory_usage();
     let message_memory_usage = canister.message_memory_usage();
 
-    let api_type =
-        ApiType::replicated_query(time, req.method_payload().to_vec(), *req.sender(), None);
+    let api_type = ApiType::replicated_query(time, req.method_payload().to_vec(), *req.sender());
 
     // As we are executing the query in the replicated mode, we do
     // not want to commit updates, i.e. we must return the

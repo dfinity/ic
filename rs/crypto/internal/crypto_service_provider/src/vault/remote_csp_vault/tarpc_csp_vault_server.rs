@@ -379,6 +379,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     async fn idkg_load_transcript(
         self,
         _: context::Context,
+        algorithm_id: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         context_data: ByteBuf,
         receiver_index: NodeIndex,
@@ -388,6 +389,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         let vault = self.local_csp_vault;
         let job = move || {
             vault.idkg_load_transcript(
+                algorithm_id,
                 dealings,
                 context_data.into_vec(),
                 receiver_index,

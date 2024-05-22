@@ -1,5 +1,5 @@
-use ic_crypto_internal_threshold_sig_ecdsa::ThresholdEcdsaDerivePublicKeyError;
-use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaGetPublicKeyError;
+use ic_crypto_internal_threshold_sig_ecdsa::DeriveThresholdPublicKeyError;
+use ic_types::crypto::canister_threshold_sig::error::CanisterThresholdGetPublicKeyError;
 use ic_types::crypto::canister_threshold_sig::{
     ExtendedDerivationPath, MasterPublicKey, PublicKey,
 };
@@ -9,17 +9,17 @@ use ic_types::crypto::canister_threshold_sig::{
 pub fn derive_threshold_public_key(
     master_public_key: &MasterPublicKey,
     extended_derivation_path: &ExtendedDerivationPath,
-) -> Result<PublicKey, ThresholdEcdsaGetPublicKeyError> {
+) -> Result<PublicKey, CanisterThresholdGetPublicKeyError> {
     ic_crypto_internal_threshold_sig_ecdsa::derive_threshold_public_key(
         master_public_key,
         &extended_derivation_path.into(),
     )
     .map_err(|e| match e {
-        ThresholdEcdsaDerivePublicKeyError::InvalidArgument(s) => {
-            ThresholdEcdsaGetPublicKeyError::InvalidArgument(s)
+        DeriveThresholdPublicKeyError::InvalidArgument(s) => {
+            CanisterThresholdGetPublicKeyError::InvalidArgument(s)
         }
-        ThresholdEcdsaDerivePublicKeyError::InternalError(e) => {
-            ThresholdEcdsaGetPublicKeyError::InternalError(format!("{:?}", e))
+        DeriveThresholdPublicKeyError::InternalError(e) => {
+            CanisterThresholdGetPublicKeyError::InternalError(format!("{:?}", e))
         }
     })
 }

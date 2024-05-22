@@ -332,14 +332,16 @@ impl NeuronStore {
         let clock = Box::new(IcClock::new());
         let (neurons, topic_followee_index) = state;
 
-        Self {
+        let mut neuron_store = Self {
             heap_neurons: neurons
                 .into_iter()
                 .map(|(id, proto)| (id, Neuron::try_from(proto).unwrap()))
                 .collect(),
             topic_followee_index: proto_to_heap_topic_followee_index(topic_followee_index),
             clock,
-        }
+        };
+        neuron_store.normalize_neurons_dissolve_state_and_age(neuron_store.now());
+        neuron_store
     }
 
     /// Takes the neuron store state which should be persisted through upgrades.
@@ -857,6 +859,27 @@ impl NeuronStore {
         });
 
         (active_neurons_in_stable_store, neuron_id_for_next_batch)
+    }
+
+    /// Normalizes the dissolve state and age for all the neurons (heap and stable storage).
+    // TODO(NNS1-3068): clean up after the migration is performed.
+    fn normalize_neurons_dissolve_state_and_age(&mut self, now_seconds: u64) {
+        let mut neuron_ids_with_legacy_dissolve_state_and_age =
+            with_stable_neuron_store(|stable_neuron_store| {
+                stable_neuron_store.neuron_ids_with_legacy_dissolve_state_and_age()
+            });
+        for neuron in self.heap_neurons.values() {
+            if neuron.dissolve_state_and_age().is_legacy() {
+                neuron_ids_with_legacy_dissolve_state_and_age.push(neuron.id());
+            }
+        }
+
+        for neuron_id in neuron_ids_with_legacy_dissolve_state_and_age {
+            self.with_neuron_mut(&neuron_id, |neuron| {
+                neuron.normalize_dissolve_state_and_age(now_seconds);
+            })
+            .unwrap();
+        }
     }
 
     // Census

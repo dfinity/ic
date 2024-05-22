@@ -11,7 +11,7 @@ use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     methods::{FuncRef, WasmClosure, WasmMethod},
     time::UNIX_EPOCH,
-    NumBytes,
+    NumBytes, NumInstructions,
 };
 
 #[cfg(target_os = "linux")]
@@ -44,10 +44,8 @@ fn cannot_execute_wasm_without_memory() {
         Err(err) => {
             assert_eq!(
                 err,
-                ic_interfaces::execution_environment::HypervisorError::ContractViolation {
+                ic_interfaces::execution_environment::HypervisorError::ToolchainContractViolation {
                     error: "WebAssembly module must define memory".to_string(),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string()
                 }
             );
         }
@@ -106,6 +104,7 @@ fn correctly_count_instructions() {
 #[test]
 fn instruction_limit_traps() {
     let data_size = 1024;
+    let instruction_limit = NumInstructions::from(1000);
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(
             format!(
@@ -129,7 +128,7 @@ fn instruction_limit_traps() {
             vec![0; 1024],
             user_test_id(24).get(),
         ))
-        .with_num_instructions(1000.into())
+        .with_num_instructions(instruction_limit)
         .build();
 
     let result = instance.run(ic_types::methods::FuncRef::Method(
@@ -138,7 +137,7 @@ fn instruction_limit_traps() {
 
     assert_eq!(
         result.err(),
-        Some(HypervisorError::InstructionLimitExceeded)
+        Some(HypervisorError::InstructionLimitExceeded(instruction_limit))
     );
 }
 
@@ -505,10 +504,8 @@ fn calling_function_with_invalid_signature_fails() {
         .unwrap_err();
     assert_eq!(
         err,
-        HypervisorError::ContractViolation {
+        HypervisorError::ToolchainContractViolation {
             error: "function invocation does not match its signature".to_string(),
-            suggestion: "".to_string(),
-            doc_link: "".to_string()
         }
     );
 }
@@ -755,7 +752,7 @@ fn stable_read_accessed_pages_allowance() {
     use HypervisorError::*;
 
     let mut config = Config {
-        stable_memory_accessed_page_limit: ic_types::NumPages::new(3),
+        stable_memory_accessed_page_limit: ic_types::NumOsPages::new(3),
         ..Default::default()
     };
     config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
@@ -846,7 +843,7 @@ fn stable64_read_accessed_pages_allowance() {
     use HypervisorError::*;
 
     let mut config = Config {
-        stable_memory_accessed_page_limit: ic_types::NumPages::new(3),
+        stable_memory_accessed_page_limit: ic_types::NumOsPages::new(3),
         ..Default::default()
     };
     config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;

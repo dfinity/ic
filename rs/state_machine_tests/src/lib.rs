@@ -33,7 +33,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, CanisterLog, InstallCodeArgs, Method, Payload,
+    self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload,
 };
 pub use ic_management_canister_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2,
@@ -114,7 +114,7 @@ use ic_types::{
         SignedIngressContent, UserQuery, EXPECTED_MESSAGE_ID_LENGTH,
     },
     xnet::StreamIndex,
-    CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
+    CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
 };
 pub use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},

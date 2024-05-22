@@ -12,8 +12,9 @@
 //!
 
 use crate::{
-    wasm_utils::instrumentation::InjectedImports,
-    wasmtime_embedder::system_api_complexity::overhead_native, InternalErrorCode,
+    wasm_utils::instrumentation::{InjectedImports, WasmMemoryType},
+    wasmtime_embedder::system_api_complexity::overhead_native,
+    InternalErrorCode,
 };
 use ic_interfaces::execution_environment::StableMemoryApi;
 use ic_registry_subnet_type::SubnetType;
@@ -31,6 +32,7 @@ pub(super) fn replacement_functions(
     special_indices: SpecialIndices,
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
+    main_memory_type: WasmMemoryType,
 ) -> Vec<(SystemApiFunc, (FuncType, Body<'static>))> {
     let count_clean_pages_fn_index = special_indices.count_clean_pages_fn.unwrap();
     let dirty_pages_counter_index = special_indices.dirty_pages_counter_ix.unwrap();
@@ -41,6 +43,12 @@ pub(super) fn replacement_functions(
     use Operator::*;
     let page_size_shift = PAGE_SIZE.trailing_zeros() as i32;
     let stable_memory_bytemap_index = stable_memory_index + 1;
+
+    let cast_to_heap_addr_type = match main_memory_type {
+        WasmMemoryType::Wasm32 => I32WrapI64,
+        WasmMemoryType::Wasm64 => Nop,
+    };
+
     vec![
         (
             SystemApiFunc::StableSize,
@@ -731,10 +739,10 @@ pub(super) fn replacement_functions(
                             },
                             Else,
                             LocalGet { local_index: DST },
-                            I32WrapI64,
+                            cast_to_heap_addr_type.clone(),
                             LocalGet { local_index: SRC },
                             LocalGet { local_index: LEN },
-                            I32WrapI64,
+                            cast_to_heap_addr_type.clone(),
                             MemoryCopy {
                                 dst_mem: 0,
                                 src_mem: stable_memory_index,
@@ -1205,9 +1213,9 @@ pub(super) fn replacement_functions(
                             // copy memory contents
                             LocalGet { local_index: DST },
                             LocalGet { local_index: SRC },
-                            I32WrapI64,
+                            cast_to_heap_addr_type.clone(),
                             LocalGet { local_index: LEN },
-                            I32WrapI64,
+                            cast_to_heap_addr_type,
                             MemoryCopy {
                                 dst_mem: stable_memory_index,
                                 src_mem: 0,

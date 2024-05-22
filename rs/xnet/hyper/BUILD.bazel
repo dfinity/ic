@@ -9,10 +9,13 @@ rust_library(
     version = "0.9.0",
     deps = [
         "//rs/crypto/tls_interfaces",
+        "//rs/crypto/utils/tls",
         "//rs/interfaces/registry",
         "//rs/xnet/uri",
         "@crate_index//:hyper_0_14_27",
+        "@crate_index//:rustls",
         "@crate_index//:socket2",
         "@crate_index//:tokio",
+        "@crate_index//:tokio-rustls",
     ],
 )

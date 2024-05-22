@@ -1,5 +1,5 @@
 {
-  "checksum": "db26944b54e59819536134e66938c9c4c8d09a96833d8ac163bd117f910b585d",
+  "checksum": "122100c2d84570f3c52cbc5d2c5389bf5c85b785fbd60ebe3c7375eba951d32c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3454,6 +3454,69 @@
         },
         "edition": "2018",
         "version": "2.8.0"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "async-lock 3.3.0": {
+      "name": "async-lock",
+      "version": "3.3.0",
+      "package_url": "https://github.com/smol-rs/async-lock",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/async-lock/3.3.0/download",
+          "sha256": "d034b430882f8381900d3fe6f0aaa3ad94f2cb4ac519b429692a1bc2dda4ae7b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "async_lock",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "async_lock",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "event-listener 4.0.3",
+              "target": "event_listener"
+            },
+            {
+              "id": "event-listener-strategy 0.4.0",
+              "target": "event_listener_strategy"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "3.3.0"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -17239,7 +17302,7 @@
               "target": "hyperlocal_next"
             },
             {
-              "id": "ic-agent 0.34.0",
+              "id": "ic-agent 0.35.0",
               "target": "ic_agent"
             },
             {
@@ -17299,7 +17362,7 @@
               "target": "ic_test_state_machine_client"
             },
             {
-              "id": "ic-utils 0.34.0",
+              "id": "ic-utils 0.35.0",
               "target": "ic_utils"
             },
             {
@@ -17701,7 +17764,7 @@
               "alias": "reqwest_0_11_27"
             },
             {
-              "id": "reqwest 0.12.3",
+              "id": "reqwest 0.12.4",
               "target": "reqwest"
             },
             {
@@ -20829,6 +20892,130 @@
         ],
         "edition": "2018",
         "version": "2.5.3"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "event-listener 4.0.3": {
+      "name": "event-listener",
+      "version": "4.0.3",
+      "package_url": "https://github.com/smol-rs/event-listener",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/event-listener/4.0.3/download",
+          "sha256": "67b215c49b2b248c855fb73579eb1f4f26c38ffdc12973e20e07b91d78d5646e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "event_listener",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "event_listener",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "parking",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "concurrent-queue 2.2.0",
+              "target": "concurrent_queue"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            }
+          ],
+          "selects": {
+            "cfg(not(target_family = \"wasm\"))": [
+              {
+                "id": "parking 2.1.0",
+                "target": "parking"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "4.0.3"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "event-listener-strategy 0.4.0": {
+      "name": "event-listener-strategy",
+      "version": "0.4.0",
+      "package_url": "https://github.com/smol-rs/event-listener",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/event-listener-strategy/0.4.0/download",
+          "sha256": "958e4d70b6d5e81971bebec42271ec641e7ff4e170a6fa605f2b8a8b65cb97d3"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "event_listener_strategy",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "event_listener_strategy",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "event-listener 4.0.3",
+              "target": "event_listener"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.4.0"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -27504,14 +27691,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "ic-agent 0.34.0": {
+    "ic-agent 0.35.0": {
       "name": "ic-agent",
-      "version": "0.34.0",
+      "version": "0.35.0",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-agent/0.34.0/download",
-          "sha256": "555eda283b8ba1a996d44d80b6c9a6d38a6cbb81797a7b7bbee134fdde64ce48"
+          "url": "https://static.crates.io/crates/ic-agent/0.35.0/download",
+          "sha256": "8f08d1b54f1834fb9637a57855f1d87bb9dbec7a9dec09499737580692829cb0"
         }
       },
       "targets": [
@@ -27544,6 +27731,10 @@
         },
         "deps": {
           "common": [
+            {
+              "id": "async-lock 3.3.0",
+              "target": "async_lock"
+            },
             {
               "id": "backoff 0.4.0",
               "target": "backoff"
@@ -27585,7 +27776,7 @@
               "target": "ic_certification"
             },
             {
-              "id": "ic-transport-types 0.34.0",
+              "id": "ic-transport-types 0.35.0",
               "target": "ic_transport_types"
             },
             {
@@ -27621,7 +27812,7 @@
               "target": "rangemap"
             },
             {
-              "id": "reqwest 0.11.27",
+              "id": "reqwest 0.12.4",
               "target": "reqwest"
             },
             {
@@ -27708,7 +27899,7 @@
           ],
           "selects": {}
         },
-        "version": "0.34.0"
+        "version": "0.35.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28961,14 +29152,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-transport-types 0.34.0": {
+    "ic-transport-types 0.35.0": {
       "name": "ic-transport-types",
-      "version": "0.34.0",
+      "version": "0.35.0",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-transport-types/0.34.0/download",
-          "sha256": "7c06d3c1292368c813f8104d9d8294bda5577ea6fe4501a65997d0b7f155f15f"
+          "url": "https://static.crates.io/crates/ic-transport-types/0.35.0/download",
+          "sha256": "c1c68959f501cfcb79319b6720fd1903a661d77b503e6128bfce31f91ad87aca"
         }
       },
       "targets": [
@@ -29037,7 +29228,7 @@
           ],
           "selects": {}
         },
-        "version": "0.34.0"
+        "version": "0.35.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -29045,14 +29236,14 @@
       ],
       "license_file": null
     },
-    "ic-utils 0.34.0": {
+    "ic-utils 0.35.0": {
       "name": "ic-utils",
-      "version": "0.34.0",
+      "version": "0.35.0",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-utils/0.34.0/download",
-          "sha256": "c83e1b5aea342fd6209b2de903eaf11c98f9724131f906da090cc14ec8329d0e"
+          "url": "https://static.crates.io/crates/ic-utils/0.35.0/download",
+          "sha256": "61fd20379ac2d86f85e177e75e72b27eaa595a9561891d5be0e7d0ca37604bbb"
         }
       },
       "targets": [
@@ -29091,7 +29282,7 @@
               "target": "futures_util"
             },
             {
-              "id": "ic-agent 0.34.0",
+              "id": "ic-agent 0.35.0",
               "target": "ic_agent"
             },
             {
@@ -29125,6 +29316,10 @@
             {
               "id": "time 0.3.31",
               "target": "time"
+            },
+            {
+              "id": "tokio 1.37.0",
+              "target": "tokio"
             }
           ],
           "selects": {}
@@ -29143,7 +29338,7 @@
           ],
           "selects": {}
         },
-        "version": "0.34.0"
+        "version": "0.35.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -51763,14 +51958,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "reqwest 0.12.3": {
+    "reqwest 0.12.4": {
       "name": "reqwest",
-      "version": "0.12.3",
+      "version": "0.12.4",
       "package_url": "https://github.com/seanmonstar/reqwest",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/reqwest/0.12.3/download",
-          "sha256": "3e6cc1e89e689536eb5aeede61520e874df5a4707df811cd5da4aa5fbb2aae19"
+          "url": "https://static.crates.io/crates/reqwest/0.12.4/download",
+          "sha256": "566cafdd92868e0939d3fb961bd0dc25fcfaaed179291093b3d43e6b3150ea10"
         }
       },
       "targets": [
@@ -52070,7 +52265,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.12.3"
+        "version": "0.12.4"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -77480,7 +77675,7 @@
     "hyper-socks2 0.8.0",
     "hyper-util 0.1.3",
     "hyperlocal-next 0.9.0",
-    "ic-agent 0.34.0",
+    "ic-agent 0.35.0",
     "ic-btc-interface 0.2.0",
     "ic-btc-test-utils 0.1.0",
     "ic-btc-validation 0.1.0",
@@ -77496,7 +77691,7 @@
     "ic-response-verification 2.3.0",
     "ic-stable-structures 0.6.4",
     "ic-test-state-machine-client 3.0.1",
-    "ic-utils 0.34.0",
+    "ic-utils 0.35.0",
     "ic-wasm 0.7.1",
     "ic-xrc-types 1.2.0",
     "ic0 0.18.11",
@@ -77601,7 +77796,7 @@
     "rcgen 0.11.1",
     "regex 1.9.1",
     "reqwest 0.11.27",
-    "reqwest 0.12.3",
+    "reqwest 0.12.4",
     "rgb 0.8.37",
     "ring 0.17.7",
     "ripemd 0.1.3",

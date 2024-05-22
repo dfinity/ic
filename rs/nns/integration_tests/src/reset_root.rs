@@ -104,6 +104,6 @@ fn test_other_controllers_cannot_reset_root() {
 
     assert!(response.is_err());
     assert!(response.unwrap_err().contains(
-        "Error from Canister rno2w-sqaaa-aaaaa-aaacq-cai: Canister trapped explicitly: assertion failed at lifeline.mo",
+        "Error from Canister rno2w-sqaaa-aaaaa-aaacq-cai: Canister called `ic0.trap` with message: assertion failed at lifeline.mo",
     ));
 }

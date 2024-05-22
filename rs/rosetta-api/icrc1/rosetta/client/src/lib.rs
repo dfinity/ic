@@ -175,6 +175,24 @@ impl RosettaClient {
         ))
     }
 
+    async fn fetch_transaction_metadata(
+        &self,
+        network_identifier: NetworkIdentifier,
+    ) -> Result<ConstructionMetadataResponse, Error> {
+        let preprocess_response = self
+            .construction_preprocess(vec![], network_identifier.clone())
+            .await?;
+
+        self.construction_metadata(
+            preprocess_response
+                .options
+                .try_into()
+                .map_err(|err| Error::parsing_unsuccessful(&err))?,
+            network_identifier.clone(),
+        )
+        .await
+    }
+
     pub async fn build_transfer_operations<T: RosettaSupportedKeyPair>(
         &self,
         signer_keypair: &T,
@@ -183,21 +201,12 @@ impl RosettaClient {
         amount: Nat,
         network_identifier: NetworkIdentifier,
     ) -> Result<Vec<Operation>, Error> {
-        let preprocess_response = self
-            .construction_preprocess(vec![], network_identifier.clone())
-            .await?;
-
-        let metadata_response = self
-            .construction_metadata(
-                preprocess_response
-                    .options
-                    .try_into()
-                    .map_err(|err| Error::parsing_unsuccessful(&err))?,
-                network_identifier.clone(),
-            )
-            .await?;
-
-        let currency = &metadata_response.suggested_fee.unwrap()[0].currency;
+        let currency = &self
+            .fetch_transaction_metadata(network_identifier)
+            .await?
+            .suggested_fee
+            .unwrap()[0]
+            .currency;
 
         let transfer_from_operation = Operation {
             operation_identifier: OperationIdentifier {
@@ -242,6 +251,83 @@ impl RosettaClient {
         Ok(vec![transfer_from_operation, transfer_to_operation])
     }
 
+    pub async fn build_transfer_from_operations<T: RosettaSupportedKeyPair>(
+        &self,
+        signer_keypair: &T,
+        spender_subaccount: Option<Subaccount>,
+        to_account: Account,
+        from_account: Account,
+        amount: Nat,
+        network_identifier: NetworkIdentifier,
+    ) -> Result<Vec<Operation>, Error> {
+        let currency = &self
+            .fetch_transaction_metadata(network_identifier)
+            .await?
+            .suggested_fee
+            .unwrap()[0]
+            .currency;
+
+        let transfer_from_operation = Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "TRANSFER".to_string(),
+            status: None,
+            account: Some(from_account.into()),
+            amount: Some(Amount::new(
+                BigInt::from_biguint(num_bigint::Sign::Minus, amount.0.clone()),
+                currency.clone(),
+            )),
+            coin_change: None,
+            metadata: None,
+        };
+
+        let transfer_to_operation = Operation {
+            operation_identifier: OperationIdentifier {
+                index: 1,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "TRANSFER".to_string(),
+            status: None,
+            account: Some(to_account.into()),
+            amount: Some(Amount::new(BigInt::from(amount), currency.clone())),
+            coin_change: None,
+            metadata: None,
+        };
+
+        let spender_operation = Operation {
+            operation_identifier: OperationIdentifier {
+                index: 2,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "SPENDER".to_string(),
+            status: None,
+            account: Some(
+                Account {
+                    owner: signer_keypair
+                        .generate_principal_id()
+                        .map_err(|err| Error::parsing_unsuccessful(&err))?
+                        .0,
+                    subaccount: spender_subaccount,
+                }
+                .into(),
+            ),
+            amount: None,
+            coin_change: None,
+            metadata: None,
+        };
+
+        Ok(vec![
+            transfer_from_operation,
+            transfer_to_operation,
+            spender_operation,
+        ])
+    }
+
     pub async fn build_approve_operations<T: RosettaSupportedKeyPair>(
         &self,
         signer_keypair: &T,
@@ -252,21 +338,12 @@ impl RosettaClient {
         network_identifier: NetworkIdentifier,
         expires_at: Option<u64>,
     ) -> Result<Vec<Operation>, Error> {
-        let preprocess_response = self
-            .construction_preprocess(vec![], network_identifier.clone())
-            .await?;
-
-        let metadata_response = self
-            .construction_metadata(
-                preprocess_response
-                    .options
-                    .try_into()
-                    .map_err(|err| Error::parsing_unsuccessful(&err))?,
-                network_identifier.clone(),
-            )
-            .await?;
-
-        let currency = &metadata_response.suggested_fee.unwrap()[0].currency;
+        let currency = &self
+            .fetch_transaction_metadata(network_identifier)
+            .await?
+            .suggested_fee
+            .unwrap()[0]
+            .currency;
 
         let approver_operation = Operation {
             operation_identifier: OperationIdentifier {

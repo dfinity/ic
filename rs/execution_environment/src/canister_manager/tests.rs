@@ -3282,9 +3282,11 @@ fn install_code_respects_instruction_limit() {
     let compilation_cost = wat_compilation_cost(wasm);
     let wasm = wat::parse_str(wasm).unwrap();
 
+    let instructions_limit = NumInstructions::from(1);
+
     // Too few instructions result in failed installation.
     let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(NumInstructions::from(3)),
+        instructions: as_round_instructions(instructions_limit + compilation_cost),
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         compute_allocation_used: state.total_compute_allocation(),
     };
@@ -3307,8 +3309,9 @@ fn install_code_respects_instruction_limit() {
         result,
         Err(CanisterManagerError::Hypervisor(
             _,
-            HypervisorError::InstructionLimitExceeded
+            HypervisorError::InstructionLimitExceeded(instructions_limit_in_error)
         ))
+        if instructions_limit == instructions_limit_in_error
     );
     assert_eq!(instructions_left, NumInstructions::from(0));
 
@@ -3337,9 +3340,11 @@ fn install_code_respects_instruction_limit() {
     assert_eq!(instructions_left, NumInstructions::from(0));
     state.put_canister_state(canister.unwrap());
 
+    let instructions_limit = NumInstructions::from(1);
+
     // Too few instructions result in failed upgrade.
     let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(NumInstructions::from(5)),
+        instructions: as_round_instructions(instructions_limit),
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         compute_allocation_used: state.total_compute_allocation(),
     };
@@ -3362,8 +3367,9 @@ fn install_code_respects_instruction_limit() {
         result,
         Err(CanisterManagerError::Hypervisor(
             _,
-            HypervisorError::InstructionLimitExceeded
+            HypervisorError::InstructionLimitExceeded(instructions_limit_in_error)
         ))
+        if instructions_limit == instructions_limit_in_error
     );
     assert_eq!(instructions_left, NumInstructions::from(0));
 

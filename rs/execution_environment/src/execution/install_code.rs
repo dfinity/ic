@@ -11,7 +11,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{error, fatal, info, warn};
 use ic_management_canister_types::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterLog,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
 };
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
@@ -20,7 +20,7 @@ use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ExecutionParameters;
 use ic_types::{
-    funds::Cycles, messages::CanisterCall, CanisterTimer, ComputeAllocation, Height,
+    funds::Cycles, messages::CanisterCall, CanisterLog, CanisterTimer, ComputeAllocation, Height,
     MemoryAllocation, NumInstructions, Time,
 };
 use ic_wasm_types::WasmHash;

@@ -3,7 +3,10 @@ use crate::wasmtime_embedder::{
     StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
 };
 
-use ic_config::{embedders::FeatureFlags, flag_status::FlagStatus};
+use ic_config::{
+    embedders::{FeatureFlags, StableMemoryDirtyPageLimit},
+    flag_status::FlagStatus,
+};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, PerformanceCounterType, StableGrowOutcome, SystemApi,
     TrapCode,
@@ -11,7 +14,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_types::{Cycles, NumBytes, NumInstructions, NumPages, Time};
+use ic_types::{Cycles, NumBytes, NumInstructions, NumOsPages, Time};
 use ic_wasm_types::WasmEngineError;
 
 use wasmtime::{AsContextMut, Caller, Global, Linker, Val};
@@ -95,10 +98,8 @@ fn mark_writes_on_bytemap(
         _ => {
             return Err(process_err(
                 caller,
-                HypervisorError::ContractViolation {
+                HypervisorError::ToolchainContractViolation {
                     error: "Failed to access heap bitmap".to_string(),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
                 },
             ))
         }
@@ -139,11 +140,18 @@ fn charge_for_stable_write(
     mut overhead: NumInstructions,
     offset: u64,
     size: u64,
-    stable_memory_dirty_page_limit: NumPages,
+    dirty_page_limit_message: NumOsPages,
+    dirty_page_limit_upgrade: NumOsPages,
 ) -> HypervisorResult<()> {
     let system_api = caller.data().system_api()?;
     let (new_stable_dirty_pages, dirty_page_cost) =
         system_api.dirty_pages_from_stable_write(offset, size)?;
+
+    let dirty_page_limit = if system_api.is_install_or_upgrade_message() {
+        dirty_page_limit_upgrade
+    } else {
+        dirty_page_limit_message
+    };
 
     overhead = overhead
         .get()
@@ -158,30 +166,24 @@ fn charge_for_stable_write(
     #[allow(non_upper_case_globals)]
     const KiB: u64 = 1024;
 
-    match system_api.subnet_type() {
-        // Do not observe stable dirty pages limit on the system subnets.
-        SubnetType::System => {}
-        SubnetType::Application | SubnetType::VerifiedApplication => {
-            let stable_dirty_pages = &mut caller
-                .data_mut()
-                .num_stable_dirty_pages_from_non_native_writes;
-            let total_pages = NumPages::from(
-                stable_dirty_pages
-                    .get()
-                    .saturating_add(new_stable_dirty_pages.get()),
-            );
+    let stable_dirty_pages = &mut caller
+        .data_mut()
+        .num_stable_dirty_pages_from_non_native_writes;
+    let total_pages = NumOsPages::from(
+        stable_dirty_pages
+            .get()
+            .saturating_add(new_stable_dirty_pages.get()),
+    );
 
-            if total_pages > stable_memory_dirty_page_limit {
-                let error = HypervisorError::MemoryAccessLimitExceeded(
+    if total_pages > dirty_page_limit {
+        let error = HypervisorError::MemoryAccessLimitExceeded(
                             format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
-                                stable_memory_dirty_page_limit * (PAGE_SIZE as u64 / KiB),
+                            dirty_page_limit * (PAGE_SIZE as u64 / KiB),
                             ),
                         );
-                return Err(error);
-            }
-            *stable_dirty_pages = total_pages;
-        }
+        return Err(error);
     }
+    *stable_dirty_pages = total_pages;
 
     charge_for_system_api_call(caller, overhead, size)
 }
@@ -287,7 +289,7 @@ fn ic0_performance_counter_helper(
         1 => caller.data().system_api()?.ic0_performance_counter(
             PerformanceCounterType::CallContextInstructions(instruction_counter),
         ),
-        _ => Err(HypervisorError::ContractViolation {
+        _ => Err(HypervisorError::UserContractViolation {
             error: format!("Error getting performance counter type {}", counter_type),
             suggestion: "".to_string(),
             doc_link: "".to_string(),
@@ -298,8 +300,8 @@ fn ic0_performance_counter_helper(
 pub(crate) fn syscalls(
     linker: &mut Linker<StoreData>,
     feature_flags: FeatureFlags,
-    stable_memory_dirty_page_limit: NumPages,
-    stable_memory_access_page_limit: NumPages,
+    stable_memory_dirty_page_limit: StableMemoryDirtyPageLimit,
+    stable_memory_access_page_limit: NumOsPages,
     main_memory_type: WasmMemoryType,
 ) {
     fn with_system_api<T>(
@@ -326,17 +328,13 @@ pub(crate) fn syscalls(
     ) -> Result<T, anyhow::Error> {
         caller
             .get_export(WASM_HEAP_MEMORY_NAME)
-            .ok_or_else(|| HypervisorError::ContractViolation {
+            .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                 error: "WebAssembly module must define memory".to_string(),
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
             })
             .and_then(|ext| {
                 ext.into_memory()
-                    .ok_or_else(|| HypervisorError::ContractViolation {
+                    .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                         error: "export 'memory' is not a memory".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     })
             })
             .and_then(|mem| {
@@ -757,7 +755,8 @@ pub(crate) fn syscalls(
                     overhead::STABLE_WRITE,
                     offset as u64,
                     size as u64,
-                    stable_memory_dirty_page_limit,
+                    stable_memory_dirty_page_limit.message,
+                    stable_memory_dirty_page_limit.upgrade,
                 )
                 .map_err(|e| process_err(&mut caller, e))?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
@@ -827,7 +826,8 @@ pub(crate) fn syscalls(
                     overhead::STABLE64_WRITE,
                     offset,
                     size,
-                    stable_memory_dirty_page_limit,
+                    stable_memory_dirty_page_limit.message,
+                    stable_memory_dirty_page_limit.upgrade,
                 )
                 .map_err(|e| process_err(&mut caller, e))?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
@@ -1172,7 +1172,7 @@ pub(crate) fn syscalls(
                         system_api.ic0_call_with_best_effort_response(timeout_seconds)
                     })
                 } else {
-                    let err = HypervisorError::ContractViolation {
+                    let err = HypervisorError::UserContractViolation {
                         error: "ic0::call_with_best_effort_response is not enabled.".to_string(),
                         suggestion: "".to_string(),
                         doc_link: "".to_string(),
@@ -1190,7 +1190,7 @@ pub(crate) fn syscalls(
                 if feature_flags.best_effort_responses == FlagStatus::Enabled {
                     with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
                 } else {
-                    let err = HypervisorError::ContractViolation {
+                    let err = HypervisorError::UserContractViolation {
                         error: "ic0::msg_deadline is not enabled.".to_string(),
                         suggestion: "".to_string(),
                         doc_link: "".to_string(),
@@ -1216,8 +1216,8 @@ pub(crate) fn syscalls(
                     }
                     InternalErrorCode::MemoryWriteLimitExceeded => {
                         HypervisorError::MemoryAccessLimitExceeded(
-                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
-                                    stable_memory_dirty_page_limit * (PAGE_SIZE as u64 / 1024),
+                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
+                            stable_memory_dirty_page_limit.message.get() * (PAGE_SIZE as u64 / 1024), stable_memory_dirty_page_limit.upgrade.get() * (PAGE_SIZE as u64 / 1024),
                             )
                         )
                     }

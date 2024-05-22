@@ -121,27 +121,6 @@ pub async fn perform_tls_server_handshake<P: CspTlsHandshakeSignerProvider>(
     ))
 }
 
-pub async fn perform_tls_server_handshake_without_client_auth<P: CspTlsHandshakeSignerProvider>(
-    signer_provider: &P,
-    self_node_id: NodeId,
-    registry_client: &dyn RegistryClient,
-    tcp_stream: TcpStream,
-    registry_version: RegistryVersion,
-) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError> {
-    let config = server_config_without_client_auth(
-        signer_provider,
-        self_node_id,
-        registry_client,
-        registry_version,
-    )?;
-
-    let rustls_stream = accept_connection(tcp_stream, config).await?;
-
-    Ok(Box::new(RustlsTlsStream::new(
-        tokio_rustls::TlsStream::from(rustls_stream),
-    )))
-}
-
 fn server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
     client_cert_verifier: Arc<dyn ClientCertVerifier>,
     self_tls_cert: TlsPublicKeyCert,

@@ -268,7 +268,7 @@ sh_test(
     tags = [
         "no-sandbox",
         "requires-network",
-        "system_test_hourly",
+        "system_test_nightly",
     ],
 )
 

@@ -83,7 +83,32 @@ MACRO_DEPENDENCIES = [
     "//rs/registry/admin-derive",
 ]
 
-DEV_DEPENDENCIES = []
+DEV_DEPENDENCIES = [
+    "//packages/pocket-ic",
+    "//rs/pocket_ic_server:pocket-ic-server",
+    "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+    "//rs/registry/admin:ic-admin",
+]
+
+DEV_DATA = [
+    "//rs/nns/governance:governance-canister",
+    "//rs/nns/handlers/root/impl:root-canister",
+    "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/nns/handlers/lifeline/impl:lifeline_canister",
+    "//rs/registry/canister:registry-canister",
+    "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+]
+
+DEV_ENV = {
+    "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
+    "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+    "LIFELINE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
+    "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
+    "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    "IC_ADMIN_BIN": "$(rootpath //rs/registry/admin:ic-admin)",
+}
 
 ALIASES = {}
 
@@ -98,6 +123,17 @@ rust_binary(
 rust_test(
     name = "ic-admin_unit_test",
     crate = ":ic-admin",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    data = DEV_DATA,
+    env = DEV_ENV,
+    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -29,8 +29,10 @@ opentelemetry-prometheus = "0.13.0"
 prometheus = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tempfile = "3.3.0"
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 wat = "1.0.52"
+
+[dev-dependencies]
+tempfile = "3.3.0"

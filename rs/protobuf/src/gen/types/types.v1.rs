@@ -1478,8 +1478,6 @@ pub mod canister_http_response_content {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpReject {
-    #[prost(uint32, tag = "1")]
-    pub reject_code_old: u32,
     #[prost(enumeration = "RejectCode", tag = "3")]
     pub reject_code: i32,
     #[prost(string, tag = "2")]

@@ -80,8 +80,8 @@ use ic_protobuf::registry::{
 };
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{
-    crypto::CryptoRegistry, deserialize_registry_value, ecdsa_keys::EcdsaKeysRegistry,
-    hostos_version::HostosRegistry, subnet::SubnetRegistry,
+    chain_keys::ChainKeysRegistry, crypto::CryptoRegistry, deserialize_registry_value,
+    ecdsa_keys::EcdsaKeysRegistry, hostos_version::HostosRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
     get_node_operator_id_from_record_key, get_node_record_node_id, is_node_operator_record_key,
@@ -444,6 +444,8 @@ enum SubCommand {
     ProposeToInsertSnsWasmUpgradePathEntries(ProposeToInsertSnsWasmUpgradePathEntriesCmd),
     /// Get the ECDSA key ids and their signing subnets
     GetEcdsaSigningSubnets,
+    /// Get the Master public key ids and their signing subnets
+    GetChainKeySigningSubnets,
     /// Propose to update the list of SNS Subnet IDs that SNS-WASM deploys SNS instances to
     ProposeToUpdateSnsSubnetIdsInSnsWasm(ProposeToUpdateSnsSubnetIdsInSnsWasmCmd),
     /// Propose to update the list of Principals that are allowed to deploy SNS instances
@@ -4509,6 +4511,7 @@ async fn main() {
                 "Subcommand OpenSnsTokenSwap is obsolete; please use \
                 ProposeToCreateServiceNervousSystem instead"
             ),
+            SubCommand::ProposeToRentSubnet(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -4786,6 +4789,26 @@ async fn main() {
 
             let signing_subnets = registry_client
                 .get_ecdsa_signing_subnets(registry_client.get_latest_version())
+                .unwrap()
+                .unwrap();
+            for (key_id, subnets) in signing_subnets.iter() {
+                println!("KeyId {:?}: {:?}", key_id, subnets);
+            }
+        }
+        SubCommand::GetChainKeySigningSubnets => {
+            let registry_client = make_registry_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+            );
+
+            // maximum number of retries, let the user ctrl+c if necessary
+            registry_client
+                .try_polling_latest_version(usize::MAX)
+                .unwrap();
+
+            let signing_subnets = registry_client
+                .get_chain_key_signing_subnets(registry_client.get_latest_version())
                 .unwrap()
                 .unwrap();
             for (key_id, subnets) in signing_subnets.iter() {

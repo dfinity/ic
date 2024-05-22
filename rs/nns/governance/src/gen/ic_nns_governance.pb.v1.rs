@@ -3080,7 +3080,7 @@ pub struct AuditEvent {
     /// The timestamp of the event.
     #[prost(uint64, tag = "1")]
     pub timestamp_seconds: u64,
-    #[prost(oneof = "audit_event::Payload", tags = "2, 3")]
+    #[prost(oneof = "audit_event::Payload", tags = "2, 3, 4")]
     pub payload: ::core::option::Option<audit_event::Payload>,
 }
 /// Nested message and enum types in `AuditEvent`.
@@ -3157,14 +3157,85 @@ pub mod audit_event {
     }
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct NormalizeDissolveStateAndAge {
+        /// The neuron id whose dissolve state and age were normalized.
+        #[prost(uint64, optional, tag = "1")]
+        pub neuron_id: ::core::option::Option<u64>,
+        /// Which legacy case the neuron falls into.
+        #[prost(enumeration = "NeuronLegacyCase", tag = "2")]
+        pub neuron_legacy_case: i32,
+        /// Previous when_dissolved_timestamp_seconds if the neuron was dissolving or dissolved.
+        #[prost(uint64, optional, tag = "3")]
+        pub previous_when_dissolved_timestamp_seconds: ::core::option::Option<u64>,
+        /// Previous aging_since_timestamp_seconds.
+        #[prost(uint64, optional, tag = "4")]
+        pub previous_aging_since_timestamp_seconds: ::core::option::Option<u64>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
+    #[repr(i32)]
+    pub enum NeuronLegacyCase {
+        Unspecified = 0,
+        /// Neuron is dissolving or dissolved but with a non-zero age.
+        DissolvingOrDissolved = 1,
+        /// Neuron is dissolved with DissolveDelaySeconds(0).
+        Dissolved = 2,
+        /// Neuron has a None dissolve state.
+        NoneDissolveState = 3,
+    }
+    impl NeuronLegacyCase {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                NeuronLegacyCase::Unspecified => "NEURON_LEGACY_CASE_UNSPECIFIED",
+                NeuronLegacyCase::DissolvingOrDissolved => {
+                    "NEURON_LEGACY_CASE_DISSOLVING_OR_DISSOLVED"
+                }
+                NeuronLegacyCase::Dissolved => "NEURON_LEGACY_CASE_DISSOLVED",
+                NeuronLegacyCase::NoneDissolveState => "NEURON_LEGACY_CASE_NONE_DISSOLVE_STATE",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "NEURON_LEGACY_CASE_UNSPECIFIED" => Some(Self::Unspecified),
+                "NEURON_LEGACY_CASE_DISSOLVING_OR_DISSOLVED" => Some(Self::DissolvingOrDissolved),
+                "NEURON_LEGACY_CASE_DISSOLVED" => Some(Self::Dissolved),
+                "NEURON_LEGACY_CASE_NONE_DISSOLVE_STATE" => Some(Self::NoneDissolveState),
+                _ => None,
+            }
+        }
+    }
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Payload {
-        /// Reset aging timestamps for <https://forum.dfinity.org/t/icp-neuron-age-is-52-years/21261/26>
+        /// Reset aging timestamps (<https://forum.dfinity.org/t/icp-neuron-age-is-52-years/21261/26>).
         #[prost(message, tag = "2")]
         ResetAging(ResetAging),
-        /// Restore aging timestamp that were incorrectly reset.
+        /// Restore aging timestamp that were incorrectly reset (<https://forum.dfinity.org/t/restore-neuron-age-in-proposal-129394/29840>).
         #[prost(message, tag = "3")]
         RestoreAging(RestoreAging),
+        /// Normalize neuron dissolve state and age (<https://forum.dfinity.org/t/simplify-neuron-state-age/30527>)
+        #[prost(message, tag = "4")]
+        NormalizeDissolveStateAndAge(NormalizeDissolveStateAndAge),
     }
 }
 /// The summary of the restore aging event.

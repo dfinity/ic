@@ -58,6 +58,32 @@ enum OperationType {
         #[arg(long)]
         created_at_time: Option<u64>,
     },
+
+    TransferFrom {
+        /// The amount of tokens to transfer
+        #[arg(long)]
+        amount: Nat,
+
+        /// The account of the credited account
+        #[arg(long)]
+        to: Account,
+
+        /// The account of the debited account
+        #[arg(long)]
+        from: Account,
+
+        /// The subaccount of the spender. If set it has to be a non empty 32 byte vector.
+        #[arg(long)]
+        spender_subaccount: Option<String>,
+
+        /// A vector of maximum 32 bytes that is attached to the transaction for arbitrary data.
+        #[arg(long)]
+        memo: Option<String>,
+
+        /// The created_at_time timestamp that is set in the transaction. It triggers the deduplication.
+        #[arg(long)]
+        created_at_time: Option<u64>,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -139,7 +165,7 @@ async fn main() -> anyhow::Result<()> {
         }
         OperationType::Transfer {
             amount,
-            to,
+            to: to_account,
             from_subaccount,
             memo,
             created_at_time,
@@ -155,12 +181,52 @@ async fn main() -> anyhow::Result<()> {
                 .build_transfer_operations(
                     &sender_keypair,
                     from_subaccount,
-                    to,
+                    to_account,
                     amount,
                     network_identifier.clone(),
                 )
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to build transfer operations: {:?}", e))?;
+
+            rosetta_client
+                .make_submit_and_wait_for_transaction(
+                    &sender_keypair,
+                    network_identifier.clone(),
+                    operations,
+                    memo,
+                    created_at_time,
+                )
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to make and submit transaction: {:?}", e))?
+        }
+        OperationType::TransferFrom {
+            amount,
+            to: to_account,
+            from: from_account,
+            spender_subaccount,
+            memo,
+            created_at_time,
+        } => {
+            let spender_subaccount: Option<[u8; 32]> = spender_subaccount
+                .map(|s| s.as_bytes().try_into())
+                .transpose()
+                .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+
+            let memo: Option<Vec<u8>> = memo.map(|s| s.as_bytes().to_vec());
+
+            let operations = rosetta_client
+                .build_transfer_from_operations(
+                    &sender_keypair,
+                    spender_subaccount,
+                    to_account,
+                    from_account,
+                    amount,
+                    network_identifier.clone(),
+                )
+                .await
+                .map_err(|e| {
+                    anyhow::anyhow!("Failed to build transfer from operations: {:?}", e)
+                })?;
 
             rosetta_client
                 .make_submit_and_wait_for_transaction(

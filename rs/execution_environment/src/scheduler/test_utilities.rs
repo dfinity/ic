@@ -1075,7 +1075,7 @@ impl TestWasmExecutorCore {
                 executed_instructions: instructions_to_execute,
             };
             let output = WasmExecutionOutput {
-                wasm_result: Err(HypervisorError::InstructionLimitExceeded),
+                wasm_result: Err(HypervisorError::InstructionLimitExceeded(message_limit)),
                 num_instructions_left: NumInstructions::from(0),
                 allocated_bytes: NumBytes::from(0),
                 allocated_message_bytes: NumBytes::from(0),

@@ -113,14 +113,16 @@ message GetSuccessorsResponseComplete {
 
 // A `GetSucceessors` reject response containing additional information about the rejection.
 message GetSuccessorsReject {
-  uint64 reject_code_old = 1;
+  reserved 1;
+  reserved "reject_code_old";
   types.v1.RejectCode reject_code = 3;
   string message = 2;
 }
 
 // A `SendTransaction` reject response containing additional information about the rejection.
 message SendTransactionReject {
-  uint64 reject_code_old = 1;
+  reserved 1;
+  reserved "reject_code_old";
   types.v1.RejectCode reject_code = 3;
   string message = 2;
 }

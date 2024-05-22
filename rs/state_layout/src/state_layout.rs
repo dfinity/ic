@@ -4,7 +4,7 @@ use crate::utils::do_copy;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::{CanisterLog, LogVisibility};
+use ic_management_canister_types::LogVisibility;
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -25,8 +25,8 @@ use ic_replicated_state::{
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
     batch::TotalQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
-    ComputeAllocation, Cycles, ExecutionRound, Height, MemoryAllocation, NumInstructions,
-    PrincipalId, SnapshotId, Time,
+    CanisterLog, ComputeAllocation, Cycles, ExecutionRound, Height, MemoryAllocation,
+    NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_utils::thread::parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};

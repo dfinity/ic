@@ -238,7 +238,7 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
                             IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(
                                 KeyRotationOutcome::KeyRotated {
                                     new_key: idkg_dealing_encryption_pk_to_proto(
-                                        self.csp.idkg_gen_dealing_encryption_key_pair()?,
+                                        self.vault.idkg_gen_dealing_encryption_key_pair()?,
                                     ),
                                 },
                             ),
@@ -254,7 +254,7 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
                                 IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(
                                     KeyRotationOutcome::KeyRotated {
                                         new_key: idkg_dealing_encryption_pk_to_proto(
-                                            self.csp.idkg_gen_dealing_encryption_key_pair()?,
+                                            self.vault.idkg_gen_dealing_encryption_key_pair()?,
                                         ),
                                     },
                                 ),

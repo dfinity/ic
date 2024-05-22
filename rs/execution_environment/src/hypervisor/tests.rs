@@ -1439,6 +1439,42 @@ fn ic0_msg_reject_works() {
 }
 
 #[test]
+fn wasm64_active_data_segments() {
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update test")
+                (if (i64.ne
+                         (i64.load8_u (i64.const 0))
+                         (i64.const 112) ;; p
+                    )
+                    (then (unreachable))
+                )
+                (if (i64.ne
+                         (i64.load8_u (i64.const 1))
+                         (i64.const 0)
+                    )
+                    (then (unreachable))
+                )
+                (if (i64.ne
+                         (i64.load8_u (i64.const 2))
+                         (i64.const 97) ;; a
+                    )
+                    (then (unreachable))
+                )
+                (call $msg_reply)
+            )
+            (memory i64 1 1)
+            (data (i64.const 0) "p")
+            (data (i64.const 2) "a")
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(WasmResult::Reply(vec![]), result);
+}
+
+#[test]
 fn ic0_msg_caller_size_works_in_reply_callback() {
     let mut test = ExecutionTestBuilder::new().build();
     let caller_id = test.universal_canister().unwrap();
@@ -2294,7 +2330,7 @@ fn ic0_trap_works() {
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     assert_eq!(
-        format!("Error from Canister {canister_id}: Canister trapped explicitly: Hi!"),
+        format!("Error from Canister {canister_id}: Canister called `ic0.trap` with message: Hi!"),
         err.description()
     );
 }
@@ -4465,7 +4501,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
         WasmResult::Reject(reject_message) => reject_message,
     };
     assert!(
-        reject_message.contains("trapped explicitly: panicked at")
+        reject_message.contains("Canister called `ic0.trap` with message: panicked at")
             && reject_message.contains("get_callback: 1 out of bounds"),
         "Unexpected error message: {}",
         reject_message
@@ -4605,7 +4641,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
 
     // The reject message from method #2 of B to method #1.
     let reject_message_b_2_to_1 = format!(
-        "IC0537: Error from canister {b_id}: Attempt to execute a message, but the canister contains no Wasm module",
+        "IC0537: Error from canister {b_id}: Attempted to execute a message, but the canister contains no Wasm module.",
     );
 
     // Canister B gets the cycles it accepted from A.

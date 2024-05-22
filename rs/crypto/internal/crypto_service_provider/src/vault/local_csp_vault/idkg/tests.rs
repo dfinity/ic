@@ -943,7 +943,7 @@ mod idkg_create_dealing {
         assert_matches!(
             test.run(),
             Err(IDkgCreateDealingVaultError::SerializationError(e))
-            if e.contains("ThresholdEcdsaSerializationError")
+            if e.contains("CanisterThresholdSerializationError")
         );
     }
 
@@ -1390,6 +1390,7 @@ mod idkg_load_transcript {
             let mut remaining_iterations = 1 + self.load_twice as usize;
             loop {
                 let result = loader_vault.idkg_load_transcript(
+                    self.algorithm_id,
                     signed_dealings.clone(),
                     self.context_data.clone(),
                     DEALER_RECEIVER_INDEX,
@@ -1942,7 +1943,7 @@ mod idkg_open_dealing {
         assert_matches!(
             test.run(),
             Err(IDkgOpenTranscriptError::InternalError { internal_error })
-            if internal_error.contains("Error deserializing a signed dealing: ThresholdEcdsaSerializationError")
+            if internal_error.contains("Error deserializing a signed dealing: CanisterThresholdSerializationError")
         );
     }
 

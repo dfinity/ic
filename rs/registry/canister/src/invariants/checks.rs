@@ -21,7 +21,10 @@ use crate::{
 use dfn_core::println;
 use ic_registry_transport::pb::v1::{registry_mutation::Type, RegistryMutation};
 
-use super::subnet::subnet_record_mutations_from_ecdsa_configs_to_chain_key_configs;
+use super::subnet::{
+    subnet_record_mutations_from_ecdsa_configs_to_chain_key_configs,
+    subnet_record_mutations_from_ecdsa_to_master_public_key_signing_subnet_list,
+};
 
 impl Registry {
     pub fn check_changelog_version_invariants(&self) {
@@ -58,7 +61,13 @@ impl Registry {
     // TODO[NNS1-2986]: Remove this function after the migration has been performed.
     pub fn subnet_record_mutations_from_ecdsa_to_chain_key(&self) -> Vec<RegistryMutation> {
         let snapshot = self.take_latest_snapshot();
-        subnet_record_mutations_from_ecdsa_configs_to_chain_key_configs(&snapshot)
+        let mut mutations = vec![];
+        mutations
+            .extend(subnet_record_mutations_from_ecdsa_configs_to_chain_key_configs(&snapshot));
+        mutations.extend(
+            subnet_record_mutations_from_ecdsa_to_master_public_key_signing_subnet_list(&snapshot),
+        );
+        mutations
     }
 
     pub fn check_global_state_invariants(&self, mutations: &[RegistryMutation]) {
@@ -158,8 +167,15 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use crate::{
-        common::test_helpers::invariant_compliant_registry,
-        invariants::common::get_value_from_snapshot, registry::EncodedVersion,
+        common::test_helpers::{
+            add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
+            prepare_registry_with_nodes,
+        },
+        invariants::common::{
+            get_all_chain_key_signing_subnet_list_records,
+            get_all_ecdsa_signing_subnet_list_records, get_value_from_snapshot,
+        },
+        registry::EncodedVersion,
     };
 
     use super::*;
@@ -167,7 +183,10 @@ mod tests {
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_common::registry::encode_or_panic;
     use ic_protobuf::registry::{
-        crypto::v1::{master_public_key_id, EcdsaKeyId, MasterPublicKeyId},
+        crypto::v1::{
+            master_public_key_id, ChainKeySigningSubnetList, EcdsaKeyId, EcdsaSigningSubnetList,
+            MasterPublicKeyId,
+        },
         node_operator::v1::NodeOperatorRecord,
         routing_table::v1::{
             CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
@@ -175,17 +194,18 @@ mod tests {
         subnet::v1::{ChainKeyConfig, EcdsaConfig, KeyConfig, SubnetListRecord, SubnetRecord},
     };
     use ic_registry_keys::{
-        make_canister_migrations_record_key, make_node_operator_record_key,
+        make_canister_migrations_record_key, make_chain_key_signing_subnet_list_key,
+        make_ecdsa_signing_subnet_list_key, make_node_operator_record_key,
         make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
     };
     use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
     use ic_registry_transport::{
         delete, insert,
         pb::v1::{RegistryAtomicMutateRequest, RegistryMutation},
-        update,
+        update, upsert,
     };
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::{PrincipalId, SubnetId};
+    use ic_types::{subnet_id_into_protobuf, PrincipalId, SubnetId};
     use maplit::btreemap;
     use std::collections::BTreeMap;
     use std::convert::TryFrom;
@@ -383,7 +403,7 @@ mod tests {
     // TODO[NNS1-2986]: Remove this test after the migration has been performed.
     #[test]
     fn test_subnet_record_ecdsa_to_chain_key_migration_no_ecdsa_config_no_chain_key_config() {
-        // Start with an invariant-complient registry.
+        // Start with an invariant-compliant registry.
         let mut registry = invariant_compliant_registry(0);
 
         // Get an ID of a subnet.
@@ -655,7 +675,7 @@ mod tests {
                 key_configs: vec![KeyConfig {
                     key_id: Some(MasterPublicKeyId {
                         key_id: Some(master_public_key_id::KeyId::Ecdsa(EcdsaKeyId {
-                            curve: 0,
+                            curve: 1,
                             name: "test_curve_1".to_string(),
                         })),
                     }),
@@ -751,5 +771,260 @@ mod tests {
             let mutations = registry.subnet_record_mutations_from_ecdsa_to_chain_key();
             registry.maybe_apply_mutation_internal(mutations);
         }
+    }
+
+    /// Template for test runs
+    ///
+    /// Creates a registry, then calls `initialize` to let user make changes to it,
+    /// evaluates invariants, calls `check` to allow user to make custom checks then
+    /// applies the migrations and finally gives the resulting registry back to the user
+    // TODO[NNS1-2986]: Remove this test after the migration has been performed.
+    fn initialize_then_migrate<F, C>(initialize: F, check: C) -> Registry
+    where
+        F: FnOnce(SubnetId, &RegistrySnapshot) -> Vec<RegistryMutation>,
+        C: FnOnce(SubnetId, &RegistrySnapshot),
+    {
+        // Start with an invariant-compliant registry.
+        let mut registry = invariant_compliant_registry(0);
+
+        // Add another subnet, which is needed for some tests
+        {
+            let subnet_id = subnet_test_id(1);
+            let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
+            registry.maybe_apply_mutation_internal(mutate_request.mutations);
+            let mut subnet_list_record = registry.get_subnet_list_record();
+            let subnet_record = get_invariant_compliant_subnet_record(
+                node_ids_and_dkg_pks.keys().copied().collect(),
+            );
+
+            let fake_subnet_mutation = add_fake_subnet(
+                subnet_id,
+                &mut subnet_list_record,
+                subnet_record,
+                &node_ids_and_dkg_pks,
+            );
+            registry.maybe_apply_mutation_internal(fake_subnet_mutation);
+        }
+
+        // Get an ID of a subnet.
+        let subnet_id = {
+            let snapshot = registry.take_latest_snapshot();
+            // Assume we have at least one subnet, pick the first one WLOG.
+            get_subnet_ids_from_subnet_list_record(&snapshot)[0]
+        };
+
+        // Execute the initial mutations, i.e. create a state that represents the registry
+        // before the migrations
+        let mutations = initialize(subnet_id, &mut registry.take_latest_snapshot());
+        registry.maybe_apply_mutation_internal(mutations);
+
+        // Precondition: Invariants hold initially.
+        registry.check_global_state_invariants(&[]);
+
+        // Do some custom checks, if desired
+        check(subnet_id, &mut registry.take_latest_snapshot());
+
+        // --- Run code under test ---
+        {
+            let mutations = registry.subnet_record_mutations_from_ecdsa_to_chain_key();
+            registry.maybe_apply_mutation_internal(mutations);
+        }
+
+        // Postcondition I: Invariants still hold.
+        registry.check_global_state_invariants(&[]);
+
+        registry
+    }
+
+    fn apply_to_subnet_record<F: FnOnce(&mut SubnetRecord)>(
+        snapshot: &RegistrySnapshot,
+        subnet_id: SubnetId,
+        config: F,
+    ) -> RegistryMutation {
+        let mut subnet_record = get_subnet_record(snapshot, subnet_id);
+        config(&mut subnet_record);
+        update(
+            make_subnet_record_key(subnet_id).as_bytes(),
+            encode_or_panic(&subnet_record),
+        )
+    }
+
+    fn test_ecdsa_config(num_keys: usize) -> EcdsaConfig {
+        let key_ids = (0..num_keys)
+            .map(|key_num| EcdsaKeyId {
+                curve: 1,
+                name: format!("test_curve_{}", key_num),
+            })
+            .collect();
+
+        EcdsaConfig {
+            quadruples_to_create_in_advance: 456,
+            key_ids,
+            max_queue_size: 100,
+            signature_request_timeout_ns: Some(10_000),
+            idkg_key_rotation_period_ms: Some(20_000),
+        }
+    }
+
+    /// Add the `subnet_ids` as signing ecdsa subnets of `key`
+    fn upsert_ecdsa(key: String, subnet_ids: &[SubnetId]) -> RegistryMutation {
+        upsert(
+            key,
+            encode_or_panic(&EcdsaSigningSubnetList {
+                subnets: subnet_ids
+                    .iter()
+                    .cloned()
+                    .map(subnet_id_into_protobuf)
+                    .collect(),
+            }),
+        )
+    }
+
+    /// Add the `subnet_ids` as signing chainkey subnets of `key`
+    fn upsert_ck(key: String, subnet_ids: &[SubnetId]) -> RegistryMutation {
+        upsert(
+            key,
+            encode_or_panic(&ChainKeySigningSubnetList {
+                subnets: subnet_ids
+                    .iter()
+                    .cloned()
+                    .map(subnet_id_into_protobuf)
+                    .collect(),
+            }),
+        )
+    }
+
+    /// Check that a signing subnet list present in the ecdsa_subnet_signing_list
+    /// will be transfered correctly to the chain_key_signing_list
+    // TODO[NNS1-2986]: Remove this test after the migration has been performed.
+    #[test]
+    fn test_subnet_record_ecdsa_signing_subnet_list_to_chain_key_signing_list() {
+        let config = test_ecdsa_config(1);
+        let key_id = config.key_ids[0].clone();
+        let key_id = ic_management_canister_types::EcdsaKeyId::try_from(key_id).unwrap();
+
+        let ecdsa_key_id = make_ecdsa_signing_subnet_list_key(&key_id);
+        let ck_key_id = make_chain_key_signing_subnet_list_key(
+            &ic_management_canister_types::MasterPublicKeyId::Ecdsa(key_id),
+        );
+
+        let registry = initialize_then_migrate(
+            |subnet_id, snapshot| {
+                vec![
+                    apply_to_subnet_record(snapshot, subnet_id, |record| {
+                        record.ecdsa_config = Some(config);
+                    }),
+                    upsert_ecdsa(ecdsa_key_id.clone(), &[subnet_id]),
+                ]
+            },
+            |_, _| {},
+        );
+
+        let snapshot = registry.take_latest_snapshot();
+        let ecdsa_signing_subnet_list = get_all_ecdsa_signing_subnet_list_records(&snapshot);
+        let ecdsa_entry = ecdsa_signing_subnet_list.get(&ecdsa_key_id).unwrap();
+
+        let ck_signing_subnet_list = get_all_chain_key_signing_subnet_list_records(&snapshot);
+        let ck_entry = ck_signing_subnet_list.get(&ck_key_id).unwrap();
+
+        assert_eq!(ecdsa_entry.subnets, ck_entry.subnets);
+    }
+
+    /// Check that an entry in the chain key signing subnet list is removed, if no
+    /// corresponding entry is present in the ecdsa signing subnet list
+    // TODO[NNS1-2986]: Remove this test after the migration has been performed.
+    #[test]
+    fn test_subnet_record_ecdsa_signing_subnet_list_to_chain_key_signing_list_removal() {
+        let config = test_ecdsa_config(1);
+
+        let key_id = config.key_ids[0].clone();
+        let key_id = ic_management_canister_types::EcdsaKeyId::try_from(key_id).unwrap();
+
+        let ecdsa_key_id = make_ecdsa_signing_subnet_list_key(&key_id);
+        let ck_key_id = make_chain_key_signing_subnet_list_key(
+            &ic_management_canister_types::MasterPublicKeyId::Ecdsa(key_id),
+        );
+
+        let registry = initialize_then_migrate(
+            |subnet_id, snapshot| {
+                vec![
+                    apply_to_subnet_record(snapshot, subnet_id, |record| {
+                        record.ecdsa_config = Some(config);
+                    }),
+                    upsert_ck(ck_key_id.clone(), &[subnet_id]),
+                ]
+            },
+            |_, snapshot| {
+                let ck_signing_subnet_list =
+                    get_all_chain_key_signing_subnet_list_records(snapshot);
+                assert!(ck_signing_subnet_list.get(&ck_key_id).is_some());
+            },
+        );
+
+        let snapshot = registry.take_latest_snapshot();
+        let ecdsa_signing_subnet_list = get_all_ecdsa_signing_subnet_list_records(&snapshot);
+        assert!(ecdsa_signing_subnet_list.get(&ecdsa_key_id).is_none());
+
+        let ck_signing_subnet_list = get_all_chain_key_signing_subnet_list_records(&snapshot);
+        assert!(ck_signing_subnet_list.get(&ck_key_id).is_none());
+    }
+
+    /// Check that if an entry is present in the both signing subnet lists, the chain_key one gets overwritten
+    /// by the ecdsa list
+    // TODO[NNS1-2986]: Remove this test after the migration has been performed.
+    #[test]
+    fn test_subnet_record_ecdsa_signing_subnet_list_to_chain_key_signing_list_override() {
+        let config = test_ecdsa_config(1);
+
+        let key_id = config.key_ids[0].clone();
+        let key_id = ic_management_canister_types::EcdsaKeyId::try_from(key_id).unwrap();
+
+        let ecdsa_key_id = make_ecdsa_signing_subnet_list_key(&key_id);
+        let ck_key_id = make_chain_key_signing_subnet_list_key(
+            &ic_management_canister_types::MasterPublicKeyId::Ecdsa(key_id),
+        );
+
+        let registry = initialize_then_migrate(
+            |subnet_id, snapshot| {
+                vec![
+                    apply_to_subnet_record(snapshot, subnet_id, |record| {
+                        record.ecdsa_config = Some(config.clone());
+                    }),
+                    apply_to_subnet_record(snapshot, subnet_test_id(1), |record| {
+                        record.ecdsa_config = Some(config);
+                    }),
+                    upsert_ecdsa(ecdsa_key_id.clone(), &[subnet_test_id(1)]),
+                    upsert_ck(ck_key_id.clone(), &[subnet_id, subnet_test_id(1)]),
+                ]
+            },
+            |_, snapshot| {
+                let ecdsa_subnet_list = get_all_ecdsa_signing_subnet_list_records(snapshot);
+                let ck_subnet_list = get_all_chain_key_signing_subnet_list_records(snapshot);
+
+                let ecdsa_subnets = &ecdsa_subnet_list.get(&ecdsa_key_id).unwrap().subnets;
+                let ck_subnets = &ck_subnet_list.get(&ck_key_id).unwrap().subnets;
+                assert!(ecdsa_subnets != ck_subnets);
+
+                assert_eq!(ecdsa_subnets.len(), 1);
+                assert_eq!(ecdsa_subnets[0], subnet_id_into_protobuf(subnet_test_id(1)));
+
+                assert_eq!(ck_subnets.len(), 2);
+                assert_eq!(ck_subnets[1], subnet_id_into_protobuf(subnet_test_id(1)));
+            },
+        );
+
+        let snapshot = registry.take_latest_snapshot();
+        let ecdsa_subnet_list = get_all_ecdsa_signing_subnet_list_records(&snapshot);
+        let ck_subnet_list = get_all_chain_key_signing_subnet_list_records(&snapshot);
+
+        let ecdsa_subnets = &ecdsa_subnet_list.get(&ecdsa_key_id).unwrap().subnets;
+        let ck_subnets = &ck_subnet_list.get(&ck_key_id).unwrap().subnets;
+
+        assert!(ecdsa_subnets == ck_subnets);
+        assert_eq!(ecdsa_subnets.len(), 1);
+        assert_eq!(ecdsa_subnets[0], subnet_id_into_protobuf(subnet_test_id(1)));
+
+        assert_eq!(ck_subnets.len(), 1);
+        assert_eq!(ck_subnets[0], subnet_id_into_protobuf(subnet_test_id(1)));
     }
 }

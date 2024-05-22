@@ -556,8 +556,8 @@ def test_findings_helper_no_vulnerabilities(npm_test):
     repository = "ic"
     project = Project("ic", "ic")
     fake_npm = FakeNPM(1)
-    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
-    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
+    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
+    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output
 
     findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert not findings
@@ -567,8 +567,8 @@ def test_findings_helper_one_finding(npm_test):
     repository = "ic"
     project = Project("ic", "ic")
     fake_npm = FakeNPM(2)
-    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
-    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
+    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
+    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output
 
     findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert len(findings) == 1
@@ -617,8 +617,8 @@ def test_findings_helper_vulnerable_dependency_not_in_range(npm_test):
     repository = "ic"
     project = Project("ic", "ic")
     fake_npm = FakeNPM(3)
-    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
-    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
+    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
+    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output
 
     findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert not findings
@@ -628,8 +628,8 @@ def test_findings_helper_transitive_vulnerability(npm_test):
     repository = "ic"
     project = Project("ic", "ic")
     fake_npm = FakeNPM(4)
-    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
-    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
+    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
+    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output
 
     findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert not findings

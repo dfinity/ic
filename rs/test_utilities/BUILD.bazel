@@ -6,9 +6,6 @@ rust_library(
     name = "test_utilities",
     srcs = glob(["src/**"]),
     crate_name = "ic_test_utilities",
-    proc_macro_deps = [
-        "@crate_index//:async-trait",
-    ],
     version = "0.9.0",
     deps = [
         "//rs/bitcoin/types/internal",

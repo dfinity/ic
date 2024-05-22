@@ -20,12 +20,6 @@ mock! {
             registry_version: RegistryVersion,
         ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError>;
 
-        async fn perform_tls_server_handshake_without_client_auth(
-            &self,
-            tcp_stream: TcpStream,
-            registry_version: RegistryVersion,
-        ) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError>;
-
         async fn perform_tls_client_handshake(
             &self,
             tcp_stream: TcpStream,

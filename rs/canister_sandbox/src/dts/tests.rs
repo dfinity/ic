@@ -76,9 +76,14 @@ fn dts_max_num_slices() {
 #[test]
 fn pause_and_resume_works() {
     let (tx, rx): (Sender<PausedExecution>, Receiver<PausedExecution>) = mpsc::channel();
-    let dts = DeterministicTimeSlicingHandler::new(2500, 1000, move |_slice, paused| {
-        tx.send(paused).unwrap();
-    });
+    let total_instruction_limit = 2500;
+    let dts = DeterministicTimeSlicingHandler::new(
+        total_instruction_limit,
+        1000,
+        move |_slice, paused| {
+            tx.send(paused).unwrap();
+        },
+    );
     let control_thread = thread::spawn(move || {
         for _ in 0..2 {
             let paused_execution = rx.recv().unwrap();
@@ -94,7 +99,12 @@ fn pause_and_resume_works() {
     assert_eq!(500, next_slice_limit);
     // Slice 3: executes 500 instructions before calling `out_of_instructions()`.
     let error = dts.out_of_instructions(0);
-    assert_eq!(error, Err(HypervisorError::InstructionLimitExceeded));
+    assert_eq!(
+        error,
+        Err(HypervisorError::InstructionLimitExceeded(
+            NumInstructions::from(total_instruction_limit as u64)
+        ))
+    );
     drop(dts);
     control_thread.join().unwrap();
 }
@@ -162,9 +172,14 @@ fn invalid_instructions() {
 #[test]
 fn max_num_slices() {
     let (tx, rx): (Sender<PausedExecution>, Receiver<PausedExecution>) = mpsc::channel();
-    let dts = DeterministicTimeSlicingHandler::new(1000000, 100, move |_slice, paused| {
-        tx.send(paused).unwrap();
-    });
+    let total_instruction_limit = 1000000;
+    let dts = DeterministicTimeSlicingHandler::new(
+        total_instruction_limit,
+        100,
+        move |_slice, paused| {
+            tx.send(paused).unwrap();
+        },
+    );
     let control_thread = thread::spawn(move || {
         for _ in 0..MAX_NUM_SLICES - 1 {
             let paused_execution = rx.recv().unwrap();
@@ -181,7 +196,12 @@ fn max_num_slices() {
             assert!(result.is_err());
         }
     }
-    assert_eq!(result, Err(HypervisorError::InstructionLimitExceeded));
+    assert_eq!(
+        result,
+        Err(HypervisorError::InstructionLimitExceeded(
+            NumInstructions::from(total_instruction_limit as u64)
+        ))
+    );
     drop(dts);
     control_thread.join().unwrap();
 }

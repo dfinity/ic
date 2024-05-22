@@ -11,24 +11,25 @@ pub struct IDkgComplaintInternal {
 }
 
 impl IDkgComplaintInternal {
-    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
-        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+    pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
+        serde_cbor::to_vec(self).map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
     }
 
-    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
+    pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+            .map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
     }
 }
 
 pub fn generate_complaints(
+    alg: CanisterThresholdSignatureAlgorithm,
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     associated_data: &[u8],
     receiver_index: NodeIndex,
     secret_key: &MEGaPrivateKey,
     public_key: &MEGaPublicKey,
     seed: Seed,
-) -> ThresholdEcdsaResult<BTreeMap<NodeIndex, IDkgComplaintInternal>> {
+) -> CanisterThresholdResult<BTreeMap<NodeIndex, IDkgComplaintInternal>> {
     let mut complaints = BTreeMap::new();
 
     for (dealer_index, dealing) in verified_dealings {
@@ -50,6 +51,7 @@ pub fn generate_complaints(
 
             let complaint = IDkgComplaintInternal::new(
                 complaint_seed,
+                alg,
                 dealing,
                 *dealer_index,
                 receiver_index,
@@ -63,7 +65,7 @@ pub fn generate_complaints(
     }
 
     if complaints.is_empty() {
-        return Err(ThresholdEcdsaError::InvalidArguments(
+        return Err(CanisterThresholdError::InvalidArguments(
             "generate_complaints should return at least one complaint".to_string(),
         ));
     }
@@ -79,19 +81,21 @@ impl IDkgComplaintInternal {
     /// and does not match the dealing commitment.
     pub fn new(
         seed: Seed,
+        alg: CanisterThresholdSignatureAlgorithm,
         dealing: &IDkgDealingInternal,
         dealer_index: NodeIndex,
         receiver_index: NodeIndex,
         secret_key: &MEGaPrivateKey,
         public_key: &MEGaPublicKey,
         associated_data: &[u8],
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let shared_secret = dealing
             .ciphertext
             .ephemeral_key()
             .scalar_mul(secret_key.secret_scalar())?;
 
         let proof_assoc_data = Self::create_proof_assoc_data(
+            alg,
             associated_data,
             receiver_index,
             dealer_index,
@@ -100,6 +104,7 @@ impl IDkgComplaintInternal {
 
         let proof = zk::ProofOfDLogEquivalence::create(
             seed,
+            alg,
             secret_key.secret_scalar(),
             &EccPoint::generator_g(secret_key.secret_scalar().curve_type()),
             dealing.ciphertext.ephemeral_key(),
@@ -123,14 +128,16 @@ impl IDkgComplaintInternal {
     /// making a false complaint.
     pub fn verify(
         &self,
+        alg: CanisterThresholdSignatureAlgorithm,
         dealing: &IDkgDealingInternal,
         dealer_index: NodeIndex,
         complainer_index: NodeIndex,
         complainer_key: &MEGaPublicKey,
         associated_data: &[u8],
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         // Verify the enclosed proof
         let proof_assoc_data = Self::create_proof_assoc_data(
+            alg,
             associated_data,
             complainer_index,
             dealer_index,
@@ -138,6 +145,7 @@ impl IDkgComplaintInternal {
         )?;
 
         self.proof.verify(
+            alg,
             &EccPoint::generator_g(self.shared_secret.curve_type()),
             dealing.ciphertext.ephemeral_key(),
             complainer_key.public_point(),
@@ -169,7 +177,7 @@ impl IDkgComplaintInternal {
 
                 CommitmentOpening::Pedersen(opening.0, opening.1)
             }
-            (_, _) => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
+            (_, _) => return Err(CanisterThresholdError::UnexpectedCommitmentType),
         };
 
         // Verify that the decrypted opening does *not* match the
@@ -178,19 +186,20 @@ impl IDkgComplaintInternal {
         let commitment_check = dealing.commitment.check_opening(complainer_index, &opening);
 
         if commitment_check.is_ok() {
-            return Err(ThresholdEcdsaError::InvalidComplaint);
+            return Err(CanisterThresholdError::InvalidComplaint);
         }
 
         Ok(())
     }
 
     fn create_proof_assoc_data(
+        alg: CanisterThresholdSignatureAlgorithm,
         associated_data: &[u8],
         receiver_index: NodeIndex,
         dealer_index: NodeIndex,
         public_key: &MEGaPublicKey,
-    ) -> ThresholdEcdsaResult<Vec<u8>> {
-        let mut ro = RandomOracle::new("ic-crypto-tecdsa-complaint-proof-assoc-data");
+    ) -> CanisterThresholdResult<Vec<u8>> {
+        let mut ro = RandomOracle::new(DomainSep::ComplaintProofAssocData(alg));
 
         ro.add_bytestring("associated_data", associated_data)?;
         ro.add_u32("receiver_index", receiver_index)?;
@@ -202,9 +211,9 @@ impl IDkgComplaintInternal {
 }
 
 impl TryFrom<&IDkgComplaint> for IDkgComplaintInternal {
-    type Error = ThresholdEcdsaSerializationError;
+    type Error = CanisterThresholdSerializationError;
 
-    fn try_from(complaint: &IDkgComplaint) -> ThresholdEcdsaSerializationResult<Self> {
+    fn try_from(complaint: &IDkgComplaint) -> CanisterThresholdSerializationResult<Self> {
         Self::deserialize(&complaint.internal_complaint_raw)
     }
 }

@@ -4,8 +4,9 @@ use crate::temp_crypto_component_with_tls_keys;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
-    AuthenticatedPeer, SomeOrAllNodes, TlsHandshake, TlsServerHandshakeError,
+    AuthenticatedPeer, SomeOrAllNodes, TlsConfig, TlsServerHandshakeError,
 };
+use ic_crypto_utils_tls::node_id_from_rustls_certs;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
@@ -13,6 +14,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
+use tokio_rustls::TlsAcceptor;
 
 pub struct ServerBuilder {
     node_id: NodeId,
@@ -107,10 +109,28 @@ impl Server {
     pub async fn run(&self) -> Result<AuthenticatedPeer, TlsServerHandshakeError> {
         let tcp_stream = self.accept_connection_on_listener().await;
 
-        let (tls_stream, authenticated_node) = self
+        let server_config = self
             .crypto
-            .perform_tls_server_handshake(tcp_stream, self.allowed_clients.clone(), REG_V1)
-            .await?;
+            .server_config(self.allowed_clients.clone(), REG_V1)?;
+
+        let tls_acceptor = TlsAcceptor::from(Arc::new(server_config));
+        let tls_stream = tls_acceptor.accept(tcp_stream).await.map_err(|err| {
+            TlsServerHandshakeError::HandshakeError {
+                internal_error: err.to_string(),
+            }
+        })?;
+
+        let peer_cert = tls_stream
+            .get_ref()
+            .1
+            .peer_certificates()
+            .unwrap()
+            .first()
+            .unwrap();
+
+        let authenticated_node =
+            AuthenticatedPeer::Node(node_id_from_rustls_certs(peer_cert).unwrap());
+
         let (mut rh, mut wh) = tokio::io::split(tls_stream);
 
         self.send_msg_to_client_if_configured(&mut wh, &mut rh)
@@ -118,22 +138,6 @@ impl Server {
         self.expect_msg_from_client_if_configured(&mut rh, &mut wh)
             .await;
         Ok(authenticated_node)
-    }
-
-    pub async fn run_without_client_auth(&self) -> Result<(), TlsServerHandshakeError> {
-        let tcp_stream = self.accept_connection_on_listener().await;
-
-        let tls_stream = self
-            .crypto
-            .perform_tls_server_handshake_without_client_auth(tcp_stream, REG_V1)
-            .await?;
-        let (mut rh, mut wh) = tokio::io::split(tls_stream);
-
-        self.send_msg_to_client_if_configured(&mut wh, &mut rh)
-            .await;
-        self.expect_msg_from_client_if_configured(&mut rh, &mut wh)
-            .await;
-        Ok(())
     }
 
     async fn accept_connection_on_listener(&self) -> TcpStream {

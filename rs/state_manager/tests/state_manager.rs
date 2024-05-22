@@ -3800,6 +3800,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
                 subnet_type: SubnetType::System,
                 subnet_features: SubnetFeatures::default(),
                 ecdsa_keys_held: BTreeSet::new(),
+                idkg_keys_held: BTreeSet::new(),
             },
         );
 

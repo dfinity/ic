@@ -10,7 +10,6 @@ documentation.workspace = true
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
-axum-server = { version = "^0.6.0", features = ["tls-rustls"] }
 bytes = { workspace = true }
 byte-unit = "4.0.14"
 cfg-if = "1.0.0"
@@ -48,6 +47,7 @@ inferno = "0.11.19"
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = "0.8.3"
+rustls = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
@@ -55,6 +55,7 @@ tempfile = "3.1.0"
 threadpool = "1.8.1"
 tokio = { workspace = true }
 tokio-io-timeout = "1.2.0"
+tokio-rustls = { workspace = true }
 tower = { workspace = true }
 tower-http = { version = "0.5.2", features = ["limit", "cors"] }
 tracing-flame = "0.2.0"
@@ -67,11 +68,11 @@ url = "2.1.1"
 ic-backtrace = { path = "../../monitoring/backtrace" }
 
 [dev-dependencies]
-ic-agent = { workspace = true }
 ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canonical-state = { path = "../../canonical_state" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
+ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
 ic-interfaces-mocks = { path = "../../interfaces/mocks" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }

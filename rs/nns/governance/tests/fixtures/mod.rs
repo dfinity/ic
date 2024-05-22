@@ -860,19 +860,16 @@ impl NNS {
         controller: &PrincipalId,
         source: &NeuronId,
     ) -> ManageNeuronResponse {
-        self.governance
-            .simulate_manage_neuron(
-                controller,
-                ManageNeuron {
-                    id: Some(*target),
-                    neuron_id_or_subaccount: None,
-                    command: Some(Command::Merge(Merge {
-                        source_neuron_id: Some(*source),
-                    })),
-                },
-            )
-            .now_or_never()
-            .unwrap()
+        self.governance.simulate_manage_neuron(
+            controller,
+            ManageNeuron {
+                id: Some(*target),
+                neuron_id_or_subaccount: None,
+                command: Some(Command::Merge(Merge {
+                    source_neuron_id: Some(*source),
+                })),
+            },
+        )
     }
 
     pub fn get_neuron(&self, ident: &NeuronId) -> Neuron {

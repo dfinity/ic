@@ -27,9 +27,13 @@ pub struct SubnetTopology {
     #[prost(message, optional, tag = "4")]
     pub subnet_features:
         ::core::option::Option<super::super::super::registry::subnet::v1::SubnetFeatures>,
+    /// TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
     #[prost(message, repeated, tag = "5")]
     pub ecdsa_keys_held:
         ::prost::alloc::vec::Vec<super::super::super::registry::crypto::v1::EcdsaKeyId>,
+    #[prost(message, repeated, tag = "6")]
+    pub idkg_keys_held:
+        ::prost::alloc::vec::Vec<super::super::super::registry::crypto::v1::MasterPublicKeyId>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -39,11 +43,21 @@ pub struct SubnetsEntry {
     #[prost(message, optional, tag = "2")]
     pub subnet_topology: ::core::option::Option<SubnetTopology>,
 }
+/// TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaKeyEntry {
     #[prost(message, optional, tag = "3")]
     pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::EcdsaKeyId>,
+    #[prost(message, repeated, tag = "2")]
+    pub subnet_ids: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IDkgKeyEntry {
+    #[prost(message, optional, tag = "1")]
+    pub key_id:
+        ::core::option::Option<super::super::super::registry::crypto::v1::MasterPublicKeyId>,
     #[prost(message, repeated, tag = "2")]
     pub subnet_ids: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
@@ -61,8 +75,11 @@ pub struct NetworkTopology {
     pub canister_migrations: ::core::option::Option<
         super::super::super::registry::routing_table::v1::CanisterMigrations,
     >,
+    /// TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
     #[prost(message, repeated, tag = "5")]
     pub ecdsa_signing_subnets: ::prost::alloc::vec::Vec<EcdsaKeyEntry>,
+    #[prost(message, repeated, tag = "8")]
+    pub idkg_signing_subnets: ::prost::alloc::vec::Vec<IDkgKeyEntry>,
     #[prost(message, repeated, tag = "6")]
     pub bitcoin_testnet_canister_ids:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,

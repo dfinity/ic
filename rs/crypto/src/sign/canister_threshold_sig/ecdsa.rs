@@ -3,8 +3,8 @@ use super::MasterPublicKeyExtractionError;
 use ic_crypto_internal_csp::vault::api::{CspVault, IDkgTranscriptInternalBytes};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     combine_ecdsa_signature_shares, verify_ecdsa_signature_share, verify_ecdsa_threshold_signature,
-    DerivationPath, EccCurveType, IDkgTranscriptInternal, ThresholdEcdsaCombinedSigInternal,
-    ThresholdEcdsaSerializationError, ThresholdEcdsaSigShareInternal,
+    CanisterThresholdSerializationError, DerivationPath, EccCurveType, IDkgTranscriptInternal,
+    ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
     ThresholdEcdsaVerifySigShareInternalError, ThresholdEcdsaVerifySignatureInternalError,
 };
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -83,7 +83,7 @@ pub fn verify_sig_share(
     inputs: &ThresholdEcdsaSigInputs,
     share: &ThresholdEcdsaSigShare,
 ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
-    fn conv_error(e: ThresholdEcdsaSerializationError) -> ThresholdEcdsaVerifySigShareError {
+    fn conv_error(e: CanisterThresholdSerializationError) -> ThresholdEcdsaVerifySigShareError {
         ThresholdEcdsaVerifySigShareError::SerializationError {
             internal_error: e.0,
         }
@@ -148,7 +148,7 @@ pub fn verify_combined_signature(
     signature: &ThresholdEcdsaCombinedSignature,
 ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
     fn conv_error(
-        e: ThresholdEcdsaSerializationError,
+        e: CanisterThresholdSerializationError,
     ) -> ThresholdEcdsaVerifyCombinedSignatureError {
         ThresholdEcdsaVerifyCombinedSignatureError::SerializationError {
             internal_error: e.0,
@@ -199,7 +199,7 @@ pub fn combine_sig_shares(
     inputs: &ThresholdEcdsaSigInputs,
     shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
 ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
-    fn conv_error(e: ThresholdEcdsaSerializationError) -> ThresholdEcdsaCombineSigSharesError {
+    fn conv_error(e: CanisterThresholdSerializationError) -> ThresholdEcdsaCombineSigSharesError {
         ThresholdEcdsaCombineSigSharesError::SerializationError {
             internal_error: e.0,
         }

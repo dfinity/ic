@@ -16,7 +16,7 @@ use ic_replicated_state::{
 use ic_state_machine_tests::{Cycles, IngressStatus, WasmResult};
 use ic_sys::PAGE_SIZE;
 use ic_types::messages::{CallbackId, RequestMetadata};
-use ic_types::{NumInstructions, NumPages};
+use ic_types::{NumInstructions, NumOsPages};
 use ic_universal_canister::{call_args, wasm};
 
 use ic_test_utilities_execution_environment::{
@@ -48,10 +48,35 @@ fn wat_writing_to_each_stable_memory_page(memory_amount: u64) -> String {
     )
 }
 
+fn wat_writing_to_each_stable_memory_page_long_execution(memory_amount: u64) -> String {
+    format!(
+        r#"
+        (module
+            (import "ic0" "stable64_write"
+                (func $stable_write (param $offset i64) (param $src i64) (param $size i64))
+            )
+            (import "ic0" "stable64_grow" (func $stable_grow (param i64) (result i64)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_init") (local i64)
+                (local.set 0 (i64.const 0))
+                (drop (call $stable_grow (i64.const 10)))
+                (loop $loop
+                    (call $stable_write (local.get 0) (i64.const 0) (i64.const 1))
+                    (local.set 0 (i64.add (local.get 0) (i64.const 4096))) (;increment by OS page size;)
+                    (br_if $loop (i64.lt_s (local.get 0) (i64.const {}))) (;loop if value is within the memory amount;)
+                )
+                (call $msg_reply)
+            )
+            (memory (export "memory") 1)
+        )"#,
+        memory_amount
+    )
+}
+
 #[test]
 fn can_write_to_each_page_in_stable_memory() {
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(NumPages::new(10))
+        .with_stable_memory_dirty_page_limit(NumOsPages::new(10), NumOsPages::new(10))
         .build();
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64);
     let canister_id = test.canister_from_wat(wat).unwrap();
@@ -310,8 +335,9 @@ fn dirty_pages_are_free_on_system_subnet() {
 
 #[test]
 fn hitting_page_delta_limit_fails_message() {
+    let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(NumPages::from(10))
+        .with_stable_memory_dirty_page_limit(NumOsPages::from(no_pages), NumOsPages::from(no_pages))
         .build();
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
     let canister_id = test.canister_from_wat(wat).unwrap();
@@ -319,15 +345,72 @@ fn hitting_page_delta_limit_fails_message() {
     assert_eq!(result.code(), ErrorCode::CanisterMemoryAccessLimitExceeded);
     assert_eq!(
         result.description(),
+        format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
+        no_pages * (PAGE_SIZE as u64 / 1024), no_pages * (PAGE_SIZE as u64 / 1024))
+    );
+}
+
+#[test]
+fn hitting_page_delta_limit_fails_message_system_subnet() {
+    let no_pages = 10;
+    let mut test = ExecutionTestBuilder::new()
+        .with_stable_memory_dirty_page_limit(NumOsPages::from(no_pages), NumOsPages::from(no_pages))
+        .with_subnet_type(SubnetType::System)
+        .build();
+    let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
+    assert_eq!(result.code(), ErrorCode::CanisterMemoryAccessLimitExceeded);
+    assert_eq!(
+        result.description(),
+        format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
+        no_pages * (PAGE_SIZE as u64 / 1024), no_pages * (PAGE_SIZE as u64 / 1024))
+    );
+}
+
+#[test]
+fn hitting_page_delta_limit_fails_for_long_message() {
+    let no_pages = 10;
+    let mut test = ExecutionTestBuilder::new()
+        .with_stable_memory_dirty_page_limit(NumOsPages::from(no_pages), NumOsPages::from(no_pages))
+        .build();
+    let wat = wat_writing_to_each_stable_memory_page_long_execution(10 * PAGE_SIZE as u64 + 1);
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    let result = test.install_canister(canister_id, wat::parse_str(wat).unwrap());
+
+    assert!(result.clone().unwrap_err().code() == ErrorCode::CanisterMemoryAccessLimitExceeded);
+    assert_eq!(
+        result.unwrap_err().description(),
+        format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
+         no_pages * (PAGE_SIZE as u64 / 1024), no_pages * (PAGE_SIZE as u64 / 1024))
+    );
+}
+
+#[test]
+fn hitting_page_delta_limit_fails_for_long_message_non_native_stable() {
+    let no_pages = 10;
+    let mut test = ExecutionTestBuilder::new()
+        .with_stable_memory_dirty_page_limit(NumOsPages::from(no_pages), NumOsPages::from(no_pages))
+        .with_non_native_stable()
+        .build();
+    let wat = wat_writing_to_each_stable_memory_page_long_execution(10 * PAGE_SIZE as u64 + 1);
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    let result = test.install_canister(canister_id, wat::parse_str(wat).unwrap());
+
+    assert!(result.clone().unwrap_err().code() == ErrorCode::CanisterMemoryAccessLimitExceeded);
+    assert_eq!(
+        result.unwrap_err().description(),
         format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the \
-    number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
+        number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
     );
 }
 
 #[test]
 fn hitting_page_delta_limit_fails_message_non_native_stable() {
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(NumPages::from(10))
+        .with_stable_memory_dirty_page_limit(NumOsPages::from(10), NumOsPages::from(10))
         .with_non_native_stable()
         .build();
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
@@ -337,7 +420,25 @@ fn hitting_page_delta_limit_fails_message_non_native_stable() {
     assert_eq!(
         result.description(),
         format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the \
-    number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
+        number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
+    );
+}
+
+#[test]
+fn hitting_page_delta_limit_fails_message_non_native_stable_system_subnet() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_stable_memory_dirty_page_limit(NumOsPages::from(10), NumOsPages::from(10))
+        .with_non_native_stable()
+        .with_subnet_type(SubnetType::System)
+        .build();
+    let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
+    assert_eq!(result.code(), ErrorCode::CanisterMemoryAccessLimitExceeded);
+    assert_eq!(
+        result.description(),
+        format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the \
+        number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
     );
 }
 
@@ -715,7 +816,7 @@ fn dts_uninstall_with_aborted_update() {
     assert_eq!(
         err.description(),
         format!(
-            "Error from Canister {}: Attempt to execute a message, but the canister contains no Wasm module",
+            "Error from Canister {}: Attempted to execute a message, but the canister contains no Wasm module.",
             canister_id
         )
     );
