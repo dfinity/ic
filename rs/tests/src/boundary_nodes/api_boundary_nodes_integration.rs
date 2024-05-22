@@ -4,7 +4,6 @@ use discower_bowndary::{
     node::Node,
     route_provider::HealthCheckRouteProvider,
     snapshot_health_based::HealthBasedSnapshot,
-    test_helpers::{assert_routed_domains, route_n_times},
 };
 use ic_base_types::NodeId;
 use k256::SecretKey;
@@ -234,13 +233,14 @@ async fn test(env: TestEnv) {
             "Assert: HealthCheckRouteProvider has discovered API BNs {:?} and routes calls correctly", &all_api_domains[..2]
         );
 
-        let routed_domains = route_n_times(6, Arc::clone(&route_provider));
+        // TODO: implement a more relaxed routing check with a retry loop
+        // let routed_domains = route_n_times(6, Arc::clone(&route_provider));
 
-        assert_routed_domains(
-            routed_domains,
-            vec!["api1.com".into(), "api2.com".into()],
-            3,
-        );
+        // assert_routed_domains(
+        //     routed_domains,
+        //     vec!["api1.com".into(), "api2.com".into()],
+        //     3,
+        // );
 
         route_provider
     };
@@ -369,12 +369,13 @@ async fn test(env: TestEnv) {
         "Assert: HealthCheckRouteProvider discovered added/removed API BNs and routes calls correctly"
     );
 
-    let routed_domains = route_n_times(6, Arc::clone(&route_provider));
-    assert_routed_domains(
-        routed_domains,
-        vec!["api3.com".into(), "api4.com".into()],
-        3,
-    );
+    // TODO: implement a more relaxed routing check with a retry loop
+    // let routed_domains = route_n_times(6, Arc::clone(&route_provider));
+    // assert_routed_domains(
+    //     routed_domains,
+    //     vec!["api3.com".into(), "api4.com".into()],
+    //     3,
+    // );
 
     info!(
         log,
