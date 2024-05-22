@@ -1,26 +1,20 @@
 use crate::tls::rustls::cert_resolver::StaticCertResolver;
+use crate::tls::rustls::certified_key;
 use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
 use crate::tls::rustls::node_cert_verifier::NodeServerCertVerifier;
-use crate::tls::rustls::{certified_key, RustlsTlsStream};
 use crate::tls::tls_cert_from_registry;
 use ic_crypto_internal_csp::api::CspTlsHandshakeSignerProvider;
 use ic_crypto_internal_csp::key_id::KeyId;
-use ic_crypto_tls_interfaces::{
-    SomeOrAllNodes, TlsClientHandshakeError, TlsConfigError, TlsStream,
-};
+use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfigError};
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
 use std::sync::Arc;
-use tokio::net::TcpStream;
-use tokio_rustls::{
-    rustls::{
-        cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
-        client::ResolvesClientCert,
-        sign::CertifiedKey,
-        version::TLS13,
-        ClientConfig, ServerName, SignatureScheme,
-    },
-    TlsConnector,
+use tokio_rustls::rustls::{
+    cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
+    client::ResolvesClientCert,
+    sign::CertifiedKey,
+    version::TLS13,
+    ClientConfig, SignatureScheme,
 };
 
 pub fn client_config<P: CspTlsHandshakeSignerProvider>(
@@ -56,46 +50,9 @@ pub fn client_config<P: CspTlsHandshakeSignerProvider>(
         )))
 }
 
-pub async fn perform_tls_client_handshake<P: CspTlsHandshakeSignerProvider>(
-    signer_provider: &P,
-    self_node_id: NodeId,
-    registry_client: Arc<dyn RegistryClient>,
-    tcp_stream: TcpStream,
-    server: NodeId,
-    registry_version: RegistryVersion,
-) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError> {
-    let config = client_config(
-        signer_provider,
-        self_node_id,
-        registry_client,
-        server,
-        registry_version,
-    )?;
-
-    connect(tcp_stream, config).await
-}
-
 fn static_cert_resolver(key: CertifiedKey, scheme: SignatureScheme) -> Arc<dyn ResolvesClientCert> {
     Arc::new(StaticCertResolver::new(key, scheme).expect(
         "Failed to create the static cert resolver because the signing key referenced \
         in the certified key is incompatible with the signature scheme. This is an implementation error.",
     ))
-}
-
-async fn connect(
-    tcp_stream: TcpStream,
-    config: ClientConfig,
-) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError> {
-    let irrelevant_domain =
-        ServerName::try_from("domain.is-irrelevant-as-hostname-verification-is.disabled")
-            .expect("failed to create domain");
-    let tls_stream = TlsConnector::from(Arc::new(config))
-        .connect(irrelevant_domain, tcp_stream)
-        .await
-        .map_err(|e| TlsClientHandshakeError::HandshakeError {
-            internal_error: format!("{}", e),
-        })?;
-    Ok(Box::new(RustlsTlsStream::new(
-        tokio_rustls::TlsStream::from(tls_stream),
-    )))
 }

@@ -7464,7 +7464,6 @@ name = "ic-crypto-tls-interfaces"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "async-trait",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-tls",
  "ic-protobuf",
@@ -7474,7 +7473,6 @@ dependencies = [
  "rustls 0.21.12",
  "serde",
  "thiserror",
- "tokio",
  "x509-parser",
 ]
 
