@@ -98,6 +98,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
+    "@crate_index//:rstest",
     "@crate_index//:serde_bytes",
     "@crate_index//:tower-test",
     "@crate_index//:reqwest",

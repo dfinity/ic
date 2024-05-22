@@ -3136,6 +3136,7 @@ dependencies = [
  "rolling-file",
  "rsa",
  "rstack-self",
+ "rstest",
  "rusb",
  "rusqlite",
  "rust_decimal",
@@ -8823,6 +8824,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
 
 [[package]]
+name = "relative-path"
+version = "1.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
+
+[[package]]
 name = "rend"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9118,6 +9125,35 @@ dependencies = [
  "libc",
  "rstack",
  "serde",
+]
+
+[[package]]
+name = "rstest"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d5316d2a1479eeef1ea21e7f9ddc67c191d497abc8fc3ba2467857abbb68330"
+dependencies = [
+ "futures",
+ "futures-timer",
+ "rstest_macros",
+ "rustc_version",
+]
+
+[[package]]
+name = "rstest_macros"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04a9df72cc1f67020b0d63ad9bfe4a323e459ea7eb68e03bd9824db49f9a4c25"
+dependencies = [
+ "cfg-if 1.0.0",
+ "glob",
+ "proc-macro2 1.0.76",
+ "quote 1.0.35",
+ "regex",
+ "relative-path",
+ "rustc_version",
+ "syn 2.0.48",
+ "unicode-ident",
 ]
 
 [[package]]
