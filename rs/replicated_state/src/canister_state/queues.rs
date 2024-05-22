@@ -915,8 +915,8 @@ impl CanisterQueues {
     }
 
     /// Returns the memory usage of all guaranteed response messages.
-    pub fn memory_usage(&self) -> usize {
-        self.memory_usage_stats.memory_usage()
+    pub fn guaranteed_response_memory_usage(&self) -> usize {
+        self.memory_usage_stats.guaranteed_response_memory_usage()
             + self.pool.message_stats().guaranteed_response_memory_usage()
     }
 
@@ -1592,7 +1592,7 @@ struct MemoryUsageStats {
 impl MemoryUsageStats {
     /// Returns the memory usage of reservations for guaranteed responses plus
     /// guaranteed responses in streans.
-    pub fn memory_usage(&self) -> usize {
+    pub fn guaranteed_response_memory_usage(&self) -> usize {
         self.guaranteed_response_memory_reservations as usize * MAX_RESPONSE_COUNT_BYTES
             + self.transient_stream_responses_size_bytes
     }

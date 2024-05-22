@@ -325,8 +325,9 @@ impl CanisterState {
     /// pass that to `SystemState::induct_messages_to_self()` (which doesn't
     /// have all the data necessary to compute it itself).
     ///
-    /// `subnet_available_memory` is updated to reflect the change in memory
-    /// usage due to inducting the messages.
+    /// `subnet_available_memory` (the subnet's available guaranteed response
+    /// message memory) is updated to reflect the change in memory usage due to
+    /// inducting the messages.
     pub fn induct_messages_to_self(
         &mut self,
         subnet_available_memory: &mut i64,
@@ -380,9 +381,12 @@ impl CanisterState {
             .map_or(NumBytes::from(0), |es| es.memory_usage())
     }
 
-    /// Returns the amount of canister message memory used by the canister in bytes.
+    /// Returns the amount memory used by or reserved for guaranteed response
+    /// canister messages, in bytes.
+    // TODO(MR-551) Rename this to make it clear that it's only for guaranteed
+    // response messages.
     pub fn message_memory_usage(&self) -> NumBytes {
-        self.system_state.message_memory_usage()
+        self.system_state.guaranteed_response_message_memory_usage()
     }
 
     /// Returns the amount of memory used by canisters that have custom Wasm

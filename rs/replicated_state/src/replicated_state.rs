@@ -393,7 +393,7 @@ impl From<&StateError> for ErrorCode {
 
 /// Represents the memory taken in bytes by various resources.
 ///
-/// Should  be used in cases where the deterministic state machine needs to
+/// Should be used in cases where the deterministic state machine needs to
 /// compute how much available memory exists for canisters to use for the
 /// various resources while respecting the relevant configured limits.
 pub struct MemoryTaken {
@@ -402,8 +402,8 @@ pub struct MemoryTaken {
     /// Wasm custom sections) where no explicit memory reservation
     /// has been made.
     execution: NumBytes,
-    /// Memory taken by canister messages.
-    messages: NumBytes,
+    /// Memory taken by guaranteed response canister messages.
+    guaranteed_response_messages: NumBytes,
     /// Memory taken by Wasm Custom Sections.
     wasm_custom_sections: NumBytes,
     /// Memory taken by canister history.
@@ -416,9 +416,9 @@ impl MemoryTaken {
         self.execution
     }
 
-    /// Returns the amount of memory taken by canister messages.
-    pub fn messages(&self) -> NumBytes {
-        self.messages
+    /// Returns the amount of memory taken by guaranteed response canister messages.
+    pub fn guaranteed_response_messages(&self) -> NumBytes {
+        self.guaranteed_response_messages
     }
 
     /// Returns the amount of memory taken by Wasm Custom Sections.
@@ -652,7 +652,7 @@ impl ReplicatedState {
     pub fn memory_taken(&self) -> MemoryTaken {
         let (
             raw_memory_taken,
-            mut message_memory_taken,
+            mut guaranteed_response_message_memory_taken,
             wasm_custom_sections_memory_taken,
             canister_history_memory_taken,
             wasm_chunk_store_memory_usage,
@@ -664,7 +664,9 @@ impl ReplicatedState {
                         MemoryAllocation::Reserved(bytes) => bytes,
                         MemoryAllocation::BestEffort => canister.execution_memory_usage(),
                     },
-                    canister.system_state.message_memory_usage(),
+                    canister
+                        .system_state
+                        .guaranteed_response_message_memory_usage(),
                     canister.wasm_custom_sections_memory_usage(),
                     canister.canister_history_memory_usage(),
                     canister.wasm_chunk_store_memory_usage(),
@@ -681,13 +683,14 @@ impl ReplicatedState {
             })
             .unwrap_or_default();
 
-        message_memory_taken += (self.subnet_queues.memory_usage() as u64).into();
+        guaranteed_response_message_memory_taken +=
+            (self.subnet_queues.guaranteed_response_memory_usage() as u64).into();
 
         MemoryTaken {
             execution: raw_memory_taken
                 + canister_history_memory_taken
                 + wasm_chunk_store_memory_usage,
-            messages: message_memory_taken,
+            guaranteed_response_messages: guaranteed_response_message_memory_taken,
             wasm_custom_sections: wasm_custom_sections_memory_taken,
             canister_history: canister_history_memory_taken,
         }
@@ -697,12 +700,17 @@ impl ReplicatedState {
     ///
     /// This is a more efficient alternative to `memory_taken()` for cases when only
     /// the message memory usage is necessary.
-    pub fn message_memory_taken(&self) -> NumBytes {
+    pub fn guaranteed_response_message_memory_taken(&self) -> NumBytes {
         let canisters_memory_usage: NumBytes = self
             .canisters_iter()
-            .map(|canister| canister.system_state.message_memory_usage())
+            .map(|canister| {
+                canister
+                    .system_state
+                    .guaranteed_response_message_memory_usage()
+            })
             .sum();
-        let subnet_memory_usage = (self.subnet_queues.memory_usage() as u64).into();
+        let subnet_memory_usage =
+            (self.subnet_queues.guaranteed_response_memory_usage() as u64).into();
 
         canisters_memory_usage + subnet_memory_usage
     }

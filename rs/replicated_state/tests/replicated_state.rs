@@ -160,8 +160,8 @@ impl ReplicatedStateFixture {
         self.state.memory_taken()
     }
 
-    fn message_memory_taken(&self) -> NumBytes {
-        self.state.message_memory_taken()
+    fn guaranteed_response_message_memory_taken(&self) -> NumBytes {
+        self.state.guaranteed_response_message_memory_taken()
     }
 
     fn remote_subnet_input_schedule(&self, canister: &CanisterId) -> &VecDeque<CanisterId> {
@@ -193,11 +193,11 @@ fn assert_execution_memory_taken(total_memory_usage: usize, fixture: &Replicated
 fn assert_message_memory_taken(queues_memory_usage: usize, fixture: &ReplicatedStateFixture) {
     assert_eq!(
         queues_memory_usage as u64,
-        fixture.memory_taken().messages().get()
+        fixture.memory_taken().guaranteed_response_messages().get()
     );
     assert_eq!(
         queues_memory_usage as u64,
-        fixture.message_memory_taken().get()
+        fixture.guaranteed_response_message_memory_taken().get()
     );
 }
 
