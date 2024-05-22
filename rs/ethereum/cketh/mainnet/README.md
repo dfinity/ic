@@ -1,3 +1,4 @@
+# ckETH Mainnet Deployment
 This directory contains the deployed arguments and canister IDs related to ckETH.
 
 The canisters have been create on pzp6e, the fiduciary subnet.
@@ -160,6 +161,19 @@ Installing the canister:
     --arg index_arg.bin \
     --summary-file ./index_proposal.md
 ```
+
+## Deployment of ckERC20
+
+Tasks:
+1. [x] Create empty canister for the orchestrator, see `vxkom-oyaaa-aaaar-qafda-cai`.
+2. [x] Change controller of the orchestrator to the NNS root `r7inp-6aaaa-aaaaa-aaabq-cai` and self `vxkom-oyaaa-aaaar-qafda-cai`.
+3. [x] Install the orchestrator canister wasm via NNS proposal, see the [proposal](orchestrator_install_2024_05_10).
+4. [x] Deploy the ckERC20 deposit helper smart contract on Ethereum mainnet.
+5. [x] Upgrade the minter canister via NNS proposal to support ckERC20, see the [proposal](minter_upgrade_2024_05_10).
+6. [x] Add at least 500T cycles to the orchestrator canister `vxkom-oyaaa-aaaar-qafda-cai`.
+7. [x] Add ckUSDC by upgrading the orchestrator via NNS proposal, see the [proposal](orchestrator_upgrade_2024_05_19).
+
+Step 3 and (4,5) could happen in any order (first 3, then (4.5); or first (4,5), then 3). It's crucial that the last step happens after step 5 so that the minter is aware of the orchestrator, which will notify the minter when a new token is added.
 
 ## Test the proposals on a testnet
 
