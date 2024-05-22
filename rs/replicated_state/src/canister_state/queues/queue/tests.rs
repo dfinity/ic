@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 use ic_test_utilities_types::arbitrary;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
-use ic_types::messages::RequestOrResponse;
+use ic_types::messages::{CallbackId, RequestOrResponse};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::Time;
 use proptest::prelude::*;
@@ -39,7 +39,7 @@ fn canister_queue_push_request_succeeds() {
     const CAPACITY: usize = 1;
     let mut queue = CanisterQueue::new(CAPACITY);
 
-    let id = new_request_message_id(13);
+    let id = new_request_message_id(13, Class::BestEffort);
     queue.push_request(id);
 
     assert_eq!(1, queue.len());
@@ -141,7 +141,7 @@ fn canister_queue_push_request_to_full_queue_fails() {
     const CAPACITY: usize = 2;
     let mut queue = CanisterQueue::new(CAPACITY);
     for i in 0..CAPACITY {
-        queue.push_request(new_request_message_id(i as u64));
+        queue.push_request(new_request_message_id(i as u64, Class::BestEffort));
     }
 
     assert_eq!(CAPACITY, queue.len());
@@ -159,7 +159,7 @@ fn canister_queue_push_request_to_full_queue_fails() {
     );
     assert_eq!(0, queue.response_memory_reservations());
 
-    queue.push_request(new_request_message_id(13));
+    queue.push_request(new_request_message_id(13, Class::BestEffort));
 }
 
 /// Test that overfilling an output queue with slot reservations results in
@@ -236,7 +236,7 @@ fn canister_queue_full_duplex() {
     const CAPACITY: usize = 2;
     let mut queue = CanisterQueue::new(CAPACITY);
     for i in 0..CAPACITY as u64 {
-        queue.push_request(new_request_message_id(i * 2));
+        queue.push_request(new_request_message_id(i * 2, Class::BestEffort));
         queue
             .try_reserve_response_slot(&make_request(i, Class::BestEffort))
             .unwrap();
@@ -265,7 +265,7 @@ fn canister_queue_push_without_reserved_slot_panics() {
 }
 
 #[test]
-#[should_panic(expected = "assertion failed: self.response_memory_reservations > 0")]
+#[should_panic(expected = "InvariantBroken(\"No guaranteed response memory reservation\")")]
 fn canister_queue_push_without_memory_reservation_panics() {
     let mut queue = CanisterQueue::new(10);
     // Reserve a best-effort slot.
@@ -290,26 +290,13 @@ fn canister_queue_push_without_consuming_memory_reservation_panics() {
     queue.push_response(new_response_message_id(13, Class::BestEffort));
 }
 
-#[test]
-fn canister_queue_empty_size_bytes() {
-    let pool = MessagePool::default();
-
-    assert_eq!(
-        CanisterQueue::new(1).calculate_size_bytes(&pool),
-        CanisterQueue::empty_size_bytes()
-    );
-    assert_eq!(
-        CanisterQueue::new(10).calculate_size_bytes(&pool),
-        CanisterQueue::empty_size_bytes()
-    );
-}
-
 /// Generator for an arbitrary `MessageReference`.
 fn arbitrary_message_reference() -> impl Strategy<Value = MessageReference> {
     prop_oneof![
-        5 => any::<u64>().prop_map(|gen| MessageReference::Request(new_request_message_id(gen))),
-        4 => any::<u64>().prop_map(|gen| MessageReference::Response(new_response_message_id(gen, Class::BestEffort))),
-        1 => any::<u64>().prop_map(|id| MessageReference::LocalRejectResponse(CallbackId::new(id))),
+        1 => any::<u64>().prop_map(|gen| MessageReference::Request(new_request_message_id(gen, Class::GuaranteedResponse))),
+        1 => any::<u64>().prop_map(|gen| MessageReference::Request(new_request_message_id(gen, Class::BestEffort))),
+        1 => any::<u64>().prop_map(|gen| MessageReference::Response(new_response_message_id(gen, Class::GuaranteedResponse))),
+        1 => any::<u64>().prop_map(|gen| MessageReference::Response(new_response_message_id(gen, Class::BestEffort))),
     ]
 }
 
@@ -333,16 +320,6 @@ proptest! {
                 MessageReference::Response(id) => {
                     queue.try_reserve_response_slot(&make_request(13, id.class())).unwrap();
                     queue.push_response(*id);
-                }
-                MessageReference::LocalRejectResponse(callback) => {
-                    let class = if callback.get() % 2 == 0 {
-                        Class::BestEffort
-                    } else {
-                        Class::GuaranteedResponse
-                    };
-                    let req = make_request(callback.get(), class);
-                    queue.try_reserve_response_slot(&req).unwrap();
-                    queue.push_local_reject_response(&req);
                 }
             }
             prop_assert!(queue.check_invariants());
@@ -377,7 +354,7 @@ fn canister_queue_calculate_stats() {
     queue.push_response(rep_id);
 
     // Push a stale request reference onto the queue.
-    let stale_req_id = new_request_message_id(13);
+    let stale_req_id = new_request_message_id(13, Class::BestEffort);
     queue.push_request(stale_req_id);
 
     // Push a stale response reference onto the queue.
@@ -387,28 +364,18 @@ fn canister_queue_calculate_stats() {
         .unwrap();
     queue.push_response(stale_rep_id);
 
-    // Push a local reject response reference onto the queue.
-    let request = make_request(16, Class::GuaranteedResponse);
-    queue.try_reserve_response_slot(&request).unwrap();
-    queue.push_local_reject_response(&request);
-
     // Validate the calculated stats.
     assert_eq!(
-        CanisterQueue::empty_size_bytes() + req.count_bytes() + rep.count_bytes(),
-        queue.calculate_size_bytes(&pool)
+        req.count_bytes() + rep.count_bytes(),
+        pool.message_stats().size_bytes
     );
-    // Two active references and one local reject response.
-    assert_eq!(3, queue.calculate_message_count(&pool));
-    // One active response reference and one local reject response.
-    assert_eq!(2, queue.calculate_response_count(&pool));
-    // One active request (20) and one active response (21).
+    // Two active references.
+    assert_eq!(2, pool.message_stats().inbound_message_count);
+    // One active response reference.
+    assert_eq!(1, pool.message_stats().inbound_response_count);
+    // 2 request references (20 each) and 2 response references (21 each).
     assert_eq!(
-        41,
-        queue.calculate_stat_sum(|msg| 20 + msg.is_response() as usize, &pool)
-    );
-    // 2 response references (20 each) and 3 response references (21 each).
-    assert_eq!(
-        103,
+        82,
         queue.calculate_reference_stat_sum(|r| 20 + r.is_response() as usize)
     );
 }

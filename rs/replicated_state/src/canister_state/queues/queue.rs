@@ -6,11 +6,10 @@ use crate::StateError;
 use ic_base_types::CanisterId;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::{ingress::v1 as pb_ingress, queues::v1 as pb_queues};
-use ic_types::messages::{CallbackId, Ingress, Request, RequestOrResponse, Response, NO_DEADLINE};
+use ic_types::messages::{Ingress, Request, RequestOrResponse, Response, NO_DEADLINE};
 use ic_types::{CountBytes, Cycles, Time};
 use std::collections::{BTreeMap, VecDeque};
 use std::convert::{From, TryFrom, TryInto};
-use std::iter::Sum;
 use std::mem::size_of;
 use std::sync::Arc;
 
@@ -37,8 +36,9 @@ pub(super) enum MessageReference {
     /// Weak reference to a `Response` held in the message pool.
     ///
     /// Best-effort responses in output queues may time out and be dropped from the
-    /// pool. Guaranteed responses never time out. All best-effort responses are
-    /// subject to load shedding and may be dropped from the pool at any time.
+    /// pool. Best-effort responses in input queues and guaranteed responses never
+    /// time out. Additionally, best-effort responses are subject to load shedding
+    /// and may be dropped from the pool at any time.
     ///
     /// Stale response references in output queues can be safely ignored.
     ///
@@ -49,24 +49,29 @@ pub(super) enum MessageReference {
     /// `SYS_UNKNOWN` reject responses to best-effort calls ("timeout" if deadline
     /// has expired, "drop" otherwise.)
     Response(MessageId),
+    //
+    // TODO(MR-552) Define and use variants for best-effort and guaranteed reject
+    // responses, so we don't need to allocate a full message.
 
-    /// Local known (i.e. `SYS_TRANSIENT`) reject response: "timeout" if deadline
-    /// has expired, "drop" otherwise.
-    LocalRejectResponse(CallbackId),
+    // Local known (i.e. `SYS_TRANSIENT`) reject for a guaranteed response call:
+    // "timeout" if deadline has expired, "drop" otherwise.
+    // LocalRejectGuaranteedResponse(CallbackId),
+
+    // Local known (i.e. `SYS_TRANSIENT`) reject for a best-effort response call:
+    // "timeout" if deadline has expired, "drop" otherwise.
+    // LocalRejectBestEffortResponse(CallbackId),
 }
 
 impl MessageReference {
     /// Returns `true` if this is a reference to a response; or a reject response.
     pub(super) fn is_response(&self) -> bool {
-        matches!(self, Self::Response(_) | Self::LocalRejectResponse(_))
+        matches!(self, Self::Response(_))
     }
 
-    /// Returns the `MessageId` behind this reference, if any; `None` if this is a
-    /// reject response marker.
-    pub(super) fn id(&self) -> Option<MessageId> {
+    /// Returns the `MessageId` behind this reference.
+    pub(super) fn id(&self) -> MessageId {
         match self {
-            Self::Request(id) | Self::Response(id) => Some(*id),
-            Self::LocalRejectResponse(_) => None,
+            Self::Request(id) | Self::Response(id) => *id,
         }
     }
 }
@@ -101,8 +106,8 @@ pub(crate) struct CanisterQueue {
     ///
     /// Since responses may be enqueued at arbitrary points in time, reserved slots
     /// for responses cannot be explicitly represented in `queue`. They only exist
-    /// as the difference between `request_slots` and the number of actually
-    /// enqueued request references (also equal to `request_slots + response_slots
+    /// as the difference between `response_slots` and the number of actually
+    /// enqueued response references (calculated as `request_slots + response_slots
     /// - queue.len()`).
     queue: VecDeque<MessageReference>,
 
@@ -110,10 +115,10 @@ pub(crate) struct CanisterQueue {
     /// in the queue at any one time.
     capacity: usize,
 
-    /// Number of enqueued requests.
+    /// Number of enqueued request references.
     request_slots: usize,
 
-    /// Number of slots used by enqueued responses or reserved for expected
+    /// Number of slots used by response references or reserved for expected
     /// responses.
     response_slots: usize,
 
@@ -122,6 +127,9 @@ pub(crate) struct CanisterQueue {
 }
 
 impl CanisterQueue {
+    /// The memoty overhead of an empty `CanisterQueue`, in bytes.
+    pub const EMPTY_SIZE_BYTES: usize = size_of::<CanisterQueue>();
+
     /// Creates a new `CanisterQueue` with the given capacity.
     pub(super) fn new(capacity: usize) -> Self {
         Self {
@@ -135,7 +143,8 @@ impl CanisterQueue {
 
     /// Returns the number slots available for requests.
     pub(super) fn available_request_slots(&self) -> usize {
-        self.capacity.checked_sub(self.request_slots).unwrap()
+        debug_assert!(self.request_slots <= self.capacity);
+        self.capacity - self.request_slots
     }
 
     /// Returns `Ok(())` if there exists at least one available request slot,
@@ -163,7 +172,8 @@ impl CanisterQueue {
 
     /// Returns the number of response slots available for reservation.
     pub(super) fn available_response_slots(&self) -> usize {
-        self.capacity.checked_sub(self.response_slots).unwrap()
+        debug_assert!(self.response_slots <= self.capacity);
+        self.capacity - self.response_slots
     }
 
     /// Reserves a slot for the response to the given request, if available; else
@@ -172,6 +182,7 @@ impl CanisterQueue {
     /// If the request is for a guaranteed response call, also reserves memory for
     /// the response.
     pub(super) fn try_reserve_response_slot(&mut self, req: &Request) -> Result<(), StateError> {
+        debug_assert!(self.response_slots <= self.capacity);
         if self.response_slots >= self.capacity {
             return Err(StateError::QueueFull {
                 capacity: self.capacity,
@@ -188,16 +199,13 @@ impl CanisterQueue {
 
     /// Returns the number of reserved response slots.
     pub(super) fn reserved_slots(&self) -> usize {
-        (self.request_slots + self.response_slots)
-            .checked_sub(self.queue.len())
-            .unwrap()
+        debug_assert!(self.request_slots + self.response_slots >= self.queue.len());
+        self.request_slots + self.response_slots - self.queue.len()
     }
 
-    /// Returns `Ok(())` if there exists at least one reserved response slot,
+    /// Returns `Ok(())` if there exists at least one reserved response slot and
+    /// (iff `class` is `GuaranteedResponse`) one response memory reservation,
     /// `Err(StateError::InvariantBroken)` otherwise.
-    ///
-    /// Panics if `class` is `GuaranteedResponse` and no guaranteed response
-    /// memory reservation exists.
     pub(super) fn check_has_reserved_response_slot(&self, class: Class) -> Result<(), StateError> {
         if self.request_slots + self.response_slots <= self.queue.len() {
             return Err(StateError::InvariantBroken(
@@ -205,14 +213,13 @@ impl CanisterQueue {
             ));
         }
 
-        if class == Class::GuaranteedResponse {
+        if class == Class::GuaranteedResponse && self.response_memory_reservations == 0 {
             // Guaranteed response, we must have a memory reservation for it.
-            //
-            // It is safe to assert here, as this is either an outbound response and we made
-            // a memory reservation for it; or an inbound response and we checked its class
-            // against that of the matching call context when inducting it).
-            assert!(self.response_memory_reservations > 0);
+            return Err(StateError::InvariantBroken(
+                "No guaranteed response memory reservation".to_string(),
+            ));
         }
+
         Ok(())
     }
 
@@ -237,38 +244,16 @@ impl CanisterQueue {
         debug_assert!(self.check_invariants());
     }
 
-    /// Enqueues a local `SYS_TRANSIENT` reject response for the given request into
-    /// a reserved slot, consuming the slot.
-    ///
-    /// Panics if there is no reserved response slot or if this is a guaranteed
-    /// response call and there is no guaranteed response memory reservation.
-    pub(super) fn push_local_reject_response(&mut self, own_request: &Request) {
-        let class = if own_request.deadline == NO_DEADLINE {
-            Class::GuaranteedResponse
-        } else {
-            Class::BestEffort
-        };
-        self.check_has_reserved_response_slot(class).unwrap();
-
-        if class == Class::GuaranteedResponse {
-            // Consume one memory reservation.
-            self.response_memory_reservations -= 1;
-        }
-
-        self.queue.push_back(MessageReference::LocalRejectResponse(
-            own_request.sender_reply_callback,
-        ));
-        debug_assert!(self.check_invariants());
-    }
-
     /// Pops a reference from the queue. Returns `None` if the queue is empty.
     pub(super) fn pop(&mut self) -> Option<MessageReference> {
         let reference = self.queue.pop_front()?;
 
         if reference.is_response() {
-            self.response_slots = self.response_slots.checked_sub(1).unwrap();
+            debug_assert!(self.response_slots > 0);
+            self.response_slots -= 1;
         } else {
-            self.request_slots = self.request_slots.checked_sub(1).unwrap();
+            debug_assert!(self.request_slots > 0);
+            self.request_slots -= 1;
         }
         debug_assert!(self.check_invariants());
 
@@ -296,30 +281,17 @@ impl CanisterQueue {
         self.queue.len()
     }
 
-    /// Calculates the size in bytes, including struct and messages.
-    ///
-    /// Time complexity: `O(n * log(n))`.
-    pub(super) fn calculate_size_bytes(&self, pool: &MessagePool) -> usize {
-        size_of::<Self>() + self.calculate_stat_sum(CountBytes::count_bytes, pool)
-    }
-
-    /// Returns the byte size of an empty `CanisterQueue`. This is the same number
-    /// that `Self::new(capacity).calculate_size_bytes()` would return.
-    pub(super) fn empty_size_bytes() -> usize {
-        size_of::<Self>()
-    }
-
     /// Calculates the number of messages (non-stale references or reject response
     /// markers) in the queue.
     ///
     /// Time complexity: `O(n * log(n))`.
+    // FIXME Drop this.
     pub(super) fn calculate_message_count(&self, pool: &MessagePool) -> usize {
         use MessageReference::*;
 
         self.calculate_reference_stat_sum(|reference| match reference {
             Request(id) => pool.get_request(*id).is_some() as usize,
             Response(id) => pool.get_response(*id).is_some() as usize,
-            LocalRejectResponse(_) => 1,
         })
     }
 
@@ -327,57 +299,40 @@ impl CanisterQueue {
     /// markers) in the queue.
     ///
     /// Time complexity: `O(n * log(n))`.
+    // FIXME Drop this.
     pub(super) fn calculate_response_count(&self, pool: &MessagePool) -> usize {
         use MessageReference::*;
 
         self.calculate_reference_stat_sum(|reference| match reference {
             Request(_) => 0,
             Response(id) => pool.get_response(*id).is_some() as usize,
-            LocalRejectResponse(_) => 1,
         })
     }
 
     /// Counts guaranteed response request references (live or stale) in the queue.
     ///
     /// Time complexity: `O(n)`.
+    // FIXME Drop this.
     pub(super) fn count_guaranteed_request_references(&self) -> usize {
         use MessageReference::*;
 
         self.calculate_reference_stat_sum(|reference| match reference {
             Request(id) => (id.class() == Class::GuaranteedResponse) as usize,
             Response(_) => 0,
-            LocalRejectResponse(_) => 0,
         })
     }
 
     /// Counts guaranteed response references in the queue.
     ///
     /// Time complexity: `O(n)`.
+    // FIXME Drop this.
     pub(super) fn count_guaranteed_response_references(&self) -> usize {
         use MessageReference::*;
 
         self.calculate_reference_stat_sum(|reference| match reference {
             Request(_) => 0,
             Response(id) => (id.class() == Class::GuaranteedResponse) as usize,
-            // FIXME: Some of these may be guaranteed responses.
-            LocalRejectResponse(_) => 0,
         })
-    }
-
-    /// Calculates the sum of the given stat across all (non-stale) enqueued
-    /// messages.
-    ///
-    /// Time complexity: `O(n * log(n))`.
-    pub(super) fn calculate_stat_sum<S: Sum<S>>(
-        &self,
-        stat: impl Fn(&RequestOrResponse) -> S,
-        pool: &MessagePool,
-    ) -> S {
-        self.queue
-            .iter()
-            .filter_map(|reference| pool.get(reference.id()?))
-            .map(stat)
-            .sum()
     }
 
     /// Calculates the sum of the given stat across all enqueued references.
@@ -417,7 +372,7 @@ impl CanisterQueue {
         // FIXME: Get rid of this.
         self.queue
             .iter()
-            .filter_map(|reference| pool.get(reference.id()?).cloned())
+            .filter_map(|reference| pool.get(reference.id()).cloned())
     }
 }
 
@@ -1254,10 +1209,11 @@ pub(super) struct IngressQueue {
     size_bytes: usize,
 }
 
-const PER_CANISTER_QUEUE_OVERHEAD_BYTES: usize =
-    size_of::<Option<CanisterId>>() + size_of::<VecDeque<Arc<Ingress>>>();
-
 impl IngressQueue {
+    /// The memoty overhead of a per-canister ingress queue, in bytes.
+    const PER_CANISTER_QUEUE_OVERHEAD_BYTES: usize =
+        size_of::<Option<CanisterId>>() + size_of::<VecDeque<Arc<Ingress>>>();
+
     /// Pushes a new ingress message to the back of the queue.
     pub(super) fn push(&mut self, msg: Ingress) {
         let msg_size = Self::ingress_size_bytes(&msg);
@@ -1265,7 +1221,7 @@ impl IngressQueue {
 
         if receiver_ingress_queue.is_empty() {
             self.schedule.push_back(msg.effective_canister_id);
-            self.size_bytes += PER_CANISTER_QUEUE_OVERHEAD_BYTES;
+            self.size_bytes += Self::PER_CANISTER_QUEUE_OVERHEAD_BYTES;
         }
 
         receiver_ingress_queue.push_back(Arc::new(msg));
@@ -1290,7 +1246,7 @@ impl IngressQueue {
             self.schedule.push_back(canister_id);
         } else {
             self.queues.remove(&canister_id);
-            self.size_bytes -= PER_CANISTER_QUEUE_OVERHEAD_BYTES;
+            self.size_bytes -= Self::PER_CANISTER_QUEUE_OVERHEAD_BYTES;
         }
 
         let msg = res.unwrap();
@@ -1364,7 +1320,7 @@ impl IngressQueue {
             let canister_ingress_queue = self.queues.get(canister_id).unwrap();
             if canister_ingress_queue.is_empty() {
                 self.queues.remove(canister_id);
-                self.size_bytes -= PER_CANISTER_QUEUE_OVERHEAD_BYTES;
+                self.size_bytes -= Self::PER_CANISTER_QUEUE_OVERHEAD_BYTES;
                 false
             } else {
                 true
@@ -1392,7 +1348,7 @@ impl IngressQueue {
                 .iter()
                 .map(|i| Self::ingress_size_bytes(i))
                 .sum::<usize>()
-                + PER_CANISTER_QUEUE_OVERHEAD_BYTES;
+                + Self::PER_CANISTER_QUEUE_OVERHEAD_BYTES;
         }
         size
     }

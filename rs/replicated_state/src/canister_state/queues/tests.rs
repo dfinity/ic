@@ -16,6 +16,7 @@ use ic_test_utilities_types::{
 use ic_types::{
     messages::{CallbackId, CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE},
     time::{expiry_time_from_now, CoarseTime, UNIX_EPOCH},
+    Cycles,
 };
 use maplit::{btreemap, btreeset};
 use proptest::prelude::*;
@@ -1109,7 +1110,7 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
 #[test]
 fn test_message_stats_oversized_requests() {
     let mut queues = CanisterQueues::default();
-    let iq_size: usize = CanisterQueue::empty_size_bytes();
+    let iq_size: usize = CanisterQueue::EMPTY_SIZE_BYTES;
 
     assert_eq!(InputQueuesStats::default(), queues.input_queues_stats);
     assert_eq!(OutputQueuesStats::default(), queues.output_queues_stats);
@@ -1151,17 +1152,17 @@ fn test_message_stats_oversized_requests() {
 
     // One input queue, two inbound messages and two reserved slots.
     let expected_iq_stats = InputQueuesStats {
-        message_count: 2,
-        response_count: 0,
+        // message_count: 2,
+        // response_count: 0,
         reserved_slots: 2,
-        size_bytes: iq_size + best_effort_size_bytes + guaranteed_size_bytes,
-        guaranteed_request_count: 1,
-        guaranteed_response_count: 0,
+        // size_bytes: iq_size + best_effort_size_bytes + guaranteed_size_bytes,
+        // guaranteed_request_count: 1,
+        // guaranteed_response_count: 0,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Two messages in output queues.
     let expected_oq_stats = OutputQueuesStats {
-        message_count: 2,
+        // message_count: 2,
         reserved_slots: 2,
     };
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1198,17 +1199,17 @@ fn test_message_stats_oversized_requests() {
 
     // One input queue, two reserved slots.
     let expected_iq_stats = InputQueuesStats {
-        message_count: 0,
-        response_count: 0,
+        // message_count: 0,
+        // response_count: 0,
         reserved_slots: 2,
-        size_bytes: iq_size,
-        guaranteed_request_count: 0,
-        guaranteed_response_count: 0,
+        // size_bytes: iq_size,
+        // guaranteed_request_count: 0,
+        // guaranteed_response_count: 0,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Still two messages in output queues.
     let expected_oq_stats = OutputQueuesStats {
-        message_count: 2,
+        // message_count: 2,
         reserved_slots: 2,
     };
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1249,13 +1250,13 @@ fn test_message_stats_oversized_requests() {
     // Back to all-zero stats.
     assert_eq!(
         InputQueuesStats {
-            size_bytes: CanisterQueue::empty_size_bytes(),
+            // size_bytes: CanisterQueue::empty_size_bytes(),
             ..Default::default()
         },
         queues.input_queues_stats
     );
     let expected_oq_stats = OutputQueuesStats {
-        message_count: 0,
+        // message_count: 0,
         reserved_slots: 2,
     };
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1282,7 +1283,7 @@ fn test_stats() {
     let other_3 = canister_test_id(3);
     const NAME: &str = "abcd";
     // let iq_size: usize = InputQueue::new(DEFAULT_QUEUE_CAPACITY).calculate_size_bytes();
-    let iq_size: usize = CanisterQueue::empty_size_bytes();
+    let iq_size: usize = CanisterQueue::EMPTY_SIZE_BYTES;
     let mut msg_size = [0; 6];
 
     let mut queues = CanisterQueues::default();
@@ -1309,16 +1310,16 @@ fn test_stats() {
 
         // Added a new input queue and `msg`.
         expected_iq_stats += InputQueuesStats {
-            message_count: 1,
-            response_count: 0,
+            // message_count: 1,
+            // response_count: 0,
             reserved_slots: 0,
-            size_bytes: iq_size + msg_size[i],
-            guaranteed_request_count: 1,
-            guaranteed_response_count: 0,
+            // size_bytes: iq_size + msg_size[i],
+            // guaranteed_request_count: 1,
+            // guaranteed_response_count: 0,
         };
         assert_eq!(expected_iq_stats, queues.input_queues_stats);
         expected_oq_stats += OutputQueuesStats {
-            message_count: 0,
+            // message_count: 0,
             reserved_slots: 1,
         };
         assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1338,12 +1339,12 @@ fn test_stats() {
     // We've now removed all messages in the input queue from `other_1`, but the
     // queue is still there.
     expected_iq_stats -= InputQueuesStats {
-        message_count: 1,
-        response_count: 0,
+        // message_count: 1,
+        // response_count: 0,
         reserved_slots: 0,
-        size_bytes: msg_size[0],
-        guaranteed_request_count: 1,
-        guaranteed_response_count: 0,
+        // size_bytes: msg_size[0],
+        // guaranteed_request_count: 1,
+        // guaranteed_response_count: 0,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1361,7 +1362,7 @@ fn test_stats() {
     // Input queue stats are unchanged.
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     expected_oq_stats += OutputQueuesStats {
-        message_count: 1,
+        // message_count: 1,
         reserved_slots: -1,
     };
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1392,7 +1393,7 @@ fn test_stats() {
     // expected_mu_stats.oversized_requests_extra_bytes += msg_size[4] - MAX_RESPONSE_COUNT_BYTES;
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     expected_oq_stats += OutputQueuesStats {
-        message_count: 1,
+        // message_count: 1,
         reserved_slots: 0,
     };
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1413,7 +1414,7 @@ fn test_stats() {
     {
         (_, RequestOrResponse::Response(msg)) => {
             expected_oq_stats -= OutputQueuesStats {
-                message_count: 1,
+                // message_count: 1,
                 reserved_slots: 0,
             };
             assert_eq!(msg.originator, other_1)
@@ -1435,7 +1436,7 @@ fn test_stats() {
     {
         (_, RequestOrResponse::Request(msg)) => {
             expected_oq_stats -= OutputQueuesStats {
-                message_count: 1,
+                // message_count: 1,
                 reserved_slots: 0,
             };
             assert_eq!(msg.receiver, other_1)
@@ -1465,12 +1466,12 @@ fn test_stats() {
         .expect("could not push");
     // Added a new input message.
     expected_iq_stats += InputQueuesStats {
-        message_count: 1,
-        response_count: 1,
+        // message_count: 1,
+        // response_count: 1,
         reserved_slots: -1,
-        size_bytes: msg_size[5],
-        guaranteed_request_count: 0,
-        guaranteed_response_count: 1,
+        // size_bytes: msg_size[5],
+        // guaranteed_request_count: 0,
+        // guaranteed_response_count: 1,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1492,12 +1493,12 @@ fn test_stats() {
     }
     // Removed message.
     expected_iq_stats -= InputQueuesStats {
-        message_count: 1,
-        response_count: 0,
+        // message_count: 1,
+        // response_count: 0,
         reserved_slots: 0,
-        size_bytes: msg_size[1],
-        guaranteed_request_count: 1,
-        guaranteed_response_count: 0,
+        // size_bytes: msg_size[1],
+        // guaranteed_request_count: 1,
+        // guaranteed_response_count: 0,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1511,12 +1512,12 @@ fn test_stats() {
     }
     // Removed message.
     expected_iq_stats -= InputQueuesStats {
-        message_count: 1,
-        response_count: 0,
+        // message_count: 1,
+        // response_count: 0,
         reserved_slots: 0,
-        size_bytes: msg_size[2],
-        guaranteed_request_count: 1,
-        guaranteed_response_count: 0,
+        // size_bytes: msg_size[2],
+        // guaranteed_request_count: 1,
+        // guaranteed_response_count: 0,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1530,12 +1531,12 @@ fn test_stats() {
     }
     // Removed message.
     expected_iq_stats -= InputQueuesStats {
-        message_count: 1,
-        response_count: 1,
+        // message_count: 1,
+        // response_count: 1,
         reserved_slots: 0,
-        size_bytes: msg_size[5],
-        guaranteed_request_count: 0,
-        guaranteed_response_count: 1,
+        // size_bytes: msg_size[5],
+        // guaranteed_request_count: 0,
+        // guaranteed_response_count: 1,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1550,7 +1551,7 @@ fn test_stats() {
 fn test_stats_induct_message_to_self() {
     let this = canister_test_id(13);
     // let iq_size: usize = InputQueue::new(DEFAULT_QUEUE_CAPACITY).calculate_size_bytes();
-    let iq_size: usize = CanisterQueue::empty_size_bytes();
+    let iq_size: usize = CanisterQueue::EMPTY_SIZE_BYTES;
 
     let mut queues = CanisterQueues::default();
     let mut expected_iq_stats = InputQueuesStats::default();
@@ -1575,7 +1576,7 @@ fn test_stats_induct_message_to_self() {
         .expect("could not push");
 
     // New input queue was created, with one reserved slot.
-    expected_iq_stats.size_bytes += iq_size;
+    // expected_iq_stats.size_bytes += iq_size;
     expected_iq_stats.reserved_slots += 1;
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Pushed a request: one more response slot and memory reservation.
@@ -1590,12 +1591,12 @@ fn test_stats_induct_message_to_self() {
 
     // Request is now in the input queue.
     expected_iq_stats += InputQueuesStats {
-        message_count: 1,
-        response_count: 0,
+        // message_count: 1,
+        // response_count: 0,
         reserved_slots: 0,
-        size_bytes: request_size,
-        guaranteed_request_count: 1,
-        guaranteed_response_count: 0,
+        // size_bytes: request_size,
+        // guaranteed_request_count: 1,
+        // guaranteed_response_count: 0,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // We now have slot and guaranteed response memory reservations (for the same
@@ -1610,12 +1611,12 @@ fn test_stats_induct_message_to_self() {
     queues.pop_input().expect("could not pop request");
     // Request consumed.
     expected_iq_stats -= InputQueuesStats {
-        message_count: 1,
-        response_count: 0,
+        // message_count: 1,
+        // response_count: 0,
         reserved_slots: 0,
-        size_bytes: request_size,
-        guaranteed_request_count: 1,
-        guaranteed_response_count: 0,
+        // size_bytes: request_size,
+        // guaranteed_request_count: 1,
+        // guaranteed_response_count: 0,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Memory usage stats unchanged, as the response memory reservations are still there.
@@ -1644,12 +1645,12 @@ fn test_stats_induct_message_to_self() {
 
     // Response is now in the input queue, reserved slot is consumed.
     expected_iq_stats += InputQueuesStats {
-        message_count: 1,
-        response_count: 1,
+        // message_count: 1,
+        // response_count: 1,
         reserved_slots: -1,
-        size_bytes: response_size,
-        guaranteed_request_count: 0,
-        guaranteed_response_count: 1,
+        // size_bytes: response_size,
+        // guaranteed_request_count: 0,
+        // guaranteed_response_count: 1,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Consumed input queue response slot and memory reservation.
@@ -1663,12 +1664,12 @@ fn test_stats_induct_message_to_self() {
     queues.pop_input().expect("could not pop response");
     // Response consumed.
     expected_iq_stats -= InputQueuesStats {
-        message_count: 1,
-        response_count: 1,
+        // message_count: 1,
+        // response_count: 1,
         reserved_slots: 0,
-        size_bytes: response_size,
-        guaranteed_request_count: 0,
-        guaranteed_response_count: 1,
+        // size_bytes: response_size,
+        // guaranteed_request_count: 0,
+        // guaranteed_response_count: 1,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Zero response bytes, zero response memory reservations.

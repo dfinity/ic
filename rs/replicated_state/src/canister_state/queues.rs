@@ -4,34 +4,27 @@ mod queue;
 mod tests;
 
 use self::message_pool::{Context, MessageId, MessagePool};
-use self::queue::{CanisterQueue, IngressQueue, MessageReference};
+use self::queue::{CanisterQueue, IngressQueue};
 use crate::canister_state::queues::message_pool::Class;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{CanisterState, InputQueueType, NextInputQueue, StateError};
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
 use ic_management_canister_types::IC_00;
-use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
-    state::queues::{v1 as pb_queues, v1::canister_queues::NextInputQueue as ProtoNextInputQueue},
-    types::v1 as pb_types,
+use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::state::queues::v1 as pb_queues;
+use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue as ProtoNextInputQueue;
+use ic_protobuf::types::v1 as pb_types;
+use ic_types::messages::{
+    CanisterMessage, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
+    MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
-use ic_types::messages::{CallbackId, NO_DEADLINE};
-use ic_types::methods::Callback;
-use ic_types::{
-    messages::{
-        CanisterMessage, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
-        MAX_RESPONSE_COUNT_BYTES,
-    },
-    xnet::{QueueId, SessionId},
-    CanisterId, CountBytes, Cycles, Time,
-};
-use std::{
-    collections::{BTreeMap, HashSet, VecDeque},
-    convert::{From, TryFrom},
-    ops::{AddAssign, SubAssign},
-    sync::Arc,
-};
+use ic_types::xnet::{QueueId, SessionId};
+use ic_types::{CanisterId, CountBytes, Time};
+use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::convert::{From, TryFrom};
+use std::ops::{AddAssign, SubAssign};
+use std::sync::Arc;
 
 pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 
@@ -194,8 +187,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
                     session_id: SessionId::new(0),
                 };
 
-                // FIXME: Generate a reject response if this is a reject response marker.
-                let msg = match self.pool.get(reference.id().unwrap()) {
+                let msg = match self.pool.get(reference.id()) {
                     Some(msg) => msg,
 
                     // Stale reference, pop it and try again.
@@ -231,8 +223,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
                     session_id: SessionId::new(0),
                 };
 
-                // FIXME: Generate a reject response if this is a reject response marker.
-                let msg = match self.pool.take(reference.id().unwrap()) {
+                let msg = match self.pool.take(reference.id()) {
                     Some(msg) => msg,
 
                     // Stale reference, try again.
@@ -335,8 +326,7 @@ impl CanisterQueues {
     {
         for (canister_id, (_, queue)) in self.canister_queues.iter_mut() {
             while let Some(reference) = queue.peek() {
-                // FIXME: Generate a reject response if this is a reject response marker.
-                let id = reference.id().unwrap();
+                let id = reference.id();
                 let msg = match self.pool.get(id) {
                     // Actual message.
                     Some(msg) => msg,
@@ -493,8 +483,7 @@ impl CanisterQueues {
             // Get the message queue of this canister.
             let input_queue = &mut self.canister_queues.get_mut(&sender).unwrap().0;
             while let Some(reference) = input_queue.pop() {
-                // FIXME: Generate a reject response if this is a reject response marker.
-                let msg = match self.pool.take(reference.id().unwrap()) {
+                let msg = match self.pool.take(reference.id()) {
                     Some(message) => message,
 
                     // Stale reference, try again.
@@ -538,8 +527,7 @@ impl CanisterQueues {
 
             while let Some(reference) = input_queue.peek() {
                 // Look up the message.
-                // FIXME: Generate a reject response if this is a reject response marker.
-                let msg = match self.pool.get(reference.id().unwrap()) {
+                let msg = match self.pool.get(reference.id()) {
                     Some(msg) => msg,
 
                     // Stale reference, pop it and try again.
@@ -580,13 +568,13 @@ impl CanisterQueues {
     /// Returns `true` if `ingress_queue` or at least one of the `input_queues`
     /// is not empty; `false` otherwise.
     pub fn has_input(&self) -> bool {
-        !self.ingress_queue.is_empty() || self.input_queues_stats.message_count > 0
+        !self.ingress_queue.is_empty() || self.pool.message_stats().inbound_message_count > 0
     }
 
     /// Returns `true` if at least one output queue is not empty; false
     /// otherwise.
     pub fn has_output(&self) -> bool {
-        self.output_queues_stats.message_count > 0
+        self.pool.message_stats().outbound_message_count > 0
     }
 
     /// Peeks the next inter-canister or ingress message (round-robin) from
@@ -825,8 +813,7 @@ impl CanisterQueues {
 
         while let Some(reference) = output_queue.peek() {
             // Look up the message.
-            // FIXME: Generate a reject response if this is a reject response marker.
-            match self.pool.get(reference.id().unwrap()) {
+            match self.pool.get(reference.id()) {
                 msg @ Some(_) => return msg,
 
                 // Stale reference, pop it and try again.
@@ -859,9 +846,8 @@ impl CanisterQueues {
             .1
             .pop()
             .expect("Message peeked above so pop should not fail.");
-        // FIXME: Generate a reject response if this is a reject response marker.
         self.pool
-            .take(reference.id().unwrap())
+            .take(reference.id())
             .expect("Message peeked above so take should not fail.");
 
         self.output_queues_stats -= oq_stats_delta;
@@ -883,7 +869,7 @@ impl CanisterQueues {
 
     /// Returns the number of canister messages enqueued in input queues.
     pub fn input_queues_message_count(&self) -> usize {
-        self.input_queues_stats.message_count
+        self.pool.message_stats().inbound_message_count
     }
 
     /// Returns the number of reserved slots across all input queues.
@@ -897,20 +883,22 @@ impl CanisterQueues {
     /// Returns the total byte size of canister input queues (queues +
     /// messages).
     pub fn input_queues_size_bytes(&self) -> usize {
-        self.input_queues_stats.size_bytes
+        self.pool.message_stats().inbound_size_bytes
+            + self.canister_queues.len() * CanisterQueue::EMPTY_SIZE_BYTES
     }
 
     pub fn input_queues_request_count(&self) -> usize {
-        self.input_queues_stats.message_count - self.input_queues_stats.response_count
+        self.pool.message_stats().inbound_message_count
+            - self.pool.message_stats().inbound_response_count
     }
 
     pub fn input_queues_response_count(&self) -> usize {
-        self.input_queues_stats.response_count
+        self.pool.message_stats().inbound_response_count
     }
 
     /// Returns the number of actual messages in output queues.
     pub fn output_queues_message_count(&self) -> usize {
-        self.output_queues_stats.message_count
+        self.pool.message_stats().outbound_message_count
     }
 
     /// Returns the number of reserved slots across all output queues.
@@ -979,7 +967,6 @@ impl CanisterQueues {
             self.canister_queues.entry(*canister_id).or_insert_with(|| {
                 let input_queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
                 let output_queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
-                self.input_queues_stats.size_bytes += CanisterQueue::empty_size_bytes();
                 (input_queue, output_queue)
             });
         (input_queue, output_queue)
@@ -1026,8 +1013,8 @@ impl CanisterQueues {
         let mut have_empty_pair = false;
         for (_canister_id, (input_queue, output_queue)) in self.canister_queues.iter() {
             if !input_queue.has_used_slots() && !output_queue.has_used_slots() {
-                self.input_queues_stats.size_bytes -= CanisterQueue::empty_size_bytes();
                 have_empty_pair = true;
+                break;
             }
         }
         // Bail out early if there is nothing to GC.
@@ -1047,11 +1034,11 @@ impl CanisterQueues {
     /// by writing `debug_assert!(self.stats_ok())`.
     fn stats_ok(&self) -> bool {
         debug_assert_eq!(
-            Self::calculate_input_queues_stats(&self.canister_queues, &self.pool),
+            Self::calculate_input_queues_stats(&self.canister_queues),
             self.input_queues_stats
         );
         debug_assert_eq!(
-            Self::calculate_output_queues_stats(&self.canister_queues, &self.pool),
+            Self::calculate_output_queues_stats(&self.canister_queues),
             self.output_queues_stats
         );
         debug_assert_eq!(
@@ -1103,17 +1090,11 @@ impl CanisterQueues {
     /// Time complexity: `O(num_messages)`.
     fn calculate_input_queues_stats(
         canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
-        pool: &MessagePool,
     ) -> InputQueuesStats {
         let mut stats = InputQueuesStats::default();
         for (q, _) in canister_queues.values() {
             stats += InputQueuesStats {
-                message_count: q.calculate_message_count(pool),
-                response_count: q.calculate_response_count(pool),
                 reserved_slots: q.reserved_slots() as isize,
-                size_bytes: q.calculate_size_bytes(pool),
-                guaranteed_request_count: q.count_guaranteed_request_references(),
-                guaranteed_response_count: q.count_guaranteed_response_references(),
             }
         }
         stats
@@ -1125,12 +1106,10 @@ impl CanisterQueues {
     /// Time complexity: `O(num_messages)`.
     fn calculate_output_queues_stats(
         canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
-        pool: &MessagePool,
     ) -> OutputQueuesStats {
         let mut stats = OutputQueuesStats::default();
         for (_, q) in canister_queues.values() {
             stats += OutputQueuesStats {
-                message_count: q.calculate_message_count(pool),
                 reserved_slots: q.reserved_slots() as isize,
             };
         }
@@ -1373,51 +1352,6 @@ fn generate_timeout_response(request: &Arc<Request>) -> Arc<Response> {
     })
 }
 
-#[allow(dead_code)]
-fn get_message(
-    reference: MessageReference,
-    pool: &MessagePool,
-    callbacks: &BTreeMap<CallbackId, Callback>,
-) -> Option<RequestOrResponse> {
-    use MessageReference::*;
-
-    match reference {
-        Request(id) => pool.get_request(id).cloned(),
-        Response(id) => pool.get_response(id).cloned(),
-        LocalRejectResponse(callback) => Some(generate_reject_response(
-            callback,
-            callbacks,
-            RejectCode::SysTransient,
-            "Timed out".into(),
-        )),
-    }
-}
-
-/// Generates a reject `Response` for a `Request` message with the provided
-/// `RejectCode` and error message.
-fn generate_reject_response(
-    callback_id: CallbackId,
-    callbacks: &BTreeMap<CallbackId, Callback>,
-    reject_code: RejectCode,
-    message: String,
-) -> RequestOrResponse {
-    let callback = callbacks.get(&callback_id).unwrap();
-
-    Response {
-        originator: callback.originator,
-        respondent: callback.respondent,
-        originator_reply_callback: callback_id,
-        refund: Cycles::zero(),
-        response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
-            reject_code,
-            message,
-            MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
-        )),
-        deadline: callback.deadline,
-    }
-    .into()
-}
-
 impl From<&CanisterQueues> for pb_queues::CanisterQueues {
     fn from(item: &CanisterQueues) -> Self {
         Self {
@@ -1488,9 +1422,9 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
             canister_queues.insert(can_id, (iq, oq));
         }
         let pool = Default::default();
-        let input_queues_stats = Self::calculate_input_queues_stats(&canister_queues, &pool);
+        let input_queues_stats = Self::calculate_input_queues_stats(&canister_queues);
         let memory_usage_stats = Self::calculate_memory_usage_stats(&canister_queues);
-        let output_queues_stats = Self::calculate_output_queues_stats(&canister_queues, &pool);
+        let output_queues_stats = Self::calculate_output_queues_stats(&canister_queues);
 
         let next_input_queue = NextInputQueue::from(
             ProtoNextInputQueue::try_from(item.next_input_queue).unwrap_or_default(),
@@ -1534,34 +1468,11 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
 /// adding lots of zeros in lots of places.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct InputQueuesStats {
-    /// Count of messages in input queues.
-    message_count: usize,
-
-    /// Count of responses in input queues.
-    response_count: usize,
-
     /// Count of slots reserved in input queues. Note that this is different from
     /// memory reservations for guaranteed responses.
     ///
     /// Signed type so that `stats_delta()` may return `-1`.
     reserved_slots: isize,
-
-    /// Byte size of input queues (queues + messages).
-    size_bytes: usize,
-
-    /// Number of guaranteed response requests in input queues.
-    ///
-    /// At the end of each round, this plus the number of not yet responded
-    /// guaranteed response call contexts must be equal to the number of guaranteed
-    /// response memory reservations for inbound calls.
-    guaranteed_request_count: usize,
-
-    /// Number of guaranteed responses in input queues.
-    ///
-    /// At the end of each round, the number of guaranteed response callbacks minus
-    /// this must be equal to the number of guaranteed response memory reservations
-    /// for outbound calls.
-    guaranteed_response_count: usize,
 }
 
 impl InputQueuesStats {
@@ -1574,76 +1485,35 @@ impl InputQueuesStats {
         }
     }
 
-    fn request_stats_delta(request: &Request) -> InputQueuesStats {
-        InputQueuesStats {
-            message_count: 1,
-            response_count: 0,
-            reserved_slots: 0,
-            size_bytes: request.count_bytes(),
-            guaranteed_request_count: (request.deadline == NO_DEADLINE) as usize,
-            guaranteed_response_count: 0,
-        }
+    fn request_stats_delta(_request: &Request) -> InputQueuesStats {
+        InputQueuesStats { reserved_slots: 0 }
     }
 
-    fn response_stats_delta(op: QueueOp, response: &Response) -> InputQueuesStats {
+    fn response_stats_delta(op: QueueOp, _response: &Response) -> InputQueuesStats {
         // Consume one reserved slot iff pushing a response.
         let reserved_slots = if op == QueueOp::Push { -1 } else { 0 };
 
-        InputQueuesStats {
-            message_count: 1,
-            response_count: 1,
-            reserved_slots,
-            size_bytes: response.count_bytes(),
-            guaranteed_request_count: 0,
-            guaranteed_response_count: (response.deadline == NO_DEADLINE) as usize,
-        }
+        InputQueuesStats { reserved_slots }
     }
 }
 
 impl AddAssign<InputQueuesStats> for InputQueuesStats {
     fn add_assign(&mut self, rhs: InputQueuesStats) {
-        let InputQueuesStats {
-            message_count,
-            response_count,
-            reserved_slots,
-            size_bytes,
-            guaranteed_request_count,
-            guaranteed_response_count,
-        } = rhs;
-        self.message_count += message_count;
-        self.response_count += response_count;
+        let InputQueuesStats { reserved_slots } = rhs;
         self.reserved_slots += reserved_slots;
-        self.size_bytes += size_bytes;
-        self.guaranteed_request_count += guaranteed_request_count;
-        self.guaranteed_response_count += guaranteed_response_count;
     }
 }
 
 impl SubAssign<InputQueuesStats> for InputQueuesStats {
     fn sub_assign(&mut self, rhs: InputQueuesStats) {
-        let InputQueuesStats {
-            message_count,
-            response_count,
-            reserved_slots,
-            size_bytes,
-            guaranteed_request_count,
-            guaranteed_response_count,
-        } = rhs;
-        self.message_count -= message_count;
-        self.response_count -= response_count;
+        let InputQueuesStats { reserved_slots } = rhs;
         self.reserved_slots -= reserved_slots;
-        self.size_bytes -= size_bytes;
-        self.guaranteed_request_count -= guaranteed_request_count;
-        self.guaranteed_response_count -= guaranteed_response_count;
     }
 }
 
 /// Running stats across output queues.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OutputQueuesStats {
-    /// Number of actual messages in output queues.
-    message_count: usize,
-
     /// Count of slots reserved in output queues. Note that this is different from
     /// memory reservations for guaranteed responses.
     ///
@@ -1662,41 +1532,27 @@ impl OutputQueuesStats {
     }
 
     fn request_stats_delta(_request: &Request) -> OutputQueuesStats {
-        OutputQueuesStats {
-            message_count: 1,
-            reserved_slots: 0,
-        }
+        OutputQueuesStats { reserved_slots: 0 }
     }
 
     fn response_stats_delta(op: QueueOp, _response: &Response) -> OutputQueuesStats {
         // Consume one reserved slot iff pushing a response.
         let reserved_slots = if op == QueueOp::Push { -1 } else { 0 };
 
-        OutputQueuesStats {
-            message_count: 1,
-            reserved_slots,
-        }
+        OutputQueuesStats { reserved_slots }
     }
 }
 
 impl AddAssign<OutputQueuesStats> for OutputQueuesStats {
     fn add_assign(&mut self, rhs: OutputQueuesStats) {
-        let OutputQueuesStats {
-            message_count,
-            reserved_slots,
-        } = rhs;
-        self.message_count += message_count;
+        let OutputQueuesStats { reserved_slots } = rhs;
         self.reserved_slots += reserved_slots;
     }
 }
 
 impl SubAssign<OutputQueuesStats> for OutputQueuesStats {
     fn sub_assign(&mut self, rhs: OutputQueuesStats) {
-        let OutputQueuesStats {
-            message_count,
-            reserved_slots,
-        } = rhs;
-        self.message_count -= message_count;
+        let OutputQueuesStats { reserved_slots } = rhs;
         self.reserved_slots -= reserved_slots;
     }
 }
@@ -1923,10 +1779,8 @@ pub mod testing {
                 .get_mut(dst_canister)
                 .unwrap()
                 .1
-                .pop()
-                .unwrap();
-            // FIXME: Generate a reject response if this is a reject response marker.
-            let msg = self.pool.take(reference.id().unwrap()).unwrap();
+                .pop()?;
+            let msg = self.pool.take(reference.id())?;
 
             self.output_queues_stats -= OutputQueuesStats::stats_delta(QueueOp::Pop, &msg);
             self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
