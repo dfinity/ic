@@ -705,7 +705,7 @@ fn test_message_stats_best_effort() {
         pool.message_stats
     );
     // And the guaranteed memory usage is zero.
-    assert_eq!(0, pool.message_stats.memory_usage());
+    assert_eq!(0, pool.message_stats.guaranteed_response_memory_usage());
 
     //
     // Take one request and one response.
@@ -716,7 +716,7 @@ fn test_message_stats_best_effort() {
     stats.adjust_and_check(&pool, Pop, Outbound, request.into());
 
     // The guaranteed memory usage is still zero.
-    assert_eq!(0, pool.message_stats.memory_usage());
+    assert_eq!(0, pool.message_stats.guaranteed_response_memory_usage());
     // Best-effort memory usage and total byte size are halved.
     assert_eq!(
         request_size_bytes + response_size_bytes,
@@ -784,7 +784,10 @@ fn test_message_stats_guaranteed_response() {
         pool.message_stats
     );
     // And the guaranteed memory usage covers the two responses.
-    assert_eq!(2 * response_size_bytes, pool.message_stats.memory_usage());
+    assert_eq!(
+        2 * response_size_bytes,
+        pool.message_stats.guaranteed_response_memory_usage()
+    );
 
     //
     // Take one request and one response.
@@ -795,7 +798,10 @@ fn test_message_stats_guaranteed_response() {
     stats.adjust_and_check(&pool, Pop, Outbound, response.clone().into());
 
     // The guaranteed memory usage covers the remaining response.
-    assert_eq!(response_size_bytes, pool.message_stats.memory_usage());
+    assert_eq!(
+        response_size_bytes,
+        pool.message_stats.guaranteed_response_memory_usage()
+    );
     // Best-effort memory usage is still zero.
     assert_eq!(0, pool.message_stats.best_effort_message_bytes);
     // Total byte size accounts for the two remaining messages.
@@ -876,7 +882,7 @@ fn test_message_stats_oversized_requests() {
     // requests.
     assert_eq!(
         2 * guaranteed_extra_bytes,
-        pool.message_stats.memory_usage()
+        pool.message_stats.guaranteed_response_memory_usage()
     );
 
     // Take one best-effort and one guaranteed request.
@@ -887,7 +893,10 @@ fn test_message_stats_oversized_requests() {
 
     // The guaranteed memory usage covers the extra bytes of the remaining
     // guaranteed request.
-    assert_eq!(guaranteed_extra_bytes, pool.message_stats.memory_usage());
+    assert_eq!(
+        guaranteed_extra_bytes,
+        pool.message_stats.guaranteed_response_memory_usage()
+    );
     // Best-effort memory usage covers the remaining best-effort request.
     assert_eq!(
         best_effort_size_bytes,
