@@ -613,10 +613,10 @@ impl Metrics {
         let crypto_fine_grained_verify_dealing_private_duration_seconds = r.histogram(
             "crypto_fine_grained_verify_dealing_private_duration_seconds",
             "Histogram of a verify dealing private call durations in seconds",
-            // The buckets are from 200 us to 627 us (0.002 * 1.1^12), which is
+            // The buckets are from 350 us to 1329 us (0.00035 * 1.1^14), which is
             // slightly larger than the range observed in the experiments for
             // subnets with 13 to 40 nodes.
-            ic_metrics::buckets::exponential_buckets(0.0002, 1.1, 13),
+            ic_metrics::buckets::exponential_buckets(0.00035, 1.1, 15),
         );
         let crypto_fine_grained_verify_dealing_public_duration_seconds = r.histogram(
             "crypto_fine_grained_verify_dealing_public_duration_seconds",
