@@ -35,7 +35,12 @@ for counter in "${counters[@]}"; do
         counter_value = 0
     fi
 
-    echo "# HELP ${counter_name} Total number of times the firewall rule has been applied." >>$METRICS_FILE
-    echo "# TYPE ${counter_name} counter" >>$METRICS_FILE
-    echo "${counter_name} ${counter_value}" >>$METRICS_FILE
+    cat >>"${METRICS_FILE}" <<EOF
+# HELP ${counter_name} Total number of times the firewall rule has been applied.
+# TYPE ${counter_name} counter
+${counter_name} ${counter_value}
+EOF
+
 done
+
+echo "Metrics written to ${METRICS_FILE}"
