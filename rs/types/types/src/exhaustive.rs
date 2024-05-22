@@ -802,8 +802,8 @@ impl ExhaustiveSet for EcdsaKeyTranscript {
         DerivedEcdsaKeyTranscript::exhaustive_set(rng)
             .into_iter()
             .map(|r| EcdsaKeyTranscript {
-                key_id: r.key_id,
-                master_key_id: None,
+                key_id: r.key_id.clone(),
+                master_key_id: Some(MasterPublicKeyId::Ecdsa(r.key_id)),
                 current: r.current,
                 next_in_creation: r.next_in_creation,
             })
