@@ -66,6 +66,7 @@ def rust_canister(name, service_file, **kwargs):
     opt = kwargs.pop("opt", "3")
     kwargs.setdefault("visibility", ["//visibility:public"])
     kwargs.setdefault("tags", []).append("canister")
+    kwargs.setdefault("testonly", False)
 
     rust_binary(
         name = wasm_name,
@@ -77,6 +78,7 @@ def rust_canister(name, service_file, **kwargs):
         name = name + ".raw",
         binary = ":" + wasm_name,
         opt = opt,
+        testonly = kwargs.get("testonly"),
     )
 
     did_git_test(
@@ -89,6 +91,7 @@ def rust_canister(name, service_file, **kwargs):
         name = name + ".opt",
         srcs = [name + ".raw", service_file],
         outs = [name + ".opt.wasm"],
+        testonly = kwargs.get("testonly"),
         message = "Shrinking canister " + name,
         tools = ["@crate_index//:ic-wasm__ic-wasm"],
         cmd_bash = """
@@ -106,17 +109,20 @@ def rust_canister(name, service_file, **kwargs):
         name = name + "_with_version.opt",
         src_wasm = name + ".opt",
         version_file = "//bazel:rc_only_version.txt",
+        testonly = kwargs.get("testonly"),
     )
 
     gzip_compress(
         name = name + ".wasm",
         srcs = [name + "_with_version.opt"],
+        testonly = kwargs.get("testonly"),
     )
 
     copy_file(
         name = name + "-wasm.gz",
         src = name + ".wasm",
         out = name + ".wasm.gz",
+        testonly = kwargs.get("testonly"),
     )
 
     native.alias(
@@ -171,7 +177,7 @@ def motoko_canister(name, entry, deps):
         actual = name + ".wasm",
     )
 
-def inject_version_into_wasm(*, name, src_wasm, version_file = "//bazel:version.txt", visibility = None):
+def inject_version_into_wasm(*, name, src_wasm, version_file = "//bazel:version.txt", visibility = None, testonly = False):
     """Generates an output file named `name + '.wasm'`.
 
     The output file is almost identical to the input (i.e. `src_wasm`), except
@@ -204,4 +210,5 @@ def inject_version_into_wasm(*, name, src_wasm, version_file = "//bazel:version.
             "--file $(location " + version_file + ")",
         ]),
         visibility = visibility,
+        testonly = testonly,
     )

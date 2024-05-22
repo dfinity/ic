@@ -5,7 +5,7 @@ use ic_interfaces::execution_environment::{
     TrapCode::{HeapOutOfBounds, StableMemoryOutOfBounds, StableMemoryTooBigFor32Bit},
 };
 use ic_replicated_state::{canister_state::WASM_PAGE_SIZE_IN_BYTES, page_map, NumWasmPages};
-use ic_types::NumPages;
+use ic_types::NumOsPages;
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: usize = 64 * 1024; // 4GiB
 
@@ -185,7 +185,7 @@ impl StableMemory {
     ///
     /// No guarantee is made that such a write would succeed though (e.g. it
     /// could exceed the current stable memory size).
-    pub(super) fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumPages {
+    pub(super) fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumOsPages {
         self.stable_memory_buffer
             .dirty_pages_from_write(offset, size)
     }

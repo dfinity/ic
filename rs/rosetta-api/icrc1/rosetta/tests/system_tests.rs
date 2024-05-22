@@ -23,7 +23,7 @@ use ic_icrc_rosetta::common::utils::utils::{
 };
 use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions;
 use ic_icrc_rosetta_client::RosettaClient;
-use ic_icrc_rosetta_runner::RosettaClientArgs;
+use ic_icrc_rosetta_runner::RosettaClientArgsBuilder;
 use ic_icrc_rosetta_runner::{make_transaction_with_rosetta_client_binary, DEFAULT_TOKEN_SYMBOL};
 use ic_icrc_rosetta_runner::{
     start_rosetta, RosettaContext, RosettaOptions, DEFAULT_DECIMAL_PLACES,
@@ -1238,19 +1238,12 @@ fn test_rosetta_client_binary() {
             .await
             .unwrap();
 
-        let rosetta_client_args = RosettaClientArgs {
-            operation_type: "transfer".to_owned(),
-            to: Some(receiver_keypair.generate_principal_id().unwrap().0.into()),
-            spender: None,
-            from_subaccount: sender_account.subaccount.map(|s| s.to_vec()),
-            amount: Some(transfer_amount.clone()),
-            allowance: None,
-            rosetta_url: env.rosetta_client.url.clone().to_string(),
-            expires_at: None,
-            expected_allowance: None,
-            memo: None,
-            created_at_time: None,
-        };
+        let rosetta_client_args =
+            RosettaClientArgsBuilder::new(env.rosetta_client.url.clone().to_string(), "transfer")
+                .with_to_account(receiver_keypair.generate_principal_id().unwrap().0.into())
+                .with_from_subaccount(sender_account.subaccount.map(|s| s.to_vec()).unwrap())
+                .with_amount(transfer_amount.clone())
+                .build();
 
         make_transaction_with_rosetta_client_binary(
             &rosetta_client_bin(),
@@ -1280,19 +1273,13 @@ fn test_rosetta_client_binary() {
             .await
             .unwrap();
 
-        let rosetta_client_args = RosettaClientArgs {
-            operation_type: "approve".to_owned(),
-            to: None,
-            spender: Some(receiver_keypair.generate_principal_id().unwrap().0.into()),
-            from_subaccount: sender_account.subaccount.map(|s| s.to_vec()),
-            amount: None,
-            allowance: Some(approve_amount),
-            rosetta_url: env.rosetta_client.url.clone().to_string(),
-            expires_at: None,
-            expected_allowance: None,
-            memo: Some(b"test_bytes".to_vec()),
-            created_at_time: None,
-        };
+        let rosetta_client_args =
+            RosettaClientArgsBuilder::new(env.rosetta_client.url.clone().to_string(), "approve")
+                .with_spender_account(receiver_keypair.generate_principal_id().unwrap().0.into())
+                .with_from_subaccount(sender_account.subaccount.map(|s| s.to_vec()).unwrap())
+                .with_allowance(approve_amount.clone())
+                .with_memo(b"test_bytes".to_vec())
+                .build();
 
         make_transaction_with_rosetta_client_binary(
             &rosetta_client_bin(),
@@ -1312,6 +1299,99 @@ fn test_rosetta_client_binary() {
             current_balance,
             balance_before_approve - Nat::from(DEFAULT_TRANSFER_FEE)
         );
+    });
+}
+
+#[test]
+fn test_rosetta_transfer_from() {
+    let from_keypair = EdKeypair::generate_from_u64(0);
+    let to_keypair = EdKeypair::generate_from_u64(1);
+    let spender_keypair = EdKeypair::generate_from_u64(2);
+
+    let spender_account = Account {
+        owner: spender_keypair.generate_principal_id().unwrap().0,
+        subaccount: Some([1; 32]),
+    };
+    let from_account = Account {
+        owner: from_keypair.generate_principal_id().unwrap().0,
+        subaccount: Some([2; 32]),
+    };
+    let to_account = Account {
+        owner: to_keypair.generate_principal_id().unwrap().0,
+        subaccount: Some([3; 32]),
+    };
+    let rt = Runtime::new().unwrap();
+    let setup = Setup::builder()
+        .with_initial_balance(from_account, 1_000_000_000_000u64)
+        .build();
+
+    rt.block_on(async {
+        let env = RosettaTestingEnvironmentBuilder::new(&setup).build().await;
+        wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0).await;
+
+        // Approve a certain amount to the spender so we can then transfer some of the approved amount
+        let approve_amount: Nat = 1_000_000_000u64.into();
+
+        let rosetta_client_args =
+            RosettaClientArgsBuilder::new(env.rosetta_client.url.clone().to_string(), "approve")
+                .with_spender_account(spender_account)
+                .with_from_subaccount(from_account.subaccount.map(|s| s.to_vec()).unwrap())
+                .with_allowance(approve_amount.clone())
+                .build();
+
+        make_transaction_with_rosetta_client_binary(
+            &rosetta_client_bin(),
+            rosetta_client_args,
+            from_keypair.to_pem(),
+        )
+        .await
+        .unwrap();
+
+        // Test the transfer from functionality of the rosetta client binary
+        let transfer_amount: Nat = 1_000_000u64.into();
+
+        let balance_before_transfer = env
+            .icrc1_agent
+            .balance_of(from_account, CallMode::Query)
+            .await
+            .unwrap();
+
+        let rosetta_client_args = RosettaClientArgsBuilder::new(
+            env.rosetta_client.url.clone().to_string(),
+            "transfer-from",
+        )
+        .with_to_account(to_account)
+        .with_from_account(from_account)
+        .with_spender_subaccount(spender_account.subaccount.map(|s| s.to_vec()).unwrap())
+        .with_amount(transfer_amount.clone())
+        .build();
+
+        make_transaction_with_rosetta_client_binary(
+            &rosetta_client_bin(),
+            rosetta_client_args,
+            spender_keypair.to_pem(),
+        )
+        .await
+        .unwrap();
+
+        let current_balance = env
+            .icrc1_agent
+            .balance_of(from_account, CallMode::Query)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            current_balance,
+            balance_before_transfer - Nat::from(DEFAULT_TRANSFER_FEE) - transfer_amount.clone()
+        );
+
+        let balance_receiver = env
+            .icrc1_agent
+            .balance_of(to_account, CallMode::Query)
+            .await
+            .unwrap();
+
+        assert_eq!(balance_receiver, transfer_amount);
     });
 }
 

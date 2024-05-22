@@ -916,7 +916,8 @@ impl CanisterQueues {
 
     /// Returns the memory usage of all guaranteed response messages.
     pub fn memory_usage(&self) -> usize {
-        self.memory_usage_stats.memory_usage() + self.pool.message_stats().memory_usage()
+        self.memory_usage_stats.memory_usage()
+            + self.pool.message_stats().guaranteed_response_memory_usage()
     }
 
     /// Returns the total byte size of guaranteed responses across input and

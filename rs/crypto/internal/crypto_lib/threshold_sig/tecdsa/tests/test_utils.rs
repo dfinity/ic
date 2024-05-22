@@ -13,32 +13,37 @@ use std::collections::BTreeMap;
 
 #[derive(Copy, Clone, Debug)]
 pub struct TestConfig {
-    signature_curve: EccCurveType,
+    signature_alg: CanisterThresholdSignatureAlgorithm,
     key_curve: EccCurveType,
 }
 
 impl TestConfig {
     pub fn all() -> Vec<Self> {
         vec![
-            Self::new(EccCurveType::K256),
-            Self::new(EccCurveType::P256),
-            Self::new_mixed(EccCurveType::P256, EccCurveType::K256),
+            Self::new(
+                CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
+                EccCurveType::K256,
+            ),
+            Self::new(
+                CanisterThresholdSignatureAlgorithm::EcdsaSecp256r1,
+                EccCurveType::K256,
+            ),
+            Self::new(
+                CanisterThresholdSignatureAlgorithm::EcdsaSecp256r1,
+                EccCurveType::P256,
+            ),
         ]
     }
 
-    pub fn new(curve: EccCurveType) -> Self {
-        Self::new_mixed(curve, curve)
-    }
-
-    pub fn new_mixed(signature_curve: EccCurveType, key_curve: EccCurveType) -> Self {
+    pub fn new(alg: CanisterThresholdSignatureAlgorithm, key_curve: EccCurveType) -> Self {
         Self {
-            signature_curve,
+            signature_alg: alg,
             key_curve,
         }
     }
 
-    pub fn signature_curve(&self) -> EccCurveType {
-        self.signature_curve
+    pub fn signature_alg(&self) -> CanisterThresholdSignatureAlgorithm {
+        self.signature_alg
     }
 
     pub fn key_curve(&self) -> EccCurveType {
@@ -90,12 +95,8 @@ impl ProtocolSetup {
         receivers: usize,
         threshold: usize,
         seed: Seed,
-    ) -> Result<Self, ThresholdEcdsaError> {
-        let alg = match cfg.signature_curve() {
-            EccCurveType::K256 => AlgorithmId::ThresholdEcdsaSecp256k1,
-            EccCurveType::P256 => AlgorithmId::ThresholdEcdsaSecp256r1,
-            EccCurveType::Ed25519 => AlgorithmId::ThresholdEd25519,
-        };
+    ) -> Result<Self, CanisterThresholdError> {
+        let alg = cfg.signature_alg().to_algorithm_id();
 
         let rng = &mut seed.into_rng();
         let ad = rng.gen::<[u8; 32]>().to_vec();
@@ -124,8 +125,8 @@ impl ProtocolSetup {
         })
     }
 
-    pub fn signature_curve(&self) -> EccCurveType {
-        self.cfg.signature_curve()
+    pub fn signature_alg(&self) -> CanisterThresholdSignatureAlgorithm {
+        self.cfg.signature_alg()
     }
 
     pub fn key_curve(&self) -> EccCurveType {
@@ -209,7 +210,7 @@ impl ProtocolRound {
         setup: &ProtocolSetup,
         number_of_dealers: usize,
         number_of_dealings_corrupted: usize,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let shares = vec![SecretShares::Random; number_of_dealers];
         let mode = IDkgTranscriptOperationInternal::Random;
 
@@ -240,7 +241,7 @@ impl ProtocolRound {
         setup: &ProtocolSetup,
         number_of_dealers: usize,
         number_of_dealings_corrupted: usize,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let shares = vec![SecretShares::RandomUnmasked; number_of_dealers];
         let mode = IDkgTranscriptOperationInternal::RandomUnmasked;
 
@@ -272,7 +273,7 @@ impl ProtocolRound {
         masked: &ProtocolRound,
         number_of_dealers: usize,
         number_of_dealings_corrupted: usize,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let mut shares = Vec::with_capacity(masked.openings.len());
         for opening in &masked.openings {
             match opening {
@@ -313,7 +314,7 @@ impl ProtocolRound {
         unmasked: &ProtocolRound,
         number_of_dealers: usize,
         number_of_dealings_corrupted: usize,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let mut shares = Vec::with_capacity(unmasked.openings.len());
         for opening in &unmasked.openings {
             match opening {
@@ -360,7 +361,7 @@ impl ProtocolRound {
         unmasked: &ProtocolRound,
         number_of_dealers: usize,
         number_of_dealings_corrupted: usize,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let mut shares = Vec::with_capacity(unmasked.openings.len());
         for opening in unmasked.openings.iter().zip(masked.openings.iter()) {
             match opening {
@@ -402,7 +403,7 @@ impl ProtocolRound {
     fn verify_commitment_openings(
         commitment: &PolynomialCommitment,
         openings: &[CommitmentOpening],
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         let constant_term = commitment.constant_term();
         let curve_type = constant_term.curve_type();
 
@@ -480,6 +481,7 @@ impl ProtocolRound {
             } else {
                 // Generate a complaint:
                 let complaints = generate_complaints(
+                    setup.alg,
                     dealings,
                     &setup.ad,
                     receiver as NodeIndex,
@@ -491,11 +493,14 @@ impl ProtocolRound {
 
                 let mut provided_openings = BTreeMap::new();
 
+                let ctsa = CanisterThresholdSignatureAlgorithm::from_algorithm(setup.alg).unwrap();
+
                 for (dealer_index, complaint) in &complaints {
                     let dealing = dealings.get(dealer_index).unwrap();
                     // the complaints must be valid
                     assert!(complaint
                         .verify(
+                            ctsa,
                             dealing,
                             *dealer_index,
                             receiver as NodeIndex, /* complainer index */
@@ -581,17 +586,17 @@ impl ProtocolRound {
         setup: &ProtocolSetup,
         dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
         mode: &IDkgTranscriptOperationInternal,
-    ) -> ThresholdEcdsaResult<IDkgTranscriptInternal> {
+    ) -> CanisterThresholdResult<IDkgTranscriptInternal> {
         match create_transcript(setup.alg, setup.threshold, dealings, mode) {
             Ok(t) => {
                 assert!(verify_transcript(&t, setup.alg, setup.threshold, dealings, mode).is_ok());
                 Ok(t)
             }
             Err(IDkgCreateTranscriptInternalError::InsufficientDealings) => {
-                Err(ThresholdEcdsaError::InsufficientDealings)
+                Err(CanisterThresholdError::InsufficientDealings)
             }
             Err(IDkgCreateTranscriptInternalError::InconsistentCommitments) => {
-                Err(ThresholdEcdsaError::InvalidCommitment)
+                Err(CanisterThresholdError::InvalidCommitment)
             }
             Err(_) => panic!("Unexpected error from create_transcript"),
         }
@@ -721,7 +726,7 @@ impl ProtocolRound {
         dealing
             .publicly_verify(
                 setup.key_curve(),
-                setup.signature_curve(),
+                setup.signature_alg(),
                 transcript_type,
                 setup.threshold,
                 dealer_index,
@@ -734,42 +739,42 @@ impl ProtocolRound {
         assert_eq!(
             dealing.publicly_verify(
                 setup.key_curve(),
-                setup.signature_curve(),
+                setup.signature_alg(),
                 transcript_type,
                 setup.threshold,
                 dealer_index + 1,
                 number_of_receivers,
                 &setup.ad,
             ),
-            Err(ThresholdEcdsaError::InvalidProof)
+            Err(CanisterThresholdError::InvalidProof)
         );
 
         // wrong number of receivers -> invalid
         assert_eq!(
             dealing.publicly_verify(
                 setup.key_curve(),
-                setup.signature_curve(),
+                setup.signature_alg(),
                 transcript_type,
                 setup.threshold,
                 dealer_index,
                 NumberOfNodes::from(1 + setup.receivers as u32),
                 &setup.ad,
             ),
-            Err(ThresholdEcdsaError::InvalidRecipients)
+            Err(CanisterThresholdError::InvalidRecipients)
         );
 
         // wrong associated data -> invalid
         assert_eq!(
             dealing.publicly_verify(
                 setup.key_curve(),
-                setup.signature_curve(),
+                setup.signature_alg(),
                 transcript_type,
                 setup.threshold,
                 dealer_index,
                 number_of_receivers,
                 "wrong ad".as_bytes(),
             ),
-            Err(ThresholdEcdsaError::InvalidProof)
+            Err(CanisterThresholdError::InvalidProof)
         );
 
         /*
@@ -807,13 +812,13 @@ pub fn compute_public_key(
     alg: AlgorithmId,
     key_transcript: &IDkgTranscriptInternal,
     path: &DerivationPath,
-) -> Result<PublicKey, ThresholdEcdsaError> {
+) -> Result<PublicKey, CanisterThresholdError> {
     let master_public_key = MasterPublicKey {
         algorithm_id: alg,
         public_key: key_transcript.constant_term().serialize(),
     };
     ic_crypto_internal_threshold_sig_ecdsa::derive_threshold_public_key(&master_public_key, path)
-        .map_err(|e| ThresholdEcdsaError::InvalidArguments(format!("{:?}", e)))
+        .map_err(|e| CanisterThresholdError::InvalidArguments(format!("{:?}", e)))
 }
 
 #[derive(Clone, Debug)]
@@ -841,7 +846,7 @@ impl EcdsaSignatureProtocolSetup {
         number_of_dealings_corrupted: usize,
         seed: Seed,
         use_masked_kappa: bool,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let setup = ProtocolSetup::new(cfg, number_of_dealers, threshold, seed)?;
 
         let key = ProtocolRound::random(&setup, number_of_dealers, number_of_dealings_corrupted)?;
@@ -904,7 +909,7 @@ impl EcdsaSignatureProtocolSetup {
         })
     }
 
-    pub fn public_key(&self, path: &DerivationPath) -> Result<PublicKey, ThresholdEcdsaError> {
+    pub fn public_key(&self, path: &DerivationPath) -> Result<PublicKey, CanisterThresholdError> {
         compute_public_key(self.setup.alg, &self.key.transcript, path)
     }
 
@@ -942,7 +947,7 @@ impl EcdsaSignatureProtocolExecution {
 
     pub fn generate_shares(
         &self,
-    ) -> ThresholdEcdsaResult<BTreeMap<u32, ThresholdEcdsaSigShareInternal>> {
+    ) -> CanisterThresholdResult<BTreeMap<u32, ThresholdEcdsaSigShareInternal>> {
         let mut shares = BTreeMap::new();
 
         for node_index in 0..self.setup.setup.receivers {
@@ -1040,7 +1045,7 @@ impl SchnorrSignatureProtocolSetup {
         threshold: usize,
         number_of_dealings_corrupted: usize,
         seed: Seed,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let setup = ProtocolSetup::new(cfg, number_of_dealers, threshold, seed)?;
 
         let key = ProtocolRound::random(&setup, number_of_dealers, number_of_dealings_corrupted)?;
@@ -1061,7 +1066,7 @@ impl SchnorrSignatureProtocolSetup {
         Ok(Self { setup, key, presig })
     }
 
-    pub fn public_key(&self, path: &DerivationPath) -> Result<Vec<u8>, ThresholdEcdsaError> {
+    pub fn public_key(&self, path: &DerivationPath) -> Result<Vec<u8>, CanisterThresholdError> {
         Ok(compute_public_key(self.setup.alg, &self.key.transcript, path)?.public_key)
     }
 }
@@ -1091,7 +1096,7 @@ impl Bip340SignatureProtocolExecution {
 
     pub fn generate_shares(
         &self,
-    ) -> ThresholdEcdsaResult<BTreeMap<u32, ThresholdBip340SignatureShareInternal>> {
+    ) -> CanisterThresholdResult<BTreeMap<u32, ThresholdBip340SignatureShareInternal>> {
         let mut shares = BTreeMap::new();
 
         for node_index in 0..self.setup.setup.receivers {
@@ -1194,7 +1199,7 @@ impl Ed25519SignatureProtocolExecution {
 
     pub fn generate_shares(
         &self,
-    ) -> ThresholdEcdsaResult<BTreeMap<u32, ThresholdEd25519SignatureShareInternal>> {
+    ) -> CanisterThresholdResult<BTreeMap<u32, ThresholdEd25519SignatureShareInternal>> {
         let mut shares = BTreeMap::new();
 
         for node_index in 0..self.setup.setup.receivers {

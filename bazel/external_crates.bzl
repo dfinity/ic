@@ -15,6 +15,7 @@ def sanitize_external_crates(sanitizers_enabled):
         "wasmtime": FUZZING_ANNOTATION,
         "bitcoin": FUZZING_ANNOTATION,
         "bincode": FUZZING_ANNOTATION,
+        "ic-stable-structures": FUZZING_ANNOTATION,
     }
 
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
@@ -558,7 +559,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 rev = ICRC_1_REV,
             ),
             "ic-agent": crate.spec(
-                version = "^0.34.0",
+                version = "^0.35.0",
                 features = [
                     "hyper",
                     "reqwest",
@@ -615,7 +616,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^3.0.0",
             ),
             "ic-utils": crate.spec(
-                version = "^0.34.0",
+                version = "^0.35.0",
                 features = ["raw"],
             ),
             "ic-wasm": crate.spec(

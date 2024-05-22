@@ -26,7 +26,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10.2"
 tar = "0.4.38"
-tempfile = "3.3.0"
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.3.0"

@@ -124,8 +124,8 @@ impl ResponsePlaceholder {
 /// to the load shedding queue.
 ///
 /// All pool operations except `expire_messages()` and
-/// `calculate_memory_usage_stats()` (only used during deserialization) execute
-/// in at most `O(log(N))` time.
+/// `calculate_message_stats()` (only called during deserialization) execute in
+/// at most `O(log(N))` time.
 #[derive(Clone, Debug, Default)]
 pub struct MessagePool {
     /// Pool contents.
@@ -520,7 +520,7 @@ impl MessageStats {
     /// excluding memory reservations for guaranteed responses.
     ///
     /// Complexity: `O(1)`.
-    pub fn memory_usage(&self) -> usize {
+    pub fn guaranteed_response_memory_usage(&self) -> usize {
         self.guaranteed_responses_size_bytes + self.oversized_guaranteed_requests_extra_bytes
     }
 

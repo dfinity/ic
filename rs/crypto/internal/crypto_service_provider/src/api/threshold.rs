@@ -4,12 +4,12 @@ use crate::api::CspThresholdSignError;
 use crate::types::{CspPublicCoefficients, CspSecretKeyConversionError, CspSignature};
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    CspFsEncryptionPop, CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
+    CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::{AlgorithmId, CryptoResult};
-use ic_types::{NodeId, NodeIndex, NumberOfNodes};
+use ic_types::{NodeIndex, NumberOfNodes};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -154,35 +154,6 @@ pub trait ThresholdSignatureCspClient {
 ///
 /// TODO(CRP-564): Remove the csp_ prefix from argument names.
 pub trait NiDkgCspClient {
-    /// Generates a forward secure dealing encryption key pair used to encrypt threshold key shares
-    /// in transmission.
-    ///
-    /// Note: FS keys are NOT threshold keys.
-    ///
-    /// The secret key is stored in the secret key store.  It is not returned by
-    /// the method as that would violate the principle that secret keys never
-    /// leave the CSP.  The public key and the proof of possession are returned.
-    /// The public key can be used to verify signatures, it also needs to be
-    /// provided when signing as it is used to retrieve the secret key from the
-    /// key store.
-    ///
-    /// # Arguments
-    /// * `node_id` is the identity of the node generating the public key.
-    /// # Errors
-    /// * `CspDkgCreateFsKeyError::InternalError` if there is an internal
-    ///   error (e.g., the public key in the public key store is already set).
-    /// * `CspDkgCreateFsKeyError::DuplicateKeyId` if there already
-    ///   exists a secret key in the store for the secret key ID derived from
-    ///   the public part of the randomly generated key pair. This error
-    ///   most likely indicates a bad randomness source.
-    /// * `CspDkgCreateFsKeyError::TransientInternalError` if there is a transient
-    ///   internal error, e.g., an IO error when writing a key to disk, or an
-    ///   RPC error when calling a remote CSP vault.
-    fn gen_dealing_encryption_key_pair(
-        &self,
-        node_id: NodeId,
-    ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>;
-
     /// Updates the epoch of the (forward-secure) DKG dealing decryption key
     /// (i.e., the secret part of the DKG dealing encryption key) so that it
     /// cannot be used at epochs that are smaller than the given epoch.

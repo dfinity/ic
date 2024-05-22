@@ -34,8 +34,6 @@ use icp_ledger::{
     TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
     MAX_BLOCKS_PER_REQUEST, MEMO_SIZE_BYTES,
 };
-use icrc_ledger_types::icrc1::transfer::TransferArg;
-use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::{
@@ -44,6 +42,13 @@ use icrc_ledger_types::{
 use icrc_ledger_types::{
     icrc1::account::Account, icrc2::transfer_from::TransferFromArgs,
     icrc2::transfer_from::TransferFromError,
+};
+use icrc_ledger_types::{
+    icrc1::transfer::TransferArg,
+    icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
+};
+use icrc_ledger_types::{
+    icrc1::transfer::TransferError as Icrc1TransferError, icrc21::errors::ErrorInfo,
 };
 use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES};
 use num_traits::cast::ToPrimitive;
@@ -1500,6 +1505,30 @@ fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
 #[export_name = "canister_query icrc2_allowance"]
 fn icrc2_allowance_candid() {
     over(candid_one, icrc2_allowance)
+}
+
+#[candid_method(update, rename = "icrc21_canister_call_consent_message")]
+fn icrc21_canister_call_consent_message(
+    _request: ConsentMessageRequest,
+) -> Result<ConsentInfo, Icrc21Error> {
+    Err(Icrc21Error::ConsentMessageUnavailable(ErrorInfo {
+        description: "Consent message is not available".to_string(),
+    }))
+}
+
+#[export_name = "canister_query icrc21_canister_call_consent_message"]
+fn icrc21_canister_call_consent_message_candid() {
+    over(candid_one, icrc21_canister_call_consent_message)
+}
+
+#[candid_method(query, rename = "icrc10_supported_standards")]
+fn icrc10_supported_standards() -> Vec<StandardRecord> {
+    icrc1_supported_standards()
+}
+
+#[export_name = "canister_query icrc10_supported_standards"]
+fn icrc10_supported_standards_candid() {
+    over(candid_one, |()| icrc10_supported_standards())
 }
 
 candid::export_service!();

@@ -1,12 +1,18 @@
 use crate::{
+    audit_event::add_audit_event,
+    governance::LOG_PREFIX,
     neuron::dissolve_state_and_age::DissolveStateAndAge,
     neuron_store::NeuronStoreError,
     pb::v1::{
         abridged_neuron::DissolveState as AbridgedNeuronDissolveState,
+        audit_event::{NormalizeDissolveStateAndAge, Payload},
         neuron::{DissolveState as NeuronDissolveState, Followees},
-        AbridgedNeuron, BallotInfo, KnownNeuronData, Neuron as NeuronProto, NeuronStakeTransfer,
+        AbridgedNeuron, AuditEvent, BallotInfo, KnownNeuronData, Neuron as NeuronProto,
+        NeuronStakeTransfer,
     },
 };
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
@@ -30,6 +36,8 @@ pub struct Neuron {
     /// such that the corresponding secret key should be kept very
     /// secure. The principal may control many neurons.
     controller: PrincipalId,
+    /// The dissolve state and age of the neuron.
+    dissolve_state_and_age: DissolveStateAndAge,
     /// Keys that can be used to perform actions with limited privileges
     /// without exposing the secret key corresponding to the principal
     /// e.g. could be a WebAuthn key.
@@ -52,15 +60,6 @@ pub struct Neuron {
     /// When the Neuron was created. A neuron can only vote on proposals
     /// submitted after its creation date.
     pub created_timestamp_seconds: u64,
-    /// The timestamp, in seconds from the Unix epoch, corresponding to
-    /// the time this neuron has started aging. This is either the
-    /// creation time or the last time at which the neuron has stopped
-    /// dissolving.
-    ///
-    /// This value is meaningless when the neuron is dissolving, since a
-    /// dissolving neurons always has age zero. The canonical value of
-    /// this field for a dissolving neuron is `u64::MAX`.
-    aging_since_timestamp_seconds: u64,
     /// The timestamp, in seconds from the Unix epoch, at which this
     /// neuron should be spawned and its maturity converted to ICP
     /// according to <https://wiki.internetcomputer.org/wiki/Maturity_modulation.>
@@ -106,21 +105,6 @@ pub struct Neuron {
     /// The type of the Neuron. See \[NeuronType\] for a description
     /// of the different states.
     pub neuron_type: Option<i32>,
-    /// At any time, at most one of `when_dissolved` and
-    /// `dissolve_delay` are specified.
-    ///
-    /// `NotDissolving`. This is represented by `dissolve_delay` being
-    /// set to a non zero value.
-    ///
-    /// `Dissolving`. This is represented by `when_dissolved` being
-    /// set, and this value is in the future.
-    ///
-    /// `Dissolved`. All other states represent the dissolved
-    /// state. That is, (a) `when_dissolved` is set and in the past,
-    /// (b) `dissolve_delay` is set to zero, (c) neither value is set.
-    ///
-    /// Cf. \[Neuron::stop_dissolving\] and \[Neuron::start_dissolving\].
-    dissolve_state: Option<NeuronDissolveState>,
 }
 
 impl Neuron {
@@ -146,71 +130,123 @@ impl Neuron {
 
     /// Returns an enum representing the dissolve state and age of a neuron.
     pub fn dissolve_state_and_age(&self) -> DissolveStateAndAge {
-        DissolveStateAndAge::from(StoredDissolvedStateAndAge {
-            dissolve_state: self.dissolve_state.clone(),
-            aging_since_timestamp_seconds: self.aging_since_timestamp_seconds,
-        })
+        self.dissolve_state_and_age
     }
 
     /// Sets a neuron's dissolve state and age.
-    pub fn set_dissolve_state_and_age(&mut self, state_and_age: DissolveStateAndAge) {
-        let stored = StoredDissolvedStateAndAge::from(state_and_age);
-        self.dissolve_state = stored.dissolve_state;
-        self.aging_since_timestamp_seconds = stored.aging_since_timestamp_seconds;
+    pub fn set_dissolve_state_and_age(&mut self, dissolve_state_and_age: DissolveStateAndAge) {
+        self.dissolve_state_and_age = dissolve_state_and_age;
     }
 
-    /// Returns the dissolve state. Deprecated and only used by the old merge neurons flow and will
-    /// be cleaned up.
-    pub fn depregated_dissolve_state(&self) -> Option<NeuronDissolveState> {
-        self.dissolve_state.clone()
-    }
+    /// Normalizes the dissolve state and age of the neuron. If any changes are made, stores an
+    /// audit event.
+    // TODO(NNS1-3068): clean up after the migration is performed.
+    pub fn normalize_dissolve_state_and_age(&mut self, now_seconds: u64) {
+        let previous_dissolve_state_and_age = self.dissolve_state_and_age();
 
-    /// Sets the dissolve state. Deprecated and only used by the old merge neurons flow and will
-    /// be cleaned up.
-    pub fn deprecated_set_dissolve_state(&mut self, dissolve_state: NeuronDissolveState) {
-        self.dissolve_state = Some(dissolve_state);
-    }
+        let (normalized, legacy_case) =
+            match previous_dissolve_state_and_age.normalize(self.created_timestamp_seconds) {
+                Some((normalized, legacy_case)) => (normalized, legacy_case),
+                None => return,
+            };
 
-    /// Returns the aging since timestamp in seconds. Deprecated and only used by the old merge
-    /// neurons flow and will be cleaned up.
-    pub fn deprecated_aging_since_timestamp_seconds(&self) -> u64 {
-        self.aging_since_timestamp_seconds
-    }
+        println!(
+            "{}Neuron {} dissolve state and age got normaized from {:?} to {:?}",
+            LOG_PREFIX,
+            self.id().id,
+            previous_dissolve_state_and_age,
+            normalized
+        );
 
-    /// Sets the aging since timestamp in seconds. Deprecated and only used by the old merge neurons
-    /// flow and will be cleaned up.
-    pub fn deprecated_set_aging_since_timestamp_seconds(
-        &mut self,
-        aging_since_timestamp_seconds: u64,
-    ) {
-        self.aging_since_timestamp_seconds = aging_since_timestamp_seconds;
+        // Collect attributes for audit event logging.
+        let StoredDissolveStateAndAge {
+            dissolve_state: previous_dissolve_state,
+            aging_since_timestamp_seconds: previous_aging_since_timestamp_seconds,
+        } = StoredDissolveStateAndAge::from(self.dissolve_state_and_age());
+        let previous_when_dissolved_timestamp_seconds = if let Some(
+            NeuronDissolveState::WhenDissolvedTimestampSeconds(when_dissolved_timestamp_seconds),
+        ) = previous_dissolve_state
+        {
+            Some(when_dissolved_timestamp_seconds)
+        } else {
+            None
+        };
+        let previous_aging_since_timestamp_seconds = Some(previous_aging_since_timestamp_seconds);
+        let neuron_id = Some(self.id().id);
+
+        // Apply the normalized dissolve state and age.
+        self.set_dissolve_state_and_age(normalized);
+
+        // Log an audit event.
+        add_audit_event(AuditEvent {
+            timestamp_seconds: now_seconds,
+            payload: Some(Payload::NormalizeDissolveStateAndAge(
+                NormalizeDissolveStateAndAge {
+                    neuron_id,
+                    neuron_legacy_case: legacy_case as i32,
+                    previous_when_dissolved_timestamp_seconds,
+                    previous_aging_since_timestamp_seconds,
+                },
+            )),
+        });
     }
 }
 
 impl From<Neuron> for NeuronProto {
     fn from(neuron: Neuron) -> Self {
+        let Neuron {
+            id,
+            subaccount,
+            controller,
+            dissolve_state_and_age,
+            hot_keys,
+            cached_neuron_stake_e8s,
+            neuron_fees_e8s,
+            created_timestamp_seconds,
+            spawn_at_timestamp_seconds,
+            followees,
+            recent_ballots,
+            kyc_verified,
+            transfer,
+            maturity_e8s_equivalent,
+            staked_maturity_e8s_equivalent,
+            auto_stake_maturity,
+            not_for_profit,
+            joined_community_fund_timestamp_seconds,
+            known_neuron_data,
+            neuron_type,
+        } = neuron;
+
+        let id = Some(id);
+        let controller = Some(controller);
+        let account = subaccount.to_vec();
+        let StoredDissolveStateAndAge {
+            dissolve_state,
+            aging_since_timestamp_seconds,
+        } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
+
         NeuronProto {
-            id: Some(neuron.id),
-            account: neuron.subaccount.to_vec(),
-            controller: Some(neuron.controller),
-            hot_keys: neuron.hot_keys,
-            cached_neuron_stake_e8s: neuron.cached_neuron_stake_e8s,
-            neuron_fees_e8s: neuron.neuron_fees_e8s,
-            created_timestamp_seconds: neuron.created_timestamp_seconds,
-            aging_since_timestamp_seconds: neuron.aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds: neuron.spawn_at_timestamp_seconds,
-            followees: neuron.followees,
-            recent_ballots: neuron.recent_ballots,
-            kyc_verified: neuron.kyc_verified,
-            transfer: neuron.transfer,
-            maturity_e8s_equivalent: neuron.maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent: neuron.staked_maturity_e8s_equivalent,
-            auto_stake_maturity: neuron.auto_stake_maturity,
-            not_for_profit: neuron.not_for_profit,
-            joined_community_fund_timestamp_seconds: neuron.joined_community_fund_timestamp_seconds,
-            known_neuron_data: neuron.known_neuron_data,
-            neuron_type: neuron.neuron_type,
-            dissolve_state: neuron.dissolve_state,
+            id,
+            account,
+            controller,
+            dissolve_state,
+            aging_since_timestamp_seconds,
+            hot_keys,
+            cached_neuron_stake_e8s,
+            neuron_fees_e8s,
+            created_timestamp_seconds,
+            spawn_at_timestamp_seconds,
+            followees,
+            recent_ballots,
+            kyc_verified,
+            transfer,
+            maturity_e8s_equivalent,
+            staked_maturity_e8s_equivalent,
+            auto_stake_maturity,
+            not_for_profit,
+            joined_community_fund_timestamp_seconds,
+            known_neuron_data,
+            neuron_type,
         }
     }
 }
@@ -219,33 +255,60 @@ impl TryFrom<NeuronProto> for Neuron {
     type Error = String;
 
     fn try_from(proto: NeuronProto) -> Result<Self, Self::Error> {
-        let id = proto.id.ok_or("Neuron ID is missing")?;
+        let NeuronProto {
+            id,
+            account,
+            controller,
+            dissolve_state,
+            aging_since_timestamp_seconds,
+            hot_keys,
+            cached_neuron_stake_e8s,
+            neuron_fees_e8s,
+            created_timestamp_seconds,
+            spawn_at_timestamp_seconds,
+            followees,
+            recent_ballots,
+            kyc_verified,
+            transfer,
+            maturity_e8s_equivalent,
+            staked_maturity_e8s_equivalent,
+            auto_stake_maturity,
+            not_for_profit,
+            joined_community_fund_timestamp_seconds,
+            known_neuron_data,
+            neuron_type,
+        } = proto;
+
+        let id = id.ok_or("Neuron ID is missing")?;
+        let subaccount = Subaccount::try_from(account.as_slice())
+            .map_err(|_| "Invalid subaccount".to_string())?;
+        let controller = controller.ok_or(format!("Controller is missing for neuron {}", id.id))?;
+        let dissolve_state_and_age = DissolveStateAndAge::from(StoredDissolveStateAndAge {
+            dissolve_state,
+            aging_since_timestamp_seconds,
+        });
 
         Ok(Neuron {
             id,
-            subaccount: Subaccount::try_from(proto.account.as_slice())
-                .map_err(|_| "Invalid subaccount".to_string())?,
-            controller: proto
-                .controller
-                .ok_or(format!("Controller is missing for neuron {}", id.id))?,
-            hot_keys: proto.hot_keys,
-            cached_neuron_stake_e8s: proto.cached_neuron_stake_e8s,
-            neuron_fees_e8s: proto.neuron_fees_e8s,
-            created_timestamp_seconds: proto.created_timestamp_seconds,
-            aging_since_timestamp_seconds: proto.aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds: proto.spawn_at_timestamp_seconds,
-            followees: proto.followees,
-            recent_ballots: proto.recent_ballots,
-            kyc_verified: proto.kyc_verified,
-            transfer: proto.transfer,
-            maturity_e8s_equivalent: proto.maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent: proto.staked_maturity_e8s_equivalent,
-            auto_stake_maturity: proto.auto_stake_maturity,
-            not_for_profit: proto.not_for_profit,
-            joined_community_fund_timestamp_seconds: proto.joined_community_fund_timestamp_seconds,
-            known_neuron_data: proto.known_neuron_data,
-            neuron_type: proto.neuron_type,
-            dissolve_state: proto.dissolve_state,
+            subaccount,
+            controller,
+            dissolve_state_and_age,
+            hot_keys,
+            cached_neuron_stake_e8s,
+            neuron_fees_e8s,
+            created_timestamp_seconds,
+            spawn_at_timestamp_seconds,
+            followees,
+            recent_ballots,
+            kyc_verified,
+            transfer,
+            maturity_e8s_equivalent,
+            staked_maturity_e8s_equivalent,
+            auto_stake_maturity,
+            not_for_profit,
+            joined_community_fund_timestamp_seconds,
+            known_neuron_data,
+            neuron_type,
         })
     }
 }
@@ -320,11 +383,11 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             id,
             subaccount,
             controller,
+            dissolve_state_and_age,
             hot_keys,
             cached_neuron_stake_e8s,
             neuron_fees_e8s,
             created_timestamp_seconds,
-            aging_since_timestamp_seconds,
             spawn_at_timestamp_seconds,
             followees,
             recent_ballots,
@@ -337,12 +400,19 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             joined_community_fund_timestamp_seconds,
             known_neuron_data,
             neuron_type,
-            dissolve_state,
         } = source;
 
+        let account = subaccount.to_vec();
+        let controller = Some(controller);
+        let StoredDissolveStateAndAge {
+            dissolve_state,
+            aging_since_timestamp_seconds,
+        } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
+        let dissolve_state = dissolve_state.map(AbridgedNeuronDissolveState::from);
+
         let main = AbridgedNeuron {
-            account: subaccount.to_vec(),
-            controller: Some(controller),
+            account,
+            controller,
             cached_neuron_stake_e8s,
             neuron_fees_e8s,
             created_timestamp_seconds,
@@ -355,7 +425,7 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             not_for_profit,
             joined_community_fund_timestamp_seconds,
             neuron_type,
-            dissolve_state: dissolve_state.map(AbridgedNeuronDissolveState::from),
+            dissolve_state,
         };
 
         Ok(Self {
@@ -406,15 +476,22 @@ impl From<DecomposedNeuron> for Neuron {
             dissolve_state,
         } = main;
 
+        let subaccount = Subaccount::try_from(account.as_slice()).unwrap();
+        let controller = controller.unwrap();
+        let dissolve_state_and_age = DissolveStateAndAge::from(StoredDissolveStateAndAge {
+            dissolve_state: dissolve_state.map(NeuronDissolveState::from),
+            aging_since_timestamp_seconds,
+        });
+
         Neuron {
             id,
-            subaccount: Subaccount::try_from(account.as_slice()).unwrap(),
-            controller: controller.unwrap(),
+            subaccount,
+            controller,
+            dissolve_state_and_age,
             hot_keys,
             cached_neuron_stake_e8s,
             neuron_fees_e8s,
             created_timestamp_seconds,
-            aging_since_timestamp_seconds,
             spawn_at_timestamp_seconds,
             followees,
             recent_ballots,
@@ -427,7 +504,6 @@ impl From<DecomposedNeuron> for Neuron {
             joined_community_fund_timestamp_seconds,
             known_neuron_data,
             neuron_type,
-            dissolve_state: dissolve_state.map(NeuronDissolveState::from),
         }
     }
 }
@@ -644,10 +720,6 @@ impl NeuronBuilder {
             known_neuron_data,
         } = self;
 
-        let StoredDissolvedStateAndAge {
-            dissolve_state,
-            aging_since_timestamp_seconds,
-        } = StoredDissolvedStateAndAge::from(dissolve_state_and_age);
         let auto_stake_maturity = if auto_stake_maturity {
             Some(true)
         } else {
@@ -670,11 +742,11 @@ impl NeuronBuilder {
             id,
             subaccount,
             controller,
+            dissolve_state_and_age,
             hot_keys,
             cached_neuron_stake_e8s,
             neuron_fees_e8s,
             created_timestamp_seconds,
-            aging_since_timestamp_seconds,
             spawn_at_timestamp_seconds,
             followees,
             recent_ballots,
@@ -687,25 +759,24 @@ impl NeuronBuilder {
             joined_community_fund_timestamp_seconds,
             known_neuron_data,
             neuron_type,
-            dissolve_state,
         }
     }
 }
 
 /// An intermediate struct to represent a neuron's dissolve state and age on the storage layer.
 #[derive(Clone, Debug, PartialEq)]
-pub(super) struct StoredDissolvedStateAndAge {
+pub(crate) struct StoredDissolveStateAndAge {
     pub dissolve_state: Option<NeuronDissolveState>,
     pub aging_since_timestamp_seconds: u64,
 }
 
-impl From<DissolveStateAndAge> for StoredDissolvedStateAndAge {
+impl From<DissolveStateAndAge> for StoredDissolveStateAndAge {
     fn from(dissolve_state_and_age: DissolveStateAndAge) -> Self {
         match dissolve_state_and_age {
             DissolveStateAndAge::NotDissolving {
                 dissolve_delay_seconds,
                 aging_since_timestamp_seconds,
-            } => StoredDissolvedStateAndAge {
+            } => StoredDissolveStateAndAge {
                 dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(
                     dissolve_delay_seconds,
                 )),
@@ -713,7 +784,7 @@ impl From<DissolveStateAndAge> for StoredDissolvedStateAndAge {
             },
             DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds,
-            } => StoredDissolvedStateAndAge {
+            } => StoredDissolveStateAndAge {
                 dissolve_state: Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(
                     when_dissolved_timestamp_seconds,
                 )),
@@ -722,7 +793,7 @@ impl From<DissolveStateAndAge> for StoredDissolvedStateAndAge {
             DissolveStateAndAge::LegacyDissolvingOrDissolved {
                 when_dissolved_timestamp_seconds,
                 aging_since_timestamp_seconds,
-            } => StoredDissolvedStateAndAge {
+            } => StoredDissolveStateAndAge {
                 dissolve_state: Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(
                     when_dissolved_timestamp_seconds,
                 )),
@@ -730,13 +801,13 @@ impl From<DissolveStateAndAge> for StoredDissolvedStateAndAge {
             },
             DissolveStateAndAge::LegacyDissolved {
                 aging_since_timestamp_seconds,
-            } => StoredDissolvedStateAndAge {
+            } => StoredDissolveStateAndAge {
                 dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(0)),
                 aging_since_timestamp_seconds,
             },
             DissolveStateAndAge::LegacyNoneDissolveState {
                 aging_since_timestamp_seconds,
-            } => StoredDissolvedStateAndAge {
+            } => StoredDissolveStateAndAge {
                 dissolve_state: None,
                 aging_since_timestamp_seconds,
             },
@@ -744,8 +815,8 @@ impl From<DissolveStateAndAge> for StoredDissolvedStateAndAge {
     }
 }
 
-impl From<StoredDissolvedStateAndAge> for DissolveStateAndAge {
-    fn from(stored: StoredDissolvedStateAndAge) -> Self {
+impl From<StoredDissolveStateAndAge> for DissolveStateAndAge {
+    fn from(stored: StoredDissolveStateAndAge) -> Self {
         match (stored.dissolve_state, stored.aging_since_timestamp_seconds) {
             (None, aging_since_timestamp_seconds) => DissolveStateAndAge::LegacyNoneDissolveState {
                 aging_since_timestamp_seconds,
@@ -799,7 +870,7 @@ mod tests {
                     dissolve_delay_seconds: 100,
                     aging_since_timestamp_seconds: 200,
                 },
-                StoredDissolvedStateAndAge {
+                StoredDissolveStateAndAge {
                     dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(100)),
                     aging_since_timestamp_seconds: 200,
                 },
@@ -812,7 +883,7 @@ mod tests {
                     dissolve_delay_seconds: 100,
                     aging_since_timestamp_seconds: u64::MAX,
                 },
-                StoredDissolvedStateAndAge {
+                StoredDissolveStateAndAge {
                     dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(100)),
                     aging_since_timestamp_seconds: u64::MAX,
                 },
@@ -821,7 +892,7 @@ mod tests {
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: 300,
                 },
-                StoredDissolvedStateAndAge {
+                StoredDissolveStateAndAge {
                     dissolve_state: Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(300)),
                     aging_since_timestamp_seconds: u64::MAX,
                 },
@@ -831,7 +902,7 @@ mod tests {
                     when_dissolved_timestamp_seconds: 400,
                     aging_since_timestamp_seconds: 500,
                 },
-                StoredDissolvedStateAndAge {
+                StoredDissolveStateAndAge {
                     dissolve_state: Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(400)),
                     aging_since_timestamp_seconds: 500,
                 },
@@ -840,7 +911,7 @@ mod tests {
                 DissolveStateAndAge::LegacyDissolved {
                     aging_since_timestamp_seconds: 600,
                 },
-                StoredDissolvedStateAndAge {
+                StoredDissolveStateAndAge {
                     dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(0)),
                     aging_since_timestamp_seconds: 600,
                 },
@@ -849,20 +920,20 @@ mod tests {
                 DissolveStateAndAge::LegacyNoneDissolveState {
                     aging_since_timestamp_seconds: 700,
                 },
-                StoredDissolvedStateAndAge {
+                StoredDissolveStateAndAge {
                     dissolve_state: None,
                     aging_since_timestamp_seconds: 700,
                 },
             ),
         ];
 
-        for (dissolve_state_and_age, stored_dissolved_state_and_age) in test_cases {
+        for (dissolve_state_and_age, stored_dissolve_state_and_age) in test_cases {
             assert_eq!(
-                StoredDissolvedStateAndAge::from(dissolve_state_and_age),
-                stored_dissolved_state_and_age.clone()
+                StoredDissolveStateAndAge::from(dissolve_state_and_age),
+                stored_dissolve_state_and_age.clone()
             );
             assert_eq!(
-                DissolveStateAndAge::from(stored_dissolved_state_and_age),
+                DissolveStateAndAge::from(stored_dissolve_state_and_age),
                 dissolve_state_and_age
             );
         }

@@ -9,8 +9,8 @@ use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::consensus_pool::{ChangeAction, ChangeSet, HeightRange};
 use ic_logger::{info, trace, ReplicaLogger};
 use ic_types::consensus::{
-    hashed, Block, BlockProposal, ConsensusMessage, ConsensusMessageHashable, FinalizationContent,
-    FinalizationShare, HasHeight, HashedBlock, NotarizationShare, Rank,
+    hashed, Block, BlockMetadata, BlockProposal, ConsensusMessage, ConsensusMessageHashable,
+    FinalizationContent, FinalizationShare, HasHeight, HashedBlock, NotarizationShare, Rank,
 };
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::Time;
@@ -112,8 +112,12 @@ fn maliciously_propose_blocks(
                             new_block.context.time += Duration::from_nanos(i);
                             let hashed_block =
                                 hashed::Hashed::new(ic_types::crypto::crypto_hash, new_block);
-                            if let Ok(signature) = block_maker.crypto.sign(
+                            let metadata = BlockMetadata::from_block(
                                 &hashed_block,
+                                &block_maker.replica_config,
+                            );
+                            if let Ok(signature) = block_maker.crypto.sign(
+                                &metadata,
                                 block_maker.replica_config.node_id,
                                 registry_version,
                             ) {

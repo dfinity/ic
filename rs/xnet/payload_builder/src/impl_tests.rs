@@ -3,14 +3,13 @@
 use super::test_fixtures::*;
 use super::*;
 use assert_matches::assert_matches;
+use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_interfaces_certified_stream_store::DecodeStreamError;
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_interfaces_state_manager::StateReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::ReplicatedStateTesting;
-use ic_test_utilities::{
-    crypto::fake_tls_handshake::FakeTlsHandshake, state_manager::FakeStateManager,
-};
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_42, SUBNET_5};
 use maplit::btreemap;
@@ -50,7 +49,7 @@ async fn expected_stream_indices() {
 
         // A registry that has entries for `SUBNET_1` through `SUBNET_5`.
         let (registry, _urls) = get_registry_and_urls_for_test(5, expected_indices.clone());
-        let tls_handshake = Arc::new(FakeTlsHandshake::new());
+        let tls_handshake = Arc::new(MockTlsConfig::new());
         let state_manager = Arc::new(state_manager);
         let xnet_payload_builder = XNetPayloadBuilderImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
@@ -365,7 +364,7 @@ async fn validate_slice_invalid_signature() {
 
         let state_manager = FakeStateManager::new();
         let state_manager = Arc::new(state_manager);
-        let tls_handshake = Arc::new(FakeTlsHandshake::new());
+        let tls_handshake = Arc::new(MockTlsConfig::new());
         let registry = get_empty_registry_for_test();
         let xnet_payload_builder = XNetPayloadBuilderImpl::new(
             state_manager,
@@ -611,7 +610,7 @@ fn get_xnet_payload_builder_for_test(
 ) -> XNetPayloadBuilderImpl {
     let registry = get_empty_registry_for_test();
     let state_manager = Arc::new(state_manager);
-    let tls_handshake = Arc::new(FakeTlsHandshake::new());
+    let tls_handshake = Arc::new(MockTlsConfig::new());
     XNetPayloadBuilderImpl::new(
         Arc::clone(&state_manager) as Arc<_>,
         state_manager,

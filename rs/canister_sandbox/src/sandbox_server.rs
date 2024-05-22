@@ -190,7 +190,10 @@ mod tests {
         }
     }
 
-    fn sandbox_safe_system_state(caller: Option<PrincipalId>) -> SandboxSafeSystemState {
+    fn sandbox_safe_system_state(
+        caller: Option<PrincipalId>,
+        call_context_id: Option<CallContextId>,
+    ) -> SandboxSafeSystemState {
         let mut ic00_aliases = BTreeSet::new();
         ic00_aliases.insert(canister_test_id(0));
         let controller = user_test_id(0).get();
@@ -203,8 +206,9 @@ mod tests {
             Cycles::new(1_000_000),
             Cycles::zero(),
             None,
-            BTreeMap::new(),
-            BTreeMap::new(),
+            call_context_id,
+            None,
+            None,
             CyclesAccountManager::new(
                 NumInstructions::from(1_000_000_000),
                 SubnetType::Application,
@@ -255,6 +259,7 @@ mod tests {
             CallContextId::from(0),
         );
         let caller = api_type.caller();
+        let call_context_id = api_type.call_context_id();
         SandboxExecInput {
             func_ref: FuncRef::Method(WasmMethod::Update(method_name.to_string())),
             api_type,
@@ -269,7 +274,7 @@ mod tests {
             ),
             next_wasm_memory_id,
             next_stable_memory_id,
-            sandbox_safe_system_state: sandbox_safe_system_state(caller),
+            sandbox_safe_system_state: sandbox_safe_system_state(caller, call_context_id),
             wasm_reserved_pages: NumWasmPages::from(0),
         }
     }
@@ -283,9 +288,9 @@ mod tests {
             Time::from_nanos_since_unix_epoch(0),
             incoming_payload.to_vec(),
             PrincipalId::try_from([0].as_ref()).unwrap(),
-            None,
         );
         let caller = api_type.caller();
+        let call_context_id = api_type.call_context_id();
         SandboxExecInput {
             func_ref: FuncRef::Method(WasmMethod::Query(method_name.to_string())),
             api_type,
@@ -300,7 +305,7 @@ mod tests {
             ),
             next_wasm_memory_id: MemoryId::new(),
             next_stable_memory_id: MemoryId::new(),
-            sandbox_safe_system_state: sandbox_safe_system_state(caller),
+            sandbox_safe_system_state: sandbox_safe_system_state(caller, call_context_id),
             wasm_reserved_pages: NumWasmPages::from(0),
         }
     }

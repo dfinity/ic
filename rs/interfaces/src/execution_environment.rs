@@ -4,7 +4,7 @@ mod errors;
 pub use errors::{CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
-use ic_management_canister_types::{CanisterLog, EcdsaKeyId};
+use ic_management_canister_types::EcdsaKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -16,12 +16,15 @@ use ic_types::{
         AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, MessageId,
         SignedIngressContent, UserQuery,
     },
-    Cycles, ExecutionRound, Height, NumInstructions, NumPages, Randomness, Time,
+    CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, ops};
-use std::{collections::BTreeSet, convert::TryFrom};
-use std::{convert::Infallible, fmt};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    convert::{Infallible, TryFrom},
+    fmt, ops,
+};
+use strum_macros::EnumIter;
 use tower::util::BoxCloneService;
 
 /// Instance execution statistics. The stats are cumulative and
@@ -84,6 +87,7 @@ pub enum PerformanceCounterType {
 }
 
 /// System API call ids to track their execution (in alphabetical order).
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, EnumIter)]
 pub enum SystemApiCallId {
     /// Tracker for `ic0.accept_message())`
     AcceptMessage,
@@ -127,6 +131,8 @@ pub enum SystemApiCallId {
     DebugPrint,
     /// Tracker for `ic0.global_timer_set()`
     GlobalTimerSet,
+    /// Tracker for `ic0.in_replicated_execution()`
+    InReplicatedExecution,
     /// Tracker for `ic0.is_controller()`
     IsController,
     /// Tracker for `ic0.mint_cycles()`
@@ -866,7 +872,7 @@ pub trait SystemApi {
         &self,
         offset: u64,
         size: u64,
-    ) -> HypervisorResult<(NumPages, NumInstructions)>;
+    ) -> HypervisorResult<(NumOsPages, NumInstructions)>;
 
     /// The canister can query the IC for the current time.
     fn ic0_time(&mut self) -> HypervisorResult<Time>;

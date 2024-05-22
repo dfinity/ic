@@ -112,25 +112,11 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
 }
 
 #[test]
-fn ic_ref_test_nns_group_01() {
-    let mut excluded = vec!["$0 ~ /API availability/"];
-    excluded.append(&mut EXCLUDED.to_vec());
-    setup_and_run_ic_ref_test(true, excluded, vec![])
+fn ic_ref_test_nns() {
+    setup_and_run_ic_ref_test(true, EXCLUDED.to_vec(), vec![])
 }
 
 #[test]
-fn ic_ref_test_nns_group_02() {
-    setup_and_run_ic_ref_test(true, EXCLUDED.to_vec(), vec!["$0 ~ /API availability/"])
-}
-
-#[test]
-fn ic_ref_test_app_group_01() {
-    let mut excluded = vec!["$0 ~ /API availability/"];
-    excluded.append(&mut EXCLUDED.to_vec());
-    setup_and_run_ic_ref_test(false, excluded, vec![])
-}
-
-#[test]
-fn ic_ref_test_app_group_02() {
-    setup_and_run_ic_ref_test(false, EXCLUDED.to_vec(), vec!["$0 ~ /API availability/"])
+fn ic_ref_test_app() {
+    setup_and_run_ic_ref_test(false, EXCLUDED.to_vec(), vec![])
 }

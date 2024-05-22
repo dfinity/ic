@@ -13,7 +13,7 @@ use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    batch::{LocalQueryStats, QueryStatsPayload, ValidationContext},
+    batch::{LocalQueryStats, QueryStats, QueryStatsPayload, ValidationContext},
     epoch_from_height, CanisterId, Height, NodeId, NumBytes, QueryStatsEpoch,
 };
 use std::{
@@ -80,11 +80,24 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
             .start_timer();
 
         match self.receiver.try_recv() {
-            Ok(new_epoch) => {
-                let Ok(mut epoch) = self.current_stats.write() else {
+            Ok(new_stats) => {
+                let Ok(mut current_stats) = self.current_stats.write() else {
                     return vec![];
                 };
-                *epoch = Some(new_epoch);
+                *current_stats = Some(new_stats);
+
+                // Update the metrics about the received metrics
+                if let Some(current_stats) = current_stats.as_ref() {
+                    let mut report = QueryStats::default();
+                    current_stats
+                        .stats
+                        .iter()
+                        .for_each(|next_stats| report.saturating_accumulate(&next_stats.stats));
+
+                    self.metrics
+                        .query_stats_payload_builder_current
+                        .add(&report);
+                };
             }
             Err(TryRecvError::Empty) => (),
             Err(TryRecvError::Disconnected) => {

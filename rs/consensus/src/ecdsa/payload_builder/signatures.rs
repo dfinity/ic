@@ -163,7 +163,7 @@ mod tests {
     };
 
     use crate::ecdsa::{
-        payload_builder::quadruples::test_utils::create_available_quadruple,
+        payload_builder::pre_signatures::test_utils::create_available_quadruple,
         test_utils::{
             empty_ecdsa_payload_with_key_ids, empty_response,
             fake_completed_sign_with_ecdsa_context, fake_ecdsa_key_id,

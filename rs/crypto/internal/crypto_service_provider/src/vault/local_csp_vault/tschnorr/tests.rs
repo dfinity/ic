@@ -9,8 +9,9 @@ use crate::KeyId;
 use crate::LocalCspVault;
 use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CombinedCommitment, CommitmentOpeningBytes, EccCurveType, EccPoint, EccScalar, EccScalarBytes,
-    IDkgTranscriptInternal, PolynomialCommitment, SimpleCommitment,
+    CanisterThresholdSignatureAlgorithm, CombinedCommitment, CommitmentOpeningBytes, EccCurveType,
+    EccPoint, EccScalar, EccScalarBytes, IDkgTranscriptInternal, PolynomialCommitment,
+    SimpleCommitment,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::{
@@ -354,7 +355,7 @@ mod create_schnorr_sig_share {
                 assert_matches!(
                     parameters.create_schnorr_sig_share(&vault),
                     Err(ThresholdSchnorrCreateSigShareVaultError::SerializationError(s))
-                    if s == "ThresholdEcdsaSerializationError(\"Invalid scalar encoding\")"
+                    if s == "CanisterThresholdSerializationError(\"Invalid scalar encoding\")"
                 );
             }
         }
@@ -378,8 +379,9 @@ mod utils {
     impl SchnorrSignShareParameters {
         pub fn new_valid<R: Rng + CryptoRng>(algorithm_id: AlgorithmId, rng: &mut R) -> Self {
             assert!(algorithm_id.is_threshold_schnorr());
-            let curve_type = EccCurveType::from_algorithm(algorithm_id)
-                .expect("failed to convert algorithm ID to curve type");
+            let curve_type = CanisterThresholdSignatureAlgorithm::from_algorithm(algorithm_id)
+                .expect("failed to convert algorithm ID to threshold signature type")
+                .curve();
             let key = random_transcript(curve_type, rng);
             let presig = random_transcript(curve_type, rng);
             let key_opening = random_commitment_opening(curve_type, rng);

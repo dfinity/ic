@@ -23,3 +23,19 @@ pub fn crypto_component_with_csp(
         None,
     )
 }
+
+pub fn crypto_component_with_csp_and_vault(
+    csp: MockAllCryptoServiceProvider,
+    vault: MockLocalCspVault,
+    registry_client: Arc<dyn RegistryClient>,
+) -> CryptoComponentImpl<MockAllCryptoServiceProvider> {
+    CryptoComponentImpl::new_for_test(
+        csp,
+        Arc::new(vault),
+        no_op_logger(),
+        registry_client,
+        node_test_id(NODE_ID),
+        Arc::new(CryptoMetrics::none()),
+        None,
+    )
+}

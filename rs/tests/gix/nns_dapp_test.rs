@@ -27,7 +27,7 @@ use ic_tests::driver::{
     test_env_api::{retry, secs, HasTopologySnapshot, NnsCanisterWasmStrategy},
 };
 use ic_tests::nns_dapp::{
-    install_ii_and_nns_dapp, nns_dapp_customizations, set_authorized_subnets,
+    install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_tests::retry_with_msg;
@@ -121,7 +121,7 @@ fn get_html(env: &TestEnv, farm_url: &str, canister_id: Principal, dapp_anchor: 
 
 pub fn test(env: TestEnv) {
     let (ii_canister_id, nns_dapp_canister_id) =
-        install_ii_and_nns_dapp(&env, BOUNDARY_NODE_NAME, None);
+        install_ii_nns_dapp_and_subnet_rental(&env, BOUNDARY_NODE_NAME, None);
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
         .unwrap()

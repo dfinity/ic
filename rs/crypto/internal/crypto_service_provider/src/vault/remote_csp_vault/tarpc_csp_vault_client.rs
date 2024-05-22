@@ -615,6 +615,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
 
     fn idkg_load_transcript(
         &self,
+        algorithm_id: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         context_data: Vec<u8>,
         receiver_index: NodeIndex,
@@ -623,6 +624,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_load_transcript(
             context_with_timeout(self.rpc_timeout),
+            algorithm_id,
             dealings,
             ByteBuf::from(context_data),
             receiver_index,

@@ -19,7 +19,6 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
-    "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
@@ -31,6 +30,10 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:indoc",
 ]
 
+DEV_DEPENDENCIES = [
+    "@crate_index//:tempfile",
+]
+
 rust_binary(
     name = "boundary-node-prober",
     srcs = [
@@ -40,7 +43,7 @@ rust_binary(
     ],
     compile_data = ["src/canister.wat"],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test(

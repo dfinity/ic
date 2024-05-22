@@ -27,6 +27,7 @@ use ic_registry_replicator::RegistryReplicator;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::CanisterId;
 use little_loadshedder::{LoadShedError, LoadShedLayer};
+use nix::unistd::{getpgid, setpgid, Pid};
 use prometheus::Registry;
 use rustls::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use tokio::sync::RwLock;
@@ -105,6 +106,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     if !(cli.registry.local_store_path.is_none() ^ cli.registry.stub_replica.is_empty()) {
         panic!("--local-store-path and --stub-replica are mutually exclusive and at least one of them must be specified");
+    }
+
+    // make sure ic-boundary is the leader of its own process group
+    let pgid = getpgid(None).context("Failed to get the process group ID.")?;
+    if pgid != Pid::this() {
+        // If that is not the case, set it as the leader of its own process group
+        setpgid(Pid::from_raw(0), Pid::from_raw(0))
+            .context("Failed to setup a new process group for ic-boundary.")?;
     }
 
     // Metrics

@@ -1,5 +1,3 @@
-pub mod fake_tls_handshake;
-
 use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgDealing;
 use ic_crypto_temp_crypto::TempCryptoComponent;

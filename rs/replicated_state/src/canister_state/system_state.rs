@@ -12,7 +12,7 @@ pub use call_context_manager::{CallContext, CallContextAction, CallContextManage
 use ic_base_types::NumSeconds;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterLog, LogVisibility,
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibility,
 };
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
@@ -22,7 +22,9 @@ use ic_types::messages::{
     Request, RequestOrResponse, Response, StopCanisterContext,
 };
 use ic_types::nominal_cycles::NominalCycles;
-use ic_types::{CanisterId, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time};
+use ic_types::{
+    CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
+};
 use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;

@@ -13,20 +13,20 @@ pub struct IDkgTranscriptInternal {
 }
 
 impl IDkgTranscriptInternal {
-    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
-        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+    pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
+        serde_cbor::to_vec(self).map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
     }
 
-    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
+    pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+            .map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
     }
 
     pub fn constant_term(&self) -> EccPoint {
         self.combined_commitment.commitment().constant_term()
     }
 
-    pub(crate) fn evaluate_at(&self, eval_point: NodeIndex) -> ThresholdEcdsaResult<EccPoint> {
+    pub(crate) fn evaluate_at(&self, eval_point: NodeIndex) -> CanisterThresholdResult<EccPoint> {
         self.combined_commitment
             .commitment()
             .evaluate_at(eval_point)
@@ -34,11 +34,11 @@ impl IDkgTranscriptInternal {
 }
 
 impl TryFrom<&IDkgTranscript> for IDkgTranscriptInternal {
-    type Error = ThresholdEcdsaSerializationError;
+    type Error = CanisterThresholdSerializationError;
 
     fn try_from(
         idkm_transcript: &IDkgTranscript,
-    ) -> Result<Self, ThresholdEcdsaSerializationError> {
+    ) -> Result<Self, CanisterThresholdSerializationError> {
         Self::deserialize(&idkm_transcript.internal_transcript_raw)
     }
 }
@@ -85,13 +85,13 @@ impl CombinedCommitment {
         }
     }
 
-    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
-        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+    pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
+        serde_cbor::to_vec(self).map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
     }
 
-    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
+    pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+            .map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
     }
 }
 
@@ -107,11 +107,11 @@ pub enum IDkgTranscriptOperationInternal {
 }
 
 impl TryFrom<&IDkgTranscriptOperation> for IDkgTranscriptOperationInternal {
-    type Error = ThresholdEcdsaSerializationError;
+    type Error = CanisterThresholdSerializationError;
 
     fn try_from(
         idkm_transcript_op: &IDkgTranscriptOperation,
-    ) -> Result<Self, ThresholdEcdsaSerializationError> {
+    ) -> Result<Self, CanisterThresholdSerializationError> {
         match idkm_transcript_op {
             IDkgTranscriptOperation::Random => Ok(Self::Random),
             IDkgTranscriptOperation::RandomUnmasked => Ok(Self::RandomUnmasked),
@@ -144,11 +144,11 @@ fn combine_commitments_via_interpolation(
     curve: EccCurveType,
     reconstruction_threshold: usize,
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
-) -> ThresholdEcdsaResult<CombinedCommitment> {
+) -> CanisterThresholdResult<CombinedCommitment> {
     // First verify the dealings are of the expected type
     for dealing in verified_dealings.values() {
         if dealing.commitment.ctype() != commitment_type {
-            return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+            return Err(CanisterThresholdError::UnexpectedCommitmentType);
         }
     }
 
@@ -190,16 +190,16 @@ impl IDkgTranscriptInternal {
         reconstruction_threshold: usize,
         verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
         operation_mode: &IDkgTranscriptOperationInternal,
-    ) -> ThresholdEcdsaResult<IDkgTranscriptInternal> {
+    ) -> CanisterThresholdResult<IDkgTranscriptInternal> {
         // Check all dealings have correct length and are on the same curve
         for dealing in verified_dealings.values() {
             if dealing.commitment.points().len() != reconstruction_threshold {
-                return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                return Err(CanisterThresholdError::UnexpectedCommitmentType);
             }
 
             for point in dealing.commitment.points() {
                 if point.curve_type() != curve {
-                    return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                    return Err(CanisterThresholdError::UnexpectedCommitmentType);
                 }
             }
         }
@@ -212,7 +212,7 @@ impl IDkgTranscriptInternal {
 
                 for dealing in verified_dealings.values() {
                     if dealing.commitment.ctype() != PolynomialCommitmentType::Pedersen {
-                        return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                        return Err(CanisterThresholdError::UnexpectedCommitmentType);
                     }
 
                     let c = dealing.commitment.points();
@@ -230,7 +230,7 @@ impl IDkgTranscriptInternal {
 
                 for dealing in verified_dealings.values() {
                     if dealing.commitment.ctype() != PolynomialCommitmentType::Simple {
-                        return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                        return Err(CanisterThresholdError::UnexpectedCommitmentType);
                     }
 
                     let c = dealing.commitment.points();
@@ -245,14 +245,14 @@ impl IDkgTranscriptInternal {
             IDkgTranscriptOperationInternal::ReshareOfMasked(reshared_commitment) => {
                 // Verify that the old commitment is actually masked
                 if reshared_commitment.ctype() != PolynomialCommitmentType::Pedersen {
-                    return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                    return Err(CanisterThresholdError::UnexpectedCommitmentType);
                 }
                 // Check the number of dealings is not smaller than the number of coefficients
                 // of the opening of the `reshared_commitment`. This ensures that the
                 // commitment combined via interpolation will open to a polynomial that has
                 // the same constant term as the opening of `reshared_commitment`.
                 if verified_dealings.len() < reshared_commitment.points().len() {
-                    return Err(ThresholdEcdsaError::InsufficientDealings);
+                    return Err(CanisterThresholdError::InsufficientDealings);
                 }
                 combine_commitments_via_interpolation(
                     PolynomialCommitmentType::Simple,
@@ -265,14 +265,14 @@ impl IDkgTranscriptInternal {
             IDkgTranscriptOperationInternal::ReshareOfUnmasked(reshared_commitment) => {
                 // Verify that the old commitment is Unmasked
                 if reshared_commitment.ctype() != PolynomialCommitmentType::Simple {
-                    return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                    return Err(CanisterThresholdError::UnexpectedCommitmentType);
                 }
                 // Check the number of dealings is not smaller than the number of coefficients
                 // of the opening of the `reshared_commitment`. This ensures that the
                 // commitment combined via interpolation will open to a polynomial that has
                 // the same constant term as the opening of `reshared_commitment`.
                 if verified_dealings.len() < reshared_commitment.points().len() {
-                    return Err(ThresholdEcdsaError::InsufficientDealings);
+                    return Err(CanisterThresholdError::InsufficientDealings);
                 }
                 let combined_commitment = combine_commitments_via_interpolation(
                     PolynomialCommitmentType::Simple,
@@ -284,7 +284,7 @@ impl IDkgTranscriptInternal {
                 // Check the constant term of the combined commitment is
                 // consistent with the reshared commitment
                 if reshared_commitment.points()[0] != combined_commitment.commitment().points()[0] {
-                    return Err(ThresholdEcdsaError::InvalidCommitment);
+                    return Err(CanisterThresholdError::InvalidCommitment);
                 }
 
                 combined_commitment
@@ -296,7 +296,7 @@ impl IDkgTranscriptInternal {
                 if left_commitment.ctype() != PolynomialCommitmentType::Simple
                     || right_commitment.ctype() != PolynomialCommitmentType::Pedersen
                 {
-                    return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                    return Err(CanisterThresholdError::UnexpectedCommitmentType);
                 }
                 // Check the number of dealings is not smaller than the number of coefficients
                 // in the polynomial obtained by multiplying the opening of `left_commitment`
@@ -307,7 +307,7 @@ impl IDkgTranscriptInternal {
                 if verified_dealings.len()
                     < left_commitment.points().len() + right_commitment.points().len() - 1
                 {
-                    return Err(ThresholdEcdsaError::InsufficientDealings);
+                    return Err(CanisterThresholdError::InsufficientDealings);
                 }
 
                 combine_commitments_via_interpolation(
@@ -342,11 +342,11 @@ fn reconstruct_share_from_openings(
     dealing: &IDkgDealingInternal,
     openings: &BTreeMap<NodeIndex, CommitmentOpening>,
     share_index: NodeIndex,
-) -> ThresholdEcdsaResult<CommitmentOpening> {
+) -> CanisterThresholdResult<CommitmentOpening> {
     let reconstruction_threshold = dealing.commitment.len();
 
     if openings.len() < reconstruction_threshold {
-        return Err(ThresholdEcdsaError::InsufficientOpenings(
+        return Err(CanisterThresholdError::InsufficientOpenings(
             openings.len(),
             reconstruction_threshold,
         ));
@@ -365,7 +365,7 @@ fn reconstruct_share_from_openings(
                     x_values.push(*receiver_index);
                     values.push(value.clone());
                 } else {
-                    return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                    return Err(CanisterThresholdError::UnexpectedCommitmentType);
                 }
             }
 
@@ -384,7 +384,7 @@ fn reconstruct_share_from_openings(
                     values.push(value.clone());
                     masks.push(mask.clone());
                 } else {
-                    return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                    return Err(CanisterThresholdError::UnexpectedCommitmentType);
                 }
             }
 
@@ -441,7 +441,7 @@ impl CommitmentOpening {
             let opening = if let Some(shares) = provided_openings.get(dealer_index) {
                 reconstruct_share_from_openings(dealing, shares, receiver_index).map_err(|e| {
                     match e {
-                        ThresholdEcdsaError::InsufficientOpenings(have, req) => {
+                        CanisterThresholdError::InsufficientOpenings(have, req) => {
                             IDkgComputeSecretSharesInternalError::InsufficientOpenings(have, req)
                         }
                         e => IDkgComputeSecretSharesInternalError::UnableToReconstruct(format!(
@@ -462,7 +462,7 @@ impl CommitmentOpening {
                         public_key,
                     )
                     .map_err(|e| match e {
-                        ThresholdEcdsaError::InvalidCommitment => {
+                        CanisterThresholdError::InvalidCommitment => {
                             IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued
                         }
                         e => IDkgComputeSecretSharesInternalError::InvalidCiphertext(format!(
@@ -479,7 +479,7 @@ impl CommitmentOpening {
 
         Self::combine_openings(&openings, transcript_commitment, receiver_index).map_err(
             |e| match e {
-                ThresholdEcdsaError::InsufficientOpenings(have, req) => {
+                CanisterThresholdError::InsufficientOpenings(have, req) => {
                     IDkgComputeSecretSharesInternalError::InsufficientOpenings(have, req)
                 }
                 e => IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(format!(
@@ -528,7 +528,7 @@ impl CommitmentOpening {
                     public_key,
                 )
                 .map_err(|e| match e {
-                    ThresholdEcdsaError::InvalidCommitment => {
+                    CanisterThresholdError::InvalidCommitment => {
                         IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued
                     }
                     e => IDkgComputeSecretSharesInternalError::InvalidCiphertext(format!(
@@ -551,7 +551,7 @@ impl CommitmentOpening {
         openings: &[(NodeIndex, CommitmentOpening)],
         transcript_commitment: &CombinedCommitment,
         receiver_index: NodeIndex,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let curve = transcript_commitment.curve_type();
 
         // Recombine the openings according to the type of combined polynomial
@@ -567,7 +567,7 @@ impl CommitmentOpening {
                             if let Self::Simple(value) = opening {
                                 combined_value = combined_value.add(value)?;
                             } else {
-                                return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                                return Err(CanisterThresholdError::UnexpectedCommitmentType);
                             }
                         }
 
@@ -582,7 +582,7 @@ impl CommitmentOpening {
                                 combined_value = combined_value.add(value)?;
                                 combined_mask = combined_mask.add(mask)?;
                             } else {
-                                return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                                return Err(CanisterThresholdError::UnexpectedCommitmentType);
                             }
                         }
 
@@ -605,7 +605,7 @@ impl CommitmentOpening {
                                 x_values.push(*dealer_index);
                                 values.push(value.clone());
                             } else {
-                                return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                                return Err(CanisterThresholdError::UnexpectedCommitmentType);
                             }
                         }
 
@@ -625,7 +625,7 @@ impl CommitmentOpening {
                                 values.push(value.clone());
                                 masks.push(mask.clone());
                             } else {
-                                return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                                return Err(CanisterThresholdError::UnexpectedCommitmentType);
                             }
                         }
 

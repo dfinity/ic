@@ -17,15 +17,6 @@ mod status;
 mod threads;
 mod tracing_flamegraph;
 
-use axum_server::{
-    accept::{Accept, NoDelayAcceptor},
-    tls_rustls::{RustlsAcceptor, RustlsConfig},
-};
-pub use call::CallServiceBuilder;
-use futures_util::{future::BoxFuture, FutureExt};
-use prometheus::HistogramTimer;
-pub use query::QueryServiceBuilder;
-
 cfg_if::cfg_if! {
     if #[cfg(feature = "fuzzing_code")] {
         pub mod validator_executor;
@@ -38,19 +29,27 @@ cfg_if::cfg_if! {
     }
 }
 
+pub use call::CallServiceBuilder;
+pub use common::cors_layer;
+pub use query::QueryServiceBuilder;
+pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
+
 use crate::{
     catch_up_package::CatchUpPackageService,
     common::{get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response},
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
-    metrics::{LABEL_STATUS, REQUESTS_LABEL_NAMES, STATUS_ERROR, STATUS_SUCCESS},
+    metrics::{
+        HttpHandlerMetrics, LABEL_INSECURE, LABEL_IO_ERROR, LABEL_SECURE, LABEL_STATUS,
+        LABEL_TIMEOUT_ERROR, LABEL_TLS_ERROR, LABEL_UNKNOWN, REQUESTS_LABEL_NAMES, STATUS_ERROR,
+        STATUS_SUCCESS,
+    },
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
     read_state::subnet::SubnetReadStateService,
     state_reader_executor::StateReaderExecutor,
     status::StatusService,
     tracing_flamegraph::TracingFlamegraphService,
 };
-pub use common::cors_layer;
 
 use axum::{
     body::Body,
@@ -63,13 +62,13 @@ use axum::{
 };
 use crossbeam::atomic::AtomicCell;
 use http_body_util::{BodyExt, Full, LengthLimitError};
-use hyper::{Request, StatusCode};
-use hyper_util::rt::TokioIo;
+use hyper::{body::Incoming, Request, StatusCode};
+use hyper_util::rt::{TokioExecutor, TokioIo};
 use ic_async_utils::start_tcp_listener;
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_crypto_tls_interfaces::{TlsConfig, TlsHandshake};
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces::{
@@ -101,18 +100,13 @@ use ic_types::{
     time::expiry_time_from_now,
     NodeId, SubnetId,
 };
-use metrics::{
-    HttpHandlerMetrics, LABEL_INSECURE, LABEL_IO_ERROR, LABEL_SECURE, LABEL_TIMEOUT_ERROR,
-    LABEL_TLS_ERROR, LABEL_UNKNOWN,
-};
 use rand::Rng;
-pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
+use rustls::client::ServerName;
 use std::{
     convert::TryFrom,
-    io::{ErrorKind, Write},
+    io::Write,
     net::SocketAddr,
     path::PathBuf,
-    pin::Pin,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -123,7 +117,8 @@ use tokio::{
     sync::mpsc::UnboundedSender,
     time::{sleep, timeout, Instant},
 };
-use tower::{limit::GlobalConcurrencyLimitLayer, BoxError, ServiceBuilder};
+use tokio_rustls::TlsConnector;
+use tower::{limit::GlobalConcurrencyLimitLayer, BoxError, Service, ServiceBuilder};
 use tower_http::limit::RequestBodyLimitLayer;
 
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
@@ -135,6 +130,10 @@ const ALPN_HTTP2: &[u8; 2] = b"h2";
 /// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/1.1` ID][spec]
 /// [spec]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids)
 const ALPN_HTTP1_1: &[u8; 8] = b"http/1.1";
+
+/// To indicate a TLS handshake the first byte of the TLS record (also known as Content Type) is set to 22.
+/// Defined in RFC 5246 for TLS 1.2 and RFC 8446 for TLS 1.3
+const TLS_HANDHAKE_BYTES: u8 = 22;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HttpError {
@@ -171,7 +170,7 @@ fn start_server_initialization(
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     rt_handle: tokio::runtime::Handle,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig + Send + Sync>,
 ) {
     let rt_handle_clone = rt_handle.clone();
     rt_handle.spawn(async move {
@@ -205,7 +204,7 @@ fn start_server_initialization(
             subnet_id,
             nns_subnet_id,
             registry_client.as_ref(),
-            tls_handshake.as_ref(),
+            tls_config.as_ref(),
         )
         .await;
         if let Some(delegation) = loaded_delegation {
@@ -283,7 +282,6 @@ pub fn start_server(
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     node_id: NodeId,
     subnet_id: SubnetId,
@@ -393,7 +391,7 @@ pub fn start_server(
         Arc::clone(&delegation_from_nns),
         Arc::clone(&health_status),
         rt_handle.clone(),
-        tls_handshake.clone(),
+        tls_config.clone(),
     );
 
     let http_handler = HttpHandler {
@@ -424,188 +422,110 @@ pub fn start_server(
         create_port_file(path, local_addr.port());
     }
 
+    let read_timeout = Duration::from_secs(config.connection_read_timeout_seconds);
     rt_handle.spawn(async move {
-        axum_server::Server::from_tcp(tcp_listener.into_std().unwrap())
-            .acceptor(HttpEndpointAcceptor::new(
-                tls_config.clone(),
-                registry_client.clone(),
-                Duration::from_secs(config.connection_read_timeout_seconds),
-                metrics.clone(),
-            ))
-            .serve(router.into_make_service())
-            .await
-            .unwrap();
+        loop {
+            let (stream, _remote_addr) = tcp_listener.accept().await.unwrap();
+
+            let router = router.clone();
+            let tls_config = tls_config.clone();
+            let log = log.clone();
+            let registry_client = registry_client.clone();
+            let metrics = metrics.clone();
+
+            tokio::spawn(async move {
+                metrics.connections_total.inc();
+                let timer = Instant::now();
+                // Set `NODELAY`
+                if stream.set_nodelay(true).is_err() {
+                    warn!(log, "Failed to set NODELAY option on tcp stream");
+                }
+
+                // Peek to know if it is TLS connection.
+                let mut b = [0_u8; 1];
+                match timeout(read_timeout, stream.peek(&mut b)).await {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(_)) => {
+                        metrics
+                            .connection_setup_duration
+                            .with_label_values(&[STATUS_ERROR, LABEL_IO_ERROR])
+                            .observe(timer.elapsed().as_secs_f64());
+                        return;
+                    }
+                    Err(_) => {
+                        metrics
+                            .connection_setup_duration
+                            .with_label_values(&[STATUS_ERROR, LABEL_TIMEOUT_ERROR])
+                            .observe(timer.elapsed().as_secs_f64());
+                        return;
+                    }
+                }
+                let mut stream = tokio_io_timeout::TimeoutStream::new(stream);
+                stream.set_read_timeout(Some(read_timeout));
+                let stream = Box::pin(stream);
+
+                if b[0] == TLS_HANDHAKE_BYTES {
+                    let _timer = metrics
+                        .connection_duration
+                        .with_label_values(&[LABEL_SECURE])
+                        .start_timer();
+                    let mut config = match tls_config
+                        .server_config_without_client_auth(registry_client.get_latest_version())
+                    {
+                        Ok(c) => c,
+                        Err(err) => {
+                            warn!(log, "Failed to get server config from crypto {err}");
+                            return;
+                        }
+                    };
+                    config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
+                    let tls_acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
+
+                    match tls_acceptor.accept(stream).await {
+                        Ok(stream) => {
+                            metrics
+                                .connection_setup_duration
+                                .with_label_values(&[STATUS_SUCCESS, LABEL_SECURE])
+                                .observe(timer.elapsed().as_secs_f64());
+                            if let Err(err) = serve_http(stream, router).await {
+                                warn!(log, "failed to serve connection: {err}");
+                            }
+                        }
+                        Err(_) => {
+                            metrics
+                                .connection_setup_duration
+                                .with_label_values(&[STATUS_ERROR, LABEL_TLS_ERROR])
+                                .observe(timer.elapsed().as_secs_f64());
+                        }
+                    }
+                } else {
+                    let _timer = metrics
+                        .connection_duration
+                        .with_label_values(&[LABEL_INSECURE])
+                        .start_timer();
+                    metrics
+                        .connection_setup_duration
+                        .with_label_values(&[STATUS_SUCCESS, LABEL_INSECURE])
+                        .observe(timer.elapsed().as_secs_f64());
+                    if let Err(err) = serve_http(stream, router).await {
+                        warn!(log, "failed to serve connection: {err}");
+                    }
+                };
+            });
+        }
     });
 }
 
-#[derive(Clone)]
-struct HttpEndpointAcceptor {
-    tls: Arc<dyn TlsConfig + Send + Sync>,
-    registry: Arc<dyn RegistryClient>,
-    read_timeout: Duration,
-    metrics: HttpHandlerMetrics,
-}
-
-impl HttpEndpointAcceptor {
-    fn new(
-        tls: Arc<dyn TlsConfig + Send + Sync>,
-        registry: Arc<dyn RegistryClient>,
-        read_timeout: Duration,
-        metrics: HttpHandlerMetrics,
-    ) -> Self {
-        Self {
-            tls,
-            registry,
-            read_timeout,
-            metrics,
-        }
-    }
-}
-
-trait TokioRW: AsyncRead + AsyncWrite + Send + Unpin {}
-impl<T> TokioRW for T where T: AsyncRead + AsyncWrite + Send + Unpin {}
-
-struct StreamWithTimer {
-    inner: Box<dyn TokioRW>,
-    _timer: HistogramTimer,
-}
-
-impl AsyncRead for StreamWithTimer {
-    fn poll_read(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        Pin::new(&mut self.inner).poll_read(cx, buf)
-    }
-}
-
-impl AsyncWrite for StreamWithTimer {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        Pin::new(&mut self.inner).poll_write(cx, buf)
-    }
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut self.inner).poll_flush(cx)
-    }
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut self.inner).poll_shutdown(cx)
-    }
-}
-
-impl<S: Send + 'static> Accept<TcpStream, S> for HttpEndpointAcceptor {
-    type Stream = StreamWithTimer;
-    type Service = S;
-    type Future = BoxFuture<'static, Result<(Self::Stream, Self::Service), std::io::Error>>;
-    fn accept(&self, stream: TcpStream, service: S) -> Self::Future {
-        let tls = self.tls.clone();
-        let registry_client = self.registry.clone();
-        let read_timeout = self.read_timeout;
-        let metrics = self.metrics.clone();
-
-        async move {
-            metrics.connections_total.inc();
-            let timer = Instant::now();
-
-            // Peek first byte to determine if TLS connection or not.
-            let mut b = [0_u8; 1];
-            match timeout(read_timeout, stream.peek(&mut b)).await {
-                Ok(Ok(_)) => {}
-                Ok(Err(e)) => {
-                    metrics
-                        .connection_setup_duration
-                        .with_label_values(&[STATUS_ERROR, LABEL_IO_ERROR])
-                        .observe(timer.elapsed().as_secs_f64());
-                    Err(e)?
-                }
-                Err(_) => {
-                    metrics
-                        .connection_setup_duration
-                        .with_label_values(&[STATUS_ERROR, LABEL_TIMEOUT_ERROR])
-                        .observe(timer.elapsed().as_secs_f64());
-                    Err(std::io::Error::new(
-                        ErrorKind::TimedOut,
-                        "Failed to read first byte of tcp stream",
-                    ))
-                }?,
-            }
-            // Set no delay on the socket
-            let (stream, service) = NoDelayAcceptor::new().accept(stream, service).await?;
-            // Set read timeout on the socket such that connection get closed if idle for long.
-            let mut stream = tokio_io_timeout::TimeoutStream::new(stream);
-            stream.set_read_timeout(Some(read_timeout));
-            let stream = Box::pin(stream);
-
-            if b[0] == 22 {
-                let _timer = metrics
-                    .connection_duration
-                    .with_label_values(&[LABEL_SECURE])
-                    .start_timer();
-                let mut config = tls
-                    .server_config_without_client_auth(registry_client.get_latest_version())
-                    .map_err(|err| {
-                        std::io::Error::new(
-                            ErrorKind::Other,
-                            format!("Failed to get tls config from registry: {err}"),
-                        )
-                    })?;
-                config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
-                let mut tls = RustlsAcceptor::new(RustlsConfig::from_config(Arc::new(config)));
-                tls = tls.handshake_timeout(read_timeout);
-                let res = tls.accept(stream, service).await.map(|(stream, svc)| {
-                    (
-                        StreamWithTimer {
-                            inner: Box::new(stream) as Box<_>,
-                            _timer,
-                        },
-                        svc,
-                    )
-                });
-                match res {
-                    Ok(s) => {
-                        metrics
-                            .connection_setup_duration
-                            .with_label_values(&[STATUS_SUCCESS, LABEL_SECURE])
-                            .observe(timer.elapsed().as_secs_f64());
-                        Ok(s)
-                    }
-                    Err(e) => {
-                        metrics
-                            .connection_setup_duration
-                            .with_label_values(&[STATUS_ERROR, LABEL_TLS_ERROR])
-                            .observe(timer.elapsed().as_secs_f64());
-                        Err(e)
-                    }
-                }
-            } else {
-                let _timer = metrics
-                    .connection_duration
-                    .with_label_values(&[LABEL_INSECURE])
-                    .start_timer();
-                metrics
-                    .connection_setup_duration
-                    .with_label_values(&[STATUS_SUCCESS, LABEL_INSECURE])
-                    .observe(timer.elapsed().as_secs_f64());
-                Ok((
-                    StreamWithTimer {
-                        inner: Box::new(stream) as Box<_>,
-                        _timer,
-                    },
-                    service,
-                ))
-            }
-        }
-        .boxed()
-    }
+async fn serve_http<S: AsyncRead + AsyncWrite + Send + Unpin + 'static>(
+    stream: S,
+    router: Router,
+) -> Result<(), BoxError> {
+    let stream = TokioIo::new(stream);
+    let hyper_service =
+        hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
+    hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+        .serve_connection_with_upgrades(stream, hyper_service)
+        .await
 }
 
 fn make_router(
@@ -835,7 +755,7 @@ async fn load_root_delegation(
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
-    tls_handshake: &(dyn TlsHandshake + Send + Sync),
+    tls_config: &(dyn TlsConfig + Send + Sync),
 ) -> Option<CertificateDelegation> {
     if subnet_id == nns_subnet_id {
         info!(log, "On the NNS subnet. Skipping fetching the delegation.");
@@ -862,7 +782,7 @@ async fn load_root_delegation(
             &subnet_id,
             &nns_subnet_id,
             registry_client,
-            tls_handshake,
+            tls_config,
         )
         .await
         {
@@ -892,7 +812,7 @@ async fn try_fetch_delegation_from_nns(
     subnet_id: &SubnetId,
     nns_subnet_id: &SubnetId,
     registry_client: &dyn RegistryClient,
-    tls_handshake: &(dyn TlsHandshake + Send + Sync),
+    tls_config: &(dyn TlsConfig + Send + Sync),
 ) -> Result<CertificateDelegation, BoxError> {
     let (peer_id, node) =
         match get_random_node_from_nns_subnet(registry_client, *nns_subnet_id).await {
@@ -939,17 +859,31 @@ async fn try_fetch_delegation_from_nns(
 
     let addr = SocketAddr::new(ip_addr, node.port as u16);
 
+    let tls_client_config = tls_config
+        .client_config(peer_id, registry_version)
+        .map_err(|err| format!("Retrieving TLS client config failed: {:?}.", err))?;
+
     let tcp_stream: TcpStream = TcpStream::connect(addr)
         .await
         .map_err(|err| format!("Could not connect to node {}. {:?}.", addr, err))?;
 
-    let tls_handshake = tls_handshake
-        .perform_tls_client_handshake(tcp_stream, peer_id, registry_version)
+    let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
+    // TODO: ideally the expect should run at compile time
+    let irrelevant_domain =
+        ServerName::try_from("domain.is-irrelevant-as-hostname-verification-is.disabled")
+            .expect("failed to create domain");
+    let tls_stream = tls_connector
+        .connect(irrelevant_domain, tcp_stream)
         .await
-        .map_err(|err| format!("TLS handshake failed: {:?}.", err))?;
+        .map_err(|err| {
+            format!(
+                "Could not establish TLS stream to node {}. {:?}.",
+                addr, err
+            )
+        })?;
 
     let (mut request_sender, connection) =
-        hyper::client::conn::http1::handshake(TokioIo::new(tls_handshake)).await?;
+        hyper::client::conn::http1::handshake(TokioIo::new(tls_stream)).await?;
 
     let log_clone = log.clone();
 

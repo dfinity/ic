@@ -220,6 +220,7 @@ fn subnet_to_subnet_config(
         subnet.max_instructions_per_install_code,
         subnet.features,
         None,
+        None,
         subnet.max_number_of_canisters,
         subnet.ssh_readonly_access,
         subnet.ssh_backup_access,

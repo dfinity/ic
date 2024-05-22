@@ -2560,7 +2560,7 @@ fn canister_output_queue_does_not_overflow_when_calling_ic00() {
                 test.ingress_state(&message_id),
                 IngressState::Failed(UserError::new(
                     ErrorCode::CanisterCalledTrap,
-                    format!("Error from Canister {uc}: Canister trapped explicitly: call_perform failed")
+                    format!("Error from Canister {uc}: Canister called `ic0.trap` with message: call_perform failed")
                 ))
             );
         } else {
@@ -2608,7 +2608,7 @@ fn send_messages_to_bitcoin_canister_until_capacity(
                 test.ingress_state(&message_id),
                 IngressState::Failed(UserError::new(
                     ErrorCode::CanisterCalledTrap,
-                    format!("Error from Canister {uc}: Canister trapped explicitly: call_perform failed")
+                    format!("Error from Canister {uc}: Canister called `ic0.trap` with message: call_perform failed")
                 ))
             );
         } else {

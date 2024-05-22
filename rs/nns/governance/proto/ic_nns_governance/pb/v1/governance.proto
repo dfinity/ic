@@ -2234,8 +2234,6 @@ message Governance {
     // Migrates neuron indexes to stable storage.
     Migration neuron_indexes_migration = 1;
     Migration copy_inactive_neurons_to_stable_memory_migration = 2;
-
-    // TODO(NNS1-2533): Migration delete_inactive_neurons_from_heap = 3;
   }
 
   // Migration related data.
@@ -2555,10 +2553,12 @@ message AuditEvent {
   uint64 timestamp_seconds = 1;
 
   oneof payload {
-    // Reset aging timestamps for https://forum.dfinity.org/t/icp-neuron-age-is-52-years/21261/26
+    // Reset aging timestamps (https://forum.dfinity.org/t/icp-neuron-age-is-52-years/21261/26).
     ResetAging reset_aging = 2;
-    // Restore aging timestamp that were incorrectly reset.
+    // Restore aging timestamp that were incorrectly reset (https://forum.dfinity.org/t/restore-neuron-age-in-proposal-129394/29840).
     RestoreAging restore_aging = 3;
+    // Normalize neuron dissolve state and age (https://forum.dfinity.org/t/simplify-neuron-state-age/30527)
+    NormalizeDissolveStateAndAge normalize_dissolve_state_and_age = 4;
   }
 
   message ResetAging {
@@ -2599,6 +2599,30 @@ message AuditEvent {
 
     // Neuron's stake at the time of restore.
     optional uint64 neuron_stake_e8s = 6;
+  }
+
+  enum NeuronLegacyCase {
+    NEURON_LEGACY_CASE_UNSPECIFIED = 0;
+    // Neuron is dissolving or dissolved but with a non-zero age.
+    NEURON_LEGACY_CASE_DISSOLVING_OR_DISSOLVED = 1;
+    // Neuron is dissolved with DissolveDelaySeconds(0).
+    NEURON_LEGACY_CASE_DISSOLVED = 2;
+    // Neuron has a None dissolve state.
+    NEURON_LEGACY_CASE_NONE_DISSOLVE_STATE = 3;
+  }
+
+  message NormalizeDissolveStateAndAge {
+    // The neuron id whose dissolve state and age were normalized.
+    optional uint64 neuron_id = 1;
+
+    // Which legacy case the neuron falls into.
+    NeuronLegacyCase neuron_legacy_case = 2;
+
+    // Previous when_dissolved_timestamp_seconds if the neuron was dissolving or dissolved.
+    optional uint64 previous_when_dissolved_timestamp_seconds = 3;
+
+    // Previous aging_since_timestamp_seconds.
+    optional uint64 previous_aging_since_timestamp_seconds = 4;
   }
 }
 

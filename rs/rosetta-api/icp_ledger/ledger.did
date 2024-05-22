@@ -425,6 +425,62 @@ type TransferFromError = variant {
     GenericError : record { error_code : nat; message : text };
 };
 
+type icrc21_consent_message_metadata = record {
+    language: text;
+};
+
+type icrc21_consent_message_spec = record {
+    metadata: icrc21_consent_message_metadata;
+    device_spec: opt variant {
+        GenericDisplay;
+        LineDisplay: record {
+            characters_per_line: nat16;
+            lines_per_page: nat16;
+        };
+    };
+};
+
+type icrc21_consent_message_request = record {
+    method: text;
+    arg: blob;
+    user_preferences: icrc21_consent_message_spec;
+};
+
+type icrc21_consent_message = variant {
+    GenericDisplayMessage: text;
+    LineDisplayMessage: record {
+        pages: vec record {
+            lines: vec text;
+        };
+    };
+};
+
+type icrc21_consent_info = record {
+    consent_message: icrc21_consent_message;
+    metadata: icrc21_consent_message_metadata;
+};
+
+type icrc21_error_info = record {
+    description: text;
+};
+
+type icrc21_error = variant {
+    UnsupportedCanisterCall: icrc21_error_info;
+    ConsentMessageUnavailable: icrc21_error_info;
+    InsufficientPayment: icrc21_error_info;
+
+    // Any error not covered by the above variants.
+    GenericError: record {
+       error_code: nat;
+       description: text;
+   };
+};
+
+type icrc21_consent_message_response = variant {
+    Ok: icrc21_consent_info;
+    Err: icrc21_error;
+};
+
 service: (LedgerCanisterPayload) -> {
     // Transfers tokens from a subaccount of the caller to the destination address.
     // The source address is computed from the principal of the caller and the specified subaccount.
@@ -476,4 +532,7 @@ service: (LedgerCanisterPayload) -> {
     icrc2_approve : (ApproveArgs) -> (ApproveResult);
     icrc2_allowance : (AllowanceArgs) -> (Allowance) query;
     icrc2_transfer_from : (TransferFromArgs) -> (TransferFromResult);
+
+    icrc21_canister_call_consent_message: (icrc21_consent_message_request) -> (icrc21_consent_message_response);
+    icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
 }

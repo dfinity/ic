@@ -2,13 +2,12 @@ use super::test_fixtures::*;
 use super::*;
 use crate::certified_slice_pool::CertifiedSliceError;
 use assert_matches::assert_matches;
+use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_interfaces::messaging::{InvalidXNetPayload, XNetTransientValidationError};
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_interfaces_state_manager::StateManagerError;
 use ic_interfaces_state_manager_mocks::MockStateManager;
-use ic_test_utilities::{
-    crypto::fake_tls_handshake::FakeTlsHandshake, state_manager::FakeStateManager,
-};
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter_vec, metric_vec,
@@ -233,7 +232,7 @@ async fn validate_duplicate_messages_against_state_only() {
         };
         let state_manager = Arc::new(state_manager);
         let registry = get_empty_registry_for_test();
-        let tls_handshake = Arc::new(FakeTlsHandshake::new());
+        let tls_handshake = Arc::new(MockTlsConfig::new());
         let xnet_payload_builder = XNetPayloadBuilderImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
             state_manager,
@@ -314,7 +313,7 @@ async fn validate_state_removed() {
             .return_const(Err(StateManagerError::StateRemoved(CERTIFIED_HEIGHT)));
         let state_manager = Arc::new(state_manager);
         let registry = get_empty_registry_for_test();
-        let tls_handshake = Arc::new(FakeTlsHandshake::new());
+        let tls_handshake = Arc::new(MockTlsConfig::new());
         let xnet_payload_builder = XNetPayloadBuilderImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
             certified_stream_store,
@@ -351,7 +350,7 @@ async fn validate_state_not_yet_committed() {
         let state_manager = Arc::new(state_manager);
 
         let registry = get_empty_registry_for_test();
-        let tls_handshake = Arc::new(FakeTlsHandshake::new());
+        let tls_handshake = Arc::new(MockTlsConfig::new());
         let xnet_payload_builder = XNetPayloadBuilderImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
             state_manager,
@@ -414,7 +413,7 @@ async fn validate_broken_count_bytes_fn() {
 /// `RegistryClient` with valid payloads and expected indices.
 pub(crate) struct PayloadBuilderTestFixture {
     pub state_manager: Arc<FakeStateManager>,
-    pub tls_handshake: Arc<FakeTlsHandshake>,
+    pub tls_handshake: Arc<MockTlsConfig>,
     pub registry: Arc<dyn RegistryClient>,
     pub validation_context: ValidationContext,
     pub metrics: MetricsRegistry,
@@ -427,7 +426,7 @@ impl PayloadBuilderTestFixture {
     /// and registry entries plus matching URLs for the given number of subnets.
     pub fn with_xnet_state(subnet_count: u8) -> Self {
         let state_manager = Arc::new(FakeStateManager::new());
-        let tls_handshake = Arc::new(FakeTlsHandshake::new());
+        let tls_handshake = Arc::new(MockTlsConfig::new());
 
         let (payloads, expected_indices) = get_xnet_state_for_testing(&state_manager);
         let (registry, _) = get_registry_and_urls_for_test(subnet_count, expected_indices);

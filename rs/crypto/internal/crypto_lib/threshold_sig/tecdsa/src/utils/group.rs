@@ -99,16 +99,6 @@ impl EccCurveType {
         }
     }
 
-    pub fn from_algorithm(alg_id: ic_types::crypto::AlgorithmId) -> Option<Self> {
-        match alg_id {
-            AlgorithmId::ThresholdEcdsaSecp256k1 => Some(EccCurveType::K256),
-            AlgorithmId::ThresholdEcdsaSecp256r1 => Some(EccCurveType::P256),
-            AlgorithmId::ThresholdSchnorrBip340 => Some(EccCurveType::K256),
-            AlgorithmId::ThresholdEd25519 => Some(EccCurveType::Ed25519),
-            _ => None,
-        }
-    }
-
     pub(crate) fn valid_for_ecdsa(&self) -> bool {
         match self {
             EccCurveType::K256 => true,
@@ -169,32 +159,32 @@ impl EccScalar {
     }
 
     /// Return the sum of two scalar values
-    pub fn add(&self, other: &EccScalar) -> ThresholdEcdsaResult<Self> {
+    pub fn add(&self, other: &EccScalar) -> CanisterThresholdResult<Self> {
         match (self, other) {
             (Self::K256(s1), Self::K256(s2)) => Ok(Self::K256(s1.add(s2))),
             (Self::P256(s1), Self::P256(s2)) => Ok(Self::P256(s1.add(s2))),
             (Self::Ed25519(s1), Self::Ed25519(s2)) => Ok(Self::Ed25519(s1.add(s2))),
-            (_, _) => Err(ThresholdEcdsaError::CurveMismatch),
+            (_, _) => Err(CanisterThresholdError::CurveMismatch),
         }
     }
 
     /// Return the difference of two scalar values
-    pub fn sub(&self, other: &EccScalar) -> ThresholdEcdsaResult<Self> {
+    pub fn sub(&self, other: &EccScalar) -> CanisterThresholdResult<Self> {
         match (self, other) {
             (Self::K256(s1), Self::K256(s2)) => Ok(Self::K256(s1.sub(s2))),
             (Self::P256(s1), Self::P256(s2)) => Ok(Self::P256(s1.sub(s2))),
             (Self::Ed25519(s1), Self::Ed25519(s2)) => Ok(Self::Ed25519(s1.sub(s2))),
-            (_, _) => Err(ThresholdEcdsaError::CurveMismatch),
+            (_, _) => Err(CanisterThresholdError::CurveMismatch),
         }
     }
 
     /// Return the product of two scalar values
-    pub fn mul(&self, other: &EccScalar) -> ThresholdEcdsaResult<Self> {
+    pub fn mul(&self, other: &EccScalar) -> CanisterThresholdResult<Self> {
         match (self, other) {
             (Self::K256(s1), Self::K256(s2)) => Ok(Self::K256(s1.mul(s2))),
             (Self::P256(s1), Self::P256(s2)) => Ok(Self::P256(s1.mul(s2))),
             (Self::Ed25519(s1), Self::Ed25519(s2)) => Ok(Self::Ed25519(s1.mul(s2))),
-            (_, _) => Err(ThresholdEcdsaError::CurveMismatch),
+            (_, _) => Err(CanisterThresholdError::CurveMismatch),
         }
     }
 
@@ -251,7 +241,7 @@ impl EccScalar {
         curve: EccCurveType,
         input: &[u8],
         domain_separator: &[u8],
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         let h = Self::hash_to_several_scalars(curve, 1, input, domain_separator)?;
         Ok(h[0].clone())
     }
@@ -262,7 +252,7 @@ impl EccScalar {
         count: usize,
         input: &[u8],
         domain_separator: &[u8],
-    ) -> ThresholdEcdsaResult<Vec<Self>> {
+    ) -> CanisterThresholdResult<Vec<Self>> {
         let s_bits = curve.scalar_bits();
         let security_level = curve.security_level();
 
@@ -289,16 +279,16 @@ impl EccScalar {
     }
 
     /// Deserialize a scalar value (with tag)
-    pub fn deserialize_tagged(bytes: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
+    pub fn deserialize_tagged(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         if bytes.is_empty() {
-            return Err(ThresholdEcdsaSerializationError(
+            return Err(CanisterThresholdSerializationError(
                 "Empty bytestring".to_string(),
             ));
         }
 
         match EccCurveType::from_tag(bytes[0]) {
             Some(curve) => Self::deserialize(curve, &bytes[1..]),
-            None => Err(ThresholdEcdsaSerializationError(
+            None => Err(CanisterThresholdSerializationError(
                 "Unknown curve tag".to_string(),
             )),
         }
@@ -308,9 +298,9 @@ impl EccScalar {
     pub fn deserialize(
         curve: EccCurveType,
         bytes: &[u8],
-    ) -> ThresholdEcdsaSerializationResult<Self> {
+    ) -> CanisterThresholdSerializationResult<Self> {
         if bytes.len() != curve.scalar_bytes() {
-            return Err(ThresholdEcdsaSerializationError(
+            return Err(CanisterThresholdSerializationError(
                 "Unexpected length".to_string(),
             ));
         }
@@ -318,19 +308,19 @@ impl EccScalar {
         match curve {
             EccCurveType::K256 => {
                 let s = secp256k1::Scalar::deserialize(bytes).ok_or_else(|| {
-                    ThresholdEcdsaSerializationError("Invalid scalar encoding".to_string())
+                    CanisterThresholdSerializationError("Invalid scalar encoding".to_string())
                 })?;
                 Ok(Self::K256(s))
             }
             EccCurveType::P256 => {
                 let s = secp256r1::Scalar::deserialize(bytes).ok_or_else(|| {
-                    ThresholdEcdsaSerializationError("Invalid scalar encoding".to_string())
+                    CanisterThresholdSerializationError("Invalid scalar encoding".to_string())
                 })?;
                 Ok(Self::P256(s))
             }
             EccCurveType::Ed25519 => {
                 let s = ed25519::Scalar::deserialize(bytes).ok_or_else(|| {
-                    ThresholdEcdsaSerializationError("Invalid scalar encoding".to_string())
+                    CanisterThresholdSerializationError("Invalid scalar encoding".to_string())
                 })?;
                 Ok(Self::Ed25519(s))
             }
@@ -342,21 +332,21 @@ impl EccScalar {
     /// The input is allowed to be up to twice the length of a scalar. It is
     /// interpreted as a big-endian encoded integer, and reduced modulo the
     /// group order.
-    pub fn from_bytes_wide(curve: EccCurveType, bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn from_bytes_wide(curve: EccCurveType, bytes: &[u8]) -> CanisterThresholdResult<Self> {
         match curve {
             EccCurveType::K256 => {
                 let s = secp256k1::Scalar::from_wide_bytes(bytes)
-                    .ok_or(ThresholdEcdsaError::InvalidScalar)?;
+                    .ok_or(CanisterThresholdError::InvalidScalar)?;
                 Ok(Self::K256(s))
             }
             EccCurveType::P256 => {
                 let s = secp256r1::Scalar::from_wide_bytes(bytes)
-                    .ok_or(ThresholdEcdsaError::InvalidScalar)?;
+                    .ok_or(CanisterThresholdError::InvalidScalar)?;
                 Ok(Self::P256(s))
             }
             EccCurveType::Ed25519 => {
                 let s = ed25519::Scalar::from_wide_bytes(bytes)
-                    .ok_or(ThresholdEcdsaError::InvalidScalar)?;
+                    .ok_or(CanisterThresholdError::InvalidScalar)?;
                 Ok(Self::Ed25519(s))
             }
         }
@@ -392,11 +382,11 @@ impl EccScalar {
     }
 
     /// Return true iff self is >= order / 2
-    pub fn is_high(&self) -> ThresholdEcdsaResult<bool> {
+    pub fn is_high(&self) -> CanisterThresholdResult<bool> {
         match self {
             Self::K256(s) => Ok(s.is_high()),
             Self::P256(s) => Ok(s.is_high()),
-            Self::Ed25519(_) => Err(ThresholdEcdsaError::CurveMismatch),
+            Self::Ed25519(_) => Err(CanisterThresholdError::CurveMismatch),
         }
     }
 
@@ -488,9 +478,9 @@ impl EccScalarBytes {
 }
 
 impl TryFrom<&EccScalarBytes> for EccScalar {
-    type Error = ThresholdEcdsaSerializationError;
+    type Error = CanisterThresholdSerializationError;
 
-    fn try_from(bytes: &EccScalarBytes) -> ThresholdEcdsaSerializationResult<Self> {
+    fn try_from(bytes: &EccScalarBytes) -> CanisterThresholdSerializationResult<Self> {
         match bytes {
             EccScalarBytes::K256(raw) => EccScalar::deserialize(EccCurveType::K256, raw.as_ref()),
             EccScalarBytes::P256(raw) => EccScalar::deserialize(EccCurveType::P256, raw.as_ref()),
@@ -502,23 +492,23 @@ impl TryFrom<&EccScalarBytes> for EccScalar {
 }
 
 impl TryFrom<&EccScalar> for EccScalarBytes {
-    type Error = ThresholdEcdsaSerializationError;
+    type Error = CanisterThresholdSerializationError;
 
-    fn try_from(scalar: &EccScalar) -> ThresholdEcdsaSerializationResult<Self> {
+    fn try_from(scalar: &EccScalar) -> CanisterThresholdSerializationResult<Self> {
         match scalar.curve_type() {
             EccCurveType::K256 => {
                 Ok(Self::K256(scalar.serialize().try_into().map_err(|e| {
-                    ThresholdEcdsaSerializationError(format!("{:?}", e))
+                    CanisterThresholdSerializationError(format!("{:?}", e))
                 })?))
             }
             EccCurveType::P256 => {
                 Ok(Self::P256(scalar.serialize().try_into().map_err(|e| {
-                    ThresholdEcdsaSerializationError(format!("{:?}", e))
+                    CanisterThresholdSerializationError(format!("{:?}", e))
                 })?))
             }
             EccCurveType::Ed25519 => {
                 Ok(Self::Ed25519(scalar.serialize().try_into().map_err(
-                    |e| ThresholdEcdsaSerializationError(format!("{:?}", e)),
+                    |e| CanisterThresholdSerializationError(format!("{:?}", e)),
                 )?))
             }
         }
@@ -630,7 +620,7 @@ impl EccPoint {
         curve: EccCurveType,
         input: &[u8],
         dst: &[u8],
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         match curve {
             EccCurveType::K256 => Ok(Self::from(secp256k1::Point::hash2curve(input, dst))),
             EccCurveType::P256 => Ok(Self::from(secp256r1::Point::hash2curve(input, dst))),
@@ -639,7 +629,7 @@ impl EccPoint {
     }
 
     /// Add two elliptic curve points
-    pub fn add_points(&self, other: &Self) -> ThresholdEcdsaResult<Self> {
+    pub fn add_points(&self, other: &Self) -> CanisterThresholdResult<Self> {
         match (&self.point, &other.point) {
             (EccPointInternal::K256(pt1), EccPointInternal::K256(pt2)) => {
                 Ok(Self::from(pt1.add(pt2)))
@@ -650,12 +640,12 @@ impl EccPoint {
             (EccPointInternal::Ed25519(pt1), EccPointInternal::Ed25519(pt2)) => {
                 Ok(Self::from(pt1.add(pt2)))
             }
-            _ => Err(ThresholdEcdsaError::CurveMismatch),
+            _ => Err(CanisterThresholdError::CurveMismatch),
         }
     }
 
     /// Subtract two elliptic curve points
-    pub fn sub_points(&self, other: &Self) -> ThresholdEcdsaResult<Self> {
+    pub fn sub_points(&self, other: &Self) -> CanisterThresholdResult<Self> {
         match (&self.point, &other.point) {
             (EccPointInternal::K256(pt1), EccPointInternal::K256(pt2)) => {
                 Ok(Self::from(pt1.sub(pt2)))
@@ -666,17 +656,17 @@ impl EccPoint {
             (EccPointInternal::Ed25519(pt1), EccPointInternal::Ed25519(pt2)) => {
                 Ok(Self::from(pt1.sub(pt2)))
             }
-            (_, _) => Err(ThresholdEcdsaError::CurveMismatch),
+            (_, _) => Err(CanisterThresholdError::CurveMismatch),
         }
     }
 
     /// Perform point*scalar multiplication
-    pub fn scalar_mul(&self, scalar: &EccScalar) -> ThresholdEcdsaResult<Self> {
+    pub fn scalar_mul(&self, scalar: &EccScalar) -> CanisterThresholdResult<Self> {
         match (&self.point, scalar) {
             (EccPointInternal::K256(pt), EccScalar::K256(s)) => Ok(Self::from(pt.mul(s))),
             (EccPointInternal::P256(pt), EccScalar::P256(s)) => Ok(Self::from(pt.mul(s))),
             (EccPointInternal::Ed25519(pt), EccScalar::Ed25519(s)) => Ok(Self::from(pt.mul(s))),
-            _ => Err(ThresholdEcdsaError::CurveMismatch),
+            _ => Err(CanisterThresholdError::CurveMismatch),
         }
     }
 
@@ -709,7 +699,10 @@ impl EccPoint {
     /// polynomials are small and public (namely, the nodex indexes). By taking
     /// advantage of this, it is possible to gain substantial performance
     /// improvements as compared to using a constant-time scalar multiplication.
-    pub fn mul_by_node_index_vartime(&self, node_index: NodeIndex) -> ThresholdEcdsaResult<Self> {
+    pub fn mul_by_node_index_vartime(
+        &self,
+        node_index: NodeIndex,
+    ) -> CanisterThresholdResult<Self> {
         // This cannot overflow as NodeIndex is a u32
         let scalar = node_index as u64 + 1;
         let scalar_bits = 64 - scalar.leading_zeros();
@@ -732,7 +725,7 @@ impl EccPoint {
         scalar1: &EccScalar,
         pt2: &EccPoint,
         scalar2: &EccScalar,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         match (&pt1.point, scalar1, &pt2.point, scalar2) {
             (
                 EccPointInternal::K256(pt1),
@@ -755,7 +748,7 @@ impl EccPoint {
                 EccScalar::Ed25519(s2),
             ) => Ok(Self::from(ed25519::Point::lincomb(pt1, s1, pt2, s2))),
 
-            _ => Err(ThresholdEcdsaError::CurveMismatch),
+            _ => Err(CanisterThresholdError::CurveMismatch),
         }
     }
 
@@ -771,8 +764,8 @@ impl EccPoint {
     /// The supported values of `window_size` are in `3..=7`.
     ///
     /// # Errors
-    /// * ThresholdEcdsaError::InvalidArguments if `window_size` is out of bounds.
-    pub fn precompute(&mut self, window_size: usize) -> ThresholdEcdsaResult<()> {
+    /// * CanisterThresholdError::InvalidArguments if `window_size` is out of bounds.
+    pub fn precompute(&mut self, window_size: usize) -> CanisterThresholdResult<()> {
         self.precompute = Some(Arc::new(NafLut::new(&self.clone(), window_size)?));
         Ok(())
     }
@@ -793,7 +786,7 @@ impl EccPoint {
         &self,
         scalar_naf_state: &mut SlidingWindowMulState,
         accum: &mut EccPoint,
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         match &self.precompute {
             Some(lut) => {
                 let next = scalar_naf_state.next();
@@ -818,7 +811,7 @@ impl EccPoint {
                 }
                 Ok(())
             }
-            None => Err(ThresholdEcdsaError::InvalidArguments(String::from(
+            None => Err(CanisterThresholdError::InvalidArguments(String::from(
                 "No precomputed information in EccPoint. Forgot to call precompute()?",
             ))),
         }
@@ -829,7 +822,7 @@ impl EccPoint {
     ///
     /// Warning: this function leaks information about the scalars via
     /// side channels. Do not use this function with secret scalars.
-    pub fn scalar_mul_vartime(&self, scalar: &EccScalar) -> ThresholdEcdsaResult<EccPoint> {
+    pub fn scalar_mul_vartime(&self, scalar: &EccScalar) -> CanisterThresholdResult<EccPoint> {
         match &self.precompute {
             Some(lut) => {
                 let mut scalar_naf_state = SlidingWindowMulState::new(scalar, lut.window_size);
@@ -852,15 +845,15 @@ impl EccPoint {
     ///
     ///
     /// # Errors
-    /// * [`ThresholdEcdsaResult::CurveMismatch`] in case of inconsistent points.
-    /// * [`ThresholdEcdsaResult::InvalidArguments`] If `points.is_empty()`.
+    /// * [`CanisterThresholdResult::CurveMismatch`] in case of inconsistent points.
+    /// * [`CanisterThresholdResult::InvalidArguments`] If `points.is_empty()`.
     pub(crate) fn ct_select_from_slice(
         points: &[Self],
         index: usize,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         use subtle::ConstantTimeEq;
         if points.is_empty() {
-            return Err(ThresholdEcdsaError::InvalidArguments(String::from(
+            return Err(CanisterThresholdError::InvalidArguments(String::from(
                 "The input to constant-time select from slice must contain at least one element",
             )));
         }
@@ -880,12 +873,12 @@ impl EccPoint {
     /// If the index is out of range, no assignment will happen, which will not be detectable using side channels.
     ///
     /// # Errors
-    /// * [`ThresholdEcdsaResult::CurveMismatch`] in case of inconsistent points.
+    /// * [`CanisterThresholdResult::CurveMismatch`] in case of inconsistent points.
     pub(crate) fn ct_assign_in_slice(
         points: &mut [Self],
         input: &Self,
         index: usize,
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         use subtle::ConstantTimeEq;
         for (i, point) in points.iter_mut().enumerate() {
             point.conditional_assign(input, usize::ct_eq(&i, &index))?;
@@ -902,17 +895,17 @@ impl EccPoint {
     /// side channels. Do not use this function with secret scalars.
     pub fn mul_n_points_vartime<'a>(
         point_scalar_pairs: &[(&'a EccPoint, &EccScalar)],
-    ) -> ThresholdEcdsaResult<EccPoint> {
+    ) -> CanisterThresholdResult<EccPoint> {
         if point_scalar_pairs.is_empty() {
-            return Err(ThresholdEcdsaError::InvalidArguments(String::from(
+            return Err(CanisterThresholdError::InvalidArguments(String::from(
                 "Trying to compute the sum of products with 0 inputs",
             )));
         }
 
-        let get_lut_or_return_error = |pt: &'a EccPoint| -> ThresholdEcdsaResult<&'a NafLut> {
+        let get_lut_or_return_error = |pt: &'a EccPoint| -> CanisterThresholdResult<&'a NafLut> {
             match &pt.precompute {
                 Some(lut) => Ok(lut),
-                None => Err(ThresholdEcdsaError::InvalidArguments(String::from(
+                None => Err(CanisterThresholdError::InvalidArguments(String::from(
                     "No precomputed information in EccPoint. Forgot to call precompute()?",
                 ))),
             }
@@ -955,13 +948,13 @@ impl EccPoint {
     ///
     /// # Errors
     /// * CurveMismatch in case of inconsistent points.
-    /// * `ThresholdEcdsaError::InvalidArguments` if `point_scalar_pairs`
+    /// * `CanisterThresholdError::InvalidArguments` if `point_scalar_pairs`
     /// is empty because we cannot infer a curve type from the input arguments.
     pub fn mul_n_points_pippenger(
         point_scalar_pairs: &[(&EccPoint, &EccScalar)],
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         if point_scalar_pairs.is_empty() {
-            return Err(ThresholdEcdsaError::InvalidArguments(
+            return Err(CanisterThresholdError::InvalidArguments(
                 "Trying to invoke batch-multiplication with an empty argument vector".to_string(),
             ));
         }
@@ -980,7 +973,7 @@ impl EccPoint {
         let mut windows = Vec::with_capacity(point_scalar_pairs.len());
         for (p, s) in point_scalar_pairs {
             if p.curve_type() != s.curve_type() {
-                return Err(ThresholdEcdsaError::CurveMismatch);
+                return Err(CanisterThresholdError::CurveMismatch);
             }
             let sb = (*s).scalar_bits_be();
 
@@ -1027,7 +1020,7 @@ impl EccPoint {
     ///
     /// Equivalent to EccPoint::mul_2_points(g, x, h, y) but takes
     /// advantage of precomputation on g/h
-    pub fn pedersen(x: &EccScalar, y: &EccScalar) -> ThresholdEcdsaResult<Self> {
+    pub fn pedersen(x: &EccScalar, y: &EccScalar) -> CanisterThresholdResult<Self> {
         match (x, y) {
             (EccScalar::K256(x), EccScalar::K256(y)) => {
                 Ok(Self::from(secp256k1::Point::pedersen(x, y)))
@@ -1038,7 +1031,7 @@ impl EccPoint {
             (EccScalar::Ed25519(x), EccScalar::Ed25519(y)) => {
                 Ok(Self::from(ed25519::Point::pedersen(x, y)))
             }
-            (_, _) => Err(ThresholdEcdsaError::CurveMismatch),
+            (_, _) => Err(CanisterThresholdError::CurveMismatch),
         }
     }
 
@@ -1077,9 +1070,9 @@ impl EccPoint {
     /// chops off the leading byte which is used to indicate the parity of y.
     /// That effectively returns just the affine x coordinate in a fixed with
     /// encoding.
-    pub fn serialize_bip340(&self) -> ThresholdEcdsaResult<Vec<u8>> {
+    pub fn serialize_bip340(&self) -> CanisterThresholdResult<Vec<u8>> {
         if self.curve_type() != EccCurveType::K256 {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         let mut encoding = self.serialize();
@@ -1090,7 +1083,7 @@ impl EccPoint {
         // BIP340 representative of a point where that is non-sensensical - by
         // design in BIP340 all points have even y.
         if encoding[0] != 0x02 {
-            return Err(ThresholdEcdsaError::InvalidPoint);
+            return Err(CanisterThresholdError::InvalidPoint);
         }
 
         encoding.remove(0);
@@ -1098,9 +1091,9 @@ impl EccPoint {
         Ok(encoding)
     }
 
-    pub fn deserialize_bip340(curve: EccCurveType, pt: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize_bip340(curve: EccCurveType, pt: &[u8]) -> CanisterThresholdResult<Self> {
         if curve != EccCurveType::K256 {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         let mut sec1 = Vec::with_capacity(1 + pt.len());
@@ -1124,9 +1117,9 @@ impl EccPoint {
     }
 
     /// Return the binary encoding of the affine X coordinate of this point
-    pub fn affine_x_bytes(&self) -> ThresholdEcdsaResult<Vec<u8>> {
+    pub fn affine_x_bytes(&self) -> CanisterThresholdResult<Vec<u8>> {
         if self.curve_type() == EccCurveType::Ed25519 {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         // We can just strip off the SEC1 header to get the encoding of x
@@ -1134,9 +1127,9 @@ impl EccPoint {
     }
 
     /// Return if the affine Y coordinate of this point is even
-    pub fn is_y_even(&self) -> ThresholdEcdsaResult<bool> {
+    pub fn is_y_even(&self) -> CanisterThresholdResult<bool> {
         if self.curve_type() == EccCurveType::Ed25519 {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         let compressed = self.serialize();
@@ -1144,12 +1137,12 @@ impl EccPoint {
         match compressed.first() {
             Some(0x02) => Ok(true),
             Some(0x03) => Ok(false),
-            _ => Err(ThresholdEcdsaError::InvalidPoint),
+            _ => Err(CanisterThresholdError::InvalidPoint),
         }
     }
 
     /// Return true if this is the point at infinity
-    pub fn is_infinity(&self) -> ThresholdEcdsaResult<bool> {
+    pub fn is_infinity(&self) -> CanisterThresholdResult<bool> {
         match &self.point {
             EccPointInternal::K256(pt) => Ok(pt.is_infinity()),
             EccPointInternal::P256(pt) => Ok(pt.is_infinity()),
@@ -1158,21 +1151,21 @@ impl EccPoint {
     }
 
     /// Deserialize a tagged point. Only compressed points are accepted.
-    pub fn deserialize_tagged(bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize_tagged(bytes: &[u8]) -> CanisterThresholdResult<Self> {
         if bytes.is_empty() {
-            return Err(ThresholdEcdsaError::InvalidPoint);
+            return Err(CanisterThresholdError::InvalidPoint);
         }
 
         match EccCurveType::from_tag(bytes[0]) {
             Some(curve) => Self::deserialize(curve, &bytes[1..]),
-            None => Err(ThresholdEcdsaError::InvalidPoint),
+            None => Err(CanisterThresholdError::InvalidPoint),
         }
     }
 
     /// Deserialize a point. Only compressed points are accepted.
-    pub fn deserialize(curve: EccCurveType, bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize(curve: EccCurveType, bytes: &[u8]) -> CanisterThresholdResult<Self> {
         if bytes.len() != curve.point_bytes() {
-            return Err(ThresholdEcdsaError::InvalidPoint);
+            return Err(CanisterThresholdError::InvalidPoint);
         }
 
         if curve != EccCurveType::Ed25519 {
@@ -1197,7 +1190,7 @@ impl EccPoint {
 
             // If not all zeros, then first byte should be 2 or 3 indicating sign of y
             if bytes[0] != 2 && bytes[0] != 3 {
-                return Err(ThresholdEcdsaError::InvalidPoint);
+                return Err(CanisterThresholdError::InvalidPoint);
             }
         }
 
@@ -1205,21 +1198,21 @@ impl EccPoint {
     }
 
     /// Deserialize a point. Both compressed and uncompressed points are accepted.
-    fn deserialize_any_format(curve: EccCurveType, bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+    fn deserialize_any_format(curve: EccCurveType, bytes: &[u8]) -> CanisterThresholdResult<Self> {
         match curve {
             EccCurveType::K256 => {
                 let pt = secp256k1::Point::deserialize(bytes)
-                    .ok_or(ThresholdEcdsaError::InvalidPoint)?;
+                    .ok_or(CanisterThresholdError::InvalidPoint)?;
                 Ok(Self::from(pt))
             }
             EccCurveType::P256 => {
                 let pt = secp256r1::Point::deserialize(bytes)
-                    .ok_or(ThresholdEcdsaError::InvalidPoint)?;
+                    .ok_or(CanisterThresholdError::InvalidPoint)?;
                 Ok(Self::from(pt))
             }
             EccCurveType::Ed25519 => {
-                let pt =
-                    ed25519::Point::deserialize(bytes).ok_or(ThresholdEcdsaError::InvalidPoint)?;
+                let pt = ed25519::Point::deserialize(bytes)
+                    .ok_or(CanisterThresholdError::InvalidPoint)?;
                 Ok(Self::from(pt))
             }
         }
@@ -1228,7 +1221,7 @@ impl EccPoint {
     /// # Errors
     /// * CurveMismatch in case of inconsistent points.
     #[inline(always)]
-    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> ThresholdEcdsaResult<Self> {
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> CanisterThresholdResult<Self> {
         match (&a.point, &b.point) {
             (EccPointInternal::K256(pt_a), EccPointInternal::K256(pt_b)) => Ok(Self::from(
                 secp256k1::Point::conditional_select(pt_a, pt_b, choice),
@@ -1239,14 +1232,14 @@ impl EccPoint {
             (EccPointInternal::Ed25519(pt_a), EccPointInternal::Ed25519(pt_b)) => Ok(Self::from(
                 ed25519::Point::conditional_select(pt_a, pt_b, choice),
             )),
-            _ => Err(ThresholdEcdsaError::CurveMismatch),
+            _ => Err(CanisterThresholdError::CurveMismatch),
         }
     }
 
     /// # Errors
     /// * CurveMismatch in case of inconsistent points.
     #[inline(always)]
-    fn conditional_assign(&mut self, other: &Self, choice: Choice) -> ThresholdEcdsaResult<()> {
+    fn conditional_assign(&mut self, other: &Self, choice: Choice) -> CanisterThresholdResult<()> {
         *self = Self::conditional_select(self, other, choice)?;
         Ok(())
     }
@@ -1617,10 +1610,10 @@ impl NafLut {
     /// "-1 0 -1 0 -1"..="-1 0 1 0 1","1 0 -1 0 -1"..="1 0 1 0 1" or as integers -21..=-11,11..=21
     ///
     /// # Errors
-    /// * ThresholdEcdsaError::InvalidArguments if `window_size` is out of bounds.
-    fn new(point: &EccPoint, window_size: usize) -> ThresholdEcdsaResult<Self> {
+    /// * CanisterThresholdError::InvalidArguments if `window_size` is out of bounds.
+    fn new(point: &EccPoint, window_size: usize) -> CanisterThresholdResult<Self> {
         if !(Self::MIN_WINDOW_SIZE..=Self::MAX_WINDOW_SIZE).contains(&window_size) {
-            return Err(ThresholdEcdsaError::InvalidArguments(format!(
+            return Err(CanisterThresholdError::InvalidArguments(format!(
                 "NAF LUT window sizes are only allowed in range {}..={} but got {}",
                 Self::MIN_WINDOW_SIZE,
                 Self::MAX_WINDOW_SIZE,
@@ -1646,7 +1639,10 @@ impl NafLut {
     /// # Errors
     /// * CurveMismatch in case of inconsistent points. However, this should generally not happen
     /// because the curve type of all computed points is derived from `point`.
-    fn compute_table(point: &EccPoint, window_size: usize) -> ThresholdEcdsaResult<Vec<EccPoint>> {
+    fn compute_table(
+        point: &EccPoint,
+        window_size: usize,
+    ) -> CanisterThresholdResult<Vec<EccPoint>> {
         let lower_bound = Self::BOUND[window_size - 1];
         let upper_bound = Self::BOUND[window_size] + 1;
         // Offset is equal to the number of negative values

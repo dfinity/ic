@@ -4,6 +4,7 @@ use crate::{
     batch::{BatchPayload, ValidationContext},
     crypto::threshold_sig::ni_dkg::NiDkgId,
     crypto::*,
+    replica_config::ReplicaConfig,
     replica_version::ReplicaVersion,
     signature::*,
     *,
@@ -300,15 +301,27 @@ pub type HashedBlock = Hashed<CryptoHashOf<Block>, Block>;
 pub struct BlockMetadata {
     version: ReplicaVersion,
     height: Height,
+    subnet_id: SubnetId,
     hash: CryptoHashOf<Block>,
 }
 
-impl From<&HashedBlock> for BlockMetadata {
-    fn from(block: &HashedBlock) -> Self {
+impl BlockMetadata {
+    pub fn from_block(block: &HashedBlock, config: &ReplicaConfig) -> Self {
         Self {
             version: block.version().clone(),
             height: block.height(),
+            subnet_id: config.subnet_id,
             hash: block.get_hash().clone(),
+        }
+    }
+    /// Creates a signed block metadata instance from a given block proposal.
+    pub fn signed_from_proposal(
+        proposal: &BlockProposal,
+        config: &ReplicaConfig,
+    ) -> Signed<Self, BasicSignature<Self>> {
+        Signed {
+            content: Self::from_block(&proposal.content, config),
+            signature: proposal.signature.clone(),
         }
     }
 }

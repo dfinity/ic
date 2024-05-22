@@ -61,6 +61,7 @@ fn test_wasmtime_system_api() {
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
+        api_type.call_context_id(),
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
@@ -90,7 +91,7 @@ fn test_wasmtime_system_api() {
             .wasm_native_stable_memory,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Rc::new(DefaultOutOfInstructionsHandler {}),
+        Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );
     let mut store = Store::new(
@@ -99,7 +100,7 @@ fn test_wasmtime_system_api() {
             system_api: Some(system_api),
             num_instructions_global: None,
             log: no_op_logger(),
-            num_stable_dirty_pages_from_non_native_writes: ic_types::NumPages::from(0),
+            num_stable_dirty_pages_from_non_native_writes: ic_types::NumOsPages::from(0),
             limits: StoreLimits::default(),
         },
     );

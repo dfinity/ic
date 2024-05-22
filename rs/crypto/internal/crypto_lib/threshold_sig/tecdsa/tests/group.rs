@@ -3,7 +3,7 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{Rng, RngCore};
 
 #[test]
-fn not_affected_by_point_serialization_bug() -> ThresholdEcdsaResult<()> {
+fn not_affected_by_point_serialization_bug() -> CanisterThresholdResult<()> {
     // Repro of https://github.com/RustCrypto/elliptic-curves/issues/529
     let curve = EccCurveType::K256;
 
@@ -25,7 +25,7 @@ fn not_affected_by_point_serialization_bug() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn verify_serialization_round_trips_correctly() -> ThresholdEcdsaResult<()> {
+fn verify_serialization_round_trips_correctly() -> CanisterThresholdResult<()> {
     fn assert_serialization_round_trips(pt: EccPoint) {
         let curve_type = pt.curve_type();
         let b = pt.serialize();
@@ -68,7 +68,7 @@ fn verify_serialization_round_trips_correctly() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn hash_to_scalar_is_deterministic() -> ThresholdEcdsaResult<()> {
+fn hash_to_scalar_is_deterministic() -> CanisterThresholdResult<()> {
     let input = "test input string".as_bytes();
     let domain_separator = "domain sep".as_bytes();
 
@@ -83,7 +83,7 @@ fn hash_to_scalar_is_deterministic() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn hash_to_scalar_p256_has_fixed_output() -> ThresholdEcdsaResult<()> {
+fn hash_to_scalar_p256_has_fixed_output() -> CanisterThresholdResult<()> {
     let curve_type = EccCurveType::P256;
     let input = "known answer test input".as_bytes();
     let domain_separator = "domain sep".as_bytes();
@@ -99,7 +99,7 @@ fn hash_to_scalar_p256_has_fixed_output() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn hash_to_scalar_k256_has_fixed_output() -> ThresholdEcdsaResult<()> {
+fn hash_to_scalar_k256_has_fixed_output() -> CanisterThresholdResult<()> {
     let curve_type = EccCurveType::K256;
     let input = "known answer test input".as_bytes();
     let domain_separator = "domain sep".as_bytes();
@@ -115,7 +115,7 @@ fn hash_to_scalar_k256_has_fixed_output() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn generator_h_has_expected_value() -> ThresholdEcdsaResult<()> {
+fn generator_h_has_expected_value() -> CanisterThresholdResult<()> {
     for curve_type in EccCurveType::all() {
         let h = EccPoint::generator_h(curve_type);
 
@@ -137,7 +137,7 @@ fn generator_h_has_expected_value() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn k256_wide_reduce_scalar_expected_value() -> ThresholdEcdsaResult<()> {
+fn k256_wide_reduce_scalar_expected_value() -> CanisterThresholdResult<()> {
     // Checked using Python
     let wide_input = hex::decode("5465872a72824a73539f16e825035c403a2596407116900d47141fca8cbfd9a638af75a71310b08fe6351dd302b820c86b15e71ea73c78c876c1f88338a0").unwrap();
 
@@ -152,7 +152,7 @@ fn k256_wide_reduce_scalar_expected_value() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn p256_wide_reduce_scalar_expected_value() -> ThresholdEcdsaResult<()> {
+fn p256_wide_reduce_scalar_expected_value() -> CanisterThresholdResult<()> {
     // Checked using Python
     let wide_input = hex::decode("5465872a72824a73539f16e825035c403a2596407116900d47141fca8cbfd9a638af75a71310b08fe6351dd302b820c86b15e71ea73c78c876c1f88338a0").unwrap();
 
@@ -167,7 +167,7 @@ fn p256_wide_reduce_scalar_expected_value() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn ed25519_wide_reduce_scalar_expected_value() -> ThresholdEcdsaResult<()> {
+fn ed25519_wide_reduce_scalar_expected_value() -> CanisterThresholdResult<()> {
     // Checked using Python
     let wide_input = hex::decode("5465872a72824a73539f16e825035c403a2596407116900d47141fca8cbfd9a638af75a71310b08fe6351dd302b820c86b15e71ea73c78c876c1f88338a0").unwrap();
 
@@ -197,7 +197,7 @@ fn scalar_deserializaion_errors_if_byte_length_invalid() {
             rng.fill_bytes(&mut bytes[..]);
             assert_eq!(
                 EccScalar::deserialize(curve, &bytes[..]),
-                Err(ThresholdEcdsaSerializationError(
+                Err(CanisterThresholdSerializationError(
                     "Unexpected length".to_string()
                 ))
             );
@@ -211,7 +211,7 @@ fn scalar_deserializaion_errors_is_over_the_order() {
         let bytes = vec![0xFFu8; curve.scalar_bytes()];
         assert_eq!(
             EccScalar::deserialize(curve, &bytes[..]),
-            Err(ThresholdEcdsaSerializationError(
+            Err(CanisterThresholdSerializationError(
                 "Invalid scalar encoding".to_string()
             ))
         );
@@ -230,7 +230,7 @@ fn scalar_from_bytes_wide_errors_if_byte_length_invalid() {
             rng.fill_bytes(&mut bytes[..]);
             assert_eq!(
                 EccScalar::from_bytes_wide(curve, &bytes[..]),
-                Err(ThresholdEcdsaError::InvalidScalar)
+                Err(CanisterThresholdError::InvalidScalar)
             );
         }
     }
@@ -249,14 +249,14 @@ fn point_deserialization_errors_if_byte_length_invalid() {
             rng.fill_bytes(&mut bytes[..]);
             assert_eq!(
                 EccPoint::deserialize(curve, &bytes[..]),
-                Err(ThresholdEcdsaError::InvalidPoint)
+                Err(CanisterThresholdError::InvalidPoint)
             );
         }
     }
 }
 
 #[test]
-fn test_scalar_negate() -> ThresholdEcdsaResult<()> {
+fn test_scalar_negate() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -279,7 +279,7 @@ fn test_scalar_negate() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn test_point_mul_by_node_index() -> ThresholdEcdsaResult<()> {
+fn test_point_mul_by_node_index() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
     for curve in EccCurveType::all() {
         let g = EccPoint::generator_g(curve);
@@ -305,7 +305,7 @@ fn test_point_mul_by_node_index() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn test_point_mul_naf() -> ThresholdEcdsaResult<()> {
+fn test_point_mul_naf() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
     for curve_type in EccCurveType::all() {
         for window_size in [3, 4, 5, 6, 7] {
@@ -337,7 +337,7 @@ fn test_point_mul_naf() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn test_point_negate() -> ThresholdEcdsaResult<()> {
+fn test_point_negate() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
@@ -362,7 +362,7 @@ fn test_point_negate() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn test_mul_by_g_is_correct() -> ThresholdEcdsaResult<()> {
+fn test_mul_by_g_is_correct() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
@@ -381,7 +381,7 @@ fn test_mul_by_g_is_correct() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn test_y_is_even() -> ThresholdEcdsaResult<()> {
+fn test_y_is_even() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
@@ -407,7 +407,7 @@ fn test_y_is_even() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn test_mul_2_is_correct() -> ThresholdEcdsaResult<()> {
+fn test_mul_2_is_correct() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
@@ -430,7 +430,7 @@ fn test_mul_2_is_correct() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn test_pedersen_is_correct() -> ThresholdEcdsaResult<()> {
+fn test_pedersen_is_correct() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
@@ -451,12 +451,13 @@ fn test_pedersen_is_correct() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn test_mul_n_ct_pippenger_is_correct() -> ThresholdEcdsaResult<()> {
+fn test_mul_n_ct_pippenger_is_correct() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
-    let mut random_point_and_scalar = |curve_type| -> ThresholdEcdsaResult<(EccPoint, EccScalar)> {
-        let p = EccPoint::mul_by_g(&EccScalar::random(curve_type, rng));
-        Ok((p, EccScalar::random(curve_type, rng)))
-    };
+    let mut random_point_and_scalar =
+        |curve_type| -> CanisterThresholdResult<(EccPoint, EccScalar)> {
+            let p = EccPoint::mul_by_g(&EccScalar::random(curve_type, rng));
+            Ok((p, EccScalar::random(curve_type, rng)))
+        };
 
     for curve_type in EccCurveType::all() {
         for num_terms in 2..20 {
@@ -473,7 +474,7 @@ fn test_mul_n_ct_pippenger_is_correct() -> ThresholdEcdsaResult<()> {
             let computed_result = EccPoint::mul_n_points_pippenger(&refs_of_pairs)?;
 
             let mul_and_aggregate =
-                |acc: &EccPoint, p: EccPoint, s: EccScalar| -> ThresholdEcdsaResult<EccPoint> {
+                |acc: &EccPoint, p: EccPoint, s: EccScalar| -> CanisterThresholdResult<EccPoint> {
                     let mul = p.scalar_mul(&s)?;
                     acc.add_points(&mul)
                 };
@@ -493,7 +494,7 @@ fn test_mul_n_ct_pippenger_is_correct() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
+fn test_mul_n_vartime_naf() -> CanisterThresholdResult<()> {
     assert_eq!(EccPoint::MIN_LUT_WINDOW_SIZE, 3);
     assert_eq!(EccPoint::MAX_LUT_WINDOW_SIZE, 7);
 
@@ -502,7 +503,7 @@ fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
     for curve_type in EccCurveType::all() {
         for window_size in [3, 4, 5, 6, 7] {
             let g = EccPoint::generator_g(curve_type);
-            let mut random_pair = || -> ThresholdEcdsaResult<_> {
+            let mut random_pair = || -> CanisterThresholdResult<_> {
                 Ok((
                     g.scalar_mul(&EccScalar::random(curve_type, rng))?,
                     EccScalar::random(curve_type, rng),

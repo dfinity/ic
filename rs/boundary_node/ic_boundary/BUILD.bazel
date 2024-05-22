@@ -7,7 +7,6 @@ DEPENDENCIES = [
     "//rs/certification/test-utils",
     "//rs/config",
     "//rs/crypto/ed25519",
-    "//rs/crypto/test_utils/keys",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/crypto/utils/tls",
@@ -23,8 +22,6 @@ DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
     "//rs/protobuf",
-    "//rs/test_utilities/registry",
-    "//rs/test_utilities/types",
     "//rs/types/base_types",
     "//rs/types/types",
     "//rs/types/management_canister_types",
@@ -56,6 +53,7 @@ DEPENDENCIES = [
     "@crate_index//:mockall",
     "@crate_index//:moka",
     "@crate_index//:nftables",
+    "@crate_index//:nix",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:ratelimit",
@@ -70,7 +68,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:strum",
-    "@crate_index//:tempfile",
     "@crate_index//:thiserror",
     "@crate_index//:tokio-rustls",
     "@crate_index//:tokio-util",
@@ -84,7 +81,6 @@ DEPENDENCIES = [
     "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing",
     "@crate_index//:url",
-    "@crate_index//:wiremock",
     "@crate_index//:x509-parser",
 ]
 
@@ -94,6 +90,8 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "@crate_index//:criterion",
+    "@crate_index//:tempfile",
+    "@crate_index//:wiremock",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

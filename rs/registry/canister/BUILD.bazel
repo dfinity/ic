@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -118,6 +118,7 @@ rust_canister(
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/registry.did"],
+    opt = "z",  # TODO: undo once dfx-extensions do not ungzip canister modules
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/registry.did",
     deps = DEPENDENCIES + [":canister"] + [":build_script"],
@@ -184,16 +185,5 @@ generated_files_check(
         "//rs/registry/canister/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
-    ],
-)
-
-rust_binary(
-    name = "generate_did",
-    srcs = ["canister/canister.rs"],
-    compile_data = ["canister/registry.did"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        ":build_script",
-        ":canister",
     ],
 )

@@ -1,34 +1,28 @@
 use ic_crypto_internal_csp::api::{
-    CspCreateMEGaKeyError, CspIDkgProtocol, CspKeyGenerator, CspPublicAndSecretKeyStoreChecker,
-    CspPublicKeyStore, CspSigVerifier, CspSigner, CspThresholdSignError,
-    CspTlsHandshakeSignerProvider, NiDkgCspClient, ThresholdSignatureCspClient,
+    CspPublicAndSecretKeyStoreChecker, CspPublicKeyStore, CspSigVerifier, CspSigner,
+    CspThresholdSignError, CspTlsHandshakeSignerProvider, NiDkgCspClient,
+    ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::ExternalPublicKeys;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
-use ic_crypto_internal_csp::vault::api::CspBasicSignatureKeygenError;
-use ic_crypto_internal_csp::vault::api::CspMultiSignatureKeygenError;
 use ic_crypto_internal_csp::vault::api::CspPublicKeyStoreError;
-use ic_crypto_internal_csp::vault::api::CspTlsKeygenError;
 use ic_crypto_internal_csp::vault::api::PksAndSksContainsErrors;
 use ic_crypto_internal_csp::vault::api::ValidatePksAndSksError;
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
-    CspDkgCreateDealingError, CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError,
-    CspDkgCreateReshareTranscriptError, CspDkgCreateTranscriptError, CspDkgLoadPrivateKeyError,
-    CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError, CspDkgVerifyDealingError,
-    CspDkgVerifyReshareDealingError,
+    CspDkgCreateDealingError, CspDkgCreateReshareDealingError, CspDkgCreateReshareTranscriptError,
+    CspDkgCreateTranscriptError, CspDkgLoadPrivateKeyError, CspDkgRetainThresholdKeysError,
+    CspDkgUpdateFsEpochError, CspDkgVerifyDealingError, CspDkgVerifyReshareDealingError,
 };
-use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    CspFsEncryptionPop, CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
+    CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
-use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::{AlgorithmId, CryptoResult, CurrentNodePublicKeys};
-use ic_types::{NodeId, NodeIndex, NumberOfNodes};
+use ic_types::{NodeIndex, NumberOfNodes};
 use mockall::predicate::*;
 use mockall::*;
 use std::collections::{BTreeMap, BTreeSet};
@@ -84,19 +78,6 @@ mock! {
         ) -> CryptoResult<()>;
     }
 
-    impl CspKeyGenerator for AllCryptoServiceProvider {
-        fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
-
-        fn gen_committee_signing_key_pair(
-            &self,
-        ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError>;
-
-        fn gen_tls_key_pair(
-            &self,
-            node_id: NodeId,
-        ) -> Result<TlsPublicKeyCert, CspTlsKeygenError>;
-    }
-
     impl ThresholdSignatureCspClient for AllCryptoServiceProvider {
         fn threshold_sign(
             &self,
@@ -137,11 +118,6 @@ mock! {
     }
 
     impl NiDkgCspClient for AllCryptoServiceProvider {
-        fn gen_dealing_encryption_key_pair(
-            &self,
-            _node_id: NodeId,
-        ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), CspDkgCreateFsKeyError>;
-
         /// Erases forward secure secret keys at and before a given epoch
         fn update_forward_secure_epoch(
           &self,
@@ -246,9 +222,5 @@ mock! {
 
     impl CspTlsHandshakeSignerProvider for AllCryptoServiceProvider {
         fn handshake_signer(&self) -> Arc<dyn TlsHandshakeCspVault>;
-    }
-
-    impl CspIDkgProtocol for AllCryptoServiceProvider {
-        fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
     }
 }

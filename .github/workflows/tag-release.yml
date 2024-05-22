@@ -67,7 +67,7 @@ jobs:
           mkdir canisters && pushd canisters
           for C in "${CANISTERS[@]}"; do
             curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/canisters/${C}.gz" -O
-            curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/canisters/${C}.did" -O
+            curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/canisters/${C}.gz.did" -O
           done
           tar -cf canisters.tar *.gz *.did
           mv canisters.tar ..
