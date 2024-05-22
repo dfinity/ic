@@ -1796,6 +1796,37 @@ fn ic0_msg_reject_fails_if_called_twice() {
 }
 
 #[test]
+fn some_ic0_calls_fail_if_called_with_huge_size() {
+    fn test(syscall: &str) {
+        let mut test = ExecutionTestBuilder::new()
+            // 3T Cycles should be more than enough for a single ingress call.
+            .with_initial_canister_cycles(3_000_000_000_000)
+            .build();
+        let wat = format!(
+            r#"
+        (module
+            (import "ic0" "{syscall}"
+                (func $ic0_{syscall} (param i32) (param i32))
+            )
+            (func (export "canister_update test")
+                (call $ic0_{syscall} (i32.const 0) (i32.const {SIZE}))
+            )
+            (memory 1 1)
+        )"#,
+            SIZE = u32::MAX
+        );
+        let canister_id = test.canister_from_wat(wat).unwrap();
+
+        let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
+        // It must be neither a contract violation nor timeout.
+        assert_eq!(ErrorCode::CanisterInstructionLimitExceeded, err.code());
+    }
+    for syscall in ["msg_reject", "call_data_append", "msg_reply_data_append"] {
+        test(syscall);
+    }
+}
+
+#[test]
 fn ic0_msg_reject_code_works() {
     let mut test = ExecutionTestBuilder::new().build();
     let caller_id = test.universal_canister().unwrap();

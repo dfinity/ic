@@ -28,7 +28,7 @@ use ic_system_api::SystemApiImpl;
 /// The amount of instructions required to process a single byte in a payload.
 /// This includes the cost of memory as well as time passing the payload
 /// from wasm sandbox to the replica execution environment.
-const BYTE_TRANSMISSION_COST_FACTOR: u32 = 50;
+const BYTE_TRANSMISSION_COST_FACTOR: u64 = 50;
 
 fn unexpected_err(s: String) -> HypervisorError {
     HypervisorError::WasmEngineError(WasmEngineError::Unexpected(s))
@@ -376,7 +376,7 @@ pub(crate) fn syscalls(
         // - the allocated bytes (x2 to account for adding new message and removing the oldest one)
         //   - this must be in sync with `CanisterLog::add_record()` from `ic_management_canister_types`
         // - the transmitted bytes (multiplied by the cost factor) for sending the payload to the replica.
-        Ok(2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR as u64 * transmitted_num_bytes)
+        Ok(2 * allocated_num_bytes + BYTE_TRANSMISSION_COST_FACTOR * transmitted_num_bytes)
         // LINT.ThenChange(logging_charge_bytes_rule)
     }
 
@@ -482,7 +482,7 @@ pub(crate) fn syscalls(
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead::MSG_REPLY_DATA_APPEND,
-                    (BYTE_TRANSMISSION_COST_FACTOR * size) as u64,
+                    (size as u64).saturating_mul(BYTE_TRANSMISSION_COST_FACTOR),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reply_data_append(src, size, memory)
@@ -515,7 +515,7 @@ pub(crate) fn syscalls(
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead::MSG_REJECT,
-                    (BYTE_TRANSMISSION_COST_FACTOR * size) as u64,
+                    (size as u64).saturating_mul(BYTE_TRANSMISSION_COST_FACTOR),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject(src, size, memory)
@@ -663,7 +663,7 @@ pub(crate) fn syscalls(
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead::CALL_DATA_APPEND,
-                    (BYTE_TRANSMISSION_COST_FACTOR * size) as u64,
+                    (size as u64).saturating_mul(BYTE_TRANSMISSION_COST_FACTOR),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_data_append(src, size, memory)

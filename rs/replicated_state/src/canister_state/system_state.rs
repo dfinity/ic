@@ -355,7 +355,7 @@ pub struct SystemState {
 }
 
 /// A wrapper around the different canister statuses.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CanisterStatus {
     Running {
         call_context_manager: CallContextManager,

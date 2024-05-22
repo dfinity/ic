@@ -49,7 +49,7 @@ anchors:
       labels: bazel-runner-small
     container:
       <<: *image
-    timeout-minutes: 30
+    timeout-minutes: 45
     if: ${{ vars.RUN_CI == 'true' }}
   default-setup: &default-setup
     runs-on:
@@ -156,8 +156,8 @@ jobs:
 
   bazel-test-darwin-x86-64:
     name: Bazel Test Darwin x86-64
-    timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' && github.event_name != 'pull_request' && github.event_name != 'merge_group' }} # disable until we have more macos runners
+    timeout-minutes: 120
+    if: ${{ vars.RUN_CI == 'true' && github.event_name != 'merge_group' }} # disable until we have more macos runners
     runs-on:
       labels: macos
     steps:
@@ -169,7 +169,7 @@ jobs:
         with:
           filters: |
             bazel-test-darwin-x86-64:
-              - '.github/workflows/main-ci.yml'
+              - '.github/workflows/ci-main.yml'
               - '.bazelrc'
               - '.bazelversion'
               - '**/*.bazel'

@@ -3249,40 +3249,38 @@ impl ExecutionEnvironment {
 
         for canister in canister_states.values_mut() {
             let canister_id = canister.canister_id();
-            let ready_to_stop = canister.system_state.ready_to_stop();
             match canister.system_state.status {
                 // Canister is not stopping so we can skip it.
                 CanisterStatus::Running { .. } | CanisterStatus::Stopped => continue,
-                // Canister is stopping so there might be some work to do.
+
+                // Canister is ready to stop.
+                CanisterStatus::Stopping { .. } if canister.system_state.ready_to_stop() => {
+                    // Transition the canister to "stopped".
+                    let stopping_status =
+                        mem::replace(&mut canister.system_state.status, CanisterStatus::Stopped);
+                    canister.system_state.canister_version += 1;
+
+                    // Reply to all pending stop_canister requests.
+                    if let CanisterStatus::Stopping { stop_contexts, .. } = stopping_status {
+                        for stop_context in stop_contexts {
+                            self.reply_to_stop_context(
+                                &stop_context,
+                                &mut state,
+                                canister_id,
+                                time,
+                                StopCanisterReply::Completed,
+                            );
+                        }
+                    }
+                }
+
+                // Canister is stopping, but not yet ready to stop.
                 CanisterStatus::Stopping {
                     ref mut stop_contexts,
                     ..
                 } => {
-                    if ready_to_stop {
-                        // Canister is ready to stop.
-                        // Transition the canister to "stopped".
-                        let stopping_status = mem::replace(
-                            &mut canister.system_state.status,
-                            CanisterStatus::Stopped,
-                        );
-                        canister.system_state.canister_version += 1;
-
-                        // Reply to all pending stop_canister requests.
-                        if let CanisterStatus::Stopping { stop_contexts, .. } = stopping_status {
-                            for stop_context in stop_contexts {
-                                self.reply_to_stop_context(
-                                    &stop_context,
-                                    &mut state,
-                                    canister_id,
-                                    time,
-                                    StopCanisterReply::Completed,
-                                );
-                            }
-                        }
-                    } else {
-                        // Respond to any stop contexts that have timed out.
-                        self.timeout_expired_requests(time, canister_id, stop_contexts, &mut state);
-                    }
+                    // Respond to any stop contexts that have timed out.
+                    self.timeout_expired_requests(time, canister_id, stop_contexts, &mut state);
                 }
             }
         }
