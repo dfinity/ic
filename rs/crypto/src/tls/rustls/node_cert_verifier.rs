@@ -5,12 +5,12 @@ use ic_crypto_utils_tls::node_id_from_rustls_certs;
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::{NodeId, RegistryVersion, Time};
-use std::{sync::Arc, time::SystemTime};
-use tokio_rustls::rustls::{
+use rustls::{
     client::{ServerCertVerified, ServerCertVerifier},
     server::{ClientCertVerified, ClientCertVerifier},
     Certificate, DistinguishedName, Error as TLSError, ServerName,
 };
+use std::{sync::Arc, time::SystemTime};
 
 #[cfg(test)]
 mod tests;

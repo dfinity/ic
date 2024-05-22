@@ -8,14 +8,14 @@ use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfigError};
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
-use std::sync::Arc;
-use tokio_rustls::rustls::{
+use rustls::{
     cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
     client::ResolvesClientCert,
     sign::CertifiedKey,
     version::TLS13,
     ClientConfig, SignatureScheme,
 };
+use std::sync::Arc;
 
 pub fn client_config<P: CspTlsHandshakeSignerProvider>(
     signer_provider: &P,

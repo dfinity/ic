@@ -8,13 +8,13 @@ use ic_crypto_test_utils_tls::x509_certificates::{x509_public_key_cert, CertWith
 use ic_crypto_tls_interfaces::SomeOrAllNodes;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
 use maplit::btreeset;
-use std::time::SystemTime;
-use tokio_rustls::rustls::{
+use rustls::{
     client::ServerCertVerifier, server::ClientCertVerifier, Certificate, Error as TLSError,
 };
+use std::time::SystemTime;
 
 mod client_cert_verifier_tests {
-    use tokio_rustls::rustls::CertificateError;
+    use rustls::CertificateError;
 
     use super::*;
     use std::{collections::BTreeSet, time::UNIX_EPOCH};
@@ -354,8 +354,8 @@ mod client_cert_verifier_tests {
 mod server_cert_verifier_tests {
     use super::*;
     use assert_matches::assert_matches;
+    use rustls::{CertificateError, ServerName};
     use std::{collections::BTreeSet, time::UNIX_EPOCH};
-    use tokio_rustls::rustls::{CertificateError, ServerName};
 
     #[test]
     fn should_return_ok_if_node_allowed_and_certificate_in_registry() {
