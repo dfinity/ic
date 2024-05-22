@@ -782,8 +782,8 @@ impl ExhaustiveSet for EcdsaPayload {
                 ongoing_xnet_reshares: payload.ongoing_xnet_reshares,
                 xnet_reshare_agreements: payload.xnet_reshare_agreements,
                 key_transcripts: replace_by_singleton_if_empty(payload.key_transcripts, rng),
-                layout: EcdsaPayloadLayout::SingleKeyTranscript,
-                generalized_pre_signatures: false,
+                layout: EcdsaPayloadLayout::MultipleKeyTranscripts,
+                generalized_pre_signatures: true,
             })
             .collect()
     }
