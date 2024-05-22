@@ -495,7 +495,7 @@ impl EcdsaKeyTranscript {
     pub fn new(key_id: EcdsaKeyId, next_in_creation: KeyTranscriptCreation) -> Self {
         Self {
             current: None,
-            master_key_id: None,
+            master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id.clone())),
             next_in_creation,
             key_id,
         }
@@ -510,7 +510,7 @@ impl EcdsaKeyTranscript {
             current: current.or_else(|| self.current.clone()),
             next_in_creation,
             key_id: self.key_id.clone(),
-            master_key_id: self.master_key_id.clone(),
+            master_key_id: Some(MasterPublicKeyId::Ecdsa(self.key_id.clone())),
         }
     }
 
