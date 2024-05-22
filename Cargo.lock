@@ -12353,7 +12353,6 @@ dependencies = [
  "ic-crypto-utils-tls",
  "ic-interfaces-registry",
  "ic-xnet-uri",
- "rustls 0.21.12",
  "socket2 0.5.6",
  "tokio",
  "tokio-rustls 0.24.1",
