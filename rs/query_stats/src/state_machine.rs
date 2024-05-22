@@ -325,6 +325,17 @@ fn try_aggregate_one_epoch(
         .flat_map(|inner| inner.iter())
         .for_each(|(&canister_id, stat)| records.entry(canister_id).or_default().push(stat));
 
+    info!(
+        logger,
+        "QueryStats aggregation summary: num_nodes: {}, need_stats_from: {}, \
+            num_nodes_with_stats: {}, aggregatable_records: {}, aggregatable_canisters: {}",
+        num_nodes,
+        need_stats_from,
+        num_nodes_with_stats,
+        aggregatable_records.len(),
+        records.len(),
+    );
+
     // Aggregate statistics
     let empty_stats = QueryStats::default();
     let mut query_stats_to_be_applied = vec![];
