@@ -10,7 +10,7 @@ use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
 use rand::{CryptoRng, Rng};
 use rustls;
-use rustls::{ClientConfig, ServerName};
+use rustls::ClientConfig;
 use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
@@ -162,11 +162,14 @@ impl CustomClient {
         // it is important that the domain is well-formed because some TLS implementations
         // (e.g., Rustls) abort the handshake if parsing of the domain fails (e.g., for SNI when
         // sent to the server)
-        let irrelevant_domain =
-            ServerName::try_from("domain.is-irrelevant-as-hostname-verification-is.disabled")
-                .expect("failed to create domain");
+        let irrelevant_domain = "domain.is-irrelevant-as-hostname-verification-is.disabled";
         let result = TlsConnector::from(Arc::new(config))
-            .connect(irrelevant_domain, tcp_stream)
+            .connect(
+                irrelevant_domain
+                    .try_into()
+                    .expect("failed to create domain"),
+                tcp_stream,
+            )
             .await
             .map_err(|e| format!("TlsConnector::connect failed: {e}"));
 
