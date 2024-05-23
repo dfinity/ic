@@ -281,67 +281,6 @@ impl CanisterQueue {
         self.queue.len()
     }
 
-    /// Calculates the number of messages (non-stale references or reject response
-    /// markers) in the queue.
-    ///
-    /// Time complexity: `O(n * log(n))`.
-    // FIXME Drop this.
-    pub(super) fn calculate_message_count(&self, pool: &MessagePool) -> usize {
-        use MessageReference::*;
-
-        self.calculate_reference_stat_sum(|reference| match reference {
-            Request(id) => pool.get_request(*id).is_some() as usize,
-            Response(id) => pool.get_response(*id).is_some() as usize,
-        })
-    }
-
-    /// Calculates the number of responses (non-stale references or reject response
-    /// markers) in the queue.
-    ///
-    /// Time complexity: `O(n * log(n))`.
-    // FIXME Drop this.
-    pub(super) fn calculate_response_count(&self, pool: &MessagePool) -> usize {
-        use MessageReference::*;
-
-        self.calculate_reference_stat_sum(|reference| match reference {
-            Request(_) => 0,
-            Response(id) => pool.get_response(*id).is_some() as usize,
-        })
-    }
-
-    /// Counts guaranteed response request references (live or stale) in the queue.
-    ///
-    /// Time complexity: `O(n)`.
-    // FIXME Drop this.
-    pub(super) fn count_guaranteed_request_references(&self) -> usize {
-        use MessageReference::*;
-
-        self.calculate_reference_stat_sum(|reference| match reference {
-            Request(id) => (id.class() == Class::GuaranteedResponse) as usize,
-            Response(_) => 0,
-        })
-    }
-
-    /// Counts guaranteed response references in the queue.
-    ///
-    /// Time complexity: `O(n)`.
-    // FIXME Drop this.
-    pub(super) fn count_guaranteed_response_references(&self) -> usize {
-        use MessageReference::*;
-
-        self.calculate_reference_stat_sum(|reference| match reference {
-            Request(_) => 0,
-            Response(id) => (id.class() == Class::GuaranteedResponse) as usize,
-        })
-    }
-
-    /// Calculates the sum of the given stat across all enqueued references.
-    ///
-    /// Time complexity: `O(n)`.
-    fn calculate_reference_stat_sum(&self, stat: impl Fn(&MessageReference) -> usize) -> usize {
-        self.queue.iter().map(stat).sum::<usize>()
-    }
-
     /// Queue invariant check that panics if any invariant does not hold. Intended
     /// to be called from within a `debug_assert!()` in production code.
     ///

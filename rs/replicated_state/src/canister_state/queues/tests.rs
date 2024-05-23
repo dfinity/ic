@@ -2209,20 +2209,11 @@ fn time_out_requests_pushes_correct_reject_responses() {
 
     // Check that each canister has one request timed out in the output queue and one
     // reject response in the corresponding input queue.
-    for (canister_id, num_output_messages) in [
-        (&own_canister_id, 0),
-        (&local_canister_id, 0),
-        (&remote_canister_id, 1),
-    ] {
-        if let Some((input_queue, output_queue)) = canister_queues.canister_queues.get(canister_id)
-        {
-            assert_eq!(
-                num_output_messages,
-                output_queue.calculate_message_count(&canister_queues.pool)
-            );
-            assert_eq!(1, input_queue.len());
-        }
-    }
+    assert_eq!(1, canister_queues.queue_stats.input_queues_reserved_slots);
+    let message_stats = canister_queues.pool.message_stats();
+    assert_eq!(3, message_stats.inbound_message_count);
+    assert_eq!(3, message_stats.inbound_guaranteed_response_count);
+    assert_eq!(1, message_stats.outbound_message_count);
 
     // FIXME
     // // Explicitly check contents of a reject response.
@@ -2268,15 +2259,12 @@ fn time_out_requests_pushes_correct_reject_responses() {
         canister_queues.time_out_messages(current_time, &own_canister_id, &local_canisters),
     );
 
-    if let Some((input_queue, output_queue)) =
-        canister_queues.canister_queues.get(&remote_canister_id)
-    {
-        assert_eq!(
-            0,
-            output_queue.calculate_message_count(&canister_queues.pool)
-        );
-        assert_eq!(2, input_queue.len());
-    }
+    // Zero input queue reserved slots, 4 inbound responses,
+    assert_eq!(0, canister_queues.queue_stats.input_queues_reserved_slots);
+    let message_stats = canister_queues.pool.message_stats();
+    assert_eq!(4, message_stats.inbound_message_count);
+    assert_eq!(4, message_stats.inbound_guaranteed_response_count);
+    assert_eq!(0, message_stats.outbound_message_count);
     // Check that timing out twice does not lead to duplicate entries in subnet input schedules.
     assert_eq!(
         canister_queues.remote_subnet_input_schedule,

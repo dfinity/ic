@@ -337,49 +337,6 @@ proptest! {
     }
 }
 
-#[test]
-fn canister_queue_calculate_stats() {
-    let mut queue = CanisterQueue::new(20);
-    let mut pool = MessagePool::default();
-
-    // Push an active request reference onto the queue.
-    let req = RequestBuilder::default().build();
-    let req_id = pool.insert_inbound(req.clone().into());
-    queue.push_request(req_id);
-
-    // Push an active response reference onto the queue.
-    let rep: RequestOrResponse = ResponseBuilder::default().build().into();
-    let rep_id = pool.insert_inbound(rep.clone());
-    queue.try_reserve_response_slot(&req).unwrap();
-    queue.push_response(rep_id);
-
-    // Push a stale request reference onto the queue.
-    let stale_req_id = new_request_message_id(13, Class::BestEffort);
-    queue.push_request(stale_req_id);
-
-    // Push a stale response reference onto the queue.
-    let stale_rep_id = new_response_message_id(14, Class::BestEffort);
-    queue
-        .try_reserve_response_slot(&make_request(15, Class::BestEffort))
-        .unwrap();
-    queue.push_response(stale_rep_id);
-
-    // Validate the calculated stats.
-    assert_eq!(
-        req.count_bytes() + rep.count_bytes(),
-        pool.message_stats().size_bytes
-    );
-    // Two active references.
-    assert_eq!(2, pool.message_stats().inbound_message_count);
-    // One active response reference.
-    assert_eq!(1, pool.message_stats().inbound_response_count);
-    // 2 request references (20 each) and 2 response references (21 each).
-    assert_eq!(
-        82,
-        queue.calculate_reference_stat_sum(|r| 20 + r.is_response() as usize)
-    );
-}
-
 fn make_request(callback_id: u64, class: Class) -> Request {
     RequestBuilder::default()
         .sender_reply_callback(CallbackId::from(callback_id))
