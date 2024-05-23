@@ -1,7 +1,7 @@
 //! Consensus utility functions
 use crate::{crypto::Aggregate, membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::{
-    consensus::{PayloadTransientError, PayloadValidationError},
+    consensus::{PayloadValidationError, PayloadValidationFailure},
     consensus_pool::ConsensusPoolCache,
     time_source::TimeSource,
     validation::ValidationError,
@@ -555,14 +555,14 @@ pub fn get_subnet_record(
         Ok(Some(record)) => Ok(record),
         Ok(None) => {
             warn!(logger, "Subnet id {:?} not found in registry", subnet_id);
-            Err(ValidationError::Transient(
-                PayloadTransientError::SubnetNotFound(subnet_id),
+            Err(ValidationError::ValidationFailed(
+                PayloadValidationFailure::SubnetNotFound(subnet_id),
             ))
         }
         Err(err) => {
             warn!(logger, "Failed to get subnet record in block_maker");
-            Err(ValidationError::Transient(
-                PayloadTransientError::RegistryUnavailable(err),
+            Err(ValidationError::ValidationFailed(
+                PayloadValidationFailure::RegistryUnavailable(err),
             ))
         }
     }

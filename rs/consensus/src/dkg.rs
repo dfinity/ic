@@ -40,9 +40,7 @@ use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId, Time,
 };
 pub use payload_builder::{create_payload, make_genesis_summary, PayloadCreationError};
-pub(crate) use payload_validator::{
-    PermanentPayloadValidationError, TransientPayloadValidationError,
-};
+pub(crate) use payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason};
 use phantom_newtype::Id;
 use prometheus::Histogram;
 use rayon::prelude::*;
