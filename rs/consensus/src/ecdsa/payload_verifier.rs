@@ -74,8 +74,8 @@ pub(crate) enum TransientError {
 #[allow(dead_code)]
 pub(crate) enum PermanentError {
     // wrapper of other errors
-    UnexpectedSummaryPayload(EcdsaPayloadError),
-    UnexpectedDataPayload(Option<EcdsaPayloadError>),
+    SummaryPayloadRecreationFailed(EcdsaPayloadError),
+    DataPayloadRecreationFailed(EcdsaPayloadError),
     InvalidChainCacheError(InvalidChainCacheError),
     ThresholdEcdsaSigInputsError(ecdsa::ThresholdEcdsaSigInputsError),
     TranscriptParamsError(idkg::TranscriptParamsError),
@@ -84,6 +84,7 @@ pub(crate) enum PermanentError {
     IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
     // local errors
     ConsensusRegistryVersionNotFound(Height),
+    UnexpectedDataPayload,
     EcdsaConfigNotFound,
     SummaryPayloadMismatch,
     DataPayloadMismatch,
@@ -255,7 +256,7 @@ fn validate_summary_payload(
         Err(EcdsaPayloadError::StateManagerError(err)) => {
             Err(TransientError::StateManagerError(err).into())
         }
-        Err(err) => Err(PermanentError::UnexpectedSummaryPayload(err).into()),
+        Err(err) => Err(PermanentError::SummaryPayloadRecreationFailed(err).into()),
     }
 }
 
@@ -274,7 +275,7 @@ fn validate_data_payload(
 ) -> ValidationResult<EcdsaValidationError> {
     if parent_block.payload.as_ref().as_ecdsa().is_none() {
         if data_payload.is_some() {
-            return Err(PermanentError::UnexpectedDataPayload(None).into());
+            return Err(PermanentError::UnexpectedDataPayload.into());
         } else {
             return Ok(());
         }
@@ -285,7 +286,7 @@ fn validate_data_payload(
         match &block_payload.as_summary().ecdsa {
             None => {
                 if data_payload.is_some() {
-                    return Err(PermanentError::UnexpectedDataPayload(None).into());
+                    return Err(PermanentError::UnexpectedDataPayload.into());
                 } else {
                     return Ok(());
                 }
@@ -301,7 +302,7 @@ fn validate_data_payload(
         match &block_payload.as_data().ecdsa {
             None => {
                 if data_payload.is_some() {
-                    return Err(PermanentError::UnexpectedDataPayload(None).into());
+                    return Err(PermanentError::UnexpectedDataPayload.into());
                 } else {
                     return Ok(());
                 }
@@ -382,7 +383,7 @@ fn validate_data_payload(
         None,
         &ic_logger::replica_logger::no_op_logger(),
     )
-    .map_err(|err| PermanentError::UnexpectedDataPayload(Some(err)))?;
+    .map_err(PermanentError::DataPayloadRecreationFailed)?;
 
     if ecdsa_payload.as_ref() == data_payload {
         Ok(())
