@@ -168,6 +168,7 @@ BENCH_DEPENDENCIES = [
 
 rust_library(
     name = "execution_environment_bench",
+    testonly = True,
     srcs = glob(["benches/lib/src/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -238,6 +239,7 @@ rust_ic_bench(
 
 rust_library(
     name = "utils",
+    testonly = True,
     srcs = ["benches/management_canister/utils.rs"],
     aliases = ALIASES,
     deps = [

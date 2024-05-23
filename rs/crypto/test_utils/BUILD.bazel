@@ -2,6 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 rust_library(
     name = "test_utils",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_test_utils",
     version = "0.9.0",

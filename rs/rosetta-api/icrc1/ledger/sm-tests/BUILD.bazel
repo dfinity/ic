@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 [
     rust_library(
         name = "sm-tests" + name_suffix,
+        testonly = True,
         srcs = ["src/lib.rs"],
         crate_features = features,
         crate_name = "ic_icrc1_ledger_sm_tests",

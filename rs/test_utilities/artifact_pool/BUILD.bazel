@@ -31,6 +31,7 @@ ALIASES = {}
 
 rust_library(
     name = "artifact_pool",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_test_artifact_pool",

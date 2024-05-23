@@ -41,6 +41,7 @@ MACRO_DEPENDENCIES = [
 
 rust_library(
     name = "execution_environment",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_test_utilities_execution_environment",
     proc_macro_deps = MACRO_DEPENDENCIES,

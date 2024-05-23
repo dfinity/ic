@@ -17,6 +17,7 @@ ALIASES = {}
 
 rust_library(
     name = "reproducible_rng",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_test_utils_reproducible_rng",

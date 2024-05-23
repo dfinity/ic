@@ -31,6 +31,7 @@ DEPENDENCIES = [
 
 rust_library(
     name = "determinism_test",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = {},
     crate_name = "ic_determinism_test",

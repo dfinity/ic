@@ -23,6 +23,7 @@ ALIASES = {}
 
 rust_binary(
     name = "launch-single-vm",
+    testonly = True,
     srcs = glob(["src/*.rs"]),
     aliases = ALIASES,
     crate_name = "launch_single_vm",

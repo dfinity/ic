@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "lib",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_query_stats_test",
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

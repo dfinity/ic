@@ -150,6 +150,7 @@ def system_test(
 
     rust_binary(
         name = bin_name,
+        testonly = True,
         srcs = [name + ".rs"],
         **kwargs
     )

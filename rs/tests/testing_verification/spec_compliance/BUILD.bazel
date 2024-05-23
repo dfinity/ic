@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "spec_compliance",
+    testonly = True,
     srcs = ["spec_compliance.rs"],
     crate_name = "spec_compliance",
     target_compatible_with = ["@platforms//os:linux"],
