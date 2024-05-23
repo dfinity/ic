@@ -329,7 +329,7 @@ message GetDeployedSnsByProposalIdResponse {
   }
 }
 
-// The argument for get_wasm, which consists of the WASM hash to be retrieved.
+// The request type for get_wasm_metadata, which returns the metadata for a given wasm
 message GetWasmMetadataRequest {
   optional bytes hash = 1;
 }
@@ -345,7 +345,7 @@ message MetadataSection {
   optional bytes contents = 3;
 }
 
-// The response for get_wasm, which returns a WASM if it is found, or None.
+// The response for get_wasm_metadata, which returns the metadata for a given wasm
 message GetWasmMetadataResponse {
   message Ok {
     repeated MetadataSection sections = 1;
