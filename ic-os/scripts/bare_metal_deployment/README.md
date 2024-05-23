@@ -109,8 +109,8 @@ E.g.:
 or
 
 ```csv
-10.10.10.123,root,password,2a00:fb01:400:200:6801::1234
-10.10.10.124,root,password,2a00:fb01:400:200:6801::1235
+10.10.10.123,root,password,2a00:fb01:400:44:6801::1234
+10.10.10.124,root,password,2a00:fb01:400:44:6801::1235
 ```
 
 #### Manually preparing SetupOS image
