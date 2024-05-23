@@ -624,7 +624,7 @@ pub(crate) fn create_data_payload_helper_2(
     );
 
     let new_transcripts = [
-        pre_signatures::update_quadruples_in_creation(
+        pre_signatures::update_pre_signatures_in_creation(
             ecdsa_payload,
             transcript_builder,
             height,
@@ -1239,7 +1239,7 @@ mod tests {
                 .idkg_transcripts
                 .insert(kappa_config_ref.as_ref().transcript_id, kappa_transcript);
             let parent_block_height = Height::new(15);
-            let result = pre_signatures::update_quadruples_in_creation(
+            let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut ecdsa_payload,
                 &transcript_builder,
                 parent_block_height,
@@ -1477,7 +1477,7 @@ mod tests {
                 .idkg_transcripts
                 .insert(kappa_config_ref.as_ref().transcript_id, kappa_transcript);
             let parent_block_height = Height::new(15);
-            let result = pre_signatures::update_quadruples_in_creation(
+            let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut ecdsa_payload,
                 &transcript_builder,
                 parent_block_height,

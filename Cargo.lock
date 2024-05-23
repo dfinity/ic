@@ -6280,6 +6280,7 @@ dependencies = [
  "slog-async",
  "slog-envlogger",
  "slog-term",
+ "strum 0.26.2",
  "strum_macros 0.26.2",
  "tempfile",
 ]
