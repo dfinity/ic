@@ -181,6 +181,7 @@ DEV_ENV = {
 
 rust_library(
     name = "integration_tests",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_features = ["test"],
@@ -192,6 +193,7 @@ rust_library(
 
 rust_canister(
     name = "mem-utils-test-canister",
+    testonly = True,
     srcs = ["test_canisters/mem_utils_test.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -201,6 +203,7 @@ rust_canister(
 
 rust_canister(
     name = "canister-playground-canister",
+    testonly = True,
     srcs = ["test_canisters/canister_playground_canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -210,6 +213,7 @@ rust_canister(
 
 rust_canister(
     name = "governance-mem-test-canister",
+    testonly = True,
     srcs = ["test_canisters/governance_mem_test_canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -219,6 +223,7 @@ rust_canister(
 
 rust_canister(
     name = "unstoppable-canister",
+    testonly = True,
     srcs = ["test_canisters/unstoppable_canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -230,6 +235,7 @@ rust_canister(
 
 rust_canister(
     name = "unstoppable-sns-root-canister",
+    testonly = True,
     srcs = ["test_canisters/unstoppable_sns_root_canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,

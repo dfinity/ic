@@ -38,6 +38,7 @@ MACRO_DEV_DEPENDENCIES = []
 
 rust_library(
     name = "init",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_nns_init",
@@ -48,6 +49,7 @@ rust_library(
 
 rust_binary(
     name = "ic-nns-init",
+    testonly = True,
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -56,6 +58,7 @@ rust_binary(
 
 rust_binary(
     name = "ic-get-neuron-ids",
+    testonly = True,
     srcs = ["src/get_neuron_ids.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,

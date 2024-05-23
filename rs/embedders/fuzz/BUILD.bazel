@@ -120,6 +120,7 @@ rust_fuzz_test_binary(
 
 rust_binary(
     name = "ws2wasm",
+    testonly = True,
     srcs = [
         "fuzz_targets/ic_wasm.rs",
         "fuzz_targets/ws2wasm.rs",

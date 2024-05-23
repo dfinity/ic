@@ -41,6 +41,7 @@ DEPENDENCIES = [
 
 rust_library(
     name = "drun_lib",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_drun",
     version = "0.9.0",
@@ -49,6 +50,7 @@ rust_library(
 
 rust_binary(
     name = "drun",
+    testonly = True,
     srcs = ["src/main.rs"],
     deps = DEPENDENCIES + [":drun_lib"],
 )

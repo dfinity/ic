@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "test_utilities",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_test_utilities",
     version = "0.9.0",

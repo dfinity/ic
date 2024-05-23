@@ -73,6 +73,7 @@ DEV_ENV = {
 
 rust_library(
     name = "replica_tests",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_replica_tests",

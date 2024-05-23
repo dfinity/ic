@@ -10,6 +10,7 @@ exports_files([
 
 rust_library(
     name = "canister_http",
+    testonly = True,
     srcs = ["canister_http.rs"],
     crate_name = "canister_http",
     target_compatible_with = ["@platforms//os:linux"],
