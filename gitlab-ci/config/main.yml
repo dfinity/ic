@@ -429,6 +429,7 @@ benchmarks:
   parallel:
     matrix:
       - TARGETS: "//rs/crypto/..."
+      - TARGETS: "//rs/certification/..."
       - TARGETS: "//rs/state_manager/..."
       - TARGETS: "//rs/boundary_node/ic_boundary/..."
       # IDX-2849
