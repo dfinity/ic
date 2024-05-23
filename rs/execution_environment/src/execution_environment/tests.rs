@@ -948,6 +948,7 @@ fn stop_canister_creates_entry_in_subnet_call_context_manager() {
                     ),
                     ("outcome", "finished"),
                     ("status", "success"),
+                    ("speed", "fast"),
                 ],
                 1
             ),
@@ -956,6 +957,7 @@ fn stop_canister_creates_entry_in_subnet_call_context_manager() {
                     ("method_name", "ic00_stop_canister"),
                     ("outcome", "finished"),
                     ("status", "success"),
+                    ("speed", "slow"),
                 ],
                 2
             ),
@@ -964,6 +966,7 @@ fn stop_canister_creates_entry_in_subnet_call_context_manager() {
                     ("method_name", "ic00_update_settings"),
                     ("outcome", "finished"),
                     ("status", "success"),
+                    ("speed", "fast"),
                 ],
                 1
             )
@@ -1531,6 +1534,7 @@ fn metrics_are_observed_for_subnet_messages() {
                     ("method_name", "ic00_create_canister"),
                     ("outcome", "error"),
                     ("status", "CanisterContractViolation"),
+                    ("speed", "fast"),
                 ],
                 1
             ),
@@ -1539,6 +1543,7 @@ fn metrics_are_observed_for_subnet_messages() {
                     ("method_name", "ic00_install_code"),
                     ("outcome", "error"),
                     ("status", "InvalidManagementPayload"),
+                    ("speed", "slow"),
                 ],
                 1
             ),
@@ -1547,6 +1552,7 @@ fn metrics_are_observed_for_subnet_messages() {
                     ("method_name", "ic00_start_canister"),
                     ("outcome", "error"),
                     ("status", "InvalidManagementPayload"),
+                    ("speed", "fast"),
                 ],
                 1
             ),
@@ -1555,6 +1561,7 @@ fn metrics_are_observed_for_subnet_messages() {
                     ("method_name", "ic00_stop_canister"),
                     ("outcome", "error"),
                     ("status", "InvalidManagementPayload"),
+                    ("speed", "slow"),
                 ],
                 1
             ),
@@ -1563,6 +1570,7 @@ fn metrics_are_observed_for_subnet_messages() {
                     ("method_name", "ic00_delete_canister"),
                     ("outcome", "error"),
                     ("status", "InvalidManagementPayload"),
+                    ("speed", "fast"),
                 ],
                 1
             ),
@@ -1571,6 +1579,7 @@ fn metrics_are_observed_for_subnet_messages() {
                     ("method_name", "unknown_method"),
                     ("outcome", "error"),
                     ("status", "CanisterMethodNotFound"),
+                    ("speed", "unknown_speed"),
                 ],
                 1
             ),

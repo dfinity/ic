@@ -70,7 +70,7 @@ impl ExecutionEnvironmentMetrics {
                 // Buckets: 1ms, 2ms, 5ms, ..., 100s, 200s, 500s
                 decimal_buckets(-3, 2),
                 // The `outcome` label is deprecated and should be replaced by `status` eventually.
-                &["method_name", "outcome", "status"],
+                &["method_name", "outcome", "status", "speed"],
             ),
             executions_aborted: metrics_registry
                 .int_counter("executions_aborted", "Total number of aborted executions"),
@@ -133,6 +133,7 @@ impl ExecutionEnvironmentMetrics {
     ///     "method_name": "ic00_create_canister",
     ///     "outcome": "success",
     ///     "status": "success",
+    ///     "speed": "fast",
     /// })
     ///
     /// Example 2: An unsuccessful call to ic00::install_code is observed as:
@@ -140,6 +141,7 @@ impl ExecutionEnvironmentMetrics {
     ///     "method_name": "ic00_install_code",
     ///     "outcome": "error",
     ///     "status": "CanisterContractViolation",
+    ///     "speed": "slow",
     /// })
     ///
     /// Example 3: A call to a non-existing method is observed as:
@@ -147,6 +149,7 @@ impl ExecutionEnvironmentMetrics {
     ///     "method_name": "unknown_method",
     ///     "outcome": "error",
     ///     "status": "CanisterMethodNotFound",
+    ///     "speed": "unknown_speed",
     /// })
     pub fn observe_subnet_message<T>(
         &self,
@@ -170,14 +173,69 @@ impl ExecutionEnvironmentMetrics {
         outcome_label: String,
         status_label: String,
     ) {
-        let method_name_label = if let Ok(method_name) = ic00::Method::from_str(method_name) {
-            format!("ic00_{}", method_name)
-        } else {
-            String::from("unknown_method")
+        let (method_name_label, speed_label) = match ic00::Method::from_str(method_name) {
+            Ok(method_name) => {
+                let speed_label = match method_name {
+                    ic00::Method::CanisterStatus
+                    | ic00::Method::CanisterInfo
+                    | ic00::Method::CreateCanister
+                    | ic00::Method::DeleteCanister
+                    | ic00::Method::DepositCycles
+                    | ic00::Method::RawRand
+                    | ic00::Method::SetupInitialDKG
+                    | ic00::Method::StartCanister
+                    | ic00::Method::UninstallCode
+                    | ic00::Method::ECDSAPublicKey
+                    | ic00::Method::SchnorrPublicKey
+                    | ic00::Method::UpdateSettings
+                    | ic00::Method::BitcoinGetBalance
+                    | ic00::Method::BitcoinGetUtxos
+                    | ic00::Method::BitcoinSendTransaction
+                    | ic00::Method::BitcoinGetCurrentFeePercentiles
+                    | ic00::Method::NodeMetricsHistory
+                    | ic00::Method::FetchCanisterLogs
+                    | ic00::Method::ProvisionalCreateCanisterWithCycles
+                    | ic00::Method::ProvisionalTopUpCanister
+                    | ic00::Method::UploadChunk
+                    | ic00::Method::StoredChunks
+                    | ic00::Method::DeleteChunks
+                    | ic00::Method::ClearChunkStore
+                    | ic00::Method::TakeCanisterSnapshot
+                    | ic00::Method::LoadCanisterSnapshot
+                    | ic00::Method::ListCanisterSnapshots
+                    | ic00::Method::DeleteCanisterSnapshot => String::from("fast"),
+
+                    // "Slow" management methods that might require several execution
+                    // rounds to be completed, either due to using DTS or due to
+                    // having to wait for consensus to produce a response.
+                    // Any method that does not fall into the above category should
+                    // be considered "fast".
+                    ic00::Method::InstallCode
+                    | ic00::Method::InstallChunkedCode
+                    | ic00::Method::StopCanister
+                    | ic00::Method::HttpRequest
+                    | ic00::Method::SignWithECDSA
+                    | ic00::Method::SignWithSchnorr
+                    | ic00::Method::ComputeInitialEcdsaDealings
+                    | ic00::Method::ComputeInitialIDkgDealings
+                    | ic00::Method::BitcoinSendTransactionInternal
+                    | ic00::Method::BitcoinGetSuccessors => String::from("slow"),
+                };
+                (format!("ic00_{}", method_name), speed_label)
+            }
+            Err(_) => (
+                String::from("unknown_method"),
+                String::from("unknown_speed"),
+            ),
         };
 
         self.subnet_messages
-            .with_label_values(&[&method_name_label, &outcome_label, &status_label])
+            .with_label_values(&[
+                &method_name_label,
+                &outcome_label,
+                &status_label,
+                &speed_label,
+            ])
             .observe(duration);
     }
 
