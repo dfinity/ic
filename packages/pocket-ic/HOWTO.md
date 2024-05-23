@@ -53,7 +53,10 @@ Of course, other instances on the same PocketIC server remain unchanged - neithe
 
 **Attention**: Enabling auto-progress makes instances non-deterministic! There is no way to guarantee message order when agents dispatch async requests, which may interleave with each other and with the `tick`s from the auto-progress thread. If you need determinism, use the old, manually-`tick`ed API. 
 
-Live instances can be made deterministic again by disabling auto-progress and disabling the gateway. This is done by calling `make_deterministic` on the instance. Once this call returns, the instance will only continue to make progress when you call `tick` - but the state in which the instance halts is not deterministic. So be extra careful with tests which are setup with a live phase and which then transition to non-live for the test section. 
+Live instances can be made non-live again by disabling auto-progress and disabling the gateway.
+This is done by calling `stop_live()` on the instance.
+Once this call returns, the instance will only continue to make progress when you call `tick` - but the state in which the instance halts is not deterministic.
+So be extra careful with tests which are setup with a live phase and which then transition to non-live for the test section. 
 
 Here is a sketch on how to use the live mode: 
 
@@ -76,8 +79,8 @@ let res = rt.block_on(async {
     let res = agent.[...]
     res
 });
-// stop the HTTP gateway and make instance deterministic
-pic.make_deterministic();
+// stop the HTTP gateway and auto progress
+pic.stop_live();
 ```
 
 ## Concurrent update calls

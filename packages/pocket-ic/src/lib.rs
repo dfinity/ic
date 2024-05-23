@@ -412,6 +412,10 @@ impl PocketIc {
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub fn make_live(&mut self, listen_at: Option<u16>) -> Url {
         self.auto_progress();
+        self.start_http_gateway(listen_at)
+    }
+
+    fn start_http_gateway(&mut self, listen_at: Option<u16>) -> Url {
         if let Some(res) = &self.http_gateway {
             return Url::parse(&format!("http://{}:{}/", LOCALHOST, res.port)).unwrap();
         }
@@ -455,13 +459,18 @@ impl PocketIc {
         }
     }
 
-    /// Makes the IC instance deterministic by stopping automatic progress
-    /// (time updates and round executions) on the IC instance
-    /// and stops the HTTP gateway for this IC instance.
+    /// Stops auto progress (automatic time updates and round executions)
+    /// and the HTTP gateway for this IC instance.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
-    pub fn make_deterministic(&mut self) {
+    pub fn stop_live(&mut self) {
         self.stop_http_gateway();
         self.stop_progress();
+    }
+
+    #[deprecated(note = "Use `stop_live` instead.")]
+    /// Use `stop_live` instead.
+    pub fn make_deterministic(&mut self) {
+        self.stop_live();
     }
 
     /// Get the root key of this IC instance. Returns `None` if the IC has no NNS subnet.

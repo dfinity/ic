@@ -123,7 +123,7 @@ impl Setup {
 
 impl Drop for Setup {
     fn drop(&mut self) {
-        self.pocket_ic.make_deterministic();
+        self.pocket_ic.stop_live();
     }
 }
 
