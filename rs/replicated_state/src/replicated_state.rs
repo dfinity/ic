@@ -147,7 +147,7 @@ struct OutputIterator<'a> {
     /// popped / peeked from the first iterator.
     canister_iterators: VecDeque<CanisterOutputQueuesIterator<'a>>,
 
-    /// Number of messages left in the iterator.
+    /// Number of (potentially stale) message references left in the iterator.
     size: usize,
 }
 
@@ -174,7 +174,7 @@ impl<'a> OutputIterator<'a> {
         if !subnet_queues_iter.is_empty() {
             canister_iterators.push_front(subnet_queues_iter)
         }
-        let size = canister_iterators.iter().map(|q| q.size_hint().0).sum();
+        let size = canister_iterators.iter().map(|q| q.size()).sum();
 
         OutputIterator {
             canister_iterators,
@@ -182,11 +182,12 @@ impl<'a> OutputIterator<'a> {
         }
     }
 
-    /// Computes the number of messages left in `queue_handles`.
+    /// Computes the number of (potentially stale) message references left in
+    /// `queue_handles`.
     ///
     /// Time complexity: O(N).
     fn compute_size(queue_handles: &VecDeque<CanisterOutputQueuesIterator<'a>>) -> usize {
-        queue_handles.iter().map(|q| q.size_hint().0).sum()
+        queue_handles.iter().map(|q| q.size()).sum()
     }
 }
 
@@ -209,7 +210,7 @@ impl std::iter::Iterator for OutputIterator<'_> {
                     self.canister_iterators.push_back(canister_iterator);
                 }
 
-                debug_assert!(Self::compute_size(&self.canister_iterators) <= self.size);
+                debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
                 return Some((queue_id, msg));
             }
         }
@@ -218,7 +219,7 @@ impl std::iter::Iterator for OutputIterator<'_> {
         None
     }
 
-    /// Returns the bounds on the remaining length of the iterator.
+    /// Returns the bounds on the number of messages remaining in the iterator.
     ///
     /// Since any message reference may or may not be stale (due to expiration /
     /// load shedding), there may be anywhere between 0 and `size` messages left in
@@ -246,13 +247,20 @@ pub trait PeekableOutputIterator: std::iter::Iterator<Item = (QueueId, RequestOr
 impl PeekableOutputIterator for OutputIterator<'_> {
     fn peek(&mut self) -> Option<(QueueId, &RequestOrResponse)> {
         while let Some(canister_iterator) = self.canister_iterators.front_mut() {
-            if canister_iterator.peek().is_some() {
-                // Borrow checker won't let me return here, so bail out and peek again.
+            // `peek()` may consume an arbitrary number of stale references.
+            self.size -= canister_iterator.size();
+            let peeked_some = canister_iterator.peek().is_some();
+            self.size += canister_iterator.size();
+
+            if peeked_some {
+                // Borrow checker won't let us return here, so bail out and peek again.
                 break;
             }
+
             self.canister_iterators.pop_front();
-            debug_assert!(Self::compute_size(&self.canister_iterators) <= self.size);
         }
+        debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
+
         self.canister_iterators.front_mut()?.peek()
     }
 
@@ -262,7 +270,7 @@ impl PeekableOutputIterator for OutputIterator<'_> {
             if !canister_iterator.is_empty() {
                 self.canister_iterators.push_front(canister_iterator);
             }
-            debug_assert!(Self::compute_size(&self.canister_iterators) <= self.size);
+            debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
         }
     }
 

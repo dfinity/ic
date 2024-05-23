@@ -87,7 +87,7 @@ impl CanisterQueuesFixture {
     }
 
     fn pop_output(&mut self) -> Option<(QueueId, RequestOrResponse)> {
-        let mut iter = self.queues.output_into_iter(self.other);
+        let mut iter = self.queues.output_into_iter(self.this);
         iter.pop()
     }
 
@@ -132,7 +132,7 @@ fn can_push_output_request() {
 /// Cannot push response to output queues without pushing an input request
 /// first.
 #[test]
-#[should_panic(expected = "pushing response into inexistent output queue")]
+#[should_panic(expected = "assertion failed: self.guaranteed_response_memory_reservations > 0")]
 fn cannot_push_output_response_without_input_request() {
     let mut queues = CanisterQueuesFixture::new();
     queues.push_output_response();
@@ -278,6 +278,51 @@ fn test_back_pressure_with_timed_out_requests() {
     assert!(queues.push_output_request().is_err());
 }
 
+#[test]
+fn test_shed_largest_message() {
+    let this = canister_test_id(13);
+    let other = canister_test_id(11);
+
+    let mut queues = CanisterQueues::default();
+
+    // Push an input and an output request.
+    queues
+        .push_input(
+            RequestBuilder::default()
+                .sender(other)
+                .receiver(this)
+                .deadline(CoarseTime::from_secs_since_unix_epoch(17))
+                .build()
+                .into(),
+            RemoteSubnet,
+        )
+        .unwrap();
+    queues
+        .push_output_request(
+            Arc::new(
+                RequestBuilder::default()
+                    .sender(this)
+                    .receiver(other)
+                    .deadline(CoarseTime::from_secs_since_unix_epoch(19))
+                    .build(),
+            ),
+            UNIX_EPOCH,
+        )
+        .unwrap();
+
+    // Shed the two requests.
+    let local_canisters = Default::default();
+    assert!(queues.shed_largest_message(&this, &local_canisters));
+    assert!(queues.shed_largest_message(&this, &local_canisters));
+
+    // There should be a reject response in an input queue.
+    assert_matches!(queues.pop_input(), Some(CanisterMessage::Response(_)));
+    assert!(!queues.has_input());
+    // But no output.
+    assert!(!queues.has_output());
+    assert!(queues.output_into_iter(this).next().is_none());
+}
+
 /// Enqueues 3 requests for the same canister and consumes them.
 #[test]
 fn test_message_picking_round_robin_on_one_queue() {
@@ -402,8 +447,8 @@ impl CanisterQueuesMultiFixture {
         )
     }
 
-    fn pop_output(&mut self, other: CanisterId) -> Option<(QueueId, RequestOrResponse)> {
-        let mut iter = self.queues.output_into_iter(other);
+    fn pop_output(&mut self) -> Option<(QueueId, RequestOrResponse)> {
+        let mut iter = self.queues.output_into_iter(self.this);
         iter.pop()
     }
 
@@ -442,7 +487,7 @@ fn test_message_picking_round_robin() {
     // Local response from `other_2`.
     // First push then pop a request to `other_2`, in order to get a reserved slot.
     queues.push_output_request(other_2).unwrap();
-    queues.pop_output(other_2).unwrap();
+    queues.pop_output().unwrap();
     queues.push_input_response(other_2, LocalSubnet).unwrap();
 
     // Local request from `other_2`.
