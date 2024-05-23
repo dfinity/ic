@@ -1,14 +1,14 @@
 use crate::tls::tls_cert_from_registry;
 use ic_crypto_tls_cert_validation::ValidTlsCertificate;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsPublicKeyCert};
-use ic_crypto_utils_tls::node_id_from_rustls_certs;
+use ic_crypto_utils_tls::{node_id_from_certificate_der, NodeIdFromCertificateDerError};
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::{NodeId, RegistryVersion, Time};
 use rustls::{
     client::{ServerCertVerified, ServerCertVerifier},
     server::{ClientCertVerified, ClientCertVerifier},
-    Certificate, DistinguishedName, Error as TLSError, ServerName,
+    Certificate, CertificateError, DistinguishedName, Error as TLSError, ServerName,
 };
 use std::{sync::Arc, time::SystemTime};
 
@@ -154,7 +154,15 @@ fn verify_node_cert(
 ) -> Result<(), TLSError> {
     ensure_intermediate_certs_empty(intermediates)?;
     let end_entity_node_id =
-        node_id_from_rustls_certs(end_entity_der).map_err(TLSError::InvalidCertificate)?;
+        node_id_from_certificate_der(end_entity_der.as_ref()).map_err(|err| match err {
+            NodeIdFromCertificateDerError::InvalidCertificate(_) => {
+                TLSError::InvalidCertificate(CertificateError::BadEncoding)
+            }
+            NodeIdFromCertificateDerError::UnexpectedContent(e) => {
+                TLSError::InvalidCertificate(CertificateError::Other(Arc::from(Box::from(e))))
+            }
+        })?;
+
     ensure_node_id_in_allowed_nodes(end_entity_node_id, allowed_nodes)?;
     let node_cert_from_registry =
         node_cert_from_registry(end_entity_node_id, registry_client, registry_version)?;

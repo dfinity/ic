@@ -8,5 +8,5 @@ documentation.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../../types/base_types" }
-rustls = { workspace = true }
+thiserror = { workspace = true }
 x509-parser = { workspace = true }

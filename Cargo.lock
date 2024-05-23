@@ -7609,7 +7609,7 @@ name = "ic-crypto-utils-tls"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
- "rustls 0.21.12",
+ "thiserror",
  "x509-parser",
 ]
 
