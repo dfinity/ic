@@ -17,9 +17,9 @@ use ic_config::bitcoin_payload_builder_config::Config;
 use ic_error_types::RejectCode;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
-    consensus::{PayloadPermanentError, PayloadValidationError},
+    consensus::{self, PayloadValidationError},
     self_validating_payload::{
-        InvalidSelfValidatingPayload, SelfValidatingPayloadBuilder,
+        InvalidSelfValidatingPayloadReason, SelfValidatingPayloadBuilder,
         SelfValidatingPayloadValidationError,
     },
     validation::ValidationError,
@@ -372,9 +372,11 @@ impl BatchPayloadBuilder for BitcoinPayloadBuilder {
 
         let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
         let payload = parse::bytes_to_payload(payload).map_err(|e| {
-            ValidationError::Permanent(PayloadPermanentError::SelfValidatingPayloadValidationError(
-                InvalidSelfValidatingPayload::DecodeError(e),
-            ))
+            ValidationError::InvalidArtifact(
+                consensus::InvalidPayloadReason::InvalidSelfValidatingPayload(
+                    InvalidSelfValidatingPayloadReason::DecodeError(e),
+                ),
+            )
         })?;
         let num_responses = payload.len();
 
@@ -387,9 +389,9 @@ impl BatchPayloadBuilder for BitcoinPayloadBuilder {
             if num_responses == 1 {
                 warn!(self.log, "Bitcoin Payload oversized");
             } else {
-                return Err(ValidationError::Permanent(
-                    PayloadPermanentError::SelfValidatingPayloadValidationError(
-                        InvalidSelfValidatingPayload::PayloadTooBig,
+                return Err(ValidationError::InvalidArtifact(
+                    consensus::InvalidPayloadReason::InvalidSelfValidatingPayload(
+                        InvalidSelfValidatingPayloadReason::PayloadTooBig,
                     ),
                 ));
             }

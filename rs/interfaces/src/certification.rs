@@ -59,45 +59,51 @@ pub trait CertificationPool {
     fn certified_heights(&self) -> HashSet<Height>;
 }
 
-/// Enumeration of all permanent errors the verifier component can return.
+/// Reasons for why a certification might be invalid.
 #[derive(Debug, PartialEq, Eq)]
-pub enum CertificationPermanentError {
+pub enum InvalidCertificationReason {
     CryptoError(CryptoError),
     UnexpectedCertificationHash(CryptoHashOfPartialState),
     RejectedByRejectingVerifier, // for testing only
 }
 
-/// Enumeration of all transient errors the verifier component can return.
+/// Possible failures of validating a certification. Doesn't necessarily mean the certification is
+/// invalid.
 #[derive(Debug, PartialEq, Eq)]
-pub enum CertificationTransientError {
+pub enum CertificationValidationFailure {
     CryptoError(CryptoError),
 }
 
-impl From<CryptoError> for CertificationTransientError {
-    fn from(err: CryptoError) -> CertificationTransientError {
-        CertificationTransientError::CryptoError(err)
+impl From<CryptoError> for CertificationValidationFailure {
+    fn from(err: CryptoError) -> CertificationValidationFailure {
+        CertificationValidationFailure::CryptoError(err)
     }
 }
 
-impl From<CryptoError> for CertificationPermanentError {
-    fn from(err: CryptoError) -> CertificationPermanentError {
-        CertificationPermanentError::CryptoError(err)
+impl From<CryptoError> for InvalidCertificationReason {
+    fn from(err: CryptoError) -> InvalidCertificationReason {
+        InvalidCertificationReason::CryptoError(err)
     }
 }
 
-impl<T> From<CertificationPermanentError> for ValidationError<CertificationPermanentError, T> {
-    fn from(err: CertificationPermanentError) -> ValidationError<CertificationPermanentError, T> {
-        ValidationError::Permanent(err)
+impl<T> From<InvalidCertificationReason> for ValidationError<InvalidCertificationReason, T> {
+    fn from(err: InvalidCertificationReason) -> ValidationError<InvalidCertificationReason, T> {
+        ValidationError::InvalidArtifact(err)
     }
 }
 
-impl<P> From<CertificationTransientError> for ValidationError<P, CertificationTransientError> {
-    fn from(err: CertificationTransientError) -> ValidationError<P, CertificationTransientError> {
-        ValidationError::Transient(err)
+impl<P> From<CertificationValidationFailure>
+    for ValidationError<P, CertificationValidationFailure>
+{
+    fn from(
+        err: CertificationValidationFailure,
+    ) -> ValidationError<P, CertificationValidationFailure> {
+        ValidationError::ValidationFailed(err)
     }
 }
 
-pub type VerifierError = ValidationError<CertificationPermanentError, CertificationTransientError>;
+pub type VerifierError =
+    ValidationError<InvalidCertificationReason, CertificationValidationFailure>;
 
 /// Verifier is used to verify state hash certifications. It will be injected
 /// into XNet and StateSync components so that they can ensure the authenticity

@@ -5,7 +5,7 @@ use ic_config::{
     state_manager::{lsmt_config_default, Config, LsmtConfig},
 };
 use ic_interfaces::{
-    certification::{CertificationPermanentError, Verifier, VerifierError},
+    certification::{InvalidCertificationReason, Verifier, VerifierError},
     p2p::state_sync::{Chunk, ChunkId, Chunkable},
     validation::ValidationResult,
 };
@@ -100,7 +100,7 @@ impl Verifier for RejectingVerifier {
         _certification: &Certification,
         _registry_version: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
-        Err(CertificationPermanentError::RejectedByRejectingVerifier.into())
+        Err(InvalidCertificationReason::RejectedByRejectingVerifier.into())
     }
 }
 
