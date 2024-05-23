@@ -17,9 +17,9 @@ pub(crate) const SEPOLIA_PROVIDERS: &[RpcService] = &[
 ];
 
 pub(crate) const ARBITRUM_PROVIDERS: &[RpcService] = &[
-    RpcService::ArbitrumMainnet(L2MainnetService::Alchemy),
-    RpcService::ArbitrumMainnet(L2MainnetService::Ankr),
-    RpcService::ArbitrumMainnet(L2MainnetService::PublicNode),
+    RpcService::ArbitrumOne(L2MainnetService::Alchemy),
+    RpcService::ArbitrumOne(L2MainnetService::Ankr),
+    RpcService::ArbitrumOne(L2MainnetService::PublicNode),
 ];
 
 pub(crate) const BASE_PROVIDERS: &[RpcService] = &[
@@ -50,7 +50,7 @@ pub enum RpcService {
     Custom(RpcApi),
     EthMainnet(EthMainnetService),
     EthSepolia(EthSepoliaService),
-    ArbitrumMainnet(L2MainnetService),
+    ArbitrumOne(L2MainnetService),
     BaseMainnet(L2MainnetService),
     OptimismMainnet(L2MainnetService),
 }
@@ -63,7 +63,7 @@ impl std::fmt::Debug for RpcService {
             RpcService::Custom(_) => write!(f, "Custom(..)"), // Redact credentials
             RpcService::EthMainnet(service) => write!(f, "{:?}", service),
             RpcService::EthSepolia(service) => write!(f, "{:?}", service),
-            RpcService::ArbitrumMainnet(service)
+            RpcService::ArbitrumOne(service)
             | RpcService::BaseMainnet(service)
             | RpcService::OptimismMainnet(service) => write!(f, "{:?}", service),
         }
