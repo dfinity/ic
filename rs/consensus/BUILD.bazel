@@ -68,6 +68,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:slog-async",
     "@crate_index//:slog-envlogger",
     "@crate_index//:slog-term",
+    "@crate_index//:strum",
     "@crate_index//:tempfile",
 ]
 

@@ -1478,11 +1478,15 @@ pub(crate) fn fake_ecdsa_key_id() -> EcdsaKeyId {
     EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()
 }
 
-pub(crate) fn fake_schnorr_master_public_key_id(algorithm: SchnorrAlgorithm) -> MasterPublicKeyId {
-    MasterPublicKeyId::Schnorr(SchnorrKeyId {
+pub(crate) fn fake_schnorr_key_id(algorithm: SchnorrAlgorithm) -> SchnorrKeyId {
+    SchnorrKeyId {
         algorithm,
         name: String::from("some_schnorr_key"),
-    })
+    }
+}
+
+pub(crate) fn fake_schnorr_master_public_key_id(algorithm: SchnorrAlgorithm) -> MasterPublicKeyId {
+    MasterPublicKeyId::Schnorr(fake_schnorr_key_id(algorithm))
 }
 
 pub(crate) fn create_reshare_request(num_nodes: u64, registry_version: u64) -> EcdsaReshareRequest {
