@@ -1020,7 +1020,11 @@ fn test_skip_canister_input() {
     );
 }
 
-fn request(payload_size: usize, deadline: CoarseTime) -> Request {
+fn request(deadline: CoarseTime) -> Request {
+    request_with_payload(13, deadline)
+}
+
+fn request_with_payload(payload_size: usize, deadline: CoarseTime) -> Request {
     RequestBuilder::new()
         .sender(canister_test_id(13))
         .receiver(canister_test_id(13))
@@ -1029,8 +1033,10 @@ fn request(payload_size: usize, deadline: CoarseTime) -> Request {
         .build()
 }
 
-// FIXME
-#[allow(dead_code)]
+fn response(deadline: CoarseTime) -> Response {
+    response_with_payload(13, deadline)
+}
+
 fn response_with_payload(payload_size: usize, deadline: CoarseTime) -> Response {
     ResponseBuilder::new()
         .respondent(canister_test_id(13))
@@ -1044,135 +1050,262 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
     CoarseTime::from_secs_since_unix_epoch(seconds_since_unix_epoch)
 }
 
-// #[test]
-// fn test_message_stats_best_effort() {
-//     let mut pool = MessagePool::default();
-
-//     // No memoory used by messages.
-//     assert_eq!(MessageStats::default(), pool.message_stats);
-
-//     // Insert a bunch of best-effort messages.
-//     let request = request(time(10));
-//     let request_size_bytes = request.count_bytes();
-//     let response = response(time(20));
-//     let response_size_bytes = response.count_bytes();
-
-//     let _ = pool.insert_inbound(request.clone().into());
-//     let inbound_response_id = pool.insert_inbound(response.clone().into());
-//     let outbound_request_id = pool.insert_outbound_request(request.into(), UNIX_EPOCH);
-//     let _ = pool.insert_outbound_response(response.into());
-
-//     // The guaranteed memory usage is zero.
-//     assert_eq!(0, pool.message_stats.memory_usage());
-//     // Best-effort memory usage and total byte size account for all messages.
-//     assert_eq!(
-//         2 * (request_size_bytes + response_size_bytes),
-//         pool.message_stats.best_effort_message_bytes
-//     );
-//     assert_eq!(
-//         2 * (request_size_bytes + response_size_bytes),
-//         pool.message_stats.size_bytes
-//     );
-
-//     // Take one request and one response.
-//     assert!(pool.take(inbound_response_id).is_some());
-//     assert!(pool.take(outbound_request_id).is_some());
-
-//     // The guaranteed memory usage is still zero.
-//     assert_eq!(0, pool.message_stats.memory_usage());
-//     // Best-effort memory usage and total byte size are halved.
-//     assert_eq!(
-//         request_size_bytes + response_size_bytes,
-//         pool.message_stats.best_effort_message_bytes
-//     );
-//     assert_eq!(
-//         request_size_bytes + response_size_bytes,
-//         pool.message_stats.size_bytes
-//     );
-
-//     // Shed one of the remaining messages and time out the other.
-//     assert!(pool.shed_largest_message().is_some());
-//     assert_eq!(1, pool.expire_messages(time(u32::MAX).into()).len());
-
-//     // Again no message memoory usage.
-//     assert_eq!(MessageStats::default(), pool.message_stats);
-// }
-
-// #[test]
-// fn test_message_stats_guaranteed_response() {
-//     let mut pool = MessagePool::default();
-
-//     // No memoory used by messages.
-//     assert_eq!(MessageStats::default(), pool.message_stats);
-
-//     // Insert a bunch of guaranteed response messages.
-//     let request = request(NO_DEADLINE);
-//     let request_size_bytes = request.count_bytes();
-//     let response = response(NO_DEADLINE);
-//     let response_size_bytes = response.count_bytes();
-
-//     let inbound_request_id = pool.insert_inbound(request.clone().into());
-//     let inbound_response_id = pool.insert_inbound(response.clone().into());
-//     let _ = pool.insert_outbound_request(request.into(), UNIX_EPOCH);
-//     let outbound_response_id = pool.insert_outbound_response(response.into());
-
-//     // The guaranteed memory usage covers the two responses.
-//     assert_eq!(
-//         2 * response_size_bytes,
-//         pool.message_stats.memory_usage()
-//     );
-//     // Best-effort memory usage is zero.
-//     assert_eq!(0, pool.message_stats.best_effort_message_bytes);
-//     // Total byte size accounts for all messages.
-//     assert_eq!(
-//         2 * (request_size_bytes + response_size_bytes),
-//         pool.message_stats.size_bytes
-//     );
-
-//     // Take one request and one response.
-//     assert!(pool.take(inbound_request_id).is_some());
-//     assert!(pool.take(outbound_response_id).is_some());
-
-//     // The guaranteed memory usage covers the remaining response.
-//     assert_eq!(response_size_bytes, pool.message_stats.memory_usage());
-//     // Best-effort memory usage is still zero.
-//     assert_eq!(0, pool.message_stats.best_effort_message_bytes);
-//     // Total byte size accounts for the two remaining messages.
-//     assert_eq!(
-//         request_size_bytes + response_size_bytes,
-//         pool.message_stats.size_bytes
-//     );
-
-//     // Time out the one message that has an (implicit) deadline (the outgoing
-//     // request), take the other.
-//     assert_eq!(1, pool.expire_messages(time(u32::MAX).into()).len());
-//     assert!(pool.take(inbound_response_id).is_some());
-
-//     // Again no message memoory usage.
-//     assert_eq!(MessageStats::default(), pool.message_stats);
-// }
-
 #[test]
-fn test_message_stats_oversized_requests() {
+fn test_stats_best_effort() {
     let mut queues = CanisterQueues::default();
-    let iq_size: usize = CanisterQueue::EMPTY_SIZE_BYTES;
 
-    assert_eq!(InputQueuesStats::default(), queues.input_queues_stats);
-    assert_eq!(OutputQueuesStats::default(), queues.output_queues_stats);
-    assert_eq!(MemoryUsageStats::default(), queues.memory_usage_stats);
+    let mut expected_queue_stats = QueueStats::default();
+    assert_eq!(expected_queue_stats, queues.queue_stats);
     assert_eq!(
         &message_pool::MessageStats::default(),
         queues.pool.message_stats()
     );
 
-    // Insert one best-effort and one guaranteed oversized request each into an
+    // Enqueue one guaranteed response request and one guaranteed response each into
+    // an input and an output queue.
+    let request = request(time(10));
+    let request_size_bytes = request.count_bytes();
+    let response = response_with_payload(1000, time(20));
+    let response_size_bytes = response.count_bytes();
+
+    // Make reservatuibs for the responses.
+    queues
+        .push_input(request.clone().into(), InputQueueType::LocalSubnet)
+        .unwrap();
+    queues.pop_input().unwrap();
+    queues
+        .push_output_request(request.clone().into(), UNIX_EPOCH)
+        .unwrap();
+    queues.output_into_iter(request.sender).next().unwrap();
+    // Actually enqueue the messages.
+    queues
+        .push_input(request.clone().into(), InputQueueType::LocalSubnet)
+        .unwrap();
+    queues
+        .push_input(response.clone().into(), InputQueueType::LocalSubnet)
+        .unwrap();
+    queues.push_output_response(response.clone().into());
+    queues
+        .push_output_request(request.clone().into(), UNIX_EPOCH)
+        .unwrap();
+
+    // One input queue slot, one output queue slot, zero memory reservations.
+    expected_queue_stats = QueueStats {
+        guaranteed_response_memory_reservations: 0,
+        input_queues_reserved_slots: 1,
+        output_queues_reserved_slots: 1,
+        transient_stream_responses_size_bytes: 0,
+    };
+    assert_eq!(expected_queue_stats, queues.queue_stats);
+    // Two guaranteed response requests, two guaranteed responses.
+    assert_eq!(
+        &message_pool::MessageStats {
+            size_bytes: 2 * (request_size_bytes + response_size_bytes),
+            best_effort_message_bytes: 2 * (request_size_bytes + response_size_bytes),
+            guaranteed_responses_size_bytes: 0,
+            oversized_guaranteed_requests_extra_bytes: 0,
+            inbound_size_bytes: request_size_bytes + response_size_bytes,
+            inbound_message_count: 2,
+            inbound_response_count: 1,
+            inbound_guaranteed_request_count: 0,
+            inbound_guaranteed_response_count: 0,
+            outbound_message_count: 2,
+        },
+        queues.pool.message_stats()
+    );
+
+    // Pop the incoming request and the outgoing response.
+    assert_eq!(
+        queues.pop_input(),
+        Some(CanisterMessage::Request(request.clone().into()))
+    );
+    assert_eq!(
+        queues.output_into_iter(request.sender).next().unwrap().1,
+        RequestOrResponse::Response(response.clone().into())
+    );
+
+    // No changes in slot and memory reservations.
+    assert_eq!(expected_queue_stats, queues.queue_stats);
+    // One guaranteed response request, one guaranteed response.
+    assert_eq!(
+        &message_pool::MessageStats {
+            size_bytes: request_size_bytes + response_size_bytes,
+            best_effort_message_bytes: request_size_bytes + response_size_bytes,
+            guaranteed_responses_size_bytes: 0,
+            oversized_guaranteed_requests_extra_bytes: 0,
+            inbound_size_bytes: response_size_bytes,
+            inbound_message_count: 1,
+            inbound_response_count: 1,
+            inbound_guaranteed_request_count: 0,
+            inbound_guaranteed_response_count: 0,
+            outbound_message_count: 1,
+        },
+        queues.pool.message_stats()
+    );
+
+    // Time out the one message with a deadline of less than 20 (the outgoing
+    // request), shed the incoming response and pop the generated reject response.
+    assert_eq!(
+        1,
+        queues.time_out_messages(time(20).into(), &request.sender, &BTreeMap::new())
+    );
+    assert!(queues.shed_largest_message(&request.sender, &BTreeMap::new()));
+    assert!(queues.pop_input().is_some());
+
+    // Input queue slot reservation was consumed.
+    expected_queue_stats = QueueStats {
+        guaranteed_response_memory_reservations: 0,
+        input_queues_reserved_slots: 0,
+        output_queues_reserved_slots: 1,
+        transient_stream_responses_size_bytes: 0,
+    };
+    assert_eq!(expected_queue_stats, queues.queue_stats);
+    // And all-zero message stats.
+    assert_eq!(
+        &message_pool::MessageStats::default(),
+        queues.pool.message_stats()
+    );
+}
+
+#[test]
+fn test_stats_guaranteed_response() {
+    let mut queues = CanisterQueues::default();
+
+    let mut expected_queue_stats = QueueStats::default();
+    assert_eq!(expected_queue_stats, queues.queue_stats);
+    assert_eq!(
+        &message_pool::MessageStats::default(),
+        queues.pool.message_stats()
+    );
+
+    // Enqueue one guaranteed response request and one guaranteed response each into
+    // an input and an output queue.
+    let request = request(NO_DEADLINE);
+    let request_size_bytes = request.count_bytes();
+    let response = response(NO_DEADLINE);
+    let response_size_bytes = response.count_bytes();
+
+    // Make reservatuibs for the responses.
+    queues
+        .push_input(request.clone().into(), InputQueueType::LocalSubnet)
+        .unwrap();
+    queues.pop_input().unwrap();
+    queues
+        .push_output_request(request.clone().into(), UNIX_EPOCH)
+        .unwrap();
+    queues.output_into_iter(request.sender).next().unwrap();
+    // Actually enqueue the messages.
+    queues
+        .push_input(request.clone().into(), InputQueueType::LocalSubnet)
+        .unwrap();
+    queues
+        .push_input(response.clone().into(), InputQueueType::LocalSubnet)
+        .unwrap();
+    queues.push_output_response(response.clone().into());
+    queues
+        .push_output_request(request.clone().into(), UNIX_EPOCH)
+        .unwrap();
+
+    // One input queue slot, one output queue slot, two memory reservations.
+    expected_queue_stats = QueueStats {
+        guaranteed_response_memory_reservations: 2,
+        input_queues_reserved_slots: 1,
+        output_queues_reserved_slots: 1,
+        transient_stream_responses_size_bytes: 0,
+    };
+    assert_eq!(expected_queue_stats, queues.queue_stats);
+    // Two guaranteed response requests, two guaranteed responses.
+    assert_eq!(
+        &message_pool::MessageStats {
+            size_bytes: 2 * (request_size_bytes + response_size_bytes),
+            best_effort_message_bytes: 0,
+            guaranteed_responses_size_bytes: 2 * response_size_bytes,
+            oversized_guaranteed_requests_extra_bytes: 0,
+            inbound_size_bytes: request_size_bytes + response_size_bytes,
+            inbound_message_count: 2,
+            inbound_response_count: 1,
+            inbound_guaranteed_request_count: 1,
+            inbound_guaranteed_response_count: 1,
+            outbound_message_count: 2,
+        },
+        queues.pool.message_stats()
+    );
+
+    // Pop the incoming request and the outgoing response.
+    assert_eq!(
+        queues.pop_input(),
+        Some(CanisterMessage::Request(request.clone().into()))
+    );
+    assert_eq!(
+        queues.output_into_iter(request.sender).next().unwrap().1,
+        RequestOrResponse::Response(response.clone().into())
+    );
+
+    // No changes in slot and memory reservations.
+    assert_eq!(expected_queue_stats, queues.queue_stats);
+    // One guaranteed response request, one guaranteed response.
+    assert_eq!(
+        &message_pool::MessageStats {
+            size_bytes: request_size_bytes + response_size_bytes,
+            best_effort_message_bytes: 0,
+            guaranteed_responses_size_bytes: response_size_bytes,
+            oversized_guaranteed_requests_extra_bytes: 0,
+            inbound_size_bytes: response_size_bytes,
+            inbound_message_count: 1,
+            inbound_response_count: 1,
+            inbound_guaranteed_request_count: 0,
+            inbound_guaranteed_response_count: 1,
+            outbound_message_count: 1,
+        },
+        queues.pool.message_stats()
+    );
+
+    // Time out the one message that has an (implicit) deadline (the outgoing
+    // request), pop the incoming response and the generated reject response.
+    assert_eq!(
+        1,
+        queues.time_out_messages(time(u32::MAX).into(), &request.sender, &BTreeMap::new())
+    );
+    assert_eq!(
+        queues.pop_input(),
+        Some(CanisterMessage::Response(response.clone().into()))
+    );
+    assert!(queues.pop_input().is_some());
+
+    // Input queue slot and memory reservations were consumed.
+    expected_queue_stats = QueueStats {
+        guaranteed_response_memory_reservations: 1,
+        input_queues_reserved_slots: 0,
+        output_queues_reserved_slots: 1,
+        transient_stream_responses_size_bytes: 0,
+    };
+    assert_eq!(expected_queue_stats, queues.queue_stats);
+    // And all-zero message stats.
+    assert_eq!(
+        &message_pool::MessageStats::default(),
+        queues.pool.message_stats()
+    );
+}
+
+#[test]
+fn test_stats_oversized_requests() {
+    let mut queues = CanisterQueues::default();
+
+    let mut expected_queue_stats = QueueStats::default();
+    assert_eq!(expected_queue_stats, queues.queue_stats);
+    assert_eq!(
+        &message_pool::MessageStats::default(),
+        queues.pool.message_stats()
+    );
+
+    // Enqueue one best-effort and one guaranteed oversized request each into an
     // input and an output queue.
-    let best_effort = request(
+    let best_effort = request_with_payload(
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1000,
         time(10),
     );
     let best_effort_size_bytes = best_effort.count_bytes();
-    let guaranteed = request(
+    let guaranteed = request_with_payload(
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 2000,
         NO_DEADLINE,
     );
@@ -1183,10 +1316,10 @@ fn test_message_stats_oversized_requests() {
     let guaranteed_extra_bytes = guaranteed_size_bytes - MAX_RESPONSE_COUNT_BYTES;
 
     queues
-        .push_input(best_effort.clone().into(), InputQueueType::RemoteSubnet)
+        .push_input(best_effort.clone().into(), InputQueueType::LocalSubnet)
         .unwrap();
     queues
-        .push_input(guaranteed.clone().into(), InputQueueType::RemoteSubnet)
+        .push_input(guaranteed.clone().into(), InputQueueType::LocalSubnet)
         .unwrap();
     queues
         .push_output_request(best_effort.clone().into(), UNIX_EPOCH)
@@ -1195,42 +1328,30 @@ fn test_message_stats_oversized_requests() {
         .push_output_request(guaranteed.clone().into(), UNIX_EPOCH)
         .unwrap();
 
-    // One input queue, two inbound messages and two reserved slots.
-    let expected_iq_stats = InputQueuesStats {
-        // message_count: 2,
-        // response_count: 0,
-        reserved_slots: 2,
-        // size_bytes: iq_size + best_effort_size_bytes + guaranteed_size_bytes,
-        // guaranteed_request_count: 1,
-        // guaranteed_response_count: 0,
-    };
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    // Two messages in output queues.
-    let expected_oq_stats = OutputQueuesStats {
-        // message_count: 2,
-        reserved_slots: 2,
-    };
-    assert_eq!(expected_oq_stats, queues.output_queues_stats);
-    // Four slot reservations, two guaranteed response memory reservations.
-    let expected_mu_stats = MemoryUsageStats {
+    // Two input queue slots, two output queue slots, two memory reservations.
+    expected_queue_stats = QueueStats {
         guaranteed_response_memory_reservations: 2,
+        input_queues_reserved_slots: 2,
+        output_queues_reserved_slots: 2,
         transient_stream_responses_size_bytes: 0,
     };
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+    assert_eq!(expected_queue_stats, queues.queue_stats);
     // Two best-effort requests, two oversized guaranteed requests, 4 requests in all.
-    let expected_pool_mu_stats = message_pool::MessageStats {
-        size_bytes: 2 * (best_effort_size_bytes + guaranteed_size_bytes),
-        best_effort_message_bytes: 2 * best_effort_size_bytes,
-        guaranteed_responses_size_bytes: 0,
-        oversized_guaranteed_requests_extra_bytes: 2 * guaranteed_extra_bytes,
-        inbound_size_bytes: best_effort_size_bytes + guaranteed_size_bytes,
-        inbound_message_count: 2,
-        inbound_response_count: 0,
-        inbound_guaranteed_request_count: 1,
-        inbound_guaranteed_response_count: 0,
-        outbound_message_count: 2,
-    };
-    assert_eq!(&expected_pool_mu_stats, queues.pool.message_stats());
+    assert_eq!(
+        &message_pool::MessageStats {
+            size_bytes: 2 * (best_effort_size_bytes + guaranteed_size_bytes),
+            best_effort_message_bytes: 2 * best_effort_size_bytes,
+            guaranteed_responses_size_bytes: 0,
+            oversized_guaranteed_requests_extra_bytes: 2 * guaranteed_extra_bytes,
+            inbound_size_bytes: best_effort_size_bytes + guaranteed_size_bytes,
+            inbound_message_count: 2,
+            inbound_response_count: 0,
+            inbound_guaranteed_request_count: 1,
+            inbound_guaranteed_response_count: 0,
+            outbound_message_count: 2,
+        },
+        queues.pool.message_stats()
+    );
 
     // Pop the incoming best-effort request and the incoming guaranteed request.
     assert_eq!(
@@ -1242,44 +1363,24 @@ fn test_message_stats_oversized_requests() {
         queues.pop_input()
     );
 
-    // One input queue, two reserved slots.
-    let expected_iq_stats = InputQueuesStats {
-        // message_count: 0,
-        // response_count: 0,
-        reserved_slots: 2,
-        // size_bytes: iq_size,
-        // guaranteed_request_count: 0,
-        // guaranteed_response_count: 0,
-    };
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    // Still two messages in output queues.
-    let expected_oq_stats = OutputQueuesStats {
-        // message_count: 2,
-        reserved_slots: 2,
-    };
-    assert_eq!(expected_oq_stats, queues.output_queues_stats);
-    // Still four slots, two guaranteed response memory reservations.
-    let expected_mu_stats = MemoryUsageStats {
-        guaranteed_response_memory_reservations: 2,
-        transient_stream_responses_size_bytes: 0,
-    };
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+    // No changes in slot and memory reservations.
+    assert_eq!(expected_queue_stats, queues.queue_stats);
     // One best-effort request, one oversized guaranteed request, 2 requests in all.
-    let expected_pool_mu_stats = message_pool::MessageStats {
-        size_bytes: best_effort_size_bytes + guaranteed_size_bytes,
-        best_effort_message_bytes: best_effort_size_bytes,
-        guaranteed_responses_size_bytes: 0,
-        oversized_guaranteed_requests_extra_bytes: guaranteed_extra_bytes,
-        inbound_size_bytes: 0,
-        inbound_message_count: 0,
-        inbound_response_count: 0,
-        inbound_guaranteed_request_count: 0,
-        inbound_guaranteed_response_count: 0,
-        outbound_message_count: 2,
-    };
-    assert_eq!(&expected_pool_mu_stats, queues.pool.message_stats());
-
-    // FIXME: Drop everything after this point except in one of the 3 tests.
+    assert_eq!(
+        &message_pool::MessageStats {
+            size_bytes: best_effort_size_bytes + guaranteed_size_bytes,
+            best_effort_message_bytes: best_effort_size_bytes,
+            guaranteed_responses_size_bytes: 0,
+            oversized_guaranteed_requests_extra_bytes: guaranteed_extra_bytes,
+            inbound_size_bytes: 0,
+            inbound_message_count: 0,
+            inbound_response_count: 0,
+            inbound_guaranteed_request_count: 0,
+            inbound_guaranteed_response_count: 0,
+            outbound_message_count: 2,
+        },
+        queues.pool.message_stats()
+    );
 
     // Shed the outgoing best-effort request and time out the outgoing guaranteed one.
     assert!(queues.shed_largest_message(&best_effort.sender, &BTreeMap::new()));
@@ -1288,30 +1389,22 @@ fn test_message_stats_oversized_requests() {
         queues.time_out_messages(time(u32::MAX).into(), &best_effort.sender, &BTreeMap::new())
     );
 
+    // Input queue slots and the input queue memory reservation were consumed.
+    expected_queue_stats = QueueStats {
+        guaranteed_response_memory_reservations: 1,
+        input_queues_reserved_slots: 0,
+        output_queues_reserved_slots: 2,
+        transient_stream_responses_size_bytes: 0,
+    };
+    assert_eq!(expected_queue_stats, queues.queue_stats);
+
     // And pop the two reject responses.
     queues.pop_input().unwrap();
     queues.pop_input().unwrap();
 
-    // Back to all-zero stats.
-    assert_eq!(
-        InputQueuesStats {
-            // size_bytes: CanisterQueue::empty_size_bytes(),
-            ..Default::default()
-        },
-        queues.input_queues_stats
-    );
-    let expected_oq_stats = OutputQueuesStats {
-        // message_count: 0,
-        reserved_slots: 2,
-    };
-    assert_eq!(expected_oq_stats, queues.output_queues_stats);
-    assert_eq!(
-        MemoryUsageStats {
-            guaranteed_response_memory_reservations: 1,
-            transient_stream_responses_size_bytes: 0,
-        },
-        queues.memory_usage_stats
-    );
+    // No change in slot and memory reservations.
+    assert_eq!(expected_queue_stats, queues.queue_stats);
+    // But back to all-zero message stats.
     assert_eq!(
         &message_pool::MessageStats::default(),
         queues.pool.message_stats()
@@ -1319,7 +1412,7 @@ fn test_message_stats_oversized_requests() {
 }
 
 /// Enqueues requests and responses into input and output queues, verifying that
-/// input queue and memory usage stats are accurate along the way.
+/// queue and message stats are accurate along the way.
 #[test]
 fn test_stats() {
     let this = canister_test_id(13);
@@ -1327,17 +1420,11 @@ fn test_stats() {
     let other_2 = canister_test_id(2);
     let other_3 = canister_test_id(3);
     const NAME: &str = "abcd";
-    // let iq_size: usize = InputQueue::new(DEFAULT_QUEUE_CAPACITY).calculate_size_bytes();
-    let iq_size: usize = CanisterQueue::EMPTY_SIZE_BYTES;
     let mut msg_size = [0; 6];
 
     let mut queues = CanisterQueues::default();
-    let mut expected_iq_stats = InputQueuesStats::default();
-    let mut expected_oq_stats = OutputQueuesStats::default();
-    let mut expected_mu_stats = MemoryUsageStats::default();
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    assert_eq!(expected_oq_stats, queues.output_queues_stats);
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+    let mut expected_queue_stats = QueueStats::default();
+    assert_eq!(expected_queue_stats, queues.queue_stats);
 
     // Push 3 requests into 3 input queues.
     for (i, sender) in [other_1, other_2, other_3].iter().enumerate() {
@@ -1345,56 +1432,29 @@ fn test_stats() {
             .sender(*sender)
             .receiver(this)
             .method_name(&NAME[0..i + 1]) // Vary request size.
-            .payment(Cycles::zero())
             .build()
             .into();
         msg_size[i] = msg.count_bytes();
         queues
             .push_input(msg, InputQueueType::RemoteSubnet)
             .expect("could not push");
-
-        // Added a new input queue and `msg`.
-        expected_iq_stats += InputQueuesStats {
-            // message_count: 1,
-            // response_count: 0,
-            reserved_slots: 0,
-            // size_bytes: iq_size + msg_size[i],
-            // guaranteed_request_count: 1,
-            // guaranteed_response_count: 0,
-        };
-        assert_eq!(expected_iq_stats, queues.input_queues_stats);
-        expected_oq_stats += OutputQueuesStats {
-            // message_count: 0,
-            reserved_slots: 1,
-        };
-        assert_eq!(expected_oq_stats, queues.output_queues_stats);
-        // Pushed a request: one more response slot and memory reservation.
-        expected_mu_stats += MemoryUsageStats {
-            guaranteed_response_memory_reservations: 1,
-            transient_stream_responses_size_bytes: 0,
-        };
-        assert_eq!(expected_mu_stats, queues.memory_usage_stats);
     }
+    // 3 slot and memory reservations in input queues.
+    expected_queue_stats = QueueStats {
+        guaranteed_response_memory_reservations: 3,
+        input_queues_reserved_slots: 0,
+        output_queues_reserved_slots: 3,
+        transient_stream_responses_size_bytes: 0,
+    };
+    assert_eq!(expected_queue_stats, queues.queue_stats);
 
     // Pop the first request we just pushed (as if it has started execution).
     match queues.pop_input().expect("could not pop a message") {
         CanisterMessage::Request(msg) => assert_eq!(msg.sender, other_1),
         msg => panic!("unexpected message popped: {:?}", msg),
     }
-    // We've now removed all messages in the input queue from `other_1`, but the
-    // queue is still there.
-    expected_iq_stats -= InputQueuesStats {
-        // message_count: 1,
-        // response_count: 0,
-        reserved_slots: 0,
-        // size_bytes: msg_size[0],
-        // guaranteed_request_count: 1,
-        // guaranteed_response_count: 0,
-    };
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    assert_eq!(expected_oq_stats, queues.output_queues_stats);
-    // Memory usage stats are unchanged, as the response memory reservation is still there.
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+    // No change in queue stats.
+    assert_eq!(expected_queue_stats, queues.queue_stats);
 
     // And push a matching output response.
     let msg = ResponseBuilder::default()
@@ -1404,21 +1464,14 @@ fn test_stats() {
         .build();
     msg_size[3] = msg.count_bytes();
     queues.push_output_response(msg.into());
-    // Input queue stats are unchanged.
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    expected_oq_stats += OutputQueuesStats {
-        // message_count: 1,
-        reserved_slots: -1,
-    };
-    assert_eq!(expected_oq_stats, queues.output_queues_stats);
-    // Consumed a guaranteed response memory reservation and added a response.
-    expected_mu_stats += MemoryUsageStats {
-        guaranteed_response_memory_reservations: -1,
-        // responses_size_bytes: msg_size[3],
-        // oversized_requests_extra_bytes: 0,
+    // Consumed a slot and memory reservation.
+    expected_queue_stats = QueueStats {
+        guaranteed_response_memory_reservations: 2,
+        input_queues_reserved_slots: 0,
+        output_queues_reserved_slots: 2,
         transient_stream_responses_size_bytes: 0,
     };
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+    assert_eq!(expected_queue_stats, queues.queue_stats);
 
     // Push an oversized request into the same output queue (to `other_1`).
     let msg = RequestBuilder::default()
@@ -1429,27 +1482,19 @@ fn test_stats() {
         .build();
     msg_size[4] = msg.count_bytes();
     queues.push_output_request(msg.into(), UNIX_EPOCH).unwrap();
-    // One more reserved slot and response memory reservation, oversized request.
-    expected_iq_stats.reserved_slots += 1;
-    expected_mu_stats += MemoryUsageStats {
-        guaranteed_response_memory_reservations: 1,
+    // One additional slot and response memory reservation in an input queue.
+    expected_queue_stats = QueueStats {
+        guaranteed_response_memory_reservations: 3,
+        input_queues_reserved_slots: 1,
+        output_queues_reserved_slots: 2,
         transient_stream_responses_size_bytes: 0,
     };
-    // expected_mu_stats.oversized_requests_extra_bytes += msg_size[4] - MAX_RESPONSE_COUNT_BYTES;
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    expected_oq_stats += OutputQueuesStats {
-        // message_count: 1,
-        reserved_slots: 0,
-    };
-    assert_eq!(expected_oq_stats, queues.output_queues_stats);
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+    assert_eq!(expected_queue_stats, queues.queue_stats);
 
     // Call `output_into_iter()` but don't consume any messages.
     queues.output_into_iter(this).peek();
-    // Stats should stay unchanged.
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    assert_eq!(expected_oq_stats, queues.output_queues_stats);
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+    // No change.
+    assert_eq!(expected_queue_stats, queues.queue_stats);
 
     // Call `output_into_iter()` and consume a single message.
     match queues
@@ -1457,21 +1502,11 @@ fn test_stats() {
         .next()
         .expect("could not pop a message")
     {
-        (_, RequestOrResponse::Response(msg)) => {
-            expected_oq_stats -= OutputQueuesStats {
-                // message_count: 1,
-                reserved_slots: 0,
-            };
-            assert_eq!(msg.originator, other_1)
-        }
-        msg => panic!("unexpected message popped: {:?}", msg),
+        (_, RequestOrResponse::Response(msg)) if msg.originator == other_1 => {}
+        (_, msg) => panic!("unexpected message popped: {:?}", msg),
     }
-    // No input queue changes.
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    assert_eq!(expected_oq_stats, queues.output_queues_stats);
-    // But we've consumed the response.
-    // expected_mu_stats.responses_size_bytes -= msg_size[3];
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+    // Still no change in reservations.
+    assert_eq!(expected_queue_stats, queues.queue_stats);
 
     // Consume the outgoing request.
     match queues
@@ -1479,26 +1514,16 @@ fn test_stats() {
         .next()
         .expect("could not pop a message")
     {
-        (_, RequestOrResponse::Request(msg)) => {
-            expected_oq_stats -= OutputQueuesStats {
-                // message_count: 1,
-                reserved_slots: 0,
-            };
-            assert_eq!(msg.receiver, other_1)
-        }
-        msg => panic!("unexpected message popped: {:?}", msg),
+        (_, RequestOrResponse::Request(msg)) if msg.receiver == other_1 => {}
+        (_, msg) => panic!("unexpected message popped: {:?}", msg),
     }
-    // No input queue changes.
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    assert_eq!(expected_oq_stats, queues.output_queues_stats);
-    // Oversized request was popped.
-    // expected_mu_stats.oversized_requests_extra_bytes -= msg_size[4] - MAX_RESPONSE_COUNT_BYTES;
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+    // Still no change in reservations.
+    assert_eq!(expected_queue_stats, queues.queue_stats);
 
     // Ensure no more outgoing messages.
     assert!(queues.output_into_iter(this).next().is_none());
 
-    // And enqueue a matching incoming response.
+    // Enqueue a matching incoming response.
     let msg: RequestOrResponse = ResponseBuilder::default()
         .respondent(other_1)
         .originator(this)
@@ -1509,102 +1534,49 @@ fn test_stats() {
     queues
         .push_input(msg, InputQueueType::RemoteSubnet)
         .expect("could not push");
-    // Added a new input message.
-    expected_iq_stats += InputQueuesStats {
-        // message_count: 1,
-        // response_count: 1,
-        reserved_slots: -1,
-        // size_bytes: msg_size[5],
-        // guaranteed_request_count: 0,
-        // guaranteed_response_count: 1,
-    };
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    assert_eq!(expected_oq_stats, queues.output_queues_stats);
-    // Consumed one guaranteed response memory reservation, added some response bytes.
-    expected_mu_stats += MemoryUsageStats {
-        guaranteed_response_memory_reservations: -1,
-        // responses_size_bytes: msg_size[5],
-        // oversized_requests_extra_bytes: 0,
+    // Consumed the input queue slot and memory reservation.
+    expected_queue_stats = QueueStats {
+        guaranteed_response_memory_reservations: 2,
+        input_queues_reserved_slots: 0,
+        output_queues_reserved_slots: 2,
         transient_stream_responses_size_bytes: 0,
     };
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+    assert_eq!(expected_queue_stats, queues.queue_stats);
 
     // Pop everything.
 
     // Pop request from other_2
     match queues.pop_input().expect("could not pop a message") {
-        CanisterMessage::Request(msg) => assert_eq!(msg.sender, other_2),
+        CanisterMessage::Request(msg) => if msg.sender == other_2 {},
         msg => panic!("unexpected message popped: {:?}", msg),
     }
-    // Removed message.
-    expected_iq_stats -= InputQueuesStats {
-        // message_count: 1,
-        // response_count: 0,
-        reserved_slots: 0,
-        // size_bytes: msg_size[1],
-        // guaranteed_request_count: 1,
-        // guaranteed_response_count: 0,
-    };
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    assert_eq!(expected_oq_stats, queues.output_queues_stats);
-    // Memory usage stats unchanged, as the response memory reservation is still there.
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
-
     // Pop request from other_3
     match queues.pop_input().expect("could not pop a message") {
-        CanisterMessage::Request(msg) => assert_eq!(msg.sender, other_3),
+        CanisterMessage::Request(msg) => if msg.sender == other_3 {},
         msg => panic!("unexpected message popped: {:?}", msg),
     }
-    // Removed message.
-    expected_iq_stats -= InputQueuesStats {
-        // message_count: 1,
-        // response_count: 0,
-        reserved_slots: 0,
-        // size_bytes: msg_size[2],
-        // guaranteed_request_count: 1,
-        // guaranteed_response_count: 0,
-    };
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    assert_eq!(expected_oq_stats, queues.output_queues_stats);
-    // Memory usage stats unchanged, as the response memory reservation is still there.
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
-
     // Pop response from other_1
     match queues.pop_input().expect("could not pop a message") {
-        CanisterMessage::Response(msg) => assert_eq!(msg.respondent, other_1),
+        CanisterMessage::Response(msg) => if msg.respondent == other_1 {},
         msg => panic!("unexpected message popped: {:?}", msg),
     }
-    // Removed message.
-    expected_iq_stats -= InputQueuesStats {
-        // message_count: 1,
-        // response_count: 1,
-        reserved_slots: 0,
-        // size_bytes: msg_size[5],
-        // guaranteed_request_count: 0,
-        // guaranteed_response_count: 1,
-    };
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    assert_eq!(expected_oq_stats, queues.output_queues_stats);
-    // We have consumed the response.
-    // expected_mu_stats.responses_size_bytes -= msg_size[5];
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+    // Still no change in reservations (2 output queue slot and memory reservations).
+    assert_eq!(expected_queue_stats, queues.queue_stats);
 }
 
 /// Enqueues requests and responses into input and output queues, verifying that
-/// input queue and memory usage stats are accurate along the way.
+/// queue and message stats are accurate along the way.
 #[test]
 fn test_stats_induct_message_to_self() {
     let this = canister_test_id(13);
-    // let iq_size: usize = InputQueue::new(DEFAULT_QUEUE_CAPACITY).calculate_size_bytes();
-    let iq_size: usize = CanisterQueue::EMPTY_SIZE_BYTES;
 
     let mut queues = CanisterQueues::default();
-    let mut expected_iq_stats = InputQueuesStats::default();
-    let mut expected_mu_stats = MemoryUsageStats::default();
-    let expected_pool_mu_stats = message_pool::MessageStats::default();
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
-    assert_eq!(&expected_pool_mu_stats, queues.pool.message_stats());
+
+    assert_eq!(QueueStats::default(), queues.queue_stats);
+    assert_eq!(
+        &message_pool::MessageStats::default(),
+        queues.pool.message_stats()
+    );
 
     // No messages to induct.
     assert!(queues.induct_message_to_self(this).is_err());
@@ -1620,106 +1592,117 @@ fn test_stats_induct_message_to_self() {
         .push_output_request(request.into(), UNIX_EPOCH)
         .expect("could not push");
 
-    // New input queue was created, with one reserved slot.
-    // expected_iq_stats.size_bytes += iq_size;
-    expected_iq_stats.reserved_slots += 1;
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    // Pushed a request: one more response slot and memory reservation.
-    expected_mu_stats += MemoryUsageStats {
-        guaranteed_response_memory_reservations: 1,
-        transient_stream_responses_size_bytes: 0,
-    };
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+    // One slot and memory reservation in an input queue.
+    assert_eq!(
+        QueueStats {
+            guaranteed_response_memory_reservations: 1,
+            input_queues_reserved_slots: 1,
+            output_queues_reserved_slots: 0,
+            transient_stream_responses_size_bytes: 0
+        },
+        queues.queue_stats
+    );
 
     // Induct request.
     assert!(queues.induct_message_to_self(this).is_ok());
 
-    // Request is now in the input queue.
-    expected_iq_stats += InputQueuesStats {
-        // message_count: 1,
-        // response_count: 0,
-        reserved_slots: 0,
-        // size_bytes: request_size,
-        // guaranteed_request_count: 1,
-        // guaranteed_response_count: 0,
-    };
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    // We now have slot and guaranteed response memory reservations (for the same
-    // request) in both the input and the output queue.
-    expected_mu_stats += MemoryUsageStats {
-        guaranteed_response_memory_reservations: 1,
-        transient_stream_responses_size_bytes: 0,
-    };
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+    // Additional slot and memory reservation, now in an output queue.
+    assert_eq!(
+        QueueStats {
+            guaranteed_response_memory_reservations: 2,
+            input_queues_reserved_slots: 1,
+            output_queues_reserved_slots: 1,
+            transient_stream_responses_size_bytes: 0
+        },
+        queues.queue_stats
+    );
+    // One inbound guaranteed response request.
+    assert_eq!(
+        &message_pool::MessageStats {
+            size_bytes: request_size,
+            best_effort_message_bytes: 0,
+            guaranteed_responses_size_bytes: 0,
+            oversized_guaranteed_requests_extra_bytes: 0,
+            inbound_size_bytes: request_size,
+            inbound_message_count: 1,
+            inbound_response_count: 0,
+            inbound_guaranteed_request_count: 1,
+            inbound_guaranteed_response_count: 0,
+            outbound_message_count: 0,
+        },
+        queues.pool.message_stats()
+    );
 
     // Pop the request (as if we were executing it).
     queues.pop_input().expect("could not pop request");
-    // Request consumed.
-    expected_iq_stats -= InputQueuesStats {
-        // message_count: 1,
-        // response_count: 0,
-        reserved_slots: 0,
-        // size_bytes: request_size,
-        // guaranteed_request_count: 1,
-        // guaranteed_response_count: 0,
-    };
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    // Memory usage stats unchanged, as the response memory reservations are still there.
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
-    // And push a matching output response.
+    // No change in reservations.
+    assert_eq!(
+        QueueStats {
+            guaranteed_response_memory_reservations: 2,
+            input_queues_reserved_slots: 1,
+            output_queues_reserved_slots: 1,
+            transient_stream_responses_size_bytes: 0
+        },
+        queues.queue_stats
+    );
+    // No messages.
+    assert_eq!(
+        &message_pool::MessageStats::default(),
+        queues.pool.message_stats()
+    );
+
+    // Push the matching output response.
     let response = ResponseBuilder::default()
         .respondent(this)
         .originator(this)
         .build();
     let response_size = response.count_bytes();
     queues.push_output_response(response.into());
-    // Input queue stats are unchanged.
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    // Consumed output queue response memory reservation and added a response.
-    expected_mu_stats += MemoryUsageStats {
-        guaranteed_response_memory_reservations: -1,
-        // responses_size_bytes: response_size,
-        // oversized_requests_extra_bytes: 0,
-        transient_stream_responses_size_bytes: 0,
-    };
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+
+    // Consumed the output queue slot and memory reservation.
+    assert_eq!(
+        QueueStats {
+            guaranteed_response_memory_reservations: 1,
+            input_queues_reserved_slots: 1,
+            output_queues_reserved_slots: 0,
+            transient_stream_responses_size_bytes: 0
+        },
+        queues.queue_stats
+    );
+    // One outbound guaranteed response.
+    assert_eq!(
+        &message_pool::MessageStats {
+            size_bytes: response_size,
+            best_effort_message_bytes: 0,
+            guaranteed_responses_size_bytes: response_size,
+            oversized_guaranteed_requests_extra_bytes: 0,
+            inbound_size_bytes: 0,
+            inbound_message_count: 0,
+            inbound_response_count: 0,
+            inbound_guaranteed_request_count: 0,
+            inbound_guaranteed_response_count: 0,
+            outbound_message_count: 1,
+        },
+        queues.pool.message_stats()
+    );
 
     // Induct the response.
     assert!(queues.induct_message_to_self(this).is_ok());
 
-    // Response is now in the input queue, reserved slot is consumed.
-    expected_iq_stats += InputQueuesStats {
-        // message_count: 1,
-        // response_count: 1,
-        reserved_slots: -1,
-        // size_bytes: response_size,
-        // guaranteed_request_count: 0,
-        // guaranteed_response_count: 1,
-    };
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    // Consumed input queue response slot and memory reservation.
-    expected_mu_stats += MemoryUsageStats {
-        guaranteed_response_memory_reservations: -1,
-        transient_stream_responses_size_bytes: 0,
-    };
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+    // Input queue slot and memory reservation are consumed.
+    assert_eq!(QueueStats::default(), queues.queue_stats);
 
     // Pop the response.
     queues.pop_input().expect("could not pop response");
-    // Response consumed.
-    expected_iq_stats -= InputQueuesStats {
-        // message_count: 1,
-        // response_count: 1,
-        reserved_slots: 0,
-        // size_bytes: response_size,
-        // guaranteed_request_count: 0,
-        // guaranteed_response_count: 1,
-    };
-    assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    // Zero response bytes, zero response memory reservations.
-    // expected_mu_stats.responses_size_bytes -= response_size;
-    assert_eq!(expected_mu_stats, queues.memory_usage_stats);
+
+    // No change in stats.
+    assert_eq!(QueueStats::default(), queues.queue_stats);
+    // And no messages.
+    assert_eq!(
+        &message_pool::MessageStats::default(),
+        queues.pool.message_stats()
+    );
 }
 
 /// Simulates sending an outgoing request and receiving an incoming response,

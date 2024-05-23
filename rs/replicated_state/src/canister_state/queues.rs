@@ -23,7 +23,6 @@ use ic_types::xnet::{QueueId, SessionId};
 use ic_types::{CanisterId, CountBytes, Time};
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::convert::{From, TryFrom};
-use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
 
 pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
@@ -100,15 +99,6 @@ pub struct CanisterQueues {
     /// senders is best effort.
     remote_subnet_input_schedule: VecDeque<CanisterId>,
 
-    /// Running `input_queues` stats.
-    input_queues_stats: InputQueuesStats,
-
-    /// Running `output_queues` stats.
-    output_queues_stats: OutputQueuesStats,
-
-    /// Running memory usage stats, across input and output queues.
-    memory_usage_stats: MemoryUsageStats,
-
     /// Slot and memory reservation stats. Message count and size stats are
     /// maintained separately in the `MessagePool`.
     queue_stats: QueueStats,
@@ -139,12 +129,6 @@ pub struct CanisterOutputQueuesIterator<'a> {
 
     /// Number of (potentially stale) message references left in the iterator.
     size: usize,
-
-    /// The canister's memory usage stats, to be updated as messages are popped.
-    memory_stats: &'a mut MemoryUsageStats,
-
-    /// Canister output queue stats, to be updated as messages are popped.
-    queue_stats: &'a mut OutputQueuesStats,
 }
 
 impl<'a> CanisterOutputQueuesIterator<'a> {
@@ -152,8 +136,6 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
         owner: CanisterId,
         queues: &'a mut BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
         pool: &'a mut MessagePool,
-        memory_stats: &'a mut MemoryUsageStats,
-        queue_stats: &'a mut OutputQueuesStats,
     ) -> Self {
         let queues: VecDeque<_> = queues
             .iter_mut()
@@ -167,8 +149,6 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
             queues,
             pool,
             size,
-            memory_stats,
-            queue_stats,
         }
     }
 
@@ -242,8 +222,6 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
                     self.queues.push_back((receiver, queue));
                 }
 
-                *self.memory_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
-                *self.queue_stats -= OutputQueuesStats::stats_delta(QueueOp::Pop, &msg);
                 debug_assert_eq!(Self::compute_size(&self.queues), self.size);
 
                 return Some((queue_id, msg));
@@ -346,7 +324,7 @@ impl CanisterQueues {
                     None => {
                         queue
                             .pop()
-                            .expect("peek() returned a message, pop() should not fail");
+                            .expect("peek() returned a reference, pop() should not fail");
                         continue;
                     }
                 };
@@ -357,13 +335,12 @@ impl CanisterQueues {
 
                     // Message consumed, pop it and update the stats.
                     Ok(_) => {
-                        queue.pop();
-                        let msg = self.pool.take(id).unwrap();
-
-                        self.output_queues_stats -=
-                            OutputQueuesStats::stats_delta(QueueOp::Pop, &msg);
-                        self.memory_usage_stats -=
-                            MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
+                        self.pool
+                            .take(id)
+                            .expect("peek() returned a message, take() should not fail");
+                        queue
+                            .pop()
+                            .expect("peek() returned a message, pop() should not fail");
                     }
                 }
             }
@@ -375,13 +352,7 @@ impl CanisterQueues {
     /// at a time from each in a round robin fashion. The iterator consumes all
     /// popped messages.
     pub(crate) fn output_into_iter(&mut self, owner: CanisterId) -> CanisterOutputQueuesIterator {
-        CanisterOutputQueuesIterator::new(
-            owner,
-            &mut self.canister_queues,
-            &mut self.pool,
-            &mut self.memory_usage_stats,
-            &mut self.output_queues_stats,
-        )
+        CanisterOutputQueuesIterator::new(owner, &mut self.canister_queues, &mut self.pool)
     }
 
     /// See `IngressQueue::filter_messages()` for documentation.
@@ -447,13 +418,9 @@ impl CanisterQueues {
             },
         };
 
-        let iq_stats_delta = InputQueuesStats::stats_delta(QueueOp::Push, &msg);
-        let mu_stats_delta = MemoryUsageStats::stats_delta(QueueOp::Push, &msg);
-
         self.queue_stats.on_push(&msg, Context::Inbound);
         match msg {
             RequestOrResponse::Request(_) => {
-                self.output_queues_stats.reserved_slots += 1;
                 let id = self.pool.insert_inbound(msg);
                 input_queue.push_request(id)
             }
@@ -473,8 +440,6 @@ impl CanisterQueues {
             }
         }
 
-        self.input_queues_stats += iq_stats_delta;
-        self.memory_usage_stats += mu_stats_delta;
         debug_assert!(self.stats_ok());
 
         Ok(())
@@ -509,10 +474,6 @@ impl CanisterQueues {
                 if input_queue.len() != 0 {
                     input_schedule.push_back(sender);
                 }
-
-                self.input_queues_stats -= InputQueuesStats::stats_delta(QueueOp::Pop, &msg);
-                self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
-                debug_assert!(self.stats_ok());
 
                 let msg = match msg {
                     RequestOrResponse::Request(msg) => CanisterMessage::Request(msg),
@@ -711,17 +672,12 @@ impl CanisterQueues {
         // Make the borrow checker happy.
         let (_, output_queue) = &mut self.canister_queues.get_mut(&request.receiver).unwrap();
 
-        let mu_stats_delta = MemoryUsageStats::request_stats_delta(QueueOp::Push, &request);
-        let oq_stats_delta = OutputQueuesStats::request_stats_delta(&request);
         self.queue_stats
             .on_push_request(&request, Context::Outbound);
 
         let id = self.pool.insert_outbound_request(request, time);
         output_queue.push_request(id);
 
-        self.input_queues_stats.reserved_slots += 1;
-        self.output_queues_stats += oq_stats_delta;
-        self.memory_usage_stats += mu_stats_delta;
         debug_assert!(self.stats_ok());
 
         Ok(())
@@ -750,8 +706,6 @@ impl CanisterQueues {
 
         let (input_queue, _output_queue) = self.get_or_insert_queues(&request.receiver);
         input_queue.try_reserve_response_slot(&request)?;
-        self.input_queues_stats.reserved_slots += 1;
-        self.memory_usage_stats += MemoryUsageStats::request_stats_delta(QueueOp::Push, &request);
         self.queue_stats
             .on_push_request(&request, Context::Outbound);
         debug_assert!(self.stats_ok());
@@ -795,8 +749,6 @@ impl CanisterQueues {
     /// Panics if the queue does not already exist or there is no reserved slot
     /// to push the `Response` into.
     pub fn push_output_response(&mut self, response: Arc<Response>) {
-        let mu_stats_delta = MemoryUsageStats::response_stats_delta(QueueOp::Push, &response);
-        let oq_stats_delta = OutputQueuesStats::response_stats_delta(QueueOp::Push, &response);
         self.queue_stats
             .on_push_response(&response, Context::Outbound);
 
@@ -811,8 +763,6 @@ impl CanisterQueues {
         let id = self.pool.insert_outbound_response(response);
         output_queue.push_response(id);
 
-        self.memory_usage_stats += mu_stats_delta;
-        self.output_queues_stats += oq_stats_delta;
         debug_assert!(self.stats_ok());
     }
 
@@ -850,26 +800,19 @@ impl CanisterQueues {
     pub(super) fn induct_message_to_self(&mut self, own_canister_id: CanisterId) -> Result<(), ()> {
         let msg = self.peek_output(&own_canister_id).ok_or(())?.clone();
 
-        let oq_stats_delta = OutputQueuesStats::stats_delta(QueueOp::Pop, &msg);
-        let mu_stats_delta = MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
-
         self.push_input(msg, InputQueueType::LocalSubnet)
             .map_err(|_| ())?;
 
         let reference = self
             .canister_queues
             .get_mut(&own_canister_id)
-            .expect("Output queue existed above so should not fail.")
+            .expect("Output queue existed above so lookup should not fail.")
             .1
             .pop()
             .expect("Message peeked above so pop should not fail.");
         self.pool
             .take(reference.id())
             .expect("Message peeked above so take should not fail.");
-
-        self.output_queues_stats -= oq_stats_delta;
-        self.memory_usage_stats -= mu_stats_delta;
-        debug_assert!(self.stats_ok());
 
         Ok(())
     }
@@ -894,10 +837,6 @@ impl CanisterQueues {
     /// Note that this is different from memory reservations for guaranteed
     /// responses.
     pub fn input_queues_reserved_slots(&self) -> usize {
-        assert_eq!(
-            self.input_queues_stats.reserved_slots as usize,
-            self.queue_stats.input_queues_reserved_slots
-        );
         self.queue_stats.input_queues_reserved_slots
     }
 
@@ -927,10 +866,6 @@ impl CanisterQueues {
     /// Note that this is different from memory reservations for guaranteed
     /// responses.
     pub fn output_queues_reserved_slots(&self) -> usize {
-        assert_eq!(
-            self.output_queues_stats.reserved_slots as usize,
-            self.queue_stats.output_queues_reserved_slots
-        );
         self.queue_stats.output_queues_reserved_slots
     }
 
@@ -941,10 +876,6 @@ impl CanisterQueues {
 
     /// Returns the memory usage of all guaranteed response messages.
     pub fn guaranteed_response_memory_usage(&self) -> usize {
-        assert_eq!(
-            self.memory_usage_stats.guaranteed_response_memory_usage(),
-            self.queue_stats.guaranteed_response_memory_usage(),
-        );
         self.queue_stats.guaranteed_response_memory_usage()
             + self.pool.message_stats().guaranteed_response_memory_usage()
     }
@@ -961,11 +892,6 @@ impl CanisterQueues {
     /// Note that this is different from slots reserved for responses (whether
     /// best effort or guaranteed) which are used to implement backpressure.
     pub fn guaranteed_response_memory_reservations(&self) -> usize {
-        assert_eq!(
-            self.memory_usage_stats
-                .guaranteed_response_memory_reservations as usize,
-            self.queue_stats.guaranteed_response_memory_reservations,
-        );
         self.queue_stats.guaranteed_response_memory_reservations
     }
 
@@ -980,19 +906,12 @@ impl CanisterQueues {
     /// Sets the (transient) size in bytes of responses routed from
     /// `output_queues` into streams and not yet garbage collected.
     pub(super) fn set_stream_responses_size_bytes(&mut self, size_bytes: usize) {
-        self.memory_usage_stats
-            .transient_stream_responses_size_bytes = size_bytes;
         self.queue_stats.transient_stream_responses_size_bytes = size_bytes;
     }
 
     /// Returns the byte size of responses already routed to streams as set by
     /// the last call to `set_stream_responses_size_bytes()`.
     pub fn stream_responses_size_bytes(&self) -> usize {
-        assert_eq!(
-            self.memory_usage_stats
-                .transient_stream_responses_size_bytes,
-            self.queue_stats.transient_stream_responses_size_bytes,
-        );
         self.queue_stats.transient_stream_responses_size_bytes
     }
 
@@ -1073,18 +992,6 @@ impl CanisterQueues {
     /// by writing `debug_assert!(self.stats_ok())`.
     fn stats_ok(&self) -> bool {
         debug_assert_eq!(
-            Self::calculate_input_queues_stats(&self.canister_queues),
-            self.input_queues_stats
-        );
-        debug_assert_eq!(
-            Self::calculate_output_queues_stats(&self.canister_queues),
-            self.output_queues_stats
-        );
-        debug_assert_eq!(
-            Self::calculate_memory_usage_stats(&self.canister_queues),
-            self.memory_usage_stats
-        );
-        debug_assert_eq!(
             Self::calculate_queue_stats(&self.canister_queues),
             self.queue_stats
         );
@@ -1127,56 +1034,7 @@ impl CanisterQueues {
         true
     }
 
-    /// Computes input queues stats from scratch. Used when deserializing and
-    /// in `debug_assert!()` checks.
-    ///
-    /// Time complexity: `O(num_messages)`.
-    fn calculate_input_queues_stats(
-        canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
-    ) -> InputQueuesStats {
-        let mut stats = InputQueuesStats::default();
-        for (q, _) in canister_queues.values() {
-            stats += InputQueuesStats {
-                reserved_slots: q.reserved_slots() as isize,
-            }
-        }
-        stats
-    }
-
-    /// Computes output queues stats from scratch. Used when deserializing and
-    /// in `debug_assert!()` checks.
-    ///
-    /// Time complexity: `O(num_messages)`.
-    fn calculate_output_queues_stats(
-        canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
-    ) -> OutputQueuesStats {
-        let mut stats = OutputQueuesStats::default();
-        for (_, q) in canister_queues.values() {
-            stats += OutputQueuesStats {
-                reserved_slots: q.reserved_slots() as isize,
-            };
-        }
-        stats
-    }
-
-    /// Computes memory usage stats from scratch. Used when deserializing and in
-    /// `debug_assert!()` checks.
-    ///
-    /// Time complexity: `O(canister_queues.len())`.
-    fn calculate_memory_usage_stats(
-        canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
-    ) -> MemoryUsageStats {
-        let guaranteed_response_memory_reservations = canister_queues
-            .values()
-            .map(|(iq, oq)| iq.response_memory_reservations() + oq.response_memory_reservations())
-            .sum::<usize>() as i64;
-        MemoryUsageStats {
-            guaranteed_response_memory_reservations,
-            transient_stream_responses_size_bytes: 0,
-        }
-    }
-
-    /// Computes queue stats from scratch. Used when deserializing and in
+    /// Computes stats for the given canister queues. Used when deserializing and in
     /// `debug_assert!()` checks.
     ///
     /// Time complexity: `O(canister_queues.len())`.
@@ -1327,23 +1185,8 @@ impl CanisterQueues {
     ) {
         use Context::*;
 
-        // Update stats for the dropped message.
-        self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, msg);
-        let context = id.context();
-        if context == Outbound {
-            // Sanity check: ensure that we were the sender.
-            debug_assert_eq!(own_canister_id, &msg.sender());
-
-            self.output_queues_stats -= OutputQueuesStats::stats_delta(QueueOp::Pop, msg);
-        } else {
-            // Sanity check: ensure that we were the receiver.
-            debug_assert_eq!(own_canister_id, &msg.receiver());
-
-            self.input_queues_stats -= InputQueuesStats::stats_delta(QueueOp::Pop, msg);
-        }
-
         // Generate reject response, if necessary.
-        let request = match (context, msg) {
+        let request = match (id.context(), msg) {
             // Outbound request: produce a `SYS_TRANSIENT` timeout response.
             (Outbound, RequestOrResponse::Request(request)) => request,
 
@@ -1354,10 +1197,7 @@ impl CanisterQueues {
         let destination = &request.receiver;
         let (input_queue, _) = self.canister_queues.get_mut(destination).unwrap();
 
-        // Update memory usage stats and the input queue stats for the generated
-        // response.
-        self.memory_usage_stats += MemoryUsageStats::response_stats_delta(QueueOp::Push, &response);
-        self.input_queues_stats += InputQueuesStats::response_stats_delta(QueueOp::Push, &response);
+        // Update stats for the generated response.
         self.queue_stats.on_push_response(&response, Inbound);
 
         let id = self.pool.insert_inbound(response.into());
@@ -1490,9 +1330,6 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
             canister_queues.insert(can_id, (iq, oq));
         }
         let pool = Default::default();
-        let input_queues_stats = Self::calculate_input_queues_stats(&canister_queues);
-        let memory_usage_stats = Self::calculate_memory_usage_stats(&canister_queues);
-        let output_queues_stats = Self::calculate_output_queues_stats(&canister_queues);
         let queue_stats = Self::calculate_queue_stats(&canister_queues);
 
         let next_input_queue = NextInputQueue::from(
@@ -1519,9 +1356,6 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
             ingress_queue: IngressQueue::try_from(item.ingress_queue)?,
             canister_queues,
             pool,
-            input_queues_stats,
-            output_queues_stats,
-            memory_usage_stats,
             queue_stats,
             next_input_queue,
             local_subnet_input_schedule,
@@ -1634,215 +1468,6 @@ impl PartialEq for QueueStats {
     }
 }
 
-/// Running message count and byte size stats across input queues.
-///
-/// Separate from [`MemoryUsageStats`] because the resulting `stats_delta()`
-/// method would become quite cumbersome with an extra `QueueType` argument and
-/// a `QueueOp` that only applied to memory usage stats; and would result in
-/// adding lots of zeros in lots of places.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct InputQueuesStats {
-    /// Count of slots reserved in input queues. Note that this is different from
-    /// memory reservations for guaranteed responses.
-    ///
-    /// Signed type so that `stats_delta()` may return `-1`.
-    reserved_slots: isize,
-}
-
-impl InputQueuesStats {
-    /// Calculates the change in input queue stats caused by pushing (+) or
-    /// popping (-) the given message onto/from an intput queue.
-    fn stats_delta(op: QueueOp, msg: &RequestOrResponse) -> InputQueuesStats {
-        match msg {
-            RequestOrResponse::Request(request) => Self::request_stats_delta(request),
-            RequestOrResponse::Response(response) => Self::response_stats_delta(op, response),
-        }
-    }
-
-    fn request_stats_delta(_request: &Request) -> InputQueuesStats {
-        InputQueuesStats { reserved_slots: 0 }
-    }
-
-    fn response_stats_delta(op: QueueOp, _response: &Response) -> InputQueuesStats {
-        // Consume one reserved slot iff pushing a response.
-        let reserved_slots = if op == QueueOp::Push { -1 } else { 0 };
-
-        InputQueuesStats { reserved_slots }
-    }
-}
-
-impl AddAssign<InputQueuesStats> for InputQueuesStats {
-    fn add_assign(&mut self, rhs: InputQueuesStats) {
-        let InputQueuesStats { reserved_slots } = rhs;
-        self.reserved_slots += reserved_slots;
-    }
-}
-
-impl SubAssign<InputQueuesStats> for InputQueuesStats {
-    fn sub_assign(&mut self, rhs: InputQueuesStats) {
-        let InputQueuesStats { reserved_slots } = rhs;
-        self.reserved_slots -= reserved_slots;
-    }
-}
-
-/// Running stats across output queues.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct OutputQueuesStats {
-    /// Count of slots reserved in output queues. Note that this is different from
-    /// memory reservations for guaranteed responses.
-    ///
-    /// Signed type so that `stats_delta()` may return `-1`.
-    reserved_slots: isize,
-}
-
-impl OutputQueuesStats {
-    /// Calculates the change in output queue stats caused by pushing (+) or
-    /// popping (-) the given message onto/from an output queue.
-    fn stats_delta(op: QueueOp, msg: &RequestOrResponse) -> OutputQueuesStats {
-        match msg {
-            RequestOrResponse::Request(request) => Self::request_stats_delta(request),
-            RequestOrResponse::Response(response) => Self::response_stats_delta(op, response),
-        }
-    }
-
-    fn request_stats_delta(_request: &Request) -> OutputQueuesStats {
-        OutputQueuesStats { reserved_slots: 0 }
-    }
-
-    fn response_stats_delta(op: QueueOp, _response: &Response) -> OutputQueuesStats {
-        // Consume one reserved slot iff pushing a response.
-        let reserved_slots = if op == QueueOp::Push { -1 } else { 0 };
-
-        OutputQueuesStats { reserved_slots }
-    }
-}
-
-impl AddAssign<OutputQueuesStats> for OutputQueuesStats {
-    fn add_assign(&mut self, rhs: OutputQueuesStats) {
-        let OutputQueuesStats { reserved_slots } = rhs;
-        self.reserved_slots += reserved_slots;
-    }
-}
-
-impl SubAssign<OutputQueuesStats> for OutputQueuesStats {
-    fn sub_assign(&mut self, rhs: OutputQueuesStats) {
-        let OutputQueuesStats { reserved_slots } = rhs;
-        self.reserved_slots -= reserved_slots;
-    }
-}
-
-/// Tracks memory reservations for guaranteed responses across input and output
-/// queues; and holds a (transient) byte size of responses already routed into
-/// streams (tracked separately, at the replicated state level, as the canister
-/// may be migrated to a different subnet with outstanding responses still left
-/// in this subnet's streams).
-///
-/// The byte sizes of the enqueued messages themselves are tracked separately in
-/// `message_pool::MemoryUsageStats`.
-#[derive(Clone, Debug, Default, Eq)]
-struct MemoryUsageStats {
-    /// Count of guaranteed response memory reservations across input and output
-    /// queues. This is equivalent to the number of outstanding (inbound or outbound)
-    /// guaranteed response calls and is used for computing message memory
-    /// usage (as `MAX_RESPONSE_COUNT_BYTES` per request).
-    ///
-    /// Note that this is different from slots reserved for responses (whether
-    /// best effort or guaranteed), which are used to implement backpressure.
-    ///
-    /// `i64` because we need to be able to add negative amounts (e.g. pushing a
-    /// guaranteed response consumes a memory reservation) and it's less verbose
-    /// this way.
-    guaranteed_response_memory_reservations: i64,
-
-    /// Transient: size in bytes of responses routed from `output_queues` into
-    /// streams and not yet garbage collected.
-    ///
-    /// This is populated by `ReplicatedState::put_streams()`, called by MR
-    /// after every streams mutation (induction, routing, GC).
-    transient_stream_responses_size_bytes: usize,
-}
-
-impl MemoryUsageStats {
-    /// Returns the memory usage of reservations for guaranteed responses plus
-    /// guaranteed responses in streans.
-    pub fn guaranteed_response_memory_usage(&self) -> usize {
-        self.guaranteed_response_memory_reservations as usize * MAX_RESPONSE_COUNT_BYTES
-            + self.transient_stream_responses_size_bytes
-    }
-
-    /// Calculates the change in stats caused by pushing (+) or popping (-) the
-    /// given message.
-    fn stats_delta(op: QueueOp, msg: &RequestOrResponse) -> MemoryUsageStats {
-        match msg {
-            RequestOrResponse::Request(request) => Self::request_stats_delta(op, request),
-            RequestOrResponse::Response(response) => Self::response_stats_delta(op, response),
-        }
-    }
-
-    /// Calculates the change in stats caused by pushing (+) or popping (-) a
-    /// request.
-    fn request_stats_delta(op: QueueOp, request: &Request) -> MemoryUsageStats {
-        MemoryUsageStats {
-            // If pushing a guaranteed request, reserve memory for a response.
-            guaranteed_response_memory_reservations: match op {
-                QueueOp::Push => (request.deadline == NO_DEADLINE) as i64,
-                QueueOp::Pop => 0,
-            },
-            transient_stream_responses_size_bytes: 0,
-        }
-    }
-
-    /// Calculates the change in stats caused by pushing (+) or popping (-) a
-    /// response.
-    fn response_stats_delta(op: QueueOp, response: &Response) -> MemoryUsageStats {
-        MemoryUsageStats {
-            // If pushing a guaranteed response, consume a memory reservation.
-            guaranteed_response_memory_reservations: match op {
-                QueueOp::Push => -((response.deadline == NO_DEADLINE) as i64),
-                QueueOp::Pop => 0,
-            },
-            transient_stream_responses_size_bytes: 0,
-        }
-    }
-}
-
-impl AddAssign<MemoryUsageStats> for MemoryUsageStats {
-    fn add_assign(&mut self, rhs: MemoryUsageStats) {
-        let MemoryUsageStats {
-            guaranteed_response_memory_reservations,
-            transient_stream_responses_size_bytes,
-        } = rhs;
-        self.guaranteed_response_memory_reservations += guaranteed_response_memory_reservations;
-        debug_assert!(self.guaranteed_response_memory_reservations >= 0);
-        // `transient_stream_responses_size_bytes` is always zero in stats deltas.
-        debug_assert!(transient_stream_responses_size_bytes == 0);
-    }
-}
-
-impl SubAssign<MemoryUsageStats> for MemoryUsageStats {
-    fn sub_assign(&mut self, rhs: MemoryUsageStats) {
-        let MemoryUsageStats {
-            guaranteed_response_memory_reservations,
-            transient_stream_responses_size_bytes,
-        } = rhs;
-        self.guaranteed_response_memory_reservations -= guaranteed_response_memory_reservations;
-        debug_assert!(self.guaranteed_response_memory_reservations >= 0);
-        // `transient_stream_responses_size_bytes` is always zero in stats deltas.
-        debug_assert!(transient_stream_responses_size_bytes == 0);
-    }
-}
-
-// Custom `PartialEq`, ignoring `transient_stream_responses_size_bytes`.
-impl PartialEq for MemoryUsageStats {
-    fn eq(&self, rhs: &Self) -> bool {
-        let MemoryUsageStats {
-            guaranteed_response_memory_reservations,
-            transient_stream_responses_size_bytes: _,
-        } = self;
-        *guaranteed_response_memory_reservations == rhs.guaranteed_response_memory_reservations
-    }
-}
-
 /// Checks whether `available_memory` for guaranteed response messages is
 /// sufficient to allow enqueuing `msg` into an input or output queue.
 ///
@@ -1883,21 +1508,13 @@ pub fn memory_required_to_push_request(req: &Request) -> usize {
     req.count_bytes().max(MAX_RESPONSE_COUNT_BYTES)
 }
 
-#[derive(PartialEq, Eq)]
-enum QueueOp {
-    Push,
-    Pop,
-}
-
 pub mod testing {
-    use super::{CanisterQueues, MemoryUsageStats, QueueOp};
-    use crate::canister_state::queues::OutputQueuesStats;
+    use super::CanisterQueues;
     use crate::{InputQueueType, StateError};
-    use ic_types::{
-        messages::{CanisterMessage, Request, RequestOrResponse},
-        CanisterId, Time,
-    };
-    use std::{collections::VecDeque, sync::Arc};
+    use ic_types::messages::{CanisterMessage, Request, RequestOrResponse};
+    use ic_types::{CanisterId, Time};
+    use std::collections::VecDeque;
+    use std::sync::Arc;
 
     /// Exposes public testing-only `CanisterQueues` methods to be used in other
     /// crates' unit tests.
@@ -1954,12 +1571,7 @@ pub mod testing {
                 .unwrap()
                 .1
                 .pop()?;
-            let msg = self.pool.take(reference.id())?;
-
-            self.output_queues_stats -= OutputQueuesStats::stats_delta(QueueOp::Pop, &msg);
-            self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
-
-            Some(msg)
+            self.pool.take(reference.id())
         }
 
         fn output_queues_len(&self) -> usize {

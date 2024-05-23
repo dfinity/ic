@@ -1,5 +1,3 @@
-use crate::canister_state::queues::QueueOp;
-
 use super::*;
 use core::fmt::Debug;
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
@@ -989,6 +987,12 @@ pub(crate) fn new_request_message_id(generator: u64, class: Class) -> MessageId 
 /// Generates a `MessageId` for an inbound response.
 pub(crate) fn new_response_message_id(generator: u64, class: Class) -> MessageId {
     MessageId::new(Kind::Response, Context::Inbound, class, generator)
+}
+
+#[derive(PartialEq, Eq)]
+enum QueueOp {
+    Push,
+    Pop,
 }
 
 /// Fixture for validating updates to the message stats. Relies on a parallel
