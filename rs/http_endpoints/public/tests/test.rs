@@ -932,9 +932,15 @@ fn test_http_2_requests_are_accepted() {
     assert_eq!(response.version(), reqwest::Version::HTTP_2);
 }
 
-/// Assert that the alpn protocol negotiation results in h2.
-#[test]
-fn test_http_2_alpn_header_is_set() {
+/// Assert that the ALPN protocol negotiation works for HTTP2 and HTTP/1.1.
+#[rstest]
+#[case("h2", vec![b"h3".to_vec(), b"h2".to_vec(), b"http/1.1".to_vec()])]
+#[case("h2", vec![b"h2".to_vec(), b"http/1.1".to_vec()])]
+#[case("http/1.1", vec![b"http/1.1".to_vec()])]
+fn test_http_alpn_header_is_set(
+    #[case] expected_alpn_protocol: &str,
+    #[case] client_advertised_alpn_protocols: Vec<Vec<u8>>,
+) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -972,8 +978,8 @@ fn test_http_2_alpn_header_is_set() {
         .with_custom_certificate_verifier(Arc::new(NoVerify))
         .with_no_client_auth();
 
-    // Offer both h2 and http/1.1
-    accept_any_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    accept_any_config.alpn_protocols = client_advertised_alpn_protocols;
+
     rt.block_on(async move {
         let stream = socket.connect(addr).await.unwrap();
         let tls_connector = TlsConnector::from(Arc::new(accept_any_config));
@@ -982,8 +988,17 @@ fn test_http_2_alpn_header_is_set() {
             .await
             .unwrap();
         let tls_data = tls.into_inner().1;
-        let alpn = tls_data.alpn_protocol();
-        assert_eq!(alpn, Some(b"h2".to_vec()).as_deref());
+        let negotiated_alpn_protocol = std::str::from_utf8(
+            tls_data
+                .alpn_protocol()
+                .expect("An ALPN protocol is negotiated."),
+        )
+        .unwrap();
+
+        assert_eq!(
+            negotiated_alpn_protocol, expected_alpn_protocol,
+            "Negotiated ALPN protocol is not expected."
+        );
     });
 }
 
