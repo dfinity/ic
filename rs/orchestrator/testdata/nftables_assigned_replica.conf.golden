@@ -16,9 +16,9 @@ table filter {
     iif lo accept
     ct state new add @rate_limit { ip saddr limit rate over 1000/minute burst 500 packets } log prefix "Drop - rate limit: " drop
     #  Notes about the rule below:
-    #   - The rule allows a maximum of 100 persistent connections to any ip address.
+    #   - The rule allows a maximum of 1000 persistent connections to any ip address.
     #   - The rule drops all new connections that goes over the configured limit.
-    ct state new add @connection_limit { ip saddr ct count over 100 } log prefix "Drop - connection limit: " drop
+    ct state new add @connection_limit { ip saddr ct count over 1000 } log prefix "Drop - connection limit: " drop
     icmp type parameter-problem accept
     icmp type echo-request accept
     icmp type echo-reply accept
@@ -65,9 +65,9 @@ table ip6 filter {
     ct state { established, related } accept
     ct state new add @rate_limit { ip6 saddr limit rate over 1000/minute burst 500 packets } log prefix "Drop - rate limit: " drop
     #  Notes about the rule below:
-    #   - The rule allows a maximum of 100 persistent connections to any ip6 address.
+    #   - The rule allows a maximum of 1000 persistent connections to any ip6 address.
     #   - The rule drops all new connections that goes over the configured limit.
-    ct state new add @connection_limit { ip6 saddr ct count over 100 } log prefix "Drop - connection limit: " drop
+    ct state new add @connection_limit { ip6 saddr ct count over 1000 } log prefix "Drop - connection limit: " drop
     icmpv6 type destination-unreachable accept
     icmpv6 type packet-too-big accept
     icmpv6 type time-exceeded accept
