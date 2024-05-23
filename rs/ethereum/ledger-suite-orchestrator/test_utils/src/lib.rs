@@ -2,6 +2,7 @@ use crate::flow::AddErc20TokenFlow;
 use crate::metrics::MetricsAssert;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::CanisterId;
+use ic_cdk::api::management_canister::main::CanisterStatusResponse;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds,
     OrchestratorArg, OrchestratorInfo,
@@ -80,6 +81,22 @@ impl LedgerSuiteOrchestrator {
             ledger_suite_orchestrator_wasm(),
             Encode!(upgrade_arg).unwrap(),
         )
+    }
+
+    pub fn get_canister_status(&self) -> CanisterStatusResponse {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .execute_ingress(
+                        self.ledger_suite_orchestrator_id,
+                        "get_canister_status",
+                        Encode!().unwrap()
+                    )
+                    .expect("failed to call get_canister_status")
+            ),
+            CanisterStatusResponse
+        )
+        .unwrap()
     }
 
     pub fn add_erc20_token(self, params: AddErc20Arg) -> AddErc20TokenFlow {
