@@ -1,4 +1,7 @@
-use ic_cdk_macros::{init, post_upgrade, query};
+use ic_cdk::api::management_canister::main::{
+    canister_status, CanisterIdRecord, CanisterStatusResponse,
+};
+use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_ledger_suite_orchestrator::candid::Erc20Contract as CandidErc20Contract;
 use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg, OrchestratorInfo};
 use ic_ledger_suite_orchestrator::lifecycle;
@@ -62,6 +65,16 @@ fn post_upgrade(orchestrator_arg: Option<OrchestratorArg>) {
         }
         None => lifecycle::post_upgrade(None),
     }
+}
+
+#[update]
+async fn get_canister_status() -> CanisterStatusResponse {
+    canister_status(CanisterIdRecord {
+        canister_id: ic_cdk::id(),
+    })
+    .await
+    .expect("failed to fetch canister status")
+    .0
 }
 
 #[query(hidden = true)]

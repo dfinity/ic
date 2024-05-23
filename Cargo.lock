@@ -8870,6 +8870,7 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-canisters-http-types",
+ "ic-cdk 0.13.2",
  "ic-ledger-suite-orchestrator",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",

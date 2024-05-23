@@ -533,3 +533,10 @@ fn should_query_logs_and_metrics() {
         assert_eq!(response.status_code, 200_u16);
     }
 }
+
+#[test]
+fn should_get_canister_status_smoke_test() {
+    let orchestrator = LedgerSuiteOrchestrator::default();
+    let get_canister_status = orchestrator.get_canister_status();
+    assert_eq!(format!("{:?}", get_canister_status.status), "Running");
+}
