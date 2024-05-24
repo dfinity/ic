@@ -137,6 +137,7 @@ pub struct AddCanisterRequest {
     #[serde(with = "serde_bytes")]
     pub wasm_module: Vec<u8>,
 
+    #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
 
     #[serde(serialize_with = "serialize_optional_nat")]

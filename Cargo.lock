@@ -9072,6 +9072,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-proxied-canister-calls-tracker",
  "ic-nervous-system-runtime",
+ "ic-utils 0.9.0",
  "icrc-ledger-client",
  "icrc-ledger-types",
  "num-traits",
@@ -9384,6 +9385,7 @@ dependencies = [
  "on_wire",
  "prost 0.12.3",
  "serde",
+ "serde_bytes",
  "sha2 0.9.9",
  "tempfile",
 ]

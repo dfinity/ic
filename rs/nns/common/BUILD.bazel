@@ -27,6 +27,7 @@ DEPENDENCIES = [
     "@crate_index//:num-traits",
     "@crate_index//:prost",
     "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
     "@crate_index//:sha2",
 ]
 

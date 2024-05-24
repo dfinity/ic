@@ -114,10 +114,13 @@ async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatu
 fn submit_root_proposal_to_upgrade_governance_canister() {
     over_async(
         candid,
-        |(expected_governance_wasm_sha, proposal): (Vec<u8>, ChangeCanisterRequest)| {
+        |(expected_governance_wasm_sha, proposal): (
+            serde_bytes::ByteBuf,
+            ChangeCanisterRequest,
+        )| {
             ic_nns_handler_root::root_proposals::submit_root_proposal_to_upgrade_governance_canister(
                 caller(),
-                expected_governance_wasm_sha,
+                expected_governance_wasm_sha.to_vec(),
                 proposal,
             )
         },
@@ -128,11 +131,15 @@ fn submit_root_proposal_to_upgrade_governance_canister() {
 fn vote_on_root_proposal_to_upgrade_governance_canister() {
     over_async(
         candid,
-        |(proposer, wasm_sha256, ballot): (PrincipalId, Vec<u8>, RootProposalBallot)| {
+        |(proposer, wasm_sha256, ballot): (
+            PrincipalId,
+            serde_bytes::ByteBuf,
+            RootProposalBallot,
+        )| {
             ic_nns_handler_root::root_proposals::vote_on_root_proposal_to_upgrade_governance_canister(
                 caller(),
                 proposer,
-                wasm_sha256,
+                wasm_sha256.to_vec(),
                 ballot,
             )
         },
