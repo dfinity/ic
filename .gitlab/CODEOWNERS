@@ -56,10 +56,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /toolchains/                                     @dfinity-lab/teams/node-team
 
 # [metrics-proxy]
-/ic-os/rootfs/hostos/etc/metrics-proxy.yaml                              @dfinity-lab/teams/DRE
-/ic-os/rootfs/hostos/etc/systemd/system/metrics-proxy.service            @dfinity-lab/teams/DRE
-/ic-os/rootfs/guestos/etc/metrics-proxy.yaml                             @dfinity-lab/teams/DRE
-/ic-os/rootfs/guestos/etc/systemd/system/metrics-proxy.service           @dfinity-lab/teams/DRE
+/ic-os/rootfs/monitoring/metrics-proxy/          @dfinity-lab/teams/DRE
 
 # [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity-lab/teams/idx

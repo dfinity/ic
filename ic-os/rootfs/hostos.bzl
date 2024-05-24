@@ -6,8 +6,6 @@ rootfs_files = {
     Label("hostos/etc/sudoers"): "/etc/sudoers",
     Label("hostos/etc/tmpfiles.d/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("hostos/etc/udev/rules.d/20-ipmi.rules"): "/etc/udev/rules.d/20-ipmi.rules",
-    Label("hostos/etc/metrics-proxy.yaml"): "/etc/metrics-proxy.yaml",
-    Label("hostos/etc/systemd/system/metrics-proxy.service"): "/etc/systemd/system/metrics-proxy.service",
 
     # consolidated files:
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
@@ -73,4 +71,6 @@ rootfs_files = {
     Label("monitoring/node_exporter/node_exporter"): "/etc/default/node_exporter",
     Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys.sh"): "/opt/ic/bin/setup-node_exporter-keys.sh",
     Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys.service"): "/etc/systemd/system/setup-node_exporter-keys.service",
+    Label("monitoring/metrics-proxy/hostos/metrics-proxy.yaml"): "/etc/metrics-proxy.yaml",
+    Label("monitoring/metrics-proxy/metrics-proxy.service"): "/etc/systemd/system/metrics-proxy.service",
 }
