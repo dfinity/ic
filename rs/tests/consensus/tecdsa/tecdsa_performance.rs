@@ -49,7 +49,8 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         // Since we setup VMs in sequence it takes more than the default timeout
         // of 10 minutes to setup this large testnet so let's increase the timeout:
-        .with_timeout_per_test(Duration::from_secs(60 * 30))
+        .with_timeout_per_test(Duration::from_secs(7200))
+        .with_overall_timeout(Duration::from_secs(7200))
         .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;

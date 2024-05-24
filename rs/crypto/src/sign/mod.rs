@@ -107,6 +107,9 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         signer: NodeId,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
+        use ic_crypto_internal_basic_sig_ed25519::cache::ed25519_pk_check_cache_statistics;
+        use ic_crypto_internal_basic_sig_ed25519::cache::ed25519_signature_cache_statistics;
+
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -128,6 +131,19 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
             message,
             signer,
             registry_version,
+        );
+        let sig_stats = ed25519_signature_cache_statistics();
+        self.metrics.observe_ed25519_sig_cache_stats(
+            sig_stats.size,
+            sig_stats.hits,
+            sig_stats.misses,
+        );
+
+        let pk_check_stats = ed25519_pk_check_cache_statistics();
+        self.metrics.observe_ed25519_pk_check_cache_stats(
+            pk_check_stats.size,
+            pk_check_stats.hits,
+            pk_check_stats.misses,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,

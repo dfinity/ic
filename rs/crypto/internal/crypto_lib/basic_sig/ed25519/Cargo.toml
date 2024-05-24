@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
+cached = "0.51"
 curve25519-dalek = { workspace = true }
 ed25519-consensus = "2.0.1"
 hex = { workspace = true }
@@ -15,8 +16,11 @@ ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-internal-seed = { path = "../../../crypto_lib/seed" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
+ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
+lazy_static = "1.4"
+parking_lot = "0.12"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 serde = { workspace = true }
