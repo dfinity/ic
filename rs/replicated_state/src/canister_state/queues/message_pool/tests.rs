@@ -564,6 +564,53 @@ fn test_equality() {
 }
 
 #[test]
+fn test_equality_with_different_priority_queue_representations() {
+    // Create a pool with 3 best-effort messages. Assign payload sizes and deadlines
+    // such that the 2 lower priority (smaller, later deadline) messages have equal
+    // priorities, in order to also test that message IDs consistently break ties.
+    let mut pool = MessagePool::default();
+    pool.insert_inbound(request_with_payload(2000, time(10)).into());
+    pool.insert_inbound(request_with_payload(1000, time(20)).into());
+    pool.insert_inbound(request_with_payload(1000, time(20)).into());
+    assert_eq!(3, pool.deadline_queue.len());
+    assert_eq!(3, pool.size_queue.len());
+
+    let deadline_queue = pool.deadline_queue.clone().into_vec();
+    let size_queue = pool.size_queue.clone().into_vec();
+
+    // Make a clone.
+    let mut other_pool = pool.clone();
+
+    // And alter its priority queues, so that they produce the same sorted results,
+    // but have different representations.
+    other_pool.deadline_queue = vec![
+        deadline_queue.get(0).unwrap().clone(),
+        deadline_queue.get(2).unwrap().clone(),
+        deadline_queue.get(1).unwrap().clone(),
+    ]
+    .into();
+    other_pool.size_queue = vec![
+        size_queue.get(0).unwrap().clone(),
+        size_queue.get(2).unwrap().clone(),
+        size_queue.get(1).unwrap().clone(),
+    ]
+    .into();
+
+    // Ensure that the two pairs of priority queues have different representations.
+    assert_ne!(
+        pool.deadline_queue.clone().into_vec(),
+        other_pool.deadline_queue.clone().into_vec()
+    );
+    assert_ne!(
+        pool.size_queue.clone().into_vec(),
+        other_pool.size_queue.clone().into_vec()
+    );
+
+    // But the two pools still compare as equal.
+    assert_eq!(pool, other_pool);
+}
+
+#[test]
 fn test_message_id_sanity() {
     // Each bit is actually a single bit.
     assert_eq!(1, Kind::BIT.count_ones());

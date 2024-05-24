@@ -177,6 +177,50 @@ pub struct QueueEntry {
     #[prost(message, optional, tag = "2")]
     pub queue: ::core::option::Option<InputOutputQueue>,
 }
+/// A pool holding all of a canister's incoming and outgoing canister messages.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MessagePool {
+    /// Map of messages by message ID.
+    #[prost(message, repeated, tag = "1")]
+    pub messages: ::prost::alloc::vec::Vec<message_pool::Entry>,
+    /// Message deadlines, if non-zero. May contain stale entries.
+    #[prost(message, repeated, tag = "2")]
+    pub message_deadlines: ::prost::alloc::vec::Vec<message_pool::MessageDeadline>,
+    /// Message sizes, for best-effort messages only. May contain stale entries.
+    #[prost(message, repeated, tag = "3")]
+    pub message_sizes: ::prost::alloc::vec::Vec<message_pool::MessageSize>,
+    /// Monotonically increasing counter used to generate unique message IDs.
+    #[prost(uint64, tag = "4")]
+    pub message_id_generator: u64,
+}
+/// Nested message and enum types in `MessagePool`.
+pub mod message_pool {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Entry {
+        #[prost(uint64, tag = "1")]
+        pub message_id: u64,
+        #[prost(message, optional, tag = "2")]
+        pub message: ::core::option::Option<super::RequestOrResponse>,
+    }
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct MessageDeadline {
+        #[prost(uint32, tag = "1")]
+        pub deadline_seconds: u32,
+        #[prost(uint64, tag = "2")]
+        pub message_id: u64,
+    }
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct MessageSize {
+        #[prost(uint64, tag = "1")]
+        pub size_bytes: u64,
+        #[prost(uint64, tag = "2")]
+        pub message_id: u64,
+    }
+}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterQueues {
@@ -189,6 +233,8 @@ pub struct CanisterQueues {
     pub input_schedule: ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "5")]
     pub output_queues: ::prost::alloc::vec::Vec<QueueEntry>,
+    #[prost(message, optional, tag = "9")]
+    pub pool: ::core::option::Option<MessagePool>,
     #[prost(enumeration = "canister_queues::NextInputQueue", tag = "6")]
     pub next_input_queue: i32,
     /// Downgrade: both queues are mapped back to input_schedule in the current

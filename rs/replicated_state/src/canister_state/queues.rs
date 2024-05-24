@@ -1072,56 +1072,6 @@ impl CanisterQueues {
         self.pool.has_expired_deadlines(current_time)
     }
 
-    // /// Times out requests in `OutputQueues` given a current time, enqueuing a reject response
-    // /// for each into the matching `InputQueue`.
-    // ///
-    // /// Updating the correct input queues schedule after enqueuing a reject response into a
-    // /// previously empty queue also requires the full set of local canisters to decide whether
-    // /// the destination canister was local or remote.
-    // ///
-    // /// Returns the number of requests that were timed out.
-    // pub fn time_out_requests(
-    //     &mut self,
-    //     current_time: Time,
-    //     own_canister_id: &CanisterId,
-    //     local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    // ) -> u64 {
-    //     let mut timed_out_requests_count = 0;
-    //     for (canister_id, (input_queue, output_queue)) in self.canister_queues.iter_mut() {
-    //         for request in output_queue.time_out_requests(current_time) {
-    //             let response = generate_timeout_response(&request);
-
-    //             // Request was dropped, update stats.
-    //             let request = RequestOrResponse::Request(request);
-    //             self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &request);
-    //             self.output_queues_stats -= OutputQueuesStats::stats_delta(&request);
-
-    //             // Push response, update stats.
-    //             let iq_stats_delta = InputQueuesStats::stats_delta(QueueOp::Push, &response);
-    //             let mu_stats_delta = MemoryUsageStats::stats_delta(QueueOp::Push, &response);
-    //             input_queue.push(response).unwrap();
-    //             self.input_queues_stats += iq_stats_delta;
-    //             self.memory_usage_stats += mu_stats_delta;
-
-    //             // If this was a previously empty input queue, add it to input queue schedule.
-    //             if input_queue.len() == 1 {
-    //                 if canister_id == own_canister_id || local_canisters.contains_key(canister_id) {
-    //                     self.local_subnet_input_schedule.push_back(*canister_id);
-    //                 } else {
-    //                     self.remote_subnet_input_schedule.push_back(*canister_id);
-    //                 }
-    //             }
-
-    //             timed_out_requests_count += 1;
-    //         }
-    //     }
-
-    //     debug_assert!(self.stats_ok());
-    //     debug_assert!(self.schedules_ok(own_canister_id, local_canisters));
-
-    //     timed_out_requests_count
-    // }
-
     /// Drops expired messages given a current time, enqueuing a reject response for
     /// own requests into the matching reverse queue (input or output).
     ///
@@ -1282,6 +1232,8 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
             //         queue: Some(output_queue.into()),
             //     })
             //     .collect(),
+            // pool: Some((&item.pool).into()),
+            pool: None,
             // TODO: input_schedule is deprecated and should be removed next release
             input_schedule: [].into(),
             next_input_queue: ProtoNextInputQueue::from(&item.next_input_queue).into(),
@@ -1329,6 +1281,7 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
             let oq = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
             canister_queues.insert(can_id, (iq, oq));
         }
+        // let pool = item.pool.unwrap_or_default().try_into()?;
         let pool = Default::default();
         let queue_stats = Self::calculate_queue_stats(&canister_queues);
 

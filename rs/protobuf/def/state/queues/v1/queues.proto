@@ -115,14 +115,43 @@ message QueueEntry {
   InputOutputQueue queue = 2;
 }
 
+// A pool holding all of a canister's incoming and outgoing canister messages.
+message MessagePool {
+  message Entry {
+    uint64 message_id = 1;
+    RequestOrResponse message = 2;
+  }
+  message MessageDeadline {
+    uint32 deadline_seconds = 1;
+    uint64 message_id = 2;
+  }
+  message MessageSize {
+    uint64 size_bytes = 1;
+    uint64 message_id = 2;
+  }
+
+  // Map of messages by message ID.
+  repeated Entry messages = 1;
+  // Message deadlines, if non-zero. May contain stale entries.
+  repeated MessageDeadline message_deadlines = 2;
+  // Message sizes, for best-effort messages only. May contain stale entries.
+  repeated MessageSize message_sizes = 3;
+  // Monotonically increasing counter used to generate unique message IDs.
+  uint64 message_id_generator = 4;
+}
+
 message CanisterQueues {
   reserved 1; // this is from canisterId
   reserved "canister_id";
+
   repeated ingress.v1.Ingress ingress_queue = 2;
   repeated QueueEntry input_queues = 3;
   // Upgrade: input_schedule is mapped to local_subnet_input_schedule.
   repeated types.v1.CanisterId input_schedule = 4;
   repeated QueueEntry output_queues = 5;
+
+  MessagePool pool = 9;
+
   enum NextInputQueue {
     NEXT_INPUT_QUEUE_UNSPECIFIED = 0;
     NEXT_INPUT_QUEUE_LOCAL_SUBNET = 1;
