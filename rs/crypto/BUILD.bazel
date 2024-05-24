@@ -43,7 +43,7 @@ DEPENDENCIES = [
     "@crate_index//:ed25519-consensus",
     "@crate_index//:hex",
     "@crate_index//:parking_lot",
-    "@crate_index//:rustls",
+    "@crate_index//:rustls_0_21_12",
     "@crate_index//:serde",
     "@crate_index//:slog",
     "@crate_index//:strum",

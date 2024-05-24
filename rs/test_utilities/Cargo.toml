@@ -43,7 +43,7 @@ lazy_static = "1.4.0"
 nix = { workspace = true }
 parking_lot = "0.12.1"
 rand = "0.8"
-rustls = { workspace = true }
+rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }

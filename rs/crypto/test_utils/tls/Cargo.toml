@@ -21,7 +21,7 @@ ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provide
 ic-types = { path = "../../../types/types" }
 pkcs8 = { workspace = true }
 rand = "0.8"
-rustls = { workspace = true }
+rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 signature = { workspace = true }
 time = "0.3.20"
 tokio = { workspace = true }
