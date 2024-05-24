@@ -164,6 +164,12 @@ pub fn verify(
     msg: &[u8],
     pk: &types::PublicKeyBytes,
 ) -> CryptoResult<()> {
+    let entry = crate::cache::SignatureCacheEntry::new(&pk.0, &sig.0, msg);
+
+    if crate::cache::Cache::<crate::cache::SignatureCacheEntry>::global().contains(&entry) {
+        return Ok(());
+    }
+
     let verification_key = ed25519_consensus::VerificationKey::try_from(pk.0).map_err(|e| {
         CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::Ed25519,
@@ -173,14 +179,21 @@ pub fn verify(
     })?;
     let sig = ed25519_consensus::Signature::from(sig.0);
 
-    verification_key
-        .verify(&sig, msg)
-        .map_err(|e| CryptoError::SignatureVerification {
-            algorithm: AlgorithmId::Ed25519,
-            public_key_bytes: verification_key.to_bytes().to_vec(),
-            sig_bytes: sig.to_bytes().to_vec(),
-            internal_error: e.to_string(),
-        })
+    let result =
+        verification_key
+            .verify(&sig, msg)
+            .map_err(|e| CryptoError::SignatureVerification {
+                algorithm: AlgorithmId::Ed25519,
+                public_key_bytes: verification_key.to_bytes().to_vec(),
+                sig_bytes: sig.to_bytes().to_vec(),
+                internal_error: e.to_string(),
+            });
+
+    if result.is_ok() {
+        crate::cache::Cache::<crate::cache::SignatureCacheEntry>::global().insert(&entry);
+    };
+
+    result
 }
 
 /// Verifies one or more signatures of the same message using
@@ -195,6 +208,26 @@ pub fn verify_batch(
     msg: &[u8],
     seed: Seed,
 ) -> CryptoResult<()> {
+    let uncached: Vec<_> = key_signature_map
+        .iter()
+        .map(|&(pk, sig)| {
+            (
+                (pk, sig),
+                crate::cache::SignatureCacheEntry::new(&pk.0, &sig.0, msg),
+            )
+        })
+        .filter(|((_pk, _sig), entry)| {
+            !crate::cache::Cache::<crate::cache::SignatureCacheEntry>::global().contains(entry)
+        })
+        .collect();
+
+    if uncached.is_empty() {
+        return Ok(());
+    }
+
+    let uncached_key_signature_map_vec: Vec<_> = uncached.iter().map(|(x, _)| *x).collect();
+    let key_signature_map = uncached_key_signature_map_vec.as_slice();
+
     let mut batch_verifier = ed25519_consensus::batch::Verifier::new();
     for (pk, sig) in key_signature_map {
         let verification_key = ed25519_consensus::VerificationKey::try_from(pk.0).map_err(|e| {
@@ -211,14 +244,22 @@ pub fn verify_batch(
     }
 
     let rng = seed.into_rng();
-    batch_verifier
+    let result = batch_verifier
         .verify(rng)
         .map_err(|e| CryptoError::SignatureVerification {
             algorithm: AlgorithmId::Ed25519,
             public_key_bytes: vec![],
             sig_bytes: vec![],
             internal_error: e.to_string(),
-        })
+        });
+
+    if result.is_ok() {
+        for (_, entry) in uncached {
+            crate::cache::Cache::<crate::cache::SignatureCacheEntry>::global().insert(&entry);
+        }
+    }
+
+    result
 }
 
 /// Verifies whether the given key is a valid Ed25519 public key.
@@ -226,8 +267,19 @@ pub fn verify_batch(
 /// This includes checking that the key is a point on the curve and
 /// in the right subgroup.
 pub fn verify_public_key(pk: &types::PublicKeyBytes) -> bool {
-    match curve25519_dalek::edwards::CompressedEdwardsY(pk.0).decompress() {
+    let entry = crate::cache::PkCheckCacheEntry::new(&pk.0);
+    if crate::cache::Cache::<crate::cache::PkCheckCacheEntry>::global().contains(&entry) {
+        return true;
+    }
+
+    let result = match curve25519_dalek::edwards::CompressedEdwardsY(pk.0).decompress() {
         None => false,
         Some(edwards_point) => edwards_point.is_torsion_free(),
+    };
+
+    if result {
+        crate::cache::Cache::<crate::cache::PkCheckCacheEntry>::global().insert(&entry);
     }
+
+    result
 }

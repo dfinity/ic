@@ -1,5 +1,6 @@
+use crate::canister_agent::CanisterAgent;
 use crate::canister_agent::HasCanisterAgentCapability;
-use crate::canister_api::{CallMode, Request};
+use crate::canister_api::{CallMode, GenericRequest, Request};
 use crate::canister_requests;
 use crate::driver::test_env_api::{HasPublicApiUrl, SshSession};
 use crate::driver::{
@@ -13,11 +14,22 @@ use crate::driver::{
 };
 use crate::generic_workload_engine::engine::Engine;
 use crate::generic_workload_engine::metrics::{LoadTestMetricsProvider, RequestOutcome};
+use crate::nns::{submit_external_proposal_with_test_id, vote_and_execute_proposal};
 use crate::nns_dapp::set_authorized_subnets;
 use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use crate::orchestrator::utils::subnet_recovery::{
     enable_ecdsa_signing_on_subnet, run_ecdsa_signature_test,
 };
+use crate::util::{
+    block_on, get_app_subnet_and_node, get_nns_node, runtime_from_url,
+    spawn_round_robin_workload_engine, MessageCanister,
+};
+use ic_nns_governance::pb::v1::NnsFunction;
+use ic_protobuf::registry::node_rewards::v2::{
+    NodeRewardRate, UpdateNodeRewardsTableProposalPayload,
+};
+use std::collections::BTreeMap;
+
 use crate::tecdsa::{make_key, KEY_ID1};
 use crate::util::{block_on, get_app_subnet_and_node, get_nns_node, MessageCanister};
 
@@ -55,7 +67,21 @@ const LATENCY_JITTER: Duration = Duration::from_millis(20);
 const QUADRUPLES_TO_CREATE: u32 = 20;
 const MAX_QUEUE_SIZE: u32 = 40;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: f64 = 1.5;
+const SIGNATURE_REQUESTS_PER_SECOND: f64 = 2.5;
+
+// Query parameters (copied from `networking/replica_query_workload.rs`)
+const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
+const CANISTER_METHOD: &str = "read";
+// Size of the payload sent to the counter canister in query("write") call.
+const PAYLOAD_SIZE_BYTES: usize = 1024;
+// Duration of each request is placed into one of two categories - below or above this threshold.
+const DURATION_THRESHOLD: Duration = Duration::from_secs(2);
+const QUERIES_PER_SECOND: usize = 300;
+
+// Registry update parameters
+const PROPOSAL_UPDATE_FREQUENCY: Duration = Duration::from_secs(30);
+
+const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
 
 pub fn setup(env: TestEnv) {
     PrometheusVm::default()
@@ -85,7 +111,7 @@ pub fn setup(env: TestEnv) {
                     key_ids: vec![make_key(KEY_ID1)],
                     max_queue_size: Some(MAX_QUEUE_SIZE),
                     signature_request_timeout_ns: None,
-                    idkg_key_rotation_period_ms: None,
+                    idkg_key_rotation_period_ms: IDKG_KEY_ROTATION_PERIOD_MS,
                 })
                 .add_nodes(NODES_COUNT),
         )
@@ -148,7 +174,7 @@ impl Request<SignWithECDSAReply> for EcdsaSignatureRequest {
 }
 
 pub fn test(env: TestEnv) {
-    tecdsa_performance_test(env, false, false);
+    tecdsa_performance_test(env, false, true);
 }
 
 pub fn tecdsa_performance_test(
@@ -159,7 +185,7 @@ pub fn tecdsa_performance_test(
     let log = env.logger();
 
     let duration: Duration = TESTING_PERIOD;
-    let rps = SIGNATURE_REQUESTS_PER_SECOND;
+    const RPS: f64 = 30.0;
 
     let topology_snapshot = env.topology_snapshot();
     let nns_node = get_nns_node(&topology_snapshot);
@@ -189,6 +215,9 @@ pub fn tecdsa_performance_test(
         })
         .collect::<Vec<_>>();
 
+    let app_canister = app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+    info!(&log, "Installation of counter canister has succeeded.");
+
     if apply_network_settings {
         info!(log, "Optional Step: Modify all nodes' traffic using tc");
         app_subnet.nodes().for_each(|node| {
@@ -200,6 +229,53 @@ pub fn tecdsa_performance_test(
                 .expect("Failed to execute bash script from session");
         });
     }
+
+    info!(env.logger(), "Step 3: Dispatched registry incrementor.");
+    let logger = log.clone();
+    let registry_incrementor_handle = std::thread::spawn(move || {
+        use rand::Rng;
+        let registry_inc_start = std::time::Instant::now();
+        let governance_canister =
+            canister_test::Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
+        while registry_inc_start + TESTING_PERIOD < std::time::Instant::now() {
+            let iteration_start = std::time::Instant::now();
+            // Add the reward table to quickly get the registry version incremented.
+            let json = format!("{{
+        \"North America,US\":           {{ \"type0\": [100000, null],  \"type2\": [200000, null],  \"type3\": [300000, 70]}},
+        \"North America,CA\":           {{ \"type0\": [400000, null],  \"type2\": [500000, null],  \"type3\": [600000, 70]}},
+        \"North America,US,California\":{{ \"type0\": [700000, null],                            \"type3\": [800000, 70]}},
+        \"North America,US,Florida\":   {{ \"type0\": [900000, null],                            \"type3\": [1000000, 70]}},
+        \"North America,US,Georgia\":   {{ \"type0\": [1100000, null],                           \"type3\": [1200000, null]}},
+        \"Asia,SG\":                    {{ \"type0\": [10000000, 100],  \"type2\": [11000000, 100],  \"type3\": [12000000, 70]}},
+        \"Asia\":                       {{ \"type0\": [13000000, 100],  \"type2\": [14000000, 100],  \"type3\": [15000000, 70]}},
+        \"Europe\":                     {{ \"type0\": [20000000, null], \"type2\": [21000000, null], \"type3\": [{}, 70]}}
+   }}", rand::thread_rng().gen_range(1..22000000));
+
+            let map: BTreeMap<String, BTreeMap<String, NodeRewardRate>> =
+                serde_json::from_str(json.as_str()).unwrap();
+            let node_rewards_payload = UpdateNodeRewardsTableProposalPayload::from(map);
+
+            info!(logger, "Submitting UpdateNodeRewardsTable proposal");
+            let proposal_id = block_on(submit_external_proposal_with_test_id(
+                &governance_canister,
+                NnsFunction::UpdateNodeRewardsTable,
+                node_rewards_payload,
+            ));
+
+            // Explicitly vote for the proposal to add nodes to subnet.
+            info!(logger, "Voting on proposal");
+            block_on(vote_and_execute_proposal(&governance_canister, proposal_id));
+            let iteration_duration = iteration_start.elapsed();
+            if iteration_duration < PROPOSAL_UPDATE_FREQUENCY {
+                std::thread::sleep(PROPOSAL_UPDATE_FREQUENCY - iteration_duration);
+            }
+        }
+    });
+
+    info!(
+        env.logger(),
+        "Step 4: Instantiate and start a workload using one node of the Application subnet as target."
+    );
 
     // create the runtime that lives until this variable is dropped.
     info!(
@@ -214,6 +290,41 @@ pub fn tecdsa_performance_test(
         .enable_all()
         .build()
         .unwrap();
+
+    let log = log.clone();
+    let (app_subnet, app_node) = get_app_subnet_and_node(&topology_snapshot);
+    info!(
+            env.logger(),
+            "Starting load test with {this_iter_sigs_rps} signatures per second and {this_iter_queries_rps} queries per second",
+        );
+    // Workload sends messages to canister via node agents.
+    // As we talk to a single node, we create one agent, accordingly.
+    let app_agent = app_node.with_default_agent(|agent| async move { agent });
+    // Spawn a workload against counter canister.
+    let query_generator_handle = {
+        info!(log, "Instantiate and start the query workload generator");
+        let requests = vec![GenericRequest::new(
+            app_canister,
+            CANISTER_METHOD.to_string(),
+            vec![0; PAYLOAD_SIZE_BYTES],
+            CallMode::Query,
+        ),
+        GenericRequest::new(
+            app_canister,
+            "write".to_string(),,
+            vec![0; PAYLOAD_SIZE_BYTES],
+            CallMode::UpdateNoPolling,
+        )];
+        spawn_round_robin_workload_engine(
+            log.clone(),
+            requests,
+            vec![app_agent],
+            RPS,
+            duration,
+            REQUESTS_DISPATCH_EXTRA_TIMEOUT,
+            vec![DURATION_THRESHOLD],
+        )
+    };
 
     rt.block_on(async move {
         let agents = join_all(
@@ -236,7 +347,7 @@ pub fn tecdsa_performance_test(
             }
         };
 
-        let metrics = Engine::new(log.clone(), generator, rps, duration)
+        let metrics = Engine::new(log.clone(), generator, RPS, duration)
             .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
             .execute_simply(log.clone())
             .await;
@@ -244,7 +355,7 @@ pub fn tecdsa_performance_test(
         info!(log, "Reporting workload execution results");
         env.emit_report(format!("{}", metrics));
         info!(log, "Step 5: Assert expected number of successful requests");
-        let requests_count = rps * duration.as_secs_f64();
+        let requests_count = RPS * duration.as_secs_f64();
         let min_expected_success_calls = (SUCCESS_THRESHOLD * requests_count) as usize;
         info!(
             log,
@@ -256,6 +367,21 @@ pub fn tecdsa_performance_test(
             metrics.success_calls(),
             metrics.failure_calls()
         );
+
+        info!(log, "json benchmark report: {json_report}");
+
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(env.base_path().join(BENCHMARK_REPORT_FILE))
+            .and_then(|mut file| file.write_all(json_report.as_bytes()))
+            .unwrap_or_else(|e| error!(log, "Failed to write benchmark report: {}", e));
+
+        registry_incrementor_handle
+            .join()
+            .expect("Registry incrementor failed.");
 
         if download_p8s_data {
             info!(log, "Sleeping for {} seconds", COOLDOWN_PERIOD.as_secs());

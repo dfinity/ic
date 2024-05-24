@@ -3,5 +3,6 @@
 
 //! Basic signatures implemented with Ed25519
 pub mod api;
+pub mod cache;
 pub mod types;
 pub use api::*;
