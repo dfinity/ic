@@ -467,7 +467,6 @@ pub fn verify_transcript(
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum IDkgComputeSecretSharesInternalError {
     ComplaintShouldBeIssued,
-    InsufficientOpenings(usize, usize),
     InvalidCiphertext(String),
     UnableToReconstruct(String),
     UnableToCombineOpenings(String),
@@ -506,6 +505,15 @@ pub fn compute_secret_shares(
     )
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum IDkgComputeSecretSharesWithOpeningsInternalError {
+    ComplaintShouldBeIssued,
+    InsufficientOpenings(usize, usize),
+    InvalidCiphertext(String),
+    UnableToReconstruct(String),
+    UnableToCombineOpenings(String),
+}
+
 /// Computes secret shares (in the form of commitment openings) from
 /// the given dealings and openings.
 ///
@@ -537,7 +545,7 @@ pub fn compute_secret_shares_with_openings(
     receiver_index: NodeIndex,
     secret_key: &MEGaPrivateKey,
     public_key: &MEGaPublicKey,
-) -> Result<CommitmentOpening, IDkgComputeSecretSharesInternalError> {
+) -> Result<CommitmentOpening, IDkgComputeSecretSharesWithOpeningsInternalError> {
     CommitmentOpening::from_dealings_and_openings(
         verified_dealings,
         openings,
