@@ -1,5 +1,5 @@
 {
-  "checksum": "692efee6ee784c849e3ccb792b4125b51037fb7b6321662fe3cafed7b45a61b6",
+  "checksum": "12a05ecee19d16336b7db1195f8263c7ac5f93325b467e8d41fe957897d2aaee",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17988,12 +17988,12 @@
             },
             {
               "id": "rustls 0.21.12",
-              "target": "rustls"
+              "target": "rustls",
+              "alias": "rustls_0_21_12"
             },
             {
-              "id": "rustls 0.23.5",
-              "target": "rustls",
-              "alias": "rustls_0_23_x"
+              "id": "rustls 0.23.8",
+              "target": "rustls"
             },
             {
               "id": "rustls-native-certs 0.7.0",
@@ -18002,6 +18002,10 @@
             {
               "id": "rustls-pemfile 1.0.3",
               "target": "rustls_pemfile"
+            },
+            {
+              "id": "rustls-pki-types 1.7.0",
+              "target": "rustls_pki_types"
             },
             {
               "id": "rusty-fork 0.3.0",
@@ -18194,6 +18198,11 @@
             },
             {
               "id": "tokio-rustls 0.24.1",
+              "target": "tokio_rustls",
+              "alias": "tokio_rustls_0_24_1"
+            },
+            {
+              "id": "tokio-rustls 0.26.0",
               "target": "tokio_rustls"
             },
             {
@@ -27213,7 +27222,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "rustls-pki-types 1.3.1",
+              "id": "rustls-pki-types 1.7.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -27306,7 +27315,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "rustls 0.23.5",
+              "id": "rustls 0.23.8",
               "target": "rustls"
             },
             {
@@ -27314,7 +27323,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "rustls-pki-types 1.3.1",
+              "id": "rustls-pki-types 1.7.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -52400,7 +52409,7 @@
                 "target": "rustls_pemfile"
               },
               {
-                "id": "rustls-pki-types 1.3.1",
+                "id": "rustls-pki-types 1.7.0",
                 "target": "rustls_pki_types"
               },
               {
@@ -54814,12 +54823,12 @@
               "target": "build_script_build"
             },
             {
-              "id": "rustls-pki-types 1.3.1",
+              "id": "rustls-pki-types 1.7.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
             {
-              "id": "rustls-webpki 0.102.2",
+              "id": "rustls-webpki 0.102.4",
               "target": "webpki"
             },
             {
@@ -54858,14 +54867,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustls 0.23.5": {
+    "rustls 0.23.8": {
       "name": "rustls",
-      "version": "0.23.5",
+      "version": "0.23.8",
       "package_url": "https://github.com/rustls/rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls/0.23.5/download",
-          "sha256": "afabcee0551bd1aa3e18e5adbf2c0544722014b899adb31bd186ec638d3da97e"
+          "url": "https://static.crates.io/crates/rustls/0.23.8/download",
+          "sha256": "79adb16721f56eb2d843e67676896a61ce7a0fa622dc18d3e372477a029d2740"
         }
       },
       "targets": [
@@ -54901,6 +54910,8 @@
         ],
         "crate_features": {
           "common": [
+            "log",
+            "logging",
             "ring",
             "std",
             "tls12"
@@ -54910,6 +54921,10 @@
         "deps": {
           "common": [
             {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
               "id": "once_cell 1.19.0",
               "target": "once_cell"
             },
@@ -54918,16 +54933,16 @@
               "target": "ring"
             },
             {
-              "id": "rustls 0.23.5",
+              "id": "rustls 0.23.8",
               "target": "build_script_build"
             },
             {
-              "id": "rustls-pki-types 1.3.1",
+              "id": "rustls-pki-types 1.7.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
             {
-              "id": "rustls-webpki 0.102.2",
+              "id": "rustls-webpki 0.102.4",
               "target": "webpki"
             },
             {
@@ -54942,7 +54957,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.23.5"
+        "version": "0.23.8"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -55070,7 +55085,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "rustls-pki-types 1.3.1",
+              "id": "rustls-pki-types 1.7.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -55199,7 +55214,7 @@
               "target": "base64"
             },
             {
-              "id": "rustls-pki-types 1.3.1",
+              "id": "rustls-pki-types 1.7.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -55217,14 +55232,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rustls-pki-types 1.3.1": {
+    "rustls-pki-types 1.7.0": {
       "name": "rustls-pki-types",
-      "version": "1.3.1",
+      "version": "1.7.0",
       "package_url": "https://github.com/rustls/pki-types",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls-pki-types/1.3.1/download",
-          "sha256": "5ede67b28608b4c60685c7d54122d4400d90f62b40caee7700e700380a390fa8"
+          "url": "https://static.crates.io/crates/rustls-pki-types/1.7.0/download",
+          "sha256": "976295e77ce332211c0d24d92c0e83e50f5c5f046d11082cea19f3df13a3562d"
         }
       },
       "targets": [
@@ -55255,7 +55270,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.3.1"
+        "version": "1.7.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -55323,14 +55338,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rustls-webpki 0.102.2": {
+    "rustls-webpki 0.102.4": {
       "name": "rustls-webpki",
-      "version": "0.102.2",
+      "version": "0.102.4",
       "package_url": "https://github.com/rustls/webpki",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls-webpki/0.102.2/download",
-          "sha256": "faaa0a62740bedb9b2ef5afa303da42764c012f743917351dc9a237ea1663610"
+          "url": "https://static.crates.io/crates/rustls-webpki/0.102.4/download",
+          "sha256": "ff448f7e92e913c4b7d4c6d8e4540a1724b319b4152b8aef6d4cf8339712b33e"
         }
       },
       "targets": [
@@ -55367,7 +55382,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls-pki-types 1.3.1",
+              "id": "rustls-pki-types 1.7.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -55379,7 +55394,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.102.2"
+        "version": "0.102.4"
       },
       "license": "ISC",
       "license_ids": [
@@ -64953,7 +64968,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.3.1",
+              "id": "rustls-pki-types 1.7.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -65005,6 +65020,8 @@
         ],
         "crate_features": {
           "common": [
+            "logging",
+            "ring",
             "tls12"
           ],
           "selects": {}
@@ -65012,11 +65029,11 @@
         "deps": {
           "common": [
             {
-              "id": "rustls 0.23.5",
+              "id": "rustls 0.23.8",
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.3.1",
+              "id": "rustls-pki-types 1.7.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -72741,7 +72758,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls-pki-types 1.3.1",
+              "id": "rustls-pki-types 1.7.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -78103,9 +78120,10 @@
     "rust_decimal_macros 1.32.0",
     "rustc-hash 1.1.0",
     "rustls 0.21.12",
-    "rustls 0.23.5",
+    "rustls 0.23.8",
     "rustls-native-certs 0.7.0",
     "rustls-pemfile 1.0.3",
+    "rustls-pki-types 1.7.0",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",
     "schemars 0.8.16",
@@ -78158,6 +78176,7 @@
     "tokio-io-timeout 1.2.0",
     "tokio-metrics 0.3.1",
     "tokio-rustls 0.24.1",
+    "tokio-rustls 0.26.0",
     "tokio-serde 0.8.0",
     "tokio-socks 0.5.1",
     "tokio-test 0.4.3",

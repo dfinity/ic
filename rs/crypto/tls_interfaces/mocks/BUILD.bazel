@@ -12,7 +12,7 @@ rust_library(
         "//rs/crypto/tls_interfaces",
         "//rs/types/base_types",
         "@crate_index//:mockall",
-        "@crate_index//:rustls",
+        "@crate_index//:rustls_0_21_12",
         "@crate_index//:tokio",
     ],
 )

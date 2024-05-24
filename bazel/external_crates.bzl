@@ -1079,16 +1079,17 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "rustc-hash": crate.spec(
                 version = "^1.1.0",
             ),
-            "rustls": crate.spec(
+            "rustls_0_21_12": crate.spec(
+                package = "rustls",
                 version = "^0.21.12",
                 features = [
                     "dangerous_configuration",
                 ],
             ),
-            "rustls_0_23_x": crate.spec(
+            "rustls": crate.spec(
                 package = "rustls",
                 default_features = False,
-                version = "^0.23.5",
+                version = "^0.23.8",
                 features = [
                     "ring",
                 ],
@@ -1098,6 +1099,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "rustls-pemfile": crate.spec(
                 version = "^1",
+            ),
+            "rustls-pki-types": crate.spec(
+                version = "^1.7.0",
+                features = [
+                    "alloc",
+                ],
             ),
             "rustversion": crate.spec(
                 version = "^1.0",
@@ -1291,10 +1298,20 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "tokio-metrics": crate.spec(
                 version = "^0.3.0",
             ),
-            "tokio-rustls": crate.spec(
+            "tokio_rustls_0_24_1": crate.spec(
+                package = "tokio-rustls",
                 version = "^0.24.1",
                 features = [
                     "dangerous_configuration",
+                ],
+            ),
+            "tokio-rustls": crate.spec(
+                version = "^0.26.0",
+                default_features = False,
+                features = [
+                    "logging",
+                    "tls12",
+                    "ring",
                 ],
             ),
             "tokio-serde": crate.spec(
