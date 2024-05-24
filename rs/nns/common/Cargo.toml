@@ -27,6 +27,7 @@ num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 sha2 = "0.9.1"
 comparable = { version = "0.5", features = ["derive"] }
 

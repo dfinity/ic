@@ -103,5 +103,6 @@ pub struct UpdateIcpXdrConversionRatePayload {
 pub struct CallCanisterProposal {
     pub canister_id: CanisterId,
     pub method_name: String,
+    #[serde(with = "serde_bytes")]
     pub payload: Vec<u8>,
 }

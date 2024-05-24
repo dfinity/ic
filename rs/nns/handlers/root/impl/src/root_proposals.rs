@@ -85,10 +85,12 @@ pub struct GovernanceUpgradeRootProposal {
     /// The expected sha256 hash of the governance canister
     /// wasm. This must match the sha of the currently running
     /// governance canister.
+    #[serde(with = "serde_bytes")]
     pub current_wasm_sha: Vec<u8>,
     /// The proposal payload to upgrade the governance canister.
     pub payload: ChangeCanisterRequest,
     /// The sha of the binary the proposer wants to upgrade to.
+    #[serde(with = "serde_bytes")]
     pub proposed_wasm_sha: Vec<u8>,
     /// The principal id of the proposer (must be one of the node
     /// operators of the NNS subnet according to the registry at
