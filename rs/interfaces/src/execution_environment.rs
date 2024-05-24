@@ -578,39 +578,39 @@ pub trait SystemApi {
     /// id in case of requests or the user id in case of an ingress message.
     fn ic0_msg_caller_copy(
         &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
     /// Returns the size of the opaque caller blob.
-    fn ic0_msg_caller_size(&self) -> HypervisorResult<u32>;
+    fn ic0_msg_caller_size(&self) -> HypervisorResult<usize>;
 
     /// Returns the size of msg.payload.
-    fn ic0_msg_arg_data_size(&self) -> HypervisorResult<u32>;
+    fn ic0_msg_arg_data_size(&self) -> HypervisorResult<usize>;
 
     /// Copies `length` bytes from msg.payload[offset..offset+size] to
     /// memory[dst..dst+size].
     fn ic0_msg_arg_data_copy(
         &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
     /// Used to look up the size of the method_name that the message wants to
     /// call. Can only be called in the context of inspecting messages.
-    fn ic0_msg_method_name_size(&self) -> HypervisorResult<u32>;
+    fn ic0_msg_method_name_size(&self) -> HypervisorResult<usize>;
 
     /// Used to copy the method_name that the message wants to call to heap. Can
     /// only be called in the context of inspecting messages.
     fn ic0_msg_method_name_copy(
         &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
@@ -623,8 +623,8 @@ pub trait SystemApi {
     /// it to the (initially empty) data reply.
     fn ic0_msg_reply_data_append(
         &mut self,
-        src: u32,
-        size: u32,
+        src: usize,
+        size: usize,
         heap: &[u8],
     ) -> HypervisorResult<()>;
 
@@ -640,14 +640,14 @@ pub trait SystemApi {
     fn ic0_msg_reject_code(&self) -> HypervisorResult<i32>;
 
     /// Replies to sender with an error message
-    fn ic0_msg_reject(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
+    fn ic0_msg_reject(&mut self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()>;
 
     /// Returns the length of the reject message in bytes.
     ///
     /// # Panics
     ///
     /// This traps if not invoked from a reject callback.
-    fn ic0_msg_reject_msg_size(&self) -> HypervisorResult<u32>;
+    fn ic0_msg_reject_msg_size(&self) -> HypervisorResult<usize>;
 
     /// Copies length bytes from self.reject_msg[offset..offset+size] to
     /// memory[dst..dst+size]
@@ -659,9 +659,9 @@ pub trait SystemApi {
     /// called from inside a reject callback.
     fn ic0_msg_reject_msg_copy(
         &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
@@ -672,17 +672,17 @@ pub trait SystemApi {
     /// canister to heap[dst..dst+size].
     fn ic0_canister_self_copy(
         &mut self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
     /// Outputs the specified bytes on the heap as a string on STDOUT.
-    fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
+    fn ic0_debug_print(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()>;
 
     /// Traps, with a possibly helpful message
-    fn ic0_trap(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
+    fn ic0_trap(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()>;
 
     /// Begins assembling a call to the canister specified by
     /// callee_src/callee_size at method name_src/name_size. Two mandatory
@@ -696,10 +696,10 @@ pub trait SystemApi {
     #[allow(clippy::too_many_arguments)]
     fn ic0_call_new(
         &mut self,
-        callee_src: u32,
-        callee_size: u32,
-        name_src: u32,
-        name_len: u32,
+        callee_src: usize,
+        callee_size: usize,
+        name_src: usize,
+        name_len: usize,
         reply_fun: u32,
         reply_env: u32,
         reject_fun: u32,
@@ -710,7 +710,12 @@ pub trait SystemApi {
     /// Appends the specified bytes to the argument of the call. Initially, the
     /// argument is empty. This can be called multiple times between
     /// `ic0.call_new` and `ic0.call_perform`.
-    fn ic0_call_data_append(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
+    fn ic0_call_data_append(
+        &mut self,
+        src: usize,
+        size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<()>;
 
     /// Relaxes the response delivery guarantee to be best effort, asking the system to respond at the
     /// latest after `timeout_seconds` have elapsed. Best effort means the system may also respond with
@@ -953,7 +958,11 @@ pub trait SystemApi {
     /// The amount of cycles is represented by a 128-bit value
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
-    fn ic0_canister_cycle_balance128(&mut self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
+    fn ic0_canister_cycle_balance128(
+        &mut self,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_available128` instead.
     /// This API supports only 64-bit values.
@@ -969,7 +978,7 @@ pub trait SystemApi {
     /// The amount of cycles is represented by a 128-bit value
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
-    fn ic0_msg_cycles_available128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
+    fn ic0_msg_cycles_available128(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_refunded128` instead.
     /// This API supports only 64-bit values.
@@ -985,7 +994,7 @@ pub trait SystemApi {
     /// The amount of cycles is represented by a 128-bit value
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
-    fn ic0_msg_cycles_refunded128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
+    fn ic0_msg_cycles_refunded128(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_accept128` instead.
     /// This API supports only 64-bit values.
@@ -1031,13 +1040,18 @@ pub trait SystemApi {
     fn ic0_msg_cycles_accept128(
         &mut self,
         max_amount: Cycles,
-        dst: u32,
+        dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
     /// Sets the certified data for the canister.
     /// See: <https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-certified-data>
-    fn ic0_certified_data_set(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
+    fn ic0_certified_data_set(
+        &mut self,
+        src: usize,
+        size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<()>;
 
     /// If run in non-replicated execution (i.e. query),
     /// returns 1 if the data certificate is present, 0 otherwise.
@@ -1048,16 +1062,16 @@ pub trait SystemApi {
     /// Returns the size of the data certificate if it is present
     /// (i.e. data_certificate_present returns 1).
     /// Traps if data_certificate_present returns 0.
-    fn ic0_data_certificate_size(&self) -> HypervisorResult<i32>;
+    fn ic0_data_certificate_size(&self) -> HypervisorResult<usize>;
 
     /// Copies the data certificate into the heap if it is present
     /// (i.e. data_certificate_present returns 1).
     /// Traps if data_certificate_present returns 0.
     fn ic0_data_certificate_copy(
         &mut self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
@@ -1082,7 +1096,7 @@ pub trait SystemApi {
     /// otherwise a 0 is returned. It can be called multiple times.
     ///
     /// This system call traps if src+size exceeds the size of the WebAssembly memory.
-    fn ic0_is_controller(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<u32>;
+    fn ic0_is_controller(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<u32>;
 
     /// If run in replicated execution (i.e. an update call or a certified
     /// query), returns 1.
@@ -1100,7 +1114,7 @@ pub trait SystemApi {
     fn ic0_cycles_burn128(
         &mut self,
         amount: Cycles,
-        dst: u32,
+        dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 }
