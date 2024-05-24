@@ -204,6 +204,22 @@ pub struct GetWasmResponse {
     #[prost(message, optional, tag = "1")]
     pub wasm: ::core::option::Option<SnsWasm>,
 }
+/// Similar to GetWasmRequest, but only returns the NNS proposal ID that blessed the wasm.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetProposalIdThatAddedWasmRequest {
+    #[prost(bytes = "vec", tag = "1")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+}
+/// The NNS proposal ID that blessed the wasm, if it was recorded.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetProposalIdThatAddedWasmResponse {
+    #[prost(uint64, optional, tag = "1")]
+    pub proposal_id: ::core::option::Option<u64>,
+}
 /// Payload to deploy a new SNS.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
