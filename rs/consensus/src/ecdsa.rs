@@ -206,6 +206,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub(crate) mod complaints;
+#[cfg(feature = "malicious_code")]
 pub mod malicious_pre_signer;
 pub(crate) mod payload_builder;
 pub(crate) mod payload_verifier;
@@ -219,7 +220,9 @@ pub(crate) mod utils;
 pub(crate) use payload_builder::{
     create_data_payload, create_summary_payload, make_bootstrap_summary,
 };
-pub(crate) use payload_verifier::{validate_payload, PermanentError, TransientError};
+pub(crate) use payload_verifier::{
+    validate_payload, EcdsaPayloadValidationFailure, InvalidEcdsaPayloadReason,
+};
 pub use stats::EcdsaStatsImpl;
 
 use self::utils::get_context_request_id;

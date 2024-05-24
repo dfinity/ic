@@ -1,11 +1,11 @@
-use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
-use tokio_rustls::rustls::sign::CertifiedKey;
-use tokio_rustls::rustls::{
+use rustls::{
     client::ResolvesClientCert,
     server::{ClientHello, ResolvesServerCert},
+    sign::CertifiedKey,
     SignatureScheme,
 };
+use std::fmt::{Debug, Formatter};
+use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;

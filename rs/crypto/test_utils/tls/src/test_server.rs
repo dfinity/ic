@@ -3,10 +3,8 @@ use crate::registry::REG_V1;
 use crate::temp_crypto_component_with_tls_keys;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_crypto_tls_interfaces::{
-    AuthenticatedPeer, SomeOrAllNodes, TlsConfig, TlsServerHandshakeError,
-};
-use ic_crypto_utils_tls::node_id_from_rustls_certs;
+use ic_crypto_tls_interfaces::{AuthenticatedPeer, SomeOrAllNodes, TlsConfig, TlsConfigError};
+use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
@@ -106,7 +104,7 @@ impl Server {
         }
     }
 
-    pub async fn run(&self) -> Result<AuthenticatedPeer, TlsServerHandshakeError> {
+    pub async fn run(&self) -> Result<AuthenticatedPeer, TlsConfigError> {
         let tcp_stream = self.accept_connection_on_listener().await;
 
         let server_config = self
@@ -115,7 +113,7 @@ impl Server {
 
         let tls_acceptor = TlsAcceptor::from(Arc::new(server_config));
         let tls_stream = tls_acceptor.accept(tcp_stream).await.map_err(|err| {
-            TlsServerHandshakeError::HandshakeError {
+            TlsConfigError::MalformedSelfCertificate {
                 internal_error: err.to_string(),
             }
         })?;
@@ -129,7 +127,7 @@ impl Server {
             .unwrap();
 
         let authenticated_node =
-            AuthenticatedPeer::Node(node_id_from_rustls_certs(peer_cert).unwrap());
+            AuthenticatedPeer::Node(node_id_from_certificate_der(peer_cert.as_ref()).unwrap());
 
         let (mut rh, mut wh) = tokio::io::split(tls_stream);
 

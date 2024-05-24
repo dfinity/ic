@@ -41,7 +41,7 @@ use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::{
     MalformedPeerCertificateError, SomeOrAllNodes, TlsConfig, TlsConfigError,
 };
-use ic_crypto_utils_tls::node_id_from_rustls_certs;
+use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -625,7 +625,7 @@ impl ConnectionManager {
                             internal_error: "a single cert must be present".to_string(),
                         },
                     ))?;
-            let peer_id = node_id_from_rustls_certs(rustls_cert).map_err(|err| {
+            let peer_id = node_id_from_certificate_der(rustls_cert.as_ref()).map_err(|err| {
                 ConnectionEstablishError::MalformedPeerIdentity(MalformedPeerCertificateError {
                     internal_error: format!("{:?}", err),
                 })

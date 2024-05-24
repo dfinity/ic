@@ -29,6 +29,7 @@ DEPENDENCIES = [
 
 rust_library(
     name = "mocks",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     crate_features = select({
         "//conditions:default": [],

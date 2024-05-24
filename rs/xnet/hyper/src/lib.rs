@@ -9,10 +9,9 @@ use hyper::{
     Uri,
 };
 use ic_crypto_tls_interfaces::{AuthenticatedPeer, SomeOrAllNodes, TlsConfig};
-use ic_crypto_utils_tls::node_id_from_rustls_certs;
+use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_xnet_uri::XNetAuthority;
-use rustls::client::ServerName;
 use std::convert::TryFrom;
 use std::future::Future;
 use std::net::SocketAddr;
@@ -221,7 +220,7 @@ impl Accept for TlsAccept {
                                 .first()
                                 .ok_or(std::io::Error::other("no peer certificates"))?;
                             let peer_id = AuthenticatedPeer::Node(
-                                node_id_from_rustls_certs(peer_cert)
+                                node_id_from_certificate_der(peer_cert.as_ref())
                                     .map_err(|err| std::io::Error::other(format!("{:?}", err)))?,
                             );
                             Ok((tokio_rustls::TlsStream::Server(tls_stream), peer_id))
@@ -386,13 +385,16 @@ impl Service<Uri> for TlsConnector {
                         .client_config(xnet_auth.node_id, xnet_auth.registry_version)
                         .map_err(Box::new)?;
                     let tls_connector = tokio_rustls::TlsConnector::from(Arc::new(tls_config));
-                    // TODO: ideally the expect should run at compile time
-                    let irrelevant_domain = ServerName::try_from(
-                        "domain.is-irrelevant-as-hostname-verification-is.disabled",
-                    )
-                    .expect("failed to create domain");
+                    let irrelevant_domain =
+                        "domain.is-irrelevant-as-hostname-verification-is.disabled";
                     tls_connector
-                        .connect(irrelevant_domain, tcp_stream)
+                        .connect(
+                            irrelevant_domain
+                                .try_into()
+                                // TODO: ideally the expect should run at compile time
+                                .expect("failed to create domain"),
+                            tcp_stream,
+                        )
                         .await
                         .map(|tls_stream| {
                             TlsConnection(ConnectionState::Ready {

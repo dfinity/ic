@@ -340,9 +340,11 @@ fn test_load_shedding_update_call() {
     let ingress_filter_running_clone = ingress_filter_running.clone();
     let load_shedder_returned_clone = load_shedder_returned.clone();
 
+    let call_agent = test_agent::Call::V2;
+
     let load_shedded_request_handle = rt.spawn(async move {
         ingress_filter_running_clone.notified().await;
-        let response = test_agent::Call::default().call(addr).await;
+        let response = call_agent.call_default_canister(addr).await;
         load_shedder_returned_clone.notify_one();
         response
     });
@@ -357,7 +359,7 @@ fn test_load_shedding_update_call() {
 
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
-        let response = test_agent::Call::default().call(addr).await;
+        let response = call_agent.call_default_canister(addr).await;
         assert_eq!(
             response.status(),
             StatusCode::ACCEPTED,

@@ -20,7 +20,6 @@ ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
-ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-dashboard = { path = "./dashboard" }
 ic-http-utils = { path = "../http_utils" }
 ic-management-canister-types = { path = "../types/management_canister_types" }

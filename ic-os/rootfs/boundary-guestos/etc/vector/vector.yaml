@@ -40,7 +40,7 @@ transforms:
     inputs:
     - journal
     condition: ._SYSTEMD_UNIT == "danted.service"
-  
+
   danted_json:
     type: remap
     inputs:
@@ -87,14 +87,14 @@ transforms:
     type: filter
     inputs:
     - journal
-    
+
     condition: ._SYSTEMD_UNIT == "certificate-issuer.service"
 
   certificate_issuer_normalized:
     type: remap
     inputs:
     - certificate_issuer
-    
+
     source: |
       . = parse_json!(.message)
 
@@ -123,14 +123,14 @@ transforms:
     type: filter
     inputs:
     - journal
-    
+
     condition: ._SYSTEMD_UNIT == "ic-boundary.service"
 
   ic_boundary_normalized:
     type: remap
     inputs:
     - ic_boundary
-    
+
     source: |
       . = parse_json!(.message)
 
@@ -141,7 +141,7 @@ transforms:
     type: filter
     inputs:
     - ic_boundary_normalized
-    
+
     condition: |
       !includes([
           "check",
@@ -162,7 +162,7 @@ sinks:
     type: prometheus_exporter
     inputs:
     - danted_metrics
-    
+
     address: "${DANTED_PROMETHUS_ADDR:?DANTED_PROMETHUS_ADDR must be provided}"
     default_namespace: danted
     suppress_timestamp: true
@@ -172,7 +172,7 @@ sinks:
     type: http
     inputs:
     - nginx_access_parsed
-    
+
     uri: "${LOGGING_URL:?LOGGING_URL must be provided}"
     auth:
       strategy: basic

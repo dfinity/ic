@@ -1,1 +1,1 @@
-OPTIONS="--collector.textfile.directory=/boot/config/buildinfo"
+OPTIONS="--collector.textfile.directory='/run/node_exporter/collector_textfile'"

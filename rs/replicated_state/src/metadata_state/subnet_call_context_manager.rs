@@ -26,7 +26,9 @@ pub enum SubnetCallContext {
     SetupInitialDKG(SetupInitialDkgContext),
     SignWithEcdsa(SignWithEcdsaContext),
     CanisterHttpRequest(CanisterHttpRequestContext),
+    // TODO(EXC-1621): remove after fully migrating to `IDkgDealings`.
     EcdsaDealings(EcdsaDealingsContext),
+    IDkgDealings(IDkgDealingsContext),
     BitcoinGetSuccessors(BitcoinGetSuccessorsContext),
     BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext),
 }
@@ -38,6 +40,7 @@ impl SubnetCallContext {
             SubnetCallContext::SignWithEcdsa(context) => &context.request,
             SubnetCallContext::CanisterHttpRequest(context) => &context.request,
             SubnetCallContext::EcdsaDealings(context) => &context.request,
+            SubnetCallContext::IDkgDealings(context) => &context.request,
             SubnetCallContext::BitcoinGetSuccessors(context) => &context.request,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => &context.request,
         }
@@ -49,6 +52,7 @@ impl SubnetCallContext {
             SubnetCallContext::SignWithEcdsa(context) => context.batch_time,
             SubnetCallContext::CanisterHttpRequest(context) => context.time,
             SubnetCallContext::EcdsaDealings(context) => context.time,
+            SubnetCallContext::IDkgDealings(context) => context.time,
             SubnetCallContext::BitcoinGetSuccessors(context) => context.time,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => context.time,
         }
@@ -202,7 +206,9 @@ pub struct SubnetCallContextManager {
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
     pub sign_with_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
+    // TODO(EXC-1621): remove after fully migrating to `idkg_dealings_contexts`.
     pub ecdsa_dealings_contexts: BTreeMap<CallbackId, EcdsaDealingsContext>,
+    pub idkg_dealings_contexts: BTreeMap<CallbackId, IDkgDealingsContext>,
     pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,
     pub bitcoin_send_transaction_internal_contexts:
         BTreeMap<CallbackId, BitcoinSendTransactionInternalContext>,
@@ -232,6 +238,9 @@ impl SubnetCallContextManager {
             }
             SubnetCallContext::EcdsaDealings(context) => {
                 self.ecdsa_dealings_contexts.insert(callback_id, context);
+            }
+            SubnetCallContext::IDkgDealings(context) => {
+                self.idkg_dealings_contexts.insert(callback_id, context);
             }
             SubnetCallContext::BitcoinGetSuccessors(context) => {
                 self.bitcoin_get_successors_contexts
@@ -285,6 +294,19 @@ impl SubnetCallContextManager {
                             context.request.sender
                         );
                         SubnetCallContext::EcdsaDealings(context)
+                    })
+            })
+            .or_else(|| {
+                self.idkg_dealings_contexts
+                    .remove(&callback_id)
+                    .map(|context| {
+                        info!(
+                            logger,
+                            "Received the response for ComputeInitialIDkgDealings request with key_id {:?} from {:?}",
+                            context.key_id,
+                            context.request.sender
+                        );
+                        SubnetCallContext::IDkgDealings(context)
                     })
             })
             .or_else(|| {
@@ -512,6 +534,16 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                 .iter()
                 .map(|context| context.into())
                 .collect(),
+            idkg_dealings_contexts: item
+                .idkg_dealings_contexts
+                .iter()
+                .map(
+                    |(callback_id, context)| pb_metadata::IDkgDealingsContextTree {
+                        callback_id: callback_id.get(),
+                        context: Some(context.into()),
+                    },
+                )
+                .collect(),
         }
     }
 }
@@ -550,6 +582,14 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
                 try_from_option_field(entry.context, "SystemMetadata::EcdsaDealingsContext")?;
             let context = EcdsaDealingsContext::try_from((time, pb_context))?;
             ecdsa_dealings_contexts.insert(CallbackId::new(entry.callback_id), context);
+        }
+
+        let mut idkg_dealings_contexts = BTreeMap::<CallbackId, IDkgDealingsContext>::new();
+        for entry in item.idkg_dealings_contexts {
+            let pb_context =
+                try_from_option_field(entry.context, "SystemMetadata::IDkgDealingsContext")?;
+            let context = IDkgDealingsContext::try_from((time, pb_context))?;
+            idkg_dealings_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
         let mut bitcoin_get_successors_contexts =
@@ -625,6 +665,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
                 stop_canister_call_manager,
             },
             raw_rand_contexts,
+            idkg_dealings_contexts,
         })
     }
 }
@@ -764,7 +805,7 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
     }
 }
 
-// TODO(EXC-1599): remove after generalized version `IDkgDealingsContext` is released.
+// TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EcdsaDealingsContext {
     pub request: Request,
@@ -1154,6 +1195,7 @@ mod testing {
             sign_with_ecdsa_contexts: Default::default(),
             canister_http_request_contexts: Default::default(),
             ecdsa_dealings_contexts: Default::default(),
+            idkg_dealings_contexts: Default::default(),
             bitcoin_get_successors_contexts: Default::default(),
             bitcoin_send_transaction_internal_contexts: Default::default(),
             canister_management_calls,

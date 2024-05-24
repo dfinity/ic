@@ -41,6 +41,7 @@ ALIASES = {}
 
 rust_library(
     name = "scenario_tests",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_scenario_tests",
@@ -51,6 +52,7 @@ rust_library(
 
 rust_binary(
     name = "e2e-test-driver",
+    testonly = True,
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,

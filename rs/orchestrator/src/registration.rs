@@ -798,12 +798,7 @@ mod tests {
 
     mod idkg_dealing_encryption_key_rotation {
         use super::*;
-        use async_trait::async_trait;
         use ic_crypto_temp_crypto::EcdsaSubnetConfig;
-        use ic_crypto_tls_interfaces::{
-            AuthenticatedPeer, SomeOrAllNodes, TlsClientHandshakeError, TlsHandshake,
-            TlsServerHandshakeError, TlsStream,
-        };
         use ic_interfaces::crypto::{
             BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
             IDkgDealingEncryptionKeyRotationError, KeyManager, KeyRotationOutcome,
@@ -834,7 +829,6 @@ mod tests {
         use slog::Level;
         use std::time::UNIX_EPOCH;
         use tempfile::TempDir;
-        use tokio::net::TcpStream;
 
         const REGISTRY_VERSION_1: RegistryVersion = RegistryVersion::new(1);
 
@@ -874,23 +868,6 @@ mod tests {
                     subnet_id: SubnetId,
                     registry_version: RegistryVersion,
                 ) -> CryptoResult<()>;
-            }
-
-            #[async_trait]
-            impl TlsHandshake for KeyRotationCryptoComponent {
-                async fn perform_tls_server_handshake(
-                    &self,
-                    tcp_stream: TcpStream,
-                    allowed_clients: SomeOrAllNodes,
-                    registry_version: RegistryVersion,
-                ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError>;
-
-                async fn perform_tls_client_handshake(
-                    &self,
-                    tcp_stream: TcpStream,
-                    server: NodeId,
-                    registry_version: RegistryVersion,
-                ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError>;
             }
         }
 

@@ -24,6 +24,7 @@ DEPENDENCIES = [
 
 rust_library(
     name = "rosetta-integration-tests-lib",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     crate_name = "icp_rosetta_integration_tests",
     proc_macro_deps = [

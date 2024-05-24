@@ -349,6 +349,7 @@ table ip6 filter {\n\
             "2a05:d01c:d9:2b00::/56",
             "2a05:d01c:e2c:a700::/56",
             "2a0b:21c0:4003:2::/64",
+            "2a0b:21c0:4006:100::/56",
             "2a0b:21c0:b002:2::/64",
             "2a0f:cd00:0002::/56",
             "fd00:2:1:1::/64",
@@ -361,7 +362,7 @@ table ip6 filter {\n\
         tcp_ports_for_node_whitelist: [2497, 4100, 8080],
         udp_ports_for_node_whitelist: [4100],
         ports_for_http_adapter_blacklist: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 19100, 19531],
-        max_simultaneous_connections_per_ip_address: 100,
+        max_simultaneous_connections_per_ip_address: 1000,
     },
 
     boundary_node_firewall: {

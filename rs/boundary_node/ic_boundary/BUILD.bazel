@@ -152,7 +152,6 @@ rust_library(
 
 rust_bench(
     name = "ic_boundary_bench",
-    testonly = True,
     srcs = glob(
         [
             "benches/**",

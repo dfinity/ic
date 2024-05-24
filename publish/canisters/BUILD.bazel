@@ -65,6 +65,11 @@ CANISTERS = {
     "bitcoin-mock-canister.wasm.gz": "//rs/bitcoin/mock:bitcoin_canister_mock",
 }
 
+TESTONLY_CANISTERS = [
+    "mem-utils-test-canister.wasm.gz",
+    "governance-mem-test-canister.wasm.gz",
+]
+
 DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = "21"
 
 CANISTERS_MAX_SIZE_E5_BYTES = {
@@ -151,7 +156,20 @@ COMPRESSED_CANISTERS = {
         out = compressed_file_name,
     )
     for (compressed_file_name, target) in CANISTERS.items() + COMPRESSED_CANISTERS.items()
-    if compressed_file_name.endswith(".wasm.gz") and compressed_file_name != "cow_safety.wasm.gz"
+    if compressed_file_name.endswith(".wasm.gz") and compressed_file_name !=
+                                                     "cow_safety.wasm.gz" and compressed_file_name not in TESTONLY_CANISTERS
+]
+
+[
+    copy_file(
+        name = "copy_" + compressed_file_name,
+        testonly = True,
+        src = target,
+        out = compressed_file_name,
+    )
+    for (compressed_file_name, target) in CANISTERS.items() + COMPRESSED_CANISTERS.items()
+    if compressed_file_name.endswith(".wasm.gz") and compressed_file_name !=
+                                                     "cow_safety.wasm.gz" and compressed_file_name in TESTONLY_CANISTERS
 ]
 
 filegroup(
@@ -161,9 +179,13 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+# the further targets are all testonly for simplicity because if a target was
+# violating the testonly flag, it would error at this point
+
 [
     copy_file(
         name = name + "-did",
+        testonly = True,
         src = target + ".didfile",
         out = name + ".did",
         allow_symlink = False,
@@ -176,6 +198,7 @@ filegroup(
 
 filegroup(
     name = "canisters.did",
+    testonly = True,
     srcs = [
         n + "-did"
         for n, t in CANISTERS.items()
@@ -187,6 +210,7 @@ filegroup(
 
 upload_artifacts(
     name = "upload",
+    testonly = True,
     inputs = [":canisters"] + [":canisters.did"],
     remote_subdir = "canisters",
     visibility = ["//visibility:public"],

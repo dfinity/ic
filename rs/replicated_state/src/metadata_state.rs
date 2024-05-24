@@ -282,6 +282,14 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                     }
                 })
                 .collect(),
+            bitcoin_testnet_canister_ids: match item.bitcoin_testnet_canister_id {
+                Some(c) => vec![pb_types::CanisterId::from(c)],
+                None => vec![],
+            },
+            bitcoin_mainnet_canister_ids: match item.bitcoin_mainnet_canister_id {
+                Some(c) => vec![pb_types::CanisterId::from(c)],
+                None => vec![],
+            },
             idkg_signing_subnets: item
                 .idkg_signing_subnets
                 .iter()
@@ -296,14 +304,6 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                     }
                 })
                 .collect(),
-            bitcoin_testnet_canister_ids: match item.bitcoin_testnet_canister_id {
-                Some(c) => vec![pb_types::CanisterId::from(c)],
-                None => vec![],
-            },
-            bitcoin_mainnet_canister_ids: match item.bitcoin_mainnet_canister_id {
-                Some(c) => vec![pb_types::CanisterId::from(c)],
-                None => vec![],
-            },
         }
     }
 }

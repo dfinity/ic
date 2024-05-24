@@ -3,11 +3,10 @@ use crate::registry::REG_V1;
 use crate::temp_crypto_component_with_tls_keys;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_crypto_tls_interfaces::{TlsClientHandshakeError, TlsConfig};
+use ic_crypto_tls_interfaces::{TlsConfig, TlsConfigError};
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
-use rustls::client::ServerName;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
@@ -73,7 +72,7 @@ impl Client {
         }
     }
 
-    pub async fn run(&self, server_port: u16) -> Result<(), TlsClientHandshakeError> {
+    pub async fn run(&self, server_port: u16) -> Result<(), TlsConfigError> {
         let tcp_stream = TcpStream::connect(("127.0.0.1", server_port))
             .await
             .expect("failed to connect");
@@ -81,13 +80,16 @@ impl Client {
         let tls_client_config = self.crypto.client_config(self.server_node_id, REG_V1)?;
 
         let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
-        let irrelevant_domain =
-            ServerName::try_from("domain.is-irrelevant-as-hostname-verification-is.disabled")
-                .expect("failed to create domain");
+        let irrelevant_domain = "domain.is-irrelevant-as-hostname-verification-is.disabled";
         let tls_stream = tls_connector
-            .connect(irrelevant_domain, tcp_stream)
+            .connect(
+                irrelevant_domain
+                    .try_into()
+                    .expect("failed to create domain"),
+                tcp_stream,
+            )
             .await
-            .map_err(|err| TlsClientHandshakeError::HandshakeError {
+            .map_err(|err| TlsConfigError::MalformedSelfCertificate {
                 internal_error: err.to_string(),
             })?;
 

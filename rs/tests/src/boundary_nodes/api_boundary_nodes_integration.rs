@@ -7,6 +7,8 @@ use discower_bowndary::{
 };
 use ic_base_types::NodeId;
 use k256::SecretKey;
+use std::collections::HashSet;
+use std::time::Instant;
 use tokio::time::sleep;
 
 use crate::{
@@ -63,9 +65,11 @@ use ic_agent::{
     Agent,
 };
 
-use slog::info;
+use slog::{debug, error, info};
 const CANISTER_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
 const CANISTER_RETRY_BACKOFF: Duration = Duration::from_secs(2);
+const API_BN_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(90);
+const ROUTE_CALL_INTERVAL: Duration = Duration::from_secs(1);
 
 /* tag::catalog[]
 Title:: API Boundary Nodes Decentralization
@@ -202,9 +206,8 @@ async fn test(env: TestEnv) {
         "Creating an agent with a HealthCheckRouteProvider to route requests against discovered and healthy API BNs",
     );
 
-    let api_bn_fetch_interval = Duration::from_secs(5);
-
     let route_provider = {
+        let api_bn_fetch_interval = Duration::from_secs(5);
         let fetcher = Arc::new(NodesFetcherImpl::new(
             http_client.clone(),
             nns_node.effective_canister_id().into(),
@@ -225,22 +228,19 @@ async fn test(env: TestEnv) {
 
         route_provider.run().await;
 
-        // Wait till all nodes go through health checks.
-        sleep(2 * check_interval).await;
-
         info!(
             log,
             "Assert: HealthCheckRouteProvider has discovered API BNs {:?} and routes calls correctly", &all_api_domains[..2]
         );
 
-        // TODO: implement a more relaxed routing check with a retry loop
-        // let routed_domains = route_n_times(6, Arc::clone(&route_provider));
-
-        // assert_routed_domains(
-        //     routed_domains,
-        //     vec!["api1.com".into(), "api2.com".into()],
-        //     3,
-        // );
+        assert_routing_via_domains(
+            &log,
+            Arc::clone(&route_provider) as Arc<dyn RouteProvider>,
+            all_api_domains[..2].to_vec(),
+            API_BN_DISCOVERY_TIMEOUT,
+            ROUTE_CALL_INTERVAL,
+        )
+        .await;
 
         route_provider
     };
@@ -253,12 +253,28 @@ async fn test(env: TestEnv) {
             http_client.clone(),
         )
         .unwrap();
+
         let agent = Agent::builder()
             .with_transport(transport)
             .with_identity(AnonymousIdentity {})
             .build()
             .unwrap();
-        agent.fetch_root_key().await.unwrap();
+
+        retry_async(
+            "fetch_root_key",
+            &log,
+            Duration::from_secs(30),
+            Duration::from_secs(2),
+            || async {
+                if agent.fetch_root_key().await.is_ok() {
+                    return Ok(());
+                }
+                bail!("Failed to fetch root key");
+            },
+        )
+        .await
+        .expect("Failed to fetch root key");
+
         agent
     };
 
@@ -326,6 +342,23 @@ async fn test(env: TestEnv) {
     )
     .await;
 
+    assert_api_bns_present_in_state_tree(
+        &log,
+        agent_with_identity.clone(),
+        nns_node.clone(),
+        all_api_bns[..4].to_vec(),
+    )
+    .await;
+
+    assert_routing_via_domains(
+        &log,
+        Arc::clone(&route_provider) as Arc<dyn RouteProvider>,
+        all_api_domains[..4].to_vec(),
+        API_BN_DISCOVERY_TIMEOUT,
+        ROUTE_CALL_INTERVAL,
+    )
+    .await;
+
     let node_ids = unassigned_nodes
         .iter()
         .take(2)
@@ -361,21 +394,19 @@ async fn test(env: TestEnv) {
 
     assert_api_bns_healthy(&log, http_client.clone(), all_api_domains[2..4].to_vec()).await;
 
-    // Wait till all added/removed nodes are discovered by the HealthCheckRouteProvider.
-    sleep(2 * api_bn_fetch_interval).await;
-
     info!(
         log,
         "Assert: HealthCheckRouteProvider discovered added/removed API BNs and routes calls correctly"
     );
 
-    // TODO: implement a more relaxed routing check with a retry loop
-    // let routed_domains = route_n_times(6, Arc::clone(&route_provider));
-    // assert_routed_domains(
-    //     routed_domains,
-    //     vec!["api3.com".into(), "api4.com".into()],
-    //     3,
-    // );
+    assert_routing_via_domains(
+        &log,
+        Arc::clone(&route_provider) as Arc<dyn RouteProvider>,
+        all_api_domains[2..4].to_vec(),
+        API_BN_DISCOVERY_TIMEOUT,
+        ROUTE_CALL_INTERVAL,
+    )
+    .await;
 
     info!(
         log,
@@ -612,4 +643,38 @@ async fn assert_api_bns_present_in_state_tree(
     )
     .await
     .expect("API BNs haven't appeared in the state tree");
+}
+
+async fn assert_routing_via_domains(
+    log: &slog::Logger,
+    route_provider: Arc<dyn RouteProvider>,
+    domains: Vec<&str>,
+    timeout: Duration,
+    route_call_interval: Duration,
+) {
+    if domains.is_empty() {
+        panic!("Expected routing domains can't be empty");
+    }
+    info!(log, "Assert: domains {domains:?} are all used for routing");
+    let mut unrouted_domains: HashSet<&str> = HashSet::from_iter(domains.into_iter());
+    let start = Instant::now();
+    while !unrouted_domains.is_empty() {
+        let domain = match route_provider.route() {
+            Ok(url) => url.domain().expect("no domain name in url").to_string(),
+            Err(err) => {
+                error!(log, "Failed to get routing url: {err:?}");
+                sleep(route_call_interval).await;
+                continue;
+            }
+        };
+        if unrouted_domains.remove(domain.as_str()) {
+            debug!(log, "domain {domain} was discovered for routing");
+        } else {
+            debug!(log, "domain {domain} has already appeared in routing");
+        }
+        if start.elapsed() > timeout {
+            panic!("The following domains {unrouted_domains:?} didn't appear in routing within the timeout of {timeout:?}");
+        }
+        sleep(route_call_interval).await;
+    }
 }

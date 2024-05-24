@@ -3,7 +3,7 @@ use super::*;
 use crate::certified_slice_pool::CertifiedSliceError;
 use assert_matches::assert_matches;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
-use ic_interfaces::messaging::{InvalidXNetPayload, XNetTransientValidationError};
+use ic_interfaces::messaging::{InvalidXNetPayload, XNetPayloadValidationFailure};
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_interfaces_state_manager::StateManagerError;
 use ic_interfaces_state_manager_mocks::MockStateManager;
@@ -190,7 +190,7 @@ async fn validate_duplicate_messages() {
                 &fixture.validation_context,
                 &fixture.past_payloads(),
             ),
-            Err(ValidationError::Permanent(
+            Err(ValidationError::InvalidArtifact(
                 InvalidXNetPayload::InvalidSlice(_)
             ))
         );
@@ -249,7 +249,7 @@ async fn validate_duplicate_messages_against_state_only() {
 
         assert_matches!(
             xnet_payload_builder.validate_xnet_payload(&payload, &validation_context, &[],),
-            Err(ValidationError::Permanent(
+            Err(ValidationError::InvalidArtifact(
                 InvalidXNetPayload::InvalidSlice(_)
             ))
         );
@@ -274,7 +274,7 @@ async fn validate_missing_messages() {
                 &fixture.validation_context,
                 &past_payloads,
             ),
-            Err(ValidationError::Permanent(
+            Err(ValidationError::InvalidArtifact(
                 InvalidXNetPayload::InvalidSlice(_)
             ))
         );
@@ -294,7 +294,7 @@ async fn validate_missing_messages_against_state_only() {
                 &fixture.validation_context,
                 &[],
             ),
-            Err(ValidationError::Permanent(
+            Err(ValidationError::InvalidArtifact(
                 InvalidXNetPayload::InvalidSlice(_)
             ))
         );
@@ -337,7 +337,7 @@ async fn validate_state_removed() {
                 &validation_context,
                 &[]
             ),
-            Err(ValidationError::Permanent(InvalidXNetPayload::StateRemoved(h)))
+            Err(ValidationError::ValidationFailed(XNetPayloadValidationFailure::StateRemoved(h)))
             if h == CERTIFIED_HEIGHT
         );
     });
@@ -374,7 +374,7 @@ async fn validate_state_not_yet_committed() {
                 &validation_context,
                 &[]
             ),
-            Err(ValidationError::Transient(XNetTransientValidationError::StateNotCommittedYet(h)))
+            Err(ValidationError::ValidationFailed(XNetPayloadValidationFailure::StateNotCommittedYet(h)))
             if h == CERTIFIED_HEIGHT
         );
     });

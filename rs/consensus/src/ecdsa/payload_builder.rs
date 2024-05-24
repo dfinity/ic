@@ -631,7 +631,7 @@ pub(crate) fn create_data_payload_helper_2(
     );
 
     let new_transcripts = [
-        pre_signatures::update_quadruples_in_creation(
+        pre_signatures::update_pre_signatures_in_creation(
             ecdsa_payload,
             transcript_builder,
             height,
@@ -1246,7 +1246,7 @@ mod tests {
                 .idkg_transcripts
                 .insert(kappa_config_ref.as_ref().transcript_id, kappa_transcript);
             let parent_block_height = Height::new(15);
-            let result = pre_signatures::update_quadruples_in_creation(
+            let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut ecdsa_payload,
                 &transcript_builder,
                 parent_block_height,
@@ -1484,7 +1484,7 @@ mod tests {
                 .idkg_transcripts
                 .insert(kappa_config_ref.as_ref().transcript_id, kappa_transcript);
             let parent_block_height = Height::new(15);
-            let result = pre_signatures::update_quadruples_in_creation(
+            let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut ecdsa_payload,
                 &transcript_builder,
                 parent_block_height,
@@ -1708,7 +1708,7 @@ mod tests {
                     current_key_transcript.unmasked_transcript(),
                 ),
                 key_id: key_id.clone(),
-                master_key_id: None,
+                master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id.clone())),
             };
 
             // Initial bootstrap payload should be created successfully
@@ -1745,7 +1745,7 @@ mod tests {
                     next_key_transcript.unmasked_transcript(),
                 ),
                 key_id: key_id.clone(),
-                master_key_id: None,
+                master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id.clone())),
             };
 
             let mut payload_2 = payload_1.clone();
@@ -1760,8 +1760,8 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     next_key_transcript.unmasked_transcript(),
                 ),
-                key_id,
-                master_key_id: None,
+                key_id: key_id.clone(),
+                master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
             };
 
             let payload_3 = create_summary_payload_helper(
@@ -1836,7 +1836,7 @@ mod tests {
                     current_key_transcript.unmasked_transcript(),
                 ),
                 key_id: key_id.clone(),
-                master_key_id: None,
+                master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id.clone())),
             };
 
             let mut payload_0 =

@@ -23,7 +23,6 @@ rust_library(
         "//rs/consensus",
         "//rs/crypto",
         "//rs/crypto/node_key_generation",
-        "//rs/crypto/tls_interfaces",
         "//rs/http_endpoints/metrics",
         "//rs/http_utils",
         "//rs/interfaces",

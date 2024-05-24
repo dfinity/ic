@@ -89,6 +89,7 @@ ALIASES = {}
 
 rust_library(
     name = "test_utils",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_nns_test_utils",
@@ -99,6 +100,7 @@ rust_library(
 
 rust_library(
     name = "test_utils--test_feature",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_features = ["test"],

@@ -21,7 +21,7 @@ use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
     messaging::{
         InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
-        XNetTransientValidationError,
+        XNetPayloadValidationFailure,
     },
     validation::ValidationError,
 };
@@ -1080,14 +1080,14 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                 SliceValidationResult::Invalid(reason) => {
                     self.metrics
                         .observe_validate_duration(VALIDATION_STATUS_INVALID, since);
-                    return Err(ValidationError::Permanent(
+                    return Err(ValidationError::InvalidArtifact(
                         InvalidXNetPayload::InvalidSlice(reason),
                     ));
                 }
                 SliceValidationResult::Empty => {
                     self.metrics
                         .observe_validate_duration(VALIDATION_STATUS_EMPTY_SLICE, since);
-                    return Err(ValidationError::Permanent(
+                    return Err(ValidationError::InvalidArtifact(
                         InvalidXNetPayload::InvalidSlice("Empty slice".to_string()),
                     ));
                 }
@@ -1152,11 +1152,11 @@ fn get_node_operator_id(
 fn from_state_manager_error(e: StateManagerError) -> XNetPayloadValidationError {
     match e {
         StateManagerError::StateRemoved(height) => {
-            ValidationError::Permanent(InvalidXNetPayload::StateRemoved(height))
+            ValidationError::ValidationFailed(XNetPayloadValidationFailure::StateRemoved(height))
         }
-        StateManagerError::StateNotCommittedYet(height) => {
-            ValidationError::Transient(XNetTransientValidationError::StateNotCommittedYet(height))
-        }
+        StateManagerError::StateNotCommittedYet(height) => ValidationError::ValidationFailed(
+            XNetPayloadValidationFailure::StateNotCommittedYet(height),
+        ),
     }
 }
 

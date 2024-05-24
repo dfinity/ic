@@ -253,7 +253,8 @@ message PrettySnsVersion {
 
 // The request type accepted by the get_next_sns_version canister method.
 message GetNextSnsVersionRequest {
-  // The current version recorded on the SNS (in Governance, the "deployed_version" field)
+  // The current version recorded on the SNS (in Governance, the "deployed_version" field). This
+  // field is still required when governance_canister_id is provided.
   SnsVersion current_version = 1;
   // If supplied, will replace "caller" to allow verifying the response a particular
   // SNS would receive
@@ -329,7 +330,7 @@ message GetDeployedSnsByProposalIdResponse {
   }
 }
 
-// The argument for get_wasm, which consists of the WASM hash to be retrieved.
+// The request type for get_wasm_metadata, which returns the metadata for a given wasm
 message GetWasmMetadataRequest {
   optional bytes hash = 1;
 }
@@ -345,7 +346,7 @@ message MetadataSection {
   optional bytes contents = 3;
 }
 
-// The response for get_wasm, which returns a WASM if it is found, or None.
+// The response for get_wasm_metadata, which returns the metadata for a given wasm
 message GetWasmMetadataResponse {
   message Ok {
     repeated MetadataSection sections = 1;

@@ -47,7 +47,6 @@ inferno = "0.11.19"
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = "0.8.3"
-rustls = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
@@ -88,6 +87,8 @@ mockall = { workspace = true }
 maplit = "1.0.2"
 pretty_assertions = { workspace = true }
 proptest = "1.0.0"
+rustls = { workspace = true }
 serde_bytes = { workspace = true }
 tower-test = "0.4.0"
 reqwest = { workspace = true }
+rstest = { workspace = true }

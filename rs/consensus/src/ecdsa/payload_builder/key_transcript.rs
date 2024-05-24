@@ -220,7 +220,7 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::EcdsaKeyId;
+    use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
@@ -242,12 +242,12 @@ mod tests {
         let key_transcript_ref =
             idkg::UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
-
+        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         let current_key_transcript = idkg::EcdsaKeyTranscript {
             current: None,
             next_in_creation: idkg::KeyTranscriptCreation::Created(key_transcript_ref),
-            key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
-            master_key_id: None,
+            key_id: key_id.clone(),
+            master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
         };
 
         let created_key_transcript =
@@ -266,12 +266,12 @@ mod tests {
     #[test]
     fn get_created_key_transcript_returns_none_test() {
         let block_reader = TestEcdsaBlockReader::new();
-
+        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         let key_transcript = idkg::EcdsaKeyTranscript {
             current: None,
             next_in_creation: idkg::KeyTranscriptCreation::Begin,
-            key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
-            master_key_id: None,
+            key_id: key_id.clone(),
+            master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
         };
 
         let created_key_transcript =

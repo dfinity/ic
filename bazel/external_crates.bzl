@@ -1060,6 +1060,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "rstack-self": crate.spec(
                 version = "^0.3",
             ),
+            "rstest": crate.spec(
+                version = "^0.19",
+            ),
             "rusb": crate.spec(
                 version = "0.9",
             ),

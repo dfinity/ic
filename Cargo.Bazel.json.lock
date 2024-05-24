@@ -1,5 +1,5 @@
 {
-  "checksum": "122100c2d84570f3c52cbc5d2c5389bf5c85b785fbd60ebe3c7375eba951d32c",
+  "checksum": "380d6fa01dc8f2e9cb04caceafa0e849bf8ac4c0a0d8218b679f4ee1a5fbfd28",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17798,6 +17798,10 @@
             {
               "id": "rstack-self 0.3.0",
               "target": "rstack_self"
+            },
+            {
+              "id": "rstest 0.19.0",
+              "target": "rstest"
             },
             {
               "id": "rusb 0.9.3",
@@ -51666,6 +51670,51 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "relative-path 1.9.3": {
+      "name": "relative-path",
+      "version": "1.9.3",
+      "package_url": "https://github.com/udoprog/relative-path",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/relative-path/1.9.3/download",
+          "sha256": "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "relative_path",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "relative_path",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.9.3"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
     "rend 0.4.0": {
       "name": "rend",
       "version": "0.4.0",
@@ -53439,6 +53488,186 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "rstest 0.19.0": {
+      "name": "rstest",
+      "version": "0.19.0",
+      "package_url": "https://github.com/la10736/rstest",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rstest/0.19.0/download",
+          "sha256": "9d5316d2a1479eeef1ea21e7f9ddc67c191d497abc8fc3ba2467857abbb68330"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rstest",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rstest",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "async-timeout",
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures 0.3.30",
+              "target": "futures"
+            },
+            {
+              "id": "futures-timer 3.0.2",
+              "target": "futures_timer"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "rstest_macros 0.19.0",
+              "target": "rstest_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.19.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "rstest_macros 0.19.0": {
+      "name": "rstest_macros",
+      "version": "0.19.0",
+      "package_url": "https://github.com/la10736/rstest",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rstest_macros/0.19.0/download",
+          "sha256": "04a9df72cc1f67020b0d63ad9bfe4a323e459ea7eb68e03bd9824db49f9a4c25"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "rstest_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rstest_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "async-timeout"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "glob 0.3.1",
+              "target": "glob"
+            },
+            {
+              "id": "proc-macro2 1.0.76",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "regex 1.9.1",
+              "target": "regex"
+            },
+            {
+              "id": "relative-path 1.9.3",
+              "target": "relative_path"
+            },
+            {
+              "id": "rstest_macros 0.19.0",
+              "target": "build_script_build"
+            },
+            {
+              "id": "syn 2.0.48",
+              "target": "syn"
+            },
+            {
+              "id": "unicode-ident 1.0.11",
+              "target": "unicode_ident"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.19.0"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "rustc_version 0.4.0",
+              "target": "rustc_version"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "rusb 0.9.3": {
       "name": "rusb",
@@ -77805,6 +78034,7 @@
     "rolling-file 0.2.0",
     "rsa 0.9.2",
     "rstack-self 0.3.0",
+    "rstest 0.19.0",
     "rusb 0.9.3",
     "rusqlite 0.28.0",
     "rust_decimal 1.30.0",

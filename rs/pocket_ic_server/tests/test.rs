@@ -256,8 +256,8 @@ fn test_http_gateway() {
     let page = String::from_utf8(res.bytes().unwrap().to_vec()).unwrap();
     assert!(page.contains("<title>Internet Identity</title>"));
 
-    // stop HTTP gateway and make IC instance deterministic
-    pic.make_deterministic();
+    // stop HTTP gateway and disable auto progress
+    pic.stop_live();
 
     // HTTP gateway requests should eventually stop and requests to it fail
     loop {

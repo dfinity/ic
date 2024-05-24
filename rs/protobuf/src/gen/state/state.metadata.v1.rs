@@ -78,14 +78,14 @@ pub struct NetworkTopology {
     /// TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
     #[prost(message, repeated, tag = "5")]
     pub ecdsa_signing_subnets: ::prost::alloc::vec::Vec<EcdsaKeyEntry>,
-    #[prost(message, repeated, tag = "8")]
-    pub idkg_signing_subnets: ::prost::alloc::vec::Vec<IDkgKeyEntry>,
     #[prost(message, repeated, tag = "6")]
     pub bitcoin_testnet_canister_ids:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "7")]
     pub bitcoin_mainnet_canister_ids:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
+    #[prost(message, repeated, tag = "8")]
+    pub idkg_signing_subnets: ::prost::alloc::vec::Vec<IDkgKeyEntry>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -177,7 +177,7 @@ pub struct CanisterHttpRequestContextTree {
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<CanisterHttpRequestContext>,
 }
-/// TODO(EXC-1599): remove after generalized version `IDkgDealingsContext` is released.
+/// TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaDealingsContext {
@@ -192,6 +192,7 @@ pub struct EcdsaDealingsContext {
     #[prost(message, optional, tag = "6")]
     pub time: ::core::option::Option<Time>,
 }
+/// TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaDealingsContextTree {
@@ -214,6 +215,14 @@ pub struct IDkgDealingsContext {
     pub registry_version: u64,
     #[prost(message, optional, tag = "5")]
     pub time: ::core::option::Option<Time>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IDkgDealingsContextTree {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub context: ::core::option::Option<IDkgDealingsContext>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -351,6 +360,7 @@ pub struct SubnetCallContextManager {
     pub sign_with_ecdsa_contexts: ::prost::alloc::vec::Vec<SignWithEcdsaContextTree>,
     #[prost(message, repeated, tag = "6")]
     pub canister_http_request_contexts: ::prost::alloc::vec::Vec<CanisterHttpRequestContextTree>,
+    /// TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
     #[prost(message, repeated, tag = "7")]
     pub ecdsa_dealings_contexts: ::prost::alloc::vec::Vec<EcdsaDealingsContextTree>,
     #[prost(message, repeated, tag = "8")]
@@ -371,6 +381,8 @@ pub struct SubnetCallContextManager {
     pub stop_canister_calls: ::prost::alloc::vec::Vec<StopCanisterCallTree>,
     #[prost(message, repeated, tag = "16")]
     pub raw_rand_contexts: ::prost::alloc::vec::Vec<RawRandContext>,
+    #[prost(message, repeated, tag = "17")]
+    pub idkg_dealings_contexts: ::prost::alloc::vec::Vec<IDkgDealingsContextTree>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

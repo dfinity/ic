@@ -56,9 +56,9 @@ message NetworkTopology {
   registry.routing_table.v1.CanisterMigrations canister_migrations = 4;
   // TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
   repeated EcdsaKeyEntry ecdsa_signing_subnets = 5;
-  repeated IDkgKeyEntry idkg_signing_subnets = 8;
   repeated types.v1.CanisterId bitcoin_testnet_canister_ids = 6;
   repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
+  repeated IDkgKeyEntry idkg_signing_subnets = 8;
 }
 
 message SetupInitialDkgContext {
@@ -125,7 +125,7 @@ message CanisterHttpRequestContextTree {
   CanisterHttpRequestContext context = 2;
 }
 
-// TODO(EXC-1599): remove after generalized version `IDkgDealingsContext` is released.
+// TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
 message EcdsaDealingsContext {
   state.queues.v1.Request request = 1;
   reserved 2;
@@ -135,6 +135,7 @@ message EcdsaDealingsContext {
   Time time = 6;
 }
 
+// TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
 message EcdsaDealingsContextTree {
   uint64 callback_id = 1;
   EcdsaDealingsContext context = 2;
@@ -146,6 +147,11 @@ message IDkgDealingsContext {
   repeated types.v1.NodeId nodes = 3;
   uint64 registry_version = 4;
   Time time = 5;
+}
+
+message IDkgDealingsContextTree {
+  uint64 callback_id = 1;
+  IDkgDealingsContext context = 2;
 }
 
 message BitcoinGetSuccessorsContext {
@@ -226,6 +232,7 @@ message SubnetCallContextManager {
   reserved 5;
   reserved "sign_with_mock_ecdsa_contexts";
   repeated CanisterHttpRequestContextTree canister_http_request_contexts = 6;
+  // TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
   repeated EcdsaDealingsContextTree ecdsa_dealings_contexts = 7;
   repeated BitcoinGetSuccessorsContextTree bitcoin_get_successors_contexts = 8;
   repeated BitcoinSendTransactionInternalContextTree bitcoin_send_transaction_internal_contexts = 9;
@@ -238,6 +245,7 @@ message SubnetCallContextManager {
   uint64 next_stop_canister_call_id = 14;
   repeated StopCanisterCallTree stop_canister_calls = 15;
   repeated RawRandContext raw_rand_contexts = 16;
+  repeated IDkgDealingsContextTree idkg_dealings_contexts = 17;
 }
 
 message SubnetMetrics {

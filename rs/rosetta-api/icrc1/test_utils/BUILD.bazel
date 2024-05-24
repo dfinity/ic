@@ -24,6 +24,7 @@ DEV_DEPENDENCIES = [
 
 rust_library(
     name = "test_utils",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_icrc1_test_utils",
     version = "0.8.0",
