@@ -1598,6 +1598,26 @@ fn write_overlay(
             internal_error: err.to_string(),
         })?;
 
+    // Mark the file as readonly.
+    let metadata = path
+        .metadata()
+        .map_err(|err| PersistenceError::FileSystemError {
+            path: path.display().to_string(),
+            context: format!("Failed to write overlay file {}", path.display()),
+            internal_error: err.to_string(),
+        })?;
+    let mut permissions = metadata.permissions();
+    if !permissions.readonly() {
+        permissions.set_readonly(true);
+        std::fs::set_permissions(path, permissions).map_err(|err| {
+            PersistenceError::FileSystemError {
+                path: path.display().to_string(),
+                context: format!("Failed to write overlay file {}", path.display()),
+                internal_error: err.to_string(),
+            }
+        })?;
+    }
+
     let data_size = pages.len() * PAGE_SIZE;
     let index_size = ranges_serialized.len() + 8;
 
