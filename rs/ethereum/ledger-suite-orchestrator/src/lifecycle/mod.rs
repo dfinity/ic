@@ -35,8 +35,17 @@ pub fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
             .expect("BUG: failed to record icrc1 ledger suite wasms during upgrade");
         }
         match read_wasm_store(|w| UpgradeOrchestratorArgs::validate_upgrade_arg(w, arg.clone())) {
-            Ok(_valid_upgrade_args) => {
-                //TODO XC-30 add upgrade managed canisters task
+            Ok(valid_upgrade_args) => {
+                if valid_upgrade_args.upgrade_ledger_suite() {
+                    for erc20 in
+                        read_state(|s| s.managed_erc20_tokens_iter().cloned().collect::<Vec<_>>())
+                    {
+                        schedule_now(
+                            Task::UpgradeLedgerSuite(valid_upgrade_args.clone().into_task(erc20)),
+                            &IC_CANISTER_RUNTIME,
+                        );
+                    }
+                }
             }
             Err(e) => {
                 ic_cdk::trap(&format!(
