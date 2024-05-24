@@ -26,6 +26,7 @@ use ic_sns_wasm::{
         AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse, GetAllowedPrincipalsRequest,
         GetAllowedPrincipalsResponse, GetDeployedSnsByProposalIdRequest,
         GetDeployedSnsByProposalIdResponse, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
+        GetProposalIdThatAddedWasmRequest, GetProposalIdThatAddedWasmResponse,
         GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, GetWasmMetadataRequest,
         GetWasmMetadataResponse, GetWasmRequest, GetWasmResponse, InsertUpgradePathEntriesRequest,
         InsertUpgradePathEntriesResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
@@ -396,6 +397,22 @@ fn get_wasm_metadata_(
         sns_wasm
             .borrow()
             .get_wasm_metadata(get_wasm_metadata_payload)
+    })
+}
+
+#[export_name = "canister_query get_proposal_id_that_added_wasm"]
+fn get_proposal_id_that_added_wasm() {
+    over(candid_one, get_proposal_id_that_added_wasm_)
+}
+
+#[candid_method(query, rename = "get_proposal_id_that_added_wasm")]
+fn get_proposal_id_that_added_wasm_(
+    get_proposal_id_that_added_wasm_payload: GetProposalIdThatAddedWasmRequest,
+) -> GetProposalIdThatAddedWasmResponse {
+    SNS_WASM.with(|sns_wasm| {
+        sns_wasm
+            .borrow()
+            .get_proposal_id_that_added_wasm(get_proposal_id_that_added_wasm_payload)
     })
 }
 
