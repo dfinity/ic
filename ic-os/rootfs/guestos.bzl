@@ -10,8 +10,6 @@ rootfs_files = {
     Label("//ic-os/rootfs/guestos:etc/sysctl.d/privileged-ports.conf"): "/etc/sysctl.d/privileged-ports.conf",
     Label("//ic-os/rootfs/guestos:etc/sysfs.d/hugepage.conf"): "/etc/sysfs.d/hugepage.conf",
     Label("//ic-os/rootfs/guestos:etc/tmpfiles.d/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
-    Label("//ic-os/rootfs/guestos:etc/metrics-proxy.yaml"): "/etc/metrics-proxy.yaml",
-    Label("//ic-os/rootfs/guestos:etc/systemd/system/metrics-proxy.service"): "/etc/systemd/system/metrics-proxy.service",
 
     # prep files:
     Label("//ic-os/rootfs/guestos:prep/filebeat/filebeat.fc"): "/prep/filebeat/filebeat.fc",
@@ -129,4 +127,6 @@ rootfs_files = {
     Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys.sh"): "/opt/ic/bin/setup-node_exporter-keys.sh",
     Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys.service"): "/etc/systemd/system/setup-node_exporter-keys.service",
     Label("hostos-scripts/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
+    Label("monitoring/metrics-proxy/guestos/metrics-proxy.yaml"): "/etc/metrics-proxy.yaml",
+    Label("monitoring/metrics-proxy/metrics-proxy.service"): "/etc/systemd/system/metrics-proxy.service",
 }
