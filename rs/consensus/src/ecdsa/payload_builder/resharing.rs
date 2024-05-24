@@ -170,8 +170,8 @@ fn reshare_request_from_dealings_context(
     context: &EcdsaDealingsContext,
 ) -> idkg::EcdsaReshareRequest {
     idkg::EcdsaReshareRequest {
-        key_id: context.key_id.clone(),
-        master_key_id: Some(MasterPublicKeyId::Ecdsa(context.key_id.clone())),
+        key_id: Some(context.key_id.clone()),
+        master_key_id: MasterPublicKeyId::Ecdsa(context.key_id.clone()),
         receiving_node_ids: context.nodes.iter().copied().collect(),
         registry_version: context.registry_version,
     }
@@ -191,8 +191,8 @@ pub mod test_utils {
         registry_version: u64,
     ) -> idkg::EcdsaReshareRequest {
         idkg::EcdsaReshareRequest {
-            key_id: key_id.clone(),
-            master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
+            key_id: Some(key_id.clone()),
+            master_key_id: MasterPublicKeyId::Ecdsa(key_id),
             receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
             registry_version: RegistryVersion::from(registry_version),
         }
@@ -261,8 +261,8 @@ mod tests {
         let make_key_id =
             |i: u64| EcdsaKeyId::from_str(&format!("Secp256k1:some_key_{i}")).unwrap();
         let make_reshare_request = |i| EcdsaReshareRequest {
-            key_id: make_key_id(i),
-            master_key_id: Some(MasterPublicKeyId::Ecdsa(make_key_id(i))),
+            key_id: Some(make_key_id(i)),
+            master_key_id: MasterPublicKeyId::Ecdsa(make_key_id(i)),
             receiving_node_ids: vec![node_test_id(i)],
             registry_version: RegistryVersion::from(i),
         };
