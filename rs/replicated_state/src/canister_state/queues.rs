@@ -1402,7 +1402,7 @@ impl QueueStats {
     /// Returns the memory usage of reservations for guaranteed responses plus
     /// guaranteed responses in streans.
     pub fn guaranteed_response_memory_usage(&self) -> usize {
-        self.guaranteed_response_memory_reservations as usize * MAX_RESPONSE_COUNT_BYTES
+        self.guaranteed_response_memory_reservations * MAX_RESPONSE_COUNT_BYTES
             + self.transient_stream_responses_size_bytes
     }
 
