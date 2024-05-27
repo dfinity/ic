@@ -168,3 +168,34 @@ fn test_log_file() {
     assert!(buffer.contains("The PocketIC server is listening on port"));
     assert!(!buffer.contains("Canister lxzze-o7777-77777-aaaaa-cai"));
 }
+
+#[test]
+fn test_cycles_used_file() {
+    let mut canister_file = NamedTempFile::new().unwrap();
+    let canister_wasm = wat::parse_str(CANISTER_WAT).unwrap();
+    canister_file.write_all(&canister_wasm).unwrap();
+    let canister_file_path = canister_file.path();
+
+    let mut messages_file = NamedTempFile::new().unwrap();
+    messages_file
+        .write_all(&messages(canister_file_path.as_os_str().to_str().unwrap()))
+        .unwrap();
+    let messages_file_path = messages_file.path();
+
+    let mut cycles_used_file = NamedTempFile::new().unwrap();
+
+    let drun_path = std::env::var_os("DRUN_BIN").expect("Missing drun binary");
+    let output = Command::new(drun_path)
+        .arg(messages_file_path)
+        .arg("--cycles-used-file")
+        .arg(cycles_used_file.path())
+        .output()
+        .expect("failed to execute process");
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    assert_eq!(output.stdout, expected_output());
+
+    let mut buffer = String::new();
+    cycles_used_file.read_to_string(&mut buffer).unwrap();
+    assert!(buffer.contains("lxzze-o7777-77777-aaaaa-cai:"));
+}

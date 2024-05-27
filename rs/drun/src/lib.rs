@@ -9,6 +9,7 @@ use pocket_ic::{
 };
 use serde::Serialize;
 use std::fs::File;
+use std::io::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -70,6 +71,7 @@ impl FromStr for SubnetType {
 pub struct DrunOptions {
     pub msg_filename: String,
     pub log_file: Option<PathBuf>,
+    pub cycles_used_file: Option<PathBuf>,
     pub subnet_type: SubnetType,
 }
 
@@ -78,6 +80,7 @@ pub fn run_drun(uo: DrunOptions) {
         msg_filename,
         log_file,
         subnet_type,
+        cycles_used_file,
     } = uo;
 
     let msg_stream = msg_stream_from_file(&msg_filename)
@@ -89,7 +92,7 @@ pub fn run_drun(uo: DrunOptions) {
             log_file
                 .map(|p| {
                     File::create(p)
-                        .unwrap_or_else(|e| panic!("Could not open log file: {}", e))
+                        .unwrap_or_else(|e| panic!("Could not create log file: {}", e))
                         .into()
                 })
                 .unwrap_or(std::process::Stdio::null()),
@@ -107,6 +110,8 @@ pub fn run_drun(uo: DrunOptions) {
         }
     }
     let pocket_ic = PocketIc::from_config_and_server_url_and_pid(config, server_url, pid);
+
+    let mut canister_ids = vec![];
 
     for parse_result in msg_stream {
         match parse_result {
@@ -153,12 +158,29 @@ pub fn run_drun(uo: DrunOptions) {
             Ok(Message::Create) => {
                 let canister_id = pocket_ic.create_canister();
                 pocket_ic.add_cycles(canister_id, DEFAULT_CYCLES_PER_CANISTER);
+                canister_ids.push(canister_id);
                 println!("Canister created: {}", canister_id);
             }
 
             Err(e) => {
                 panic!("Could not parse message: {}", e);
             }
+        }
+    }
+
+    if let Some(cycles_used_file_path) = cycles_used_file {
+        let mut file = File::create(cycles_used_file_path)
+            .unwrap_or_else(|e| panic!("Could not create cycles used file: {}", e));
+        for canister_id in canister_ids {
+            file.write_all(
+                format!(
+                    "{}:{}",
+                    canister_id,
+                    DEFAULT_CYCLES_PER_CANISTER - pocket_ic.cycle_balance(canister_id)
+                )
+                .as_bytes(),
+            )
+            .unwrap();
         }
     }
 }
