@@ -1138,8 +1138,6 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
                     queue: Some(output_queue.into()),
                 })
                 .collect(),
-            // TODO: input_schedule is deprecated and should be removed next release
-            input_schedule: [].into(),
             next_input_queue: ProtoNextInputQueue::from(&item.next_input_queue).into(),
             local_subnet_input_schedule: item
                 .local_subnet_input_schedule
@@ -1192,11 +1190,6 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
         );
 
         let mut local_subnet_input_schedule = VecDeque::new();
-        // Upgrade: input_schedule is mapped to local_subnet_input_schedule
-        for can_id in item.input_schedule.into_iter() {
-            let c = CanisterId::try_from(can_id)?;
-            local_subnet_input_schedule.push_back(c);
-        }
         for can_id in item.local_subnet_input_schedule.into_iter() {
             let c = CanisterId::try_from(can_id)?;
             local_subnet_input_schedule.push_back(c);
