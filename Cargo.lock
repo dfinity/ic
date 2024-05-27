@@ -12588,6 +12588,7 @@ dependencies = [
  "candid",
  "crc32fast",
  "hex",
+ "itertools 0.12.0",
  "num-bigint 0.4.4",
  "num-traits",
  "proptest",
