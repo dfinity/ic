@@ -22,7 +22,7 @@ use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EcdsaKeyId, EmptyBlob,
-    InstallCodeArgs, InstallCodeArgsV2, LogVisibility, Method, Payload,
+    InstallCodeArgs, InstallCodeArgsV2, LogVisibility, MasterPublicKeyId, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
@@ -99,7 +99,6 @@ pub fn generate_subnets(
                 nodes,
                 subnet_type,
                 subnet_features: SubnetFeatures::default(),
-                ecdsa_keys_held: BTreeSet::new(),
                 idkg_keys_held: BTreeSet::new(),
             },
         );
@@ -2051,11 +2050,10 @@ impl ExecutionTestBuilder {
         }
         if let Some(ecdsa_key) = &self.ecdsa_key {
             if self.ecdsa_signing_enabled {
-                state
-                    .metadata
-                    .network_topology
-                    .ecdsa_signing_subnets
-                    .insert(ecdsa_key.clone(), vec![self.own_subnet_id]);
+                state.metadata.network_topology.idkg_signing_subnets.insert(
+                    MasterPublicKeyId::Ecdsa(ecdsa_key.clone()),
+                    vec![self.own_subnet_id],
+                );
             }
             state
                 .metadata
@@ -2063,8 +2061,8 @@ impl ExecutionTestBuilder {
                 .subnets
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
-                .ecdsa_keys_held
-                .insert(ecdsa_key.clone());
+                .idkg_keys_held
+                .insert(MasterPublicKeyId::Ecdsa(ecdsa_key.clone()));
         }
 
         state.metadata.network_topology.bitcoin_mainnet_canister_id =
