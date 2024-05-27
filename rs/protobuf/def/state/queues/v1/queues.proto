@@ -139,6 +139,10 @@ message MessagePool {
   uint64 message_id_generator = 3;
 }
 
+message CanisterQueue {
+
+}
+
 message CanisterQueues {
   reserved 1; // this is from canisterId
   reserved "canister_id";
@@ -162,4 +166,6 @@ message CanisterQueues {
   // release.
   repeated types.v1.CanisterId local_subnet_input_schedule = 7;
   repeated types.v1.CanisterId remote_subnet_input_schedule = 8;
+
+  uint64 guaranteed_response_memory_reservations = 10;
 }

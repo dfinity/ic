@@ -5,7 +5,6 @@ mod tests;
 
 use self::message_pool::{Context, MessageId, MessagePool};
 use self::queue::{CanisterQueue, IngressQueue};
-use crate::canister_state::queues::message_pool::Class;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{CanisterState, InputQueueType, NextInputQueue, StateError};
 use ic_base_types::PrincipalId;
@@ -389,27 +388,22 @@ impl CanisterQueues {
     ) -> Result<(), (StateError, RequestOrResponse)> {
         let sender = msg.sender();
         let input_queue = match &msg {
-            RequestOrResponse::Request(req) => {
+            RequestOrResponse::Request(_) => {
                 let (input_queue, output_queue) = self.get_or_insert_queues(&sender);
                 if let Err(e) = input_queue.check_has_request_slot() {
                     return Err((e, msg));
                 }
                 // Safe to already (attempt to) reserve an output slot here, as the `push()`
                 // below is guaranteed to succeed due to the check above.
-                if let Err(e) = output_queue.try_reserve_response_slot(req) {
+                if let Err(e) = output_queue.try_reserve_response_slot() {
                     return Err((e, msg));
                 }
                 // Make the borrow checker happy.
                 &mut self.canister_queues.get_mut(&sender).unwrap().0
             }
-            RequestOrResponse::Response(rep) => match self.canister_queues.get_mut(&sender) {
+            RequestOrResponse::Response(_) => match self.canister_queues.get_mut(&sender) {
                 Some((queue, _)) => {
-                    let class = if rep.deadline == NO_DEADLINE {
-                        Class::GuaranteedResponse
-                    } else {
-                        Class::BestEffort
-                    };
-                    if let Err(e) = queue.check_has_reserved_response_slot(class) {
+                    if let Err(e) = queue.check_has_reserved_response_slot() {
                         return Err((e, msg));
                     }
                     queue
@@ -666,7 +660,7 @@ impl CanisterQueues {
         if let Err(e) = output_queue.check_has_request_slot() {
             return Err((e, request));
         }
-        if let Err(e) = input_queue.try_reserve_response_slot(&request) {
+        if let Err(e) = input_queue.try_reserve_response_slot() {
             return Err((e, request));
         }
         // Make the borrow checker happy.
@@ -705,7 +699,7 @@ impl CanisterQueues {
         );
 
         let (input_queue, _output_queue) = self.get_or_insert_queues(&request.receiver);
-        input_queue.try_reserve_response_slot(&request)?;
+        input_queue.try_reserve_response_slot()?;
         self.queue_stats
             .on_push_request(&request, Context::Outbound);
         debug_assert!(self.stats_ok());
@@ -992,7 +986,10 @@ impl CanisterQueues {
     /// by writing `debug_assert!(self.stats_ok())`.
     fn stats_ok(&self) -> bool {
         debug_assert_eq!(
-            Self::calculate_queue_stats(&self.canister_queues),
+            Self::calculate_queue_stats(
+                &self.canister_queues,
+                self.queue_stats.guaranteed_response_memory_reservations
+            ),
             self.queue_stats
         );
         true
@@ -1035,27 +1032,20 @@ impl CanisterQueues {
     }
 
     /// Computes stats for the given canister queues. Used when deserializing and in
-    /// `debug_assert!()` checks.
+    /// `debug_assert!()` checks. Takes the number of memory reservations from the
+    /// caller, as the queues have no need to track memory reservations, so it
+    /// cannot be computed.
     ///
     /// Time complexity: `O(canister_queues.len())`.
     fn calculate_queue_stats(
         canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
+        guaranteed_response_memory_reservations: usize,
     ) -> QueueStats {
-        let (
-            guaranteed_response_memory_reservations,
-            input_queues_reserved_slots,
-            output_queues_reserved_slots,
-        ) = canister_queues
+        let (input_queues_reserved_slots, output_queues_reserved_slots) = canister_queues
             .values()
-            .map(|(iq, oq)| {
-                (
-                    iq.response_memory_reservations() + oq.response_memory_reservations(),
-                    iq.reserved_slots(),
-                    oq.reserved_slots(),
-                )
-            })
-            .fold((0, 0, 0), |(acc0, acc1, acc2), (item0, item1, item2)| {
-                (acc0 + item0, acc1 + item1, acc2 + item2)
+            .map(|(iq, oq)| (iq.reserved_slots(), oq.reserved_slots()))
+            .fold((0, 0), |(acc0, acc1), (item0, item1)| {
+                (acc0 + item0, acc1 + item1)
             });
         QueueStats {
             guaranteed_response_memory_reservations,
@@ -1247,6 +1237,10 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
                 .iter()
                 .map(|canid| pb_types::CanisterId::from(*canid))
                 .collect(),
+            guaranteed_response_memory_reservations: item
+                .queue_stats
+                .guaranteed_response_memory_reservations
+                as u64,
         }
     }
 }
@@ -1283,7 +1277,10 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
         }
         // let pool = item.pool.unwrap_or_default().try_into()?;
         let pool = Default::default();
-        let queue_stats = Self::calculate_queue_stats(&canister_queues);
+        let queue_stats = Self::calculate_queue_stats(
+            &canister_queues,
+            item.guaranteed_response_memory_reservations as usize,
+        );
 
         let next_input_queue = NextInputQueue::from(
             ProtoNextInputQueue::try_from(item.next_input_queue).unwrap_or_default(),
@@ -1333,6 +1330,11 @@ struct QueueStats {
     ///
     /// Note that this is different from slots reserved for responses (whether
     /// best effort or guaranteed), which are used to implement backpressure.
+    ///
+    /// This is a counter maintained by `CanisterQueues` / `QueueStats`, but not
+    /// computed from the queues themselves. Rather, it is validated against the
+    /// number of unresponded guaranteed response callbacks and call contexts in the
+    /// `CallContextManager`.
     guaranteed_response_memory_reservations: usize,
 
     /// Count of slots reserved in input queues. Note that this is different from
@@ -1391,7 +1393,9 @@ impl QueueStats {
         // If pushing a guaranteed response, consume a memory reservation.
         if response.deadline == NO_DEADLINE {
             debug_assert!(self.guaranteed_response_memory_reservations > 0);
-            self.guaranteed_response_memory_reservations -= 1;
+            self.guaranteed_response_memory_reservations = self
+                .guaranteed_response_memory_reservations
+                .saturating_sub(1);
         }
 
         if context == Context::Inbound {

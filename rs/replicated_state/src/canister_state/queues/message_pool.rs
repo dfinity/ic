@@ -336,24 +336,6 @@ impl MessagePool {
         id
     }
 
-    /// Retrieves the request with the given `MessageId`.
-    ///
-    /// Panics if the provided ID was generated for a `Response`.
-    pub(crate) fn get_request(&self, id: MessageId) -> Option<&RequestOrResponse> {
-        assert_eq!(Kind::Request, id.kind());
-
-        self.messages.get(&id)
-    }
-
-    /// Retrieves the response with the given `MessageId`.
-    ///
-    /// Panics if the provided ID was generated for a `Request`.
-    pub(crate) fn get_response(&self, id: MessageId) -> Option<&RequestOrResponse> {
-        assert_eq!(Kind::Response, id.kind());
-
-        self.messages.get(&id)
-    }
-
     /// Retrieves the message with the given `MessageId`.
     pub(crate) fn get(&self, id: MessageId) -> Option<&RequestOrResponse> {
         self.messages.get(&id)
@@ -364,6 +346,11 @@ impl MessagePool {
     /// Updates the stats; and updates the priority queues, if necessary.
     pub(crate) fn take(&mut self, id: MessageId) -> Option<RequestOrResponse> {
         let msg = self.messages.remove(&id)?;
+        // Sanity check.
+        debug_assert_eq!(
+            (id.class(), id.kind()),
+            (Class::from(&msg), Kind::from(&msg))
+        );
 
         self.message_stats -= MessageStats::stats_delta(&msg, id.context());
         debug_assert_eq!(

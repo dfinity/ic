@@ -218,6 +218,9 @@ pub mod message_pool {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterQueue {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterQueues {
     #[prost(message, repeated, tag = "2")]
     pub ingress_queue: ::prost::alloc::vec::Vec<super::super::ingress::v1::Ingress>,
@@ -240,6 +243,8 @@ pub struct CanisterQueues {
     #[prost(message, repeated, tag = "8")]
     pub remote_subnet_input_schedule:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
+    #[prost(uint64, tag = "10")]
+    pub guaranteed_response_memory_reservations: u64,
 }
 /// Nested message and enum types in `CanisterQueues`.
 pub mod canister_queues {
