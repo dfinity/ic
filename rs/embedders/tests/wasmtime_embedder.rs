@@ -579,8 +579,8 @@ fn read_before_write_stats() {
         .run(FuncRef::Method(WasmMethod::Update("write".to_string())))
         .unwrap();
     let stats = instance.get_stats();
-    assert_eq!(stats.direct_write_count, 1);
-    assert_eq!(stats.read_before_write_count, 0);
+    assert_eq!(stats.wasm_direct_write_count, 1);
+    assert_eq!(stats.wasm_read_before_write_count, 0);
 
     // This wasm does a read then write to page 0.
     let read_then_write_wat = r#"
@@ -607,8 +607,8 @@ fn read_before_write_stats() {
         .run(FuncRef::Method(WasmMethod::Update("write".to_string())))
         .unwrap();
     let stats = instance.get_stats();
-    assert_eq!(stats.direct_write_count, 0);
-    assert_eq!(stats.read_before_write_count, 1);
+    assert_eq!(stats.wasm_direct_write_count, 0);
+    assert_eq!(stats.wasm_read_before_write_count, 1);
 }
 
 #[test]
@@ -919,7 +919,7 @@ fn multiple_stable_write() {
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap();
     // one dirty heap page and 13 stable
-    assert_eq!(instance.get_stats().dirty_pages, 1 + 13);
+    assert_eq!(instance.get_stats().dirty_pages(), 1 + 13);
 }
 
 #[test]
@@ -967,7 +967,7 @@ fn multiple_stable64_write() {
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap();
     // one dirty heap page and 13 stable
-    assert_eq!(instance.get_stats().dirty_pages, 1 + 13);
+    assert_eq!(instance.get_stats().dirty_pages(), 1 + 13);
 }
 
 #[test]
