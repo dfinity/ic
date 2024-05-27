@@ -78,7 +78,7 @@ dependencies = [
  "language-tags",
  "local-channel",
  "mime",
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "pin-project-lite",
  "rand 0.8.5",
  "sha1",
@@ -464,7 +464,7 @@ dependencies = [
  "askama_escape",
  "humansize",
  "num-traits",
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "serde",
  "serde_json",
 ]
@@ -740,7 +740,7 @@ dependencies = [
  "matchit",
  "memchr",
  "mime",
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "pin-project-lite",
  "rustversion",
  "serde",
@@ -774,7 +774,7 @@ dependencies = [
  "matchit",
  "memchr",
  "mime",
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "pin-project-lite",
  "rustversion",
  "serde",
@@ -2026,24 +2026,20 @@ dependencies = [
 
 [[package]]
 name = "cloudflare"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28a69d53c61ddd5611ad0203c60aa02074d67f91bfb98db2225833f6bdc2f1a4"
+version = "0.11.0"
+source = "git+https://github.com/blind-oracle/cloudflare-rs.git?rev=386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc#386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc"
 dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.13.1",
- "cfg-if 0.1.10",
  "chrono",
  "http 0.2.9",
- "percent-encoding 1.0.1",
+ "percent-encoding",
  "reqwest 0.11.27",
  "serde",
  "serde_json",
- "serde_qs 0.4.6",
- "serde_with",
+ "serde_urlencoded",
+ "serde_with 2.3.3",
+ "thiserror",
  "url",
- "uuid 0.8.2",
+ "uuid",
 ]
 
 [[package]]
@@ -2185,7 +2181,7 @@ version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e859cd57d0710d9e06c381b550c06e76992472a8c6d527aecd2fc673dcc231fb"
 dependencies = [
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "time",
  "version_check",
 ]
@@ -2762,7 +2758,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef552e6f588e446098f6ba40d89ac146c8c7b64aade83c051ee00bb5d2bc18d"
 dependencies = [
- "uuid 1.5.0",
+ "uuid",
 ]
 
 [[package]]
@@ -2810,6 +2806,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b42b6fa04a440b495c8b04d0e71b707c585f83cb9cb28cf8cd0d976c315e31b4"
 dependencies = [
  "powerfmt",
+ "serde",
 ]
 
 [[package]]
@@ -3151,7 +3148,7 @@ dependencies = [
  "serde_cbor",
  "serde_derive",
  "serde_json",
- "serde_with",
+ "serde_with 1.14.0",
  "serde_yaml 0.9.30",
  "sha2 0.10.8",
  "sha2 0.9.9",
@@ -3214,7 +3211,7 @@ dependencies = [
  "trust-dns-resolver",
  "turmoil",
  "url",
- "uuid 1.5.0",
+ "uuid",
  "vsock",
  "walkdir",
  "walrus 0.19.0",
@@ -3566,7 +3563,6 @@ version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d2f06b9cac1506ece98fe3231e3cc9c4410ec3d5b1f24ae1c8946f0742cdefc"
 dependencies = [
- "backtrace",
  "version_check",
 ]
 
@@ -3878,7 +3874,7 @@ version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a62bc1cf6f830c2ec14a513a9fb124d0a213a629668a4186f329db21fe045652"
 dependencies = [
- "percent-encoding 2.3.0",
+ "percent-encoding",
 ]
 
 [[package]]
@@ -5367,6 +5363,7 @@ checksum = "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
 dependencies = [
  "autocfg 1.1.0",
  "hashbrown 0.12.3",
+ "serde",
 ]
 
 [[package]]
@@ -6678,7 +6675,7 @@ dependencies = [
  "tagptr",
  "thiserror",
  "triomphe",
- "uuid 1.5.0",
+ "uuid",
 ]
 
 [[package]]
@@ -7289,7 +7286,7 @@ dependencies = [
  "futures-util",
  "once_cell",
  "opentelemetry_api 0.18.0",
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "rand 0.8.5",
  "thiserror",
 ]
@@ -7308,7 +7305,7 @@ dependencies = [
  "once_cell",
  "opentelemetry_api 0.20.0",
  "ordered-float 3.7.0",
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "rand 0.8.5",
  "regex",
  "thiserror",
@@ -7329,7 +7326,7 @@ dependencies = [
  "once_cell",
  "opentelemetry 0.21.0",
  "ordered-float 4.2.0",
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "rand 0.8.5",
  "thiserror",
  "tokio",
@@ -7582,12 +7579,6 @@ checksum = "88b39c9bfcfc231068454382784bb460aae594343fb030d46e9f50a645418412"
 dependencies = [
  "base64ct",
 ]
-
-[[package]]
-name = "percent-encoding"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31010dd2e1ac33d5b46a5b413495239882813e0369f8ed8a5e266f173602f831"
 
 [[package]]
 name = "percent-encoding"
@@ -8855,7 +8846,7 @@ dependencies = [
  "mime",
  "mime_guess",
  "once_cell",
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "pin-project-lite",
  "rustls 0.21.12",
  "rustls-pemfile 1.0.3",
@@ -8901,7 +8892,7 @@ dependencies = [
  "log",
  "mime",
  "once_cell",
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "pin-project-lite",
  "rustls 0.22.2",
  "rustls-native-certs 0.7.0",
@@ -9011,7 +9002,7 @@ dependencies = [
  "rkyv_derive",
  "seahash",
  "tinyvec",
- "uuid 1.5.0",
+ "uuid",
 ]
 
 [[package]]
@@ -9808,23 +9799,11 @@ dependencies = [
 
 [[package]]
 name = "serde_qs"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35965fa1d2413717053d67c2df1f5c3e1763fbf77200ea7e767523707bd5a0af"
-dependencies = [
- "data-encoding",
- "error-chain",
- "percent-encoding 1.0.1",
- "serde",
-]
-
-[[package]]
-name = "serde_qs"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7715380eec75f029a4ef7de39a9200e0a63823176b759d055b613f5a87df6a6"
 dependencies = [
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "serde",
  "thiserror",
 ]
@@ -9837,7 +9816,7 @@ checksum = "0431a35568651e363364210c91983c1da5eb29404d9f0928b67d4ebcfa7d330c"
 dependencies = [
  "axum 0.6.20",
  "futures",
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "serde",
  "thiserror",
 ]
@@ -9883,7 +9862,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "678b5a069e50bf00ecd22d0cd8ddf7c236f68581b03db652061ed5eb13a312ff"
 dependencies = [
  "serde",
- "serde_with_macros",
+ "serde_with_macros 1.5.2",
+]
+
+[[package]]
+name = "serde_with"
+version = "2.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07ff71d2c147a7b57362cead5e22f772cd52f6ab31cfcd9edcd7f6aeb2a0afbe"
+dependencies = [
+ "base64 0.13.1",
+ "chrono",
+ "hex",
+ "indexmap 1.9.3",
+ "serde",
+ "serde_json",
+ "serde_with_macros 2.3.3",
+ "time",
 ]
 
 [[package]]
@@ -9896,6 +9891,18 @@ dependencies = [
  "proc-macro2 1.0.76",
  "quote 1.0.35",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "serde_with_macros"
+version = "2.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "881b6f881b17d13214e5d494c939ebab463d01264ce1811e9d4ac3a882e7695f"
+dependencies = [
+ "darling 0.20.3",
+ "proc-macro2 1.0.76",
+ "quote 1.0.35",
+ "syn 2.0.48",
 ]
 
 [[package]]
@@ -10498,7 +10505,7 @@ dependencies = [
  "debugid",
  "memmap2",
  "stable_deref_trait",
- "uuid 1.5.0",
+ "uuid",
 ]
 
 [[package]]
@@ -11096,7 +11103,7 @@ dependencies = [
  "http-body 0.4.5",
  "hyper 0.14.27",
  "hyper-timeout",
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "pin-project",
  "prost 0.11.9",
  "tokio",
@@ -11123,7 +11130,7 @@ dependencies = [
  "http-body 0.4.5",
  "hyper 0.14.27",
  "hyper-timeout",
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "pin-project",
  "prost 0.12.2",
  "tokio",
@@ -11191,7 +11198,7 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
- "uuid 1.5.0",
+ "uuid",
 ]
 
 [[package]]
@@ -11214,7 +11221,7 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
- "uuid 1.5.0",
+ "uuid",
 ]
 
 [[package]]
@@ -11695,7 +11702,7 @@ checksum = "143b538f18257fac9cad154828a57c6bf5157e1aa604d4816b5995bf6de87ae5"
 dependencies = [
  "form_urlencoded",
  "idna 0.4.0",
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "serde",
 ]
 
@@ -11722,16 +11729,6 @@ name = "utf8parse"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
-
-[[package]]
-name = "uuid"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
-dependencies = [
- "getrandom 0.2.10",
- "serde",
-]
 
 [[package]]
 name = "uuid"
@@ -11869,7 +11866,7 @@ dependencies = [
  "mime",
  "mime_guess",
  "multer",
- "percent-encoding 2.3.0",
+ "percent-encoding",
  "pin-project",
  "rustls-pemfile 1.0.3",
  "scoped-tls",
