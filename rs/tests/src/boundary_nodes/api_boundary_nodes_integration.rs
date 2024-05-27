@@ -65,11 +65,11 @@ use ic_agent::{
     Agent,
 };
 
-use slog::{debug, error, info};
+use slog::{debug, info};
 const CANISTER_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
 const CANISTER_RETRY_BACKOFF: Duration = Duration::from_secs(2);
 const API_BN_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(90);
-const ROUTE_CALL_INTERVAL: Duration = Duration::from_secs(1);
+const ROUTE_CALL_INTERVAL: Duration = Duration::from_secs(5);
 
 /* tag::catalog[]
 Title:: API Boundary Nodes Decentralization
@@ -655,26 +655,38 @@ async fn assert_routing_via_domains(
     if domains.is_empty() {
         panic!("Expected routing domains can't be empty");
     }
-    info!(log, "Assert: domains {domains:?} are all used for routing");
-    let mut unrouted_domains: HashSet<&str> = HashSet::from_iter(domains.into_iter());
+
+    info!(log, "Assert: only domains {domains:?} are used for routing");
+
+    let expected_domains = HashSet::from_iter(domains.into_iter().map(|d| d.to_string()));
+    let route_calls = 30;
     let start = Instant::now();
-    while !unrouted_domains.is_empty() {
-        let domain = match route_provider.route() {
-            Ok(url) => url.domain().expect("no domain name in url").to_string(),
-            Err(err) => {
-                error!(log, "Failed to get routing url: {err:?}");
-                sleep(route_call_interval).await;
-                continue;
-            }
-        };
-        if unrouted_domains.remove(domain.as_str()) {
-            debug!(log, "domain {domain} was discovered for routing");
-        } else {
-            debug!(log, "domain {domain} has already appeared in routing");
+
+    while start.elapsed() < timeout {
+        let routed_domains = (0..route_calls)
+            .map(|_| {
+                route_provider.route().map(|url| {
+                    let domain = url.domain().expect("no domain name in url");
+                    domain.to_string()
+                })
+            })
+            .collect::<Result<HashSet<String>, _>>()
+            .unwrap_or_default();
+
+        if expected_domains == routed_domains {
+            info!(
+                log,
+                "All expected domains {expected_domains:?} used for routing"
+            );
+            return;
         }
-        if start.elapsed() > timeout {
-            panic!("The following domains {unrouted_domains:?} didn't appear in routing within the timeout of {timeout:?}");
-        }
+
+        debug!(
+            log,
+            "Actual routed domains {routed_domains:?} are not equal to expected {expected_domains:?}"
+        );
+
         sleep(route_call_interval).await;
     }
+    panic!("Expected routes {expected_domains:?} were not observed over {route_calls} consecutive routing calls");
 }
