@@ -3,7 +3,7 @@ use super::CanisterId;
 use hex::decode;
 use ic_execution_environment::execution::upgrade::ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION;
 use ic_management_canister_types::{
-    self as ic00, CanisterInstallModeV2, CanisterUpgradeOptions, Payload, WasmMemoryPersistence,
+    CanisterInstallModeV2, CanisterUpgradeOptions, WasmMemoryPersistence,
 };
 use ic_types::{
     messages::{SignedIngress, UserQuery},
@@ -20,11 +20,27 @@ use std::{
 };
 
 #[derive(Debug, PartialEq)]
+pub(crate) enum CanisterInstallMode {
+    Install,
+    Reinstall,
+    Upgrade,
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct CanisterInstallArgs {
+    pub canister_id: CanisterId,
+    pub wasm_module: Vec<u8>,
+    pub arg: Vec<u8>,
+    pub sender: PrincipalId,
+    pub mode: CanisterInstallModeV2,
+}
+
+#[derive(Debug, PartialEq)]
 pub(crate) enum Message {
     Ingress(SignedIngress),
     Query(UserQuery),
-    Install(SignedIngress),
-    Create(SignedIngress),
+    Install(CanisterInstallArgs),
+    Create,
 }
 
 #[derive(Debug)]
@@ -177,16 +193,25 @@ fn parse_message(s: &str, nonce: u64) -> Result<Message, String> {
             ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
             nonce: Some(nonce.to_le_bytes().to_vec()),
         })),
-        ["create"] => parse_create(nonce),
-        ["install", canister_id, wasm_file, payload] => {
-            parse_install(nonce, canister_id, payload, wasm_file, "install")
-        }
-        ["reinstall", canister_id, wasm_file, payload] => {
-            parse_install(nonce, canister_id, payload, wasm_file, "reinstall")
-        }
-        ["upgrade", canister_id, wasm_file, payload] => {
-            parse_install(nonce, canister_id, payload, wasm_file, "upgrade")
-        }
+        ["create"] => parse_create(),
+        ["install", canister_id, wasm_file, payload] => parse_install(
+            canister_id,
+            payload,
+            wasm_file,
+            CanisterInstallMode::Install,
+        ),
+        ["reinstall", canister_id, wasm_file, payload] => parse_install(
+            canister_id,
+            payload,
+            wasm_file,
+            CanisterInstallMode::Reinstall,
+        ),
+        ["upgrade", canister_id, wasm_file, payload] => parse_install(
+            canister_id,
+            payload,
+            wasm_file,
+            CanisterInstallMode::Upgrade,
+        ),
         _ => Err(format!(
             "Failed to parse line {}, don't have a pattern to match this with",
             s
@@ -205,17 +230,8 @@ fn parse_canister_id(canister_id: &str) -> Result<CanisterId, String> {
     }
 }
 
-fn parse_create(nonce: u64) -> Result<Message, String> {
-    use ic_test_utilities_types::messages::SignedIngressBuilder;
-
-    let signed_ingress = SignedIngressBuilder::new()
-        .method_name(ic00::Method::ProvisionalCreateCanisterWithCycles)
-        .canister_id(ic00::IC_00)
-        .method_payload(ic00::ProvisionalCreateCanisterWithCyclesArgs::new(None, None).encode())
-        .nonce(nonce)
-        .build();
-
-    Ok(Message::Create(signed_ingress))
+fn parse_create() -> Result<Message, String> {
+    Ok(Message::Create)
 }
 
 fn contains_icp_private_custom_section(wasm_binary: &[u8], name: &str) -> Result<bool, String> {
@@ -234,14 +250,11 @@ fn contains_icp_private_custom_section(wasm_binary: &[u8], name: &str) -> Result
 }
 
 fn parse_install(
-    nonce: u64,
     canister_id: &str,
     payload: &str,
     wasm_file: &str,
-    mode: &str,
+    mode: CanisterInstallMode,
 ) -> Result<Message, String> {
-    use ic_test_utilities_types::messages::SignedIngressBuilder;
-
     let mut wasm_data = Vec::new();
     let mut wasm_file = File::open(wasm_file)
         .map_err(|e| format!("Could not open wasm file: {} - Error: {}", wasm_file, e))?;
@@ -253,9 +266,9 @@ fn parse_install(
     let payload = parse_octet_string(payload)?;
 
     let install_mode = match mode {
-        "install" => CanisterInstallModeV2::Install,
-        "reinstall" => CanisterInstallModeV2::Reinstall,
-        "upgrade" => {
+        CanisterInstallMode::Install => CanisterInstallModeV2::Install,
+        CanisterInstallMode::Reinstall => CanisterInstallModeV2::Reinstall,
+        CanisterInstallMode::Upgrade => {
             let wasm_memory_persistence = if contains_icp_private_custom_section(
                 wasm_data.as_ref(),
                 ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION,
@@ -269,30 +282,15 @@ fn parse_install(
                 wasm_memory_persistence,
             }))
         }
-        _ => {
-            return Err(String::from("Unsupported install mode: {mode}"));
-        }
     };
 
-    let signed_ingress = SignedIngressBuilder::new()
-        // `source` should become a self-authenticating id according
-        // to https://internetcomputer.org/docs/current/references/ic-interface-spec#id-classes
-        .canister_id(ic00::IC_00)
-        .method_name(ic00::Method::InstallCode)
-        .method_payload(
-            ic00::InstallCodeArgsV2::new(
-                install_mode,
-                canister_id,
-                wasm_data,
-                payload,
-                None,
-                Some(8 * 1024 * 1024 * 1024), // drun users dont care about memory limits
-            )
-            .encode(),
-        )
-        .nonce(nonce)
-        .build();
-    Ok(Message::Install(signed_ingress))
+    Ok(Message::Install(CanisterInstallArgs {
+        canister_id,
+        wasm_module: wasm_data,
+        arg: payload,
+        sender: PrincipalId::new_anonymous(),
+        mode: install_mode,
+    }))
 }
 
 fn validate_method_name(method_name: &str) -> Result<String, String> {

@@ -1,42 +1,22 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/canister_sandbox:backend_lib",
-    "//rs/config",
-    "//rs/crypto/test_utils/ni-dkg",
-    "//rs/cycles_account_manager",
+    "//packages/pocket-ic",
     "//rs/execution_environment",
-    "//rs/http_endpoints/metrics",
     "//rs/interfaces",
-    "//rs/interfaces/state_manager",
-    "//rs/messaging",
-    "//rs/monitoring/metrics",
-    "//rs/protobuf",
-    "//rs/registry/client",
-    "//rs/registry/keys",
-    "//rs/registry/proto_data_provider",
-    "//rs/registry/provisional_whitelist",
-    "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
-    "//rs/state_machine_tests",
-    "//rs/state_manager",
-    "//rs/test_utilities/consensus",
-    "//rs/test_utilities/registry",
     "//rs/test_utilities/types",
-    "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:futures",
     "@crate_index//:hex",
-    "@crate_index//:slog",
-    "@crate_index//:slog-term",
+    "@crate_index//:tempfile",
     "@crate_index//:tokio",
-    "@crate_index//:tower",
-    "@crate_index//:rand",
     "@crate_index//:wasmparser",
+    "@crate_index//:wat",
 ]
 
 rust_library(
@@ -58,5 +38,22 @@ rust_binary(
 rust_test(
     name = "drun_test",
     crate = ":drun_lib",
+    deps = DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "integration_tests",
+    size = "medium",
+    srcs = glob(["tests/**/*.rs"]),
+    data = [
+        "//rs/drun:drun",
+        "//rs/pocket_ic_server:pocket-ic-server",
+    ],
+    env = {
+        "DRUN_BIN": "$(rootpath //rs/drun:drun)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    },
+    flaky = False,
+    tags = ["cpu:4"],
     deps = DEPENDENCIES,
 )

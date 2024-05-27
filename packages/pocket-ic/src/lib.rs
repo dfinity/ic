@@ -1478,6 +1478,14 @@ pub enum WasmResult {
 
 /// Attempt to start a new PocketIC server if it's not already running.
 pub fn start_or_reuse_server() -> Url {
+    start_or_reuse_server_with_redirects(None, None)
+}
+
+/// Attempt to start a new PocketIC server if it's not already running.
+pub fn start_or_reuse_server_with_redirects(
+    stdout: Option<std::process::Stdio>,
+    stderr: Option<std::process::Stdio>,
+) -> Url {
     let bin_path = match std::env::var_os("POCKET_IC_BIN") {
         None => "./pocket-ic".to_string(),
         Some(path) => path
@@ -1504,6 +1512,12 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
         cmd.stdout(std::process::Stdio::null());
         cmd.stderr(std::process::Stdio::null());
+    }
+    if let Some(stdout) = stdout {
+        cmd.stdout(stdout);
+    }
+    if let Some(stderr) = stderr {
+        cmd.stderr(stderr);
     }
     cmd.spawn().expect("Failed to start PocketIC binary");
 
