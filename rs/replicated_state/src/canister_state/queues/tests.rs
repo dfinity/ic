@@ -849,9 +849,9 @@ fn test_output_into_iter() {
     assert!(queues.pool.len() == 0);
 }
 
-/// Tests that an encode-decode roundtrip yields a result equal to the
-/// original (and the queue size metrics of an organically constructed
-/// `CanisterQueues` match those of a deserialized one).
+/// Tests that an encode-decode roundtrip yields a result equal to the original
+/// (and that the stats of an organically constructed `CanisterQueues` match
+/// those of a deserialized one).
 #[test]
 fn encode_roundtrip() {
     let mut queues = CanisterQueues::default();

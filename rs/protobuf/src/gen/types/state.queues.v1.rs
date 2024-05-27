@@ -195,18 +195,17 @@ pub struct MessagePool {
     /// Map of messages by message ID.
     #[prost(message, repeated, tag = "1")]
     pub messages: ::prost::alloc::vec::Vec<message_pool::Entry>,
-    /// Message deadlines, if non-zero. May contain stale entries.
+    /// The (implicit) deadlines of all outbound guaranteed response requests (only).
     #[prost(message, repeated, tag = "2")]
-    pub message_deadlines: ::prost::alloc::vec::Vec<message_pool::MessageDeadline>,
-    /// Message sizes, for best-effort messages only. May contain stale entries.
-    #[prost(message, repeated, tag = "3")]
-    pub message_sizes: ::prost::alloc::vec::Vec<message_pool::MessageSize>,
+    pub outbound_guaranteed_request_deadlines:
+        ::prost::alloc::vec::Vec<message_pool::MessageDeadline>,
     /// Monotonically increasing counter used to generate unique message IDs.
-    #[prost(uint64, tag = "4")]
+    #[prost(uint64, tag = "3")]
     pub message_id_generator: u64,
 }
 /// Nested message and enum types in `MessagePool`.
 pub mod message_pool {
+    /// A pool entry: a message keyed by its ID.
     #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
@@ -216,23 +215,18 @@ pub mod message_pool {
         #[prost(message, optional, tag = "2")]
         pub message: ::core::option::Option<super::RequestOrResponse>,
     }
+    /// A message deadline.
+    ///
+    /// Recorded explicitly for outbound guaranteed response requests only.
+    /// Best-effort messages have explicit deadlines.
     #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct MessageDeadline {
-        #[prost(uint32, tag = "1")]
-        pub deadline_seconds: u32,
-        #[prost(uint64, tag = "2")]
-        pub message_id: u64,
-    }
-    #[derive(serde::Serialize, serde::Deserialize)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct MessageSize {
         #[prost(uint64, tag = "1")]
-        pub size_bytes: u64,
-        #[prost(uint64, tag = "2")]
         pub message_id: u64,
+        #[prost(uint32, tag = "2")]
+        pub deadline_seconds: u32,
     }
 }
 #[derive(serde::Serialize, serde::Deserialize)]

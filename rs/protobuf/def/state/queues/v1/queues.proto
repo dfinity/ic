@@ -117,27 +117,26 @@ message QueueEntry {
 
 // A pool holding all of a canister's incoming and outgoing canister messages.
 message MessagePool {
+  // A pool entry: a message keyed by its ID.
   message Entry {
     uint64 message_id = 1;
     RequestOrResponse message = 2;
   }
+  // A message deadline.
+  //
+  // Recorded explicitly for outbound guaranteed response requests only.
+  // Best-effort messages have explicit deadlines.
   message MessageDeadline {
-    uint32 deadline_seconds = 1;
-    uint64 message_id = 2;
-  }
-  message MessageSize {
-    uint64 size_bytes = 1;
-    uint64 message_id = 2;
+    uint64 message_id = 1;
+    uint32 deadline_seconds = 2;
   }
 
   // Map of messages by message ID.
   repeated Entry messages = 1;
-  // Message deadlines, if non-zero. May contain stale entries.
-  repeated MessageDeadline message_deadlines = 2;
-  // Message sizes, for best-effort messages only. May contain stale entries.
-  repeated MessageSize message_sizes = 3;
+  // The (implicit) deadlines of all outbound guaranteed response requests (only).
+  repeated MessageDeadline outbound_guaranteed_request_deadlines = 2;
   // Monotonically increasing counter used to generate unique message IDs.
-  uint64 message_id_generator = 4;
+  uint64 message_id_generator = 3;
 }
 
 message CanisterQueues {

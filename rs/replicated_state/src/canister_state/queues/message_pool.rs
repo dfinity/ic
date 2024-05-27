@@ -8,8 +8,7 @@ use ic_types::messages::{
 };
 use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Time};
-use std::cmp::Reverse;
-use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
 use std::time::Duration;
@@ -151,25 +150,27 @@ impl ResponsePlaceholder {
 /// All pool operations except `expire_messages()` and
 /// `calculate_message_stats()` (only called during deserialization) execute in
 /// at most `O(log(N))` time.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MessagePool {
     /// Pool contents.
     messages: BTreeMap<MessageId, RequestOrResponse>,
 
+    /// Records the (implicit) deadlines of all the outbound guaranteed response
+    /// requests (only).
+    outbound_guaranteed_request_deadlines: BTreeMap<MessageId, CoarseTime>,
+
     /// Running message stats for the pool.
     message_stats: MessageStats,
 
-    /// Deadline priority queue, earliest deadlines first.
+    /// Deadline priority queue.
     ///
-    /// Message IDs break ties, ensuring deterministic representation across
-    /// replicas.
-    deadline_queue: BinaryHeap<(Reverse<CoarseTime>, MessageId)>,
+    /// Message IDs break ties, ensuring deterministic ordering.
+    deadline_queue: BTreeSet<(CoarseTime, MessageId)>,
 
-    /// Load shedding priority queue: largest message first.
+    /// Load shedding priority queue.
     ///
-    /// Message IDs break ties, ensuring deterministic representation across
-    /// replicas.
-    size_queue: BinaryHeap<(usize, MessageId)>,
+    /// Message IDs break ties, ensuring deterministic ordering.
+    size_queue: BTreeSet<(usize, MessageId)>,
 
     /// A monotonically increasing counter used to generate unique message IDs.
     message_id_generator: u64,
@@ -250,10 +251,11 @@ impl MessagePool {
         deadline: CoarseTime,
         context: Context,
     ) -> MessageId {
-        let id = self.next_message_id(Kind::from(&msg), context, Class::from(&msg));
+        let kind = Kind::from(&msg);
+        let class = Class::from(&msg);
+        let id = self.next_message_id(kind, context, class);
 
         let size_bytes = msg.count_bytes();
-        let is_best_effort = msg.is_best_effort();
 
         // Update message stats.
         self.message_stats += MessageStats::stats_delta(&msg, context);
@@ -267,12 +269,20 @@ impl MessagePool {
 
         // Record in deadline queue iff a deadline was provided.
         if deadline != NO_DEADLINE {
-            self.deadline_queue.push((Reverse(deadline), id));
+            self.deadline_queue.insert((deadline, id));
+
+            // And in the outbound guaranteed response deadline map, iff it's an outbound
+            // guaranteed response request.
+            if class == Class::GuaranteedResponse {
+                debug_assert_eq!((Context::Outbound, Kind::Request), (context, kind));
+                self.outbound_guaranteed_request_deadlines
+                    .insert(id, deadline);
+            }
         }
 
         // Record in load shedding queue iff it's a best-effort message.
-        if is_best_effort {
-            self.size_queue.push((size_bytes, id));
+        if class == Class::BestEffort {
+            self.size_queue.insert((size_bytes, id));
         }
 
         id
@@ -316,7 +326,7 @@ impl MessagePool {
         );
 
         // Record in load shedding queue only.
-        self.size_queue.push((size_bytes, id));
+        self.size_queue.insert((size_bytes, id));
     }
 
     /// Reserves and returns a new message ID.
@@ -351,7 +361,7 @@ impl MessagePool {
 
     /// Removes the message with the given `MessageId` from the pool.
     ///
-    /// Updates the stats; and prunes the priority queues if necessary.
+    /// Updates the stats; and updates the priority queues, if necessary.
     pub(crate) fn take(&mut self, id: MessageId) -> Option<RequestOrResponse> {
         let msg = self.messages.remove(&id)?;
 
@@ -361,21 +371,45 @@ impl MessagePool {
             self.message_stats
         );
 
-        self.maybe_trim_queues();
+        use Class::*;
+        use Context::*;
+        use Kind::*;
+        match (id.context(), id.class(), id.kind()) {
+            // Outbound guaranteed response requests have (separately recorded) deadlines.
+            (Outbound, GuaranteedResponse, Request) => {
+                let deadline = self
+                    .outbound_guaranteed_request_deadlines
+                    .remove(&id)
+                    .unwrap();
+                self.deadline_queue.remove(&(deadline, id));
+            }
+
+            // All other guaranteed response messages neither expire nor can be shed.
+            (_, GuaranteedResponse, _) => {}
+
+            // Inbound best-effort responses don't expire, but can be shed.
+            (Inbound, BestEffort, Response) => {
+                self.size_queue.remove(&(msg.count_bytes(), id));
+            }
+
+            // All other best-effort messages are enqueued in both priority queues.
+            (_, BestEffort, _) => {
+                self.size_queue.remove(&(msg.count_bytes(), id));
+                self.deadline_queue.remove(&(msg.deadline(), id));
+            }
+        }
+        debug_assert_eq!(Ok(()), self.check_invariants());
 
         Some(msg)
     }
 
-    /// Queries whether the deadline at the head of the deadline queue has expired.
+    /// Queries whether any message's deadline has expired.
     ///
-    /// This is a fast check, but it may produce false positives if the message at
-    /// the head of the deadline queue has already been removed from the pool.
-    ///
-    /// Time complexity: `O(1)`.
+    /// Time complexity: `O(log(self.len()))`.
     pub(crate) fn has_expired_deadlines(&self, now: Time) -> bool {
-        if let Some((deadline, _)) = self.deadline_queue.peek() {
+        if let Some((deadline, _)) = self.deadline_queue.first() {
             let now = CoarseTime::floor(now);
-            if deadline.0 < now {
+            if *deadline < now {
                 return true;
             }
         }
@@ -385,7 +419,7 @@ impl MessagePool {
     /// Removes and returns all messages with expired deadlines (i.e. `deadline <
     /// now`).
     ///
-    /// Amortized time complexity per expired message: `O(log(n))`.
+    /// Time complexity per expired message: `O(log(self.len()))`.
     pub(crate) fn expire_messages(&mut self, now: Time) -> Vec<(MessageId, RequestOrResponse)> {
         if self.deadline_queue.is_empty() {
             return Vec::new();
@@ -393,31 +427,26 @@ impl MessagePool {
 
         let now = CoarseTime::floor(now);
         let mut expired = Vec::new();
-        while let Some((deadline, id)) = self.deadline_queue.peek() {
-            if deadline.0 >= now {
+        while let Some((deadline, id)) = self.deadline_queue.first() {
+            if *deadline >= now {
                 break;
             }
             let id = *id;
 
             // Pop the deadline queue entry.
-            self.deadline_queue.pop();
+            self.deadline_queue.pop_first();
 
-            // Drop the message, if present.
-            if let Some(msg) = self.take(id) {
-                expired.push((id, msg))
-            }
+            // Drop the message.
+            expired.push((id, self.take(id).unwrap()));
         }
 
         expired
     }
 
-    /// Removes and returns the largest best-effort message in the pool.
+    /// Removes and returns the largest best-effort message in the pool, if any.
     pub(crate) fn shed_largest_message(&mut self) -> Option<(MessageId, RequestOrResponse)> {
-        // Keep trying until we actually drop a message.
-        while let Some((_, id)) = self.size_queue.pop() {
-            if let Some(msg) = self.take(id) {
-                return Some((id, msg));
-            }
+        if let Some((_, id)) = self.size_queue.pop_last() {
+            return Some((id, self.take(id).unwrap()));
         }
 
         // Nothing to shed.
@@ -434,27 +463,6 @@ impl MessagePool {
         &self.message_stats
     }
 
-    /// Prunes stale entries from the priority queues if they make up more than half
-    /// of the respective priority queue. This ensures amortized constant time for
-    /// the priority queues.
-    fn maybe_trim_queues(&mut self) {
-        let len = self.messages.len();
-
-        if len == 0 {
-            *self = MessagePool::default();
-            return;
-        }
-
-        if self.deadline_queue.len() > 2 * len + 2 {
-            self.deadline_queue
-                .retain(|&(_, id)| self.messages.contains_key(&id));
-        }
-        if self.size_queue.len() > 2 * len + 2 {
-            self.size_queue
-                .retain(|&(_, id)| self.messages.contains_key(&id));
-        }
-    }
-
     /// Computes message stats from scratch. Used when deserializing and in
     /// `debug_assert!()` checks.
     ///
@@ -467,20 +475,12 @@ impl MessagePool {
         stats
     }
 
+    /// Invariant check for use at loading time and in `debug_asserts`.
+    ///
+    /// Time complexity: `O(n * log(n))`.
     fn check_invariants(&self) -> Result<(), String> {
-        const OUTBOUND_GUARANTEED_REQUEST: u64 =
-            Context::Outbound as u64 | Class::GuaranteedResponse as u64 | Kind::Request as u64;
-        const MESSAGE_ID_FLAGS_MASK: u64 = Context::BIT | Class::BIT | Kind::BIT;
-
-        // To compare the largest seen `MessageId` against `message_id_generator`.
-        let mut max_message_id = 0;
-
-        // Collect all message IDs that should be present in the deadline / size queues.
-        let mut best_effort_messages = BTreeSet::new();
-        let mut messages_with_deadlines = BTreeSet::new();
-
+        // `MessageId` kind and class must match those of the message.
         self.messages.iter().try_for_each(|(id, msg)| {
-            // `MessageId` kind and class must match those of the message.
             if id.kind() != Kind::from(msg) {
                 return Err(format!(
                     "Message kind mismatch: message {:?}, MessageId {:?}",
@@ -495,20 +495,56 @@ impl MessagePool {
                     id.class()
                 ));
             }
-
-            // Collect all the relevant `MessageIds`.
-            max_message_id = max_message_id.max(id.0);
-            if id.class() == Class::BestEffort {
-                best_effort_messages.insert(id);
-                messages_with_deadlines.insert(id);
-            } else if id.0 & MESSAGE_ID_FLAGS_MASK == OUTBOUND_GUARANTEED_REQUEST {
-                messages_with_deadlines.insert(id);
-            }
-
             Ok(())
         })?;
 
-        // Validate `message_id_generator`.
+        // Validate the priority queues.
+        let (expected_deadline_queue, expected_size_queue) = Self::calculate_priority_queues(
+            &self.messages,
+            &self.outbound_guaranteed_request_deadlines,
+        );
+        if self.deadline_queue != expected_deadline_queue {
+            return Err(format!(
+                "Unexpected deadline queue: expected {:?}, actual {:?}",
+                expected_deadline_queue, self.deadline_queue
+            ));
+        }
+        if self.size_queue != expected_size_queue {
+            return Err(format!(
+                "Unexpected load shedding queue: expected {:?}, actual {:?}",
+                expected_size_queue, self.size_queue
+            ));
+        }
+
+        // Validate that `outbound_guaranteed_request_deadlines` holds all outbound
+        // guaranteed response requests (and nothing else).
+        let mut expected_outbound_guaranteed_request_ids = BTreeSet::new();
+        self.messages.keys().for_each(|id| {
+            if id.context() == Context::Outbound
+                && id.class() == Class::GuaranteedResponse
+                && id.kind() == Kind::Request
+            {
+                expected_outbound_guaranteed_request_ids.insert(id);
+            }
+        });
+        if self
+            .outbound_guaranteed_request_deadlines
+            .keys()
+            .collect::<BTreeSet<_>>()
+            != expected_outbound_guaranteed_request_ids
+        {
+            return Err(format!(
+                "Unexpected outbound guaranteed request deadlines: expected keys {:?}, actual {:?}",
+                expected_outbound_guaranteed_request_ids,
+                self.outbound_guaranteed_request_deadlines
+            ));
+        }
+
+        // Validate `message_id_generator` against the largest seen `MessageId`.
+        let mut max_message_id = 0;
+        self.messages.keys().for_each(|id| {
+            max_message_id = max_message_id.max(id.0);
+        });
         if max_message_id >> MessageId::BITMASK_LEN >= self.message_id_generator {
             return Err(format!(
                 "MessageId out of bounds: max MessageId: {}, message_id_generator: {}",
@@ -516,109 +552,51 @@ impl MessagePool {
             ));
         }
 
-        self.deadline_queue.iter().try_for_each(|(deadline, id)| {
-            if id.class() == Class::GuaranteedResponse && id.0 & MESSAGE_ID_FLAGS_MASK != OUTBOUND_GUARANTEED_REQUEST {
-                return Err(format!(
-                    "Unexpected MessageId in deadline queue: MessageId {:?}, kind: {:?}, context: {:?}, class: {:?}",
-                    id, id.kind(), id.context(), id.class()
-                ));
-            }
-            // Ensure that all best-effort messages' deadlines match what's in `deadline_queue`.
-            if id.class() == Class::BestEffort && messages_with_deadlines.contains(id) {
-                let msg = self.messages.get(id).unwrap();
-                if msg.deadline() != deadline.0 {
-                    return Err(format!(
-                        "Deadline mismatch: MessageId {:?}, message: {:?}, deadline_queue: {:?}",
-                        id,
-                        msg.deadline(),
-                        deadline.0
-                    ));
-                }
-            }
-            messages_with_deadlines.remove(id);
-            Ok(())
-        })?;
-        // All best-effort messages and outbound guaranteed response requests must be
-        // present in the deadline queue.
-        if !messages_with_deadlines.is_empty() {
-            return Err(format!(
-                "Messages missing from deadline queue: {:?}",
-                messages_with_deadlines
-            ));
-        }
-
-        self.size_queue.iter().try_for_each(|(_, id)| {
-            if id.class() == Class::GuaranteedResponse {
-                return Err(format!(
-                    "Guaranteed response message in load shedding queue: MessageId {:?}, kind: {:?}, context: {:?}, class: {:?}",
-                    id, id.kind(), id.context(), id.class()
-                ));
-            }
-            best_effort_messages.remove(id);
-            Ok(())
-        })?;
-        // All best-effort messages must be present in the load shedding queue.
-        if !best_effort_messages.is_empty() {
-            return Err(format!(
-                "Best-effort messages missing from load shedding queue: {:?}",
-                best_effort_messages
-            ));
-        }
-
         Ok(())
     }
-}
 
-impl PartialEq for MessagePool {
-    fn eq(&self, other: &Self) -> bool {
-        let Self {
-            messages,
-            message_stats,
-            deadline_queue,
-            size_queue,
-            message_id_generator: next_message_id_generator,
-        } = self;
+    /// Calculates the deadline and load shedding priority queues for the given
+    /// messages and outbound guaranteed response request (implicit) deadlines.
+    ///
+    /// Time complexity: `O(n * log(n))`.
+    fn calculate_priority_queues(
+        messages: &BTreeMap<MessageId, RequestOrResponse>,
+        outbound_guaranteed_request_deadlines: &BTreeMap<MessageId, CoarseTime>,
+    ) -> (
+        BTreeSet<(CoarseTime, MessageId)>,
+        BTreeSet<(usize, MessageId)>,
+    ) {
+        let mut expected_deadline_queue = BTreeSet::new();
+        let mut expected_size_queue = BTreeSet::new();
+        messages.iter().for_each(|(id, msg)| {
+            use Class::*;
+            use Context::*;
+            use Kind::*;
+            match (id.context(), id.class(), id.kind()) {
+                // Outbound guaranteed response requests have (separately recorded) deadlines.
+                (Outbound, GuaranteedResponse, Request) => {
+                    let deadline = outbound_guaranteed_request_deadlines.get(&id).unwrap();
+                    expected_deadline_queue.insert((*deadline, *id));
+                }
 
-        if *messages != other.messages
-            || *message_stats != other.message_stats
-            || *next_message_id_generator != other.message_id_generator
-        {
-            return false;
-        }
+                // All other guaranteed response messages neither expire nor can be shed.
+                (_, GuaranteedResponse, _) => {}
 
-        return binary_heap_eq(deadline_queue, &other.deadline_queue)
-            && binary_heap_eq(size_queue, &other.size_queue);
+                // Inbound best-effort responses don't have expiration deadlines, but can be
+                // shed.
+                (Inbound, BestEffort, Response) => {
+                    expected_size_queue.insert((msg.count_bytes(), *id));
+                }
+
+                // All other best-effort messages are enqueued in both priority queues.
+                (_, BestEffort, _) => {
+                    expected_deadline_queue.insert((msg.deadline(), *id));
+                    expected_size_queue.insert((msg.count_bytes(), *id));
+                }
+            }
+        });
+        (expected_deadline_queue, expected_size_queue)
     }
-}
-impl Eq for MessagePool {}
-
-/// Compares two binary heaps for equality of their contents, allowing for
-/// different representations.
-///
-/// This is a rather expensive check, if the representations are different, but
-/// it's only used during checkpointing.
-fn binary_heap_eq<T: Eq + Ord + Clone>(lhs: &BinaryHeap<T>, rhs: &BinaryHeap<T>) -> bool {
-    if lhs.len() != rhs.len() {
-        return false;
-    }
-
-    // First do a cheap equality comparison, in case the two heaps do have identical
-    // representations.
-    if lhs
-        .iter()
-        .zip(rhs.iter())
-        .all(|(lhs_entry, rhs_entry)| lhs_entry == rhs_entry)
-    {
-        // Happy path.
-        return true;
-    }
-
-    // Slow path: sort the heaps and compare the sorted vectors.
-    lhs.clone()
-        .into_sorted_vec()
-        .iter()
-        .zip(rhs.clone().into_sorted_vec().iter())
-        .all(|(lhs_entry, rhs_entry)| lhs_entry == rhs_entry)
 }
 
 impl From<&MessagePool> for pb_queues::MessagePool {
@@ -634,23 +612,11 @@ impl From<&MessagePool> for pb_queues::MessagePool {
                     message: Some(message.into()),
                 })
                 .collect(),
-            message_deadlines: item
-                .deadline_queue
-                .clone()
-                .into_sorted_vec()
+            outbound_guaranteed_request_deadlines: item
+                .outbound_guaranteed_request_deadlines
                 .iter()
-                .map(|(deadline, message_id)| MessageDeadline {
-                    deadline_seconds: deadline.0.as_secs_since_unix_epoch(),
-                    message_id: message_id.0,
-                })
-                .collect(),
-            message_sizes: item
-                .size_queue
-                .clone()
-                .into_sorted_vec()
-                .iter()
-                .map(|(size_bytes, message_id)| MessageSize {
-                    size_bytes: *size_bytes as u64,
+                .map(|(message_id, deadline)| MessageDeadline {
+                    deadline_seconds: deadline.as_secs_since_unix_epoch(),
                     message_id: message_id.0,
                 })
                 .collect(),
@@ -676,35 +642,31 @@ impl TryFrom<pb_queues::MessagePool> for MessagePool {
         if messages.len() != message_count {
             return Err(ProxyDecodeError::Other(format!("Duplicate MessageId")));
         }
-
         let message_stats = Self::calculate_message_stats(&messages);
 
-        let deadline_queue = item
-            .message_deadlines
+        let outbound_guaranteed_request_deadlines = item
+            .outbound_guaranteed_request_deadlines
             .into_iter()
             .map(|entry| {
+                let message_id = MessageId(entry.message_id);
                 let deadline = CoarseTime::from_secs_since_unix_epoch(entry.deadline_seconds);
-                let message_id = MessageId(entry.message_id);
-                (Reverse(deadline), message_id)
+                (message_id, deadline)
             })
             .collect();
-        let size_queue = item
-            .message_sizes
-            .into_iter()
-            .map(|entry| {
-                let size_bytes = entry.size_bytes as usize;
-                let message_id = MessageId(entry.message_id);
-                (size_bytes, message_id)
-            })
-            .collect();
+
+        let (deadline_queue, size_queue) =
+            Self::calculate_priority_queues(&messages, &outbound_guaranteed_request_deadlines);
 
         let res = Self {
             messages,
+            outbound_guaranteed_request_deadlines,
             message_stats,
             deadline_queue,
             size_queue,
             message_id_generator: item.message_id_generator,
         };
+
+        // Ensure that we've built a valid `MessagePool`.
         res.check_invariants().map_err(ProxyDecodeError::Other)?;
 
         Ok(res)

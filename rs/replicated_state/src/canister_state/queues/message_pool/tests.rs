@@ -54,20 +54,20 @@ fn test_insert() {
     // Of the inbound messages, only the best-effort request should be in the
     // deadline queue. Of the outbound messages, only the guaranteed response should
     // not be in the deadline queue.
-    assert_exact_queue_contents(
-        vec![
-            (Reverse(time(20)), id2),
-            (Reverse(time(60)), id6),
-            (Reverse(time(80)), id8),
-            (Reverse(time(50 + REQUEST_LIFETIME.as_secs() as u32)), id5),
-        ],
-        &pool.deadline_queue,
+    assert_eq!(
+        maplit::btreeset! {
+            (time(20), id2),
+            (time(60), id6),
+            (time(80), id8),
+            (time(50 + REQUEST_LIFETIME.as_secs() as u32), id5)
+        },
+        pool.deadline_queue
     );
 
     // All best-effort messages should be in the load shedding queue.
     //
     // We don't want to predict message sizes, so we only test which messages are in
-    // the deadline queue.
+    // the load shedding queue.
     assert_exact_messages_in_queue(btreeset! {id2, id4, id6, id8}, &pool.size_queue);
 }
 
@@ -94,7 +94,7 @@ fn test_insert_outbound_request_deadline_rounding() {
 
     pool.insert_outbound_request(request(NO_DEADLINE).into(), current_time);
 
-    assert_eq!(expected_deadline, pool.deadline_queue.peek().unwrap().0 .0);
+    assert_eq!(expected_deadline, pool.deadline_queue.first().unwrap().0);
 }
 
 #[test]
@@ -266,14 +266,14 @@ fn test_expiration() {
 
     // Sanity check.
     assert_eq!(4, pool.len());
-    assert_exact_queue_contents(
-        vec![
-            (Reverse(time(10)), id1),
-            (Reverse(time(20)), id2),
-            (Reverse(time(30)), id3),
-            (Reverse(time(40 + REQUEST_LIFETIME.as_secs() as u32)), id4),
-        ],
-        &pool.deadline_queue,
+    assert_eq!(
+        maplit::btreeset! {
+            (time(10), id1),
+            (time(20), id2),
+            (time(30), id3),
+            (time(40 + REQUEST_LIFETIME.as_secs() as u32), id4)
+        },
+        pool.deadline_queue
     );
     // There are expiring messages.
     assert!(pool.has_expired_deadlines(t_max));
@@ -316,12 +316,9 @@ fn test_expiration() {
     assert_eq!(Some(msg2.into()), pool.take(id2));
     assert_eq!(2, pool.len());
 
-    // The pool still thinks it has a message expiring at 21 seconds.
-    assert!(pool.has_expired_deadlines(t21));
-    // But trying to expire it doesn't produce anything.
-    assert_eq!(empty_vec, pool.expire_messages(t21));
-    // It should have, however, consumed the deadline queue entry.
+    // There is now no longer a message expiring at 21 seconds.
     assert!(!pool.has_expired_deadlines(t21));
+    assert_eq!(empty_vec, pool.expire_messages(t21));
 
     //
     // Pop the remaining messages.
@@ -428,87 +425,6 @@ fn test_shed_message_guaranteed_response() {
 }
 
 #[test]
-fn test_take_trims_queues() {
-    let mut pool = MessagePool::default();
-
-    // Insert a bunch of expiring best-effort messages.
-    let request = request(time(10));
-    let mut ids: Vec<_> = (0..100)
-        .map(|_| pool.insert_inbound(request.clone().into()))
-        .collect();
-
-    // Sanity check.
-    assert_eq!(ids.len(), pool.len());
-    assert_eq!(ids.len(), pool.deadline_queue.len());
-    assert_eq!(ids.len(), pool.size_queue.len());
-
-    while let Some(id) = ids.pop() {
-        assert!(pool.take(id).is_some());
-
-        // Sanity check.
-        assert_eq!(ids.len(), pool.len());
-
-        // Ensure that the priority queues are always at most twice (+2) the pool size.
-        assert_trimmed_priority_queues(&pool);
-    }
-}
-
-#[test]
-fn test_expire_messages_trims_queues() {
-    let mut pool = MessagePool::default();
-
-    // Insert a bunch of expiring messages.
-    let mut expiration_times: VecDeque<_> = (0..100)
-        .map(|i| {
-            pool.insert_inbound(request(time(i + 1)).into());
-            time(i + 2)
-        })
-        .collect();
-
-    // Sanity check.
-    assert_eq!(expiration_times.len(), pool.len());
-    assert_eq!(expiration_times.len(), pool.deadline_queue.len());
-    assert_eq!(expiration_times.len(), pool.size_queue.len());
-
-    while !expiration_times.is_empty() {
-        let expiration_time = expiration_times.pop_front().unwrap();
-        assert_eq!(1, pool.expire_messages(expiration_time.into()).len());
-
-        // Sanity check.
-        assert_eq!(expiration_times.len(), pool.len());
-
-        // Ensure that the priority queues are always at most twice (+2) the pool size.
-        assert_trimmed_priority_queues(&pool);
-    }
-}
-
-#[test]
-fn test_shed_message_trims_queues() {
-    let mut pool = MessagePool::default();
-
-    // Insert a bunch of expiring best-effort messages.
-    let request = request(time(10));
-    let ids: Vec<_> = (0..100)
-        .map(|_| pool.insert_inbound(request.clone().into()))
-        .collect();
-
-    // Sanity check.
-    assert_eq!(ids.len(), pool.len());
-    assert_eq!(ids.len(), pool.deadline_queue.len());
-    assert_eq!(ids.len(), pool.size_queue.len());
-
-    for i in (0..ids.len()).rev() {
-        assert!(pool.shed_largest_message().is_some());
-
-        // Sanity check.
-        assert_eq!(i, pool.len());
-
-        // Ensure that the priority queues are always at most twice (+2) the pool size.
-        assert_trimmed_priority_queues(&pool);
-    }
-}
-
-#[test]
 fn test_equality() {
     let mut pool = MessagePool::default();
 
@@ -549,64 +465,13 @@ fn test_equality() {
     // Expire a message from one pool (id8), take it from the other.
     assert_eq!(1, pool.expire_messages(time(81).into()).len());
     assert!(other_pool.take(id8).is_some());
-    // The two pools should no longer be equal.
-    assert_ne!(pool, other_pool);
-
-    // Restore the two pools to equality.
-    let mut other_pool = pool.clone();
+    // The two pools should still be equal.
     assert_eq!(pool, other_pool);
 
     // Shed a message from one pool, take it from the other.
     let id = pool.shed_largest_message().unwrap().0;
     assert!(other_pool.take(id).is_some());
-    // The two pools should no longer be equal.
-    assert_ne!(pool, other_pool);
-}
-
-#[test]
-fn test_equality_with_different_priority_queue_representations() {
-    // Create a pool with 3 best-effort messages. Assign payload sizes and deadlines
-    // such that the 2 lower priority (smaller, later deadline) messages have equal
-    // priorities, in order to also test that message IDs consistently break ties.
-    let mut pool = MessagePool::default();
-    pool.insert_inbound(request_with_payload(2000, time(10)).into());
-    pool.insert_inbound(request_with_payload(1000, time(20)).into());
-    pool.insert_inbound(request_with_payload(1000, time(20)).into());
-    assert_eq!(3, pool.deadline_queue.len());
-    assert_eq!(3, pool.size_queue.len());
-
-    let deadline_queue = pool.deadline_queue.clone().into_vec();
-    let size_queue = pool.size_queue.clone().into_vec();
-
-    // Make a clone.
-    let mut other_pool = pool.clone();
-
-    // And alter its priority queues, so that they produce the same sorted results,
-    // but have different representations.
-    other_pool.deadline_queue = vec![
-        deadline_queue.get(0).unwrap().clone(),
-        deadline_queue.get(2).unwrap().clone(),
-        deadline_queue.get(1).unwrap().clone(),
-    ]
-    .into();
-    other_pool.size_queue = vec![
-        size_queue.get(0).unwrap().clone(),
-        size_queue.get(2).unwrap().clone(),
-        size_queue.get(1).unwrap().clone(),
-    ]
-    .into();
-
-    // Ensure that the two pairs of priority queues have different representations.
-    assert_ne!(
-        pool.deadline_queue.clone().into_vec(),
-        other_pool.deadline_queue.clone().into_vec()
-    );
-    assert_ne!(
-        pool.size_queue.clone().into_vec(),
-        other_pool.size_queue.clone().into_vec()
-    );
-
-    // But the two pools still compare as equal.
+    // The two pools should still be equal.
     assert_eq!(pool, other_pool);
 }
 
@@ -961,6 +826,32 @@ fn test_message_stats_oversized_requests() {
     assert_eq!(MessageStats::default(), pool.message_stats);
 }
 
+/// Tests that an encode-decode roundtrip yields a result equal to the original
+/// (and that the stats and priority queues of an organically constructed
+/// `MessagePool` match those of a deserialized one).
+#[test]
+fn encode_roundtrip() {
+    let mut pool = MessagePool::default();
+
+    // Insert one message of each kind / class / context.
+    pool.insert_inbound(request_with_payload(100, NO_DEADLINE).into());
+    pool.insert_inbound(request_with_payload(200, time(20)).into());
+    pool.insert_inbound(response_with_payload(300, NO_DEADLINE).into());
+    pool.insert_inbound(response_with_payload(400, time(40)).into());
+    pool.insert_outbound_request(
+        request_with_payload(500, NO_DEADLINE).into(),
+        time(50).into(),
+    );
+    pool.insert_outbound_request(request_with_payload(600, time(60)).into(), time(65).into());
+    pool.insert_outbound_response(response_with_payload(700, NO_DEADLINE).into());
+    pool.insert_outbound_response(response_with_payload(800, time(80)).into());
+
+    let encoded: pb_queues::MessagePool = (&pool).into();
+    let decoded = encoded.try_into().unwrap();
+
+    assert_eq!(pool, decoded);
+}
+
 //
 // Fixtures and helper functions.
 //
@@ -993,37 +884,9 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
 
 fn assert_exact_messages_in_queue<T>(
     messages: BTreeSet<MessageId>,
-    queue: &BinaryHeap<(T, MessageId)>,
+    queue: &BTreeSet<(T, MessageId)>,
 ) {
     assert_eq!(messages, queue.iter().map(|(_, id)| *id).collect())
-}
-
-fn assert_exact_queue_contents<T: Clone + Ord + PartialOrd + Eq + PartialEq + Debug>(
-    expected: Vec<(T, MessageId)>,
-    queue: &BinaryHeap<(T, MessageId)>,
-) {
-    let mut queue = (*queue).clone();
-    let mut queue_contents = Vec::with_capacity(queue.len());
-    while let Some(entry) = queue.pop() {
-        queue_contents.push(entry)
-    }
-    assert_eq!(expected, queue_contents)
-}
-
-// Ensures that the priority queue sizes are at most `2 * pool.len() + 2`.
-fn assert_trimmed_priority_queues(pool: &MessagePool) {
-    assert!(
-        pool.deadline_queue.len() <= 2 * pool.len() + 2,
-        "Deadline queue length: {}, pool size: {}",
-        pool.deadline_queue.len(),
-        pool.len()
-    );
-    assert!(
-        pool.size_queue.len() <= 2 * pool.len() + 2,
-        "Load shedding queue length: {}, pool size: {}",
-        pool.size_queue.len(),
-        pool.len()
-    );
 }
 
 /// Generates a `MessageId` for a best-effort inbound request.
