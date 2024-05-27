@@ -33,10 +33,14 @@ use std::hash::Hash;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
+const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;
+
 const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
 const NUM_BLOCKS_TO_ARCHIVE: usize = 10;
 const MAX_BLOCKS_FROM_ARCHIVE: u64 = 10;
+const MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT: u8 = 100; // No reason for this number.
+const INDEX_SYNC_TIME_TO_ADVANCE: Duration = Duration::from_secs(60);
 
 // Metadata-related constants
 const TOKEN_NAME: &str = "Test Token";
@@ -113,10 +117,11 @@ fn install_ledger(
     for (account, amount) in initial_balances {
         builder = builder.with_initial_balance(account, amount);
     }
-    env.install_canister(
+    env.install_canister_with_cycles(
         ledger_wasm(),
         Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
         None,
+        ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }
@@ -144,12 +149,22 @@ fn upgrade_ledger(
         .unwrap()
 }
 
-fn install_index_ng(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
-    let args = IndexArg::Init(IndexInitArg {
-        ledger_id: ledger_id.into(),
-    });
-    env.install_canister(index_ng_wasm(), Encode!(&args).unwrap(), None)
-        .unwrap()
+fn index_init_arg_without_interval(ledger_id: CanisterId) -> IndexInitArg {
+    IndexInitArg {
+        ledger_id: Principal::from(ledger_id),
+        retrieve_blocks_from_ledger_interval_seconds: None,
+    }
+}
+
+fn install_index_ng(env: &StateMachine, init_arg: IndexInitArg) -> CanisterId {
+    let args = IndexArg::Init(init_arg);
+    env.install_canister_with_cycles(
+        index_ng_wasm(),
+        Encode!(&args).unwrap(),
+        None,
+        ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+    )
+    .unwrap()
 }
 
 fn install_index(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
@@ -207,10 +222,9 @@ fn get_logs(env: &StateMachine, index_id: CanisterId) -> Log {
 // last one in the ledger or enough attempts passed and therefore
 // it fails.
 fn wait_until_sync_is_completed(env: &StateMachine, index_id: CanisterId, ledger_id: CanisterId) {
-    const MAX_ATTEMPTS: u8 = 100; // No reason for this number.
     let mut num_blocks_synced = u64::MAX;
     let mut chain_length = u64::MAX;
-    for _i in 0..MAX_ATTEMPTS {
+    for _i in 0..MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT {
         env.advance_time(Duration::from_secs(60));
         env.tick();
         num_blocks_synced = status(env, index_id).num_blocks_synced.0.to_u64().unwrap();
@@ -763,7 +777,7 @@ fn test_ledger_growing() {
         None,
         minter_identity().sender().unwrap(),
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     // Test initial mint block.
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -807,7 +821,7 @@ fn test_archive_indexing() {
     let env = &StateMachine::new();
     let minter = minter_identity().sender().unwrap();
     let ledger_id = install_ledger(env, vec![], default_archive_options(), None, minter);
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     // Test indexing archive by forcing the ledger to archive some transactions
     // and by having enough transactions such that the index must use archive
@@ -877,7 +891,7 @@ fn test_get_account_transactions() {
         None,
         minter,
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     // List of the transactions that the test is going to add. This exists to make
     // the test easier to read.
@@ -1012,7 +1026,7 @@ fn test_get_account_transactions_start_length() {
         None,
         minter,
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
     let expected_txs: Vec<_> = (0..10u32)
         .map(|i| TransactionWithId {
             id: i.into(),
@@ -1070,7 +1084,7 @@ fn test_get_account_transactions_pagination() {
         None,
         minter,
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1152,7 +1166,7 @@ fn test_icrc1_balance_of() {
                     None,
                     minter_principal,
                 );
-                let index_id = install_index_ng(env, ledger_id);
+                let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
                 for arg_with_caller in &transactions {
                     apply_arg_with_caller(env, ledger_id, arg_with_caller.clone());
@@ -1217,7 +1231,7 @@ fn test_list_subaccounts() {
         None,
         minter.sender().unwrap(),
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1285,7 +1299,7 @@ fn test_post_upgrade_start_timer() {
         None,
         minter.sender().unwrap(),
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1313,7 +1327,7 @@ fn test_oldest_tx_id() {
         None,
         minter,
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     env.advance_time(Duration::from_secs(60));
     env.tick();
@@ -1396,7 +1410,7 @@ fn test_fee_collector() {
         Some(fee_collector),
         minter,
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     assert_eq!(
         icrc1_balance_of(env, ledger_id, fee_collector),
@@ -1507,7 +1521,7 @@ fn test_get_account_transactions_vs_old_index() {
                     None,
                     minter_principal,
                 );
-                let index_ng_id = install_index_ng(env, ledger_id);
+                let index_ng_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
                 let index_id = install_index(env, ledger_id);
 
                 for arg_with_caller in &transactions {
@@ -1556,7 +1570,7 @@ fn test_upgrade_index_to_index_ng() {
                     None,
                     minter_principal,
                 );
-                let index_ng_id = install_index_ng(env, ledger_id);
+                let index_ng_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
                 let index_id = install_index(env, ledger_id);
 
                 for arg_with_caller in &transactions {
@@ -1611,7 +1625,7 @@ fn test_index_ledger_coherence() {
                     None,
                     minter_principal,
                 );
-                let index_id = install_index_ng(env, ledger_id);
+                let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
                 for arg_with_caller in &transactions {
                     apply_arg_with_caller(env, ledger_id, arg_with_caller.clone());
@@ -1636,7 +1650,7 @@ fn test_principal_subaccounts() {
         None,
         minter,
     );
-    let index_id = install_index_ng(env, ledger_id);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     // Test initial mint block.
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -1683,4 +1697,361 @@ fn test_principal_subaccounts() {
     assert_eq!(subaccounts.len(), 1);
     // The subaccount 1 should show up in a `list_subaccount` query although it has only been involved in an Approve transaction
     assert!(subaccounts.contains(&account(2, 1).subaccount.unwrap()));
+}
+
+mod retrieve_blocks_from_ledger_interval {
+    use crate::{
+        default_archive_options, index_ng_wasm, install_index_ng, install_ledger,
+        wait_until_sync_is_completed, INDEX_SYNC_TIME_TO_ADVANCE, MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT,
+        STARTING_CYCLES_PER_CANISTER,
+    };
+    use candid::{CandidType, Deserialize, Encode, Principal};
+    use ic_agent::Identity;
+    use ic_base_types::CanisterId;
+    use ic_icrc1_index_ng::{IndexArg, InitArg, UpgradeArg};
+    use ic_icrc1_test_utils::minter_identity;
+    use ic_registry_subnet_type::SubnetType;
+    use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, Time, UserError};
+    use std::time::{Duration, SystemTime};
+
+    /// Corresponds to ic_icrc1_index_ng::DEFAULT_MAX_WAIT_TIME_IN_SECS
+    const DEFAULT_MAX_WAIT_TIME_IN_SECS: u64 = 1;
+    const GENESIS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
+    const IDLE_TIME_IN_SECS: u64 = 300;
+    const MINTER_PRINCIPAL: Principal = Principal::from_slice(&[3_u8; 29]);
+
+    fn install_and_upgrade(
+        install_interval: Option<u64>,
+        upgrade_interval: Option<u64>,
+    ) -> Result<(), UserError> {
+        let env = &StateMachineBuilder::new()
+            .with_subnet_type(SubnetType::Application)
+            .with_subnet_size(28)
+            .with_time(GENESIS)
+            .build();
+        let ledger_id = install_ledger(
+            env,
+            vec![],
+            default_archive_options(),
+            None,
+            minter_identity().sender().unwrap(),
+        );
+        let args = IndexArg::Init(ic_icrc1_index_ng::InitArg {
+            ledger_id: Principal::from(ledger_id),
+            retrieve_blocks_from_ledger_interval_seconds: install_interval,
+        });
+        let index_id = env.install_canister_with_cycles(
+            index_ng_wasm(),
+            Encode!(&args).unwrap(),
+            None,
+            ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        )?;
+
+        wait_until_sync_is_completed(env, index_id, ledger_id);
+
+        let upgrade_arg = IndexArg::Upgrade(UpgradeArg {
+            ledger_id: None,
+            retrieve_blocks_from_ledger_interval_seconds: upgrade_interval,
+        });
+        env.upgrade_canister(index_id, index_ng_wasm(), Encode!(&upgrade_arg).unwrap())?;
+
+        wait_until_sync_is_completed(env, index_id, ledger_id);
+
+        Ok(())
+    }
+
+    fn max_value_for_interval() -> u64 {
+        (u64::MAX - GENESIS.as_nanos_since_unix_epoch()) / 1_000_000_000
+    }
+
+    fn max_index_sync_time() -> u64 {
+        (MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT as u64)
+            .checked_mul(INDEX_SYNC_TIME_TO_ADVANCE.as_secs())
+            .unwrap()
+    }
+
+    #[test]
+    fn should_fail_to_install_and_upgrade_with_invalid_value() {
+        let minimum_invalid_value_for_interval = max_value_for_interval() + 1;
+        let invalid_install_and_upgrade_combinations = [
+            (Some(minimum_invalid_value_for_interval), Some(1)),
+            (Some(1), Some(minimum_invalid_value_for_interval)),
+        ];
+        for (install_interval, upgrade_interval) in &invalid_install_and_upgrade_combinations {
+            let err = install_and_upgrade(*install_interval, *upgrade_interval)
+                .expect_err("should fail to install with invalid interval");
+            let code = err.code();
+            assert_eq!(code, ErrorCode::CanisterCalledTrap);
+            let description = err.description();
+            assert!(description.contains("delay out of bounds"));
+        }
+    }
+
+    #[test]
+    fn should_install_and_upgrade_with_valid_values() {
+        let max_seconds_for_timer = max_value_for_interval() - max_index_sync_time();
+        let build_index_interval_values = [
+            None,
+            Some(0u64),
+            Some(1u64),
+            Some(2u64),
+            Some(5u64),
+            Some(10u64),
+            Some(20u64),
+            Some(50u64),
+            Some(max_seconds_for_timer),
+        ];
+
+        // Installing and upgrading with valid values should succeed
+        for install_interval in &build_index_interval_values {
+            for upgrade_interval in &build_index_interval_values {
+                assert_eq!(
+                    install_and_upgrade(*install_interval, *upgrade_interval),
+                    Ok(()),
+                    "install_interval: {:?}, upgrade_interval: {:?}",
+                    install_interval,
+                    upgrade_interval
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn should_install_and_upgrade_without_build_index_interval_field_set() {
+        #[derive(CandidType, Debug, Deserialize, Clone)]
+        enum OldIndexArg {
+            Init(OldInitArg),
+            Upgrade(OldUpgradeArg),
+        }
+
+        #[derive(CandidType, Debug, Deserialize, Clone)]
+        struct OldInitArg {
+            pub ledger_id: Principal,
+        }
+
+        #[derive(CandidType, Debug, Deserialize, Clone)]
+        struct OldUpgradeArg {
+            pub ledger_id: Option<Principal>,
+        }
+
+        let env = &StateMachineBuilder::new()
+            .with_subnet_type(SubnetType::Application)
+            .with_subnet_size(28)
+            .build();
+        let ledger_id = install_ledger(
+            env,
+            vec![],
+            default_archive_options(),
+            None,
+            minter_identity().sender().unwrap(),
+        );
+        let args = OldIndexArg::Init(OldInitArg {
+            ledger_id: ledger_id.into(),
+        });
+        let index_id = env
+            .install_canister_with_cycles(
+                index_ng_wasm(),
+                Encode!(&args).unwrap(),
+                None,
+                ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+            )
+            .unwrap();
+
+        wait_until_sync_is_completed(env, index_id, ledger_id);
+
+        let upgrade_arg = OldIndexArg::Upgrade(OldUpgradeArg { ledger_id: None });
+        env.upgrade_canister(index_id, index_ng_wasm(), Encode!(&upgrade_arg).unwrap())
+            .unwrap();
+
+        wait_until_sync_is_completed(env, index_id, ledger_id);
+    }
+
+    struct CyclesConsumptionParameters {
+        initial_interval: Option<u64>,
+        upgrade_interval: Option<u64>,
+        assert_cost: fn(&CycleConsumption, &CycleConsumption),
+    }
+
+    #[test]
+    fn should_consume_expected_amount_of_cycles() {
+        let assert_same_amount_of_cycles_consumed =
+            |initial_consumption: &CycleConsumption, upgrade_consumption: &CycleConsumption| {
+                assert!(
+                    abs_relative_difference(initial_consumption.ledger, upgrade_consumption.ledger)
+                        < 0.01,
+                    "initial ledger cycles consumed: {}, cycles consumed after upgrade: {}",
+                    initial_consumption.ledger,
+                    upgrade_consumption.ledger
+                );
+                assert!(
+                    abs_relative_difference(initial_consumption.index, upgrade_consumption.index)
+                        < 0.01,
+                    "initial index cycles consumed: {}, cycles consumed after upgrade: {}",
+                    initial_consumption.index,
+                    upgrade_consumption.index
+                );
+            };
+        for &CyclesConsumptionParameters {
+            initial_interval,
+            upgrade_interval,
+            assert_cost,
+        } in &[
+            // should consume the same amount of cycles when the interval stays the same
+            CyclesConsumptionParameters {
+                initial_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
+                upgrade_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
+                assert_cost: assert_same_amount_of_cycles_consumed,
+            },
+            CyclesConsumptionParameters {
+                initial_interval: None,
+                upgrade_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
+                assert_cost: assert_same_amount_of_cycles_consumed,
+            },
+            CyclesConsumptionParameters {
+                initial_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
+                upgrade_interval: None,
+                assert_cost: assert_same_amount_of_cycles_consumed,
+            },
+            CyclesConsumptionParameters {
+                initial_interval: None,
+                upgrade_interval: None,
+                assert_cost: assert_same_amount_of_cycles_consumed,
+            },
+            // should consume half the amount of cycles when the interval is doubled
+            CyclesConsumptionParameters {
+                initial_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
+                upgrade_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS * 2),
+                assert_cost: |initial_consumption, upgrade_consumption| {
+                    for (initial, upgrade) in [
+                        (initial_consumption.ledger, upgrade_consumption.ledger),
+                        (initial_consumption.index, upgrade_consumption.index),
+                    ] {
+                        let relative_difference = abs_relative_difference(initial, upgrade);
+                        assert!(
+                            0.4 < relative_difference && relative_difference < 0.5,
+                            "initial cycles: {}, cycles after upgrade: {}",
+                            initial,
+                            upgrade
+                        )
+                    }
+                },
+            },
+            // should consume cycles within 30% of hard-coded value when the interval is set to 1 sec
+            CyclesConsumptionParameters {
+                initial_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
+                upgrade_interval: Some(DEFAULT_MAX_WAIT_TIME_IN_SECS),
+                assert_cost: |initial, upgrade| {
+                    const EXPECTED_LEDGER_CYCLES_CONSUMPTION: i128 = 284_829_728;
+                    const EXPECTED_INDEX_CYCLES_CONSUMPTION: i128 = 1_035_193_256;
+                    for ledger_consumption in [initial.ledger, upgrade.ledger] {
+                        assert!(
+                            abs_relative_difference(
+                                EXPECTED_LEDGER_CYCLES_CONSUMPTION,
+                                ledger_consumption
+                            ) < 0.3,
+                            "ledger cycles consumed 30% more/less than expected: {}, expected: {}",
+                            ledger_consumption,
+                            EXPECTED_LEDGER_CYCLES_CONSUMPTION
+                        );
+                    }
+                    for index_consumption in [initial.index, upgrade.index] {
+                        assert!(
+                            abs_relative_difference(
+                                EXPECTED_INDEX_CYCLES_CONSUMPTION,
+                                index_consumption
+                            ) < 0.3,
+                            "index cycles consumed 30% more/less than expected: {}, expected: {}",
+                            index_consumption,
+                            EXPECTED_INDEX_CYCLES_CONSUMPTION
+                        );
+                    }
+                },
+            },
+        ] {
+            let env = &StateMachineBuilder::new()
+                .with_subnet_type(SubnetType::Application)
+                .with_subnet_size(28)
+                .build();
+            env.set_time(SystemTime::from(GENESIS));
+            let ledger_id = install_ledger(
+                env,
+                vec![],
+                default_archive_options(),
+                None,
+                MINTER_PRINCIPAL,
+            );
+            let index_id = install_index_ng(
+                env,
+                InitArg {
+                    ledger_id: Principal::from(ledger_id),
+                    retrieve_blocks_from_ledger_interval_seconds: initial_interval,
+                },
+            );
+
+            let initial_cycle_consumption = idle_ledger_and_index_cycles_consumption(
+                env,
+                ledger_id,
+                index_id,
+                IDLE_TIME_IN_SECS,
+            );
+
+            let upgrade_arg = IndexArg::Upgrade(UpgradeArg {
+                ledger_id: None,
+                retrieve_blocks_from_ledger_interval_seconds: upgrade_interval,
+            });
+            env.upgrade_canister(index_id, index_ng_wasm(), Encode!(&upgrade_arg).unwrap())
+                .unwrap();
+
+            let upgrade_cycle_consumption = idle_ledger_and_index_cycles_consumption(
+                env,
+                ledger_id,
+                index_id,
+                IDLE_TIME_IN_SECS,
+            );
+
+            (assert_cost)(&initial_cycle_consumption, &upgrade_cycle_consumption);
+        }
+    }
+
+    struct CycleConsumption {
+        ledger: i128,
+        index: i128,
+    }
+
+    fn abs_relative_difference(subject: i128, reference: i128) -> f64 {
+        subject.abs_diff(reference) as f64 / (subject as f64)
+    }
+
+    fn idle_ledger_and_index_cycles_consumption(
+        pocket_ic: &StateMachine,
+        ledger_canister_id: CanisterId,
+        index_canister_id: CanisterId,
+        secs: u64,
+    ) -> CycleConsumption {
+        let initial_ledger_cycle_balance = pocket_ic.cycle_balance(ledger_canister_id);
+        let initial_index_cycle_balance = pocket_ic.cycle_balance(index_canister_id);
+
+        for _ in 0..secs {
+            pocket_ic.advance_time(Duration::from_secs(1));
+            pocket_ic.tick();
+        }
+
+        let ledger_cycle_balance = pocket_ic.cycle_balance(ledger_canister_id);
+        let index_cycle_balance = pocket_ic.cycle_balance(index_canister_id);
+
+        let ledger_cycles_burned = initial_ledger_cycle_balance
+            .checked_sub(ledger_cycle_balance)
+            .expect("ledger cycles should not have increased");
+        let index_cycles_burned = initial_index_cycle_balance
+            .checked_sub(index_cycle_balance)
+            .expect("index cycles should not have increased");
+
+        assert!(ledger_cycles_burned > 0);
+        assert!(index_cycles_burned > 0);
+
+        CycleConsumption {
+            ledger: ledger_cycles_burned as i128,
+            index: index_cycles_burned as i128,
+        }
+    }
 }

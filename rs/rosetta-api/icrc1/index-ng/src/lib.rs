@@ -16,11 +16,13 @@ pub enum IndexArg {
 #[derive(CandidType, Debug, Deserialize, Clone)]
 pub struct InitArg {
     pub ledger_id: Principal,
+    pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
 }
 
 #[derive(CandidType, Debug, Deserialize, Clone)]
 pub struct UpgradeArg {
     pub ledger_id: Option<Principal>,
+    pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
 }
 
 #[derive(CandidType, Debug, Deserialize, Eq, PartialEq)]

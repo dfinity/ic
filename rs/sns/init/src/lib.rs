@@ -449,7 +449,7 @@ impl SnsInitPayload {
     /// This gives us some values that work for testing but would not be useful
     /// in a real world scenario. They are only meant to validate, not be sensible.
     /// These values are "post-execution", meaning they can be used to
-    /// immediately create an SNS.  
+    /// immediately create an SNS.
     pub fn with_valid_values_for_testing_post_execution() -> Self {
         Self {
             token_symbol: Some("TEST".to_string()),
@@ -515,7 +515,7 @@ impl SnsInitPayload {
     }
 
     /// Build all the SNS canister's init payloads given the state of the SnsInitPayload, the
-    /// provided SnsCanisterIds, and the version being deployed.  
+    /// provided SnsCanisterIds, and the version being deployed.
     pub fn build_canister_payloads(
         &self,
         sns_canister_ids: &SnsCanisterIds,
@@ -636,6 +636,7 @@ impl SnsInitPayload {
     fn index_ng_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> Option<IndexArg> {
         Some(IndexArg::Init(InitArg {
             ledger_id: Principal::from(sns_canister_ids.ledger),
+            retrieve_blocks_from_ledger_interval_seconds: None,
         }))
     }
 
@@ -1150,7 +1151,7 @@ impl SnsInitPayload {
         if !invalid_principals.is_empty() {
             return Err(format!(
                 "Error: One or more fallback_controller_principal_ids is not a valid principal id. \
-                The follow principals are invalid: {:?}", 
+                The follow principals are invalid: {:?}",
                 invalid_principals
                     .into_iter()
                     .map(|pair| pair.0)
@@ -1230,7 +1231,7 @@ impl SnsInitPayload {
         if final_reward_rate_basis_points > initial_reward_rate_basis_points {
             Err(
                 format!(
-                    "Error: final_reward_rate_basis_points ({}) must be less than or equal to initial_reward_rate_basis_points ({})", final_reward_rate_basis_points, 
+                    "Error: final_reward_rate_basis_points ({}) must be less than or equal to initial_reward_rate_basis_points ({})", final_reward_rate_basis_points,
                     initial_reward_rate_basis_points
                 )
             )
