@@ -1108,14 +1108,10 @@ impl TestWasmExecutorCore {
         };
 
         let instance_stats = InstanceStats {
-            accessed_pages: message.dirty_pages,
-            dirty_pages: message.dirty_pages,
-            read_before_write_count: message.dirty_pages,
-            direct_write_count: 0,
-            sigsegv_count: 0,
-            mmap_count: 0,
-            mprotect_count: 0,
-            copy_page_count: 0,
+            wasm_accessed_pages: message.dirty_pages,
+            wasm_dirty_pages: message.dirty_pages,
+            wasm_read_before_write_count: message.dirty_pages,
+            ..Default::default()
         };
         let slice = SliceExecutionOutput {
             executed_instructions: instructions_to_execute,
