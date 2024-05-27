@@ -1686,7 +1686,7 @@ pub mod test {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::{
-            idkg::QuadrupleId, BlockPayload, CatchUpPackageShare, Finalization, FinalizationShare,
+            idkg::PreSigId, BlockPayload, CatchUpPackageShare, Finalization, FinalizationShare,
             HashedBlock, HashedRandomBeacon, NotarizationShare, Payload, RandomBeaconContent,
             RandomTapeContent, SummaryPayload,
         },
@@ -1904,22 +1904,14 @@ pub mod test {
 
             let key_id = fake_ecdsa_key_id();
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
-            let quadruple_id1 = QuadrupleId::new(1);
-            let quadruple_id2 = QuadrupleId::new(2);
-            let quadruple_id3 = QuadrupleId::new(3);
+            let pre_sig_id1 = PreSigId(1);
+            let pre_sig_id2 = PreSigId(2);
+            let pre_sig_id3 = PreSigId(3);
 
             let contexts = vec![
-                fake_sign_with_ecdsa_context_with_quadruple(
-                    1,
-                    key_id.clone(),
-                    Some(quadruple_id1.clone()),
-                ),
+                fake_sign_with_ecdsa_context_with_quadruple(1, key_id.clone(), Some(pre_sig_id1)),
                 fake_sign_with_ecdsa_context_with_quadruple(2, key_id.clone(), None),
-                fake_sign_with_ecdsa_context_with_quadruple(
-                    3,
-                    key_id.clone(),
-                    Some(quadruple_id3.clone()),
-                ),
+                fake_sign_with_ecdsa_context_with_quadruple(3, key_id.clone(), Some(pre_sig_id3)),
             ];
 
             state_manager
@@ -1961,9 +1953,9 @@ pub mod test {
 
             let mut ecdsa = empty_ecdsa_payload(subnet_test_id(0));
             // Add the three quadruples using registry version 3, 1 and 2 in order
-            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id1, RegistryVersion::from(3));
-            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id2, RegistryVersion::from(1));
-            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id3, RegistryVersion::from(2));
+            add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id1, RegistryVersion::from(3));
+            add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id2, RegistryVersion::from(1));
+            add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id3, RegistryVersion::from(2));
 
             let dkg = block.payload.as_ref().as_summary().dkg.clone();
             block.payload = Payload::new(

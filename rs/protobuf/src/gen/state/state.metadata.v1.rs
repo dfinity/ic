@@ -127,7 +127,7 @@ pub struct SignWithEcdsaContext {
     #[prost(uint64, optional, tag = "8")]
     pub height: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "9")]
-    pub quadruple_id: ::core::option::Option<u64>,
+    pub pre_signature_id: ::core::option::Option<u64>,
     #[prost(bytes = "vec", optional, tag = "10")]
     pub nonce: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }

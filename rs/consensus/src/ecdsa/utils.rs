@@ -20,7 +20,7 @@ use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::consensus::Block;
 use ic_types::consensus::{
     idkg::{
-        EcdsaBlockReader, EcdsaMessage, IDkgTranscriptParamsRef, QuadrupleId, RequestId,
+        EcdsaBlockReader, EcdsaMessage, IDkgTranscriptParamsRef, PreSigId, RequestId,
         TranscriptLookupError, TranscriptRef,
     },
     HasHeight,
@@ -76,7 +76,7 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             })
     }
 
-    fn pre_signatures_in_creation(&self) -> Box<dyn Iterator<Item = &QuadrupleId> + '_> {
+    fn pre_signatures_in_creation(&self) -> Box<dyn Iterator<Item = &PreSigId> + '_> {
         self.chain
             .tip()
             .payload
@@ -87,7 +87,7 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             })
     }
 
-    fn available_pre_signature(&self, id: &QuadrupleId) -> Option<&PreSignatureRef> {
+    fn available_pre_signature(&self, id: &PreSigId) -> Option<&PreSignatureRef> {
         self.chain
             .tip()
             .payload
@@ -220,9 +220,8 @@ pub(super) fn block_chain_cache(
 pub(super) fn get_context_request_id(context: &SignWithEcdsaContext) -> Option<RequestId> {
     context
         .matched_quadruple
-        .clone()
-        .map(|(quadruple_id, height)| RequestId {
-            quadruple_id,
+        .map(|(pre_signature_id, height)| RequestId {
+            pre_signature_id,
             pseudo_random_id: context.pseudo_random_id,
             height,
         })
@@ -240,7 +239,7 @@ pub(super) fn build_signature_inputs(
         derivation_path: context.derivation_path.clone(),
     };
     let PreSignatureRef::Ecdsa(quadruple) = block_reader
-        .available_pre_signature(&request_id.quadruple_id)?
+        .available_pre_signature(&request_id.pre_signature_id)?
         .clone()
     else {
         return None;
@@ -418,12 +417,12 @@ pub(crate) fn get_enabled_signing_keys(
 /// We deliver IDs of all available quadruples that were created using the current key transcript.
 pub(crate) fn get_quadruple_ids_to_deliver(
     block: &Block,
-) -> BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>> {
+) -> BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>> {
     let Some(ecdsa) = block.payload.as_ref().as_ecdsa() else {
         return BTreeMap::new();
     };
 
-    let mut quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>> = BTreeMap::new();
+    let mut pre_sig_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>> = BTreeMap::new();
 
     for key_id in ecdsa.key_transcripts.keys() {
         let MasterPublicKeyId::Ecdsa(key_id) = key_id else {
@@ -431,10 +430,10 @@ pub(crate) fn get_quadruple_ids_to_deliver(
             continue;
         };
 
-        quadruple_ids.insert(key_id.clone(), BTreeSet::default());
+        pre_sig_ids.insert(key_id.clone(), BTreeSet::default());
     }
 
-    for (quadruple_id, quadruple) in &ecdsa.available_pre_signatures {
+    for (pre_sig_id, quadruple) in &ecdsa.available_pre_signatures {
         if !ecdsa
             .current_key_transcript(&quadruple.key_id())
             .is_some_and(|current_key_transcript| {
@@ -450,13 +449,10 @@ pub(crate) fn get_quadruple_ids_to_deliver(
             continue;
         };
 
-        quadruple_ids
-            .entry(key_id)
-            .or_default()
-            .insert(quadruple_id.clone());
+        pre_sig_ids.entry(key_id).or_default().insert(*pre_sig_id);
     }
 
-    quadruple_ids
+    pre_sig_ids
 }
 
 /// This function returns the ECDSA subnet public keys to be added to the batch, if required.
@@ -800,19 +796,19 @@ mod tests {
         ecdsa_payload: &mut EcdsaPayload,
         key_transcript: UnmaskedTranscript,
         _key_id: &EcdsaKeyId,
-    ) -> Vec<QuadrupleId> {
-        let mut quadruple_ids = vec![];
+    ) -> Vec<PreSigId> {
+        let mut pre_sig_ids = vec![];
         for i in 0..10 {
             let sig_inputs = create_sig_inputs(i);
-            let quadruple_id = ecdsa_payload.uid_generator.next_quadruple_id();
-            quadruple_ids.push(quadruple_id.clone());
+            let pre_sig_id = ecdsa_payload.uid_generator.next_pre_signature_id();
+            pre_sig_ids.push(pre_sig_id);
             let mut quadruple_ref = sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone();
             quadruple_ref.key_unmasked_ref = key_transcript;
             ecdsa_payload
                 .available_pre_signatures
-                .insert(quadruple_id, PreSignatureRef::Ecdsa(quadruple_ref.clone()));
+                .insert(pre_sig_id, PreSignatureRef::Ecdsa(quadruple_ref.clone()));
         }
-        quadruple_ids
+        pre_sig_ids
     }
 
     fn make_block(ecdsa_payload: Option<EcdsaPayload>) -> Block {
@@ -852,7 +848,7 @@ mod tests {
             .clone()
             .unwrap();
 
-        let quadruple_ids_to_be_delivered = add_available_quadruples_with_key_transcript(
+        let pre_signature_ids_to_be_delivered = add_available_quadruples_with_key_transcript(
             &mut ecdsa_payload,
             current_key_transcript.unmasked_transcript(),
             &key_id,
@@ -872,7 +868,7 @@ mod tests {
         );
         let old_key_transcript =
             UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
-        let quadruple_ids_not_to_be_delivered = add_available_quadruples_with_key_transcript(
+        let pre_signature_ids_not_to_be_delivered = add_available_quadruples_with_key_transcript(
             &mut ecdsa_payload,
             old_key_transcript,
             &key_id,
@@ -883,11 +879,11 @@ mod tests {
         assert_eq!(delivered_map.len(), 1);
         let delivered_ids = delivered_map.remove(&key_id).unwrap();
 
-        assert!(!quadruple_ids_not_to_be_delivered
+        assert!(!pre_signature_ids_not_to_be_delivered
             .into_iter()
-            .any(|qid| delivered_ids.contains(&qid)));
+            .any(|pid| delivered_ids.contains(&pid)));
         assert_eq!(
-            quadruple_ids_to_be_delivered,
+            pre_signature_ids_to_be_delivered,
             delivered_ids.into_iter().collect::<Vec<_>>()
         );
     }

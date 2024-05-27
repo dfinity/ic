@@ -38,7 +38,7 @@ use ic_types::consensus::idkg::{
     EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript,
     EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaReshareRequest,
     EcdsaSigShare, IDkgTranscriptAttributes, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef,
-    KeyTranscriptCreation, MaskedTranscript, QuadrupleId, RequestId, ReshareOfMaskedParams,
+    KeyTranscriptCreation, MaskedTranscript, PreSigId, RequestId, ReshareOfMaskedParams,
     TranscriptAttributes, TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
@@ -109,7 +109,7 @@ pub fn fake_sign_with_ecdsa_context_with_batch_time(
 pub fn fake_sign_with_ecdsa_context_with_quadruple(
     id: u8,
     key_id: EcdsaKeyId,
-    quadruple: Option<QuadrupleId>,
+    quadruple: Option<PreSigId>,
 ) -> (CallbackId, SignWithEcdsaContext) {
     let context = SignWithEcdsaContext {
         request: RequestBuilder::new().build(),
@@ -126,10 +126,10 @@ pub fn fake_sign_with_ecdsa_context_with_quadruple(
 
 pub fn fake_completed_sign_with_ecdsa_context(
     id: u8,
-    quadruple_id: QuadrupleId,
+    pre_signature_id: PreSigId,
 ) -> (CallbackId, SignWithEcdsaContext) {
     fake_sign_with_ecdsa_context_from_request_id(&RequestId {
-        quadruple_id,
+        pre_signature_id,
         pseudo_random_id: [id; 32],
         height: Height::from(1),
     })
@@ -139,8 +139,8 @@ pub fn fake_sign_with_ecdsa_context_from_request_id(
     request_id: &RequestId,
 ) -> (CallbackId, SignWithEcdsaContext) {
     let height = request_id.height;
-    let quadruple_id = request_id.quadruple_id.clone();
-    let callback_id = CallbackId::from(quadruple_id.id());
+    let pre_sig_id = request_id.pre_signature_id;
+    let callback_id = CallbackId::from(pre_sig_id.id());
     let context = SignWithEcdsaContext {
         request: RequestBuilder::new().build(),
         message_hash: [0; 32],
@@ -148,7 +148,7 @@ pub fn fake_sign_with_ecdsa_context_from_request_id(
         batch_time: UNIX_EPOCH,
         key_id: fake_ecdsa_key_id(),
         pseudo_random_id: request_id.pseudo_random_id,
-        matched_quadruple: Some((quadruple_id, height)),
+        matched_quadruple: Some((pre_sig_id, height)),
         nonce: Some([0; 32]),
     };
     (callback_id, context)
@@ -175,9 +175,9 @@ pub fn insert_test_sig_inputs<T>(
     ecdsa_payload: &mut EcdsaPayload,
     inputs: T,
 ) where
-    T: IntoIterator<Item = (QuadrupleId, TestSigInputs)>,
+    T: IntoIterator<Item = (PreSigId, TestSigInputs)>,
 {
-    for (quadruple_id, inputs) in inputs {
+    for (pre_sig_id, inputs) in inputs {
         inputs
             .idkg_transcripts
             .iter()
@@ -185,11 +185,11 @@ pub fn insert_test_sig_inputs<T>(
                 block_reader.add_transcript(*transcript_ref, transcript.clone())
             });
         ecdsa_payload.available_pre_signatures.insert(
-            quadruple_id.clone(),
+            pre_sig_id,
             PreSignatureRef::Ecdsa(inputs.sig_inputs_ref.presig_quadruple_ref.clone()),
         );
         block_reader
-            .add_available_quadruple(quadruple_id, inputs.sig_inputs_ref.presig_quadruple_ref);
+            .add_available_quadruple(pre_sig_id, inputs.sig_inputs_ref.presig_quadruple_ref);
     }
 }
 
@@ -295,7 +295,7 @@ pub(crate) struct TestEcdsaBlockReader {
     source_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     target_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     requested_signatures: Vec<(RequestId, ThresholdEcdsaSigInputsRef)>,
-    available_pre_signatures: BTreeMap<QuadrupleId, PreSignatureRef>,
+    available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
     idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
     fail_to_resolve: bool,
 }
@@ -338,7 +338,7 @@ impl TestEcdsaBlockReader {
                 idkg_transcripts.insert(transcript_ref, transcript);
             }
             available_pre_signatures.insert(
-                request_id.quadruple_id.clone(),
+                request_id.pre_signature_id,
                 PreSignatureRef::Ecdsa(sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone()),
             );
             requested_signatures.push((request_id, sig_inputs.sig_inputs_ref));
@@ -400,11 +400,11 @@ impl TestEcdsaBlockReader {
 
     pub(crate) fn add_available_quadruple(
         &mut self,
-        quadruple_id: QuadrupleId,
+        pre_signature_id: PreSigId,
         quadruple: PreSignatureQuadrupleRef,
     ) {
         self.available_pre_signatures
-            .insert(quadruple_id, PreSignatureRef::Ecdsa(quadruple));
+            .insert(pre_signature_id, PreSignatureRef::Ecdsa(quadruple));
     }
 
     pub(crate) fn requested_signatures(
@@ -430,11 +430,11 @@ impl EcdsaBlockReader for TestEcdsaBlockReader {
         Box::new(self.requested_transcripts.iter())
     }
 
-    fn pre_signatures_in_creation(&self) -> Box<dyn Iterator<Item = &QuadrupleId> + '_> {
+    fn pre_signatures_in_creation(&self) -> Box<dyn Iterator<Item = &PreSigId> + '_> {
         Box::new(std::iter::empty())
     }
 
-    fn available_pre_signature(&self, id: &QuadrupleId) -> Option<&PreSignatureRef> {
+    fn available_pre_signature(&self, id: &PreSigId) -> Option<&PreSignatureRef> {
         self.available_pre_signatures.get(id)
     }
 
@@ -1505,14 +1505,15 @@ pub(crate) fn crypto_without_keys() -> Arc<dyn ConsensusCrypto> {
 
 pub(crate) fn add_available_quadruple_to_payload(
     ecdsa_payload: &mut EcdsaPayload,
-    quadruple_id: QuadrupleId,
+    pre_signature_id: PreSigId,
     registry_version: RegistryVersion,
 ) {
-    let sig_inputs = create_sig_inputs(quadruple_id.id() as u8);
+    let sig_inputs = create_sig_inputs(pre_signature_id.id() as u8);
     let quadruple_ref = sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone();
-    ecdsa_payload
-        .available_pre_signatures
-        .insert(quadruple_id, PreSignatureRef::Ecdsa(quadruple_ref.clone()));
+    ecdsa_payload.available_pre_signatures.insert(
+        pre_signature_id,
+        PreSignatureRef::Ecdsa(quadruple_ref.clone()),
+    );
     for (t_ref, mut transcript) in sig_inputs.idkg_transcripts {
         transcript.registry_version = registry_version;
         ecdsa_payload
@@ -1581,7 +1582,7 @@ pub(crate) fn generate_key_transcript(
 pub(crate) trait EcdsaPayloadTestHelper {
     fn peek_next_transcript_id(&self) -> IDkgTranscriptId;
 
-    fn peek_next_quadruple_id(&self) -> QuadrupleId;
+    fn peek_next_pre_signature_id(&self) -> PreSigId;
 
     fn generate_current_key(
         &mut self,
@@ -1606,8 +1607,8 @@ impl EcdsaPayloadTestHelper for EcdsaPayload {
         self.uid_generator.clone().next_transcript_id()
     }
 
-    fn peek_next_quadruple_id(&self) -> QuadrupleId {
-        self.uid_generator.clone().next_quadruple_id()
+    fn peek_next_pre_signature_id(&self) -> PreSigId {
+        self.uid_generator.clone().next_pre_signature_id()
     }
 
     fn single_key_transcript(&self) -> &EcdsaKeyTranscript {

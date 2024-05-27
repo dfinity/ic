@@ -15,7 +15,7 @@ message EcdsaPayload {
   repeated registry.subnet.v1.IDkgTranscript idkg_transcripts = 6;
   repeated OngoingXnetReshare ongoing_xnet_reshares = 7;
   repeated XnetReshareAgreement xnet_reshare_agreements = 8;
-  uint64 next_unused_quadruple_id = 10;
+  uint64 next_unused_pre_signature_id = 10;
   repeated EcdsaKeyTranscript key_transcripts = 13;
   repeated AvailablePreSignature available_pre_signatures = 14;
   repeated PreSignatureInProgress pre_signatures_in_creation = 15;
@@ -53,14 +53,14 @@ message OngoingSignature {
 message AvailableQuadruple {
   reserved 3;
   reserved "key_id";
-  uint64 quadruple_id = 1;
+  uint64 pre_signature_id = 1;
   PreSignatureQuadrupleRef quadruple = 2;
 }
 
 message QuadrupleInProgress {
   reserved 3;
   reserved "key_id";
-  uint64 quadruple_id = 1;
+  uint64 pre_signature_id = 1;
   QuadrupleInCreation quadruple = 2;
 }
 
@@ -90,7 +90,7 @@ message RequestId {
   reserved 4;
   reserved "key_id";
   bytes pseudo_random_id = 1;
-  uint64 quadruple_id = 2;
+  uint64 pre_signature_id = 2;
   uint64 height = 3;
 }
 
