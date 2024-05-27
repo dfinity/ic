@@ -8842,6 +8842,7 @@ dependencies = [
  "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-crypto-sha2",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-ethereum-types",
  "ic-icrc1-index-ng",
  "ic-icrc1-ledger",
@@ -8868,13 +8869,16 @@ dependencies = [
 name = "ic-ledger-suite-orchestrator-test-utils"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "candid",
  "ic-base-types",
  "ic-canisters-http-types",
  "ic-cdk 0.13.2",
  "ic-ledger-suite-orchestrator",
+ "ic-management-canister-types",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
+ "ic-universal-canister",
  "icrc-ledger-types",
  "paste 1.0.14",
  "proptest",
