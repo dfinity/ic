@@ -31,7 +31,9 @@ use ic_message::ForwardParams;
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
-use slog::info;
+use slog::{error, info};
+use std::fs::create_dir_all;
+use std::io::prelude::*;
 use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 
@@ -52,10 +54,12 @@ const LATENCY: Duration = Duration::from_millis(120); // artificial added latenc
 const LATENCY_JITTER: Duration = Duration::from_millis(20);
 
 // ECDSA parameters
-const QUADRUPLES_TO_CREATE: u32 = 20;
-const MAX_QUEUE_SIZE: u32 = 40;
+const QUADRUPLES_TO_CREATE: u32 = 30;
+const MAX_QUEUE_SIZE: u32 = 10;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: f64 = 1.5;
+const SIGNATURE_REQUESTS_PER_SECOND: f64 = 2.5;
+
+const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
 
 pub fn setup(env: TestEnv) {
     PrometheusVm::default()
@@ -250,12 +254,35 @@ pub fn tecdsa_performance_test(
             log,
             "Minimal expected number of success calls {}", min_expected_success_calls,
         );
-        info!(
-            log,
-            "Number of success calls {}, failure calls {}",
-            metrics.success_calls(),
-            metrics.failure_calls()
+
+        let json_report = format!(
+            "{{
+                \"benchmark_name\": \"tecdsa_performance_test\",
+                \"success_calls\": {},
+                \"failure_calls\": {},
+                \"success_rps\": {}
+            }}",
+            metrics.success_calls() as f32,
+            metrics.failure_calls() as f32,
+            metrics.success_calls() as f32 / TESTING_PERIOD.as_secs() as f32
         );
+
+        info!(log, "json benchmark report: {json_report}");
+
+        let report_path = env.base_path().join(BENCHMARK_REPORT_FILE);
+
+        let create_dir_result = match report_path.parent() {
+            Some(dir_path) => create_dir_all(dir_path),
+            None => Ok(()),
+        };
+
+        let open_and_write_to_file_result =
+            ic_sys::fs::write_atomically(&report_path, |f| f.write_all(json_report.as_bytes()));
+
+        match create_dir_result.and(open_and_write_to_file_result) {
+            Ok(()) => info!(log, "Benchmark report written to {}", report_path.display()),
+            Err(e) => error!(log, "Failed to write benchmark report: {}", e),
+        }
 
         if download_p8s_data {
             info!(log, "Sleeping for {} seconds", COOLDOWN_PERIOD.as_secs());

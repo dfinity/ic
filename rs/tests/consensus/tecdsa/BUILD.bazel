@@ -139,6 +139,7 @@ system_test(
     tags = [
         "experimental_system_test_colocation",
         "manual",
+        "system_test_benchmark",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
