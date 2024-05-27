@@ -229,7 +229,7 @@ impl WasmExecutor for WasmExecutorImpl {
             &execution_state.exported_globals,
             self.log.clone(),
             wasm_reserved_pages,
-            Rc::new(DefaultOutOfInstructionsHandler {}),
+            Rc::new(DefaultOutOfInstructionsHandler::default()),
         );
 
         // Collect logs only when the flag is enabled to avoid producing too much data.
@@ -661,7 +661,7 @@ pub fn process(
     // In case the message dirtied too many pages, as a performance optimization we will
     // yield the control to the replica and then resume copying dirty pages in a new execution slice.
     let num_dirty_pages = if let Ok(ref res) = run_result {
-        let dirty_pages = NumOsPages::from(res.dirty_pages.len() as u64);
+        let dirty_pages = NumOsPages::from(res.wasm_dirty_pages.len() as u64);
         // Do not perform this optimization for subnets where DTS is not enabled.
         if execution_parameters.instruction_limits.slicing_enabled()
             && dirty_pages.get() > embedder.config().max_dirty_pages_without_optimization as u64
@@ -709,7 +709,7 @@ pub fn process(
         NumWasmPages::from(wasmtime_environ::WASM32_MAX_PAGES as usize) - wasm_reserved_pages;
 
     if wasm_heap_size_after > wasm_heap_limit {
-        wasm_result = Err(HypervisorError::WasmReservedPages);
+        wasm_result = Err(HypervisorError::ReservedPagesForOldMotoko);
     }
 
     let mut allocated_bytes = NumBytes::from(0);
@@ -723,7 +723,7 @@ pub fn process(
                     wasm_memory.size = instance.heap_size(CanisterMemoryType::Heap);
                     let wasm_memory_delta = wasm_memory.page_map.update(&compute_page_delta(
                         &mut instance,
-                        &run_result.dirty_pages,
+                        &run_result.wasm_dirty_pages,
                         CanisterMemoryType::Heap,
                     ));
 

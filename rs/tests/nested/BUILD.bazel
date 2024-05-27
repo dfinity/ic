@@ -29,6 +29,7 @@ MACRO_DEPENDENCIES = [
 
 rust_library(
     name = "nested",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     crate_name = "nested",
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

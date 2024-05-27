@@ -351,7 +351,7 @@ fn test_call_context_instructions_executed_is_updated() {
         call_context_manager.on_canister_result(
             call_context_id,
             None,
-            Err(HypervisorError::InstructionLimitExceeded),
+            Err(HypervisorError::InstructionLimitExceeded(2_000.into())),
             2_000.into()
         ),
         (CallContextAction::NotYetResponded, None)

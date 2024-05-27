@@ -9,7 +9,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
 use ic_types::{
-    consensus::idkg::QuadrupleId,
+    consensus::idkg::PreSigId,
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{
@@ -24,6 +24,7 @@ use std::{
     convert::{Infallible, TryFrom},
     fmt, ops,
 };
+use strum_macros::EnumIter;
 use tower::util::BoxCloneService;
 
 /// Instance execution statistics. The stats are cumulative and
@@ -31,34 +32,72 @@ use tower::util::BoxCloneService;
 /// created up until the moment they are requested.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct InstanceStats {
-    /// Total number of (host) pages accessed (read or written) by the instance
+    /// Total number of (host) OS pages (4KiB) accessed (read or written) by the instance
     /// and loaded into the linear memory.
-    pub accessed_pages: usize,
+    pub wasm_accessed_pages: usize,
 
-    /// Total number of (host) pages modified by the instance.
+    /// Total number of (host) OS pages (4KiB) modified by the instance.
     /// By definition a page that has been dirtied has also been accessed,
     /// hence this dirtied_pages <= accessed_pages
-    pub dirty_pages: usize,
+    pub wasm_dirty_pages: usize,
 
     /// Number of times a write access is handled when the page has already been
     /// read.
-    pub read_before_write_count: usize,
+    pub wasm_read_before_write_count: usize,
 
     /// Number of times a write access is handled when the page has not yet been
     /// read.
-    pub direct_write_count: usize,
+    pub wasm_direct_write_count: usize,
 
     /// Number of sigsegv handled.
-    pub sigsegv_count: usize,
+    pub wasm_sigsegv_count: usize,
 
     /// Number of calls to mmap.
-    pub mmap_count: usize,
+    pub wasm_mmap_count: usize,
 
     /// Number of calls to mprotect.
-    pub mprotect_count: usize,
+    pub wasm_mprotect_count: usize,
 
     /// Number of pages loaded by copying the data.
-    pub copy_page_count: usize,
+    pub wasm_copy_page_count: usize,
+
+    /// Number of accessed OS pages (4KiB) in stable memory.
+    pub stable_accessed_pages: usize,
+
+    /// Number of modified OS pages (4KiB) in stable memory.
+    pub stable_dirty_pages: usize,
+
+    /// Number of times a write access is handled when the page has already been
+    /// read.
+    pub stable_read_before_write_count: usize,
+
+    /// Number of times a write access is handled when the page has not yet been
+    /// read.
+    pub stable_direct_write_count: usize,
+
+    /// Number of sigsegv handled.
+    pub stable_sigsegv_count: usize,
+
+    /// Number of calls to mmap for stable memory.
+    pub stable_mmap_count: usize,
+
+    /// Number of calls to mprotect for stable memory.
+    pub stable_mprotect_count: usize,
+
+    /// Number of pages loaded by copying the data in stable memory.
+    pub stable_copy_page_count: usize,
+}
+
+impl InstanceStats {
+    // Returns the sum of dirty pages over the wasm heap and stable memory.
+    // Will be used when computing the heap delta at the end of the message.
+    pub fn dirty_pages(&self) -> usize {
+        self.wasm_dirty_pages + self.stable_dirty_pages
+    }
+    // Returns the sum of accessed pages over the wasm heap and stable memory.
+    pub fn accessed_pages(&self) -> usize {
+        self.wasm_accessed_pages + self.stable_accessed_pages
+    }
 }
 
 /// Errors that can be returned when fetching the available memory on a subnet.
@@ -86,6 +125,7 @@ pub enum PerformanceCounterType {
 }
 
 /// System API call ids to track their execution (in alphabetical order).
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, EnumIter)]
 pub enum SystemApiCallId {
     /// Tracker for `ic0.accept_message())`
     AcceptMessage,
@@ -129,6 +169,8 @@ pub enum SystemApiCallId {
     DebugPrint,
     /// Tracker for `ic0.global_timer_set()`
     GlobalTimerSet,
+    /// Tracker for `ic0.in_replicated_execution()`
+    InReplicatedExecution,
     /// Tracker for `ic0.is_controller()`
     IsController,
     /// Tracker for `ic0.mint_cycles()`
@@ -574,39 +616,39 @@ pub trait SystemApi {
     /// id in case of requests or the user id in case of an ingress message.
     fn ic0_msg_caller_copy(
         &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
     /// Returns the size of the opaque caller blob.
-    fn ic0_msg_caller_size(&self) -> HypervisorResult<u32>;
+    fn ic0_msg_caller_size(&self) -> HypervisorResult<usize>;
 
     /// Returns the size of msg.payload.
-    fn ic0_msg_arg_data_size(&self) -> HypervisorResult<u32>;
+    fn ic0_msg_arg_data_size(&self) -> HypervisorResult<usize>;
 
     /// Copies `length` bytes from msg.payload[offset..offset+size] to
     /// memory[dst..dst+size].
     fn ic0_msg_arg_data_copy(
         &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
     /// Used to look up the size of the method_name that the message wants to
     /// call. Can only be called in the context of inspecting messages.
-    fn ic0_msg_method_name_size(&self) -> HypervisorResult<u32>;
+    fn ic0_msg_method_name_size(&self) -> HypervisorResult<usize>;
 
     /// Used to copy the method_name that the message wants to call to heap. Can
     /// only be called in the context of inspecting messages.
     fn ic0_msg_method_name_copy(
         &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
@@ -619,8 +661,8 @@ pub trait SystemApi {
     /// it to the (initially empty) data reply.
     fn ic0_msg_reply_data_append(
         &mut self,
-        src: u32,
-        size: u32,
+        src: usize,
+        size: usize,
         heap: &[u8],
     ) -> HypervisorResult<()>;
 
@@ -636,14 +678,14 @@ pub trait SystemApi {
     fn ic0_msg_reject_code(&self) -> HypervisorResult<i32>;
 
     /// Replies to sender with an error message
-    fn ic0_msg_reject(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
+    fn ic0_msg_reject(&mut self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()>;
 
     /// Returns the length of the reject message in bytes.
     ///
     /// # Panics
     ///
     /// This traps if not invoked from a reject callback.
-    fn ic0_msg_reject_msg_size(&self) -> HypervisorResult<u32>;
+    fn ic0_msg_reject_msg_size(&self) -> HypervisorResult<usize>;
 
     /// Copies length bytes from self.reject_msg[offset..offset+size] to
     /// memory[dst..dst+size]
@@ -655,9 +697,9 @@ pub trait SystemApi {
     /// called from inside a reject callback.
     fn ic0_msg_reject_msg_copy(
         &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
@@ -668,17 +710,17 @@ pub trait SystemApi {
     /// canister to heap[dst..dst+size].
     fn ic0_canister_self_copy(
         &mut self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
     /// Outputs the specified bytes on the heap as a string on STDOUT.
-    fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
+    fn ic0_debug_print(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()>;
 
     /// Traps, with a possibly helpful message
-    fn ic0_trap(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
+    fn ic0_trap(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()>;
 
     /// Begins assembling a call to the canister specified by
     /// callee_src/callee_size at method name_src/name_size. Two mandatory
@@ -692,10 +734,10 @@ pub trait SystemApi {
     #[allow(clippy::too_many_arguments)]
     fn ic0_call_new(
         &mut self,
-        callee_src: u32,
-        callee_size: u32,
-        name_src: u32,
-        name_len: u32,
+        callee_src: usize,
+        callee_size: usize,
+        name_src: usize,
+        name_len: usize,
         reply_fun: u32,
         reply_env: u32,
         reject_fun: u32,
@@ -706,7 +748,12 @@ pub trait SystemApi {
     /// Appends the specified bytes to the argument of the call. Initially, the
     /// argument is empty. This can be called multiple times between
     /// `ic0.call_new` and `ic0.call_perform`.
-    fn ic0_call_data_append(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
+    fn ic0_call_data_append(
+        &mut self,
+        src: usize,
+        size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<()>;
 
     /// Relaxes the response delivery guarantee to be best effort, asking the system to respond at the
     /// latest after `timeout_seconds` have elapsed. Best effort means the system may also respond with
@@ -949,7 +996,11 @@ pub trait SystemApi {
     /// The amount of cycles is represented by a 128-bit value
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
-    fn ic0_canister_cycle_balance128(&mut self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
+    fn ic0_canister_cycle_balance128(
+        &mut self,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_available128` instead.
     /// This API supports only 64-bit values.
@@ -965,7 +1016,7 @@ pub trait SystemApi {
     /// The amount of cycles is represented by a 128-bit value
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
-    fn ic0_msg_cycles_available128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
+    fn ic0_msg_cycles_available128(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_refunded128` instead.
     /// This API supports only 64-bit values.
@@ -981,7 +1032,7 @@ pub trait SystemApi {
     /// The amount of cycles is represented by a 128-bit value
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
-    fn ic0_msg_cycles_refunded128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
+    fn ic0_msg_cycles_refunded128(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_accept128` instead.
     /// This API supports only 64-bit values.
@@ -1027,13 +1078,18 @@ pub trait SystemApi {
     fn ic0_msg_cycles_accept128(
         &mut self,
         max_amount: Cycles,
-        dst: u32,
+        dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
     /// Sets the certified data for the canister.
     /// See: <https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-certified-data>
-    fn ic0_certified_data_set(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
+    fn ic0_certified_data_set(
+        &mut self,
+        src: usize,
+        size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<()>;
 
     /// If run in non-replicated execution (i.e. query),
     /// returns 1 if the data certificate is present, 0 otherwise.
@@ -1044,16 +1100,16 @@ pub trait SystemApi {
     /// Returns the size of the data certificate if it is present
     /// (i.e. data_certificate_present returns 1).
     /// Traps if data_certificate_present returns 0.
-    fn ic0_data_certificate_size(&self) -> HypervisorResult<i32>;
+    fn ic0_data_certificate_size(&self) -> HypervisorResult<usize>;
 
     /// Copies the data certificate into the heap if it is present
     /// (i.e. data_certificate_present returns 1).
     /// Traps if data_certificate_present returns 0.
     fn ic0_data_certificate_copy(
         &mut self,
-        dst: u32,
-        offset: u32,
-        size: u32,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
@@ -1078,7 +1134,7 @@ pub trait SystemApi {
     /// otherwise a 0 is returned. It can be called multiple times.
     ///
     /// This system call traps if src+size exceeds the size of the WebAssembly memory.
-    fn ic0_is_controller(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<u32>;
+    fn ic0_is_controller(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<u32>;
 
     /// If run in replicated execution (i.e. an update call or a certified
     /// query), returns 1.
@@ -1096,7 +1152,7 @@ pub trait SystemApi {
     fn ic0_cycles_burn128(
         &mut self,
         amount: Cycles,
-        dst: u32,
+        dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 }
@@ -1174,7 +1230,7 @@ pub trait Scheduler: Send {
         state: Self::State,
         randomness: Randomness,
         ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
-        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
+        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
         current_round: ExecutionRound,
         next_checkpoint_round: Option<ExecutionRound>,
         current_round_type: ExecutionRoundType,
@@ -1206,8 +1262,8 @@ impl fmt::Display for WasmExecutionOutput {
         write!(f, "wasm_result => [{}], instructions left => {}, instance_stats => [ accessed pages => {}, dirty pages => {}]",
                wasm_result_str,
                self.num_instructions_left,
-               self.instance_stats.accessed_pages,
-               self.instance_stats.dirty_pages,
+               self.instance_stats.wasm_accessed_pages + self.instance_stats.stable_accessed_pages,
+               self.instance_stats.wasm_dirty_pages + self.instance_stats.stable_dirty_pages,
         )
     }
 }

@@ -1,14 +1,9 @@
 use super::*;
-use async_trait::async_trait;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
-use ic_crypto_tls_interfaces::{
-    AuthenticatedPeer, SomeOrAllNodes, TlsClientHandshakeError, TlsConfig, TlsConfigError,
-    TlsHandshake, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,
-};
+use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError, TlsPublicKeyCert};
 use ic_logger::{debug, new_logger};
 use ic_types::registry::RegistryClientError;
 use ic_types::{NodeId, RegistryVersion};
-use tokio::net::TcpStream;
 
 mod rustls;
 #[cfg(test)]
@@ -22,7 +17,7 @@ where
         &self,
         allowed_clients: SomeOrAllNodes,
         registry_version: RegistryVersion,
-    ) -> Result<tokio_rustls::rustls::ServerConfig, TlsConfigError> {
+    ) -> Result<::rustls::ServerConfig, TlsConfigError> {
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -60,7 +55,7 @@ where
     fn server_config_without_client_auth(
         &self,
         registry_version: RegistryVersion,
-    ) -> Result<tokio_rustls::rustls::ServerConfig, TlsConfigError> {
+    ) -> Result<::rustls::ServerConfig, TlsConfigError> {
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -98,7 +93,7 @@ where
         &self,
         server: NodeId,
         registry_version: RegistryVersion,
-    ) -> Result<tokio_rustls::rustls::ClientConfig, TlsConfigError> {
+    ) -> Result<::rustls::ClientConfig, TlsConfigError> {
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -122,96 +117,6 @@ where
             MetricsDomain::TlsConfig,
             MetricsScope::Full,
             "client_config",
-            MetricsResult::from(&result),
-            start_time,
-        );
-        debug!(logger;
-            crypto.description => "end",
-            crypto.is_ok => result.is_ok(),
-            crypto.error => log_err(result.as_ref().err()),
-        );
-        result
-    }
-}
-
-#[async_trait]
-impl<CSP> TlsHandshake for CryptoComponentImpl<CSP>
-where
-    CSP: CryptoServiceProvider + Send + Sync,
-{
-    async fn perform_tls_server_handshake(
-        &self,
-        tcp_stream: TcpStream,
-        allowed_clients: SomeOrAllNodes,
-        registry_version: RegistryVersion,
-    ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError> {
-        let log_id = get_log_id(&self.logger, module_path!());
-        let logger = new_logger!(&self.logger;
-            crypto.log_id => log_id,
-            crypto.trait_name => "TlsHandshake",
-            crypto.method_name => "perform_tls_server_handshake",
-        );
-        debug!(logger;
-            crypto.description => "start",
-            crypto.registry_version => registry_version.get(),
-            crypto.allowed_tls_clients => format!("{:?}", allowed_clients),
-        );
-        let start_time = self.metrics.now();
-        let result = rustls::server_handshake::perform_tls_server_handshake(
-            &self.csp,
-            self.node_id,
-            Arc::clone(&self.registry_client),
-            tcp_stream,
-            allowed_clients,
-            registry_version,
-        )
-        .await;
-        self.metrics.observe_duration_seconds(
-            MetricsDomain::TlsHandshake,
-            MetricsScope::Full,
-            "perform_tls_server_handshake",
-            MetricsResult::from(&result),
-            start_time,
-        );
-        debug!(logger;
-            crypto.description => "end",
-            crypto.is_ok => result.is_ok(),
-            crypto.error => log_err(result.as_ref().err()),
-        );
-        result
-    }
-
-    async fn perform_tls_client_handshake(
-        &self,
-        tcp_stream: TcpStream,
-        server: NodeId,
-        registry_version: RegistryVersion,
-    ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError> {
-        let log_id = get_log_id(&self.logger, module_path!());
-        let logger = new_logger!(&self.logger;
-            crypto.log_id => log_id,
-            crypto.trait_name => "TlsHandshake",
-            crypto.method_name => "perform_tls_client_handshake",
-        );
-        debug!(logger;
-            crypto.description => "start",
-            crypto.registry_version => registry_version.get(),
-            crypto.tls_server => format!("{}", server),
-        );
-        let start_time = self.metrics.now();
-        let result = rustls::client_handshake::perform_tls_client_handshake(
-            &self.csp,
-            self.node_id,
-            Arc::clone(&self.registry_client),
-            tcp_stream,
-            server,
-            registry_version,
-        )
-        .await;
-        self.metrics.observe_duration_seconds(
-            MetricsDomain::TlsHandshake,
-            MetricsScope::Full,
-            "perform_tls_client_handshake",
             MetricsResult::from(&result),
             start_time,
         );

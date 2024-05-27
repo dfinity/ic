@@ -63,6 +63,7 @@ DEPENDENCIES = [
 
 rust_library(
     name = "state_machine_tests",
+    testonly = True,
     srcs = [
         "src/lib.rs",
         "src/tests.rs",
@@ -101,6 +102,7 @@ MACRO_DEPENDENCIES = [
 
 rust_binary(
     name = "ic-test-state-machine",
+    testonly = True,
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = BIN_DEPENDENCIES,

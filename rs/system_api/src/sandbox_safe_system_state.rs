@@ -453,7 +453,7 @@ impl SystemStateChanges {
 
         // Verify new certified data isn't too long and set it.
         if let Some(certified_data) = self.new_certified_data.as_ref() {
-            if certified_data.len() > CERTIFIED_DATA_MAX_LENGTH as usize {
+            if certified_data.len() > CERTIFIED_DATA_MAX_LENGTH {
                 return Err(Self::error("Certified data is too large"));
             }
             system_state.certified_data = certified_data.clone();
@@ -760,11 +760,9 @@ impl SandboxSafeSystemState {
                     .push(CallbackUpdate::Register(id, callback));
                 Ok(id)
             }
-            None => Err(HypervisorError::ContractViolation {
+            None => Err(HypervisorError::ToolchainContractViolation {
                 error: "Tried to register a callback in a context where it isn't allowed."
                     .to_string(),
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
             }),
         }
     }
@@ -838,11 +836,7 @@ impl SandboxSafeSystemState {
             .cycles_account_manager
             .mint_cycles(self.canister_id, &mut new_balance, amount_to_mint)
             .map_err(|CyclesAccountManagerError::ContractViolation(msg)| {
-                HypervisorError::ContractViolation {
-                    error: msg,
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
-                }
+                HypervisorError::ToolchainContractViolation { error: msg }
             });
         self.update_balance_change(new_balance);
         result
@@ -1024,7 +1018,7 @@ impl SandboxSafeSystemState {
             .get()
             .overflowing_mul(self.dirty_page_overhead.get());
         if overflow {
-            Err(HypervisorError::ContractViolation{error: format!("Overflow calculating instruction cost for dirty pages - conversion rate: {}, dirty_pages: {}", self.dirty_page_overhead, dirty_pages), suggestion: "".to_string(), doc_link: "".to_string()})
+            Err(HypervisorError::ToolchainContractViolation{error: format!("Overflow calculating instruction cost for dirty pages - conversion rate: {}, dirty_pages: {}", self.dirty_page_overhead, dirty_pages)})
         } else {
             Ok(NumInstructions::from(inst))
         }

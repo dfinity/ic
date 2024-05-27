@@ -140,7 +140,7 @@ use crate::driver::farm::{Farm, GroupSpec};
 use crate::driver::log_events;
 use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
 use crate::k8s::tnet::TNet;
-use crate::k8s::virtualmachine::{delete_vm, restart_vm, start_vm};
+use crate::k8s::virtualmachine::{destroy_vm, restart_vm, start_vm};
 use crate::retry_with_msg;
 use crate::retry_with_msg_async;
 use crate::util::{block_on, create_agent};
@@ -1931,7 +1931,7 @@ pub struct HostedVm {
 impl VmControl for HostedVm {
     fn kill(&self) {
         if self.k8s {
-            block_on(delete_vm(&self.vm_name)).expect("could not kill VM");
+            block_on(destroy_vm(&self.vm_name)).expect("could not kill VM");
         } else {
             self.farm
                 .destroy_vm(&self.group_name, &self.vm_name)

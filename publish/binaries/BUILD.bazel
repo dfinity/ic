@@ -27,7 +27,7 @@ BINARIES = {
     "canister_sandbox": "//rs/canister_sandbox",
     "compiler_sandbox": "//rs/canister_sandbox:compiler_sandbox",
     "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
-    "replica": "//rs/replica",
+    "replica": "//rs/replica:replica",
     "boundary-node-prober": "//rs/boundary_node/prober:boundary-node-prober",
     "certificate-issuer": "//rs/boundary_node/certificate_issuance/certificate_issuer:certificate-issuer",
     "certificate-syncer": "//rs/boundary_node/certificate_issuance/certificate_syncer:certificate-syncer",
@@ -74,6 +74,25 @@ BINARIES = {
     "types-test": "//rs/types/types:types_test",
 }
 
+# test binaries or binaries using test utils
+TESTONLY_BINARIES = [
+    "drun",
+    "e2e-test-driver",
+    "ic-admin",
+    "ic-backup",
+    "ic-boundary",
+    "ic-boundary-tls",
+    "ic-nns-init",
+    "ic-prep",
+    "ic-recovery",
+    "ic-replay",
+    "ic-starter",
+    "ic-test-state-machine",
+    "pocket-ic",
+    "sns-test-feature",
+    "types-test",
+]
+
 LIBRARIES = {
     "nss_icos": "//rs/ic_os/nss_icos",
 }
@@ -81,17 +100,33 @@ LIBRARIES = {
 [release_nostrip_binary(
     name = name + "_bin",
     binary = BINARIES[name],
-) for name in BINARIES if name in NO_STRIP and name not in TEST_BINARIES]
+) for name in BINARIES if name in NO_STRIP and name not in TEST_BINARIES and name not in TESTONLY_BINARIES]
+
+[release_nostrip_binary(
+    name = name + "_bin",
+    testonly = True,
+    binary = BINARIES[name],
+) for name in BINARIES if name in NO_STRIP and name not in TEST_BINARIES and name in TESTONLY_BINARIES]
 
 [release_strip_binary(
     name = name + "_bin",
     binary = BINARIES[name],
-) for name in BINARIES if name not in NO_STRIP and name not in TEST_BINARIES]
+) for name in BINARIES if name not in NO_STRIP and name not in TEST_BINARIES and name not in TESTONLY_BINARIES]
+
+[release_strip_binary(
+    name = name + "_bin",
+    testonly = True,
+    binary = BINARIES[name],
+) for name in BINARIES if name not in NO_STRIP and name not in TEST_BINARIES and name in TESTONLY_BINARIES]
 
 [release_strip_binary_test(
     name = name + "_bin",
+    testonly = True,
     binary = BINARIES[name],
 ) for name in BINARIES if name not in NO_STRIP and name in TEST_BINARIES]
+
+# all targets below are tesonly because the targets violating the testonly flag
+# would error at this point
 
 [release_strip_binary(
     name = name + "_lib",
@@ -101,6 +136,7 @@ LIBRARIES = {
 [
     genrule(
         name = name + "_cleaned",
+        testonly = True,
         srcs = [name + "_bin"],
         outs = [name],
         cmd = select({
@@ -191,6 +227,7 @@ genrule(
 
 filegroup(
     name = "binaries",
+    testonly = True,
     srcs = select({
         "@platforms//os:linux": [name + ".gz" for name in BINARIES],
         "@platforms//os:osx": [name + ".gz" for name in BINARIES if name not in LINUX_ONLY],
@@ -199,6 +236,7 @@ filegroup(
 
 upload_artifacts(
     name = "upload",
+    testonly = True,
     inputs = [":binaries"],
     remote_subdir = "binaries/" + select({
         "@platforms//cpu:x86_64": "x86_64",
@@ -216,6 +254,7 @@ upload_artifacts(
 # the legacy upload path. Unwinding it without a will involve an unpredictable amount of time.
 upload_artifacts(
     name = "legacy_upload",
+    testonly = True,
     inputs = [":binaries"],
     remote_subdir = "release",
     target_compatible_with = ["@platforms//os:linux"],

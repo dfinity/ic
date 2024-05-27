@@ -36,7 +36,7 @@ use std::time::Duration;
 use tokio::net::TcpStream;
 
 /// This value reflects the value `max_simultaneous_connections_per_ip_address` in the firewall config file.
-const MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS: usize = 100;
+const MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS: usize = 1000;
 
 const UNIVERSAL_VM_NAME: &str = "httpbin";
 

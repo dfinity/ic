@@ -8,9 +8,8 @@ use hyper::{
     service::Service,
     Uri,
 };
-use ic_crypto_tls_interfaces::{
-    AuthenticatedPeer, SomeOrAllNodes, TlsHandshake, TlsServerHandshakeError, TlsStream,
-};
+use ic_crypto_tls_interfaces::{AuthenticatedPeer, SomeOrAllNodes, TlsConfig};
+use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_xnet_uri::XNetAuthority;
 use std::convert::TryFrom;
@@ -21,6 +20,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
+use tokio_rustls::TlsAcceptor;
 
 /// An implementation of hyper Executor that spawns futures on a tokio runtime
 /// handle.
@@ -40,27 +40,18 @@ where
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 /// The current state of TLS connection.
-enum ConnectionState {
+enum ConnectionState<IO>
+where
+    IO: AsyncRead + AsyncWrite + Unpin,
+{
     /// The handshake is still in progress.
     Handshake(
-        Pin<
-            Box<
-                dyn Future<
-                        Output = Result<
-                            (Box<dyn TlsStream>, AuthenticatedPeer),
-                            TlsServerHandshakeError,
-                        >,
-                    > + Send,
-            >,
-        >,
+        Pin<Box<dyn Future<Output = Result<(IO, AuthenticatedPeer), std::io::Error>> + Send>>,
     ),
     /// Handshake was not successful.
-    Failed(TlsServerHandshakeError),
+    Failed(std::io::Error),
     /// The handshake completed successfully.
-    Ready {
-        stream: Box<dyn TlsStream>,
-        peer: AuthenticatedPeer,
-    },
+    Ready { stream: IO, peer: AuthenticatedPeer },
     /// An unencrypted TCP stream, MUST ONLY BE USED IN TESTS.
     Unencrypted(TcpStream),
 }
@@ -70,13 +61,8 @@ fn box_err(e: impl std::error::Error + Send + Sync + 'static) -> BoxError {
     Box::new(e) as Box<_>
 }
 
-/// Construct an IO error of kind Other holding the specified error.
-fn io_err(e: impl std::error::Error + Send + Sync + 'static) -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::Other, e)
-}
-
 /// A TLS connection.
-pub struct TlsConnection(ConnectionState);
+pub struct TlsConnection(ConnectionState<tokio_rustls::TlsStream<TcpStream>>);
 
 impl TlsConnection {
     /// Returns the identity of the connected peer if the TLS
@@ -97,7 +83,10 @@ impl TlsConnection {
         f: F,
     ) -> Poll<std::io::Result<R>>
     where
-        F: FnOnce(Pin<&mut Box<dyn TlsStream>>, &mut Context<'_>) -> Poll<std::io::Result<R>>,
+        F: FnOnce(
+            Pin<&mut tokio_rustls::TlsStream<TcpStream>>,
+            &mut Context<'_>,
+        ) -> Poll<std::io::Result<R>>,
     {
         match &mut self.0 {
             ConnectionState::Handshake(fut) => match Future::poll(Pin::new(fut), cx) {
@@ -115,12 +104,17 @@ impl TlsConnection {
                     }
                 }
                 Poll::Ready(Err(tls_err)) => {
-                    self.0 = ConnectionState::Failed(tls_err.clone());
-                    Poll::Ready(Err(io_err(tls_err)))
+                    self.0 = ConnectionState::Failed(std::io::Error::new(
+                        tls_err.kind(),
+                        tls_err.to_string(),
+                    ));
+                    Poll::Ready(Err(tls_err))
                 }
                 Poll::Pending => Poll::Pending,
             },
-            ConnectionState::Failed(err) => Poll::Ready(Err(io_err(err.clone()))),
+            ConnectionState::Failed(err) => {
+                Poll::Ready(Err(std::io::Error::new(err.kind(), err.to_string())))
+            }
             ConnectionState::Ready { ref mut stream, .. } => f(Pin::new(stream), cx),
             ConnectionState::Unencrypted(_) => {
                 unreachable!("must only be called for encrypted connections")
@@ -191,7 +185,7 @@ impl Connection for TlsConnection {
 pub struct TlsAccept {
     inner: AddrIncoming,
     connection_type: ConnectionType,
-    tls: Arc<dyn TlsHandshake + Send + Sync>,
+    tls: Arc<dyn TlsConfig + Send + Sync>,
     registry_client: Arc<dyn RegistryClient + Send + Sync>,
 }
 
@@ -213,12 +207,23 @@ impl Accept for TlsAccept {
                         let tls = Arc::clone(&self.tls);
                         let registry_version = self.registry_client.get_latest_version();
                         let future = async move {
-                            tls.perform_tls_server_handshake(
-                                conn.into_inner(),
-                                SomeOrAllNodes::All,
-                                registry_version,
-                            )
-                            .await
+                            let server_config = tls
+                                .server_config(SomeOrAllNodes::All, registry_version)
+                                .map_err(|err| std::io::Error::other(err.to_string()))?;
+                            let tls_acceptor = TlsAcceptor::from(Arc::new(server_config));
+                            let tls_stream = tls_acceptor.accept(conn.into_inner()).await?;
+                            let peer_cert = tls_stream
+                                .get_ref()
+                                .1
+                                .peer_certificates()
+                                .ok_or(std::io::Error::other("no peer certificates"))?
+                                .first()
+                                .ok_or(std::io::Error::other("no peer certificates"))?;
+                            let peer_id = AuthenticatedPeer::Node(
+                                node_id_from_certificate_der(peer_cert.as_ref())
+                                    .map_err(|err| std::io::Error::other(format!("{:?}", err)))?,
+                            );
+                            Ok((tokio_rustls::TlsStream::Server(tls_stream), peer_id))
                         };
                         Ok(TlsConnection(ConnectionState::Handshake(Box::pin(future))))
                     }
@@ -238,7 +243,7 @@ impl Accept for TlsAccept {
 /// the above socket options failed.
 pub fn tls_bind(
     addr: &SocketAddr,
-    tls: Arc<dyn TlsHandshake + Send + Sync>,
+    tls: Arc<dyn TlsConfig + Send + Sync>,
     registry_client: Arc<dyn RegistryClient + Send + Sync>,
 ) -> Result<(SocketAddr, hyper::server::Builder<TlsAccept>), BoxError> {
     tls_bind_with_connection_type(addr, tls, registry_client, ConnectionType::Tls)
@@ -248,7 +253,7 @@ pub fn tls_bind(
 /// This function should be used only in tests.
 pub fn tls_bind_for_test(
     addr: &SocketAddr,
-    tls: Arc<dyn TlsHandshake + Send + Sync>,
+    tls: Arc<dyn TlsConfig + Send + Sync>,
     registry_client: Arc<dyn RegistryClient + Send + Sync>,
 ) -> Result<(SocketAddr, hyper::server::Builder<TlsAccept>), BoxError> {
     tls_bind_with_connection_type(addr, tls, registry_client, ConnectionType::Raw)
@@ -257,7 +262,7 @@ pub fn tls_bind_for_test(
 /// A common implementation
 fn tls_bind_with_connection_type(
     addr: &SocketAddr,
-    tls: Arc<dyn TlsHandshake + Send + Sync>,
+    tls: Arc<dyn TlsConfig + Send + Sync>,
     registry_client: Arc<dyn RegistryClient + Send + Sync>,
     connection_type: ConnectionType,
 ) -> Result<(SocketAddr, hyper::server::Builder<TlsAccept>), BoxError> {
@@ -322,11 +327,11 @@ enum ConnectionType {
 pub struct TlsConnector {
     connection_type: ConnectionType,
     http: HttpConnector,
-    tls: Arc<dyn TlsHandshake + Send + Sync>,
+    tls: Arc<dyn TlsConfig + Send + Sync>,
 }
 
 impl TlsConnector {
-    pub fn new(tls: Arc<dyn TlsHandshake + Send + Sync>) -> Self {
+    pub fn new(tls: Arc<dyn TlsConfig + Send + Sync>) -> Self {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
         Self {
@@ -338,7 +343,7 @@ impl TlsConnector {
 
     /// Like [TlsConnector::new], but connects over unencrypted channel.
     /// This function should be used only in tests.
-    pub fn new_for_tests(tls: Arc<dyn TlsHandshake + Send + Sync>) -> Self {
+    pub fn new_for_tests(tls: Arc<dyn TlsConfig + Send + Sync>) -> Self {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
         Self {
@@ -376,18 +381,28 @@ impl Service<Uri> for TlsConnector {
             match connection_type {
                 ConnectionType::Raw => Ok(TlsConnection(ConnectionState::Unencrypted(tcp_stream))),
                 ConnectionType::Tls => {
-                    let tls_stream = tls
-                        .perform_tls_client_handshake(
+                    let tls_config = tls
+                        .client_config(xnet_auth.node_id, xnet_auth.registry_version)
+                        .map_err(Box::new)?;
+                    let tls_connector = tokio_rustls::TlsConnector::from(Arc::new(tls_config));
+                    let irrelevant_domain =
+                        "domain.is-irrelevant-as-hostname-verification-is.disabled";
+                    tls_connector
+                        .connect(
+                            irrelevant_domain
+                                .try_into()
+                                // TODO: ideally the expect should run at compile time
+                                .expect("failed to create domain"),
                             tcp_stream,
-                            xnet_auth.node_id,
-                            xnet_auth.registry_version,
                         )
                         .await
-                        .map_err(box_err)?;
-                    Ok(TlsConnection(ConnectionState::Ready {
-                        stream: tls_stream,
-                        peer: AuthenticatedPeer::Node(xnet_auth.node_id),
-                    }))
+                        .map(|tls_stream| {
+                            TlsConnection(ConnectionState::Ready {
+                                stream: tokio_rustls::TlsStream::Client(tls_stream),
+                                peer: AuthenticatedPeer::Node(xnet_auth.node_id),
+                            })
+                        })
+                        .map_err(box_err)
                 }
             }
         };

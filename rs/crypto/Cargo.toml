@@ -42,15 +42,15 @@ ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-types = { path = "../types/types" }
 parking_lot = "0.12.1"
+# We use the `dangerous_configuration` flag for rustls to be able to set custom `ClientCertVerifier` and
+# `ServerCertVerifier` in order to verify node certificates.
+rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 serde = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = "3.1.0"
 tokio = { workspace = true }
-# We use the `dangerous_configuration` flag for rustls to be able to set custom `ClientCertVerifier` and
-# `ServerCertVerifier` in order to verify node certificates.
-tokio-rustls = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

@@ -21,7 +21,6 @@ impl<T: Rng + CryptoRng + 'static + Send + Sync> CryptoComponentRng for T {}
 
 pub mod internal {
     use super::*;
-    use async_trait::async_trait;
     use ic_base_types::PrincipalId;
     use ic_config::crypto::{CryptoConfig, CspVaultType};
     use ic_crypto::{CryptoComponent, CryptoComponentImpl};
@@ -39,10 +38,7 @@ pub mod internal {
     use ic_crypto_temp_crypto_vault::{
         RemoteVaultEnvironment, TempCspVaultServer, TokioRuntimeOrHandle,
     };
-    use ic_crypto_tls_interfaces::{
-        AuthenticatedPeer, SomeOrAllNodes, TlsClientHandshakeError, TlsConfig, TlsConfigError,
-        TlsHandshake, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,
-    };
+    use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError, TlsPublicKeyCert};
     use ic_crypto_utils_basic_sig::conversions::derive_node_id;
     use ic_interfaces::crypto::{
         BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
@@ -103,7 +99,6 @@ pub mod internal {
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use tempfile::TempDir;
-    use tokio::net::TcpStream;
 
     /// This struct combines the following two items:
     /// * a crypto component whose state lives in a temporary directory
@@ -737,33 +732,6 @@ pub mod internal {
                 inputs,
                 signature,
             )
-        }
-    }
-
-    #[async_trait]
-    impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng> TlsHandshake
-        for TempCryptoComponentGeneric<C, R>
-    {
-        async fn perform_tls_server_handshake(
-            &self,
-            tcp_stream: TcpStream,
-            allowed_clients: SomeOrAllNodes,
-            registry_version: RegistryVersion,
-        ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError> {
-            self.crypto_component
-                .perform_tls_server_handshake(tcp_stream, allowed_clients, registry_version)
-                .await
-        }
-
-        async fn perform_tls_client_handshake(
-            &self,
-            tcp_stream: TcpStream,
-            server: NodeId,
-            registry_version: RegistryVersion,
-        ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError> {
-            self.crypto_component
-                .perform_tls_client_handshake(tcp_stream, server, registry_version)
-                .await
         }
     }
 

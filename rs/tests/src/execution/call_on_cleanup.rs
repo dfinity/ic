@@ -37,7 +37,7 @@ pub fn is_called_if_reply_traps(env: TestEnv) {
                     ..
                 })) if reject_code == RejectCode::CanisterError
                     // Verify that the error message being returned is the original.
-                    && reject_message.contains("trapped explicitly")
+                    && reject_message.contains("called `ic0.trap` with message")
             );
 
             // Verify that `call_on_cleanup` was invoked.
@@ -122,8 +122,8 @@ pub fn changes_are_discarded_if_trapped(env: TestEnv) {
                 })) if reject_code == RejectCode::CanisterError
                     // Verify that the original error message as well as the on_cleanup error is
                     // returned.
-                    && reject_message.contains("trapped explicitly: in on_reply")
-                    && reject_message.contains("trapped explicitly: in on_call_cleanup")
+                    && reject_message.contains("called `ic0.trap` with message: in on_reply")
+                    && reject_message.contains("called `ic0.trap` with message: in on_call_cleanup")
             );
 
             // Changes by call_on_cleanup were discarded.

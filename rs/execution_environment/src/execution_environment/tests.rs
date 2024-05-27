@@ -2299,7 +2299,7 @@ fn ecdsa_signature_with_unknown_key_rejected() {
     let result = test.ingress(canister_id, "update", run).unwrap();
     assert_eq!(
         WasmResult::Reject(
-            format!("Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: {}, existing keys with signing enabled: [{}]\")", wrong_key, correct_key
+            format!("Unable to route management canister request sign_with_ecdsa: IDkgKeyError(\"Requested unknown iDKG key: ecdsa:{}, existing keys with signing enabled: [ecdsa:{}]\")", wrong_key, correct_key
         )),
         result
     );
@@ -2401,7 +2401,7 @@ fn ecdsa_public_key_req_with_unknown_key_rejected() {
     let result = test.ingress(canister_id, "update", run).unwrap();
     assert_eq!(
         WasmResult::Reject(
-            format!("Unable to route management canister request ecdsa_public_key: EcdsaKeyError(\"Requested ECDSA key: {}, existing keys: [{}]\")", wrong_key, correct_key
+            format!("Unable to route management canister request ecdsa_public_key: IDkgKeyError(\"Requested unknown iDKG key: ecdsa:{}, existing keys: [ecdsa:{}]\")", wrong_key, correct_key
         )),
         result
     );
@@ -2550,7 +2550,7 @@ fn canister_output_queue_does_not_overflow_when_calling_ic00() {
                 test.ingress_state(&message_id),
                 IngressState::Failed(UserError::new(
                     ErrorCode::CanisterCalledTrap,
-                    format!("Error from Canister {uc}: Canister trapped explicitly: call_perform failed")
+                    format!("Error from Canister {uc}: Canister called `ic0.trap` with message: call_perform failed")
                 ))
             );
         } else {
@@ -2598,7 +2598,7 @@ fn send_messages_to_bitcoin_canister_until_capacity(
                 test.ingress_state(&message_id),
                 IngressState::Failed(UserError::new(
                     ErrorCode::CanisterCalledTrap,
-                    format!("Error from Canister {uc}: Canister trapped explicitly: call_perform failed")
+                    format!("Error from Canister {uc}: Canister called `ic0.trap` with message: call_perform failed")
                 ))
             );
         } else {

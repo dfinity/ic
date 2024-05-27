@@ -38,10 +38,11 @@ use ic_management_canister_types::{
     CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType, ClearChunkStoreArgs,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs,
     ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method as Ic00Method,
-    NodeMetricsHistoryArgs, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs, SignWithECDSAArgs, StoredChunksArgs,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
+    Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs,
+    SignWithECDSAArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -2501,7 +2502,7 @@ impl ExecutionEnvironment {
         }
 
         if !topology
-            .ecdsa_signing_subnets(&key_id)
+            .idkg_signing_subnets(&MasterPublicKeyId::Ecdsa(key_id.clone()))
             .contains(&state.metadata.own_subnet_id)
         {
             return Err(UserError::new(
@@ -3249,40 +3250,38 @@ impl ExecutionEnvironment {
 
         for canister in canister_states.values_mut() {
             let canister_id = canister.canister_id();
-            let ready_to_stop = canister.system_state.ready_to_stop();
             match canister.system_state.status {
                 // Canister is not stopping so we can skip it.
                 CanisterStatus::Running { .. } | CanisterStatus::Stopped => continue,
-                // Canister is stopping so there might be some work to do.
+
+                // Canister is ready to stop.
+                CanisterStatus::Stopping { .. } if canister.system_state.ready_to_stop() => {
+                    // Transition the canister to "stopped".
+                    let stopping_status =
+                        mem::replace(&mut canister.system_state.status, CanisterStatus::Stopped);
+                    canister.system_state.canister_version += 1;
+
+                    // Reply to all pending stop_canister requests.
+                    if let CanisterStatus::Stopping { stop_contexts, .. } = stopping_status {
+                        for stop_context in stop_contexts {
+                            self.reply_to_stop_context(
+                                &stop_context,
+                                &mut state,
+                                canister_id,
+                                time,
+                                StopCanisterReply::Completed,
+                            );
+                        }
+                    }
+                }
+
+                // Canister is stopping, but not yet ready to stop.
                 CanisterStatus::Stopping {
                     ref mut stop_contexts,
                     ..
                 } => {
-                    if ready_to_stop {
-                        // Canister is ready to stop.
-                        // Transition the canister to "stopped".
-                        let stopping_status = mem::replace(
-                            &mut canister.system_state.status,
-                            CanisterStatus::Stopped,
-                        );
-                        canister.system_state.canister_version += 1;
-
-                        // Reply to all pending stop_canister requests.
-                        if let CanisterStatus::Stopping { stop_contexts, .. } = stopping_status {
-                            for stop_context in stop_contexts {
-                                self.reply_to_stop_context(
-                                    &stop_context,
-                                    &mut state,
-                                    canister_id,
-                                    time,
-                                    StopCanisterReply::Completed,
-                                );
-                            }
-                        }
-                    } else {
-                        // Respond to any stop contexts that have timed out.
-                        self.timeout_expired_requests(time, canister_id, stop_contexts, &mut state);
-                    }
+                    // Respond to any stop contexts that have timed out.
+                    self.timeout_expired_requests(time, canister_id, stop_contexts, &mut state);
                 }
             }
         }

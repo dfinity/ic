@@ -47,7 +47,10 @@ macro_rules! matches_pattern {
 }
 
 pub fn assert_result_invalid<P, T>(result: ValidationResult<ValidationError<P, T>>) {
-    assert!(matches_pattern!(result, Err(ValidationError::Permanent(_))));
+    assert!(matches_pattern!(
+        result,
+        Err(ValidationError::InvalidArtifact(_))
+    ));
 }
 
 pub fn assert_action_invalid<T: ConsensusMessageHashable>(action: ChangeAction, msg: &T) {

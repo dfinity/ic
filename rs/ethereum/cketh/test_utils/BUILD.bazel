@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "test_utils",
+    testonly = True,
     srcs = glob(
         ["src/**/*.rs"],
     ),

@@ -14,7 +14,7 @@ use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManagerError};
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -843,19 +843,21 @@ impl BatchProcessorImpl {
                         ))
                     })?;
             let subnet_features: SubnetFeatures = subnet_record.features.unwrap_or_default().into();
-            let ecdsa_keys_held = subnet_record
+            let idkg_keys_held = subnet_record
                 .ecdsa_config
                 .map(|ecdsa_config| {
                     ecdsa_config
                         .key_ids
                         .into_iter()
                         .map(|k| {
-                            EcdsaKeyId::try_from(k).map_err(|err: ProxyDecodeError| {
-                                Persistent(format!(
-                                    "'ECDSA key ID from subnet record for subnet {}', err: {}",
-                                    *subnet_id, err,
-                                ))
-                            })
+                            EcdsaKeyId::try_from(k)
+                                .map(MasterPublicKeyId::Ecdsa)
+                                .map_err(|err: ProxyDecodeError| {
+                                    Persistent(format!(
+                                        "'ECDSA key ID from subnet record for subnet {}', err: {}",
+                                        *subnet_id, err,
+                                    ))
+                                })
                         })
                         .collect::<Result<BTreeSet<_>, _>>()
                 })
@@ -869,7 +871,7 @@ impl BatchProcessorImpl {
                     nodes,
                     subnet_type,
                     subnet_features,
-                    ecdsa_keys_held,
+                    idkg_keys_held,
                 },
             );
         }
@@ -895,13 +897,17 @@ impl BatchProcessorImpl {
             .get_ecdsa_signing_subnets(registry_version)
             .map_err(|err| registry_error("ECDSA signing subnets", None, err))?
             .unwrap_or_default();
+        let idkg_signing_subnets: BTreeMap<_, _> = ecdsa_signing_subnets
+            .iter()
+            .map(|(key_id, value)| (MasterPublicKeyId::Ecdsa(key_id.clone()), value.clone()))
+            .collect();
 
         Ok(NetworkTopology {
             subnets,
             routing_table: Arc::new(routing_table),
             nns_subnet_id,
             canister_migrations: Arc::new(canister_migrations),
-            ecdsa_signing_subnets,
+            idkg_signing_subnets,
             bitcoin_testnet_canister_id: self.bitcoin_config.testnet_canister_id,
             bitcoin_mainnet_canister_id: self.bitcoin_config.mainnet_canister_id,
         })

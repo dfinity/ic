@@ -24,15 +24,14 @@ pub enum NodeFetchError {
 #[derive(Debug)]
 pub struct NodesFetcherImpl {
     http_client: Client,
-    // TODO: change to subnet_id once ic-agent 0.35.0 is released
-    canister_id: Principal,
+    subnet_id: Principal,
 }
 
 impl NodesFetcherImpl {
-    pub fn new(http_client: Client, canister_id: Principal) -> Self {
+    pub fn new(http_client: Client, subnet_id: Principal) -> Self {
         Self {
             http_client,
-            canister_id,
+            subnet_id,
         }
     }
 }
@@ -43,7 +42,9 @@ impl NodesFetcher for NodesFetcherImpl {
         let transport = ReqwestTransport::create_with_client(url, self.http_client.clone())?;
         let agent = Agent::builder().with_transport(transport).build()?;
         agent.fetch_root_key().await?;
-        let api_bns = agent.fetch_api_boundary_nodes(self.canister_id).await?;
+        let api_bns = agent
+            .fetch_api_boundary_nodes_by_subnet_id(self.subnet_id)
+            .await?;
         let nodes: Vec<Node> = api_bns.iter().map(|node| node.into()).collect();
         Ok(nodes)
     }

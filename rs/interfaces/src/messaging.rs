@@ -23,16 +23,16 @@ pub enum MessageRoutingError {
 #[derive(Debug)]
 pub enum InvalidXNetPayload {
     InvalidSlice(String),
-    StateRemoved(Height),
 }
 
 #[derive(Debug)]
-pub enum XNetTransientValidationError {
+pub enum XNetPayloadValidationFailure {
     StateNotCommittedYet(Height),
+    StateRemoved(Height),
 }
 
 pub type XNetPayloadValidationError =
-    ValidationError<InvalidXNetPayload, XNetTransientValidationError>;
+    ValidationError<InvalidXNetPayload, XNetPayloadValidationFailure>;
 
 /// The public interface for the MessageRouting layer.
 pub trait MessageRouting: Send + Sync {

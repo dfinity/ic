@@ -1711,7 +1711,11 @@ where
             io_err: std::io::Error::new(err.error().kind(), err.to_string()),
         })?;
 
-        Ok(())
+        mark_readonly_if_file(&self.path).map_err(|err| LayoutError::IoError {
+            path: self.path.clone(),
+            message: "failed to mark protobuf as readonly".to_string(),
+            io_err: err,
+        })
     }
 }
 
@@ -1831,6 +1835,12 @@ where
         file.sync_all().map_err(|err| LayoutError::IoError {
             path: self.path.clone(),
             message: "failed to sync wasm binary to disk".to_string(),
+            io_err: err,
+        })?;
+
+        mark_readonly_if_file(&self.path).map_err(|err| LayoutError::IoError {
+            path: self.path.clone(),
+            message: "failed to mark wasm binary as readonly".to_string(),
             io_err: err,
         })
     }

@@ -91,14 +91,19 @@ impl CanisterMethodName {
     pub fn new_from_rosetta_core_operations(
         operations: &Vec<rosetta_core::objects::Operation>,
     ) -> anyhow::Result<Self> {
-        for operation in operations {
-            let operation_type = operation.type_.parse::<OperationType>()?;
-            match operation_type {
-                OperationType::Transfer => return Ok(Self::Icrc1Transfer),
-                OperationType::Approve => return Ok(Self::Icrc2Approve),
-                // An icrc1 operation is made up of multiple rosetta_core operations, so we have to look for the definining operation
-                _ => continue,
+        let operation_types = operations
+            .iter()
+            .map(|operation| operation.type_.parse::<OperationType>())
+            .collect::<Result<Vec<OperationType>, strum::ParseError>>()?;
+
+        if operation_types.contains(&OperationType::Transfer) {
+            if operation_types.contains(&OperationType::Spender) {
+                return Ok(Self::Icrc2TransferFrom);
             }
+            return Ok(Self::Icrc1Transfer);
+        }
+        if operation_types.contains(&OperationType::Approve) {
+            return Ok(Self::Icrc2Approve);
         }
         bail!(
             "Could not derive a valid CanisterMethodName from the given operations vector: {:?} ",

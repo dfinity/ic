@@ -7,7 +7,6 @@ DEPENDENCIES = [
     "//rs/certification/test-utils",
     "//rs/config",
     "//rs/crypto/ed25519",
-    "//rs/crypto/test_utils/keys",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/crypto/utils/tls",
@@ -23,8 +22,6 @@ DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
     "//rs/protobuf",
-    "//rs/test_utilities/registry",
-    "//rs/test_utilities/types",
     "//rs/types/base_types",
     "//rs/types/types",
     "//rs/types/management_canister_types",
@@ -63,7 +60,7 @@ DEPENDENCIES = [
     "@crate_index//:rcgen",
     "@crate_index//:regex",
     "@crate_index//:reqwest_0_11_27",
-    "@crate_index//:rustls",
+    "@crate_index//:rustls_0_21_12",
     "@crate_index//:rustls-pemfile",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
@@ -71,9 +68,8 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:strum",
-    "@crate_index//:tempfile",
     "@crate_index//:thiserror",
-    "@crate_index//:tokio-rustls",
+    "@crate_index//:tokio_rustls_0_24_1",
     "@crate_index//:tokio-util",
     "@crate_index//:tokio",
     "@crate_index//:tower",
@@ -85,7 +81,6 @@ DEPENDENCIES = [
     "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing",
     "@crate_index//:url",
-    "@crate_index//:wiremock",
     "@crate_index//:x509-parser",
 ]
 
@@ -95,6 +90,8 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "@crate_index//:criterion",
+    "@crate_index//:tempfile",
+    "@crate_index//:wiremock",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
@@ -155,7 +152,6 @@ rust_library(
 
 rust_bench(
     name = "ic_boundary_bench",
-    testonly = True,
     srcs = glob(
         [
             "benches/**",

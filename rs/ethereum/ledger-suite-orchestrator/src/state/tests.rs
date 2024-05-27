@@ -1,7 +1,6 @@
 mod manage_canister {
     use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdt, usdt_metadata};
-    use crate::state::test_fixtures::new_state;
-    use crate::state::tests::expect_panic_with_message;
+    use crate::state::test_fixtures::{expect_panic_with_message, new_state};
     use crate::state::{
         Canisters, Index, Ledger, ManageSingleCanister, ManagedCanisterStatus, WasmHash,
     };
@@ -280,24 +279,4 @@ mod validate_config {
     fn arb_nat() -> impl Strategy<Value = candid::Nat> {
         any::<u64>().prop_map(candid::Nat::from)
     }
-}
-
-fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(f: F, expected_message: &str) {
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
-    let error = result.unwrap_err();
-    let panic_message = {
-        if let Some(s) = error.downcast_ref::<String>() {
-            s.to_string()
-        } else if let Some(s) = error.downcast_ref::<&str>() {
-            s.to_string()
-        } else {
-            format!("{:?}", error)
-        }
-    };
-    assert!(
-        panic_message.contains(expected_message),
-        "Expected panic message to contain: {}, but got: {}",
-        expected_message,
-        panic_message
-    );
 }

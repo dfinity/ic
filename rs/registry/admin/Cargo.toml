@@ -69,6 +69,10 @@ indexmap = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+pocket-ic = { path = "../../../packages/pocket-ic" }
+tempfile = "3.1.0"
+ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
+
 
 [[bin]]
 name = "ic-admin"

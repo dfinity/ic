@@ -21,7 +21,7 @@ use ic_consensus_utils::{
 };
 use ic_interfaces::{
     batch_payload::ProposalContext,
-    consensus::{PayloadBuilder, PayloadPermanentError, PayloadTransientError},
+    consensus::{InvalidPayloadReason, PayloadBuilder, PayloadValidationFailure},
     consensus_pool::*,
     dkg::DkgPool,
     ingress_manager::IngressSelector,
@@ -64,17 +64,17 @@ const LOG_EVERY_N_SECONDS: i32 = 60;
 /// where holding it back before, to give recomputation a chance during catch up.
 const CATCH_UP_HOLD_OF_TIME: Duration = Duration::from_secs(150);
 
-/// Possible validator transient errors.
+/// Possible transient validation failures.
 #[derive(Debug)]
 // The fields are only read by the `Debug` implementation.
 // The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
 #[allow(dead_code)]
-enum TransientError {
+enum ValidationFailure {
     CryptoError(CryptoError),
     RegistryClientError(RegistryClientError),
-    PayloadValidationError(PayloadTransientError),
-    DkgPayloadValidationError(dkg::TransientPayloadValidationError),
-    EcdsaPayloadValidationError(ecdsa::TransientError),
+    PayloadValidationFailed(PayloadValidationFailure),
+    DkgPayloadValidationFailed(dkg::DkgPayloadValidationFailure),
+    EcdsaPayloadValidationFailed(ecdsa::EcdsaPayloadValidationFailure),
     DkgSummaryNotFound(Height),
     RandomBeaconNotFound(Height),
     StateHashError(StateHashError),
@@ -86,21 +86,21 @@ enum TransientError {
     CatchUpHeightNegligible,
 }
 
-/// Possible validator permanent errors.
+/// Possible reasons for invalid artifacts.
 #[derive(Debug)]
 // The fields are only read by the `Debug` implementation.
 // The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
 #[allow(dead_code)]
-enum PermanentError {
+enum InvalidArtifactReason {
     CryptoError(CryptoError),
     MismatchedRank(Rank, Option<Rank>),
     MembershipError(MembershipError),
     InappropriateDkgId(NiDkgId),
     SignerNotInThresholdCommittee(NodeId),
     SignerNotInMultiSigCommittee(NodeId),
-    PayloadValidationError(PayloadPermanentError),
-    DkgPayloadValidationError(dkg::PermanentPayloadValidationError),
-    EcdsaPayloadValidationError(ecdsa::PermanentError),
+    InvalidPayload(InvalidPayloadReason),
+    InvalidDkgPayload(dkg::InvalidDkgPayloadReason),
+    InvalidEcdsaPayload(ecdsa::InvalidEcdsaPayloadReason),
     InsufficientSignatures,
     CannotVerifyBlockHeightZero,
     NonEmptyPayloadPastUpgradePoint,
@@ -114,40 +114,40 @@ enum PermanentError {
     ReplicaVersionMismatch,
 }
 
-impl From<CryptoError> for TransientError {
-    fn from(err: CryptoError) -> TransientError {
-        TransientError::CryptoError(err)
+impl From<CryptoError> for ValidationFailure {
+    fn from(err: CryptoError) -> ValidationFailure {
+        ValidationFailure::CryptoError(err)
     }
 }
 
-impl From<CryptoError> for PermanentError {
-    fn from(err: CryptoError) -> PermanentError {
-        PermanentError::CryptoError(err)
+impl From<CryptoError> for InvalidArtifactReason {
+    fn from(err: CryptoError) -> InvalidArtifactReason {
+        InvalidArtifactReason::CryptoError(err)
     }
 }
 
-impl<T> From<PermanentError> for ValidationError<PermanentError, T> {
-    fn from(err: PermanentError) -> ValidationError<PermanentError, T> {
-        ValidationError::Permanent(err)
+impl<T> From<InvalidArtifactReason> for ValidationError<InvalidArtifactReason, T> {
+    fn from(err: InvalidArtifactReason) -> ValidationError<InvalidArtifactReason, T> {
+        ValidationError::InvalidArtifact(err)
     }
 }
 
-impl<P> From<TransientError> for ValidationError<P, TransientError> {
-    fn from(err: TransientError) -> ValidationError<P, TransientError> {
-        ValidationError::Transient(err)
+impl<P> From<ValidationFailure> for ValidationError<P, ValidationFailure> {
+    fn from(err: ValidationFailure) -> ValidationError<P, ValidationFailure> {
+        ValidationError::ValidationFailed(err)
     }
 }
 
-type ValidatorError = ValidationError<PermanentError, TransientError>;
+type ValidatorError = ValidationError<InvalidArtifactReason, ValidationFailure>;
 
 fn membership_error_to_validation_error(err: MembershipError) -> ValidatorError {
     match err {
-        MembershipError::NodeNotFound(_) => PermanentError::MembershipError(err).into(),
+        MembershipError::NodeNotFound(_) => InvalidArtifactReason::MembershipError(err).into(),
         MembershipError::UnableToRetrieveDkgSummary(h) => {
-            TransientError::DkgSummaryNotFound(h).into()
+            ValidationFailure::DkgSummaryNotFound(h).into()
         }
         MembershipError::RegistryClientError(err) => {
-            TransientError::RegistryClientError(err).into()
+            ValidationFailure::RegistryClientError(err).into()
         }
     }
 }
@@ -178,10 +178,9 @@ impl SignatureVerify for BlockProposal {
             .get_block_maker_rank(height, &previous_beacon, self.signature.signer)
             .map_err(membership_error_to_validation_error)?;
         if rank != Some(self.rank()) {
-            return Err(ValidationError::from(PermanentError::MismatchedRank(
-                self.rank(),
-                rank,
-            )));
+            return Err(ValidationError::from(
+                InvalidArtifactReason::MismatchedRank(self.rank(), rank),
+            ));
         }
         let registry_version = get_registry_version(pool, height)?;
         let signed_metadata = BlockMetadata::signed_from_proposal(self, cfg);
@@ -199,12 +198,12 @@ impl SignatureVerify for RandomTape {
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let transcript = active_low_threshold_transcript(pool.as_cache(), self.height())
-            .ok_or_else(|| TransientError::DkgSummaryNotFound(self.height()))?;
+            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         if self.signature.signer == transcript.dkg_id {
             crypto.verify_aggregate(self, self.signature.signer)?;
             Ok(())
         } else {
-            Err(PermanentError::InappropriateDkgId(self.signature.signer).into())
+            Err(InvalidArtifactReason::InappropriateDkgId(self.signature.signer).into())
         }
     }
 }
@@ -219,7 +218,7 @@ impl SignatureVerify for RandomTapeShare {
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let transcript = active_low_threshold_transcript(pool.as_cache(), height)
-            .ok_or_else(|| TransientError::DkgSummaryNotFound(self.height()))?;
+            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
             self.signature.signer,
@@ -240,12 +239,12 @@ impl SignatureVerify for RandomBeacon {
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let transcript = active_low_threshold_transcript(pool.as_cache(), self.height())
-            .ok_or_else(|| TransientError::DkgSummaryNotFound(self.height()))?;
+            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         if self.signature.signer == transcript.dkg_id {
             crypto.verify_aggregate(self, self.signature.signer)?;
             Ok(())
         } else {
-            Err(PermanentError::InappropriateDkgId(self.signature.signer).into())
+            Err(InvalidArtifactReason::InappropriateDkgId(self.signature.signer).into())
         }
     }
 }
@@ -260,7 +259,7 @@ impl SignatureVerify for RandomBeaconShare {
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let transcript = active_low_threshold_transcript(pool.as_cache(), height)
-            .ok_or_else(|| TransientError::DkgSummaryNotFound(self.height()))?;
+            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
             self.signature.signer,
@@ -283,7 +282,7 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let transcript = active_high_threshold_transcript(pool.as_cache(), height)
-            .ok_or_else(|| TransientError::DkgSummaryNotFound(self.height()))?;
+            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
             self.signature.signer,
@@ -483,9 +482,9 @@ fn get_previous_beacon(
     let previous_height = height.decrement();
     match pool.get_random_beacon(previous_height) {
         Some(beacon) => Ok(beacon),
-        None => Err(ValidationError::from(TransientError::RandomBeaconNotFound(
-            previous_height,
-        ))),
+        None => Err(ValidationError::from(
+            ValidationFailure::RandomBeaconNotFound(previous_height),
+        )),
     }
 }
 
@@ -496,7 +495,7 @@ fn get_registry_version(
     match pool.registry_version(height) {
         Some(version) => Ok(version),
         None => Err(ValidationError::from(
-            TransientError::FailedToGetRegistryVersion,
+            ValidationFailure::FailedToGetRegistryVersion,
         )),
     }
 }
@@ -512,10 +511,10 @@ fn verify_notaries(
         .map_err(membership_error_to_validation_error)?;
     let unique_signers: HashSet<_> = signers.iter().collect();
     if unique_signers.len() < signers.len() {
-        return Err(PermanentError::RepeatedSigner.into());
+        return Err(InvalidArtifactReason::RepeatedSigner.into());
     }
     if signers.len() < threshold {
-        return Err(PermanentError::InsufficientSignatures.into());
+        return Err(InvalidArtifactReason::InsufficientSignatures.into());
     }
     for node_id in signers.iter() {
         verify_notary(membership, height, previous_beacon, *node_id)?;
@@ -533,7 +532,7 @@ fn verify_notary(
         .node_belongs_to_notarization_committee(height, previous_beacon, node_id)
         .map_err(membership_error_to_validation_error)?
     {
-        Err(PermanentError::SignerNotInMultiSigCommittee(node_id).into())
+        Err(InvalidArtifactReason::SignerNotInMultiSigCommittee(node_id).into())
     } else {
         Ok(())
     }
@@ -549,7 +548,7 @@ fn verify_threshold_committee(
         .node_belongs_to_threshold_committee(node_id, height, committee)
         .map_err(membership_error_to_validation_error)?
     {
-        Err(PermanentError::SignerNotInThresholdCommittee(node_id).into())
+        Err(InvalidArtifactReason::SignerNotInThresholdCommittee(node_id).into())
     } else {
         Ok(())
     }
@@ -563,7 +562,7 @@ fn get_notarized_parent(
     let height = proposal.height().decrement();
     pool.get_notarized_block(parent, height)
         .map(|block| block.into_inner())
-        .map_err(|_| TransientError::BlockNotFound(parent.clone(), height).into())
+        .map_err(|_| ValidationFailure::BlockNotFound(parent.clone(), height).into())
 }
 
 /// Collect the min of validated block proposal ranks in the range.
@@ -691,7 +690,7 @@ impl Validator {
         artifact: &S,
     ) -> ValidationResult<ValidatorError> {
         check_protocol_version(artifact.version())
-            .map_err(|_| PermanentError::ReplicaVersionMismatch)?;
+            .map_err(|_| InvalidArtifactReason::ReplicaVersionMismatch)?;
         artifact.verify_signature(
             self.membership.as_ref(),
             self.crypto.as_ref(),
@@ -875,7 +874,7 @@ impl Validator {
                 {
                     // Verify notarization signature before checking block validity.
                     let verification = self.verify_artifact(pool_reader, &notarization);
-                    if let Err(ValidationError::Permanent(e)) = verification {
+                    if let Err(ValidationError::InvalidArtifact(e)) = verification {
                         change_set.push(ChangeAction::HandleInvalid(
                             notarization.into_message(),
                             format!("{:?}", e),
@@ -944,14 +943,14 @@ impl Validator {
                         known_ranks.insert(proposal.height(), Some(proposal.rank()));
                         change_set.push(ChangeAction::MoveToValidated(proposal.into_message()))
                     }
-                    Err(ValidationError::Permanent(PermanentError::ReplicaVersionMismatch)) => {
-                        change_set
-                            .push(ChangeAction::RemoveFromUnvalidated(proposal.into_message()))
-                    }
-                    Err(ValidationError::Permanent(err)) => change_set.push(
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidArtifactReason::ReplicaVersionMismatch,
+                    )) => change_set
+                        .push(ChangeAction::RemoveFromUnvalidated(proposal.into_message())),
+                    Err(ValidationError::InvalidArtifact(err)) => change_set.push(
                         ChangeAction::HandleInvalid(proposal.into_message(), format!("{:?}", err)),
                     ),
-                    Err(ValidationError::Transient(err)) => {
+                    Err(ValidationError::ValidationFailed(err)) => {
                         if self.unvalidated_for_too_long(pool_reader, &proposal.get_id()) {
                             warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
                                   self.log,
@@ -981,7 +980,7 @@ impl Validator {
     }
 
     /// Check whether or not the provided `BlockProposal` can be moved into the
-    /// validated pool. A `ValidatiorError::TransientError` value is returned
+    /// validated pool. A `ValidatiorError::ValidationFailure` value is returned
     /// when any of the following conditions are met:
     ///
     /// - the `Block`'s validation context is not available locally.
@@ -989,7 +988,7 @@ impl Validator {
     /// - The `Block`'s parent is not notarized
     /// - The payload_builder returns an `Err` result of any kind
     ///
-    /// A `ValidatorError::PermanentError` is returned when any of the following
+    /// A `ValidatorError::InvalidArtifact` is returned when any of the following
     /// conditions are met:
     ///
     /// - The signer of the `BlockProposal` does not have the rank claimed on
@@ -1007,7 +1006,7 @@ impl Validator {
         proposal: &BlockProposal,
     ) -> ValidationResult<ValidatorError> {
         if proposal.height() == Height::from(0) {
-            return Err(PermanentError::CannotVerifyBlockHeightZero.into());
+            return Err(InvalidArtifactReason::CannotVerifyBlockHeightZero.into());
         }
 
         let Some(status) = status::get_status(
@@ -1017,14 +1016,14 @@ impl Validator {
             pool_reader,
             &self.log,
         ) else {
-            return Err(TransientError::FailedToGetRegistryVersion.into());
+            return Err(ValidationFailure::FailedToGetRegistryVersion.into());
         };
 
         // If the replica is halted, block payload should be empty.
         if status == Status::Halting || status == Status::Halted {
             let payload = proposal.as_ref().payload.as_ref();
             if !payload.is_summary() && !payload.is_empty() {
-                return Err(PermanentError::NonEmptyPayloadPastUpgradePoint.into());
+                return Err(InvalidArtifactReason::NonEmptyPayloadPastUpgradePoint.into());
             }
         }
 
@@ -1036,7 +1035,7 @@ impl Validator {
         // time increases *strictly* monotonically.
         let proposal = proposal.as_ref();
         if !proposal.context.greater(&parent.context) {
-            return Err(PermanentError::NonStrictlyIncreasingValidationContext.into());
+            return Err(InvalidArtifactReason::NonStrictlyIncreasingValidationContext.into());
         }
 
         let local_context = ValidationContext {
@@ -1078,7 +1077,7 @@ impl Validator {
             ) >= proposal.context.time;
 
         if !sufficient_local_ctx {
-            return Err(TransientError::ValidationContextNotReached(
+            return Err(ValidationFailure::ValidationContextNotReached(
                 proposal.context.clone(),
                 local_context,
             )
@@ -1109,8 +1108,8 @@ impl Validator {
             )
             .map_err(|err| {
                 err.map(
-                    PermanentError::PayloadValidationError,
-                    TransientError::PayloadValidationError,
+                    InvalidArtifactReason::InvalidPayload,
+                    ValidationFailure::PayloadValidationFailed,
                 )
             })?;
 
@@ -1127,8 +1126,8 @@ impl Validator {
         )
         .map_err(|err| {
             err.map(
-                PermanentError::EcdsaPayloadValidationError,
-                TransientError::EcdsaPayloadValidationError,
+                InvalidArtifactReason::InvalidEcdsaPayload,
+                ValidationFailure::EcdsaPayloadValidationFailed,
             )
         })?;
 
@@ -1152,8 +1151,8 @@ impl Validator {
         )
         .map_err(|err| {
             err.map(
-                PermanentError::DkgPayloadValidationError,
-                TransientError::DkgPayloadValidationError,
+                InvalidArtifactReason::InvalidDkgPayload,
+                ValidationFailure::DkgPayloadValidationFailed,
             )
         });
         let elapsed = timer.stop_and_record();
@@ -1436,11 +1435,10 @@ impl Validator {
                             share.into_message(),
                         )
                     }
-                    Err(ValidationError::Permanent(err)) => Some(ChangeAction::HandleInvalid(
-                        share.into_message(),
-                        format!("{:?}", err),
-                    )),
-                    Err(ValidationError::Transient(err)) => {
+                    Err(ValidationError::InvalidArtifact(err)) => Some(
+                        ChangeAction::HandleInvalid(share.into_message(), format!("{:?}", err)),
+                    ),
+                    Err(ValidationError::ValidationFailed(err)) => {
                         if self.unvalidated_for_too_long(pool_reader, &share.get_id()) {
                             warn!(
                                 every_n_seconds => LOG_EVERY_N_SECONDS,
@@ -1456,7 +1454,7 @@ impl Validator {
     }
 
     /// Return the finalized block at height if the given `CatchUpContent` is
-    /// consistent, PermanentError if it is inconsistent, and TransientError
+    /// consistent, InvalidArtifact if it is inconsistent, and ValidationFailure
     /// if there is insufficient data to verify consistency (see CON-330).
     ///
     /// A CatchUpContent is inconsistent if things in it do not match up, e.g.
@@ -1473,10 +1471,10 @@ impl Validator {
         let height = share_content.height();
         let block = pool_reader
             .get_finalized_block(height)
-            .ok_or(TransientError::FinalizedBlockNotFound(height))?;
+            .ok_or(ValidationFailure::FinalizedBlockNotFound(height))?;
         if ic_types::crypto::crypto_hash(&block) != share_content.block {
             warn!(self.log, "Block from received CatchUpShareContent does not match finalized block in the pool: {:?} {:?}", share_content, block);
-            return Err(PermanentError::MismatchedBlockInCatchUpPackageShare.into());
+            return Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare.into());
         }
         if !block.payload.is_summary() {
             warn!(
@@ -1485,24 +1483,24 @@ impl Validator {
                 share_content,
                 block
             );
-            return Err(PermanentError::DataPayloadBlockInCatchUpPackageShare.into());
+            return Err(InvalidArtifactReason::DataPayloadBlockInCatchUpPackageShare.into());
         }
 
         let beacon = pool_reader
             .get_random_beacon(height)
-            .ok_or(TransientError::RandomBeaconNotFound(height))?;
+            .ok_or(ValidationFailure::RandomBeaconNotFound(height))?;
         if &beacon != share_content.random_beacon.get_value() {
             warn!(self.log, "RandomBeacon from received CatchUpContent does not match RandomBeacon in the pool: {:?} {:?}", share_content, beacon);
-            return Err(PermanentError::MismatchedRandomBeaconInCatchUpPackageShare.into());
+            return Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare.into());
         }
 
         let hash = self
             .state_manager
             .get_state_hash_at(height)
-            .map_err(TransientError::StateHashError)?;
+            .map_err(ValidationFailure::StateHashError)?;
         if hash != share_content.state_hash {
             warn!(self.log, "State hash from received CatchUpContent does not match local state hash: {:?} {:?}", share_content, hash);
-            return Err(PermanentError::MismatchedStateHashInCatchUpPackageShare.into());
+            return Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare.into());
         }
 
         let summary = block.payload.as_ref().as_summary();
@@ -1511,7 +1509,7 @@ impl Validator {
             let state = self
                 .state_manager
                 .get_state_at(height)
-                .map_err(TransientError::StateManagerError)?;
+                .map_err(ValidationFailure::StateManagerError)?;
             get_oldest_ecdsa_state_registry_version(ecdsa, state.get_ref())
         } else {
             None
@@ -1519,7 +1517,7 @@ impl Validator {
         if registry_version != share_content.oldest_registry_version_in_use_by_replicated_state {
             warn!(self.log, "Oldest registry version from received CatchUpContent does not match local one: {:?} {:?}", share_content, registry_version);
             return Err(
-                PermanentError::MismatchedOldestRegistryVersionInCatchUpPackageShare.into(),
+                InvalidArtifactReason::MismatchedOldestRegistryVersionInCatchUpPackageShare.into(),
             );
         }
 
@@ -1553,13 +1551,13 @@ impl Validator {
     ) -> Option<ChangeAction> {
         match result {
             Ok(()) => Some(ChangeAction::MoveToValidated(message)),
-            Err(ValidationError::Permanent(PermanentError::ReplicaVersionMismatch)) => {
-                Some(ChangeAction::RemoveFromUnvalidated(message))
-            }
-            Err(ValidationError::Permanent(s)) => {
+            Err(ValidationError::InvalidArtifact(
+                InvalidArtifactReason::ReplicaVersionMismatch,
+            )) => Some(ChangeAction::RemoveFromUnvalidated(message)),
+            Err(ValidationError::InvalidArtifact(s)) => {
                 Some(ChangeAction::HandleInvalid(message, format!("{:?}", s)))
             }
-            Err(ValidationError::Transient(err)) => {
+            Err(ValidationError::ValidationFailed(err)) => {
                 if self.unvalidated_for_too_long(pool_reader, &message.get_id()) {
                     warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
                           self.log,
@@ -1593,7 +1591,7 @@ impl Validator {
         &self,
         catch_up_package: &CatchUpPackage,
         pool_reader: &PoolReader<'_>,
-    ) -> Result<(), ValidationError<PermanentError, TransientError>> {
+    ) -> Result<(), ValidationError<InvalidArtifactReason, ValidationFailure>> {
         let cup_height = catch_up_package.height();
 
         // Check that this is a CUP that is close to the current state we have
@@ -1634,8 +1632,8 @@ impl Validator {
                     );
                     Ok(())
                 }
-                Some(_) => Err(ValidationError::Transient(
-                    TransientError::CatchUpHeightNegligible,
+                Some(_) => Err(ValidationError::ValidationFailed(
+                    ValidationFailure::CatchUpHeightNegligible,
                 )),
                 None => Ok(()),
             }
@@ -1669,7 +1667,7 @@ pub mod test {
     };
     use ic_consensus_utils::get_block_maker_delay;
     use ic_interfaces::{
-        messaging::XNetTransientValidationError, p2p::consensus::MutablePool,
+        messaging::XNetPayloadValidationFailure, p2p::consensus::MutablePool,
         time_source::TimeSource,
     };
     use ic_interfaces_mocks::messaging::RefMockMessageRouting;
@@ -1686,7 +1684,7 @@ pub mod test {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::{
-            idkg::QuadrupleId, BlockPayload, CatchUpPackageShare, Finalization, FinalizationShare,
+            idkg::PreSigId, BlockPayload, CatchUpPackageShare, Finalization, FinalizationShare,
             HashedBlock, HashedRandomBeacon, NotarizationShare, Payload, RandomBeaconContent,
             RandomTapeContent, SummaryPayload,
         },
@@ -1904,22 +1902,14 @@ pub mod test {
 
             let key_id = fake_ecdsa_key_id();
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
-            let quadruple_id1 = QuadrupleId::new(1);
-            let quadruple_id2 = QuadrupleId::new(2);
-            let quadruple_id3 = QuadrupleId::new(3);
+            let pre_sig_id1 = PreSigId(1);
+            let pre_sig_id2 = PreSigId(2);
+            let pre_sig_id3 = PreSigId(3);
 
             let contexts = vec![
-                fake_sign_with_ecdsa_context_with_quadruple(
-                    1,
-                    key_id.clone(),
-                    Some(quadruple_id1.clone()),
-                ),
+                fake_sign_with_ecdsa_context_with_quadruple(1, key_id.clone(), Some(pre_sig_id1)),
                 fake_sign_with_ecdsa_context_with_quadruple(2, key_id.clone(), None),
-                fake_sign_with_ecdsa_context_with_quadruple(
-                    3,
-                    key_id.clone(),
-                    Some(quadruple_id3.clone()),
-                ),
+                fake_sign_with_ecdsa_context_with_quadruple(3, key_id.clone(), Some(pre_sig_id3)),
             ];
 
             state_manager
@@ -1961,9 +1951,9 @@ pub mod test {
 
             let mut ecdsa = empty_ecdsa_payload(subnet_test_id(0));
             // Add the three quadruples using registry version 3, 1 and 2 in order
-            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id1, RegistryVersion::from(3));
-            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id2, RegistryVersion::from(1));
-            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id3, RegistryVersion::from(2));
+            add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id1, RegistryVersion::from(3));
+            add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id2, RegistryVersion::from(1));
+            add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id3, RegistryVersion::from(2));
 
             let dkg = block.payload.as_ref().as_summary().dkg.clone();
             block.payload = Payload::new(
@@ -3244,9 +3234,9 @@ pub mod test {
                 .get_mut()
                 .expect_validate_payload()
                 .returning(|_, _, _, _| {
-                    Err(ValidationError::Transient(
-                        PayloadTransientError::XNetPayloadValidationError(
-                            XNetTransientValidationError::StateNotCommittedYet(Height::from(0)),
+                    Err(ValidationError::ValidationFailed(
+                        PayloadValidationFailure::XNetPayloadValidationFailed(
+                            XNetPayloadValidationFailure::StateNotCommittedYet(Height::from(0)),
                         ),
                     ))
                 });

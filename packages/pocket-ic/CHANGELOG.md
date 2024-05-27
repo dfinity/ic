@@ -7,10 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+- Deprecated `make_deterministic`, use `stop_live` instead
+
+
+
 ## 3.1.0 - 2024-05-02
 
 ### Added
 - Added `with_benchmarking_system_subnet` builder option to enable benchmarking with high message size limits.
+
+
 
 ## 3.0.0 - 2024-04-30
 
@@ -23,8 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and creating an HTTP gateway for that instance listening at a dedicated port (and reverting that configuration, respectively).
 - New functions `submit_call`, `submit_call_with_effective_principal` (submit an ingress message without executing it) and `await_call` (execute rounds on the PocketIc instance until the message is executed).
 
-## Changed
+### Changed
 - `get` and `post` helpers which are used by all server-facing functions now poll on results, because 1) instances can be busy with other computations and 2) the `post`ed computations may take longer than the specified timeout or the `reqwest` client's own timeout. With this change, very long-running computations can be handled by the library. 
+
+
 
 ## 2.2.0 - 2024-02-14
 
@@ -33,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `reqwest` dependency does not use the default features
+
 
 
 ## 2.1.0 - 2024-02-06
@@ -44,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Use ExtendedSubnetConfigSet to be compatible with PocketIC server 3.0.0
+
 
 
 ## 2.0.1 - 2023-11-23
@@ -73,10 +84,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New struct `SubnetConfigSet` describing the desired subnet topology on initialization
 - New enum `SubnetKind` to specify different kinds ob subnets
 
-
 ### Changed
 - `create_canister()` method now takes no arguments, the anonymous prinicpal is used. To use a custom sender, use `create_canister_with_settings()`
-
 
 ### Removed
 - `create_checkpoint()` method

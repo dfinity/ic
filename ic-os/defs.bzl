@@ -180,6 +180,7 @@ EOF
 
     inject_files(
         name = "partition-root-unsigned.tzst",
+        testonly = malicious,
         base = "static-partition-root-unsigned.tzst",
         file_contexts = ":file_contexts",
         extra_files = {
@@ -192,6 +193,7 @@ EOF
     if upgrades:
         inject_files(
             name = "partition-root-test-unsigned.tzst",
+            testonly = malicious,
             base = "static-partition-root-unsigned.tzst",
             file_contexts = ":file_contexts",
             extra_files = {
@@ -214,6 +216,7 @@ EOF
 
         native.genrule(
             name = "partition-root-sign",
+            testonly = malicious,
             srcs = ["partition-root-unsigned.tzst"],
             outs = ["partition-root.tzst", "partition-root-hash"],
             cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) -d $(location //rs/ic_os/dflate)",
@@ -236,6 +239,7 @@ EOF
         if upgrades:
             native.genrule(
                 name = "partition-root-test-sign",
+                testonly = malicious,
                 srcs = ["partition-root-test-unsigned.tzst"],
                 outs = ["partition-root-test.tzst", "partition-root-test-hash"],
                 cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) -d $(location //rs/ic_os/dflate)",
@@ -605,6 +609,7 @@ EOF
 
     native.filegroup(
         name = name,
+        testonly = malicious,
         srcs = [
             ":disk-img.tar.zst",
             ":disk-img.tar.gz",

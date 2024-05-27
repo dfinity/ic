@@ -28,7 +28,7 @@ use ic_replicated_state::{
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
-    consensus::idkg::QuadrupleId,
+    consensus::idkg::PreSigId,
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, Response, StopCanisterContext, NO_DEADLINE},
@@ -1406,7 +1406,7 @@ impl Scheduler for SchedulerImpl {
         mut state: ReplicatedState,
         randomness: Randomness,
         ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
-        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
+        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
         current_round: ExecutionRound,
         _next_checkpoint_round: Option<ExecutionRound>,
         current_round_type: ExecutionRoundType,

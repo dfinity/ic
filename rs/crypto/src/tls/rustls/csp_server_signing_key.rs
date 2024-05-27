@@ -2,9 +2,8 @@ use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::CspSignature;
 use ic_crypto_internal_csp::vault::api::CspTlsSignError;
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
+use rustls::{self, Error as TLSError, SignatureAlgorithm, SignatureScheme};
 use std::sync::Arc;
-use tokio_rustls::rustls::{self, SignatureAlgorithm};
-use tokio_rustls::rustls::{Error as TLSError, SignatureScheme};
 
 #[cfg(test)]
 mod tests;

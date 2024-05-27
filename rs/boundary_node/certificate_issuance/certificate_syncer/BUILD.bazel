@@ -16,7 +16,6 @@ DEPENDENCIES = [
     "@crate_index//:reqwest",
     "@crate_index//:serde_json",
     "@crate_index//:serde",
-    "@crate_index//:tempfile",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tracing-subscriber",
@@ -26,6 +25,10 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
+]
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:tempfile",
 ]
 
 rust_binary(
@@ -40,5 +43,5 @@ rust_test(
     name = "certificate-syncer_test",
     crate = ":certificate-syncer",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

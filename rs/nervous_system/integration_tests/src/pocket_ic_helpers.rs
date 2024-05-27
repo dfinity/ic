@@ -222,6 +222,7 @@ pub fn add_wasms_to_sns_wasm(
 }
 
 /// Installs the NNS canisters, ensuring that there is a whale neuron with `TEST_NEURON_1_ID`.
+/// Requires PocketIC to have at least an NNS and an SNS subnet.
 ///
 /// Arguments
 /// 1. `with_mainnet_nns_canister_versions` is a flag indicating whether the mainnet
@@ -241,7 +242,7 @@ pub fn install_nns_canisters(
 ) -> Vec<PrincipalId> {
     let topology = pocket_ic.topology();
 
-    let sns_subnet_id = topology.get_sns().unwrap();
+    let sns_subnet_id = topology.get_sns().expect("No SNS subnet found");
     let sns_subnet_id = PrincipalId::from(sns_subnet_id);
     let sns_subnet_id = SubnetId::from(sns_subnet_id);
     println!("sns_subnet_id = {:?}", sns_subnet_id);

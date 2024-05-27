@@ -19,8 +19,7 @@ use ic_registry_client_helpers::{
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-use ic_types::RegistryVersion;
+use ic_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use tokio::sync::watch;
 use tracing::{debug, warn};
 use url::{ParseError, Url};
@@ -438,6 +437,15 @@ impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
 
         Ok(())
     }
+}
+
+// Forked functions from ic-test-utilities to avoid depending on that crate
+pub fn subnet_test_id(i: u64) -> SubnetId {
+    SubnetId::from(PrincipalId::new_subnet_test_id(i))
+}
+
+pub fn node_test_id(i: u64) -> NodeId {
+    NodeId::from(PrincipalId::new_node_test_id(i))
 }
 
 pub fn generate_stub_snapshot(subnets: Vec<Subnet>) -> RegistrySnapshot {

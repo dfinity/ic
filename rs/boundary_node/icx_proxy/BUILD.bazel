@@ -29,7 +29,7 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:regex",
     "@crate_index//:reqwest",
-    "@crate_index//:rustls_0_23_x",
+    "@crate_index//:rustls",
     "@crate_index//:rustls-native-certs",
     "@crate_index//:rustls-pemfile",
     "@crate_index//:serde",

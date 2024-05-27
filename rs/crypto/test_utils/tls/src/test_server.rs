@@ -3,9 +3,8 @@ use crate::registry::REG_V1;
 use crate::temp_crypto_component_with_tls_keys;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_crypto_tls_interfaces::{
-    AuthenticatedPeer, SomeOrAllNodes, TlsHandshake, TlsServerHandshakeError,
-};
+use ic_crypto_tls_interfaces::{AuthenticatedPeer, SomeOrAllNodes, TlsConfig, TlsConfigError};
+use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
@@ -13,6 +12,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
+use tokio_rustls::TlsAcceptor;
 
 pub struct ServerBuilder {
     node_id: NodeId,
@@ -104,13 +104,31 @@ impl Server {
         }
     }
 
-    pub async fn run(&self) -> Result<AuthenticatedPeer, TlsServerHandshakeError> {
+    pub async fn run(&self) -> Result<AuthenticatedPeer, TlsConfigError> {
         let tcp_stream = self.accept_connection_on_listener().await;
 
-        let (tls_stream, authenticated_node) = self
+        let server_config = self
             .crypto
-            .perform_tls_server_handshake(tcp_stream, self.allowed_clients.clone(), REG_V1)
-            .await?;
+            .server_config(self.allowed_clients.clone(), REG_V1)?;
+
+        let tls_acceptor = TlsAcceptor::from(Arc::new(server_config));
+        let tls_stream = tls_acceptor.accept(tcp_stream).await.map_err(|err| {
+            TlsConfigError::MalformedSelfCertificate {
+                internal_error: err.to_string(),
+            }
+        })?;
+
+        let peer_cert = tls_stream
+            .get_ref()
+            .1
+            .peer_certificates()
+            .unwrap()
+            .first()
+            .unwrap();
+
+        let authenticated_node =
+            AuthenticatedPeer::Node(node_id_from_certificate_der(peer_cert.as_ref()).unwrap());
+
         let (mut rh, mut wh) = tokio::io::split(tls_stream);
 
         self.send_msg_to_client_if_configured(&mut wh, &mut rh)

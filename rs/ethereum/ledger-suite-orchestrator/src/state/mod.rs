@@ -297,6 +297,10 @@ impl<T> Canister<T> {
     pub fn installed_wasm_hash(&self) -> Option<&WasmHash> {
         self.status.installed_wasm_hash()
     }
+
+    pub fn status(&self) -> &ManagedCanisterStatus {
+        &self.status
+    }
 }
 
 impl<T> Serialize for Canister<T> {
@@ -432,6 +436,10 @@ impl State {
 
     pub fn managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Token, &Canisters)> {
         self.managed_canisters.canisters.iter()
+    }
+
+    pub fn managed_erc20_tokens_iter(&self) -> impl Iterator<Item = &Erc20Token> {
+        self.managed_canisters.canisters.keys()
     }
 
     pub fn managed_canisters(&self, contract: &Erc20Token) -> Option<&Canisters> {

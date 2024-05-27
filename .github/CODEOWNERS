@@ -10,3 +10,5 @@
 /.gitlab/                                                               @dfinity-sandbox/idx
 /gitlab-ci/                                                             @dfinity-sandbox/idx
 /rs/bazelifier/                                         @dfinity-sandbox/idx
+/rs/tests/                                              @dfinity-sandbox/idx
+/rs/tests/gix/                                          @dfinity-sandbox/idx

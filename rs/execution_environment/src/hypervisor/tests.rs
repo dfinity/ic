@@ -28,7 +28,7 @@ use ic_test_utilities_execution_environment::{
     wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
-use ic_test_utilities_metrics::{fetch_histogram_stats, HistogramStats};
+use ic_test_utilities_metrics::{fetch_histogram_vec_stats, metric_vec, HistogramStats};
 use ic_types::messages::{CanisterMessage, NO_DEADLINE};
 use ic_types::time::CoarseTime;
 use ic_types::Time;
@@ -1796,6 +1796,37 @@ fn ic0_msg_reject_fails_if_called_twice() {
 }
 
 #[test]
+fn some_ic0_calls_fail_if_called_with_huge_size() {
+    fn test(syscall: &str) {
+        let mut test = ExecutionTestBuilder::new()
+            // 3T Cycles should be more than enough for a single ingress call.
+            .with_initial_canister_cycles(3_000_000_000_000)
+            .build();
+        let wat = format!(
+            r#"
+        (module
+            (import "ic0" "{syscall}"
+                (func $ic0_{syscall} (param i32) (param i32))
+            )
+            (func (export "canister_update test")
+                (call $ic0_{syscall} (i32.const 0) (i32.const {SIZE}))
+            )
+            (memory 1 1)
+        )"#,
+            SIZE = u32::MAX
+        );
+        let canister_id = test.canister_from_wat(wat).unwrap();
+
+        let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
+        // It must be neither a contract violation nor timeout.
+        assert_eq!(ErrorCode::CanisterInstructionLimitExceeded, err.code());
+    }
+    for syscall in ["msg_reject", "call_data_append", "msg_reply_data_append"] {
+        test(syscall);
+    }
+}
+
+#[test]
 fn ic0_msg_reject_code_works() {
     let mut test = ExecutionTestBuilder::new().build();
     let caller_id = test.universal_canister().unwrap();
@@ -2330,7 +2361,7 @@ fn ic0_trap_works() {
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     assert_eq!(
-        format!("Error from Canister {canister_id}: Canister trapped explicitly: Hi!"),
+        format!("Error from Canister {canister_id}: Canister called `ic0.trap` with message: Hi!"),
         err.description()
     );
 }
@@ -2790,15 +2821,106 @@ fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
     let err = test.ingress(canister_id, "write", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterTrapped, err.code());
     assert_eq!(
-        fetch_histogram_stats(test.metrics_registry(), "hypervisor_dirty_pages"),
-        Some(HistogramStats { sum: 1.0, count: 1 })
+        fetch_histogram_vec_stats(test.metrics_registry(), "hypervisor_dirty_pages"),
+        metric_vec(&[
+            (
+                &[("api_type", "update"), ("memory_type", "wasm")],
+                HistogramStats { count: 1, sum: 1.0 }
+            ),
+            (
+                &[("api_type", "update"), ("memory_type", "stable")],
+                HistogramStats { count: 1, sum: 0.0 }
+            ),
+        ])
     );
-    match fetch_histogram_stats(test.metrics_registry(), "hypervisor_accessed_pages") {
-        Some(HistogramStats { sum, count }) => {
-            assert_eq!(count, 1);
-            assert!(sum >= 2.0);
+    for (labels, stats) in
+        fetch_histogram_vec_stats(test.metrics_registry(), "hypervisor_accessed_pages").iter()
+    {
+        let mem_type = labels.get("memory_type");
+        match mem_type.as_ref().map(|a| String::as_ref(*a)) {
+            Some("wasm") => {
+                assert_eq!(stats.count, 1);
+                // We can't match exactly here because on MacOS the page size is different (16 KiB) so the
+                // number of reported pages is different.
+                assert!(stats.sum >= 2.0)
+            }
+            Some("stable") => {
+                assert_eq!(stats.count, 1);
+                assert_eq!(stats.sum, 0.0)
+            }
+            _ => panic!("Unexpected memory type"),
         }
-        None => unreachable!(),
+    }
+}
+
+#[test]
+fn query_stable_memory_metrics_are_recorded() {
+    let mut test = ExecutionTestBuilder::new().build();
+    // The following canister will touch 2 pages worth of stable memory.
+    let wat = r#"
+        (module
+            (import "ic0" "stable64_write"
+                (func $stable_write (param $offset i64) (param $src i64) (param $size i64))
+            )
+            (import "ic0" "stable64_grow" (func $stable_grow (param i64) (result i64)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_query go") (local i64)
+                (local.set 0 (i64.const 0))
+                (drop (call $stable_grow (i64.const 10)))
+                (loop $loop
+                    (call $stable_write (local.get 0) (i64.const 0) (i64.const 1))
+                    (local.set 0 (i64.add (local.get 0) (i64.const 4096))) (;increment by OS page size;)
+                    (br_if $loop (i64.lt_s (local.get 0) (i64.const 8192))) (;loop if value is within the memory amount;)
+                )
+                (call $msg_reply)
+            )
+            (memory (export "memory") 1)
+        )"#.to_string();
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test
+        .non_replicated_query(canister_id, "go", vec![])
+        .unwrap();
+    assert_eq!(WasmResult::Reply(vec![]), result);
+    assert_eq!(
+        fetch_histogram_vec_stats(test.metrics_registry(), "hypervisor_dirty_pages"),
+        metric_vec(&[
+            (
+                &[
+                    ("api_type", "non replicated query"),
+                    ("memory_type", "wasm")
+                ],
+                HistogramStats { count: 1, sum: 0.0 }
+            ),
+            (
+                &[
+                    ("api_type", "non replicated query"),
+                    ("memory_type", "stable")
+                ],
+                HistogramStats { count: 1, sum: 2.0 }
+            ),
+        ])
+    );
+    for (labels, stats) in
+        fetch_histogram_vec_stats(test.metrics_registry(), "hypervisor_accessed_pages").iter()
+    {
+        assert_eq!(
+            labels.get("api_type"),
+            Some("non replicated query".to_owned()).as_ref()
+        );
+        let mem_type = labels.get("memory_type");
+        match mem_type.as_ref().map(|a| String::as_ref(*a)) {
+            Some("wasm") => {
+                assert_eq!(stats.count, 1);
+                // We can't match exactly here because on MacOS the page size is different (16 KiB) so the
+                // number of reported pages is different.
+                assert!(stats.sum >= 1.0)
+            }
+            Some("stable") => {
+                assert_eq!(stats.count, 1);
+                assert_eq!(stats.sum, 2.0)
+            }
+            _ => panic!("Unexpected memory type"),
+        }
     }
 }
 
@@ -4501,7 +4623,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
         WasmResult::Reject(reject_message) => reject_message,
     };
     assert!(
-        reject_message.contains("trapped explicitly: panicked at")
+        reject_message.contains("Canister called `ic0.trap` with message: panicked at")
             && reject_message.contains("get_callback: 1 out of bounds"),
         "Unexpected error message: {}",
         reject_message
@@ -4641,7 +4763,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
 
     // The reject message from method #2 of B to method #1.
     let reject_message_b_2_to_1 = format!(
-        "IC0537: Error from canister {b_id}: Attempt to execute a message, but the canister contains no Wasm module",
+        "IC0537: Error from canister {b_id}: Attempted to execute a message, but the canister contains no Wasm module.",
     );
 
     // Canister B gets the cycles it accepted from A.

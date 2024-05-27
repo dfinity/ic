@@ -57,10 +57,10 @@ impl RequestInPrep {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         sender: CanisterId,
-        callee_src: u32,
-        callee_size: u32,
-        method_name_src: u32,
-        method_name_len: u32,
+        callee_src: usize,
+        callee_size: usize,
+        method_name_src: usize,
+        method_name_len: usize,
         heap: &[u8],
         on_reply: WasmClosure,
         on_reject: WasmClosure,
@@ -74,19 +74,23 @@ impl RequestInPrep {
             // the minimum of the limits.
 
             // method_name checked against sum of exported function names.
-            if method_name_len as usize > max_sum_exported_function_name_lengths {
-                return Err(HypervisorError::ContractViolation{error: format!(
-                    "Size of method_name {} exceeds the allowed sum of exported function name lengths {}",
-                    method_name_len, max_sum_exported_function_name_lengths
-                ), suggestion: "".to_string(), doc_link: "".to_string()});
+            if method_name_len > max_sum_exported_function_name_lengths {
+                return Err(HypervisorError::UserContractViolation {
+                    error: format!(
+                        "Size of method_name {} exceeds the allowed limit of {}.",
+                        method_name_len, max_sum_exported_function_name_lengths
+                    ),
+                    suggestion: "".to_string(),
+                    doc_link: "".to_string(),
+                });
             }
 
             // method_name checked against payload on the call.
             let max_size_local_subnet = max_size_remote_subnet * multiplier_max_size_local_subnet;
             if method_name_len as u64 > max_size_local_subnet.get() {
-                return Err(HypervisorError::ContractViolation {
+                return Err(HypervisorError::UserContractViolation {
                     error: format!(
-                        "Size of method_name {} exceeds the allowed limit local-subnet {}",
+                        "Size of method_name {} exceeds the allowed limit of {}.",
                         method_name_len, max_size_local_subnet
                     ),
                     suggestion: "".to_string(),
@@ -124,11 +128,9 @@ impl RequestInPrep {
 
     pub(crate) fn set_on_cleanup(&mut self, on_cleanup: WasmClosure) -> HypervisorResult<()> {
         if self.on_cleanup.is_some() {
-            Err(HypervisorError::ContractViolation{
+            Err(HypervisorError::ToolchainContractViolation{
                 error: "ic0.call_on_cleanup can be called at most once between `ic0.call_new` and `ic0.call_perform`"
                     .to_string(),
-            suggestion: "".to_string(),
-            doc_link: "".to_string(),
             })
         } else {
             self.on_cleanup = Some(on_cleanup);
@@ -142,21 +144,25 @@ impl RequestInPrep {
 
     pub(crate) fn extend_method_payload(
         &mut self,
-        src: u32,
-        size: u32,
+        src: usize,
+        size: usize,
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let current_size = self.method_name.len() + self.method_payload.len();
         let max_size_local_subnet =
             self.max_size_remote_subnet * self.multiplier_max_size_local_subnet;
         if size as u64 > max_size_local_subnet.get() - current_size as u64 {
-            Err(HypervisorError::ContractViolation{error: format!(
-                "Request to {}:{} has a payload size of {}, which exceeds the allowed local-subnet limit of {}",
+            Err(HypervisorError::UserContractViolation {
+                error: format!(
+                "Request to {}:{} has a payload size of {}, which exceeds the allowed limit of {}.",
                 self.callee,
                 self.method_name,
-                current_size + size as usize,
+                current_size + size,
                 max_size_local_subnet
-            ), suggestion: "".to_string(), doc_link: "".to_string()})
+            ),
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            })
         } else {
             let data = valid_subslice("ic0.call_data_append", src, size, heap)?;
             self.method_payload.extend_from_slice(data);
@@ -210,12 +216,16 @@ pub(crate) fn into_request(
     {
         let max_size_local_subnet = max_size_remote_subnet * multiplier_max_size_local_subnet;
         if payload_size > max_size_local_subnet.get() {
-            return Err(HypervisorError::ContractViolation{error: format!(
-                "Request to {}:{} has a payload size of {}, which exceeds the allowed remote-subnet limit of {}",
+            return Err(HypervisorError::UserContractViolation {
+                error: format!(
+                "Request to {}:{} has a payload size of {}, which exceeds the allowed limit of {}.",
                 destination_canister,
                 method_name,
                 payload_size, max_size_remote_subnet
-            ), suggestion: "".to_string(), doc_link: "".to_string()});
+            ),
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            });
         }
     }
 
@@ -229,7 +239,7 @@ pub(crate) fn into_request(
             Some(deadline) => CoarseTime::floor(deadline),
             None => {
                 debug_assert!(false);
-                return Err(HypervisorError::ContractViolation {
+                return Err(HypervisorError::UserContractViolation {
                     error: format!(
                         "Request to {}:{} has a timeout of {} seconds, which exceeds the allowed timeout duration.",
                         destination_canister,

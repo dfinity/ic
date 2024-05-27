@@ -57,6 +57,8 @@ type GetNextSnsVersionRequest = record {
   current_version : opt SnsVersion;
 };
 type GetNextSnsVersionResponse = record { next_version : opt SnsVersion };
+type GetProposalIdThatAddedWasmRequest = record { hash : blob };
+type GetProposalIdThatAddedWasmResponse = record { proposal_id : opt nat64 };
 type GetSnsSubnetIdsResponse = record { sns_subnet_ids : vec principal };
 type GetWasmMetadataRequest = record { hash : opt blob };
 type GetWasmMetadataResponse = record { result : opt Result_1 };
@@ -227,6 +229,9 @@ service : (SnsWasmCanisterInitPayload) -> {
   get_latest_sns_version_pretty : (null) -> (vec record { text; text }) query;
   get_next_sns_version : (GetNextSnsVersionRequest) -> (
       GetNextSnsVersionResponse,
+    ) query;
+  get_proposal_id_that_added_wasm : (GetProposalIdThatAddedWasmRequest) -> (
+      GetProposalIdThatAddedWasmResponse,
     ) query;
   get_sns_subnet_ids : (record {}) -> (GetSnsSubnetIdsResponse) query;
   get_wasm : (GetWasmRequest) -> (GetWasmResponse) query;

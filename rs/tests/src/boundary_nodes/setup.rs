@@ -128,7 +128,7 @@ pub fn setup_ic(env: TestEnv) {
         .with_node_provider(PrincipalId::from_str(TEST_PRINCIPAL).unwrap())
         .with_node_operator(PrincipalId::from_str(TEST_PRINCIPAL).unwrap())
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
-        .with_unassigned_nodes(2)
+        .with_unassigned_nodes(4)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
     let nns_node = env

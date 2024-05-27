@@ -8,7 +8,7 @@ use crate::consensus::idkg::ecdsa::{
 use crate::consensus::idkg::{
     CompletedReshareRequest, CompletedSignature, EcdsaKeyTranscript, EcdsaPayload,
     EcdsaPayloadLayout, EcdsaReshareRequest, EcdsaUIDGenerator, KeyTranscriptCreation,
-    MaskedTranscript, PseudoRandomId, QuadrupleId, RandomTranscriptParams,
+    MaskedTranscript, PreSigId, PseudoRandomId, RandomTranscriptParams,
     RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
     UnmaskedTimesMaskedParams, UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
 };
@@ -738,8 +738,8 @@ impl ExhaustiveSet for EcdsaReshareRequest {
         DerivedEcdsaReshareRequest::exhaustive_set(rng)
             .into_iter()
             .map(|r| EcdsaReshareRequest {
-                key_id: r.key_id.clone(),
-                master_key_id: Some(MasterPublicKeyId::Ecdsa(r.key_id)),
+                key_id: Some(r.key_id.clone()),
+                master_key_id: MasterPublicKeyId::Ecdsa(r.key_id),
                 receiving_node_ids: r.receiving_node_ids,
                 registry_version: r.registry_version,
             })
@@ -751,8 +751,8 @@ impl ExhaustiveSet for EcdsaReshareRequest {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DerivedEcdsaPayload {
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
-    pub available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadrupleRef>,
-    pub quadruples_in_creation: BTreeMap<QuadrupleId, QuadrupleInCreation>,
+    pub available_quadruples: BTreeMap<PreSigId, PreSignatureQuadrupleRef>,
+    pub quadruples_in_creation: BTreeMap<PreSigId, QuadrupleInCreation>,
     pub uid_generator: EcdsaUIDGenerator,
     pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     pub ongoing_xnet_reshares: BTreeMap<EcdsaReshareRequest, ReshareOfUnmaskedParams>,
@@ -782,8 +782,8 @@ impl ExhaustiveSet for EcdsaPayload {
                 ongoing_xnet_reshares: payload.ongoing_xnet_reshares,
                 xnet_reshare_agreements: payload.xnet_reshare_agreements,
                 key_transcripts: replace_by_singleton_if_empty(payload.key_transcripts, rng),
-                layout: EcdsaPayloadLayout::SingleKeyTranscript,
-                generalized_pre_signatures: false,
+                layout: EcdsaPayloadLayout::MultipleKeyTranscripts,
+                generalized_pre_signatures: true,
             })
             .collect()
     }
@@ -802,8 +802,8 @@ impl ExhaustiveSet for EcdsaKeyTranscript {
         DerivedEcdsaKeyTranscript::exhaustive_set(rng)
             .into_iter()
             .map(|r| EcdsaKeyTranscript {
-                key_id: r.key_id,
-                master_key_id: None,
+                key_id: r.key_id.clone(),
+                master_key_id: Some(MasterPublicKeyId::Ecdsa(r.key_id)),
                 current: r.current,
                 next_in_creation: r.next_in_creation,
             })
@@ -889,8 +889,8 @@ impl HasId<SubnetId> for CertifiedStreamSlice {}
 impl HasId<NiDkgTag> for NiDkgTranscript {}
 impl HasId<NiDkgTargetId> for u32 {}
 impl HasId<RequestId> for ThresholdEcdsaSigInputsRef {}
-impl HasId<QuadrupleId> for QuadrupleInCreation {}
-impl HasId<QuadrupleId> for PreSignatureQuadrupleRef {}
+impl HasId<PreSigId> for QuadrupleInCreation {}
+impl HasId<PreSigId> for PreSignatureQuadrupleRef {}
 
 impl HasId<MasterPublicKeyId> for EcdsaKeyTranscript {
     fn get_id(&self) -> Option<MasterPublicKeyId> {

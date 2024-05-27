@@ -32,7 +32,7 @@ DEPENDENCIES = [
     "@crate_index//:hyper-rustls",
     "@crate_index//:itertools",
     "@crate_index//:prost",
-    "@crate_index//:rustls",
+    "@crate_index//:rustls_0_21_12",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:tokio",

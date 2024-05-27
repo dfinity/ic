@@ -182,6 +182,7 @@ symlink_dir(
 
 symlink_dir(
     name = "release",
+    testonly = True,
     targets = {
         "//rs/prep:ic-prep": "ic-prep",
         "//rs/nns/init:ic-nns-init": "ic-nns-init",
@@ -198,6 +199,7 @@ copy_file(
 
 copy_to_directory(
     name = "artifacts",
+    testonly = True,
     srcs = [
         ":canisters",
         ":githash",
@@ -207,6 +209,7 @@ copy_to_directory(
 
 py_binary(
     name = "e2e-scalability-tests",
+    testonly = True,
     srcs = ["common/tests/e2e-scalability-tests.py"],
     data = [
         "common/flamegraph.gz",
@@ -268,7 +271,7 @@ sh_test(
     tags = [
         "no-sandbox",
         "requires-network",
-        "system_test_hourly",
+        "system_test_nightly",
     ],
 )
 

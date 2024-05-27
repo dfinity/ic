@@ -44,7 +44,7 @@ use ic_prep_lib::{
     node::{NodeConfiguration, NodeIndex},
     subnet_configuration::{SubnetConfig, SubnetRunningState},
 };
-use ic_protobuf::registry::subnet::v1::EcdsaConfig;
+use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, EcdsaConfig};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -90,7 +90,7 @@ fn main() -> Result<()> {
         subnet_nodes.insert(
             NODE_INDEX,
             NodeConfiguration {
-                xnet_api: SocketAddr::from_str("0.0.0.0:0").unwrap(),
+                xnet_api: SocketAddr::from_str("127.0.0.1:0").unwrap(),
                 public_api: config.http_listen_addr,
                 node_operator_principal_id: None,
                 secret_key_store: None,
@@ -104,6 +104,8 @@ fn main() -> Result<()> {
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         });
+
+        let chain_key_config = ecdsa_config.clone().map(ChainKeyConfig::from);
 
         let mut topology_config = TopologyConfig::default();
         topology_config.insert_subnet(
@@ -125,6 +127,7 @@ fn main() -> Result<()> {
                 None,
                 Some(config.subnet_features),
                 ecdsa_config,
+                chain_key_config,
                 None,
                 vec![],
                 vec![],

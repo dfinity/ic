@@ -1358,17 +1358,27 @@ pub async fn validate_and_render_execute_nervous_system_function(
                     )
                     .await?;
 
+                let payload_hash = {
+                    let mut state = Sha256::new();
+                    state.write(execute.payload.as_slice());
+                    let sha = state.finish();
+                    hex::encode(sha)
+                };
+
                 Ok(format!(
                     r"# Proposal to execute nervous system function:
 
 ## Nervous system function:
 
-{:#?}
+{function:#?}
+
+## Payload sha256: 
+
+{payload_hash}
 
 ## Payload:
 
-{}",
-                    function, rendering
+{rendering}"
                 ))
             }
         }
@@ -4396,6 +4406,88 @@ Version {
             })
             .unwrap_err();
         assert!(rendered_error.contains("must change at least one value"));
+    }
+
+    #[tokio::test]
+    async fn validate_and_render_execute_nervous_system_function_success() {
+        let function_id = 1000;
+        let canister_id = CanisterId::from_u64(1);
+        let payload = vec![1, 2, 3];
+        let function = NervousSystemFunction {
+            id: 1000,
+            name: "a".to_string(),
+            description: None,
+            function_type: Some(FunctionType::GenericNervousSystemFunction(
+                GenericNervousSystemFunction {
+                    target_canister_id: Some(canister_id.get()),
+                    target_method_name: Some("test_method".to_string()),
+                    validator_canister_id: Some(canister_id.get()),
+                    validator_method_name: Some("test_validator_method".to_string()),
+                },
+            )),
+        };
+
+        // set up environment
+        let governance_canister_id = *SNS_GOVERNANCE_CANISTER_ID;
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+        env.default_canister_call_response =
+            Err((Some(1), "Oh no something was not covered!".to_string()));
+        env.set_call_canister_response(
+            canister_id,
+            "test_validator_method",
+            payload.clone(),
+            Ok(Encode!(&Ok::<String, String>("Payload rendering here".to_string())).unwrap()),
+        );
+
+        let render = validate_and_render_execute_nervous_system_function(
+            &env,
+            &ExecuteGenericNervousSystemFunction {
+                function_id,
+                payload,
+            },
+            &btreemap! {function_id => function},
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            render,
+            r#"# Proposal to execute nervous system function:
+
+## Nervous system function:
+
+NervousSystemFunction {
+    id: 1000,
+    name: "a",
+    description: None,
+    function_type: Some(
+        GenericNervousSystemFunction(
+            GenericNervousSystemFunction {
+                target_canister_id: Some(
+                    rrkah-fqaaa-aaaaa-aaaaq-cai,
+                ),
+                target_method_name: Some(
+                    "test_method",
+                ),
+                validator_canister_id: Some(
+                    rrkah-fqaaa-aaaaa-aaaaq-cai,
+                ),
+                validator_method_name: Some(
+                    "test_validator_method",
+                ),
+            },
+        ),
+    ),
+}
+
+## Payload sha256: 
+
+039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81
+
+## Payload:
+
+Payload rendering here"#
+        );
     }
 
     #[test]

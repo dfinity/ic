@@ -21,7 +21,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:sha2",
     "@crate_index//:tar",
-    "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
@@ -47,6 +46,10 @@ GENERATE_KEY_PAIR_DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
+]
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:tempfile",
 ]
 
 rust_binary(
@@ -79,5 +82,5 @@ rust_test(
     srcs = glob(["src/**"]),
     crate_root = "src/main.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

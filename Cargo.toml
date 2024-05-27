@@ -463,7 +463,7 @@ hyper-rustls = { version = "0.24.2", features = ["http2"] }
 hyper-socks2 = { version = "0.8.0", default_features = false, features = [
     "rustls",
 ] }
-ic-agent = { version = "0.34.0", features = ["hyper"] }
+ic-agent = { version = "0.35.0", features = ["hyper"] }
 ic-cdk = "0.13.2"
 ic-cdk-macros = "0.9.0"
 ic-cdk-timers = "0.7.0"
@@ -473,7 +473,7 @@ ic-http-certification = "2.3.0"
 ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
 ic-stable-structures = "0.6.4"
-ic-utils = { version = "0.34.0", features = ["raw"] }
+ic-utils = { version = "0.35.0", features = ["raw"] }
 ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "62a71e47c491fb842ccc257b1c675651501f4b82" }
 ic-btc-validation = { git = "https://github.com/dfinity/bitcoin-canister", rev = "0e996988693f2d55fc9533c44dc20ae5310a1894" }
 ic-btc-test-utils = { git = "https://github.com/dfinity/bitcoin-canister", rev = "62a71e47c491fb842ccc257b1c675651501f4b82" }
@@ -520,7 +520,8 @@ reqwest = { version = "0.12.3", default-features = false, features = [
     "socks",
     "stream",
 ] }
-rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
+rstest = "0.19.0"
+rustls = { version = "0.23.8", default-features = false, features = ["ring", "logging", "tls12"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
 serde_cbor = "0.11.2"

@@ -54,7 +54,7 @@ fuzz_target!(|module: ICWasmModule| {
 
             match (x.1, y.1) {
                 (Ok(run_x), Ok(run_y)) => {
-                    assert_eq!(run_x.dirty_pages, run_y.dirty_pages);
+                    assert_eq!(run_x.wasm_dirty_pages, run_y.wasm_dirty_pages);
                     assert_eq!(
                         run_x.stable_memory_dirty_pages,
                         run_y.stable_memory_dirty_pages

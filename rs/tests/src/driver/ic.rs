@@ -14,7 +14,7 @@ use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_regedit;
-use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
+use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::p2p::build_default_gossip_config;
@@ -424,6 +424,7 @@ pub struct Subnet {
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
     pub ecdsa_config: Option<EcdsaConfig>,
+    pub chain_key_config: Option<ChainKeyConfig>,
     pub running_state: SubnetRunningState,
     pub query_stats_epoch_length: Option<u64>,
     pub initial_height: u64,
@@ -453,6 +454,7 @@ impl Subnet {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             ecdsa_config: None,
+            chain_key_config: None,
             running_state: SubnetRunningState::Active,
             query_stats_epoch_length: None,
             initial_height: 0,
@@ -595,7 +597,8 @@ impl Subnet {
     }
 
     pub fn with_ecdsa_config(mut self, ecdsa_config: EcdsaConfig) -> Self {
-        self.ecdsa_config = Some(ecdsa_config);
+        self.ecdsa_config = Some(ecdsa_config.clone());
+        self.chain_key_config = Some(ecdsa_config.into());
         self
     }
 
@@ -685,6 +688,7 @@ impl Default for Subnet {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             ecdsa_config: None,
+            chain_key_config: None,
             running_state: SubnetRunningState::Active,
             query_stats_epoch_length: None,
             initial_height: 0,

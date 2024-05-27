@@ -110,7 +110,7 @@ fn test_api_for_update(
             .wasm_native_stable_memory,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Rc::new(DefaultOutOfInstructionsHandler {}),
+        Rc::new(DefaultOutOfInstructionsHandler::new(instruction_limit)),
         log,
     )
 }
@@ -563,10 +563,10 @@ mod tests {
                 assert_eq!(wasm_heap[start..end], test_heap[start..end]);
 
                 if modification_tracking == ModificationTracking::Track {
-                    dirty_pages.extend(result.dirty_pages.iter().map(|x| x.get()));
+                    dirty_pages.extend(result.wasm_dirty_pages.iter().map(|x| x.get()));
 
                     // Verify that wasm heap and test buffer are the same.
-                    let i = result.dirty_pages.last().unwrap().get();
+                    let i = result.wasm_dirty_pages.last().unwrap().get();
                     let offset = i as usize * PAGE_SIZE;
                     let page1 = unsafe { test_heap.as_ptr().add(offset) };
                     let page2 = unsafe { wasm_heap.as_ptr().add(offset) };
@@ -584,7 +584,7 @@ mod tests {
                     );
                     page_map.update(&compute_page_delta(
                         &mut instance,
-                        &result.dirty_pages,
+                        &result.wasm_dirty_pages,
                         CanisterMemoryType::Heap,
                     ));
                 }
@@ -771,7 +771,9 @@ mod tests {
                     max_num_instructions,
                     subnet_type,
                 ),
-                Err(HypervisorError::InstructionLimitExceeded)
+                Err(HypervisorError::InstructionLimitExceeded(
+                    max_num_instructions
+                ))
             )
         })
     }
@@ -997,7 +999,7 @@ mod tests {
                 subnet_type,
             )
             .unwrap();
-            let dry_run_dirty_heap = dry_run_stats.dirty_pages.len() as u64;
+            let dry_run_dirty_heap = dry_run_stats.wasm_dirty_pages.len() as u64;
 
             {
                 // Number of instructions consumed only for copying the payload.
@@ -1009,7 +1011,7 @@ mod tests {
                     subnet_type,
                 )
                 .unwrap();
-                let dirty_heap = run_stats.dirty_pages.len() as u64;
+                let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
                 let consumed_instructions =
                     consumed_instructions - instructions_consumed_without_data;
                 assert_eq!(
@@ -1029,7 +1031,7 @@ mod tests {
                     subnet_type,
                 )
                 .unwrap();
-                let dirty_heap = run_stats.dirty_pages.len() as u64;
+                let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
                 let consumed_instructions =
                     consumed_instructions - instructions_consumed_without_data;
 
@@ -1422,7 +1424,7 @@ mod tests {
                     "touch_heap_with_api_calls".to_string(),
                 )))
                 .expect("call to touch_heap_with_api_calls failed");
-            dirty_pages.extend(result.dirty_pages.iter().map(|x| x.get()));
+            dirty_pages.extend(result.wasm_dirty_pages.iter().map(|x| x.get()));
 
             let mut expected_dirty_pages: BTreeSet<u64> = BTreeSet::new();
             expected_dirty_pages.insert(1); // caller_copy
@@ -1478,7 +1480,7 @@ mod tests {
                     "touch_heap_with_api_calls".to_string(),
                 )))
                 .expect("call to touch_heap_with_api_calls failed");
-            dirty_pages.extend(result.dirty_pages.iter().map(|x| x.get()));
+            dirty_pages.extend(result.wasm_dirty_pages.iter().map(|x| x.get()));
 
             let mut expected_dirty_pages: BTreeSet<u64> = BTreeSet::new();
             expected_dirty_pages.insert(1); // caller_copy

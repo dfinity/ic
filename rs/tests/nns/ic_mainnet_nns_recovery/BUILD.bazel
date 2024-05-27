@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "ic_mainnet_nns_recovery",
+    testonly = True,
     srcs = ["src/lib.rs"],
     crate_name = "ic_mainnet_nns_recovery",
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

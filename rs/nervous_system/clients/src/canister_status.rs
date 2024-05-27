@@ -65,6 +65,7 @@ pub struct DefiniteCanisterSettings {
 #[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
 pub struct CanisterStatusResult {
     pub status: CanisterStatusType,
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub module_hash: Option<Vec<u8>>,
     pub memory_size: candid::Nat,
     pub settings: DefiniteCanisterSettings,

@@ -4,10 +4,9 @@ use hyper::{
     Method, Request, StatusCode,
 };
 use hyper_util::rt::TokioIo;
-use ic_agent::Agent;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsConfig;
-use ic_crypto_tls_interfaces_mocks::{MockTlsConfig, MockTlsHandshake};
+use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_error_types::UserError;
 use ic_http_endpoints_public::start_server;
@@ -63,10 +62,7 @@ use ic_types::{
 };
 use mockall::{mock, predicate::*};
 use prost::Message;
-use std::{
-    collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc, sync::RwLock,
-    time::Duration,
-};
+use std::{collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc, sync::RwLock};
 use tokio::{
     net::{TcpSocket, TcpStream},
     sync::mpsc::UnboundedReceiver,
@@ -194,11 +190,11 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
     let mut metadata = SystemMetadata::new(subnet_test_id(1), SubnetType::Application);
 
     let network_topology = NetworkTopology {
-        subnets: BTreeMap::new(),
+        subnets: Default::default(),
         routing_table: Arc::new(RoutingTable::default()),
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(1),
-        ecdsa_signing_subnets: Default::default(),
+        idkg_signing_subnets: Default::default(),
         bitcoin_mainnet_canister_id: None,
         bitcoin_testnet_canister_id: None,
     };
@@ -316,24 +312,6 @@ pub fn basic_registry_client() -> MockRegistryClient {
         });
 
     mock_registry_client
-}
-
-pub async fn wait_for_status_healthy(agent: &Agent) -> Result<(), &'static str> {
-    let fut = async {
-        loop {
-            let result = agent.status().await;
-            match result {
-                Ok(status) if status.replica_health_status == Some("healthy".to_string()) => {
-                    break;
-                }
-                _ => {}
-            }
-            tokio::time::sleep(Duration::from_millis(250)).await;
-        }
-    };
-    tokio::time::timeout(Duration::from_secs(10), fut)
-        .await
-        .map_err(|_| "Timeout while waiting for http endpoint to be healthy")
 }
 
 // Get a free port on this host to which we can connect transport to.
@@ -456,7 +434,6 @@ impl HttpEndpointBuilder {
         let nns_subnet_id = subnet_test_id(1);
         let node_id = node_test_id(1);
 
-        let tls_handshake = Arc::new(MockTlsHandshake::new());
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
 
@@ -478,7 +455,6 @@ impl HttpEndpointBuilder {
             crypto as Arc<_>,
             self.registry_client,
             self.tls_config,
-            tls_handshake,
             sig_verifier,
             node_id,
             subnet_id,
@@ -492,5 +468,243 @@ impl HttpEndpointBuilder {
             ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
         );
         (ingress_filter_handle, ingress_rx, query_exe_handler)
+    }
+}
+
+pub mod test_agent {
+    use super::*;
+    use ic_crypto_tree_hash::{Label, Path};
+
+    use ic_types::{
+        messages::{
+            Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
+            HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery,
+        },
+        time::current_time,
+        PrincipalId,
+    };
+    use reqwest::header::CONTENT_TYPE;
+    use serde_cbor::Value as CBOR;
+    use std::{net::SocketAddr, time::Duration};
+
+    const INGRESS_EXPIRY_DURATION: Duration = Duration::from_secs(300);
+    const METHOD_NAME: &str = "test";
+    const SENDER: PrincipalId = PrincipalId::new_anonymous();
+    const ARG: Vec<u8> = vec![];
+    pub const APPLICATION_CBOR: &str = "application/cbor";
+
+    pub async fn wait_for_status_healthy(addr: &SocketAddr) -> Result<(), &'static str> {
+        let fut = async {
+            loop {
+                let url = format!("http://{}/api/v2/status", addr);
+
+                let response = reqwest::Client::new()
+                    .get(url)
+                    .header(CONTENT_TYPE, APPLICATION_CBOR)
+                    .send()
+                    .await;
+
+                let Ok(response) = response else {
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                    continue;
+                };
+
+                if response.status() != StatusCode::OK {
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                    continue;
+                }
+
+                let Ok(response) = response.bytes().await else {
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                    continue;
+                };
+
+                let replica_status = serde_cbor::from_slice::<CBOR>(&response)
+                    .expect("Status endpoint is a valid CBOR.");
+
+                if let CBOR::Map(map) = replica_status {
+                    if let Some(CBOR::Text(status)) =
+                        map.get(&CBOR::Text("replica_health_status".to_string()))
+                    {
+                        if status == "healthy" {
+                            return;
+                        }
+                    }
+                }
+
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(10), fut)
+            .await
+            .map_err(|_| "Timeout while waiting for http endpoint to be healthy")
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    pub enum Call {
+        V2,
+    }
+
+    impl Call {
+        pub async fn call_canister_id(
+            &self,
+            addr: SocketAddr,
+            canister_id: PrincipalId,
+            effective_canister_id: PrincipalId,
+        ) -> reqwest::Response {
+            let ingress_expiry =
+                (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
+
+            let call_content = HttpCallContent::Call {
+                update: HttpCanisterUpdate {
+                    canister_id: Blob(canister_id.into_vec()),
+                    method_name: METHOD_NAME.to_string(),
+                    ingress_expiry,
+                    arg: Blob(ARG),
+                    sender: Blob(SENDER.into_vec()),
+                    nonce: None,
+                },
+            };
+
+            let envelope = HttpRequestEnvelope {
+                content: call_content,
+                sender_pubkey: None,
+                sender_sig: None,
+                sender_delegation: None,
+            };
+
+            let body = serde_cbor::to_vec(&envelope).unwrap();
+            let version = match self {
+                Call::V2 => "v2",
+            };
+
+            let url = format!(
+                "http://{}/api/{}/canister/{}/call",
+                addr, version, effective_canister_id
+            );
+
+            reqwest::Client::new()
+                .post(url)
+                .body(body)
+                .header(CONTENT_TYPE, APPLICATION_CBOR)
+                .send()
+                .await
+                .unwrap()
+        }
+
+        pub async fn call_default_canister(self, addr: SocketAddr) -> reqwest::Response {
+            let canister_id = PrincipalId::default();
+            self.call_canister_id(addr, canister_id, canister_id).await
+        }
+    }
+
+    #[derive(Default)]
+    pub struct Query {
+        canister_id: PrincipalId,
+        effective_canister_id: PrincipalId,
+    }
+
+    impl Query {
+        pub fn new(canister_id: PrincipalId, effective_canister_id: PrincipalId) -> Self {
+            Self {
+                canister_id,
+                effective_canister_id,
+            }
+        }
+
+        pub async fn query(self, addr: SocketAddr) -> reqwest::Response {
+            let ingress_expiry =
+                (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
+
+            let call_content = HttpQueryContent::Query {
+                query: HttpUserQuery {
+                    canister_id: Blob(self.canister_id.into_vec()),
+                    method_name: METHOD_NAME.to_string(),
+                    arg: Blob(ARG),
+                    sender: Blob(SENDER.into_vec()),
+                    ingress_expiry,
+                    nonce: None,
+                },
+            };
+
+            let envelope = HttpRequestEnvelope {
+                content: call_content,
+                sender_pubkey: None,
+                sender_sig: None,
+                sender_delegation: None,
+            };
+
+            let body = serde_cbor::to_vec(&envelope).unwrap();
+            let url = format!(
+                "http://{}/api/v2/canister/{}/query",
+                addr, self.effective_canister_id
+            );
+
+            reqwest::Client::new()
+                .post(url)
+                .body(body)
+                .header(CONTENT_TYPE, APPLICATION_CBOR)
+                .send()
+                .await
+                .unwrap()
+        }
+    }
+
+    pub struct CanisterReadState {
+        paths: Vec<Path>,
+        effective_canister_id: PrincipalId,
+    }
+
+    impl Default for CanisterReadState {
+        fn default() -> Self {
+            Self {
+                paths: vec![Path::from(Label::from("time"))],
+                effective_canister_id: PrincipalId::default(),
+            }
+        }
+    }
+
+    impl CanisterReadState {
+        pub fn new(paths: Vec<Path>, effective_canister_id: PrincipalId) -> Self {
+            Self {
+                paths,
+                effective_canister_id,
+            }
+        }
+
+        pub async fn read_state(self, addr: SocketAddr) -> reqwest::Response {
+            let ingress_expiry =
+                (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
+
+            let call_content = HttpReadStateContent::ReadState {
+                read_state: HttpReadState {
+                    paths: self.paths,
+                    sender: Blob(SENDER.into_vec()),
+                    ingress_expiry,
+                    nonce: None,
+                },
+            };
+
+            let envelope = HttpRequestEnvelope {
+                content: call_content,
+                sender_pubkey: None,
+                sender_sig: None,
+                sender_delegation: None,
+            };
+
+            let body = serde_cbor::to_vec(&envelope).unwrap();
+            let url = format!(
+                "http://{}/api/v2/canister/{}/read_state",
+                addr, self.effective_canister_id
+            );
+
+            reqwest::Client::new()
+                .post(url)
+                .body(body)
+                .header(CONTENT_TYPE, APPLICATION_CBOR)
+                .send()
+                .await
+                .unwrap()
+        }
     }
 }

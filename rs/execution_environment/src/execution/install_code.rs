@@ -767,7 +767,7 @@ impl InstallCodeHelper {
                 }
             }
             self.total_heap_delta +=
-                NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
+                NumBytes::from((output.instance_stats.dirty_pages() * PAGE_SIZE) as u64);
         }
         (instructions_consumed, Ok(()))
     }

@@ -39,6 +39,7 @@ ic-ledger-suite-orchestrator-test-utils = { path = "test_utils" }
 assert_matches = { workspace = true }
 proptest = "1.0"
 candid_parser = { workspace = true }
+ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 mockall = { workspace = true }
 paste = "1.0.12"

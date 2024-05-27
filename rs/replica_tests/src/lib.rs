@@ -243,6 +243,7 @@ pub fn get_ic_config() -> IcConfig {
             None,
             None,
             None,
+            None,
             vec![],
             vec![],
             SubnetRunningState::Active,

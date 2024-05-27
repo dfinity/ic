@@ -415,7 +415,7 @@ impl ResponseHelper {
             Ok(_) => Ok(self.finish(
                 output.wasm_result,
                 instructions_available,
-                NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64),
+                NumBytes::from((output.instance_stats.dirty_pages() * PAGE_SIZE) as u64),
                 original,
                 round,
                 round_limits,
@@ -472,7 +472,7 @@ impl ResponseHelper {
                 self.finish(
                     Err(callback_err),
                     output.num_instructions_left,
-                    NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64),
+                    NumBytes::from((output.instance_stats.dirty_pages() * PAGE_SIZE) as u64),
                     original,
                     round,
                     round_limits,
@@ -1035,6 +1035,7 @@ fn execute_response_cleanup(
         ApiType::Cleanup {
             caller: original.call_origin.get_principal(),
             time: original.time,
+            execution_mode: execution_parameters.execution_mode.clone(),
             call_context_instructions_executed: original.instructions_executed,
         },
         helper.canister().execution_state.as_ref().unwrap(),

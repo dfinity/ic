@@ -730,6 +730,7 @@ impl<'a> QueryContext<'a> {
                 ApiType::Cleanup {
                     caller: call_origin.get_principal(),
                     time,
+                    execution_mode: execution_parameters.execution_mode.clone(),
                     call_context_instructions_executed,
                 },
                 time,

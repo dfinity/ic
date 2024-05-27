@@ -26,6 +26,7 @@ ALIASES = {}
 
 rust_binary(
     name = "ic-starter",
+    testonly = True,
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,

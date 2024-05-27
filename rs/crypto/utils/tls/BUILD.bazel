@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/types/base_types",
-    "@crate_index//:rustls",
+    "@crate_index//:thiserror",
     "@crate_index//:x509-parser",
 ]
 
