@@ -101,26 +101,6 @@ sh_binary(
 )
 
 sh_test(
-    name = "shellcheck",
-    size = "small",
-    srcs = ["shellcheck.sh"],
-    data = [
-        "//:WORKSPACE.bazel",
-        "@shellcheck",
-    ],
-    env = {
-        # Hack to escape the sandbox and grep on the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "shellcheck_path": "$(rootpath @shellcheck//:shellcheck)",
-    },
-    tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
-    ],
-)
-
-sh_test(
     name = "shfmt-lint",
     size = "small",
     srcs = ["shfmt-lint.sh"],

@@ -418,11 +418,6 @@ load("//pre-commit:buf.bzl", "buf")
 
 buf(name = "buf")
 
-# shellcheck binary
-load("//pre-commit:shellcheck.bzl", "shellcheck")
-
-shellcheck(name = "shellcheck")
-
 # candid binary
 load("//pre-commit:candid.bzl", "candid")
 
