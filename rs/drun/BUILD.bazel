@@ -46,7 +46,7 @@ rust_test_suite(
     size = "medium",
     srcs = glob(["tests/**/*.rs"]),
     data = [
-        "//rs/drun:drun",
+        "//rs/drun",
         "//rs/pocket_ic_server:pocket-ic-server",
     ],
     env = {
