@@ -52,12 +52,17 @@ fn messages(canister_file_path: &str) -> Vec<u8> {
     format!(
         r#"create
 install lxzze-o7777-77777-aaaaa-cai {} ""
+reinstall lxzze-o7777-77777-aaaaa-cai {} ""
+upgrade lxzze-o7777-77777-aaaaa-cai {} ""
 ingress lxzze-o7777-77777-aaaaa-cai init ""
+ingress lxzze-o7777-77777-aaaaa-cai foo ""
+query lxzze-o7777-77777-aaaaa-cai foo ""
 ingress lxzze-o7777-77777-aaaaa-cai inc ""
 ingress lxzze-o7777-77777-aaaaa-cai inc ""
 ingress lxzze-o7777-77777-aaaaa-cai read ""
+query lxzze-o7777-77777-aaaaa-cai read ""
 ingress lxzze-o7777-77777-aaaaa-cai reject """#,
-        canister_file_path
+        canister_file_path, canister_file_path, canister_file_path,
     )
     .as_bytes()
     .to_vec()
@@ -66,12 +71,19 @@ ingress lxzze-o7777-77777-aaaaa-cai reject """#,
 fn expected_output() -> Vec<u8> {
     r#"Canister created: lxzze-o7777-77777-aaaaa-cai
 Canister successfully installed.
-2021-05-06 19:17:10.000000003 UTC: [Canister lxzze-o7777-77777-aaaaa-cai] ABCD
-ingress Completed: Reply: 0x41424344
-ingress Completed: Reply: 0x
-ingress Completed: Reply: 0x
-ingress Completed: Reply: 0x04000000
-ingress Completed: Reject: ABCD
+Canister successfully installed.
+Canister successfully installed.
+2021-05-06 19:17:10.000000005 UTC: [Canister lxzze-o7777-77777-aaaaa-cai] ABCD
+ingress Ok: Reply: 0x41424344
+ingress Err: IC0536: Error from Canister lxzze-o7777-77777-aaaaa-cai: Canister has no update method 'foo'..
+Check that the method being called is exported by the target canister. See documentation: http://internetcomputer.org/docs/current/references/execution-errors#method-not-found
+Err: IC0536: Error from Canister lxzze-o7777-77777-aaaaa-cai: Canister has no query method 'foo'..
+Check that the method being called is exported by the target canister. See documentation: http://internetcomputer.org/docs/current/references/execution-errors#method-not-found
+ingress Ok: Reply: 0x
+ingress Ok: Reply: 0x
+ingress Ok: Reply: 0x04000000
+Ok: Reply: 0x04000000
+ingress Ok: Reject: ABCD
 "#
     .as_bytes()
     .to_vec()

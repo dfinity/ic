@@ -177,7 +177,7 @@ fn print_ingress_result(res: Result<WasmResult, UserError>) {
     print!("ingress ");
     match res {
         Ok(payload) => {
-            print!("Completed: ");
+            print!("Ok: ");
             print_wasm_result(payload);
         }
         Err(error) => {
