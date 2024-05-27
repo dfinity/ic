@@ -1153,18 +1153,37 @@ async fn upgrade_canister<T: StorableWasm, R: CanisterRuntime>(
         Ok(None) => Err(UpgradeLedgerSuiteError::WasmHashNotFound(wasm_hash.clone())),
         Err(e) => Err(UpgradeLedgerSuiteError::WasmStoreError(e)),
     }?;
+
+    log!(DEBUG, "Stopping canister {}", canister_id);
     runtime
         .stop_canister(canister_id)
         .await
         .map_err(UpgradeLedgerSuiteError::StopCanisterError)?;
+
+    log!(
+        DEBUG,
+        "Upgrading wasm module of canister {} to {}",
+        canister_id,
+        wasm_hash
+    );
     runtime
         .upgrade_canister(canister_id, wasm.to_bytes())
         .await
         .map_err(UpgradeLedgerSuiteError::UpgradeCanisterError)?;
+
+    log!(DEBUG, "Starting canister {}", canister_id);
     runtime
         .start_canister(canister_id)
         .await
-        .map_err(UpgradeLedgerSuiteError::StartCanisterError)
+        .map_err(UpgradeLedgerSuiteError::StartCanisterError)?;
+
+    log!(
+        DEBUG,
+        "Upgrade of canister {} to {} completed",
+        canister_id,
+        wasm_hash
+    );
+    Ok(())
 }
 
 #[derive(Debug, PartialEq, Clone, Ord, PartialOrd, Eq, Serialize, Deserialize)]
