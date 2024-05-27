@@ -207,11 +207,15 @@ async fn test(env: TestEnv) {
     );
 
     let route_provider = {
+        let subnet_id = env
+            .topology_snapshot()
+            .subnets()
+            .next()
+            .unwrap()
+            .subnet_id
+            .get();
         let api_bn_fetch_interval = Duration::from_secs(5);
-        let fetcher = Arc::new(NodesFetcherImpl::new(
-            http_client.clone(),
-            nns_node.effective_canister_id().into(),
-        ));
+        let fetcher = Arc::new(NodesFetcherImpl::new(http_client.clone(), subnet_id.into()));
         let health_timeout = Duration::from_secs(5);
         let check_interval = Duration::from_secs(1);
         let checker = Arc::new(HealthCheckImpl::new(http_client.clone(), health_timeout));
