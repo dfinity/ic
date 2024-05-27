@@ -1,18 +1,20 @@
 //! Standalone interface for testing application canisters.
 
 use crate::message::{msg_stream_from_file, Message};
+use candid::{CandidType, Principal};
 use hex::encode;
-use ic_management_canister_types::InstallCodeArgsV2;
-use ic_types::{CanisterId, PrincipalId};
 use pocket_ic::common::rest::{ExtendedSubnetConfigSet, RawEffectivePrincipal, SubnetSpec};
 use pocket_ic::{
     call_candid_as, start_or_reuse_server_with_redirects, PocketIc, UserError, WasmResult,
 };
+use serde::Serialize;
 use std::fs::File;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 mod message;
+
+pub const ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION: &str = "enhanced-orthogonal-persistence";
 
 const DEFAULT_CYCLES_PER_CANISTER: u128 = 100_000_000_000_000; // 100 T
 
@@ -21,6 +23,36 @@ const DEFAULT_CYCLES_PER_CANISTER: u128 = 100_000_000_000_000; // 100 T
 pub enum SubnetType {
     Application,
     System,
+}
+
+#[derive(CandidType, Serialize, Debug, PartialEq)]
+pub enum WasmMemoryPersistence {
+    Keep,
+    Replace,
+}
+
+#[derive(CandidType, Serialize, Debug, PartialEq)]
+pub struct SkipPreUpgrade {
+    pub skip_pre_upgrade: Option<bool>,
+    pub wasm_memory_persistence: Option<WasmMemoryPersistence>,
+}
+
+#[derive(CandidType, Serialize, Debug, PartialEq)]
+pub enum CanisterInstallModeV2 {
+    #[serde(rename = "install")]
+    Install,
+    #[serde(rename = "reinstall")]
+    Reinstall,
+    #[serde(rename = "upgrade")]
+    Upgrade(Option<SkipPreUpgrade>),
+}
+
+#[derive(CandidType, Serialize, Debug, PartialEq)]
+pub struct InstallCodeArgument {
+    pub mode: CanisterInstallModeV2,
+    pub canister_id: Principal,
+    pub wasm_module: Vec<u8>,
+    pub arg: Vec<u8>,
 }
 
 impl FromStr for SubnetType {
@@ -79,21 +111,19 @@ pub fn run_drun(uo: DrunOptions) {
     for parse_result in msg_stream {
         match parse_result {
             Ok(Message::Install(msg)) => {
-                let args = InstallCodeArgsV2::new(
-                    msg.mode,
-                    msg.canister_id,
-                    msg.wasm_module,
-                    msg.arg,
-                    None,
-                    None,
-                );
+                let arg = InstallCodeArgument {
+                    mode: msg.mode,
+                    canister_id: msg.canister_id,
+                    wasm_module: msg.wasm_module,
+                    arg: msg.arg,
+                };
                 let res: Result<(), _> = call_candid_as(
                     &pocket_ic,
-                    PrincipalId::default().into(),
-                    RawEffectivePrincipal::CanisterId(msg.canister_id.get().as_slice().to_vec()),
-                    msg.sender.into(),
+                    Principal::management_canister(),
+                    RawEffectivePrincipal::CanisterId(msg.canister_id.as_slice().to_vec()),
+                    msg.sender,
                     "install_code",
-                    (args,),
+                    (arg,),
                 );
                 match res {
                     Ok(()) => {
@@ -106,19 +136,14 @@ pub fn run_drun(uo: DrunOptions) {
             }
 
             Ok(Message::Query(q)) => {
-                let res = pocket_ic.query_call(
-                    q.canister_id.into(),
-                    q.sender.into(),
-                    &q.method_name,
-                    q.arg,
-                );
+                let res = pocket_ic.query_call(q.canister_id, q.sender, &q.method_name, q.arg);
                 print_query_result(res);
             }
 
             Ok(Message::Ingress(msg)) => {
                 let res = pocket_ic.update_call(
-                    msg.canister_id.into(),
-                    msg.sender.into(),
+                    msg.canister_id,
+                    msg.sender,
                     &msg.method_name,
                     msg.arg.to_vec(),
                 );

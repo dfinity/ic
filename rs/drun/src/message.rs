@@ -1,11 +1,9 @@
-use super::CanisterId;
-
-use hex::decode;
-use ic_execution_environment::execution::upgrade::ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION;
-use ic_management_canister_types::{
-    CanisterInstallModeV2, CanisterUpgradeOptions, WasmMemoryPersistence,
+use crate::{
+    CanisterInstallModeV2, SkipPreUpgrade, WasmMemoryPersistence,
+    ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION,
 };
-use ic_types::PrincipalId;
+use candid::Principal;
+use hex::decode;
 
 use std::{
     fmt,
@@ -24,19 +22,19 @@ pub(crate) enum CanisterInstallMode {
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct CanisterInstallArgs {
-    pub canister_id: CanisterId,
+    pub canister_id: Principal,
     pub wasm_module: Vec<u8>,
     pub arg: Vec<u8>,
-    pub sender: PrincipalId,
+    pub sender: Principal,
     pub mode: CanisterInstallModeV2,
 }
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct CanisterCall {
-    pub canister_id: CanisterId,
+    pub canister_id: Principal,
     pub method_name: String,
     pub arg: Vec<u8>,
-    pub sender: PrincipalId,
+    pub sender: Principal,
 }
 
 #[derive(Debug, PartialEq)]
@@ -179,11 +177,11 @@ fn parse_message(s: &str) -> Result<Message, String> {
                 canister_id,
                 method_name,
                 arg: method_payload,
-                sender: PrincipalId::new_anonymous(),
+                sender: Principal::anonymous(),
             }))
         }
         ["query", canister_id, method_name, payload] => Ok(Message::Query(CanisterCall {
-            sender: PrincipalId::new_anonymous(),
+            sender: Principal::anonymous(),
             canister_id: parse_canister_id(canister_id)?,
             method_name: validate_method_name(method_name)?,
             arg: parse_octet_string(payload)?,
@@ -214,10 +212,9 @@ fn parse_message(s: &str) -> Result<Message, String> {
     }
 }
 
-fn parse_canister_id(canister_id: &str) -> Result<CanisterId, String> {
-    use std::str::FromStr;
-    match PrincipalId::from_str(canister_id) {
-        Ok(id) => Ok(CanisterId::unchecked_from_principal(id)),
+fn parse_canister_id(canister_id: &str) -> Result<Principal, String> {
+    match Principal::from_text(canister_id) {
+        Ok(id) => Ok(id),
         Err(err) => Err(format!(
             "Failed to convert {} to principal id with {}",
             canister_id, err
@@ -272,7 +269,7 @@ fn parse_install(
             } else {
                 None
             };
-            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+            CanisterInstallModeV2::Upgrade(Some(SkipPreUpgrade {
                 skip_pre_upgrade: None,
                 wasm_memory_persistence,
             }))
@@ -283,7 +280,7 @@ fn parse_install(
         canister_id,
         wasm_module: wasm_data,
         arg: payload,
-        sender: PrincipalId::new_anonymous(),
+        sender: Principal::anonymous(),
         mode: install_mode,
     }))
 }
@@ -398,41 +395,41 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
-    const APP_CANISTER_ID: CanisterId = CanisterId::from_u64(2);
-
     #[test]
     fn test_parse_message_quoted_payload_succeeds() {
+        let app_canister_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
         let s = &format!(
             "ingress {} write \"payload \\x0a\\b00010001\"",
-            APP_CANISTER_ID
+            app_canister_id
         );
         let parsed_message = parse_message(s).unwrap();
         let expected = Message::Ingress(CanisterCall {
-            canister_id: APP_CANISTER_ID,
+            canister_id: app_canister_id,
             method_name: "write".to_string(),
             arg: vec![112, 97, 121, 108, 111, 97, 100, 32, 10, 17],
-            sender: PrincipalId::new_anonymous(),
+            sender: Principal::anonymous(),
         });
         assert_eq!(expected, parsed_message);
     }
 
     #[test]
     fn test_parse_message_hex_payload_succeeds() {
-        let s = &format!("ingress {} write 0x010203", APP_CANISTER_ID);
+        let app_canister_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
+        let s = &format!("ingress {} write 0x010203", app_canister_id);
         let parsed_message = parse_message(s).unwrap();
         let expected = Message::Ingress(CanisterCall {
-            canister_id: APP_CANISTER_ID,
+            canister_id: app_canister_id,
             method_name: "write".to_string(),
             arg: vec![1, 2, 3],
-            sender: PrincipalId::new_anonymous(),
+            sender: Principal::anonymous(),
         });
         assert_eq!(expected, parsed_message);
 
-        let s = &format!("query {} read 0x010203", APP_CANISTER_ID);
+        let s = &format!("query {} read 0x010203", app_canister_id);
         let parsed_message = parse_message(s).unwrap();
         let expected = Message::Query(CanisterCall {
-            sender: PrincipalId::new_anonymous(),
-            canister_id: APP_CANISTER_ID,
+            sender: Principal::anonymous(),
+            canister_id: app_canister_id,
             method_name: String::from("read"),
             arg: vec![1, 2, 3],
         });
@@ -441,25 +438,29 @@ mod tests {
 
     #[test]
     fn test_parse_message_invalid_escapes_fails() {
-        let s = &format!("query {} read \"\\xzz\"", APP_CANISTER_ID);
+        let app_canister_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
+
+        let s = &format!("query {} read \"\\xzz\"", app_canister_id);
         assert!(parse_message(s).is_err());
 
-        let s = &format!("query {} read \"\\b01\"", APP_CANISTER_ID);
+        let s = &format!("query {} read \"\\b01\"", app_canister_id);
         assert!(parse_message(s).is_err());
 
-        let s = &format!("query {} read \"\\x1\"", APP_CANISTER_ID);
+        let s = &format!("query {} read \"\\x1\"", app_canister_id);
         assert!(parse_message(s).is_err());
 
-        let s = &format!("query {} read \"\\b2\"", APP_CANISTER_ID);
+        let s = &format!("query {} read \"\\b2\"", app_canister_id);
         assert!(parse_message(s).is_err());
     }
 
     #[test]
     fn test_illegal_method_name_must_fail() {
-        let s = &format!("query {} 0read \"\\xzz\"", APP_CANISTER_ID);
+        let app_canister_id = Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap();
+
+        let s = &format!("query {} 0read \"\\xzz\"", app_canister_id);
         assert!(parse_message(s).is_err());
 
-        let s = &format!("query {} üread \"\\xzz\"", APP_CANISTER_ID);
+        let s = &format!("query {} üread \"\\xzz\"", app_canister_id);
         assert!(parse_message(s).is_err());
     }
 

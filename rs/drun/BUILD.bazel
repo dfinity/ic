@@ -4,16 +4,15 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//packages/pocket-ic",
-    "//rs/execution_environment",
-    "//rs/interfaces",
-    "//rs/types/management_canister_types",
-    "//rs/types/types",
+    "@crate_index//:candid",
     "@crate_index//:clap_3_2_25",
-    "@crate_index//:futures",
     "@crate_index//:hex",
+    "@crate_index//:serde",
     "@crate_index//:tempfile",
-    "@crate_index//:tokio",
     "@crate_index//:wasmparser",
+]
+
+DEV_DEPENDENCIES = DEPENDENCIES + [
     "@crate_index//:wat",
 ]
 
@@ -53,5 +52,5 @@ rust_test_suite(
     },
     flaky = False,
     tags = ["cpu:4"],
-    deps = DEPENDENCIES,
+    deps = DEV_DEPENDENCIES,
 )

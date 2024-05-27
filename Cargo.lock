@@ -7693,16 +7693,12 @@ dependencies = [
 name = "ic-drun"
 version = "0.9.0"
 dependencies = [
+ "candid",
  "clap 3.2.25",
- "futures",
  "hex",
- "ic-execution-environment",
- "ic-interfaces",
- "ic-management-canister-types",
- "ic-types",
  "pocket-ic",
+ "serde",
  "tempfile",
- "tokio",
  "wasmparser 0.115.0",
  "wat",
 ]

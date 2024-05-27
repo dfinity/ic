@@ -7,17 +7,15 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-pocket-ic = { path = "../../packages/pocket-ic" }
-ic-execution-environment = { path = "../execution_environment" }
-ic-interfaces = { path = "../interfaces" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
-ic-types = { path = "../types/types" }
+candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
-futures = { workspace = true }
 hex = { workspace = true }
+pocket-ic = { path = "../../packages/pocket-ic" }
+serde = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true }
 wasmparser = "0.115.0"
+
+[dev-dependencies]
 wat = "1.0.52"
 
 [[bin]]
