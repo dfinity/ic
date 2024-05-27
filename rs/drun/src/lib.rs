@@ -26,12 +26,13 @@ pub fn run_drun(uo: DrunOptions) {
     let DrunOptions {
         msg_filename,
         log_file,
-        subnet_type: _,
+        subnet_type,
     } = uo;
 
     let msg_stream = msg_stream_from_file(&msg_filename)
         .unwrap_or_else(|e| panic!("Could not read messages from file: {}", e));
 
+    let pid = std::process::id();
     let server_url = start_or_reuse_server_with_redirects(
         Some(
             log_file
@@ -43,10 +44,18 @@ pub fn run_drun(uo: DrunOptions) {
                 .unwrap_or(std::process::Stdio::null()),
         ),
         Some(std::io::stdout().into()),
+        pid,
     );
     let mut config = ExtendedSubnetConfigSet::default();
-    config.application.push(SubnetSpec::default());
-    let pocket_ic = PocketIc::from_config_and_server_url(config, server_url);
+    match subnet_type {
+        SubnetType::Application | SubnetType::VerifiedApplication => {
+            config.application.push(SubnetSpec::default());
+        }
+        SubnetType::System => {
+            config.system.push(SubnetSpec::default());
+        }
+    }
+    let pocket_ic = PocketIc::from_config_and_server_url_and_pid(config, server_url, pid);
 
     for parse_result in msg_stream {
         match parse_result {

@@ -243,11 +243,21 @@ impl PocketIc {
         config: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
     ) -> Self {
+        let parent_pid = std::os::unix::process::parent_id();
+        Self::from_config_and_server_url_and_pid(config, server_url, parent_pid)
+    }
+
+    /// Creates a new PocketIC instance with the specified subnet config and server url.
+    /// This function is intended for advanced users who start the server manually.
+    pub fn from_config_and_server_url_and_pid(
+        config: impl Into<ExtendedSubnetConfigSet>,
+        server_url: Url,
+        pid: u32,
+    ) -> Self {
         let config = config.into();
         config.validate().unwrap();
 
-        let parent_pid = std::os::unix::process::parent_id();
-        let log_guard = setup_tracing(parent_pid);
+        let log_guard = setup_tracing(pid);
 
         let reqwest_client = reqwest::blocking::Client::new();
         let (instance_id, topology) = match reqwest_client
@@ -1478,13 +1488,15 @@ pub enum WasmResult {
 
 /// Attempt to start a new PocketIC server if it's not already running.
 pub fn start_or_reuse_server() -> Url {
-    start_or_reuse_server_with_redirects(None, None)
+    let parent_pid = std::os::unix::process::parent_id();
+    start_or_reuse_server_with_redirects(None, None, parent_pid)
 }
 
 /// Attempt to start a new PocketIC server if it's not already running.
 pub fn start_or_reuse_server_with_redirects(
     stdout: Option<std::process::Stdio>,
     stderr: Option<std::process::Stdio>,
+    pid: u32,
 ) -> Url {
     let bin_path = match std::env::var_os("POCKET_IC_BIN") {
         None => "./pocket-ic".to_string(),
@@ -1506,9 +1518,8 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     }
 
     // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
-    let parent_pid = std::os::unix::process::parent_id();
     let mut cmd = Command::new(PathBuf::from(bin_path));
-    cmd.arg("--pid").arg(parent_pid.to_string());
+    cmd.arg("--pid").arg(pid.to_string());
     if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
         cmd.stdout(std::process::Stdio::null());
         cmd.stderr(std::process::Stdio::null());
@@ -1521,8 +1532,8 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
     }
     cmd.spawn().expect("Failed to start PocketIC binary");
 
-    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
-    let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid));
+    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", pid));
+    let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", pid));
     let start = Instant::now();
     loop {
         match ready_file_path.try_exists() {

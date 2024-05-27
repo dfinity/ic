@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{Read, Write};
 use std::process::Command;
 use tempfile::NamedTempFile;
 
@@ -48,6 +48,35 @@ const CANISTER_WAT: &str = r#"(module
         (export "canister_update init" (func $init))
 )"#;
 
+fn messages(canister_file_path: &str) -> Vec<u8> {
+    format!(
+        r#"create
+install lxzze-o7777-77777-aaaaa-cai {} ""
+ingress lxzze-o7777-77777-aaaaa-cai init ""
+ingress lxzze-o7777-77777-aaaaa-cai inc ""
+ingress lxzze-o7777-77777-aaaaa-cai inc ""
+ingress lxzze-o7777-77777-aaaaa-cai read ""
+ingress lxzze-o7777-77777-aaaaa-cai reject """#,
+        canister_file_path
+    )
+    .as_bytes()
+    .to_vec()
+}
+
+fn expected_output() -> Vec<u8> {
+    r#"Canister created: lxzze-o7777-77777-aaaaa-cai
+Canister successfully installed.
+2021-05-06 19:17:10.000000003 UTC: [Canister lxzze-o7777-77777-aaaaa-cai] ABCD
+ingress Completed: Reply: 0x41424344
+ingress Completed: Reply: 0x
+ingress Completed: Reply: 0x
+ingress Completed: Reply: 0x04000000
+ingress Completed: Reject: ABCD
+"#
+    .as_bytes()
+    .to_vec()
+}
+
 #[test]
 fn end_to_end_test() {
     let mut canister_file = NamedTempFile::new().unwrap();
@@ -57,19 +86,7 @@ fn end_to_end_test() {
 
     let mut messages_file = NamedTempFile::new().unwrap();
     messages_file
-        .write_all(
-            format!(
-                r#"create
-install lxzze-o7777-77777-aaaaa-cai {} ""
-ingress lxzze-o7777-77777-aaaaa-cai init ""
-ingress lxzze-o7777-77777-aaaaa-cai inc ""
-ingress lxzze-o7777-77777-aaaaa-cai inc ""
-ingress lxzze-o7777-77777-aaaaa-cai read ""
-ingress lxzze-o7777-77777-aaaaa-cai reject """#,
-                canister_file_path.as_os_str().to_str().unwrap()
-            )
-            .as_bytes(),
-        )
+        .write_all(&messages(canister_file_path.as_os_str().to_str().unwrap()))
         .unwrap();
     let messages_file_path = messages_file.path();
 
@@ -80,17 +97,62 @@ ingress lxzze-o7777-77777-aaaaa-cai reject """#,
         .expect("failed to execute process");
     assert!(output.status.success());
     assert!(output.stderr.is_empty());
-    assert_eq!(
-        output.stdout,
-        r#"Canister created: lxzze-o7777-77777-aaaaa-cai
-Canister successfully installed.
-2021-05-06 19:17:10.000000003 UTC: [Canister lxzze-o7777-77777-aaaaa-cai] ABCD
-ingress Completed: Reply: 0x41424344
-ingress Completed: Reply: 0x
-ingress Completed: Reply: 0x
-ingress Completed: Reply: 0x04000000
-ingress Completed: Reject: ABCD
-"#
-        .as_bytes()
-    );
+    assert_eq!(output.stdout, expected_output());
+}
+
+#[test]
+fn system_subnet() {
+    let mut canister_file = NamedTempFile::new().unwrap();
+    let canister_wasm = wat::parse_str(CANISTER_WAT).unwrap();
+    canister_file.write_all(&canister_wasm).unwrap();
+    let canister_file_path = canister_file.path();
+
+    let mut messages_file = NamedTempFile::new().unwrap();
+    messages_file
+        .write_all(&messages(canister_file_path.as_os_str().to_str().unwrap()))
+        .unwrap();
+    let messages_file_path = messages_file.path();
+
+    let drun_path = std::env::var_os("DRUN_BIN").expect("Missing drun binary");
+    let output = Command::new(drun_path)
+        .arg(messages_file_path)
+        .arg("--subnet-type")
+        .arg("system")
+        .output()
+        .expect("failed to execute process");
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    assert_eq!(output.stdout, expected_output());
+}
+
+#[test]
+fn test_log_file() {
+    let mut canister_file = NamedTempFile::new().unwrap();
+    let canister_wasm = wat::parse_str(CANISTER_WAT).unwrap();
+    canister_file.write_all(&canister_wasm).unwrap();
+    let canister_file_path = canister_file.path();
+
+    let mut messages_file = NamedTempFile::new().unwrap();
+    messages_file
+        .write_all(&messages(canister_file_path.as_os_str().to_str().unwrap()))
+        .unwrap();
+    let messages_file_path = messages_file.path();
+
+    let mut log_file = NamedTempFile::new().unwrap();
+
+    let drun_path = std::env::var_os("DRUN_BIN").expect("Missing drun binary");
+    let output = Command::new(drun_path)
+        .arg(messages_file_path)
+        .arg("--log-file")
+        .arg(log_file.path())
+        .output()
+        .expect("failed to execute process");
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    assert_eq!(output.stdout, expected_output());
+
+    let mut buffer = String::new();
+    log_file.read_to_string(&mut buffer).unwrap();
+    assert!(buffer.contains("The PocketIC server is listening on port"));
+    assert!(!buffer.contains("Canister lxzze-o7777-77777-aaaaa-cai"));
 }
