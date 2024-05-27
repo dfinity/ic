@@ -701,7 +701,7 @@ mod tests {
     use ic_types::consensus::dkg::{Dealings, Summary};
     use ic_types::consensus::idkg::common::PreSignatureRef;
     use ic_types::consensus::idkg::EcdsaPayload;
-    use ic_types::consensus::idkg::QuadrupleId;
+    use ic_types::consensus::idkg::PreSigId;
     use ic_types::consensus::idkg::ReshareOfUnmaskedParams;
     use ic_types::consensus::idkg::TranscriptRef;
     use ic_types::consensus::idkg::UnmaskedTranscript;
@@ -822,7 +822,7 @@ mod tests {
     }
 
     fn set_up_sign_with_ecdsa_contexts(
-        parameters: Vec<(EcdsaKeyId, u8, Time, Option<QuadrupleId>)>,
+        parameters: Vec<(EcdsaKeyId, u8, Time, Option<PreSigId>)>,
     ) -> BTreeMap<CallbackId, SignWithEcdsaContext> {
         let mut contexts = BTreeMap::new();
         for (key_id, id, batch_time, quadruple) in parameters {
@@ -846,7 +846,8 @@ mod tests {
             create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 10);
         let quadruple_for_disabled_key =
             create_available_quadruple(&mut ecdsa_payload, disabled_key_id.clone(), 11);
-        let non_existant_quadruple_for_valid_key = ecdsa_payload.uid_generator.next_quadruple_id();
+        let non_existant_quadruple_for_valid_key =
+            ecdsa_payload.uid_generator.next_pre_signature_id();
 
         let contexts = set_up_sign_with_ecdsa_contexts(vec![
             // Two request contexts without quadruple
@@ -926,27 +927,21 @@ mod tests {
 
         let (mut ecdsa_payload, _env) = set_up_ecdsa_payload_with_keys(vec![key_id.clone()]);
         // Add quadruples
-        let discarded_quadruple_id =
+        let discarded_pre_sig_id =
             create_available_quadruple(&mut ecdsa_payload, key_id.clone(), 10);
-        let matched_quadruple_id =
-            create_available_quadruple(&mut ecdsa_payload, key_id.clone(), 11);
+        let matched_pre_sig_id = create_available_quadruple(&mut ecdsa_payload, key_id.clone(), 11);
 
         let contexts = set_up_sign_with_ecdsa_contexts(vec![
             // One expired context without quadruple
             (key_id.clone(), 0, expired_time, None),
             // One expired context with matched quadruple
-            (
-                key_id.clone(),
-                1,
-                expired_time,
-                Some(discarded_quadruple_id),
-            ),
+            (key_id.clone(), 1, expired_time, Some(discarded_pre_sig_id)),
             // One non-expired context with matched quadruple
             (
                 key_id.clone(),
                 2,
                 non_expired_time,
-                Some(matched_quadruple_id.clone()),
+                Some(matched_pre_sig_id),
             ),
         ]);
 
@@ -984,7 +979,7 @@ mod tests {
                 .keys()
                 .next()
                 .unwrap(),
-            &matched_quadruple_id
+            &matched_pre_sig_id
         );
     }
 
@@ -994,20 +989,14 @@ mod tests {
         let invalid_key_id = EcdsaKeyId::from_str("Secp256k1:some_invalid_key").unwrap();
         let (mut ecdsa_payload, _env) = set_up_ecdsa_payload_with_keys(vec![valid_key_id.clone()]);
         // Add quadruples
-        let quadruple_id1 = create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 1);
-        let quadruple_id2 =
-            create_available_quadruple(&mut ecdsa_payload, invalid_key_id.clone(), 2);
+        let pre_sig_id1 = create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 1);
+        let pre_sig_id2 = create_available_quadruple(&mut ecdsa_payload, invalid_key_id.clone(), 2);
 
         let contexts = set_up_sign_with_ecdsa_contexts(vec![
             // One matched context with valid key
-            (valid_key_id.clone(), 1, UNIX_EPOCH, Some(quadruple_id1)),
+            (valid_key_id.clone(), 1, UNIX_EPOCH, Some(pre_sig_id1)),
             // One matched context with invalid key
-            (
-                invalid_key_id.clone(),
-                2,
-                UNIX_EPOCH,
-                Some(quadruple_id2.clone()),
-            ),
+            (invalid_key_id.clone(), 2, UNIX_EPOCH, Some(pre_sig_id2)),
             // One unmatched context with invalid key
             (invalid_key_id.clone(), 3, UNIX_EPOCH, None),
         ]);
@@ -1057,8 +1046,8 @@ mod tests {
     fn test_ecdsa_signature_is_only_delivered_once() {
         let key_id = fake_ecdsa_key_id();
         let (mut ecdsa_payload, _env) = set_up_ecdsa_payload_with_keys(vec![key_id.clone()]);
-        let quadruple_id = create_available_quadruple(&mut ecdsa_payload, key_id.clone(), 13);
-        let context = fake_completed_sign_with_ecdsa_context(0, quadruple_id.clone());
+        let pre_sig_id = create_available_quadruple(&mut ecdsa_payload, key_id.clone(), 13);
+        let context = fake_completed_sign_with_ecdsa_context(0, pre_sig_id);
         let sign_with_ecdsa_contexts = BTreeMap::from([context.clone()]);
 
         let valid_keys = BTreeSet::from([key_id.clone()]);
@@ -1200,16 +1189,16 @@ mod tests {
                 empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
             ecdsa_payload.single_key_transcript_mut().current =
                 Some(current_key_transcript.clone());
-            let (quadruple_id_1, quadruple_id_2) = (
-                ecdsa_payload.uid_generator.next_quadruple_id(),
-                ecdsa_payload.uid_generator.next_quadruple_id(),
+            let (pre_sig_id_1, pre_sig_id_2) = (
+                ecdsa_payload.uid_generator.next_pre_signature_id(),
+                ecdsa_payload.uid_generator.next_pre_signature_id(),
             );
             ecdsa_payload
                 .available_pre_signatures
-                .insert(quadruple_id_1, PreSignatureRef::Ecdsa(quad_1.clone()));
+                .insert(pre_sig_id_1, PreSignatureRef::Ecdsa(quad_1.clone()));
             ecdsa_payload
                 .available_pre_signatures
-                .insert(quadruple_id_2, PreSignatureRef::Ecdsa(quad_2.clone()));
+                .insert(pre_sig_id_2, PreSignatureRef::Ecdsa(quad_2.clone()));
 
             let req_1 = create_reshare_request(1, 1);
             ecdsa_payload
@@ -1438,16 +1427,16 @@ mod tests {
             let mut ecdsa_payload =
                 empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
             let uid_generator = &mut ecdsa_payload.uid_generator;
-            let quadruple_id_1 = uid_generator.next_quadruple_id();
-            let quadruple_id_2 = uid_generator.next_quadruple_id();
+            let pre_sig_id_1 = uid_generator.next_pre_signature_id();
+            let pre_sig_id_2 = uid_generator.next_pre_signature_id();
             ecdsa_payload.single_key_transcript_mut().current =
                 Some(current_key_transcript.clone());
             ecdsa_payload
                 .available_pre_signatures
-                .insert(quadruple_id_1, PreSignatureRef::Ecdsa(quad_1));
+                .insert(pre_sig_id_1, PreSignatureRef::Ecdsa(quad_1));
             ecdsa_payload
                 .available_pre_signatures
-                .insert(quadruple_id_2, PreSignatureRef::Ecdsa(quad_2));
+                .insert(pre_sig_id_2, PreSignatureRef::Ecdsa(quad_2));
 
             let req_1 = create_reshare_request(1, 1);
             ecdsa_payload
@@ -1862,7 +1851,7 @@ mod tests {
             );
             let test_inputs = TestSigInputs::from(&sig_inputs);
             payload_0.available_pre_signatures.insert(
-                payload_0.uid_generator.next_quadruple_id(),
+                payload_0.uid_generator.next_pre_signature_id(),
                 PreSignatureRef::Ecdsa(test_inputs.sig_inputs_ref.presig_quadruple_ref.clone()),
             );
             for (transcript_ref, transcript) in test_inputs.idkg_transcripts {

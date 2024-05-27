@@ -659,10 +659,10 @@ mod tests {
     use std::sync::RwLock;
 
     fn create_request_id(generator: &mut EcdsaUIDGenerator, height: Height) -> RequestId {
-        let quadruple_id = generator.next_quadruple_id();
-        let pseudo_random_id = [quadruple_id.id() as u8; 32];
+        let pre_signature_id = generator.next_pre_signature_id();
+        let pseudo_random_id = [pre_signature_id.id() as u8; 32];
         RequestId {
-            quadruple_id,
+            pre_signature_id,
             pseudo_random_id,
             height,
         }
@@ -726,7 +726,7 @@ mod tests {
 
         // Message for a signature currently requested but specifying wrong quadruple
         let wrong_id_2 = RequestId {
-            quadruple_id: id_1.quadruple_id.clone(),
+            pre_signature_id: id_1.pre_signature_id,
             ..id_2.clone()
         };
         let action = Action::new(&requested, &wrong_id_2, height);
@@ -932,15 +932,15 @@ mod tests {
             [
                 // One context without matched quadruple
                 fake_sign_with_ecdsa_context_with_quadruple(
-                    id_1.quadruple_id.id() as u8,
+                    id_1.pre_signature_id.id() as u8,
                     key_id.clone(),
                     None,
                 ),
                 // One context without nonce
                 fake_sign_with_ecdsa_context_with_quadruple(
-                    id_2.quadruple_id.id() as u8,
+                    id_2.pre_signature_id.id() as u8,
                     key_id.clone(),
-                    Some(id_2.quadruple_id.clone()),
+                    Some(id_2.pre_signature_id),
                 ),
                 // One completed context
                 fake_sign_with_ecdsa_context_from_request_id(&id_3),
@@ -1269,15 +1269,15 @@ mod tests {
             [
                 // One context without matched quadruple
                 fake_sign_with_ecdsa_context_with_quadruple(
-                    id_1.quadruple_id.id() as u8,
+                    id_1.pre_signature_id.id() as u8,
                     key_id.clone(),
                     None,
                 ),
                 // One context without nonce
                 fake_sign_with_ecdsa_context_with_quadruple(
-                    id_2.quadruple_id.id() as u8,
+                    id_2.pre_signature_id.id() as u8,
                     key_id.clone(),
-                    Some(id_2.quadruple_id.clone()),
+                    Some(id_2.pre_signature_id),
                 ),
                 // One completed context
                 fake_sign_with_ecdsa_context_from_request_id(&id_3),
@@ -1313,7 +1313,7 @@ mod tests {
 
         // A share for a the completed context, but specifying wrong quadruple (dropped)
         let mut wrong_id_3 = id_3.clone();
-        wrong_id_3.quadruple_id = id_2.quadruple_id.clone();
+        wrong_id_3.pre_signature_id = id_2.pre_signature_id;
         let share = create_signature_share(NODE_2, wrong_id_3);
         let msg_id_4 = share.message_id();
         artifacts.push(UnvalidatedArtifact {
@@ -1594,7 +1594,7 @@ mod tests {
                     caller: canister_test_id(1).get(),
                     derivation_path: vec![],
                 };
-                let quadruple_id = req_id.quadruple_id.clone();
+                let pre_sig_id = req_id.pre_signature_id;
                 let context = SignWithEcdsaContext {
                     request: RequestBuilder::new().sender(canister_test_id(1)).build(),
                     key_id: fake_ecdsa_key_id(),
@@ -1602,7 +1602,7 @@ mod tests {
                     message_hash: [0; 32],
                     derivation_path: vec![],
                     batch_time: UNIX_EPOCH,
-                    matched_quadruple: Some((quadruple_id, req_id.height)),
+                    matched_quadruple: Some((pre_sig_id, req_id.height)),
                     nonce: Some([2; 32]),
                 };
                 let sig_inputs = generate_tecdsa_protocol_inputs(

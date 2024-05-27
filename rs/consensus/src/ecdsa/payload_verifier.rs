@@ -827,20 +827,16 @@ mod test {
         valid_keys.insert(key_id.clone());
 
         let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
-        let quadruple_id1 = ecdsa_payload.uid_generator.next_quadruple_id();
-        let quadruple_id2 = ecdsa_payload.uid_generator.next_quadruple_id();
-        let quadruple_id3 = ecdsa_payload.uid_generator.next_quadruple_id();
+        let pre_sig_id1 = ecdsa_payload.uid_generator.next_pre_signature_id();
+        let pre_sig_id2 = ecdsa_payload.uid_generator.next_pre_signature_id();
+        let pre_sig_id3 = ecdsa_payload.uid_generator.next_pre_signature_id();
 
         // There are three requests in state, two are completed, one is still
         // missing its nonce.
         let sign_with_ecdsa_contexts = BTreeMap::from_iter([
-            fake_completed_sign_with_ecdsa_context(1, quadruple_id1.clone()),
-            fake_completed_sign_with_ecdsa_context(2, quadruple_id2.clone()),
-            fake_sign_with_ecdsa_context_with_quadruple(
-                3,
-                key_id.clone(),
-                Some(quadruple_id3.clone()),
-            ),
+            fake_completed_sign_with_ecdsa_context(1, pre_sig_id1),
+            fake_completed_sign_with_ecdsa_context(2, pre_sig_id2),
+            fake_sign_with_ecdsa_context_with_quadruple(3, key_id.clone(), Some(pre_sig_id3)),
         ]);
         let snapshot = fake_state_with_ecdsa_contexts(height, sign_with_ecdsa_contexts.clone());
 
@@ -869,9 +865,9 @@ mod test {
             &mut block_reader,
             &mut ecdsa_payload,
             [
-                (quadruple_id1, sig_inputs[0].clone()),
-                (quadruple_id2, sig_inputs[1].clone()),
-                (quadruple_id3, sig_inputs[2].clone()),
+                (pre_sig_id1, sig_inputs[0].clone()),
+                (pre_sig_id2, sig_inputs[1].clone()),
+                (pre_sig_id3, sig_inputs[2].clone()),
             ],
         );
 
@@ -975,13 +971,13 @@ mod test {
         valid_keys.insert(key_id.clone());
 
         let mut prev_payload = empty_ecdsa_payload(subnet_id);
-        let quadruple_id = prev_payload.uid_generator.next_quadruple_id();
+        let pre_sig_id = prev_payload.uid_generator.next_pre_signature_id();
 
         let sign_with_ecdsa_contexts =
             BTreeMap::from_iter([fake_sign_with_ecdsa_context_with_quadruple(
                 1,
                 key_id.clone(),
-                Some(quadruple_id.clone()),
+                Some(pre_sig_id),
             )]);
         let snapshot = fake_state_with_ecdsa_contexts(height, sign_with_ecdsa_contexts.clone());
 
@@ -1099,7 +1095,7 @@ mod test {
             let malicious_transcript_ref =
                 idkg::UnmaskedTranscript::try_from((Height::new(i as u64), &transcript_0)).unwrap();
             curr_payload.available_pre_signatures.insert(
-                curr_payload.uid_generator.next_quadruple_id(),
+                curr_payload.uid_generator.next_pre_signature_id(),
                 PreSignatureRef::Ecdsa(PreSignatureQuadrupleRef {
                     key_id: key_id.clone(),
                     kappa_unmasked_ref: malicious_transcript_ref,

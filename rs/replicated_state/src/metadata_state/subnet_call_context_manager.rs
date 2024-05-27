@@ -9,7 +9,7 @@ use ic_protobuf::{
 };
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
-    consensus::idkg::QuadrupleId,
+    consensus::idkg::PreSigId,
     crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
     messages::{CallbackId, CanisterCall, Request, StopCanisterCallId},
     node_id_into_protobuf, node_id_try_from_option, CanisterId, ExecutionRound, Height, NodeId,
@@ -729,7 +729,7 @@ pub struct SignWithEcdsaContext {
     pub derivation_path: Vec<Vec<u8>>,
     pub pseudo_random_id: [u8; 32],
     pub batch_time: Time,
-    pub matched_quadruple: Option<(QuadrupleId, Height)>,
+    pub matched_quadruple: Option<(PreSigId, Height)>,
     pub nonce: Option<[u8; 32]>,
 }
 
@@ -743,7 +743,7 @@ impl From<&SignWithEcdsaContext> for pb_metadata::SignWithEcdsaContext {
             pseudo_random_id: context.pseudo_random_id.to_vec(),
             batch_time: context.batch_time.as_nanos_since_unix_epoch(),
             height: context.matched_quadruple.as_ref().map(|q| q.1.get()),
-            quadruple_id: context.matched_quadruple.as_ref().map(|q| q.0.id()),
+            pre_signature_id: context.matched_quadruple.as_ref().map(|q| q.0.id()),
             nonce: context.nonce.map(|n| n.to_vec()),
         }
     }
@@ -784,8 +784,8 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
             },
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
             matched_quadruple: context
-                .quadruple_id
-                .map(QuadrupleId::new)
+                .pre_signature_id
+                .map(PreSigId)
                 .zip(context.height)
                 .map(|(q, h)| (q, Height::from(h))),
             nonce: if let Some(nonce) = context.nonce.as_ref() {

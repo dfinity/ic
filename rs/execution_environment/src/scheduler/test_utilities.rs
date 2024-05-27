@@ -47,7 +47,7 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
-    consensus::idkg::QuadrupleId,
+    consensus::idkg::PreSigId,
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},
     messages::{
@@ -111,7 +111,7 @@ pub(crate) struct SchedulerTest {
     // ECDSA subnet public keys.
     ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
     // ECDSA quadruple IDs.
-    ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
+    ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
 }
 
 impl std::fmt::Debug for SchedulerTest {
@@ -593,9 +593,9 @@ impl SchedulerTest {
             .memory_cost(bytes, duration, self.subnet_size())
     }
 
-    pub(crate) fn deliver_quadruple_ids(
+    pub(crate) fn deliver_pre_signature_ids(
         &mut self,
-        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
+        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
     ) {
         self.ecdsa_quadruple_ids = ecdsa_quadruple_ids;
     }
