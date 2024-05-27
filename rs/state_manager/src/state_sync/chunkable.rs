@@ -838,6 +838,7 @@ impl IncompleteState {
                 );
             }
             Err(LayoutError::AlreadyExists(_)) => {
+                // TODO: why do we still deliver it?
                 let elapsed = started_at.elapsed();
                 metrics
                     .state_sync_metrics

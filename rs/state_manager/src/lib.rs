@@ -2411,7 +2411,7 @@ impl StateManagerImpl {
                             self.own_subnet_type,
                             &self.metrics.checkpoint_metrics,
                             self.get_fd_factory(),
-                        )
+                        )// TODO: remove the marker everytime we call load_checkpoint_parallel
                     })
                     .unwrap_or_else(|err| {
                         fatal!(
