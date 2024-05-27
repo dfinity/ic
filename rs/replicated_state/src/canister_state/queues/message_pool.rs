@@ -559,6 +559,7 @@ impl MessagePool {
     /// messages and outbound guaranteed response request (implicit) deadlines.
     ///
     /// Time complexity: `O(n * log(n))`.
+    #[allow(clippy::type_complexity)]
     fn calculate_priority_queues(
         messages: &BTreeMap<MessageId, RequestOrResponse>,
         outbound_guaranteed_request_deadlines: &BTreeMap<MessageId, CoarseTime>,
@@ -575,7 +576,7 @@ impl MessagePool {
             match (id.context(), id.class(), id.kind()) {
                 // Outbound guaranteed response requests have (separately recorded) deadlines.
                 (Outbound, GuaranteedResponse, Request) => {
-                    let deadline = outbound_guaranteed_request_deadlines.get(&id).unwrap();
+                    let deadline = outbound_guaranteed_request_deadlines.get(id).unwrap();
                     expected_deadline_queue.insert((*deadline, *id));
                 }
 
@@ -640,7 +641,7 @@ impl TryFrom<pb_queues::MessagePool> for MessagePool {
             })
             .collect::<Result<_, Self::Error>>()?;
         if messages.len() != message_count {
-            return Err(ProxyDecodeError::Other(format!("Duplicate MessageId")));
+            return Err(ProxyDecodeError::Other("Duplicate MessageId".to_string()));
         }
         let message_stats = Self::calculate_message_stats(&messages);
 

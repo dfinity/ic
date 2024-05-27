@@ -1,10 +1,9 @@
 use super::*;
-use core::fmt::Debug;
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::messages::{Payload, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
 use ic_types::time::UNIX_EPOCH;
 use maplit::btreeset;
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::BTreeSet;
 use std::time::Duration;
 
 #[test]
