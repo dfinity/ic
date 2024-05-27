@@ -25,7 +25,8 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
-    CanisterInstallMode, CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method, Payload, IC_00,
+    CanisterInstallMode, CanisterStatusType, EcdsaKeyId, InstallCodeArgs, MasterPublicKeyId,
+    Method, Payload, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -724,19 +725,18 @@ impl SchedulerTestBuilder {
 
         let config = SubnetConfig::new(self.subnet_type).cycles_account_manager_config;
         for ecdsa_key in &self.ecdsa_keys {
-            state
-                .metadata
-                .network_topology
-                .ecdsa_signing_subnets
-                .insert(ecdsa_key.clone(), vec![self.own_subnet_id]);
+            state.metadata.network_topology.idkg_signing_subnets.insert(
+                MasterPublicKeyId::Ecdsa(ecdsa_key.clone()),
+                vec![self.own_subnet_id],
+            );
             state
                 .metadata
                 .network_topology
                 .subnets
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
-                .ecdsa_keys_held
-                .insert(ecdsa_key.clone());
+                .idkg_keys_held
+                .insert(MasterPublicKeyId::Ecdsa(ecdsa_key.clone()));
         }
         let ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey> = self
             .ecdsa_keys

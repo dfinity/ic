@@ -372,7 +372,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
                 .unwrap_err(),
             AgentError::CertifiedReject(RejectResponse {
                 reject_code: RejectCode::CanisterReject,
-                reject_message: "Unable to route management canister request ecdsa_public_key: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys: []\")".to_string(),
+                reject_message: "Unable to route management canister request ecdsa_public_key: IDkgKeyError(\"Requested unknown iDKG key: ecdsa:Secp256k1:some_other_key, existing keys: []\")".to_string(),
                 error_code: None,
             })
         );
@@ -388,7 +388,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             .unwrap_err(),
             AgentError::CertifiedReject(RejectResponse {
                 reject_code: RejectCode::CanisterReject,
-                reject_message: "Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string(),
+                reject_message: "Unable to route management canister request sign_with_ecdsa: IDkgKeyError(\"Requested unknown iDKG key: ecdsa:Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string(),
                 error_code: None,
             })
         );
@@ -490,7 +490,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
                     sig_err,
                     AgentError::CertifiedReject(RejectResponse {
                         reject_code: RejectCode::CanisterReject,
-                        reject_message: "Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string(),
+                        reject_message: "Unable to route management canister request sign_with_ecdsa: IDkgKeyError(\"Requested unknown iDKG key: ecdsa:Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string(),
                         error_code: None
                     })
                 );
