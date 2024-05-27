@@ -76,7 +76,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 # [Testnet]
 /testnet/                                                  @dfinity-lab/teams/node-team @dfinity-lab/teams/DRE
 /testnet/ansible/                                          @dfinity-lab/teams/platform-operations
-/testnet/docs/                                             @dfinity-lab/teams/ic-support-eu @dfinity-lab/teams/ic-support-na
+/testnet/docs/                                             @dfinity-lab/teams/ic-support
 /testnet/env/                                              @dfinity-lab/teams/platform-operations
 /testnet/release/                                          @dfinity-lab/teams/DRE
 /testnet/tests/pipeline/                                   @dfinity-lab/teams/ic-testing-verification
@@ -274,7 +274,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/types/management_canister_types/                    @dfinity-lab/teams/execution-owners
 /rs/types/types/src/batch.rs                            @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/batch/                              @dfinity-lab/teams/consensus-owners
-/rs/types/types/src/canister_http.rs                    @dfinity-lab/teams/execution-team @dfinity-lab/teams/consensus-owners
+/rs/types/types/src/canister_http.rs                    @dfinity-lab/teams/execution-owners @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/chunkable.rs                        @dfinity-lab/teams/networking-team
 /rs/types/types/src/consensus.rs                        @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/consensus/                          @dfinity-lab/teams/consensus-owners
