@@ -88,20 +88,20 @@ pub fn run_drun(uo: DrunOptions) {
 
             Ok(Message::Query(q)) => {
                 let res = pocket_ic.query_call(
-                    q.receiver.into(),
-                    q.source.get().into(),
+                    q.canister_id.into(),
+                    q.sender.into(),
                     &q.method_name,
-                    q.method_payload,
+                    q.arg,
                 );
                 print_query_result(res);
             }
 
             Ok(Message::Ingress(msg)) => {
                 let res = pocket_ic.update_call(
-                    msg.canister_id().into(),
-                    msg.sender().get().into(),
-                    &msg.method_name(),
-                    msg.method_arg().to_vec(),
+                    msg.canister_id.into(),
+                    msg.sender.into(),
+                    &msg.method_name,
+                    msg.arg.to_vec(),
                 );
                 print_ingress_result(res);
             }

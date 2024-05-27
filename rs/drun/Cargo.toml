@@ -11,12 +11,6 @@ pocket-ic = { path = "../../packages/pocket-ic" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces = { path = "../interfaces" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
-# This is usually supposed to be a dev-dependency. However, using it in `drun`
-# greatly simplifies the code that parses input messages to `SignedIngress`
-# messages that are delivered to Message Routing. `drun` is a tool that
-# is meant to be used mostly for testing anyway, so this dependency
-# should be fine.
-ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-types = { path = "../types/types" }
 clap = { version = "3.2.25", features = ["derive"] }

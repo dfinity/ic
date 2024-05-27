@@ -7,7 +7,6 @@ DEPENDENCIES = [
     "//rs/execution_environment",
     "//rs/interfaces",
     "//rs/registry/subnet_type",
-    "//rs/test_utilities/types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:clap_3_2_25",

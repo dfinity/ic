@@ -7700,7 +7700,6 @@ dependencies = [
  "ic-interfaces",
  "ic-management-canister-types",
  "ic-registry-subnet-type",
- "ic-test-utilities-types",
  "ic-types",
  "pocket-ic",
  "tempfile",
