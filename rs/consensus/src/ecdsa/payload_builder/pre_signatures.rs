@@ -564,7 +564,7 @@ pub(super) mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{EcdsaKeyId, SchnorrAlgorithm};
+    use ic_management_canister_types::SchnorrAlgorithm;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::idkg::{
@@ -578,7 +578,7 @@ pub(super) mod tests {
     fn set_up(
         rng: &mut ReproducibleRng,
         subnet_id: SubnetId,
-        ecdsa_key_ids: Vec<EcdsaKeyId>,
+        key_ids: Vec<MasterPublicKeyId>,
         height: Height,
     ) -> (
         EcdsaPayload,
@@ -586,10 +586,7 @@ pub(super) mod tests {
         TestEcdsaBlockReader,
     ) {
         let (mut ecdsa_payload, env, block_reader) = set_up_ecdsa_payload(
-            rng,
-            subnet_id,
-            /*nodes_count=*/ 4,
-            ecdsa_key_ids,
+            rng, subnet_id, /*nodes_count=*/ 4, key_ids,
             /*should_create_key_transcript=*/ true,
         );
         ecdsa_payload
@@ -659,8 +656,12 @@ pub(super) mod tests {
         let subnet_id = subnet_test_id(1);
         let height = Height::new(10);
         let key_id = fake_ecdsa_key_id();
-        let (mut ecdsa_payload, _env, _block_reader) =
-            set_up(&mut rng, subnet_id, vec![key_id.clone()], height);
+        let (mut ecdsa_payload, _env, _block_reader) = set_up(
+            &mut rng,
+            subnet_id,
+            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
+            height,
+        );
 
         // 4 Quadruples should be created in advance (in creation + unmatched available = 4)
         let quadruples_to_create_in_advance = 4;
@@ -801,8 +802,12 @@ pub(super) mod tests {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
         let key_id = fake_ecdsa_key_id();
-        let (mut payload, env, mut block_reader) =
-            set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
+        let (mut payload, env, mut block_reader) = set_up(
+            &mut rng,
+            subnet_id,
+            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
+            Height::from(100),
+        );
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
 
         // Start quadruple creation
@@ -975,7 +980,7 @@ pub(super) mod tests {
         let (mut payload, env, _) = set_up(
             &mut rng,
             subnet_test_id(1),
-            vec![key_id.clone()],
+            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
             Height::from(100),
         );
         let key_transcript = get_current_unmasked_key_transcript(&payload);
@@ -1029,7 +1034,7 @@ pub(super) mod tests {
         let (mut payload, _, _) = set_up(
             &mut rng,
             subnet_test_id(1),
-            vec![key_id.clone()],
+            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
             Height::from(100),
         );
         let key_transcript = get_current_unmasked_key_transcript(&payload);
@@ -1064,7 +1069,7 @@ pub(super) mod tests {
         let (mut payload, env, _) = set_up(
             &mut rng,
             subnet_test_id(1),
-            vec![key_id.clone()],
+            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
             Height::from(100),
         );
 

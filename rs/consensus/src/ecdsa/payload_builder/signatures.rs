@@ -154,7 +154,7 @@ mod tests {
 
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_management_canister_types::EcdsaKeyId;
+    use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         consensus::idkg::{EcdsaPayload, RequestId},
@@ -184,7 +184,7 @@ mod tests {
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 4,
-            vec![ecdsa_key_id.clone()],
+            vec![MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone())],
             should_create_key_transcript,
         );
 
@@ -248,7 +248,10 @@ mod tests {
     fn test_ecdsa_update_signature_agreements_success() {
         let subnet_id = subnet_test_id(0);
         let key_id = fake_ecdsa_key_id();
-        let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
+        let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(
+            subnet_id,
+            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
+        );
         let valid_keys = BTreeSet::from_iter([key_id.clone()]);
         let pre_sig_ids = (0..4)
             .map(|i| create_available_quadruple(&mut ecdsa_payload, key_id.clone(), i as u8))

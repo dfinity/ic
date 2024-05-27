@@ -839,7 +839,7 @@ mod tests {
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 8,
-            vec![key_id.clone()],
+            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
             /*should_create_key_transcript=*/ true,
         );
         let current_key_transcript = ecdsa_payload
@@ -904,7 +904,7 @@ mod tests {
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 8,
-            vec![key_id.clone()],
+            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
             /*should_create_key_transcript=*/ false,
         );
 
