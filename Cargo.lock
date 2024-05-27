@@ -7699,7 +7699,6 @@ dependencies = [
  "ic-execution-environment",
  "ic-interfaces",
  "ic-management-canister-types",
- "ic-registry-subnet-type",
  "ic-types",
  "pocket-ic",
  "tempfile",

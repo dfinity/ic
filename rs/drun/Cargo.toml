@@ -10,7 +10,6 @@ documentation.workspace = true
 pocket-ic = { path = "../../packages/pocket-ic" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces = { path = "../interfaces" }
-ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-types = { path = "../types/types" }
 clap = { version = "3.2.25", features = ["derive"] }

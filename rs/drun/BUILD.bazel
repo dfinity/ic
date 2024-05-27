@@ -6,7 +6,6 @@ DEPENDENCIES = [
     "//packages/pocket-ic",
     "//rs/execution_environment",
     "//rs/interfaces",
-    "//rs/registry/subnet_type",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:clap_3_2_25",

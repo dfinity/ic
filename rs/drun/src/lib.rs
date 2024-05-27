@@ -3,7 +3,6 @@
 use crate::message::{msg_stream_from_file, Message};
 use hex::encode;
 use ic_management_canister_types::InstallCodeArgsV2;
-use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId};
 use pocket_ic::common::rest::{ExtendedSubnetConfigSet, RawEffectivePrincipal, SubnetSpec};
 use pocket_ic::{
@@ -11,10 +10,30 @@ use pocket_ic::{
 };
 use std::fs::File;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 mod message;
 
 const DEFAULT_CYCLES_PER_CANISTER: u128 = 100_000_000_000_000; // 100 T
+
+/// Defines the different types of subnets that can exist on the IC.
+#[derive(Debug, PartialEq)]
+pub enum SubnetType {
+    Application,
+    System,
+}
+
+impl FromStr for SubnetType {
+    type Err = String;
+
+    fn from_str(input: &str) -> Result<SubnetType, Self::Err> {
+        match input {
+            "application" => Ok(SubnetType::Application),
+            "system" => Ok(SubnetType::System),
+            _ => Err("Unknown subnet type".to_string()),
+        }
+    }
+}
 
 pub struct DrunOptions {
     pub msg_filename: String,
@@ -48,7 +67,7 @@ pub fn run_drun(uo: DrunOptions) {
     );
     let mut config = ExtendedSubnetConfigSet::default();
     match subnet_type {
-        SubnetType::Application | SubnetType::VerifiedApplication => {
+        SubnetType::Application => {
             config.application.push(SubnetSpec::default());
         }
         SubnetType::System => {

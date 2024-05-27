@@ -1,6 +1,5 @@
 use clap::{Arg, ArgMatches, Command};
-use ic_drun::{run_drun, DrunOptions};
-use ic_registry_subnet_type::SubnetType;
+use ic_drun::{run_drun, DrunOptions, SubnetType};
 use std::path::PathBuf;
 
 const ARG_LOG_FILE: &str = "log-file";
