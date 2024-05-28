@@ -1073,11 +1073,29 @@ impl ExecutionEnvironment {
                 }
             }
 
-            // TODO(EXC-1599): implement ComputeInitialIDkgDealings.
+            // TODO(EXC-1627): add implementation.
             Ok(Ic00Method::ComputeInitialIDkgDealings) => ExecuteSubnetMessageResult::Finished {
                 response: Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
                     "ComputeInitialIDkgDealings API is not yet implemented.",
+                )),
+                refund: msg.take_cycles(),
+            },
+
+            // TODO(EXC-1628): add implementation.
+            Ok(Ic00Method::SchnorrPublicKey) => ExecuteSubnetMessageResult::Finished {
+                response: Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "SchnorrPublicKey API is not yet implemented.",
+                )),
+                refund: msg.take_cycles(),
+            },
+
+            // TODO(EXC-1629): add implementation.
+            Ok(Ic00Method::SignWithSchnorr) => ExecuteSubnetMessageResult::Finished {
+                response: Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "SignWithSchnorr API is not yet implemented.",
                 )),
                 refund: msg.take_cycles(),
             },

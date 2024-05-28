@@ -2335,6 +2335,8 @@ fn get_instructions_limits_for_subnet_message(
             | SignWithECDSA
             | ComputeInitialEcdsaDealings
             | ComputeInitialIDkgDealings
+            | SchnorrPublicKey
+            | SignWithSchnorr
             | StartCanister
             | StopCanister
             | UninstallCode
