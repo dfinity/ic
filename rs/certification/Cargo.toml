@@ -22,6 +22,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 ic-base-types = { path = "../types/base_types" }
 ic-certification-test-utils = { path = "test-utils" }
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
+ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils//reproducible_rng" }
 leb128 = "0.2.4"
 rand = "0.8.3"
 
