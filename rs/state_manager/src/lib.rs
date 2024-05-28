@@ -1420,13 +1420,13 @@ impl StateManagerImpl {
         let starting_time = Instant::now();
 
         // Archive unverified checkpoints.
-        let checkpoint_heights = state_layout
-            .checkpoint_heights()
-            .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve checkpoint heights: {:?}", err));
+        let unfiltered_checkpoint_heights = state_layout
+            .unfiltered_checkpoint_heights()
+            .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve unfiltered checkpoint heights: {:?}", err));
 
-        for h in checkpoint_heights {
-            let cp_layout = state_layout.checkpoint(h).unwrap_or_else(|err| {
-                fatal!(log, "Failed to create checkpoint layout @{}: {}", h, err)
+        for h in unfiltered_checkpoint_heights {
+            let cp_layout = state_layout.checkpoint_untracked(h).unwrap_or_else(|err| {
+                fatal!(log, "Failed to create untracked checkpoint layout @{}: {}", h, err)
             });
             if cp_layout.is_marked_as_unverified() {
                 info!(log, "Archiving unverified checkpoint {} ", h);
@@ -2303,22 +2303,6 @@ impl StateManagerImpl {
 
         result
     }
-
-    pub fn unfiltered_checkpoint_heights(&self) -> Vec<Height> {
-        let result = self
-            .state_layout
-            .unfiltered_checkpoint_heights()
-            .unwrap_or_else(|err| {
-                fatal!(self.log, "Failed to gather unfiltered checkpoint heights: {:?}", err)
-            });
-
-        self.metrics
-            .unfiltered_checkpoints_on_disk_count
-            .set(result.len() as i64);
-
-        result
-    }
-
 
     // Creates a checkpoint and switches state to it.
     fn create_checkpoint_and_switch(
@@ -3259,7 +3243,10 @@ impl StateManager for StateManagerImpl {
 
     fn report_diverged_checkpoint(&self, height: Height) {
         let mut states = self.states.write();
-        let heights = self.checkpoint_heights();
+        // Unverified checkpoints should also be considered when removing checkpoints higher than the diverged height.
+        let heights = self.state_layout
+            .unfiltered_checkpoint_heights()
+            .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve unfiltered checkpoint heights: {:?}", err));
 
         info!(self.log, "Moving diverged checkpoint @{}", height);
         if let Err(err) = self.state_layout.mark_checkpoint_diverged(height) {
