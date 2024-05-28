@@ -464,7 +464,7 @@ pub struct EcdsaPayload {
     #[prost(message, repeated, tag = "8")]
     pub xnet_reshare_agreements: ::prost::alloc::vec::Vec<XnetReshareAgreement>,
     #[prost(uint64, tag = "10")]
-    pub next_unused_quadruple_id: u64,
+    pub next_unused_pre_signature_id: u64,
     #[prost(message, repeated, tag = "13")]
     pub key_transcripts: ::prost::alloc::vec::Vec<EcdsaKeyTranscript>,
     #[prost(message, repeated, tag = "14")]
@@ -535,7 +535,7 @@ pub struct OngoingSignature {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AvailableQuadruple {
     #[prost(uint64, tag = "1")]
-    pub quadruple_id: u64,
+    pub pre_signature_id: u64,
     #[prost(message, optional, tag = "2")]
     pub quadruple: ::core::option::Option<PreSignatureQuadrupleRef>,
 }
@@ -544,7 +544,7 @@ pub struct AvailableQuadruple {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QuadrupleInProgress {
     #[prost(uint64, tag = "1")]
-    pub quadruple_id: u64,
+    pub pre_signature_id: u64,
     #[prost(message, optional, tag = "2")]
     pub quadruple: ::core::option::Option<QuadrupleInCreation>,
 }
@@ -591,7 +591,7 @@ pub struct RequestId {
     #[prost(bytes = "vec", tag = "1")]
     pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "2")]
-    pub quadruple_id: u64,
+    pub pre_signature_id: u64,
     #[prost(uint64, tag = "3")]
     pub height: u64,
 }

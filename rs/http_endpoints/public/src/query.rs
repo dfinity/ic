@@ -26,7 +26,7 @@ use ic_types::{
     messages::{
         Blob, CertificateDelegation, HasCanisterId, HttpQueryContent, HttpQueryResponse,
         HttpQueryResponseReply, HttpRequest, HttpRequestEnvelope, HttpSignedQueryResponse,
-        NodeSignature, QueryResponseHash, UserQuery,
+        NodeSignature, Query, QueryResponseHash,
     },
     CanisterId, NodeId,
 };
@@ -44,7 +44,7 @@ pub struct QueryService {
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-    validator_executor: ValidatorExecutor<UserQuery>,
+    validator_executor: ValidatorExecutor<Query>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: Arc<Mutex<QueryExecutionService>>,
 }
@@ -169,7 +169,7 @@ pub(crate) async fn query(
 
     // Convert the message to a strongly-typed struct, making structural validations
     // on the way.
-    let request = match HttpRequest::<UserQuery>::try_from(request) {
+    let request = match HttpRequest::<Query>::try_from(request) {
         Ok(request) => request,
         Err(e) => {
             let status = StatusCode::BAD_REQUEST;

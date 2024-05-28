@@ -178,32 +178,9 @@ fn reshare_request_from_dealings_context(
 }
 
 #[cfg(test)]
-pub mod test_utils {
-    use ic_management_canister_types::EcdsaKeyId;
-    use ic_test_utilities_types::ids::node_test_id;
-    use ic_types::RegistryVersion;
-
-    use super::*;
-
-    pub fn create_reshare_request(
-        key_id: EcdsaKeyId,
-        num_nodes: u64,
-        registry_version: u64,
-    ) -> idkg::EcdsaReshareRequest {
-        idkg::EcdsaReshareRequest {
-            key_id: Some(key_id.clone()),
-            master_key_id: MasterPublicKeyId::Ecdsa(key_id),
-            receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
-            registry_version: RegistryVersion::from(registry_version),
-        }
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
-    use super::test_utils::*;
     use super::*;
 
     use assert_matches::assert_matches;
@@ -221,12 +198,13 @@ mod tests {
     };
 
     use crate::ecdsa::test_utils::{
-        dealings_context_from_reshare_request, fake_ecdsa_key_id, set_up_ecdsa_payload,
-        TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
+        create_reshare_request, dealings_context_from_reshare_request,
+        fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+        set_up_ecdsa_payload, TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
     };
 
     fn set_up(
-        key_ids: Vec<EcdsaKeyId>,
+        key_ids: Vec<MasterPublicKeyId>,
         should_create_key_transcript: bool,
     ) -> (EcdsaPayload, TestEcdsaBlockReader) {
         let mut rng = reproducible_rng();
@@ -308,75 +286,83 @@ mod tests {
     }
 
     #[test]
-    fn test_ecdsa_initiate_reshare_requests_should_not_accept_when_key_transcript_not_created() {
-        let key_id = fake_ecdsa_key_id();
-        let (mut payload, _block_reader) = set_up(
-            vec![key_id.clone()],
-            /*should_create_key_transcript=*/ false,
-        );
-        let request = create_reshare_request(key_id, 1, 1);
+    fn test_initiate_reshare_requests_should_not_accept_when_key_transcript_not_created() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            let (mut payload, _block_reader) = set_up(
+                vec![key_id.clone()],
+                /*should_create_key_transcript=*/ false,
+            );
+            let request = create_reshare_request(key_id, 1, 1);
 
-        initiate_reshare_requests(&mut payload, BTreeSet::from([request]));
+            initiate_reshare_requests(&mut payload, BTreeSet::from([request]));
 
-        assert!(payload.ongoing_xnet_reshares.is_empty());
-        assert!(payload.xnet_reshare_agreements.is_empty());
+            assert!(payload.ongoing_xnet_reshares.is_empty());
+            assert!(payload.xnet_reshare_agreements.is_empty());
+        }
     }
 
     #[test]
-    fn test_ecdsa_initiate_reshare_requests_good_path() {
-        let key_id = fake_ecdsa_key_id();
-        let (mut payload, _block_reader) = set_up(
-            vec![key_id.clone()],
-            /*should_create_key_transcript=*/ true,
-        );
-        let request = create_reshare_request(key_id, 1, 1);
+    fn test_initiate_reshare_requests_good_path() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            let (mut payload, _block_reader) = set_up(
+                vec![key_id.clone()],
+                /*should_create_key_transcript=*/ true,
+            );
+            let request = create_reshare_request(key_id, 1, 1);
 
-        initiate_reshare_requests(&mut payload, BTreeSet::from([request.clone()]));
+            initiate_reshare_requests(&mut payload, BTreeSet::from([request.clone()]));
 
-        assert!(payload.ongoing_xnet_reshares.contains_key(&request));
-        assert!(payload.xnet_reshare_agreements.is_empty());
+            assert!(payload.ongoing_xnet_reshares.contains_key(&request));
+            assert!(payload.xnet_reshare_agreements.is_empty());
+        }
     }
 
     #[test]
-    fn test_ecdsa_initiate_reshare_requests_incremental() {
-        let key_id = fake_ecdsa_key_id();
-        let (mut payload, _block_reader) = set_up(
-            vec![key_id.clone()],
-            /*should_create_key_transcript=*/ true,
-        );
-        let request = create_reshare_request(key_id.clone(), 1, 1);
-        let request_2 = create_reshare_request(key_id.clone(), 2, 2);
+    fn test_initiate_reshare_requests_incremental() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            let (mut payload, _block_reader) = set_up(
+                vec![key_id.clone()],
+                /*should_create_key_transcript=*/ true,
+            );
+            let request = create_reshare_request(key_id.clone(), 1, 1);
+            let request_2 = create_reshare_request(key_id.clone(), 2, 2);
 
-        initiate_reshare_requests(&mut payload, BTreeSet::from([request.clone()]));
-        initiate_reshare_requests(&mut payload, BTreeSet::from([request_2.clone()]));
+            initiate_reshare_requests(&mut payload, BTreeSet::from([request.clone()]));
+            initiate_reshare_requests(&mut payload, BTreeSet::from([request_2.clone()]));
 
-        assert!(payload.ongoing_xnet_reshares.contains_key(&request));
-        assert!(payload.ongoing_xnet_reshares.contains_key(&request_2));
-        assert!(payload.xnet_reshare_agreements.is_empty());
+            assert!(payload.ongoing_xnet_reshares.contains_key(&request));
+            assert!(payload.ongoing_xnet_reshares.contains_key(&request_2));
+            assert!(payload.xnet_reshare_agreements.is_empty());
+        }
     }
 
     #[test]
-    fn test_ecdsa_initiate_reshare_requests_should_not_accept_already_completed() {
-        let key_id = fake_ecdsa_key_id();
-        let (mut payload, _block_reader) = set_up(
-            vec![key_id.clone()],
-            /*should_create_key_transcript=*/ true,
-        );
-        let request = create_reshare_request(key_id, 1, 1);
-        payload.xnet_reshare_agreements.insert(
-            request.clone(),
-            idkg::CompletedReshareRequest::ReportedToExecution,
-        );
+    fn test_initiate_reshare_requests_should_not_accept_already_completed() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            let (mut payload, _block_reader) = set_up(
+                vec![key_id.clone()],
+                /*should_create_key_transcript=*/ true,
+            );
+            let request = create_reshare_request(key_id, 1, 1);
+            payload.xnet_reshare_agreements.insert(
+                request.clone(),
+                idkg::CompletedReshareRequest::ReportedToExecution,
+            );
 
-        initiate_reshare_requests(&mut payload, BTreeSet::from([request]));
+            initiate_reshare_requests(&mut payload, BTreeSet::from([request]));
 
-        assert!(payload.ongoing_xnet_reshares.is_empty());
-        assert_eq!(payload.xnet_reshare_agreements.len(), 1);
+            assert!(payload.ongoing_xnet_reshares.is_empty());
+            assert_eq!(payload.xnet_reshare_agreements.len(), 1);
+        }
     }
 
     #[test]
     fn test_ecdsa_update_completed_reshare_requests() {
-        let key_id = fake_ecdsa_key_id();
+        let key_id = fake_ecdsa_master_public_key_id();
         let (mut payload, block_reader) = set_up(
             vec![key_id.clone()],
             /*should_create_key_transcript=*/ true,

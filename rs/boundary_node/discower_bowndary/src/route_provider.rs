@@ -346,7 +346,7 @@ mod tests {
             fetch_interval,
             Arc::clone(&checker) as Arc<dyn HealthCheck>,
             check_interval,
-            vec![Node::new(IC0_SEED_DOMAIN)],
+            vec![Node::new(IC0_SEED_DOMAIN), Node::new("api1.com")],
         ));
         route_provider.run().await;
 
@@ -364,7 +364,7 @@ mod tests {
 
         // Test 2: calls to route() return both seeds, as they become healthy.
         checker.modify_domains_health(vec![(IC0_SEED_DOMAIN, true), ("api1.com", true)]);
-        tokio::time::sleep(2 * check_interval).await;
+        tokio::time::sleep(3 * check_interval).await;
         let routed_domains = route_n_times(6, Arc::clone(&route_provider));
         assert_routed_domains(routed_domains, vec!["ic0.app".into(), "api1.com".into()], 3);
 

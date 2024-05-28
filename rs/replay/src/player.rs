@@ -64,7 +64,7 @@ use ic_types::{
     },
     ingress::{IngressState, IngressStatus, WasmResult},
     malicious_flags::MaliciousFlags,
-    messages::{CertificateDelegation, UserQuery},
+    messages::{CertificateDelegation, Query, QuerySource},
     signature::ThresholdSignature,
     time::current_time,
     CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
@@ -121,7 +121,7 @@ pub struct Player {
     validator: Option<ReplayValidator>,
     crypto: Arc<dyn CryptoComponentForVerificationOnly>,
     query_handler:
-        tower::buffer::Buffer<QueryExecutionService, (UserQuery, Option<CertificateDelegation>)>,
+        tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     certification_pool: Option<CertificationPoolImpl>,
     pub registry: Arc<RegistryClientImpl>,
@@ -853,14 +853,16 @@ impl Player {
         ingress_expiry: Time,
     ) -> Result<BlessedReplicaVersions, String> {
         let key = make_blessed_replica_versions_key();
-        let query = UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
+        let query = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+                nonce: None,
+            },
             receiver: REGISTRY_CANISTER_ID,
             method_name: "get_value".to_string(),
             method_payload: serialize_get_value_request(key.as_bytes().to_vec(), None)
                 .map_err(|err| format!("{}", err))?,
-            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-            nonce: None,
         };
         self.certify_state_with_dummy_certification();
         match self
@@ -893,13 +895,15 @@ impl Player {
         &self,
         ingress_expiry: Time,
     ) -> Result<RegistryVersion, String> {
-        let query = UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
+        let query = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+                nonce: None,
+            },
             receiver: REGISTRY_CANISTER_ID,
             method_name: "get_latest_version".to_string(),
             method_payload: Vec::new(),
-            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-            nonce: None,
         };
         self.certify_state_with_dummy_certification();
         match self
@@ -933,13 +937,15 @@ impl Player {
         ingress_expiry: Time,
     ) -> Result<Vec<RegistryTransportRecord>, String> {
         let payload = serialize_get_changes_since_request(version).unwrap();
-        let query = UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
+        let query = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+                nonce: None,
+            },
             receiver: REGISTRY_CANISTER_ID,
             method_name: "get_changes_since".to_string(),
             method_payload: payload,
-            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-            nonce: None,
         };
         self.certify_state_with_dummy_certification();
         match self
@@ -963,8 +969,12 @@ impl Player {
     /// Return the SubnetRecord of this subnet at the latest registry version.
     pub fn get_subnet_record(&self, ingress_expiry: Time) -> Result<SubnetRecord, String> {
         let subnet_record_key = make_subnet_record_key(self.subnet_id);
-        let query = UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
+        let query = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+                nonce: None,
+            },
             receiver: REGISTRY_CANISTER_ID,
             method_name: "get_value".to_string(),
             method_payload: serialize_get_value_request(
@@ -972,8 +982,6 @@ impl Player {
                 None,
             )
             .map_err(|err| format!("{}", err))?,
-            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-            nonce: None,
         };
         self.certify_state_with_dummy_certification();
         match self

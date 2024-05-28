@@ -22,7 +22,7 @@ use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EcdsaKeyId, EmptyBlob,
-    InstallCodeArgs, InstallCodeArgsV2, LogVisibility, Method, Payload,
+    InstallCodeArgs, InstallCodeArgsV2, LogVisibility, MasterPublicKeyId, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
@@ -50,8 +50,8 @@ use ic_types::{
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId,
-        RequestOrResponse, Response, UserQuery, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId, Query,
+        QuerySource, RequestOrResponse, Response, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     time::UNIX_EPOCH,
     CanisterId, Cycles, Height, NumInstructions, NumOsPages, QueryStatsEpoch, Time, UserId,
@@ -99,7 +99,6 @@ pub fn generate_subnets(
                 nodes,
                 subnet_type,
                 subnet_features: SubnetFeatures::default(),
-                ecdsa_keys_held: BTreeSet::new(),
                 idkg_keys_held: BTreeSet::new(),
             },
         );
@@ -1054,13 +1053,15 @@ impl ExecutionTest {
     ) -> Result<WasmResult, UserError> {
         let state = Arc::new(self.state.take().unwrap());
 
-        let query = UserQuery {
-            source: user_test_id(0),
+        let query = Query {
+            source: QuerySource::User {
+                user_id: user_test_id(0),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_id,
             method_name: method_name.to_string(),
             method_payload,
-            ingress_expiry: 0,
-            nonce: None,
         };
         let result = self.query(query, Arc::clone(&state), vec![]);
 
@@ -1490,7 +1491,7 @@ impl ExecutionTest {
     /// Consider to use the simplified `non_replicated_query()` instead.
     pub fn query(
         &self,
-        query: UserQuery,
+        query: Query,
         state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
@@ -2051,11 +2052,10 @@ impl ExecutionTestBuilder {
         }
         if let Some(ecdsa_key) = &self.ecdsa_key {
             if self.ecdsa_signing_enabled {
-                state
-                    .metadata
-                    .network_topology
-                    .ecdsa_signing_subnets
-                    .insert(ecdsa_key.clone(), vec![self.own_subnet_id]);
+                state.metadata.network_topology.idkg_signing_subnets.insert(
+                    MasterPublicKeyId::Ecdsa(ecdsa_key.clone()),
+                    vec![self.own_subnet_id],
+                );
             }
             state
                 .metadata
@@ -2063,8 +2063,8 @@ impl ExecutionTestBuilder {
                 .subnets
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
-                .ecdsa_keys_held
-                .insert(ecdsa_key.clone());
+                .idkg_keys_held
+                .insert(MasterPublicKeyId::Ecdsa(ecdsa_key.clone()));
         }
 
         state.metadata.network_topology.bitcoin_mainnet_canister_id =

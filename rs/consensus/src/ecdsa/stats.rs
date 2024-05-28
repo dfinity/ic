@@ -3,7 +3,7 @@
 use crate::consensus::metrics::{
     EcdsaQuadrupleMetrics, EcdsaSignatureMetrics, EcdsaTranscriptMetrics,
 };
-use ic_types::consensus::idkg::{EcdsaBlockReader, EcdsaStats, QuadrupleId, RequestId};
+use ic_types::consensus::idkg::{EcdsaBlockReader, EcdsaStats, PreSigId, RequestId};
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealingSupport, IDkgTranscriptId, IDkgTranscriptParams,
 };
@@ -24,7 +24,7 @@ pub struct EcdsaStatsImpl {
 
 struct EcdsaStatsInternal {
     transcript_stats: HashMap<IDkgTranscriptId, TranscriptStats>,
-    quadruple_stats: HashMap<QuadrupleId, QuadrupleStats>,
+    quadruple_stats: HashMap<PreSigId, QuadrupleStats>,
     signature_stats: HashMap<RequestId, SignatureStats>,
 }
 
@@ -187,12 +187,12 @@ impl EcdsaStats for EcdsaStatsImpl {
     fn update_active_quadruples(&self, block_reader: &dyn EcdsaBlockReader) {
         let mut active_quadruples = HashSet::new();
         let mut state = self.state.lock().unwrap();
-        for quadruple_id in block_reader.pre_signatures_in_creation() {
-            active_quadruples.insert(quadruple_id);
+        for pre_sig_id in block_reader.pre_signatures_in_creation() {
+            active_quadruples.insert(pre_sig_id);
 
             state
                 .quadruple_stats
-                .entry(quadruple_id.clone())
+                .entry(*pre_sig_id)
                 .or_insert(QuadrupleStats {
                     start_time: Instant::now(),
                 });
@@ -200,15 +200,15 @@ impl EcdsaStats for EcdsaStatsImpl {
 
         // Remove the entries that are no longer active, and finish reporting their metrics
         let mut to_remove = HashSet::new();
-        for (quadruple_id, quadruple_stats) in &state.quadruple_stats {
-            if !active_quadruples.contains(quadruple_id) {
-                to_remove.insert(quadruple_id.clone());
+        for (pre_sig_id, quadruple_stats) in &state.quadruple_stats {
+            if !active_quadruples.contains(pre_sig_id) {
+                to_remove.insert(*pre_sig_id);
                 self.on_quadruple_done(quadruple_stats);
             }
         }
 
-        for quadruple_id in &to_remove {
-            state.quadruple_stats.remove(quadruple_id);
+        for pre_sig_id in &to_remove {
+            state.quadruple_stats.remove(pre_sig_id);
         }
     }
 

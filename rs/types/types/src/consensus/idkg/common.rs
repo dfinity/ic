@@ -39,7 +39,7 @@ pub type PseudoRandomId = [u8; 32];
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RequestId {
-    pub quadruple_id: QuadrupleId,
+    pub pre_signature_id: PreSigId,
     pub pseudo_random_id: PseudoRandomId,
     pub height: Height,
 }
@@ -47,7 +47,7 @@ pub struct RequestId {
 impl From<RequestId> for pb::RequestId {
     fn from(request_id: RequestId) -> Self {
         Self {
-            quadruple_id: request_id.quadruple_id.id(),
+            pre_signature_id: request_id.pre_signature_id.id(),
             pseudo_random_id: request_id.pseudo_random_id.to_vec(),
             height: request_id.height.get(),
         }
@@ -67,7 +67,7 @@ impl TryFrom<&pb::RequestId> for RequestId {
             pseudo_random_id.copy_from_slice(&request_id.pseudo_random_id);
 
             Ok(Self {
-                quadruple_id: QuadrupleId(request_id.quadruple_id),
+                pre_signature_id: PreSigId(request_id.pre_signature_id),
                 pseudo_random_id,
                 height: Height::from(request_id.height),
             })
@@ -75,15 +75,11 @@ impl TryFrom<&pb::RequestId> for RequestId {
     }
 }
 
-#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct QuadrupleId(pub u64);
+pub struct PreSigId(pub u64);
 
-impl QuadrupleId {
-    pub fn new(id: u64) -> Self {
-        Self(id)
-    }
-
+impl PreSigId {
     pub fn id(&self) -> u64 {
         self.0
     }
@@ -642,10 +638,10 @@ pub trait EcdsaBlockReader: Send + Sync {
     fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
 
     /// Returns the IDs of pre-signatures in creation by the tip.
-    fn pre_signatures_in_creation(&self) -> Box<dyn Iterator<Item = &QuadrupleId> + '_>;
+    fn pre_signatures_in_creation(&self) -> Box<dyn Iterator<Item = &PreSigId> + '_>;
 
     /// For the given pre-signature ID, returns the pre-signature ref if available.
-    fn available_pre_signature(&self, id: &QuadrupleId) -> Option<&PreSignatureRef>;
+    fn available_pre_signature(&self, id: &PreSigId) -> Option<&PreSignatureRef>;
 
     /// Returns the set of all the active references.
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef>;

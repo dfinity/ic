@@ -237,6 +237,8 @@ type RemoveNodeOperatorsPayload = record {
 
 type RemoveNodesPayload = record { node_ids : vec principal };
 
+type RemoveNodesFromSubnetPayload = record { node_ids : vec principal };
+
 type RerouteCanisterRangesPayload = record {
   source_subnet : principal;
   reassigned_canister_ranges : vec CanisterIdRange;
@@ -280,11 +282,23 @@ type SubnetFeatures = record {
 
 type SubnetType = variant { application; verified_application; system };
 
+type UpdateApiBoundaryNodesVersionPayload = record {
+  version : text;
+  node_ids : vec principal;
+};
+
 type UpdateElectedHostosVersionsPayload = record {
   release_package_urls : vec text;
   hostos_version_to_elect : opt text;
   hostos_versions_to_unelect : vec text;
   release_package_sha256_hex : opt text;
+};
+
+type UpdateFirewallRulesPayload = record {
+  expected_hash : text;
+  scope : FirewallRulesScope;
+  positions : vec int32;
+  rules : vec FirewallRule;
 };
 
 type UpdateNodeDirectlyPayload = record {
@@ -400,15 +414,15 @@ service : {
   remove_node_directly : (RemoveNodeDirectlyPayload) -> ();
   remove_node_operators : (RemoveNodeOperatorsPayload) -> ();
   remove_nodes : (RemoveNodesPayload) -> ();
-  remove_nodes_from_subnet : (RemoveNodesPayload) -> ();
+  remove_nodes_from_subnet : (RemoveNodesFromSubnetPayload) -> ();
   reroute_canister_ranges : (RerouteCanisterRangesPayload) -> (Result_1);
   retire_replica_version : (RetireReplicaVersionPayload) -> ();
   revise_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();
-  update_api_boundary_nodes_version : (AddApiBoundaryNodesPayload) -> ();
+  update_api_boundary_nodes_version : (UpdateApiBoundaryNodesVersionPayload) -> ();
   update_elected_hostos_versions : (UpdateElectedHostosVersionsPayload) -> ();
   update_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
-  update_firewall_rules : (AddFirewallRulesPayload) -> ();
+  update_firewall_rules : (UpdateFirewallRulesPayload) -> ();
   update_node_directly : (UpdateNodeDirectlyPayload) -> (Result_1);
   update_node_domain_directly : (UpdateNodeDomainDirectlyPayload) -> (Result_1);
   update_node_ipv4_config_directly : (UpdateNodeIPv4ConfigDirectlyPayload) -> (

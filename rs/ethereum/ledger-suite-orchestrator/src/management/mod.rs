@@ -1,6 +1,6 @@
 use crate::logs::DEBUG;
 use async_trait::async_trait;
-use candid::{CandidType, Principal};
+use candid::{CandidType, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
@@ -282,7 +282,7 @@ impl CanisterRuntime for IcCanisterRuntime {
             mode: CanisterInstallMode::Upgrade,
             canister_id: PrincipalId::from(canister_id),
             wasm_module,
-            arg: Vec::new(),
+            arg: Encode!(&()).unwrap(),
             compute_allocation: None,
             memory_allocation: None,
             sender_canister_version: None,

@@ -17,7 +17,9 @@ use ic_agent::{
     Agent,
 };
 
-const EFFECTIVE_CANISTER_ID: &str = "3muos-6yaaa-aaaaa-qaaua-cai"; // counter canister on mainnet
+const MAINNET_ROOT_SUBNET_ID: &str =
+    "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe";
+const MAINNET_COUNTER_CANISTER_ID: &str = "3muos-6yaaa-aaaaa-qaaua-cai";
 const CANISTER_METHOD: &str = "read";
 
 /// Example usage of the HealthCheckRouteProvider (custom implementation of the RouteProvider trait defined `ic-agent`).
@@ -30,9 +32,8 @@ async fn main() {
         .build()
         .expect("Could not create HTTP client.");
     let route_provider = {
-        // TODO: change to subnet_id when 0.35.0 ic-agent is released
-        let effective_canister_id = Principal::from_text(EFFECTIVE_CANISTER_ID).unwrap();
-        let fetcher = Arc::new(NodesFetcherImpl::new(client.clone(), effective_canister_id));
+        let subnet_id = Principal::from_text(MAINNET_ROOT_SUBNET_ID).unwrap();
+        let fetcher = Arc::new(NodesFetcherImpl::new(client.clone(), subnet_id));
         let fetch_interval = Duration::from_secs(5); // periodicity of checking current topology
         let health_timeout = Duration::from_secs(3);
         let checker = Arc::new(HealthCheckImpl::new(client.clone(), health_timeout));
@@ -66,7 +67,7 @@ async fn main() {
         .await
         .expect("failed to fetch root key");
     // Start using the ic-agent for some calls
-    let effective_canister_id = Principal::from_text(EFFECTIVE_CANISTER_ID).unwrap();
+    let effective_canister_id = Principal::from_text(MAINNET_COUNTER_CANISTER_ID).unwrap();
     let result = agent
         .query(&effective_canister_id, CANISTER_METHOD)
         .call()

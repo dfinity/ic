@@ -38,10 +38,11 @@ use ic_management_canister_types::{
     CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType, ClearChunkStoreArgs,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs,
     ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method as Ic00Method,
-    NodeMetricsHistoryArgs, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs, SignWithECDSAArgs, StoredChunksArgs,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
+    Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs,
+    SignWithECDSAArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -2501,7 +2502,7 @@ impl ExecutionEnvironment {
         }
 
         if !topology
-            .ecdsa_signing_subnets(&key_id)
+            .idkg_signing_subnets(&MasterPublicKeyId::Ecdsa(key_id.clone()))
             .contains(&state.metadata.own_subnet_id)
         {
             return Err(UserError::new(

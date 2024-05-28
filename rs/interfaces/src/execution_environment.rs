@@ -9,12 +9,12 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
 use ic_types::{
-    consensus::idkg::QuadrupleId,
+    consensus::idkg::PreSigId,
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{
-        AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, MessageId,
-        SignedIngressContent, UserQuery,
+        AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, MessageId, Query,
+        SignedIngressContent,
     },
     CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, Time,
 };
@@ -25,6 +25,7 @@ use std::{
     fmt, ops,
 };
 use strum_macros::EnumIter;
+use thiserror::Error;
 use tower::util::BoxCloneService;
 
 /// Instance execution statistics. The stats are cumulative and
@@ -32,34 +33,72 @@ use tower::util::BoxCloneService;
 /// created up until the moment they are requested.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct InstanceStats {
-    /// Total number of (host) pages accessed (read or written) by the instance
+    /// Total number of (host) OS pages (4KiB) accessed (read or written) by the instance
     /// and loaded into the linear memory.
-    pub accessed_pages: usize,
+    pub wasm_accessed_pages: usize,
 
-    /// Total number of (host) pages modified by the instance.
+    /// Total number of (host) OS pages (4KiB) modified by the instance.
     /// By definition a page that has been dirtied has also been accessed,
     /// hence this dirtied_pages <= accessed_pages
-    pub dirty_pages: usize,
+    pub wasm_dirty_pages: usize,
 
     /// Number of times a write access is handled when the page has already been
     /// read.
-    pub read_before_write_count: usize,
+    pub wasm_read_before_write_count: usize,
 
     /// Number of times a write access is handled when the page has not yet been
     /// read.
-    pub direct_write_count: usize,
+    pub wasm_direct_write_count: usize,
 
     /// Number of sigsegv handled.
-    pub sigsegv_count: usize,
+    pub wasm_sigsegv_count: usize,
 
     /// Number of calls to mmap.
-    pub mmap_count: usize,
+    pub wasm_mmap_count: usize,
 
     /// Number of calls to mprotect.
-    pub mprotect_count: usize,
+    pub wasm_mprotect_count: usize,
 
     /// Number of pages loaded by copying the data.
-    pub copy_page_count: usize,
+    pub wasm_copy_page_count: usize,
+
+    /// Number of accessed OS pages (4KiB) in stable memory.
+    pub stable_accessed_pages: usize,
+
+    /// Number of modified OS pages (4KiB) in stable memory.
+    pub stable_dirty_pages: usize,
+
+    /// Number of times a write access is handled when the page has already been
+    /// read.
+    pub stable_read_before_write_count: usize,
+
+    /// Number of times a write access is handled when the page has not yet been
+    /// read.
+    pub stable_direct_write_count: usize,
+
+    /// Number of sigsegv handled.
+    pub stable_sigsegv_count: usize,
+
+    /// Number of calls to mmap for stable memory.
+    pub stable_mmap_count: usize,
+
+    /// Number of calls to mprotect for stable memory.
+    pub stable_mprotect_count: usize,
+
+    /// Number of pages loaded by copying the data in stable memory.
+    pub stable_copy_page_count: usize,
+}
+
+impl InstanceStats {
+    // Returns the sum of dirty pages over the wasm heap and stable memory.
+    // Will be used when computing the heap delta at the end of the message.
+    pub fn dirty_pages(&self) -> usize {
+        self.wasm_dirty_pages + self.stable_dirty_pages
+    }
+    // Returns the sum of accessed pages over the wasm heap and stable memory.
+    pub fn accessed_pages(&self) -> usize {
+        self.wasm_accessed_pages + self.stable_accessed_pages
+    }
 }
 
 /// Errors that can be returned when fetching the available memory on a subnet.
@@ -431,7 +470,9 @@ pub type IngressFilterService = BoxCloneService<
 >;
 
 /// Errors that can occur when handling a query execution request.
+#[derive(Debug, Error)]
 pub enum QueryExecutionError {
+    #[error("Certified state is not available yet")]
     CertifiedStateUnavailable,
 }
 
@@ -442,7 +483,7 @@ pub type QueryExecutionResponse =
 
 /// Interface for the component to execute queries.
 pub type QueryExecutionService =
-    BoxCloneService<(UserQuery, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
+    BoxCloneService<(Query, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
 
 /// Errors that can be returned when reading/writing from/to ingress history.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1192,7 +1233,7 @@ pub trait Scheduler: Send {
         state: Self::State,
         randomness: Randomness,
         ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
-        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
+        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
         current_round: ExecutionRound,
         next_checkpoint_round: Option<ExecutionRound>,
         current_round_type: ExecutionRoundType,
@@ -1224,8 +1265,8 @@ impl fmt::Display for WasmExecutionOutput {
         write!(f, "wasm_result => [{}], instructions left => {}, instance_stats => [ accessed pages => {}, dirty pages => {}]",
                wasm_result_str,
                self.num_instructions_left,
-               self.instance_stats.accessed_pages,
-               self.instance_stats.dirty_pages,
+               self.instance_stats.wasm_accessed_pages + self.instance_stats.stable_accessed_pages,
+               self.instance_stats.wasm_dirty_pages + self.instance_stats.stable_dirty_pages,
         )
     }
 }
