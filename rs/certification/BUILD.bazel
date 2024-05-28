@@ -18,6 +18,7 @@ DEV_DEPENDENCIES = [
     "//rs/canonical_state",
     "//rs/certification/test-utils",
     "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/test_utils/reproducible_rng",
     "//rs/types/base_types",
     "@crate_index//:assert_matches",
     "@crate_index//:rand",

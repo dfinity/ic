@@ -5998,6 +5998,7 @@ dependencies = [
  "ic-base-types",
  "ic-certification-test-utils",
  "ic-crypto-internal-types",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig",
  "ic-crypto-utils-threshold-sig-der",
