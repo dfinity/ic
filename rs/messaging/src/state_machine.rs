@@ -4,6 +4,7 @@ use ic_interfaces::execution_environment::{
     ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
 use ic_logger::{fatal, ReplicaLogger};
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
@@ -127,6 +128,12 @@ impl StateMachine for StateMachineImpl {
 
         self.observe_phase_duration(PHASE_INDUCTION, &since);
 
+        let idkg_subnet_public_keys = batch
+            .ecdsa_subnet_public_keys
+            .iter()
+            .map(|(key_id, key)| (MasterPublicKeyId::Ecdsa(key_id.clone()), key.clone()))
+            .collect();
+
         let execution_round_type = if batch.requires_full_state_hash {
             ExecutionRoundType::CheckpointRound
         } else {
@@ -141,7 +148,7 @@ impl StateMachine for StateMachineImpl {
         let state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
-            batch.ecdsa_subnet_public_keys,
+            idkg_subnet_public_keys,
             batch.ecdsa_quadruple_ids,
             ExecutionRound::from(batch.batch_number.get()),
             next_checkpoint_round,

@@ -7,8 +7,9 @@ use ic_management_canister_types::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType,
     DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod,
-    LogVisibility, Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, TransformContext, TransformFunc, IC_00,
+    LogVisibility, MasterPublicKeyId, Method, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, TransformContext,
+    TransformFunc, IC_00,
 };
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -2052,7 +2053,7 @@ fn get_reject_message(response: RequestOrResponse) -> String {
     }
 }
 
-fn make_key(name: &str) -> EcdsaKeyId {
+fn make_ecdsa_key(name: &str) -> EcdsaKeyId {
     EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
         name: name.to_string(),
@@ -2069,12 +2070,12 @@ fn compute_initial_ecdsa_dealings_sender_on_nns() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
         .with_ecdsa_signature_fee(0)
-        .with_ecdsa_key(make_key("secp256k1"))
+        .with_ecdsa_key(make_ecdsa_key("secp256k1"))
         .build();
 
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
-        make_key("secp256k1"),
+        make_ecdsa_key("secp256k1"),
         own_subnet,
         node_ids,
         RegistryVersion::from(100),
@@ -2099,12 +2100,12 @@ fn compute_initial_ecdsa_dealings_sender_not_on_nns() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(other_subnet, other_canister)
         .with_ecdsa_signature_fee(0)
-        .with_ecdsa_key(make_key("secp256k1"))
+        .with_ecdsa_key(make_ecdsa_key("secp256k1"))
         .build();
 
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
-        make_key("secp256k1"),
+        make_ecdsa_key("secp256k1"),
         own_subnet,
         node_ids,
         RegistryVersion::from(100),
@@ -2139,7 +2140,7 @@ fn compute_initial_ecdsa_dealings_with_unknown_key() {
 
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
-        make_key("foo"),
+        make_ecdsa_key("foo"),
         own_subnet,
         node_ids,
         RegistryVersion::from(100),
@@ -2154,9 +2155,9 @@ fn compute_initial_ecdsa_dealings_with_unknown_key() {
     assert_eq!(
         get_reject_message(response),
         format!(
-            "Subnet {} does not hold ECDSA key {}.",
+            "Subnet {} does not hold iDKG key {}.",
             own_subnet,
-            make_key("foo")
+            MasterPublicKeyId::Ecdsa(make_ecdsa_key("foo"))
         ),
     )
 }
@@ -2165,7 +2166,7 @@ fn compute_initial_ecdsa_dealings_with_unknown_key() {
 fn ecdsa_signature_fee_charged() {
     let fee = 1_000_000;
     let payment = 2_000_000;
-    let ecdsa_key = make_key("secp256k1");
+    let ecdsa_key = make_ecdsa_key("secp256k1");
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_own_subnet_id(subnet_test_id(1))
@@ -2234,7 +2235,7 @@ fn ecdsa_signature_fee_charged() {
 #[test]
 fn ecdsa_signature_rejected_without_fee() {
     let fee = 2_000_000;
-    let ecdsa_key = make_key("secp256k1");
+    let ecdsa_key = make_ecdsa_key("secp256k1");
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_own_subnet_id(subnet_test_id(1))
@@ -2271,8 +2272,8 @@ fn ecdsa_signature_rejected_without_fee() {
 
 #[test]
 fn ecdsa_signature_with_unknown_key_rejected() {
-    let correct_key = make_key("correct_key");
-    let wrong_key = make_key("wrong_key");
+    let correct_key = make_ecdsa_key("correct_key");
+    let wrong_key = make_ecdsa_key("wrong_key");
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_own_subnet_id(subnet_test_id(1))
@@ -2307,8 +2308,8 @@ fn ecdsa_signature_with_unknown_key_rejected() {
 
 #[test]
 fn ecdsa_signature_request_with_disabled_key_rejected() {
-    let disabled_key = make_key("disabled_key");
-    let wrong_key = make_key("wrong_key");
+    let disabled_key = make_ecdsa_key("disabled_key");
+    let wrong_key = make_ecdsa_key("wrong_key");
     let canister_id = canister_test_id(0x10);
     let own_subnet_id = subnet_test_id(1);
     let mut test = ExecutionTestBuilder::new()
@@ -2361,20 +2362,25 @@ fn ecdsa_signature_request_with_disabled_key_rejected() {
         // However, this is enough to assert that the correct endpoint is reached.
         "InternalError(\"InvalidPoint\")",
         "invalid or disabled key Secp256k1:disabled_key",
-        "does not hold ECDSA key Secp256k1:wrong_key",
+        "does not hold iDKG key ecdsa:Secp256k1:wrong_key",
     ];
 
     for (i, expected) in expected.iter().enumerate() {
         let result = test.xnet_messages()[i].clone();
         let message = get_reject_message(result);
-        assert!(message.contains(expected));
+        assert!(
+            message.contains(expected),
+            "Expected: {} \nActual: {}",
+            expected,
+            message
+        );
     }
 }
 
 #[test]
 fn ecdsa_public_key_req_with_unknown_key_rejected() {
-    let correct_key = make_key("correct_key");
-    let wrong_key = make_key("wrong_key");
+    let correct_key = make_ecdsa_key("correct_key");
+    let wrong_key = make_ecdsa_key("wrong_key");
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_own_subnet_id(subnet_test_id(1))
@@ -2409,7 +2415,7 @@ fn ecdsa_public_key_req_with_unknown_key_rejected() {
 
 #[test]
 fn ecdsa_signature_fee_ignored_for_nns() {
-    let ecdsa_key = make_key("secp256k1");
+    let ecdsa_key = make_ecdsa_key("secp256k1");
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_own_subnet_id(subnet_test_id(1))
@@ -2475,7 +2481,7 @@ fn ecdsa_signature_fee_ignored_for_nns() {
 fn ecdsa_signature_queue_fills_up() {
     let fee = 1_000_000;
     let payment = 2_000_000u128;
-    let ecdsa_key = make_key("secp256k1");
+    let ecdsa_key = make_ecdsa_key("secp256k1");
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_own_subnet_id(subnet_test_id(1))
