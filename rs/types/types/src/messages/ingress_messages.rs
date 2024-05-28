@@ -530,6 +530,8 @@ pub fn extract_effective_canister_id(
         | Ok(Method::SignWithECDSA)
         | Ok(Method::ComputeInitialEcdsaDealings)
         | Ok(Method::ComputeInitialIDkgDealings)
+        | Ok(Method::SchnorrPublicKey)
+        | Ok(Method::SignWithSchnorr)
         | Ok(Method::BitcoinGetBalance)
         | Ok(Method::BitcoinGetUtxos)
         | Ok(Method::BitcoinSendTransaction)

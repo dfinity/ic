@@ -8,8 +8,8 @@ use ic_management_canister_types::{
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType,
     DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod,
     LogVisibility, MasterPublicKeyId, Method, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, TransformContext,
-    TransformFunc, IC_00,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrAlgorithm,
+    SchnorrKeyId, TransformContext, TransformFunc, IC_00,
 };
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -2060,6 +2060,13 @@ fn make_ecdsa_key(name: &str) -> EcdsaKeyId {
     }
 }
 
+fn make_shnorr_key(name: &str) -> SchnorrKeyId {
+    SchnorrKeyId {
+        algorithm: SchnorrAlgorithm::Ed25519,
+        name: name.to_string(),
+    }
+}
+
 #[test]
 fn compute_initial_ecdsa_dealings_sender_on_nns() {
     let own_subnet = subnet_test_id(1);
@@ -3335,4 +3342,89 @@ fn test_fetch_canister_logs_should_accept_ingress_message_enabled() {
             "fetch_canister_logs API is only accessible in non-replicated mode"
         ))
     );
+}
+
+#[test]
+fn test_compute_initial_idkg_dealings_api_is_disabled() {
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .build();
+    test.inject_call_to_ic00(
+        Method::ComputeInitialIDkgDealings,
+        ic00::ComputeInitialIDkgDealingsArgs::new(
+            MasterPublicKeyId::Schnorr(make_shnorr_key("Ed25519")),
+            own_subnet,
+            Default::default(),
+            RegistryVersion::from(100),
+        )
+        .encode(),
+        Cycles::new(0),
+    );
+    test.execute_all();
+    let response = test.xnet_messages()[0].clone();
+    assert_eq!(
+        get_reject_message(response),
+        "ComputeInitialIDkgDealings API is not yet implemented.",
+    )
+}
+
+#[test]
+fn test_schnorr_public_key_api_is_disabled() {
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .build();
+    test.inject_call_to_ic00(
+        Method::SchnorrPublicKey,
+        ic00::SchnorrPublicKeyArgs {
+            canister_id: None,
+            derivation_path: DerivationPath::new(vec![]),
+            key_id: make_shnorr_key("Ed25519"),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
+    test.execute_all();
+    let response = test.xnet_messages()[0].clone();
+    assert_eq!(
+        get_reject_message(response),
+        "SchnorrPublicKey API is not yet implemented.",
+    )
+}
+
+#[test]
+fn test_sign_with_schnorr_api_is_disabled() {
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .build();
+    test.inject_call_to_ic00(
+        Method::SignWithSchnorr,
+        ic00::SignWithSchnorrArgs {
+            message: vec![],
+            derivation_path: DerivationPath::new(vec![]),
+            key_id: make_shnorr_key("Ed25519"),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
+    test.execute_all();
+    let response = test.xnet_messages()[0].clone();
+    assert_eq!(
+        get_reject_message(response),
+        "SignWithSchnorr API is not yet implemented.",
+    )
 }

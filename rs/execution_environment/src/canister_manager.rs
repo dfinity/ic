@@ -448,6 +448,8 @@ impl CanisterManager {
             | Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::ComputeInitialEcdsaDealings)
             | Ok(Ic00Method::ComputeInitialIDkgDealings)
+            | Ok(Ic00Method::SchnorrPublicKey)
+            | Ok(Ic00Method::SignWithSchnorr)
             // "DepositCycles" can be called by anyone however as ingress message
             // cannot carry cycles, it does not make sense to allow them from users.
             | Ok(Ic00Method::DepositCycles)
