@@ -673,7 +673,10 @@ impl StateLayout {
         Ok(())
     }
 
-    pub fn checkpoint_untracked(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    pub fn checkpoint_untracked(
+        &self,
+        height: Height,
+    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let cp_name = Self::checkpoint_name(height);
         let path = self.checkpoints().join(cp_name);
         if !path.exists() {

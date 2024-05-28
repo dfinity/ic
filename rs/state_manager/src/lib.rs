@@ -1422,11 +1422,22 @@ impl StateManagerImpl {
         // Archive unverified checkpoints.
         let unfiltered_checkpoint_heights = state_layout
             .unfiltered_checkpoint_heights()
-            .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve unfiltered checkpoint heights: {:?}", err));
+            .unwrap_or_else(|err| {
+                fatal!(
+                    &log,
+                    "Failed to retrieve unfiltered checkpoint heights: {:?}",
+                    err
+                )
+            });
 
         for h in unfiltered_checkpoint_heights {
             let cp_layout = state_layout.checkpoint_untracked(h).unwrap_or_else(|err| {
-                fatal!(log, "Failed to create untracked checkpoint layout @{}: {}", h, err)
+                fatal!(
+                    log,
+                    "Failed to create untracked checkpoint layout @{}: {}",
+                    h,
+                    err
+                )
             });
             if cp_layout.is_marked_as_unverified() {
                 info!(log, "Archiving unverified checkpoint {} ", h);
@@ -2413,12 +2424,16 @@ impl StateManagerImpl {
                             .with_label_values(&["recover"])
                             .start_timer();
 
-                        checkpoint::load_checkpoint_parallel(
+                        let state = checkpoint::load_checkpoint_parallel(
                             &layout,
                             self.own_subnet_type,
                             &self.metrics.checkpoint_metrics,
                             self.get_fd_factory(),
-                        )// TODO: remove the marker everytime we call load_checkpoint_parallel
+                        )?;
+                        layout
+                            .remove_unverified_checkpoint_marker()
+                            .map_err(|e| e.into())?;
+                        Ok(state)
                     })
                     .unwrap_or_else(|err| {
                         fatal!(
@@ -3244,9 +3259,16 @@ impl StateManager for StateManagerImpl {
     fn report_diverged_checkpoint(&self, height: Height) {
         let mut states = self.states.write();
         // Unverified checkpoints should also be considered when removing checkpoints higher than the diverged height.
-        let heights = self.state_layout
+        let heights = self
+            .state_layout
             .unfiltered_checkpoint_heights()
-            .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve unfiltered checkpoint heights: {:?}", err));
+            .unwrap_or_else(|err| {
+                fatal!(
+                    &log,
+                    "Failed to retrieve unfiltered checkpoint heights: {:?}",
+                    err
+                )
+            });
 
         info!(self.log, "Moving diverged checkpoint @{}", height);
         if let Err(err) = self.state_layout.mark_checkpoint_diverged(height) {
