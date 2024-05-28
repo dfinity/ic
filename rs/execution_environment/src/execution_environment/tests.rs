@@ -2300,7 +2300,10 @@ fn ecdsa_signature_with_unknown_key_rejected() {
     let result = test.ingress(canister_id, "update", run).unwrap();
     assert_eq!(
         WasmResult::Reject(
-            format!("Unable to route management canister request sign_with_ecdsa: IDkgKeyError(\"Requested unknown iDKG key: ecdsa:{}, existing keys with signing enabled: [ecdsa:{}]\")", wrong_key, correct_key
+            format!(
+                "Unable to route management canister request sign_with_ecdsa: IDkgKeyError(\"Requested unknown iDKG key: {}, existing keys with signing enabled: [{}]\")",
+                MasterPublicKeyId::Ecdsa(wrong_key),
+                MasterPublicKeyId::Ecdsa(correct_key),
         )),
         result
     );
@@ -2407,7 +2410,10 @@ fn ecdsa_public_key_req_with_unknown_key_rejected() {
     let result = test.ingress(canister_id, "update", run).unwrap();
     assert_eq!(
         WasmResult::Reject(
-            format!("Unable to route management canister request ecdsa_public_key: IDkgKeyError(\"Requested unknown iDKG key: ecdsa:{}, existing keys: [ecdsa:{}]\")", wrong_key, correct_key
+            format!(
+                "Unable to route management canister request ecdsa_public_key: IDkgKeyError(\"Requested unknown iDKG key: {}, existing keys: [{}]\")",
+                MasterPublicKeyId::Ecdsa(wrong_key),
+                MasterPublicKeyId::Ecdsa(correct_key),
         )),
         result
     );
