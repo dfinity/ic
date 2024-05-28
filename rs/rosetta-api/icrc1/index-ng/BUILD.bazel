@@ -88,6 +88,7 @@ rust_test(
 [
     rust_ic_test(
         name = "index_ng_test" + conf["test_suffix"],
+        timeout = "long",
         srcs = ["tests/tests.rs"],
         crate_features = conf["crate_features"],
         data = [
