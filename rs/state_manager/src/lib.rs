@@ -141,6 +141,7 @@ pub struct StateManagerMetrics {
     last_computed_manifest_height: IntGauge,
     resident_state_count: IntGauge,
     checkpoints_on_disk_count: IntGauge,
+    unfiltered_checkpoints_on_disk_count: IntGauge,
     state_sync_metrics: StateSyncMetrics,
     state_size: IntGauge,
     states_metadata_pbuf_size: IntGauge,
@@ -361,6 +362,11 @@ impl StateManagerMetrics {
 
         let checkpoints_on_disk_count = metrics_registry.int_gauge(
             "state_manager_checkpoints_on_disk_count",
+            "Number of verified checkpoints on disk.",
+        );
+
+        let unfiltered_checkpoints_on_disk_count = metrics_registry.int_gauge(
+            "state_manager_unfiltered_checkpoints_on_disk_count",
             "Number of checkpoints on disk, independent of if they are loaded or not.",
         );
 
@@ -425,6 +431,7 @@ impl StateManagerMetrics {
             last_computed_manifest_height,
             resident_state_count,
             checkpoints_on_disk_count,
+            unfiltered_checkpoints_on_disk_count,
             state_sync_metrics: StateSyncMetrics::new(metrics_registry),
             state_size,
             states_metadata_pbuf_size,
@@ -2297,6 +2304,22 @@ impl StateManagerImpl {
         result
     }
 
+    pub fn unfiltered_checkpoint_heights(&self) -> Vec<Height> {
+        let result = self
+            .state_layout
+            .unfiltered_checkpoint_heights()
+            .unwrap_or_else(|err| {
+                fatal!(self.log, "Failed to gather unfiltered checkpoint heights: {:?}", err)
+            });
+
+        self.metrics
+            .unfiltered_checkpoints_on_disk_count
+            .set(result.len() as i64);
+
+        result
+    }
+
+
     // Creates a checkpoint and switches state to it.
     fn create_checkpoint_and_switch(
         &self,
@@ -2996,28 +3019,20 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["remove_states_below"])
             .start_timer();
 
-        let verified_checkpoint_heights = self
-            .state_layout()
-            .verified_checkpoint_heights()
-            .unwrap_or_else(|err| {
-                fatal!(
-                    self.log,
-                    "Failed to gather verified checkpoint heights: {:?}",
-                    err
-                )
-            });
+        let checkpoint_heights: BTreeSet<Height> = self.checkpoint_heights().into_iter().collect();
+
         // The latest state must be kept.
         let latest_state_height = self.latest_state_height();
         let oldest_height_to_keep = latest_state_height
             .min(requested_height)
             .max(Height::new(1));
 
-        let oldest_checkpoint_to_keep = if verified_checkpoint_heights.is_empty() {
+        let oldest_checkpoint_to_keep = if checkpoint_heights.is_empty() {
             Self::INITIAL_STATE_HEIGHT
         } else {
             // The latest checkpoint below or at the requested height will also be kept
             // because the state manager needs to load from it when restarting.
-            let oldest_checkpoint_to_keep = verified_checkpoint_heights
+            let oldest_checkpoint_to_keep = checkpoint_heights
                 .iter()
                 .filter(|x| **x <= requested_height)
                 .max()
@@ -3025,7 +3040,7 @@ impl StateManager for StateManagerImpl {
                 .unwrap_or(requested_height);
 
             // Keep extra checkpoints for state sync.
-            verified_checkpoint_heights
+            checkpoint_heights
                 .iter()
                 .rev()
                 .take(EXTRA_CHECKPOINTS_TO_KEEP + 1)

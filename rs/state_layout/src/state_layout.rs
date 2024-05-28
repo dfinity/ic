@@ -763,17 +763,7 @@ impl StateLayout {
 
     /// Returns a sorted list of `Height`s for which a checkpoint is available.
     pub fn checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
-        let names = dir_file_names(&self.checkpoints()).map_err(|err| LayoutError::IoError {
-            path: self.checkpoints(),
-            message: format!("Failed to get all checkpoints (err kind: {:?})", err.kind()),
-            io_err: err,
-        })?;
-
-        parse_and_sort_checkpoint_heights(&names[..])
-    }
-
-    pub fn verified_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
-        let heights = self.checkpoint_heights()?;
+        let heights = self.unfiltered_checkpoint_heights()?;
         let mut verified_heights = vec![];
         for h in heights {
             if let Ok(cp) = self.checkpoint_untracked(h) {
@@ -783,6 +773,16 @@ impl StateLayout {
             }
         }
         Ok(verified_heights)
+    }
+
+    pub fn unfiltered_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
+        let names = dir_file_names(&self.checkpoints()).map_err(|err| LayoutError::IoError {
+            path: self.checkpoints(),
+            message: format!("Failed to get all checkpoints (err kind: {:?})", err.kind()),
+            io_err: err,
+        })?;
+
+        parse_and_sort_checkpoint_heights(&names[..])
     }
 
     /// Returns a sorted in ascended order list of `Height`s of checkpoints that were marked as
@@ -885,7 +885,7 @@ impl StateLayout {
     /// Postcondition:
     ///   height ∉ self.checkpoint_heights()[0:-1]
     fn remove_checkpoint_if_not_the_latest<T>(&self, height: Height, drop_after_rename: T) {
-        match self.verified_checkpoint_heights() {
+        match self.checkpoint_heights() {
             Err(err) => {
                 error!(self.log, "Failed to get checkpoint heights: {}", err);
                 self.metrics
