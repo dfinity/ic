@@ -6,7 +6,7 @@
 /.devcontainer/           @dfinity-lab/teams/idx
 /.github/                 @dfinity-lab/teams/idx
 /buf.yaml                 @dfinity-lab/teams/message-routing-owners
-/hs/                      @dfinity-lab/teams/ic-testing-verification
+/hs/                      @dfinity-lab/teams/utopia
 /licenses/                @dfinity-lab/teams/idx
 /bin/ict                  @dfinity-lab/teams/idx
 /bin/                     @dfinity-lab/teams/idx
@@ -46,7 +46,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /packages/icrc-ledger-agent/         @dfinity-lab/teams/financial-integrations
 /packages/icrc-ledger-types/         @dfinity-lab/teams/financial-integrations
 /packages/ic-ledger-hash-of/         @dfinity-lab/teams/financial-integrations
-/packages/pocket-ic/                 @dfinity-lab/teams/ic-testing-verification
+/packages/pocket-ic/                 @dfinity-lab/teams/utopia
 /packages/ic-vetkd-utils/            @dfinity-lab/teams/crypto-owners
 
 # [IC-OS]
@@ -82,7 +82,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /testnet/tests/pipeline/                                   @dfinity-lab/teams/ic-testing-verification
 /testnet/tests/scripts/                                    @dfinity-lab/teams/ic-testing-verification
 /testnet/tools/nns-tools/                                  @dfinity-lab/teams/nns-team
-/testnet/mainnet_revisions.json                            @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
+/testnet/mainnet_revisions.json                            @dfinity-lab/teams/consensus-owners
 
 # [Rust]
 /rs/                                                    @dfinity-lab/teams/interface-owners
@@ -149,7 +149,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/interfaces/src/p2p.rs                               @dfinity-lab/teams/networking-team
 /rs/interfaces/src/p2p/                                 @dfinity-lab/teams/networking-team
 /rs/interfaces/state_manager/                           @dfinity-lab/teams/message-routing-owners
-/rs/log_analyzer/                                       @dfinity-lab/teams/ic-testing-verification
 /rs/memory_tracker/                                     @dfinity-lab/teams/runtime-owners
 /rs/messaging/                                          @dfinity-lab/teams/message-routing-owners
 /rs/monitoring/adapter_metrics/                         @dfinity-lab/teams/networking-team
@@ -161,8 +160,8 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/orchestrator/                                       @dfinity-lab/teams/consensus-owners
 /rs/orchestrator/src/hostos_upgrade.rs                  @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/node-team
 /rs/p2p/                                                @dfinity-lab/teams/networking-team
-/rs/pocket_ic_server/                                   @dfinity-lab/teams/ic-testing-verification
-/rs/prep/                                               @dfinity-lab/teams/ic-testing-verification
+/rs/pocket_ic_server/                                   @dfinity-lab/teams/utopia
+/rs/prep/                                               @dfinity-lab/teams/utopia
 /rs/protobuf/                                           @dfinity-lab/teams/interface-owners
 /rs/protobuf/def/bitcoin/                               @dfinity-lab/teams/execution-team
 /rs/protobuf/def/canister_http/                         @dfinity-lab/teams/consensus-owners
@@ -183,9 +182,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/recovery/                                           @dfinity-lab/teams/consensus-owners
 /rs/query_stats/                                        @dfinity-lab/teams/execution-owners @dfinity-lab/teams/consensus-owners
 /rs/registry/                                           @dfinity-lab/teams/nns-team
-/rs/registry/admin/                                     @dfinity-lab/teams/nns-team
-/rs/registry/canister/                                  @dfinity-lab/teams/nns-team
-/rs/registry/client/                                    @dfinity-lab/teams/nns-team
 /rs/registry/helpers/src/crypto.rs                      @dfinity-lab/teams/crypto-owners
 /rs/registry/helpers/src/crypto/                        @dfinity-lab/teams/crypto-owners
 /rs/registry/helpers/src/firewall.rs                    @dfinity-lab/teams/networking-team
@@ -195,9 +191,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/registry/helpers/src/subnet.rs                      @dfinity-lab/teams/consensus-owners
 /rs/registry/helpers/src/unassigned_nodes.rs            @dfinity-lab/teams/consensus-owners
 /rs/registry/helpers/tests/root_of_trust.rs             @dfinity-lab/teams/crypto-owners
-/rs/registry/nns_data_provider/                         @dfinity-lab/teams/nns-team
-/rs/registry/regedit/                                   @dfinity-lab/teams/ic-testing-verification
-/rs/registry/transport/                                 @dfinity-lab/teams/nns-team
 /rs/replay/                                             @dfinity-lab/teams/consensus-owners
 /rs/replica/                                            @dfinity-lab/teams/networking-team
 /rs/replica_tests/                                      @dfinity-lab/teams/execution-owners
@@ -219,7 +212,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/stable-structures/                                  @dfinity-lab/teams/execution-owners
 /rs/starter/                                            @dfinity-lab/teams/networking-team
 /rs/state_layout/                                       @dfinity-lab/teams/message-routing-owners
-/rs/state_machine_tests/                                @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/ic-testing-verification
+/rs/state_machine_tests/                                @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/utopia
 /rs/state_manager/                                      @dfinity-lab/teams/message-routing-owners
 /rs/state_tool/                                         @dfinity-lab/teams/message-routing-owners
 /rs/system_api/                                         @dfinity-lab/teams/execution-owners
@@ -285,7 +278,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/types/types/src/signature.rs                        @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/signature/                          @dfinity-lab/teams/consensus-owners
 /rs/types/wasm_types/                                   @dfinity-lab/teams/runtime-owners
-/rs/universal_canister/                                 @dfinity-lab/teams/execution-owners @dfinity-lab/teams/ic-testing-verification
+/rs/universal_canister/                                 @dfinity-lab/teams/execution-owners
 /rs/utils/ensure/                                       @dfinity-lab/teams/financial-integrations
 /rs/validator/                                          @dfinity-lab/teams/crypto-owners
 /rs/wasm_transform/                                     @dfinity-lab/teams/runtime-owners
