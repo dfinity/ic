@@ -195,7 +195,7 @@ pub struct ExecutionTest {
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     caller_canister_id: Option<CanisterId>,
-    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
+    idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
 
     // The actual implementation.
     exec_env: ExecutionEnvironment,
@@ -1180,12 +1180,13 @@ impl ExecutionTest {
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
+
         let (new_state, instructions_used) = self.exec_env.execute_subnet_message(
             message,
             state,
             self.install_code_instruction_limits.clone(),
             &mut mock_random_number_generator(),
-            &self.ecdsa_subnet_public_keys,
+            &self.idkg_subnet_public_keys,
             &self.registry_settings,
             &mut round_limits,
         );
@@ -2073,12 +2074,12 @@ impl ExecutionTestBuilder {
         state.metadata.network_topology.bitcoin_testnet_canister_id =
             self.execution_config.bitcoin.testnet_canister_id;
 
-        let ecdsa_subnet_public_keys = self
+        let idkg_subnet_public_keys = self
             .ecdsa_key
             .into_iter()
-            .map(|key| {
+            .map(|key_id| {
                 (
-                    key,
+                    MasterPublicKeyId::Ecdsa(key_id),
                     MasterPublicKey {
                         algorithm_id: AlgorithmId::EcdsaSecp256k1,
                         public_key: b"abababab".to_vec(),
@@ -2191,7 +2192,7 @@ impl ExecutionTestBuilder {
             metrics_registry,
             ingress_history_writer,
             manual_execution: self.manual_execution,
-            ecdsa_subnet_public_keys,
+            idkg_subnet_public_keys,
             log: self.log,
             checkpoint_files: vec![],
         }

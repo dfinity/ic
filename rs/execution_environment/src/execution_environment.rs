@@ -462,7 +462,7 @@ impl ExecutionEnvironment {
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
         rng: &mut dyn RngCore,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterPublicKey>,
+        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
         registry_settings: &RegistryExecutionSettings,
         round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, Option<NumInstructions>) {
@@ -600,10 +600,10 @@ impl ExecutionEnvironment {
                             refund: msg.take_cycles(),
                         },
                         Ok(args) => {
-                            match get_master_ecdsa_public_key(
-                                ecdsa_subnet_public_keys,
+                            match get_master_public_key(
+                                idkg_subnet_public_keys,
                                 self.own_subnet_id,
-                                &args.key_id,
+                                &MasterPublicKeyId::Ecdsa(args.key_id.clone()),
                             ) {
                                 Err(err) => ExecuteSubnetMessageResult::Finished {
                                     response: Err(err),
@@ -1000,10 +1000,10 @@ impl ExecutionEnvironment {
                     CanisterCall::Request(request) => {
                         let res = match ECDSAPublicKeyArgs::decode(request.method_payload()) {
                             Err(err) => Err(err),
-                            Ok(args) => match get_master_ecdsa_public_key(
-                                ecdsa_subnet_public_keys,
+                            Ok(args) => match get_master_public_key(
+                                idkg_subnet_public_keys,
                                 self.own_subnet_id,
-                                &args.key_id,
+                                &MasterPublicKeyId::Ecdsa(args.key_id.clone()),
                             ) {
                                 Err(err) => Err(err),
                                 Ok(pubkey) => {
@@ -1042,10 +1042,10 @@ impl ExecutionEnvironment {
                 match &msg {
                     CanisterCall::Request(request) => {
                         match ComputeInitialEcdsaDealingsArgs::decode(request.method_payload()) {
-                            Ok(args) => match get_master_ecdsa_public_key(
-                                ecdsa_subnet_public_keys,
+                            Ok(args) => match get_master_public_key(
+                                idkg_subnet_public_keys,
                                 self.own_subnet_id,
-                                &args.key_id,
+                                &MasterPublicKeyId::Ecdsa(args.key_id.clone()),
                             ) {
                                 Ok(_) => self
                                     .compute_initial_ecdsa_dealings(&mut state, args, request)
@@ -3602,15 +3602,15 @@ pub fn execute_canister(
     )
 }
 
-fn get_master_ecdsa_public_key<'a>(
-    ecdsa_subnet_public_keys: &'a BTreeMap<EcdsaKeyId, MasterPublicKey>,
+fn get_master_public_key<'a>(
+    idkg_subnet_public_keys: &'a BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     subnet_id: SubnetId,
-    key_id: &EcdsaKeyId,
+    key_id: &MasterPublicKeyId,
 ) -> Result<&'a MasterPublicKey, UserError> {
-    match ecdsa_subnet_public_keys.get(key_id) {
+    match idkg_subnet_public_keys.get(key_id) {
         None => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            format!("Subnet {} does not hold ECDSA key {}.", subnet_id, key_id),
+            format!("Subnet {} does not hold iDKG key {}.", subnet_id, key_id),
         )),
         Some(master_key) => Ok(master_key),
     }
