@@ -861,3 +861,8 @@ fn test_query_archived_blocks() {
         ]
     );
 }
+
+#[test]
+fn test_icrc21_standard() {
+    ic_icrc1_ledger_sm_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
+}

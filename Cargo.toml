@@ -448,7 +448,11 @@ chrono = { version = "0.4.31", default-features = false, features = [
 ] }
 ciborium = "0.2.1"
 clap = { version = "4.4.6", features = ["derive", "string"] }
-cloudflare = { version = "0.9.1", default_features = false, features = [
+# cloudflare v0.11 is broken, master is partly fixed but unreleased yet.
+# see:
+# - https://github.com/cloudflare/cloudflare-rs/issues/222
+# - https://github.com/cloudflare/cloudflare-rs/issues/236
+cloudflare = { git = "https://github.com/blind-oracle/cloudflare-rs.git", rev = "386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc", feature = [
     "rustls-tls",
 ] }
 crossbeam-channel = "0.5.11"

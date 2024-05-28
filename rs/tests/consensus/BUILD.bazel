@@ -32,6 +32,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],
@@ -48,6 +49,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],
