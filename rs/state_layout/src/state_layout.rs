@@ -1452,6 +1452,9 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     /// Removes the unverified checkpoint marker.
     pub fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
         let path = self.unverified_checkpoint_marker();
+        if !path.exists() {
+            return Ok(());
+        }
         match std::fs::remove_file(&path) {
             Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
                 return Err(LayoutError::IoError {

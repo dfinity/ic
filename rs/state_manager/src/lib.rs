@@ -829,25 +829,22 @@ fn load_checkpoint(
     metrics: &StateManagerMetrics,
     own_subnet_type: SubnetType,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) -> Result<ReplicatedState, CheckpointError> {
+) -> Result<(ReplicatedState, CheckpointLayout<ReadOnly>), CheckpointError> {
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
 
-    state_layout
-        .checkpoint(height)
-        .map_err(|e| e.into())
-        .and_then(|layout| {
-            let _timer = metrics
-                .checkpoint_op_duration
-                .with_label_values(&["recover"])
-                .start_timer();
-            checkpoint::load_checkpoint(
-                &layout,
-                own_subnet_type,
-                &metrics.checkpoint_metrics,
-                Some(&mut thread_pool),
-                Arc::clone(&fd_factory),
-            )
-        })
+    let cp_layout = state_layout.checkpoint(height)?;
+    let _timer = metrics
+        .checkpoint_op_duration
+        .with_label_values(&["recover"])
+        .start_timer();
+    let state = checkpoint::load_checkpoint(
+        &cp_layout,
+        own_subnet_type,
+        &metrics.checkpoint_metrics,
+        Some(&mut thread_pool),
+        Arc::clone(&fd_factory),
+    )?;
+    Ok((state, cp_layout))
 }
 
 #[cfg(debug_assertions)]
@@ -2013,11 +2010,12 @@ impl StateManagerImpl {
     fn on_synced_checkpoint(
         &self,
         state: ReplicatedState,
-        height: Height,
+        cp_layout: CheckpointLayout<ReadOnly>,
         manifest: Manifest,
         meta_manifest: Arc<MetaManifest>,
         root_hash: CryptoHashOfState,
     ) {
+        let height = cp_layout.height();
         if self
             .state_layout
             .diverged_checkpoint_heights()
@@ -2087,7 +2085,7 @@ impl StateManagerImpl {
         states.states_metadata.insert(
             height,
             StateMetadata {
-                checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
+                checkpoint_layout: Some(cp_layout),
                 bundled_manifest: Some(BundledManifest {
                     root_hash,
                     manifest,
@@ -2801,9 +2799,13 @@ impl StateManager for StateManagerImpl {
 
                     match self.state_layout.clone_checkpoint(checkpoint_height, height) {
                         Ok(_) => {
-                            let state = load_checkpoint(&self.state_layout, height, &self.metrics, self.own_subnet_type, Arc::clone(&self.get_fd_factory()))
+                            let (state, cp_layout) = load_checkpoint(&self.state_layout, height, &self.metrics, self.own_subnet_type, Arc::clone(&self.get_fd_factory()))
                                 .expect("failed to load checkpoint");
-                            self.on_synced_checkpoint(state, height, manifest, meta_manifest, root_hash);
+                            // In the case of subnet recovery, the cloned checkpoint should not contain a marker file.
+                            // We still call remove_unverified_checkpoint_marker() to maintain a consistent pattern.
+                            // Normally, remove_unverified_checkpoint_marker() would be a no-op here.
+                            cp_layout.remove_unverified_checkpoint_marker().expect("unexpected error happens when removing the marker");
+                            self.on_synced_checkpoint(state, cp_layout, manifest, meta_manifest, root_hash);
                             return;
                         }
                         Err(e) => {
@@ -3400,7 +3402,7 @@ impl StateReader for StateManagerImpl {
                 self.own_subnet_type,
                 Arc::clone(&self.get_fd_factory()),
             ) {
-                Ok(state) => Ok(Labeled::new(height, Arc::new(state))),
+                Ok((state, _)) => Ok(Labeled::new(height, Arc::new(state))),
                 Err(CheckpointError::NotFound(_)) => Err(StateManagerError::StateRemoved(height)),
                 Err(err) => {
                     self.metrics
