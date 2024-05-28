@@ -218,7 +218,36 @@ pub mod message_pool {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterQueue {}
+pub struct CanisterQueue {
+    /// FIFO queue of references into the pool and reject response markers.
+    #[prost(message, repeated, tag = "1")]
+    pub queue: ::prost::alloc::vec::Vec<canister_queue::MessageReference>,
+    /// Maximum number of requests or responses that can be enqueued at any one time.
+    #[prost(uint64, tag = "2")]
+    pub capacity: u64,
+    /// Number of slots used by or reserved for responses.
+    #[prost(uint64, tag = "3")]
+    pub response_slots: u64,
+}
+/// Nested message and enum types in `CanisterQueue`.
+pub mod canister_queue {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct MessageReference {
+        #[prost(oneof = "message_reference::R", tags = "1")]
+        pub r: ::core::option::Option<message_reference::R>,
+    }
+    /// Nested message and enum types in `MessageReference`.
+    pub mod message_reference {
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Oneof)]
+        pub enum R {
+            /// A reference into the message pool.
+            #[prost(uint64, tag = "1")]
+            MessageId(u64),
+        }
+    }
+}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterQueues {

@@ -661,6 +661,26 @@ impl TryFrom<pb_queues::MessagePool> for MessagePool {
     }
 }
 
+impl From<&MessageId> for pb_queues::canister_queue::MessageReference {
+    fn from(item: &MessageId) -> Self {
+        use pb_queues::canister_queue::message_reference::R;
+
+        pb_queues::canister_queue::MessageReference {
+            r: Some(R::MessageId(item.0)),
+        }
+    }
+}
+
+impl TryFrom<pb_queues::canister_queue::MessageReference> for MessageId {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_queues::canister_queue::MessageReference) -> Result<Self, Self::Error> {
+        match item.r {
+            Some(pb_queues::canister_queue::message_reference::R::MessageId(id)) => Ok(Self(id)),
+            None => Err(ProxyDecodeError::MissingField("MessageReference::r")),
+        }
+    }
+}
+
 /// Running stats for all messages in a `MessagePool`.
 ///
 /// Slot reservations and memory reservations for guaranteed responses, being

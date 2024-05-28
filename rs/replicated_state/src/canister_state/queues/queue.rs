@@ -1,7 +1,7 @@
 // TODO(MR-569) Remove when `CanisterQueues` has been updated to use this.
 #![allow(dead_code)]
 
-use super::message_pool::{MessageId, MessagePool};
+use super::message_pool::{Kind, MessageId, MessagePool};
 use crate::StateError;
 use ic_base_types::CanisterId;
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -281,6 +281,52 @@ impl CanisterQueue {
         self.queue
             .iter()
             .filter_map(|reference| pool.get(reference.id()).cloned())
+    }
+}
+
+impl From<&CanisterQueue> for pb_queues::CanisterQueue {
+    fn from(item: &CanisterQueue) -> Self {
+        Self {
+            queue: item
+                .queue
+                .iter()
+                .map(|reference| match reference {
+                    MessageReference::Request(id) => id.into(),
+                    MessageReference::Response(id) => id.into(),
+                })
+                .collect(),
+            capacity: item.capacity as u64,
+            response_slots: item.response_slots as u64,
+        }
+    }
+}
+
+impl TryFrom<pb_queues::CanisterQueue> for CanisterQueue {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_queues::CanisterQueue) -> Result<Self, Self::Error> {
+        let queue: VecDeque<MessageReference> = item
+            .queue
+            .into_iter()
+            .map(|reference| match reference.r {
+                Some(pb_queues::canister_queue::message_reference::R::MessageId(_)) => {
+                    let id = MessageId::try_from(reference)?;
+                    match id.kind() {
+                        Kind::Request => Ok(MessageReference::Request(id)),
+                        Kind::Response => Ok(MessageReference::Response(id)),
+                    }
+                }
+                None => Err(ProxyDecodeError::MissingField("MessageReference::r")),
+            })
+            .collect::<Result<_, ProxyDecodeError>>()?;
+        let request_slots = queue.iter().filter(|id| !id.is_response()).count();
+        let res = Self {
+            queue,
+            capacity: item.capacity as usize,
+            request_slots,
+            response_slots: item.response_slots as usize,
+        };
+
+        Ok(res)
     }
 }
 
