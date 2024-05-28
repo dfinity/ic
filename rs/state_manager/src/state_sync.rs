@@ -96,8 +96,13 @@ impl StateSync {
             );
         }
 
-        self.state_manager
-            .on_synced_checkpoint(state, height, manifest, meta_manifest, root_hash);
+        self.state_manager.on_synced_checkpoint(
+            state,
+            ro_layout,
+            manifest,
+            meta_manifest,
+            root_hash,
+        );
 
         let height = self.state_manager.states.read().last_advertised;
         let ids = self.get_all_validated_ids_by_height(height);
