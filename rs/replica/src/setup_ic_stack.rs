@@ -267,7 +267,7 @@ pub fn construct_ic_stack(
         rt_handle_main.clone(),
         metrics_registry,
         config.adapters_config,
-        execution_services.anonymous_query_handler,
+        execution_services.query_execution_service.clone(),
         log.clone(),
         subnet_type,
     );

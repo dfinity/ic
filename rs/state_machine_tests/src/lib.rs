@@ -110,8 +110,8 @@ use ic_types::{
     consensus::certification::Certification,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
-        HttpRequestEnvelope, Payload as MsgPayload, RejectContext, SignedIngress,
-        SignedIngressContent, UserQuery, EXPECTED_MESSAGE_ID_LENGTH,
+        HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
+        SignedIngress, SignedIngressContent, EXPECTED_MESSAGE_ID_LENGTH,
     },
     xnet::StreamIndex,
     CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
@@ -585,7 +585,7 @@ pub struct StateMachine {
     metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_handler:
-        tower::buffer::Buffer<QueryExecutionService, (UserQuery, Option<CertificateDelegation>)>,
+        tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
     runtime: Arc<Runtime>,
     pub state_dir: TempDir,
     checkpoints_enabled: std::sync::atomic::AtomicBool,
@@ -2188,13 +2188,15 @@ impl StateMachine {
         delegation: Option<CertificateDelegation>,
     ) -> Result<WasmResult, UserError> {
         self.certify_latest_state();
-        let user_query = UserQuery {
+        let user_query = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(sender),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver,
-            source: UserId::from(sender),
             method_name: method.to_string(),
             method_payload,
-            ingress_expiry: 0,
-            nonce: None,
         };
         if let Ok((result, _)) = self
             .runtime
