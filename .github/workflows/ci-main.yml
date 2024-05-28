@@ -35,7 +35,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
+      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     env:
@@ -91,7 +91,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
+      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     name: Bazel Build All Config Check
@@ -190,7 +190,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
+      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
     timeout-minutes: 45
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -218,7 +218,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
+      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
     timeout-minutes: 45
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -271,7 +271,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
+      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     steps:
@@ -324,7 +324,7 @@ jobs:
     runs-on:
       labels: default-runner
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
+      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     needs: [build-ic, bazel-test-all]
@@ -386,7 +386,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
+      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
     timeout-minutes: 45
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -422,7 +422,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
+      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
     if: ${{ vars.RUN_CI == 'true' }}
     timeout-minutes: 60
     steps:
