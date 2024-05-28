@@ -33,7 +33,7 @@ use ic_types::batch::QueryStats;
 use ic_types::QueryStatsEpoch;
 use ic_types::{
     ingress::WasmResult,
-    messages::{Blob, Certificate, CertificateDelegation, UserQuery},
+    messages::{Blob, Certificate, CertificateDelegation, Query},
     CanisterId, NumInstructions, PrincipalId,
 };
 use prometheus::Histogram;
@@ -188,10 +188,10 @@ impl InternalHttpQueryHandler {
         self.local_query_execution_stats.set_epoch(epoch);
     }
 
-    /// Handle a query of type `UserQuery` which was sent by an end user.
+    /// Handle a query of type `ICQuery`.
     pub fn query(
         &self,
-        mut query: UserQuery,
+        mut query: Query,
         state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
@@ -199,7 +199,7 @@ impl InternalHttpQueryHandler {
 
         // Update the query receiver if the query is for the management canister.
         if query.receiver == CanisterId::ic_00() {
-            let network = match QueryMethod::from_str(query.method_name.as_str()) {
+            let network = match QueryMethod::from_str(&query.method_name) {
                 Ok(QueryMethod::BitcoinGetUtxosQuery) => {
                     BitcoinGetUtxosArgs::decode(&query.method_payload)?.network
                 }
@@ -209,7 +209,7 @@ impl InternalHttpQueryHandler {
                 Ok(QueryMethod::FetchCanisterLogs) => {
                     return match self.config.embedders_config.feature_flags.canister_logging {
                         FlagStatus::Enabled => fetch_canister_logs(
-                            query.source.get(),
+                            query.source(),
                             state.get_ref(),
                             FetchCanisterLogsRequest::decode(&query.method_payload)?,
                         ),
@@ -384,7 +384,7 @@ impl HttpQueryHandler {
     }
 }
 
-impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
+impl Service<(Query, Option<CertificateDelegation>)> for HttpQueryHandler {
     type Response = QueryExecutionResponse;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -396,7 +396,7 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
 
     fn call(
         &mut self,
-        (query, certificate_delegation): (UserQuery, Option<CertificateDelegation>),
+        (query, certificate_delegation): (Query, Option<CertificateDelegation>),
     ) -> Self::Future {
         let internal = Arc::clone(&self.internal);
         let state_reader = Arc::clone(&self.state_reader);

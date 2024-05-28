@@ -6,7 +6,7 @@ use ic_https_outcalls_service::{
     canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest,
     CanisterHttpSendResponse, HttpHeader, HttpMethod,
 };
-use ic_interfaces::execution_environment::AnonymousQueryService;
+use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
 use ic_management_canister_types::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
@@ -17,7 +17,8 @@ use ic_types::{
         CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
         CanisterHttpResponseContent, Transform, MAX_CANISTER_HTTP_RESPONSE_BYTES,
     },
-    messages::{AnonymousQuery, AnonymousQueryResponse, Request},
+    ingress::WasmResult,
+    messages::{Query, QuerySource, Request},
     CanisterId, NumBytes,
 };
 use std::time::Instant;
@@ -55,7 +56,7 @@ pub struct CanisterHttpAdapterClientImpl {
     grpc_channel: Channel,
     tx: Sender<CanisterHttpResponse>,
     rx: Receiver<CanisterHttpResponse>,
-    anonymous_query_service: AnonymousQueryService,
+    query_service: QueryExecutionService,
     metrics: Metrics,
     subnet_type: SubnetType,
 }
@@ -64,7 +65,7 @@ impl CanisterHttpAdapterClientImpl {
     pub fn new(
         rt_handle: Handle,
         grpc_channel: Channel,
-        anonymous_query_service: AnonymousQueryService,
+        query_service: QueryExecutionService,
         inflight_requests: usize,
         metrics_registry: MetricsRegistry,
         subnet_type: SubnetType,
@@ -76,7 +77,7 @@ impl CanisterHttpAdapterClientImpl {
             grpc_channel,
             tx,
             rx,
-            anonymous_query_service,
+            query_service,
             metrics,
             subnet_type,
         }
@@ -110,7 +111,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         // It is suggested to clone the underlying channel which is cheap.
         // https://docs.rs/tonic/latest/tonic/transport/struct.Channel.html
         let mut http_adapter_client = CanisterHttpServiceClient::new(self.grpc_channel.clone());
-        let anonymous_query_handler = self.anonymous_query_service.clone();
+        let query_handler = self.query_service.clone();
         let metrics = self.metrics.clone();
         let subnet_type = self.subnet_type;
 
@@ -190,7 +191,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     let transform_response = match &request_transform {
                         Some(transform) => {
                             transform_adapter_response(
-                                anonymous_query_handler,
+                                query_handler,
                                 canister_http_payload,
                                 request_sender,
                                 transform,
@@ -267,7 +268,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 /// Make upcall to execution to transform the response.
 /// This gives the ability to prune volatile fields before passing the response to consensus.
 async fn transform_adapter_response(
-    anonymous_query_handler: AnonymousQueryService,
+    query_handler: QueryExecutionService,
     canister_http_response: CanisterHttpResponsePayload,
     transform_canister: CanisterId,
     transform: &Transform,
@@ -287,19 +288,27 @@ async fn transform_adapter_response(
     })?;
 
     // Query to execution.
-    let anonymous_query = AnonymousQuery {
+    let query = Query {
+        source: QuerySource::Anonymous,
         receiver: transform_canister,
         method_name: transform.method_name.to_string(),
         method_payload,
     };
 
-    match Oneshot::new(anonymous_query_handler, anonymous_query).await {
+    match Oneshot::new(query_handler, (query, None)).await {
         Ok(query_response) => match query_response {
-            AnonymousQueryResponse::Rejected {
-                reject_code,
-                reject_message,
-            } => Err((reject_code, reject_message)),
-            AnonymousQueryResponse::Replied { reply } => Ok(reply.arg.to_vec()),
+            Ok((res, _time)) => match res {
+                Ok(wasm_result) => match wasm_result {
+                    WasmResult::Reply(reply) => Ok(reply),
+                    WasmResult::Reject(reject_message) => {
+                        Err((RejectCode::CanisterReject, reject_message))
+                    }
+                },
+                Err(user_error) => Err((user_error.reject_code(), user_error.to_string())),
+            },
+            Err(query_execution_error) => {
+                Err((RejectCode::SysTransient, query_execution_error.to_string()))
+            }
         },
         Err(err) => Err((
             RejectCode::SysFatal,
@@ -327,11 +336,13 @@ mod tests {
         canister_http_service_server::{CanisterHttpService, CanisterHttpServiceServer},
         CanisterHttpSendRequest, CanisterHttpSendResponse,
     };
+    use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::canister_http::Transform;
     use ic_types::{
         canister_http::CanisterHttpMethod,
-        messages::{Blob, CallbackId},
+        messages::{CallbackId, CertificateDelegation},
+        time::current_time,
         time::UNIX_EPOCH,
         Time,
     };
@@ -473,25 +484,31 @@ mod tests {
     }
 
     fn setup_anonymous_query_mock() -> (
-        AnonymousQueryService,
-        Handle<AnonymousQuery, AnonymousQueryResponse>,
+        QueryExecutionService,
+        Handle<(Query, Option<CertificateDelegation>), QueryExecutionResponse>,
     ) {
-        let (service, handle) = tower_test::mock::pair::<AnonymousQuery, AnonymousQueryResponse>();
+        let (service, handle) = tower_test::mock::pair::<
+            (Query, Option<CertificateDelegation>),
+            QueryExecutionResponse,
+        >();
 
-        let infallible_service = tower::service_fn(move |request: AnonymousQuery| {
-            let mut service_clone = service.clone();
-            async move {
-                Ok::<AnonymousQueryResponse, std::convert::Infallible>({
-                    service_clone
-                        .ready()
-                        .await
-                        .expect("Mocking Infallible service. Waiting for readiness failed.")
-                        .call(request)
-                        .await
-                        .expect("Mocking Infallible service and can therefore not return an error.")
-                })
-            }
-        });
+        let infallible_service =
+            tower::service_fn(move |request: (Query, Option<CertificateDelegation>)| {
+                let mut service_clone = service.clone();
+                async move {
+                    Ok::<QueryExecutionResponse, std::convert::Infallible>({
+                        service_clone
+                            .ready()
+                            .await
+                            .expect("Mocking Infallible service. Waiting for readiness failed.")
+                            .call(request)
+                            .await
+                            .expect(
+                                "Mocking Infallible service and can therefore not return an error.",
+                            )
+                    })
+                }
+            });
         (BoxCloneService::new(infallible_service), handle)
     }
 
@@ -525,10 +542,7 @@ mod tests {
 
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
-            rsp.send_response(AnonymousQueryResponse::Rejected {
-                reject_code: RejectCode::SysFatal,
-                reject_message: "dsf".to_string(),
-            });
+            rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
         let mut client = CanisterHttpAdapterClientImpl::new(
@@ -580,10 +594,7 @@ mod tests {
 
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
-            rsp.send_response(AnonymousQueryResponse::Rejected {
-                reject_code: RejectCode::SysFatal,
-                reject_message: "dsf".to_string(),
-            });
+            rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
         let mut client = CanisterHttpAdapterClientImpl::new(
@@ -635,11 +646,15 @@ mod tests {
         tokio::spawn(async move {
             let (req, rsp) = handle.next_request().await.unwrap();
             println!("{:?}", req);
-            rsp.send_response(AnonymousQueryResponse::Replied {
-                reply: ic_types::messages::AnonymousQueryResponseReply {
-                    arg: Blob(vec![0; (MAX_CANISTER_HTTP_RESPONSE_BYTES as usize) + 1]),
-                },
-            });
+            rsp.send_response(Ok((
+                Ok(WasmResult::Reply(vec![
+                    0;
+                    (MAX_CANISTER_HTTP_RESPONSE_BYTES
+                        as usize)
+                        + 1
+                ])),
+                current_time(),
+            )));
         });
 
         let mut client = CanisterHttpAdapterClientImpl::new(
@@ -697,10 +712,7 @@ mod tests {
 
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
-            rsp.send_response(AnonymousQueryResponse::Rejected {
-                reject_code: RejectCode::SysFatal,
-                reject_message: "dsf".to_string(),
-            });
+            rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
         let mut client = CanisterHttpAdapterClientImpl::new(
@@ -767,24 +779,23 @@ mod tests {
         let adapter_b = adapter_body.clone();
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
-            rsp.send_response(AnonymousQueryResponse::Replied {
-                reply: ic_types::messages::AnonymousQueryResponseReply {
-                    arg: Blob(
-                        Encode!(&ic_management_canister_types::CanisterHttpResponsePayload {
-                            status: 200_u128,
-                            headers: adapter_h
-                                .clone()
-                                .into_iter()
-                                .map(|HttpHeader { name, value }| {
-                                    ic_management_canister_types::HttpHeader { name, value }
-                                })
-                                .collect(),
-                            body: adapter_b.clone(),
-                        })
-                        .unwrap(),
-                    ),
-                },
-            });
+            rsp.send_response(Ok((
+                Ok(WasmResult::Reply(
+                    Encode!(&ic_management_canister_types::CanisterHttpResponsePayload {
+                        status: 200_u128,
+                        headers: adapter_h
+                            .clone()
+                            .into_iter()
+                            .map(|HttpHeader { name, value }| {
+                                ic_management_canister_types::HttpHeader { name, value }
+                            })
+                            .collect(),
+                        body: adapter_b.clone(),
+                    })
+                    .unwrap(),
+                )),
+                current_time(),
+            )));
         });
 
         let mut client = CanisterHttpAdapterClientImpl::new(
@@ -856,10 +867,7 @@ mod tests {
 
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
-            rsp.send_response(AnonymousQueryResponse::Rejected {
-                reject_code: RejectCode::SysFatal,
-                reject_message: "test fail".to_string(),
-            });
+            rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
         let mut client = CanisterHttpAdapterClientImpl::new(
@@ -890,8 +898,8 @@ mod tests {
                         build_mock_canister_http_response_reject(
                             420,
                             UNIX_EPOCH,
-                            RejectCode::SysFatal,
-                            "test fail".to_string(),
+                            RejectCode::SysTransient,
+                            QueryExecutionError::CertifiedStateUnavailable.to_string(),
                         )
                     );
                     break;
@@ -912,10 +920,7 @@ mod tests {
 
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
-            rsp.send_response(AnonymousQueryResponse::Rejected {
-                reject_code: RejectCode::SysFatal,
-                reject_message: "test fail".to_string(),
-            });
+            rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
         // Create a client with a capacity of 2.

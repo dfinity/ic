@@ -13,8 +13,8 @@ use ic_types::{
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{
-        AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, MessageId,
-        SignedIngressContent, UserQuery,
+        AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, MessageId, Query,
+        SignedIngressContent,
     },
     CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, Time,
 };
@@ -25,6 +25,7 @@ use std::{
     fmt, ops,
 };
 use strum_macros::EnumIter;
+use thiserror::Error;
 use tower::util::BoxCloneService;
 
 /// Instance execution statistics. The stats are cumulative and
@@ -469,7 +470,9 @@ pub type IngressFilterService = BoxCloneService<
 >;
 
 /// Errors that can occur when handling a query execution request.
+#[derive(Debug, Error)]
 pub enum QueryExecutionError {
+    #[error("Certified state is not available yet")]
     CertifiedStateUnavailable,
 }
 
@@ -480,7 +483,7 @@ pub type QueryExecutionResponse =
 
 /// Interface for the component to execute queries.
 pub type QueryExecutionService =
-    BoxCloneService<(UserQuery, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
+    BoxCloneService<(Query, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
 
 /// Errors that can be returned when reading/writing from/to ingress history.
 #[derive(Clone, Debug, PartialEq, Eq)]

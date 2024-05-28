@@ -50,8 +50,8 @@ use ic_types::{
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId,
-        RequestOrResponse, Response, UserQuery, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId, Query,
+        QuerySource, RequestOrResponse, Response, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     time::UNIX_EPOCH,
     CanisterId, Cycles, Height, NumInstructions, NumOsPages, QueryStatsEpoch, Time, UserId,
@@ -1053,13 +1053,15 @@ impl ExecutionTest {
     ) -> Result<WasmResult, UserError> {
         let state = Arc::new(self.state.take().unwrap());
 
-        let query = UserQuery {
-            source: user_test_id(0),
+        let query = Query {
+            source: QuerySource::User {
+                user_id: user_test_id(0),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_id,
             method_name: method_name.to_string(),
             method_payload,
-            ingress_expiry: 0,
-            nonce: None,
         };
         let result = self.query(query, Arc::clone(&state), vec![]);
 
@@ -1489,7 +1491,7 @@ impl ExecutionTest {
     /// Consider to use the simplified `non_replicated_query()` instead.
     pub fn query(
         &self,
-        query: UserQuery,
+        query: Query,
         state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
