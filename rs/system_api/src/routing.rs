@@ -560,7 +560,11 @@ mod tests {
             .unwrap_err(),
             ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
                 err,
-                format!("Requested unknown iDGK key ecdsa:{} on subnet {}, subnet has keys: []", ecdsa_key_id1(), subnet_test_id(2))
+                format!(
+                    "Requested unknown iDGK key {} on subnet {}, subnet has keys: []",
+                    MasterPublicKeyId::Ecdsa(ecdsa_key_id1()),
+                    subnet_test_id(2),
+                )
             )
         )
     }
@@ -577,7 +581,11 @@ mod tests {
             .unwrap_err(),
             ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
                 err,
-                format!("Requested iDKG key ecdsa:{} from unknown subnet {}", ecdsa_key_id1(), subnet_test_id(3))
+                format!(
+                    "Requested iDKG key {} from unknown subnet {}",
+                    MasterPublicKeyId::Ecdsa(ecdsa_key_id1()),
+                    subnet_test_id(3),
+                )
             )
         )
     }
@@ -595,8 +603,9 @@ mod tests {
                 .unwrap_err(),
                 ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
                     err,
-                    format!("Requested unknown iDGK key ecdsa:{} on subnet {}, subnet has keys: []",
-                        ecdsa_key_id1(),
+                    format!(
+                        "Requested unknown iDGK key {} on subnet {}, subnet has keys: []",
+                        MasterPublicKeyId::Ecdsa(ecdsa_key_id1()),
                         subnet_test_id(2),
                 )
             )
@@ -606,19 +615,20 @@ mod tests {
     #[test]
     fn resolve_compute_initial_ecdsa_dealings_subnet_not_found_error() {
         assert_matches!(
-                resolve_destination(
-                    &network_with_ecdsa_subnets(),
-                    &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
-                    // Subnet 3 doesn't exist
-                    &compute_initial_ecdsa_dealings_req(ecdsa_key_id1(), subnet_test_id(3)),
-                    subnet_test_id(2),
-                )
-                .unwrap_err(),
-                ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
-                    err,
-                    format!("Requested iDKG key ecdsa:{} from unknown subnet {}",
-                        ecdsa_key_id1(),
-                        subnet_test_id(3),
+            resolve_destination(
+                &network_with_ecdsa_subnets(),
+                &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
+                // Subnet 3 doesn't exist
+                &compute_initial_ecdsa_dealings_req(ecdsa_key_id1(), subnet_test_id(3)),
+                subnet_test_id(2),
+            )
+            .unwrap_err(),
+            ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
+                err,
+                format!(
+                    "Requested iDKG key {} from unknown subnet {}",
+                    MasterPublicKeyId::Ecdsa(ecdsa_key_id1()),
+                    subnet_test_id(3),
                 )
             )
         )
@@ -649,7 +659,10 @@ mod tests {
         .unwrap_err(),
         ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
                 err,
-                format!("Requested unknown iDKG key: ecdsa:{}, existing keys with signing enabled: []", ecdsa_key_id1())
+                format!(
+                    "Requested unknown iDKG key: {}, existing keys with signing enabled: []",
+                    MasterPublicKeyId::Ecdsa(ecdsa_key_id1()),
+                )
             )
         )
     }
