@@ -3,7 +3,7 @@
 FROM ubuntu@sha256:48c35f3de33487442af224ed4aabac19fd9bfbd91ee90e9471d412706b20ba73
 ENV TZ=UTC
 
-COPY --chown=0700 ./gitlab-ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
+COPY --chmod=0700 ./gitlab-ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
 
 ARG PACKAGE_FILE=gitlab-ci/container/files/packages.common
 COPY ${PACKAGE_FILE} /tmp/
