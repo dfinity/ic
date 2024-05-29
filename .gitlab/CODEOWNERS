@@ -6,6 +6,7 @@
 /.devcontainer/           @dfinity-lab/teams/idx
 /.github/                 @dfinity-lab/teams/idx
 /buf.yaml                 @dfinity-lab/teams/message-routing-owners
+/cpp/                     @dfinity-lab/teams/node-team
 /hs/                      @dfinity-lab/teams/utopia
 /licenses/                @dfinity-lab/teams/idx
 /bin/ict                  @dfinity-lab/teams/idx
