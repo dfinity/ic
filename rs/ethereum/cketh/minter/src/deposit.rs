@@ -30,7 +30,7 @@ async fn mint() {
         Err(_) => return,
     };
 
-    let (eth_ledger_canister_id, events) = read_state(|s| (s.ledger_id, s.events_to_mint()));
+    let (eth_ledger_canister_id, events) = read_state(|s| (s.cketh_ledger_id, s.events_to_mint()));
     let mut error_count = 0;
 
     for event in events {
