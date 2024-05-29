@@ -72,14 +72,14 @@ oSMDIQCJuBJPWt2WWxv0zQmXcXMjY+fP0CJSsB80ztXpOFd2ZQ==
 }
 
 // Wrapper of [RosettaClient] with utility functions that
-// can trap in case it cannot communicates with the
+// can panic in case it cannot communicates with the
 // Rosetta node.
 struct RosettaTestingClient {
     rosetta_client: RosettaClient,
 }
 
 impl RosettaTestingClient {
-    async fn network_list_or_trap(&self) -> NetworkListResponse {
+    async fn network_list_or_panic(&self) -> NetworkListResponse {
         self.rosetta_client
             .network_list()
             .await
@@ -88,21 +88,21 @@ impl RosettaTestingClient {
 
     // Rosetta always returns a single network in /network/list.
     // This utility calls /network/list and extracts the single network
-    async fn network_or_trap(&self) -> NetworkIdentifier {
-        let mut networks = self.network_list_or_trap().await.network_identifiers;
+    async fn network_or_panic(&self) -> NetworkIdentifier {
+        let mut networks = self.network_list_or_panic().await.network_identifiers;
         assert_eq!(networks.len(), 1); // sanity check
         networks.remove(0)
     }
 
-    async fn network_status_or_trap(&self) -> NetworkStatusResponse {
-        let network = self.network_or_trap().await;
+    async fn network_status_or_panic(&self) -> NetworkStatusResponse {
+        let network = self.network_or_panic().await;
         self.rosetta_client
             .network_status(network)
             .await
             .expect("Unable to call /network/status")
     }
 
-    async fn status_or_trap(&self) -> RosettaStatus {
+    async fn status_or_panic(&self) -> RosettaStatus {
         let url = self.rosetta_client.url("/status");
         self.rosetta_client
             .http_client
@@ -115,8 +115,8 @@ impl RosettaTestingClient {
             .expect("Unable to parse response body for /status")
     }
 
-    async fn wait_or_trap_until_synced_up_to(&self, block_index: u64) {
-        let mut network_status = self.network_status_or_trap().await;
+    async fn wait_or_panic_until_synced_up_to(&self, block_index: u64) {
+        let mut network_status = self.network_status_or_panic().await;
         let mut attempts = 0;
         while network_status.current_block_identifier.index < block_index {
             if attempts >= MAX_ATTEMPTS {
@@ -127,7 +127,7 @@ impl RosettaTestingClient {
             }
             attempts += 1;
             sleep(DURATION_BETWEEN_ATTEMPTS);
-            network_status = self.network_status_or_trap().await;
+            network_status = self.network_status_or_panic().await;
         }
     }
 }
@@ -304,7 +304,7 @@ fn test_example() {
     run_pocket_ic_test(|env: &mut TestEnv| {
         Box::pin(async move {
             // block 0 always exists in this setup
-            env.rosetta.wait_or_trap_until_synced_up_to(0).await;
+            env.rosetta.wait_or_panic_until_synced_up_to(0).await;
         })
     });
 }
@@ -315,7 +315,7 @@ fn test_rosetta_blocks() {
         Box::pin(async move {
             // Check that by default the rosetta blocks mode is not enabled
             assert_eq!(
-                env.rosetta.status_or_trap().await.rosetta_blocks_mode,
+                env.rosetta.status_or_panic().await.rosetta_blocks_mode,
                 RosettaBlocksMode::Disabled
             );
 
@@ -323,7 +323,7 @@ fn test_rosetta_blocks() {
             // rosetta blocks mode
             env.restart_rosetta_node(false).await;
             assert_eq!(
-                env.rosetta.status_or_trap().await.rosetta_blocks_mode,
+                env.rosetta.status_or_panic().await.rosetta_blocks_mode,
                 RosettaBlocksMode::Disabled
             );
 
@@ -334,14 +334,14 @@ fn test_rosetta_blocks() {
             // of the next block to sync (i.e. current block index + 1)
             let first_rosetta_block_index = env
                 .rosetta
-                .network_status_or_trap()
+                .network_status_or_panic()
                 .await
                 .current_block_identifier
                 .index
                 + 1;
             env.restart_rosetta_node(true).await;
             assert_eq!(
-                env.rosetta.status_or_trap().await.rosetta_blocks_mode,
+                env.rosetta.status_or_panic().await.rosetta_blocks_mode,
                 RosettaBlocksMode::Enabled {
                     first_rosetta_block_index
                 }
@@ -352,7 +352,7 @@ fn test_rosetta_blocks() {
             // without passing --enable-rosetta-blocks
             env.restart_rosetta_node(false).await;
             assert_eq!(
-                env.rosetta.status_or_trap().await.rosetta_blocks_mode,
+                env.rosetta.status_or_panic().await.rosetta_blocks_mode,
                 RosettaBlocksMode::Enabled {
                     first_rosetta_block_index
                 }
