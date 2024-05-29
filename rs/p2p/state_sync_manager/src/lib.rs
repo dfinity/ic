@@ -157,15 +157,15 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 info!(self.log, "Cleaning up state sync {}", artifact_id.height);
                 self.ongoing_state_sync = None;
             } else {
-                if self.state_sync.should_cancel(&ongoing.artifact_id) {
+                if self.state_sync.cancel_if_running(&ongoing.artifact_id) {
                     ongoing.shutdown.cancel();
                 }
                 return;
             }
         }
-        // `start_state_sync` should not be called if we have ongoing state sync!
+        // `maybe_start_state_sync` should not be called if we have ongoing state sync!
         debug_assert!(self.ongoing_state_sync.is_none());
-        if let Some(chunkable) = self.state_sync.start_state_sync(&artifact_id) {
+        if let Some(chunkable) = self.state_sync.maybe_start_state_sync(&artifact_id) {
             info!(
                 self.log,
                 "Starting state sync for height {}", artifact_id.height
@@ -174,7 +174,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
 
             // This spawns an event loop that downloads chunks for the specified Id.
             // When the state sync is done or cancelled it will drop the Chunkable object.
-            // Until the Chunkable object is dropped 'start_state_sync' will always return None.
+            // Until the Chunkable object is dropped 'maybe_start_state_sync' will always return None.
             let ongoing = start_ongoing_state_sync(
                 self.log.clone(),
                 &self.rt,
@@ -289,7 +289,7 @@ mod tests {
             let finished_c = finished.clone();
             let mut s = MockStateSync::<TestMessage>::default();
             let mut seq = Sequence::new();
-            s.expect_should_cancel().returning(move |_| false);
+            s.expect_cancel_if_running().returning(move |_| false);
             s.expect_available_states().return_const(vec![]);
             let mut t = MockTransport::default();
             t.expect_rpc().times(50).returning(|p, _| {
@@ -321,7 +321,7 @@ mod tests {
                     Ok(())
                 })
                 .in_sequence(&mut seq);
-            s.expect_start_state_sync()
+            s.expect_maybe_start_state_sync()
                 .once()
                 .return_once(|_| Some(Box::new(c)));
 
