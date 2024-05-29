@@ -7,10 +7,15 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "@crate_index//:axum",
-    "@crate_index//:axum_server_0_6_0",
     "@crate_index//:clap_3_2_25",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-util",
+    "@crate_index//:rustls",
+    "@crate_index//:rustls-pemfile",
     "@crate_index//:serde_json",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-rustls",
+    "@crate_index//:tower",
 ]
 
 rust_binary(
@@ -19,8 +24,6 @@ rust_binary(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES,
 )
-
-# httpbin docker image
 
 ## Create a layer with a httpbin user
 
