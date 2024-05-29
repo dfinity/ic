@@ -1,8 +1,7 @@
 [Unit]
 Description=Set up ssh account keys
-After=bootstrap-ic-node.service
-Requires=bootstrap-ic-node.service
 Before=ssh.service
+# bootstrap-ic-node.service (if it exists) lists this service as a reverse dependency
 
 [Install]
 WantedBy=multi-user.target

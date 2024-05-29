@@ -74,8 +74,8 @@ rootfs_files = {
     # ssh
     Label("ssh/setup-ssh-keys/setup-ssh-keys.sh"): "/opt/ic/bin/setup-ssh-keys.sh",
     Label("ssh/setup-ssh-keys/setup-ssh-keys.service"): "/etc/systemd/system/setup-ssh-keys.service",
-    Label("ssh/setup-ssh-account-keys/hostos/setup-ssh-account-keys.sh"): "/opt/ic/bin/setup-ssh-account-keys.sh",
-    Label("ssh/setup-ssh-account-keys/hostos/setup-ssh-account-keys.service"): "/etc/systemd/system/setup-ssh-account-keys.service",
+    Label("ssh/setup-ssh-account-keys/setup-ssh-account-keys.sh"): "/opt/ic/bin/setup-ssh-account-keys.sh",
+    Label("ssh/setup-ssh-account-keys/setup-ssh-account-keys.service"): "/etc/systemd/system/setup-ssh-account-keys.service",
     Label("ssh/deploy-updated-ssh-account-keys/deploy-updated-ssh-account-keys.sh"): "/opt/ic/bin/deploy-updated-ssh-account-keys.sh",
     Label("ssh/deploy-updated-ssh-account-keys/deploy-updated-ssh-account-keys.service"): "/etc/systemd/system/deploy-updated-ssh-account-keys.service",
 
