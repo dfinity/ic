@@ -23,7 +23,7 @@ ic-metrics = { path = "../../monitoring/metrics" }
 parking_lot = "0.12.1"
 prometheus = { workspace = true }
 prost = { workspace = true }
-rand = "0.8.3"
+rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }

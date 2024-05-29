@@ -41,7 +41,7 @@ ic-universal-canister = { path = "../universal_canister/lib" }
 lazy_static = "1.4.0"
 nix = { workspace = true }
 parking_lot = "0.12.1"
-rand = "0.8"
+rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }

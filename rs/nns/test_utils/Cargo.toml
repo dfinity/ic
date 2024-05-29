@@ -64,7 +64,7 @@ num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prometheus-parse = "0.2.4"
 prost = { workspace = true }
-rand = { version = "0.8.4" }
+rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 serde = { workspace = true }
 tokio = { workspace = true }

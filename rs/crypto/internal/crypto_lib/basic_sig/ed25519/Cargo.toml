@@ -17,7 +17,7 @@ ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
-rand = "0.8.5"
+rand = { workspace = true }
 rand_chacha = "0.3.1"
 serde = { workspace = true }
 simple_asn1 = { workspace = true }

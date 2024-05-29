@@ -28,7 +28,7 @@ itertools = { workspace = true }
 indicatif = "0.17.3"
 lazy_static = "1.4.0"
 prometheus = { workspace = true }
-rand = "0.8.4"
+rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
