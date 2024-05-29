@@ -56,6 +56,7 @@ pub const SUBNET_QUEUES_FILE: &str = "subnet_queues.pbuf";
 pub const SYSTEM_METADATA_FILE: &str = "system_metadata.pbuf";
 pub const STATS_FILE: &str = "stats.pbuf";
 pub const WASM_FILE: &str = "software.wasm";
+pub const UNVERIFIED_CHECKPOINT_MARKER: &str = "unverified_checkpoint_marker";
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
@@ -363,8 +364,13 @@ impl TipHandler {
         debug_assert!(cp.root.exists());
 
         let file_copy_instruction = |path: &Path| {
-            if path.extension() == Some(OsStr::new("pbuf")) {
+            if path.extension() == Some(OsStr::new("pbuf"))
+                || path.ends_with(UNVERIFIED_CHECKPOINT_MARKER)
+            {
                 // Do not copy protobufs.
+                //
+                // At this point, the unverified checkpoint marker may still be present in the checkpoint.
+                // We should not copy it back to the tip because it will be created later when promoting the tip as the next checkpoint.
                 CopyInstruction::Skip
             } else if path.extension() == Some(OsStr::new("bin"))
                 && lsmt_storage == FlagStatus::Disabled
@@ -1436,7 +1442,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     /// Path of unverified checkpoint marker for the given height.
     pub fn unverified_checkpoint_marker(&self) -> PathBuf {
-        self.root.join("unverified_checkpoint_marker")
+        self.root.join(UNVERIFIED_CHECKPOINT_MARKER)
     }
 
     /// Creates the unverified checkpoint marker.
