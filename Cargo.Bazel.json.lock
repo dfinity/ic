@@ -1,5 +1,5 @@
 {
-  "checksum": "44371154cd829021c65efd27442ffa516af21acfd893a1d03e911cc3f84b26c7",
+  "checksum": "b330f76c36dd63b798b98f5f29d67c7b10004942b7ad9590cdc0ec34cad3e87b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17824,7 +17824,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "rustls-pemfile 1.0.3",
+              "id": "rustls-pemfile 2.0.0",
               "target": "rustls_pemfile"
             },
             {
@@ -78011,7 +78011,7 @@
     "rustls 0.21.12",
     "rustls 0.23.8",
     "rustls-native-certs 0.7.0",
-    "rustls-pemfile 1.0.3",
+    "rustls-pemfile 2.0.0",
     "rustls-pki-types 1.7.0",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",
