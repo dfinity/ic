@@ -25,5 +25,5 @@ rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 signature = { workspace = true }
 time = "0.3.20"
 tokio = { workspace = true }
-tokio-rustls = { workspace = true }
+tokio-rustls = { version = "0.24.1", features = ["dangerous_configuration"] }
 x509-cert = { workspace = true }

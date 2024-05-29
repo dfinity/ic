@@ -509,7 +509,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "hyper": crate.spec(
-                version = "^1.2.0",
+                version = "^1.3.1",
                 features = [
                     "full",
                 ],
@@ -933,7 +933,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "prometheus": crate.spec(
-                version = "^0.13.3",
+                version = "^0.13.4",
                 features = [
                     "process",
                 ],
@@ -970,6 +970,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = [
                     "ring",
                 ],
+            ),
+            "quinn-udp": crate.spec(
+                version = "^0.5.1",
             ),
             "quote": crate.spec(
                 version = "^1.0",
@@ -1218,7 +1221,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^2.6.0",
             ),
             "socket2": crate.spec(
-                version = "^0.5.6",
+                version = "^0.5.7",
                 features = [
                     "all",
                 ],
@@ -1297,7 +1300,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.2.0",
             ),
             "tokio-metrics": crate.spec(
-                version = "^0.3.0",
+                version = "^0.3.1",
             ),
             "tokio_rustls_0_24_1": crate.spec(
                 package = "tokio-rustls",
@@ -1329,7 +1332,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4.2",
             ),
             "tokio-util": crate.spec(
-                version = "^0.7.10",
+                version = "^0.7.11",
                 features = [
                     "codec",
                     "time",
@@ -1412,7 +1415,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.22.0",
             ),
             "turmoil": crate.spec(
-                version = "^0.6",
+                version = "^0.6.2",
             ),
             "url": crate.spec(
                 version = "^2.4.1",
@@ -1521,7 +1524,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "zstd": crate.spec(
-                version = "^0.13.0",
+                version = "^0.13.1",
             ),
         },
         splicing_config = splicing_config(
