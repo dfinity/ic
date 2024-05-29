@@ -1,5 +1,5 @@
 {
-  "checksum": "b330f76c36dd63b798b98f5f29d67c7b10004942b7ad9590cdc0ec34cad3e87b",
+  "checksum": "b78d757d69329cd0dd3d1cc857a409e2c43bb2e26646d622b70fae9581542c33",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -221,7 +221,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.10",
+              "id": "tokio-util 0.7.11",
               "target": "tokio_util"
             },
             {
@@ -401,7 +401,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.10",
+              "id": "tokio-util 0.7.11",
               "target": "tokio_util"
             },
             {
@@ -4382,7 +4382,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.2.0",
+              "id": "hyper 1.3.1",
               "target": "hyper"
             },
             {
@@ -4975,7 +4975,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "prometheus 0.13.3",
+              "id": "prometheus 0.13.4",
               "target": "prometheus"
             },
             {
@@ -5164,7 +5164,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.2.0",
+              "id": "hyper 1.3.1",
               "target": "hyper"
             },
             {
@@ -17268,7 +17268,7 @@
               "alias": "hyper_0_14_27"
             },
             {
-              "id": "hyper 1.2.0",
+              "id": "hyper 1.3.1",
               "target": "hyper"
             },
             {
@@ -17674,7 +17674,7 @@
               "target": "procfs"
             },
             {
-              "id": "prometheus 0.13.3",
+              "id": "prometheus 0.13.4",
               "target": "prometheus"
             },
             {
@@ -17708,6 +17708,10 @@
             {
               "id": "quinn 0.10.2",
               "target": "quinn"
+            },
+            {
+              "id": "quinn-udp 0.5.1",
+              "target": "quinn_udp"
             },
             {
               "id": "quote 1.0.35",
@@ -17941,7 +17945,7 @@
               "target": "slog_term"
             },
             {
-              "id": "socket2 0.5.6",
+              "id": "socket2 0.5.7",
               "target": "socket2"
             },
             {
@@ -18042,7 +18046,7 @@
               "target": "tokio_test"
             },
             {
-              "id": "tokio-util 0.7.10",
+              "id": "tokio-util 0.7.11",
               "target": "tokio_util"
             },
             {
@@ -18119,7 +18123,7 @@
               "target": "trust_dns_resolver"
             },
             {
-              "id": "turmoil 0.6.0",
+              "id": "turmoil 0.6.2",
               "target": "turmoil"
             },
             {
@@ -18223,7 +18227,7 @@
               "target": "zeroize"
             },
             {
-              "id": "zstd 0.13.0",
+              "id": "zstd 0.13.1",
               "target": "zstd"
             }
           ],
@@ -24351,7 +24355,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.10",
+              "id": "tokio-util 0.7.11",
               "target": "tokio_util"
             },
             {
@@ -24438,7 +24442,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.10",
+              "id": "tokio-util 0.7.11",
               "target": "tokio_util"
             },
             {
@@ -26784,14 +26788,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "hyper 1.2.0": {
+    "hyper 1.3.1": {
       "name": "hyper",
-      "version": "1.2.0",
+      "version": "1.3.1",
       "package_url": "https://github.com/hyperium/hyper",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyper/1.2.0/download",
-          "sha256": "186548d73ac615b32a73aafe38fb4f56c0d340e110e5a200bcadbaf2e199263a"
+          "url": "https://static.crates.io/crates/hyper/1.3.1/download",
+          "sha256": "fe575dd17d0862a9a33781c8c4696a55c320909004a67a00fb286ba8b1bc496d"
         }
       },
       "targets": [
@@ -26882,7 +26886,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.2.0"
+        "version": "1.3.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -27037,7 +27041,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 1.2.0",
+              "id": "hyper 1.3.1",
               "target": "hyper"
             },
             {
@@ -27142,7 +27146,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 1.2.0",
+              "id": "hyper 1.3.1",
               "target": "hyper"
             },
             {
@@ -27405,7 +27409,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 1.2.0",
+              "id": "hyper 1.3.1",
               "target": "hyper"
             },
             {
@@ -27413,7 +27417,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "socket2 0.5.6",
+              "id": "socket2 0.5.7",
               "target": "socket2"
             },
             {
@@ -27494,7 +27498,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.2.0",
+              "id": "hyper 1.3.1",
               "target": "hyper"
             },
             {
@@ -27760,7 +27764,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 1.2.0",
+              "id": "hyper 1.3.1",
               "target": "hyper"
             },
             {
@@ -31451,7 +31455,7 @@
           "selects": {
             "cfg(windows)": [
               {
-                "id": "socket2 0.5.6",
+                "id": "socket2 0.5.7",
                 "target": "socket2"
               },
               {
@@ -33172,7 +33176,7 @@
               "target": "tokio_tungstenite"
             },
             {
-              "id": "tokio-util 0.7.10",
+              "id": "tokio-util 0.7.11",
               "target": "tokio_util"
             },
             {
@@ -33443,7 +33447,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.10",
+              "id": "tokio-util 0.7.11",
               "target": "tokio_util"
             },
             {
@@ -35463,81 +35467,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "linux-raw-sys 0.1.4": {
-      "name": "linux-raw-sys",
-      "version": "0.1.4",
-      "package_url": "https://github.com/sunfishcode/linux-raw-sys",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/linux-raw-sys/0.1.4/download",
-          "sha256": "f051f77a7c8e6957c0696eac88f26b0117e54f52d3fc682ab19397a8812846a4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "linux_raw_sys",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "linux_raw_sys",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "general",
-            "no_std"
-          ],
-          "selects": {
-            "aarch64-unknown-linux-gnu": [
-              "errno",
-              "ioctl"
-            ],
-            "aarch64-unknown-nixos-gnu": [
-              "errno",
-              "ioctl"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "errno",
-              "ioctl"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "errno",
-              "ioctl"
-            ],
-            "i686-unknown-linux-gnu": [
-              "errno",
-              "ioctl"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "errno",
-              "ioctl"
-            ],
-            "x86_64-unknown-nixos-gnu": [
-              "errno",
-              "ioctl"
-            ]
-          }
-        },
-        "edition": "2018",
-        "version": "0.1.4"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "linux-raw-sys 0.3.8": {
       "name": "linux-raw-sys",
       "version": "0.3.8",
@@ -35625,31 +35554,40 @@
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
-              "prctl"
+              "prctl",
+              "system"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "prctl"
+              "prctl",
+              "system"
             ],
             "arm-unknown-linux-gnueabi": [
-              "prctl"
+              "prctl",
+              "system"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "prctl"
+              "prctl",
+              "system"
             ],
             "i686-unknown-linux-gnu": [
-              "prctl"
+              "prctl",
+              "system"
             ],
             "powerpc-unknown-linux-gnu": [
-              "prctl"
+              "prctl",
+              "system"
             ],
             "s390x-unknown-linux-gnu": [
-              "prctl"
+              "prctl",
+              "system"
             ],
             "x86_64-unknown-linux-gnu": [
-              "prctl"
+              "prctl",
+              "system"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "prctl"
+              "prctl",
+              "system"
             ]
           }
         },
@@ -37404,7 +37342,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.2.0",
+              "id": "hyper 1.3.1",
               "target": "hyper"
             },
             {
@@ -37440,7 +37378,7 @@
               "target": "pretty_assertions"
             },
             {
-              "id": "prometheus 0.13.3",
+              "id": "prometheus 0.13.4",
               "target": "prometheus"
             },
             {
@@ -41951,7 +41889,7 @@
               "target": "opentelemetry_sdk"
             },
             {
-              "id": "prometheus 0.13.3",
+              "id": "prometheus 0.13.4",
               "target": "prometheus"
             },
             {
@@ -42020,7 +41958,7 @@
               "target": "opentelemetry_sdk"
             },
             {
-              "id": "prometheus 0.13.3",
+              "id": "prometheus 0.13.4",
               "target": "prometheus"
             },
             {
@@ -47415,14 +47353,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "procfs 0.14.2": {
+    "procfs 0.16.0": {
       "name": "procfs",
-      "version": "0.14.2",
+      "version": "0.16.0",
       "package_url": "https://github.com/eminence/procfs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/procfs/0.14.2/download",
-          "sha256": "b1de8dacb0873f77e6aefc6d71e044761fcc68060290f5b1089fcdf84626bb69"
+          "url": "https://static.crates.io/crates/procfs/0.16.0/download",
+          "sha256": "731e0d9356b0c25f16f33b5be79b1c57b562f141ebfcdb0ad8ac2c13a24293b4"
         }
       },
       "targets": [
@@ -47459,12 +47397,8 @@
         "deps": {
           "common": [
             {
-              "id": "bitflags 1.3.2",
+              "id": "bitflags 2.4.1",
               "target": "bitflags"
-            },
-            {
-              "id": "byteorder 1.5.0",
-              "target": "byteorder"
             },
             {
               "id": "hex 0.4.3",
@@ -47475,18 +47409,22 @@
               "target": "lazy_static"
             },
             {
-              "id": "procfs 0.14.2",
+              "id": "procfs 0.16.0",
               "target": "build_script_build"
             },
             {
-              "id": "rustix 0.36.15",
+              "id": "procfs-core 0.16.0",
+              "target": "procfs_core"
+            },
+            {
+              "id": "rustix 0.38.32",
               "target": "rustix"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.14.2"
+        "version": "0.16.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -47498,16 +47436,68 @@
         "Apache-2.0",
         "MIT"
       ],
-      "license_file": "LICENSE-APACHE"
+      "license_file": null
     },
-    "prometheus 0.13.3": {
+    "procfs-core 0.16.0": {
+      "name": "procfs-core",
+      "version": "0.16.0",
+      "package_url": "https://github.com/eminence/procfs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/procfs-core/0.16.0/download",
+          "sha256": "2d3554923a69f4ce04c4a754260c338f505ce22642d3830e049a399fc2059a29"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "procfs_core",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "procfs_core",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.4.1",
+              "target": "bitflags"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.16.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "prometheus 0.13.4": {
       "name": "prometheus",
-      "version": "0.13.3",
+      "version": "0.13.4",
       "package_url": "https://github.com/tikv/rust-prometheus",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/prometheus/0.13.3/download",
-          "sha256": "449811d15fbdf5ceb5c1144416066429cf82316e2ec8ce0c1f6f8a02e7bbcf8c"
+          "url": "https://static.crates.io/crates/prometheus/0.13.4/download",
+          "sha256": "3d33c28a30771f7f96db69893f78b857f7450d7e0237e9c8fc6427a81bae7ed1"
         }
       },
       "targets": [
@@ -47578,7 +47568,7 @@
               "target": "parking_lot"
             },
             {
-              "id": "prometheus 0.13.3",
+              "id": "prometheus 0.13.4",
               "target": "build_script_build"
             },
             {
@@ -47593,14 +47583,14 @@
           "selects": {
             "cfg(target_os = \"linux\")": [
               {
-                "id": "procfs 0.14.2",
+                "id": "procfs 0.16.0",
                 "target": "procfs"
               }
             ]
           }
         },
         "edition": "2018",
-        "version": "0.13.3"
+        "version": "0.13.4"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -49153,7 +49143,7 @@
               "target": "libc"
             },
             {
-              "id": "socket2 0.5.6",
+              "id": "socket2 0.5.7",
               "target": "socket2"
             },
             {
@@ -49179,6 +49169,80 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "quinn-udp 0.5.1": {
+      "name": "quinn-udp",
+      "version": "0.5.1",
+      "package_url": "https://github.com/quinn-rs/quinn",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/quinn-udp/0.5.1/download",
+          "sha256": "e4f0def2590301f4f667db5a77f9694fb004f82796dc1a8b1508fafa3d0e8b72"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "quinn_udp",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "quinn_udp",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "log"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.153",
+              "target": "libc"
+            },
+            {
+              "id": "socket2 0.5.7",
+              "target": "socket2"
+            },
+            {
+              "id": "tracing 0.1.40",
+              "target": "tracing"
+            }
+          ],
+          "selects": {
+            "cfg(windows)": [
+              {
+                "id": "once_cell 1.19.0",
+                "target": "once_cell"
+              },
+              {
+                "id": "windows-sys 0.52.0",
+                "target": "windows_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.5.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "quote 0.6.13": {
       "name": "quote",
@@ -51906,7 +51970,7 @@
                 "target": "tokio_socks"
               },
               {
-                "id": "tokio-util 0.7.10",
+                "id": "tokio-util 0.7.11",
                 "target": "tokio_util"
               },
               {
@@ -52168,7 +52232,7 @@
                 "target": "http_body_util"
               },
               {
-                "id": "hyper 1.2.0",
+                "id": "hyper 1.3.1",
                 "target": "hyper"
               },
               {
@@ -52228,7 +52292,7 @@
                 "target": "tokio_rustls"
               },
               {
-                "id": "tokio-util 0.7.10",
+                "id": "tokio-util 0.7.11",
                 "target": "tokio_util"
               },
               {
@@ -54144,127 +54208,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustix 0.36.15": {
-      "name": "rustix",
-      "version": "0.36.15",
-      "package_url": "https://github.com/bytecodealliance/rustix",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rustix/0.36.15/download",
-          "sha256": "c37f1bd5ef1b5422177b7646cba67430579cfe2ace80f284fee876bca52ad941"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rustix",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rustix",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "fs",
-            "io-lifetimes",
-            "libc",
-            "param",
-            "process",
-            "std",
-            "thread",
-            "use-libc-auxv"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 1.3.2",
-              "target": "bitflags"
-            },
-            {
-              "id": "io-lifetimes 1.0.11",
-              "target": "io_lifetimes"
-            },
-            {
-              "id": "rustix 0.36.15",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {
-            "cfg(all(any(target_os = \"android\", target_os = \"linux\"), any(rustix_use_libc, miri, not(all(target_os = \"linux\", any(target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"), all(target_endian = \"little\", any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"powerpc64\", target_arch = \"riscv64\", target_arch = \"mips\", target_arch = \"mips64\"))))))))": [
-              {
-                "id": "linux-raw-sys 0.1.4",
-                "target": "linux_raw_sys"
-              }
-            ],
-            "cfg(all(not(rustix_use_libc), not(miri), target_os = \"linux\", any(target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"), all(target_endian = \"little\", any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"powerpc64\", target_arch = \"riscv64\", target_arch = \"mips\", target_arch = \"mips64\")))))": [
-              {
-                "id": "libc 0.2.153",
-                "target": "libc"
-              },
-              {
-                "id": "linux-raw-sys 0.1.4",
-                "target": "linux_raw_sys"
-              }
-            ],
-            "cfg(any(rustix_use_libc, miri, not(all(target_os = \"linux\", any(target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"), all(target_endian = \"little\", any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"powerpc64\", target_arch = \"riscv64\", target_arch = \"mips\", target_arch = \"mips64\")))))))": [
-              {
-                "id": "errno 0.3.8",
-                "target": "errno",
-                "alias": "libc_errno"
-              },
-              {
-                "id": "libc 0.2.153",
-                "target": "libc"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "windows-sys 0.45.0",
-                "target": "windows_sys"
-              }
-            ]
-          }
-        },
-        "edition": "2018",
-        "version": "0.36.15"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "rustix 0.37.23": {
       "name": "rustix",
       "version": "0.37.23",
@@ -54454,25 +54397,41 @@
               "mm"
             ],
             "aarch64-unknown-linux-gnu": [
+              "fs",
               "mm",
+              "param",
+              "process",
+              "system",
               "thread"
             ],
             "aarch64-unknown-nixos-gnu": [
+              "fs",
               "mm",
+              "param",
+              "process",
+              "system",
               "thread"
             ],
             "aarch64-unknown-nto-qnx710": [
               "mm"
             ],
             "arm-unknown-linux-gnueabi": [
+              "fs",
               "mm",
+              "param",
+              "process",
+              "system",
               "thread"
             ],
             "armv7-linux-androideabi": [
               "mm"
             ],
             "armv7-unknown-linux-gnueabi": [
+              "fs",
               "mm",
+              "param",
+              "process",
+              "system",
               "thread"
             ],
             "i686-apple-darwin": [
@@ -54485,15 +54444,27 @@
               "mm"
             ],
             "i686-unknown-linux-gnu": [
+              "fs",
               "mm",
+              "param",
+              "process",
+              "system",
               "thread"
             ],
             "powerpc-unknown-linux-gnu": [
+              "fs",
               "mm",
+              "param",
+              "process",
+              "system",
               "thread"
             ],
             "s390x-unknown-linux-gnu": [
+              "fs",
               "mm",
+              "param",
+              "process",
+              "system",
               "thread"
             ],
             "x86_64-apple-darwin": [
@@ -54512,11 +54483,19 @@
               "mm"
             ],
             "x86_64-unknown-linux-gnu": [
+              "fs",
               "mm",
+              "param",
+              "process",
+              "system",
               "thread"
             ],
             "x86_64-unknown-nixos-gnu": [
+              "fs",
               "mm",
+              "param",
+              "process",
+              "system",
               "thread"
             ]
           }
@@ -60617,14 +60596,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "socket2 0.5.6": {
+    "socket2 0.5.7": {
       "name": "socket2",
-      "version": "0.5.6",
+      "version": "0.5.7",
       "package_url": "https://github.com/rust-lang/socket2",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/socket2/0.5.6/download",
-          "sha256": "05ffd9c0a93b7543e062e759284fcf5f5e3b098501104bfbdde4d404db792871"
+          "url": "https://static.crates.io/crates/socket2/0.5.7/download",
+          "sha256": "ce305eb0b4296696835b71df73eb912e0f1ffd2556a501fcede6e0c50349191c"
         }
       },
       "targets": [
@@ -60670,7 +60649,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.5.6"
+        "version": "0.5.7"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -63115,7 +63094,7 @@
               "target": "tokio_serde"
             },
             {
-              "id": "tokio-util 0.7.10",
+              "id": "tokio-util 0.7.11",
               "target": "tokio_util"
             },
             {
@@ -64670,7 +64649,7 @@
           "selects": {
             "cfg(not(target_family = \"wasm\"))": [
               {
-                "id": "socket2 0.5.6",
+                "id": "socket2 0.5.7",
                 "target": "socket2"
               }
             ],
@@ -65427,14 +65406,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tokio-util 0.7.10": {
+    "tokio-util 0.7.11": {
       "name": "tokio-util",
-      "version": "0.7.10",
+      "version": "0.7.11",
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio-util/0.7.10/download",
-          "sha256": "5419f34732d9eb6ee4c3578b7989078579b7f039cbbb9ca2c4da015749371e15"
+          "url": "https://static.crates.io/crates/tokio-util/0.7.11/download",
+          "sha256": "9cf6b47b3771c49ac75ad09a6162f53ad4b8088b76ac60e8ec1455b31a189fe1"
         }
       },
       "targets": [
@@ -65465,8 +65444,7 @@
             "io",
             "rt",
             "slab",
-            "time",
-            "tracing"
+            "time"
           ],
           "selects": {}
         },
@@ -65499,10 +65477,6 @@
             {
               "id": "tokio 1.37.0",
               "target": "tokio"
-            },
-            {
-              "id": "tracing 0.1.40",
-              "target": "tracing"
             }
           ],
           "selects": {
@@ -65515,7 +65489,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.7.10"
+        "version": "0.7.11"
       },
       "license": "MIT",
       "license_ids": [
@@ -66126,7 +66100,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.10",
+              "id": "tokio-util 0.7.11",
               "target": "tokio_util"
             },
             {
@@ -66258,7 +66232,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.10",
+              "id": "tokio-util 0.7.11",
               "target": "tokio_util"
             },
             {
@@ -66385,7 +66359,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.10",
+              "id": "tokio-util 0.7.11",
               "target": "tokio_util"
             },
             {
@@ -67995,14 +67969,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "turmoil 0.6.0": {
+    "turmoil 0.6.2": {
       "name": "turmoil",
-      "version": "0.6.0",
+      "version": "0.6.2",
       "package_url": "https://github.com/tokio-rs/turmoil",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/turmoil/0.6.0/download",
-          "sha256": "181ee1366231313f06f613c278fe595e7369a1714bd3dae0b2cb1c9c0ab9ae69"
+          "url": "https://static.crates.io/crates/turmoil/0.6.2/download",
+          "sha256": "c1a6d72d6f78941e759159d1080436847926852d5250455fecbbfab203832eac"
         }
       },
       "targets": [
@@ -68069,7 +68043,7 @@
               "target": "tokio_test"
             },
             {
-              "id": "tokio-util 0.7.10",
+              "id": "tokio-util 0.7.11",
               "target": "tokio_util"
             },
             {
@@ -68084,7 +68058,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.6.0"
+        "version": "0.6.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -70251,7 +70225,7 @@
               "target": "tokio_tungstenite"
             },
             {
-              "id": "tokio-util 0.7.10",
+              "id": "tokio-util 0.7.11",
               "target": "tokio_util"
             },
             {
@@ -76369,14 +76343,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "zstd 0.13.0": {
+    "zstd 0.13.1": {
       "name": "zstd",
-      "version": "0.13.0",
+      "version": "0.13.1",
       "package_url": "https://github.com/gyscos/zstd-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/zstd/0.13.0/download",
-          "sha256": "bffb3309596d527cfcba7dfc6ed6052f1d39dfbd7c867aa2e865e4a449c10110"
+          "url": "https://static.crates.io/crates/zstd/0.13.1/download",
+          "sha256": "2d789b1514203a1120ad2429eae43a7bd32b90976a7bb8a05f7ec02fa88cc23a"
         }
       },
       "targets": [
@@ -76410,14 +76384,14 @@
         "deps": {
           "common": [
             {
-              "id": "zstd-safe 7.0.0",
+              "id": "zstd-safe 7.1.0",
               "target": "zstd_safe"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.13.0"
+        "version": "0.13.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -76486,7 +76460,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "zstd-sys 2.0.8+zstd.1.5.5",
+              "id": "zstd-sys 2.0.10+zstd.1.5.6",
               "target": "zstd_sys"
             }
           ],
@@ -76502,7 +76476,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "zstd-sys 2.0.8+zstd.1.5.5",
+              "id": "zstd-sys 2.0.10+zstd.1.5.6",
               "target": "zstd_sys"
             }
           ],
@@ -76516,14 +76490,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "zstd-safe 7.0.0": {
+    "zstd-safe 7.1.0": {
       "name": "zstd-safe",
-      "version": "7.0.0",
+      "version": "7.1.0",
       "package_url": "https://github.com/gyscos/zstd-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/zstd-safe/7.0.0/download",
-          "sha256": "43747c7422e2924c11144d5229878b98180ef8b06cca4ab5af37afc8a8d8ea3e"
+          "url": "https://static.crates.io/crates/zstd-safe/7.1.0/download",
+          "sha256": "1cd99b45c6bc03a018c8b8a86025678c87e55526064e38f9df301989dce7ec0a"
         }
       },
       "targets": [
@@ -76569,18 +76543,18 @@
         "deps": {
           "common": [
             {
-              "id": "zstd-safe 7.0.0",
+              "id": "zstd-safe 7.1.0",
               "target": "build_script_build"
             },
             {
-              "id": "zstd-sys 2.0.8+zstd.1.5.5",
+              "id": "zstd-sys 2.0.10+zstd.1.5.6",
               "target": "zstd_sys"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "7.0.0"
+        "version": "7.1.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -76589,7 +76563,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "zstd-sys 2.0.8+zstd.1.5.5",
+              "id": "zstd-sys 2.0.10+zstd.1.5.6",
               "target": "zstd_sys"
             }
           ],
@@ -76603,14 +76577,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "zstd-sys 2.0.8+zstd.1.5.5": {
+    "zstd-sys 2.0.10+zstd.1.5.6": {
       "name": "zstd-sys",
-      "version": "2.0.8+zstd.1.5.5",
+      "version": "2.0.10+zstd.1.5.6",
       "package_url": "https://github.com/gyscos/zstd-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/zstd-sys/2.0.8+zstd.1.5.5/download",
-          "sha256": "5556e6ee25d32df2586c098bbfa278803692a20d0ab9565e049480d52707ec8c"
+          "url": "https://static.crates.io/crates/zstd-sys/2.0.10+zstd.1.5.6/download",
+          "sha256": "c253a4914af5bafc8fa8c86ee400827e83cf6ec01195ec1f1ed8441bf00d65aa"
         }
       },
       "targets": [
@@ -76655,18 +76629,14 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.153",
-              "target": "libc"
-            },
-            {
-              "id": "zstd-sys 2.0.8+zstd.1.5.5",
+              "id": "zstd-sys 2.0.10+zstd.1.5.6",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.0.8+zstd.1.5.5"
+        "version": "2.0.10+zstd.1.5.6"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -76943,35 +76913,6 @@
       "x86_64-unknown-nixos-gnu"
     ],
     "cfg(any())": [],
-    "cfg(any(rustix_use_libc, miri, not(all(target_os = \"linux\", any(target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"), all(target_endian = \"little\", any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"powerpc64\", target_arch = \"riscv64\", target_arch = \"mips\", target_arch = \"mips64\")))))))": [
-      "aarch64-apple-darwin",
-      "aarch64-apple-ios",
-      "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
-      "aarch64-linux-android",
-      "aarch64-pc-windows-msvc",
-      "aarch64-unknown-nto-qnx710",
-      "armv7-linux-androideabi",
-      "i686-apple-darwin",
-      "i686-linux-android",
-      "i686-pc-windows-msvc",
-      "i686-unknown-freebsd",
-      "powerpc-unknown-linux-gnu",
-      "riscv32imc-unknown-none-elf",
-      "riscv64gc-unknown-none-elf",
-      "s390x-unknown-linux-gnu",
-      "thumbv7em-none-eabi",
-      "thumbv8m.main-none-eabi",
-      "wasm32-unknown-unknown",
-      "wasm32-wasi",
-      "x86_64-apple-darwin",
-      "x86_64-apple-ios",
-      "x86_64-fuchsia",
-      "x86_64-linux-android",
-      "x86_64-pc-windows-msvc",
-      "x86_64-unknown-freebsd",
-      "x86_64-unknown-none"
-    ],
     "cfg(any(target_arch = \"aarch64\", target_arch = \"arm\", target_arch = \"x86\", target_arch = \"x86_64\"))": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
@@ -77866,7 +77807,7 @@
     "httptest 0.15.4",
     "humantime 2.1.0",
     "hyper 0.14.27",
-    "hyper 1.2.0",
+    "hyper 1.3.1",
     "hyper-rustls 0.24.2",
     "hyper-rustls 0.27.1",
     "hyper-socks2 0.8.0",
@@ -77971,7 +77912,7 @@
     "priority-queue 1.3.2",
     "proc-macro2 1.0.76",
     "procfs 0.9.1",
-    "prometheus 0.13.3",
+    "prometheus 0.13.4",
     "prometheus-parse 0.2.4",
     "proptest 1.2.0",
     "proptest-derive 0.3.0",
@@ -77982,6 +77923,7 @@
     "publicsuffix 2.2.3",
     "quickcheck 1.0.3",
     "quinn 0.10.2",
+    "quinn-udp 0.5.1",
     "quote 1.0.35",
     "rand 0.8.5",
     "rand_chacha 0.3.1",
@@ -78042,7 +77984,7 @@
     "slog-json 2.6.1",
     "slog-scope 4.4.0",
     "slog-term 2.9.0",
-    "socket2 0.5.6",
+    "socket2 0.5.7",
     "ssh2 0.9.4",
     "strum 0.26.2",
     "strum_macros 0.26.2",
@@ -78069,7 +78011,7 @@
     "tokio-serde 0.8.0",
     "tokio-socks 0.5.1",
     "tokio-test 0.4.2",
-    "tokio-util 0.7.10",
+    "tokio-util 0.7.11",
     "toml 0.5.11",
     "tonic 0.11.0",
     "tonic-build 0.11.0",
@@ -78088,7 +78030,7 @@
     "tracing-slog 0.2.0",
     "tracing-subscriber 0.3.18",
     "trust-dns-resolver 0.22.0",
-    "turmoil 0.6.0",
+    "turmoil 0.6.2",
     "url 2.4.1",
     "uuid 1.5.0",
     "vsock 0.4.0",
@@ -78114,7 +78056,7 @@
     "x509-parser 0.15.1",
     "yansi 0.5.1",
     "zeroize 1.7.0",
-    "zstd 0.13.0"
+    "zstd 0.13.1"
   ],
   "direct_dev_deps": []
 }
