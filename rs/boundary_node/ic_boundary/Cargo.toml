@@ -80,7 +80,7 @@ reqwest = { version = "0.11.22", default-features = false, features = [
     "stream",
 ] }
 rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
-rustls-pemfile = "^1"
+rustls-pemfile = "^2"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
