@@ -178,7 +178,7 @@ impl TestEnv {
     }
 }
 
-fn is_blockchain_is_empty_error(error: &rosetta_core::miscellaneous::Error) -> bool {
+fn matches_blockchain_is_empty_error(error: &rosetta_core::miscellaneous::Error) -> bool {
     error.code == 700
         && error.details.is_some()
         && error
@@ -263,7 +263,7 @@ where
         while retries > 0 {
             match rosetta_client.network_status(network.clone()).await {
                 Ok(_) => break,
-                Err(Error(err)) if is_blockchain_is_empty_error(&err) => {
+                Err(Error(err)) if matches_blockchain_is_empty_error(&err) => {
                     const WAIT_BETWEEN_RETRIES: Duration = Duration::from_millis(100);
                     println!("Found \"Blockchain is empty\" error, retrying in {WAIT_BETWEEN_RETRIES:?} (retries: {retries})");
                     retries -= 1;
