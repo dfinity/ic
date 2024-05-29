@@ -42,7 +42,7 @@ hex = { workspace = true }
 slog = { workspace = true }
 slog-term = "2.6.0"
 tokio = { workspace = true }
-rand = "0.8"
+rand = { workspace = true }
 tower = { workspace = true }
 futures.workspace = true
 wasmparser = "0.115.0"

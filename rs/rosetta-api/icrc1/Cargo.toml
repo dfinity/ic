@@ -29,4 +29,4 @@ ic-icrc1-tokens-u256 = { path = "tokens_u256" }
 ic-icrc1-tokens-u64 = { path = "tokens_u64" }
 leb128 = "0.2.4"
 proptest = "1.0"
-rand = "0.8"
+rand = { workspace = true }

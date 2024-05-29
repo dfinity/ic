@@ -19,5 +19,5 @@ ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reprod
 ic-crypto-tree-hash-test-utils = { path = "../../crypto/tree_hash/test_utils" }
 assert_matches = { workspace = true }
 proptest = "1.0"
-rand = "0.8"
+rand = { workspace = true }
 rand_chacha = "0.3"

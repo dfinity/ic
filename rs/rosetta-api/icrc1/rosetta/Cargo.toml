@@ -39,7 +39,7 @@ lazy_static = "1.4.0"
 num-bigint = "0.4.4"
 num-traits = { workspace = true }
 proptest = "1.0"
-rand = "0.8.4"
+rand = { workspace = true }
 reqwest = { workspace = true }
 rolling-file = "0.2.0"
 rosetta-core = { path = "../../rosetta_core" }
