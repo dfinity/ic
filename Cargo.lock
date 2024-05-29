@@ -7934,12 +7934,13 @@ dependencies = [
 name = "ic-http-endpoints-metrics"
 version = "0.9.0"
 dependencies = [
- "hyper 0.14.26",
+ "axum 0.7.5",
  "ic-async-utils",
  "ic-config",
  "ic-metrics",
  "ic-test-utilities-logger",
  "prometheus",
+ "reqwest 0.12.4",
  "slog",
  "thiserror",
  "tokio",
