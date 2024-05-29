@@ -6,7 +6,7 @@ set -e
 source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename "$0")[$$]"
-GUESTOS_VERSION_FILE="/opt/ic/share/version.txt"
+VERSION_FILE="/opt/ic/share/version.txt"
 
 write_log() {
     local message=$1
@@ -18,13 +18,13 @@ write_log() {
     logger -t "${SCRIPT}" "${message}"
 }
 
-function get_guestos_version_noreport() {
-    if [ -r "${GUESTOS_VERSION_FILE}" ]; then
-        GUESTOS_VERSION=$(cat ${GUESTOS_VERSION_FILE})
-        GUESTOS_VERSION_OK=1
+function get_version_noreport() {
+    if [ -r "${VERSION_FILE}" ]; then
+        VERSION=$(cat ${VERSION_FILE})
+        VERSION_OK=1
     else
-        GUESTOS_VERSION="unknown"
-        GUESTOS_VERSION_OK=0
+        VERSION="unknown"
+        VERSION_OK=0
     fi
 }
 
@@ -179,7 +179,7 @@ while getopts ":f" OPT; do
     esac
 done
 
-get_guestos_version_noreport
+get_version_noreport
 
 # Read current state
 read_grubenv "${GRUBENV_FILE}"
@@ -213,7 +213,7 @@ if [ "${boot_cycle}" == "failsafe_check" ]; then
         "GuestOS is boot stable" \
         "gauge"
     write_metric_attr "guestos_boot_action" \
-        "{next_boot=\"${NEXT_BOOT}\",version=\"${GUESTOS_VERSION}\"}" \
+        "{next_boot=\"${NEXT_BOOT}\",version=\"${VERSION}\"}" \
         "2" \
         "GuestOS boot action" \
         "gauge"
@@ -255,7 +255,7 @@ case "${ACTION}" in
             exit 1
         fi
 
-        write_log "GuestOS current version ${GUESTOS_VERSION} at slot ${CURRENT_ALTERNATIVE}"
+        write_log "GuestOS current version ${VERSION} at slot ${CURRENT_ALTERNATIVE}"
         write_log "GuestOS upgrade started, modifying slot ${TARGET_ALTERNATIVE} at ${TARGET_BOOT} and ${TARGET_ROOT}"
 
         # Write to target partitions, and "wipe" header of var partition
@@ -323,7 +323,7 @@ case "${ACTION}" in
                 "GuestOS is boot stable" \
                 "gauge"
             write_metric_attr "guestos_boot_action" \
-                "{confirm_boot=\"${CURRENT_BOOT}\",version=\"${GUESTOS_VERSION}\"}" \
+                "{confirm_boot=\"${CURRENT_BOOT}\",version=\"${VERSION}\"}" \
                 "1" \
                 "GuestOS boot action" \
                 "gauge"
