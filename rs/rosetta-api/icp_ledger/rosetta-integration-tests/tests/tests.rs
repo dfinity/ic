@@ -10,7 +10,6 @@ use ic_rosetta_api::models::{NetworkIdentifier, NetworkListResponse, NetworkStat
 use ic_rosetta_api::request_types::{RosettaBlocksMode, RosettaStatus};
 use icp_ledger::{AccountIdentifier, Subaccount};
 use icp_rosetta_integration_tests::{start_rosetta, RosettaContext};
-use icrc_ledger_agent::Icrc1Agent;
 use pocket_ic::{PocketIc, PocketIcBuilder};
 use std::future::Future;
 use std::pin::Pin;
@@ -138,7 +137,6 @@ impl RosettaTestingClient {
 // initial block so that Rosetta doesn't panic.
 struct TestEnv {
     pocket_ic: PocketIc,
-    _ledger_agent: Icrc1Agent,
     rosetta_context: Option<RosettaContext>,
     pub rosetta: RosettaTestingClient,
 }
@@ -146,13 +144,11 @@ struct TestEnv {
 impl TestEnv {
     fn new(
         pocket_ic: PocketIc,
-        ledger_agent: Icrc1Agent,
         rosetta_context: RosettaContext,
         rosetta_client: RosettaClient,
     ) -> Self {
         Self {
             pocket_ic,
-            _ledger_agent: ledger_agent,
             rosetta_context: Some(rosetta_context),
             rosetta: RosettaTestingClient { rosetta_client },
         }
@@ -229,19 +225,12 @@ where
 
     // PocketIc is using blocking Reqwest and therefore must be dropped outside
     // an async context (otherwise an error happens). The testing code as well as
-    // the ledger_agent and rosetta_client are async so we run them within
+    // the  rosetta_client are async so we run them within
     // `block_on`, then return the `pocked_ic` instance so that it can be dropped
     // correctly. Note that this is caused by https://dfinity.atlassian.net/browse/VER-2765
     // and should be removed once VER-2765 is fixed.
     let mut pocket_ic = rt.block_on(async {
         agent.fetch_root_key().await.unwrap();
-
-        // rosetta prints a lot of errors if there are no blocks in the chain so we first
-        // create a block and only after start rosetta.
-        let ledger_agent = Icrc1Agent {
-            agent,
-            ledger_canister_id,
-        };
 
         let (rosetta_client, rosetta_context) = start_rosetta(
             &get_rosetta_path(),
@@ -286,7 +275,7 @@ where
             }
         }
 
-        let mut env = TestEnv::new(pocket_ic, ledger_agent, rosetta_context, rosetta_client);
+        let mut env = TestEnv::new(pocket_ic, rosetta_context, rosetta_client);
 
         f(&mut env).await;
 
