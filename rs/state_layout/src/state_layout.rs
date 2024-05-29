@@ -612,16 +612,6 @@ impl StateLayout {
         }
     }
 
-    pub fn mark_scratchpad_unverified_and_move_to_checkpoint<T>(
-        &self,
-        layout: CheckpointLayout<RwPolicy<'_, T>>,
-        height: Height,
-        thread_pool: Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
-        layout.create_unverified_checkpoint_marker()?;
-        self.scratchpad_to_checkpoint(layout, height, thread_pool)
-    }
-
     pub fn scratchpad_to_checkpoint<T>(
         &self,
         layout: CheckpointLayout<RwPolicy<'_, T>>,
