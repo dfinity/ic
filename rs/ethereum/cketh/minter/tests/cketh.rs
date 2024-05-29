@@ -1021,6 +1021,7 @@ fn should_retrieve_minter_info() {
             erc20_balances: None,
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
+            cketh_ledger_id: Some(cketh.ledger_id.into()),
         }
     );
 

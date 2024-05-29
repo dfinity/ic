@@ -172,6 +172,9 @@ type MinterInfo = record {
 
     // Last scraped block number for logs of the ERC20 helper contract.
     last_erc20_scraped_block_number: opt nat;
+
+    // Canister ID of the ckETH ledger.
+    cketh_ledger_id: opt principal;
 };
 
 
