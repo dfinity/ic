@@ -20,19 +20,11 @@ use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_
 use crate::orchestrator::utils::subnet_recovery::{
     enable_ecdsa_signing_on_subnet, run_ecdsa_signature_test,
 };
+use crate::tecdsa::{make_key, KEY_ID1};
 use crate::util::{
     block_on, get_app_subnet_and_node, get_nns_node, runtime_from_url,
     spawn_round_robin_workload_engine, MessageCanister,
 };
-use ic_nns_governance::pb::v1::NnsFunction;
-use ic_protobuf::registry::node_rewards::v2::{
-    NodeRewardRate, UpdateNodeRewardsTableProposalPayload,
-};
-use std::collections::BTreeMap;
-
-use crate::tecdsa::{make_key, KEY_ID1};
-use crate::util::{block_on, get_app_subnet_and_node, get_nns_node, MessageCanister};
-
 use candid::{Encode, Principal};
 use futures::future::join_all;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
@@ -40,10 +32,18 @@ use ic_management_canister_types::{
     DerivationPath, Payload, SignWithECDSAArgs, SignWithECDSAReply,
 };
 use ic_message::ForwardParams;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance::pb::v1::NnsFunction;
+use ic_protobuf::registry::node_rewards::v2::{
+    NodeRewardRate, UpdateNodeRewardsTableProposalPayload,
+};
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
-use slog::info;
+use slog::{error, info};
+use std::collections::BTreeMap;
+use std::fs::OpenOptions;
+use std::io::prelude::*;
 use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 
@@ -111,7 +111,7 @@ pub fn setup(env: TestEnv) {
                     key_ids: vec![make_key(KEY_ID1)],
                     max_queue_size: Some(MAX_QUEUE_SIZE),
                     signature_request_timeout_ns: None,
-                    idkg_key_rotation_period_ms: IDKG_KEY_ROTATION_PERIOD_MS,
+                    idkg_key_rotation_period_ms: Some(90_000),
                 })
                 .add_nodes(NODES_COUNT),
         )
@@ -185,7 +185,7 @@ pub fn tecdsa_performance_test(
     let log = env.logger();
 
     let duration: Duration = TESTING_PERIOD;
-    const RPS: f64 = 30.0;
+    const RPS: usize = 30;
 
     let topology_snapshot = env.topology_snapshot();
     let nns_node = get_nns_node(&topology_snapshot);
@@ -201,6 +201,10 @@ pub fn tecdsa_performance_test(
     info!(log, "Step 1: Enabling tECDSA signing and ensuring it works");
     let key = enable_ecdsa_signing_on_subnet(&nns_node, &nns_canister, app_subnet.subnet_id, &log);
     run_ecdsa_signature_test(&nns_canister, &log, key);
+
+    // Create NNS runtime.
+    info!(log, "Creating NNS runtime");
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
 
     info!(log, "Step 2: Installing Message canisters");
     let requests = (0..CANISTER_COUNT)
@@ -295,7 +299,7 @@ pub fn tecdsa_performance_test(
     let (app_subnet, app_node) = get_app_subnet_and_node(&topology_snapshot);
     info!(
             env.logger(),
-            "Starting load test with {this_iter_sigs_rps} signatures per second and {this_iter_queries_rps} queries per second",
+            "Starting load test with {SIGNATURE_REQUESTS_PER_SECOND} signatures per second and {RPS} queries per second",
         );
     // Workload sends messages to canister via node agents.
     // As we talk to a single node, we create one agent, accordingly.
@@ -303,18 +307,20 @@ pub fn tecdsa_performance_test(
     // Spawn a workload against counter canister.
     let query_generator_handle = {
         info!(log, "Instantiate and start the query workload generator");
-        let requests = vec![GenericRequest::new(
-            app_canister,
-            CANISTER_METHOD.to_string(),
-            vec![0; PAYLOAD_SIZE_BYTES],
-            CallMode::Query,
-        ),
-        GenericRequest::new(
-            app_canister,
-            "write".to_string(),,
-            vec![0; PAYLOAD_SIZE_BYTES],
-            CallMode::UpdateNoPolling,
-        )];
+        let requests = vec![
+            GenericRequest::new(
+                app_canister,
+                CANISTER_METHOD.to_string(),
+                vec![0; PAYLOAD_SIZE_BYTES],
+                CallMode::Query,
+            ),
+            GenericRequest::new(
+                app_canister,
+                "write".to_string(),
+                vec![0; PAYLOAD_SIZE_BYTES],
+                CallMode::UpdateNoPolling,
+            ),
+        ];
         spawn_round_robin_workload_engine(
             log.clone(),
             requests,
@@ -347,7 +353,7 @@ pub fn tecdsa_performance_test(
             }
         };
 
-        let metrics = Engine::new(log.clone(), generator, RPS, duration)
+        let metrics = Engine::new(log.clone(), generator, RPS as f64, duration)
             .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
             .execute_simply(log.clone())
             .await;
@@ -355,7 +361,7 @@ pub fn tecdsa_performance_test(
         info!(log, "Reporting workload execution results");
         env.emit_report(format!("{}", metrics));
         info!(log, "Step 5: Assert expected number of successful requests");
-        let requests_count = RPS * duration.as_secs_f64();
+        let requests_count = RPS as f64 * duration.as_secs_f64();
         let min_expected_success_calls = (SUCCESS_THRESHOLD * requests_count) as usize;
         info!(
             log,
@@ -368,6 +374,18 @@ pub fn tecdsa_performance_test(
             metrics.failure_calls()
         );
 
+        let json_report = format!(
+            "{{
+                \"benchmark_name\": \"tecdsa_performance_test\",
+                \"success_calls\": {},
+                \"failure_calls\": {},
+                \"success_rps\": {}
+            }}",
+            metrics.success_calls() as f32,
+            metrics.failure_calls() as f32,
+            metrics.success_calls() as f32 / TESTING_PERIOD.as_secs() as f32
+        );
+
         info!(log, "json benchmark report: {json_report}");
 
         OpenOptions::new()
@@ -378,6 +396,10 @@ pub fn tecdsa_performance_test(
             .open(env.base_path().join(BENCHMARK_REPORT_FILE))
             .and_then(|mut file| file.write_all(json_report.as_bytes()))
             .unwrap_or_else(|e| error!(log, "Failed to write benchmark report: {}", e));
+
+        let _load_metrics = query_generator_handle
+            .join()
+            .expect("Workload execution failed.");
 
         registry_incrementor_handle
             .join()
