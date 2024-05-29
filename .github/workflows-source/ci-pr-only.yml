@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 env:
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
-  ORG: ${{ vars.ORG }}
+  ORG: ${{ github.repository_owner }}
 
 anchors:
   image: &image
