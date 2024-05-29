@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 env:
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
-  ORG: ${{ vars.ORG }}
+  ORG: ${{ github.repository_owner }}
 jobs:
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
