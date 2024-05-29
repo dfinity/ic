@@ -12491,6 +12491,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-canisters-http-types",
+ "ic-cdk 0.13.2",
  "ic-crypto-sha2",
  "ic-icp-index",
  "ic-ledger-canister-core",

@@ -26,13 +26,13 @@ use ic_ledger_core::{
     tokens::{Tokens, DECIMAL_PLACES},
 };
 use icp_ledger::{
-    protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob, AccountIdentifier, ArchiveInfo,
-    ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block,
-    BlockArg, BlockRes, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs,
-    IterBlocksArgs, LedgerCanisterPayload, Memo, Name, Operation, PaymentError,
-    QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes,
-    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
-    MAX_BLOCKS_PER_REQUEST, MEMO_SIZE_BYTES,
+    max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
+    AccountIdentifier, ArchiveInfo, ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives,
+    BinaryAccountBalanceArgs, Block, BlockArg, BlockRes, CandidBlock, Decimals, FeatureFlags,
+    GetBlocksArgs, InitArgs, IterBlocksArgs, LedgerCanisterPayload, Memo, Name, Operation,
+    PaymentError, QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol,
+    TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
+    TransferFeeArgs, MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
@@ -1154,6 +1154,7 @@ fn icrc1_total_supply_candid() {
 fn iter_blocks_() {
     over(protobuf, |IterBlocksArgs { start, length }| {
         let blocks = &LEDGER.read().unwrap().blockchain.blocks;
+        let length = std::cmp::min(length, max_blocks_per_request(&caller()));
         icp_ledger::iter_blocks(blocks, start, length)
     });
 }
@@ -1163,6 +1164,7 @@ fn iter_blocks_() {
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
     over(protobuf, |GetBlocksArgs { start, length }| {
+        let length = std::cmp::min(length, max_blocks_per_request(&caller()));
         let blockchain = &LEDGER.read().unwrap().blockchain;
         let start_offset = blockchain.num_archived_blocks();
         icp_ledger::get_blocks(&blockchain.blocks, start_offset, start, length)
@@ -1179,7 +1181,8 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
     let ledger = LEDGER.read().unwrap();
     let locations = block_locations(&*ledger, start, length);
 
-    let local_blocks = range_utils::take(&locations.local_blocks, MAX_BLOCKS_PER_REQUEST);
+    let local_blocks =
+        range_utils::take(&locations.local_blocks, max_blocks_per_request(&caller()));
 
     let blocks: Vec<CandidBlock> = ledger
         .blockchain
@@ -1367,7 +1370,8 @@ fn query_encoded_blocks(
     let ledger = LEDGER.read().unwrap();
     let locations = block_locations(&*ledger, start, length);
 
-    let local_blocks = range_utils::take(&locations.local_blocks, MAX_BLOCKS_PER_REQUEST);
+    let local_blocks =
+        range_utils::take(&locations.local_blocks, max_blocks_per_request(&caller()));
 
     let blocks = ledger.blockchain.block_slice(local_blocks.clone()).to_vec();
 
