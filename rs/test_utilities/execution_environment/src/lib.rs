@@ -50,8 +50,8 @@ use ic_types::{
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId, Query,
-        QuerySource, RequestOrResponse, Response, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId, Query, QuerySource,
+        RequestOrResponse, Response, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     time::UNIX_EPOCH,
     CanisterId, Cycles, Height, NumInstructions, NumOsPages, QueryStatsEpoch, Time, UserId,
@@ -1026,18 +1026,21 @@ impl ExecutionTest {
         canister_id: CanisterId,
         method_name: S,
         method_payload: Vec<u8>,
+        data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         let state = Arc::new(self.state.take().unwrap());
 
-        let query = AnonymousQuery {
+        let query = Query {
+            source: QuerySource::Anonymous,
             receiver: canister_id,
             method_name: method_name.to_string(),
             method_payload,
         };
-        let result = self.exec_env.execute_anonymous_query(
+
+        let result = self.query_handler.query(
             query,
-            state.clone(),
-            self.instruction_limit_without_dts,
+            Labeled::new(Height::from(0), Arc::clone(&state)),
+            data_certificate,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());

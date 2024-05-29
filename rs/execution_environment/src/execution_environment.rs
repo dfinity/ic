@@ -6,7 +6,6 @@ use crate::{
     canister_settings::CanisterSettings,
     execution::{
         inspect_message, install_code::validate_controller,
-        nonreplicated_query::execute_non_replicated_query,
         replicated_query::execute_replicated_query, response::execute_response,
         update::execute_update,
     },
@@ -16,7 +15,6 @@ use crate::{
     hypervisor::Hypervisor,
     ic00_permissions::Ic00MethodPermissions,
     metrics::{CallTreeMetrics, CallTreeMetricsImpl, IngressFilterMetrics},
-    NonReplicatedQueryKind,
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;
@@ -64,9 +62,9 @@ use ic_types::{
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        extract_effective_canister_id, AnonymousQuery, CanisterCall, CanisterCallOrTask,
-        CanisterMessage, CanisterMessageOrTask, CanisterTask, Payload, RejectContext, Request,
-        Response, SignedIngressContent, StopCanisterCallId, StopCanisterContext,
+        extract_effective_canister_id, CanisterCall, CanisterCallOrTask, CanisterMessage,
+        CanisterMessageOrTask, CanisterTask, Payload, RejectContext, Request, Response,
+        SignedIngressContent, StopCanisterCallId, StopCanisterContext,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     methods::SystemMethod,
@@ -2216,67 +2214,6 @@ impl ExecutionEnvironment {
             metrics,
         )
         .1
-    }
-
-    /// Execute a query call that has no caller provided.
-    /// This type of query is triggered by the IC only when
-    /// there is a need to execute a query call on the provided canister.
-    pub fn execute_anonymous_query(
-        &self,
-        anonymous_query: AnonymousQuery,
-        state: Arc<ReplicatedState>,
-        max_instructions_per_query: NumInstructions,
-    ) -> Result<WasmResult, UserError> {
-        let canister_id = anonymous_query.receiver;
-        let canister = state.get_active_canister(&canister_id)?;
-        // An anonymous query is expected to finish quickly, so DTS is not
-        // supported for it.
-        let instruction_limits = InstructionLimits::new(
-            FlagStatus::Disabled,
-            max_instructions_per_query,
-            max_instructions_per_query,
-        );
-        let subnet_available_memory = subnet_memory_capacity(&self.config);
-        let execution_parameters = self.execution_parameters(
-            canister,
-            instruction_limits,
-            ExecutionMode::NonReplicated,
-            // Effectively disable subnet memory resource reservation for queries.
-            ResourceSaturation::default(),
-        );
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(max_instructions_per_query),
-            subnet_available_memory,
-            // Ignore compute allocation
-            compute_allocation_used: 0,
-        };
-        let result = execute_non_replicated_query(
-            NonReplicatedQueryKind::Pure {
-                caller: IC_00.get(),
-            },
-            WasmMethod::Query(anonymous_query.method_name.to_string()),
-            &anonymous_query.method_payload,
-            canister.clone(),
-            None,
-            state.time(),
-            execution_parameters,
-            &state.metadata.network_topology,
-            &self.hypervisor,
-            &mut round_limits,
-            &self.metrics.state_changes_error,
-        )
-        .2;
-
-        match result {
-            Ok(maybe_wasm_result) => match maybe_wasm_result {
-                Some(wasm_result) => Ok(wasm_result),
-                None => Err(UserError::new(
-                    ErrorCode::CanisterDidNotReply,
-                    format!("Canister {} did not reply to the call", canister_id),
-                )),
-            },
-            Err(err) => Err(err),
-        }
     }
 
     // Output the response of a subnet message depending on its type.
