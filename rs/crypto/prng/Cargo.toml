@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 ic-crypto-sha2 = { path = "../sha2" }
 ic-types = { path = "../../types/types" }
-rand = "0.8"
+rand = { workspace = true }
 rand_chacha = "0.3"
 strum = { workspace = true }
 strum_macros = { workspace = true }

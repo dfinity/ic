@@ -990,7 +990,7 @@ fn state_equivalence() {
     let state = State {
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),
-        ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
+        cketh_ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
         eth_helper_contract_address: Some(
             "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
                 .parse()

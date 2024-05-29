@@ -1099,7 +1099,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.7.0",
             ),
             "rustls-pemfile": crate.spec(
-                version = "^1",
+                version = "^2",
             ),
             "rustls-pki-types": crate.spec(
                 version = "^1.7.0",

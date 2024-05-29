@@ -46,7 +46,7 @@ ic-validator = { path = "../../validator" }
 inferno = "0.11.19"
 prometheus = { workspace = true }
 prost = { workspace = true }
-rand = "0.8.3"
+rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }

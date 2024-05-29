@@ -120,7 +120,7 @@ mod tests {
     use ic_types::RegistryVersion;
     use ic_types::{
         messages::{
-            Blob, HttpQueryContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, UserQuery,
+            Blob, HttpQueryContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, Query,
         },
         time::expiry_time_from_now,
     };
@@ -147,7 +147,7 @@ mod tests {
             sender_pubkey: Some(Blob(vec![])),
             sender_delegation: None,
         };
-        let request = HttpRequest::<UserQuery>::try_from(request).unwrap();
+        let request = HttpRequest::<Query>::try_from(request).unwrap();
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let validator = Arc::new(HttpRequestVerifierImpl::new(sig_verifier.clone()));
         let async_validator = ValidatorExecutor::new_internal(

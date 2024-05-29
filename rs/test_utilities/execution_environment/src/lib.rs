@@ -50,8 +50,8 @@ use ic_types::{
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId,
-        RequestOrResponse, Response, UserQuery, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId, Query, QuerySource,
+        RequestOrResponse, Response, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     time::UNIX_EPOCH,
     CanisterId, Cycles, Height, NumInstructions, NumOsPages, QueryStatsEpoch, Time, UserId,
@@ -195,7 +195,7 @@ pub struct ExecutionTest {
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     caller_canister_id: Option<CanisterId>,
-    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
+    idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
 
     // The actual implementation.
     exec_env: ExecutionEnvironment,
@@ -1026,18 +1026,21 @@ impl ExecutionTest {
         canister_id: CanisterId,
         method_name: S,
         method_payload: Vec<u8>,
+        data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         let state = Arc::new(self.state.take().unwrap());
 
-        let query = AnonymousQuery {
+        let query = Query {
+            source: QuerySource::Anonymous,
             receiver: canister_id,
             method_name: method_name.to_string(),
             method_payload,
         };
-        let result = self.exec_env.execute_anonymous_query(
+
+        let result = self.query_handler.query(
             query,
-            state.clone(),
-            self.instruction_limit_without_dts,
+            Labeled::new(Height::from(0), Arc::clone(&state)),
+            data_certificate,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
@@ -1053,13 +1056,15 @@ impl ExecutionTest {
     ) -> Result<WasmResult, UserError> {
         let state = Arc::new(self.state.take().unwrap());
 
-        let query = UserQuery {
-            source: user_test_id(0),
+        let query = Query {
+            source: QuerySource::User {
+                user_id: user_test_id(0),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_id,
             method_name: method_name.to_string(),
             method_payload,
-            ingress_expiry: 0,
-            nonce: None,
         };
         let result = self.query(query, Arc::clone(&state), vec![]);
 
@@ -1178,12 +1183,13 @@ impl ExecutionTest {
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
+
         let (new_state, instructions_used) = self.exec_env.execute_subnet_message(
             message,
             state,
             self.install_code_instruction_limits.clone(),
             &mut mock_random_number_generator(),
-            &self.ecdsa_subnet_public_keys,
+            &self.idkg_subnet_public_keys,
             &self.registry_settings,
             &mut round_limits,
         );
@@ -1489,7 +1495,7 @@ impl ExecutionTest {
     /// Consider to use the simplified `non_replicated_query()` instead.
     pub fn query(
         &self,
-        query: UserQuery,
+        query: Query,
         state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
@@ -2071,12 +2077,12 @@ impl ExecutionTestBuilder {
         state.metadata.network_topology.bitcoin_testnet_canister_id =
             self.execution_config.bitcoin.testnet_canister_id;
 
-        let ecdsa_subnet_public_keys = self
+        let idkg_subnet_public_keys = self
             .ecdsa_key
             .into_iter()
-            .map(|key| {
+            .map(|key_id| {
                 (
-                    key,
+                    MasterPublicKeyId::Ecdsa(key_id),
                     MasterPublicKey {
                         algorithm_id: AlgorithmId::EcdsaSecp256k1,
                         public_key: b"abababab".to_vec(),
@@ -2189,7 +2195,7 @@ impl ExecutionTestBuilder {
             metrics_registry,
             ingress_history_writer,
             manual_execution: self.manual_execution,
-            ecdsa_subnet_public_keys,
+            idkg_subnet_public_keys,
             log: self.log,
             checkpoint_files: vec![],
         }

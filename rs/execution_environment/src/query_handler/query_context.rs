@@ -31,11 +31,11 @@ use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
     messages::{
-        CallContextId, CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
-        UserQuery, NO_DEADLINE,
+        CallContextId, CallbackId, Payload, Query, QuerySource, RejectContext, Request,
+        RequestOrResponse, Response, NO_DEADLINE,
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
-    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,
+    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, PrincipalId, Time,
 };
 use prometheus::IntCounter;
 use std::{
@@ -182,22 +182,25 @@ impl<'a> QueryContext<'a> {
     /// call graph finishes with no reply.
     pub(super) fn run<'b>(
         &mut self,
-        query: UserQuery,
+        query: Query,
         metrics: &'b QueryHandlerMetrics,
         measurement_scope: &MeasurementScope<'b>,
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
         let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
-        let call_origin = CallOrigin::Query(query.source);
+        let call_origin = match query.source {
+            QuerySource::User { user_id, .. } => CallOrigin::Query(user_id),
+            QuerySource::Anonymous => CallOrigin::Query(PrincipalId::new_anonymous().into()),
+        };
 
-        let method = match wasm_query_method(old_canister, query.method_name.clone()) {
+        let method = match wasm_query_method(old_canister, query.method_name.to_string()) {
             Ok(method) => method,
             Err(err) => return Err(err.into_user_error(&canister_id)),
         };
 
         let query_kind = match &method {
             WasmMethod::Query(_) => NonReplicatedQueryKind::Pure {
-                caller: query.source.get(),
+                caller: query.source(),
             },
             WasmMethod::CompositeQuery(_) => NonReplicatedQueryKind::Stateful {
                 call_origin: call_origin.clone(),
@@ -213,7 +216,7 @@ impl<'a> QueryContext<'a> {
             self.execute_query(
                 old_canister.clone(),
                 method.clone(),
-                query.method_payload.as_slice(),
+                &query.method_payload,
                 query_kind,
                 &measurement_scope,
             )
@@ -235,7 +238,7 @@ impl<'a> QueryContext<'a> {
                     let (new_canister, new_result) = self.execute_query(
                         old_canister.clone(),
                         method,
-                        query.method_payload.as_slice(),
+                        &query.method_payload,
                         NonReplicatedQueryKind::Stateful {
                             call_origin: call_origin.clone(),
                         },

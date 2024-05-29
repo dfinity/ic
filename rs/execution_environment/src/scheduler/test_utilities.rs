@@ -109,8 +109,8 @@ pub(crate) struct SchedulerTest {
     registry_settings: RegistryExecutionSettings,
     // Metrics Registry.
     metrics_registry: MetricsRegistry,
-    // ECDSA subnet public keys.
-    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
+    // iDKG subnet public keys.
+    idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     // ECDSA quadruple IDs.
     ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
 }
@@ -472,7 +472,7 @@ impl SchedulerTest {
         let state = self.scheduler.execute_round(
             state,
             Randomness::from([0; 32]),
-            self.ecdsa_subnet_public_keys.clone(),
+            self.idkg_subnet_public_keys.clone(),
             self.ecdsa_quadruple_ids.clone(),
             self.round,
             None,
@@ -738,12 +738,12 @@ impl SchedulerTestBuilder {
                 .idkg_keys_held
                 .insert(MasterPublicKeyId::Ecdsa(ecdsa_key.clone()));
         }
-        let ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey> = self
+        let idkg_subnet_public_keys: BTreeMap<_, _> = self
             .ecdsa_keys
             .into_iter()
-            .map(|key| {
+            .map(|key_id| {
                 (
-                    key,
+                    MasterPublicKeyId::Ecdsa(key_id),
                     MasterPublicKey {
                         algorithm_id: AlgorithmId::Secp256k1,
                         public_key: b"abababab".to_vec(),
@@ -841,7 +841,7 @@ impl SchedulerTestBuilder {
             wasm_executor,
             registry_settings: self.registry_settings,
             metrics_registry: self.metrics_registry,
-            ecdsa_subnet_public_keys,
+            idkg_subnet_public_keys,
             ecdsa_quadruple_ids: BTreeMap::new(),
         }
     }

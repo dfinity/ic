@@ -3,9 +3,10 @@ use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_certification::{verify_certified_data, verify_certified_data_with_cache};
 use ic_certification_test_utils::CertificateData::*;
 use ic_certification_test_utils::*;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_tree_hash::Digest;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use rand::{thread_rng, Rng};
+use rand::{CryptoRng, Rng};
 
 criterion_main!(benches);
 criterion_group!(benches, canister_sig, invalid_canister_sig);
@@ -24,10 +25,13 @@ fn canister_signature_bench_impl(
     mut group: BenchmarkGroup<criterion::measurement::WallTime>,
     corrupt: bool,
 ) {
+    let rng = &mut reproducible_rng();
+
+    let closure_rng = &mut rng.fork();
     group.bench_function("subnet_delegation_no_caching_no", move |b| {
         b.iter_batched(
             || {
-                let (digest, pk, cbor) = new_random_cert_without_delegation();
+                let (digest, pk, cbor) = new_random_cert_without_delegation(closure_rng);
                 (digest, conditionally_corrupt_pk(&pk, corrupt), cbor)
             },
             |(digest, pk, cbor)| {
@@ -39,10 +43,11 @@ fn canister_signature_bench_impl(
         )
     });
 
+    let closure_rng = &mut rng.fork();
     group.bench_function("subnet_delegation_yes_cache_no", move |b| {
         b.iter_batched(
             || {
-                let (digest, pk, cbor) = new_random_cert_with_delegation();
+                let (digest, pk, cbor) = new_random_cert_with_delegation(closure_rng);
                 (digest, conditionally_corrupt_pk(&pk, corrupt), cbor)
             },
             |(digest, pk, cbor)| {
@@ -54,10 +59,11 @@ fn canister_signature_bench_impl(
         )
     });
 
+    let closure_rng = &mut rng.fork();
     group.bench_function("subnet_delegation_no_cache_yes", move |b| {
         b.iter_batched(
             || {
-                let (digest, pk, cbor) = new_random_cert_without_delegation();
+                let (digest, pk, cbor) = new_random_cert_without_delegation(closure_rng);
                 let result = verify_certified_data_with_cache(
                     &cbor[..],
                     &GLOBAL_CANISTER_ID,
@@ -83,7 +89,7 @@ fn canister_signature_bench_impl(
     group.bench_function("subnet_delegation_yes_caching_yes", move |b| {
         b.iter_batched(
             || {
-                let (digest, pk, cbor) = new_random_cert_with_delegation();
+                let (digest, pk, cbor) = new_random_cert_with_delegation(rng);
                 let result = verify_certified_data_with_cache(
                     &cbor[..],
                     &GLOBAL_CANISTER_ID,
@@ -112,32 +118,45 @@ fn canister_signature_bench_impl(
 /// The reason the data can be random is that we don't need it to be valid for some data,
 /// we just need some digest that exists in the state tree's path "/canister/<canister_id>/certified_data"
 /// to successfully verify the signature.
-fn new_random_certified_data() -> Digest {
+fn new_random_certified_data<R: Rng + CryptoRng>(rng: &mut R) -> Digest {
     let mut random_certified_data: [u8; 32] = [0; 32];
-    thread_rng().fill(&mut random_certified_data);
+    rng.fill(&mut random_certified_data);
     Digest(random_certified_data)
 }
 
-fn new_random_cert_without_delegation() -> (Digest, ThresholdSigPublicKey, Vec<u8>) {
-    let certified_data = new_random_certified_data();
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: GLOBAL_CANISTER_ID,
-        certified_data: certified_data.clone(),
-    })
+fn new_random_cert_without_delegation<R: Rng + CryptoRng>(
+    rng: &mut R,
+) -> (Digest, ThresholdSigPublicKey, Vec<u8>) {
+    let certified_data = new_random_certified_data(rng);
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: GLOBAL_CANISTER_ID,
+            certified_data: certified_data.clone(),
+        },
+        rng,
+    )
     .build();
     (certified_data, pk, cbor)
 }
 
-fn new_random_cert_with_delegation() -> (Digest, ThresholdSigPublicKey, Vec<u8>) {
-    let certified_data = new_random_certified_data();
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: GLOBAL_CANISTER_ID,
-        certified_data: certified_data.clone(),
-    })
-    .with_delegation(CertificateBuilder::new(SubnetData {
-        subnet_id: subnet_id(123),
-        canister_id_ranges: vec![(canister_id(0), canister_id(10))],
-    }))
+fn new_random_cert_with_delegation<R: Rng + CryptoRng>(
+    rng: &mut R,
+) -> (Digest, ThresholdSigPublicKey, Vec<u8>) {
+    let certified_data = new_random_certified_data(rng);
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: GLOBAL_CANISTER_ID,
+            certified_data: certified_data.clone(),
+        },
+        rng,
+    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        SubnetData {
+            subnet_id: subnet_id(123),
+            canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+        },
+        rng,
+    ))
     .build();
     (certified_data, pk, cbor)
 }

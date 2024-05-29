@@ -55,7 +55,7 @@ use ic_types::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
     malicious_flags::MaliciousFlags,
-    messages::{CertificateDelegation, SignedIngressContent, UserQuery},
+    messages::{CertificateDelegation, Query, SignedIngressContent},
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
     CryptoHashOfPartialState, Height, RegistryVersion,
@@ -73,16 +73,14 @@ use tower_test::mock::Handle;
 pub type IngressFilterHandle =
     Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
 pub type QueryExecutionHandle =
-    Handle<(UserQuery, Option<CertificateDelegation>), QueryExecutionResponse>;
+    Handle<(Query, Option<CertificateDelegation>), QueryExecutionResponse>;
 
 fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
-    let (service, handle) = tower_test::mock::pair::<
-        (UserQuery, Option<CertificateDelegation>),
-        QueryExecutionResponse,
-    >();
+    let (service, handle) =
+        tower_test::mock::pair::<(Query, Option<CertificateDelegation>), QueryExecutionResponse>();
 
     let infallible_service =
-        tower::service_fn(move |request: (UserQuery, Option<CertificateDelegation>)| {
+        tower::service_fn(move |request: (Query, Option<CertificateDelegation>)| {
             let mut service_clone = service.clone();
             async move {
                 Ok::<QueryExecutionResponse, Infallible>(

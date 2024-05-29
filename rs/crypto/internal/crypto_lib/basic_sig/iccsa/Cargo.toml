@@ -28,4 +28,4 @@ ic-crypto-test-utils-reproducible-rng = { path = "../../../../../crypto/test_uti
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 ic-crypto-test-utils = { path = "../../../../test_utils" }
 ic-interfaces = { path = "../../../../../interfaces" }
-rand = "0.8.3"
+rand = { workspace = true }

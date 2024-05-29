@@ -1347,6 +1347,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         num_archives as f64,
         "Total number of archives.",
     )?;
+    w.encode_gauge(
+        "ledger_num_approvals",
+        ledger.approvals.get_num_approvals() as f64,
+        "Total number of approvals.",
+    )?;
     Ok(())
 }
 

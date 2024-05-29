@@ -590,6 +590,7 @@ bazel-test-bare-metal:
   needs: [] # don't wait on other jobs
   script:
     - |
+      set -euo pipefail
       # shellcheck disable=SC2046,SC2086
       bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
         //ic-os/setupos/envs/dev:launch_bare_metal -- \

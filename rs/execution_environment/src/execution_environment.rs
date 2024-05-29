@@ -6,7 +6,6 @@ use crate::{
     canister_settings::CanisterSettings,
     execution::{
         inspect_message, install_code::validate_controller,
-        nonreplicated_query::execute_non_replicated_query,
         replicated_query::execute_replicated_query, response::execute_response,
         update::execute_update,
     },
@@ -16,7 +15,6 @@ use crate::{
     hypervisor::Hypervisor,
     ic00_permissions::Ic00MethodPermissions,
     metrics::{CallTreeMetrics, CallTreeMetricsImpl, IngressFilterMetrics},
-    NonReplicatedQueryKind,
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;
@@ -64,9 +62,9 @@ use ic_types::{
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        extract_effective_canister_id, AnonymousQuery, CanisterCall, CanisterCallOrTask,
-        CanisterMessage, CanisterMessageOrTask, CanisterTask, Payload, RejectContext, Request,
-        Response, SignedIngressContent, StopCanisterCallId, StopCanisterContext,
+        extract_effective_canister_id, CanisterCall, CanisterCallOrTask, CanisterMessage,
+        CanisterMessageOrTask, CanisterTask, Payload, RejectContext, Request, Response,
+        SignedIngressContent, StopCanisterCallId, StopCanisterContext,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     methods::SystemMethod,
@@ -462,7 +460,7 @@ impl ExecutionEnvironment {
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
         rng: &mut dyn RngCore,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterPublicKey>,
+        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
         registry_settings: &RegistryExecutionSettings,
         round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, Option<NumInstructions>) {
@@ -600,10 +598,10 @@ impl ExecutionEnvironment {
                             refund: msg.take_cycles(),
                         },
                         Ok(args) => {
-                            match get_master_ecdsa_public_key(
-                                ecdsa_subnet_public_keys,
+                            match get_master_public_key(
+                                idkg_subnet_public_keys,
                                 self.own_subnet_id,
-                                &args.key_id,
+                                &MasterPublicKeyId::Ecdsa(args.key_id.clone()),
                             ) {
                                 Err(err) => ExecuteSubnetMessageResult::Finished {
                                     response: Err(err),
@@ -1000,10 +998,10 @@ impl ExecutionEnvironment {
                     CanisterCall::Request(request) => {
                         let res = match ECDSAPublicKeyArgs::decode(request.method_payload()) {
                             Err(err) => Err(err),
-                            Ok(args) => match get_master_ecdsa_public_key(
-                                ecdsa_subnet_public_keys,
+                            Ok(args) => match get_master_public_key(
+                                idkg_subnet_public_keys,
                                 self.own_subnet_id,
-                                &args.key_id,
+                                &MasterPublicKeyId::Ecdsa(args.key_id.clone()),
                             ) {
                                 Err(err) => Err(err),
                                 Ok(pubkey) => {
@@ -1042,10 +1040,10 @@ impl ExecutionEnvironment {
                 match &msg {
                     CanisterCall::Request(request) => {
                         match ComputeInitialEcdsaDealingsArgs::decode(request.method_payload()) {
-                            Ok(args) => match get_master_ecdsa_public_key(
-                                ecdsa_subnet_public_keys,
+                            Ok(args) => match get_master_public_key(
+                                idkg_subnet_public_keys,
                                 self.own_subnet_id,
-                                &args.key_id,
+                                &MasterPublicKeyId::Ecdsa(args.key_id.clone()),
                             ) {
                                 Ok(_) => self
                                     .compute_initial_ecdsa_dealings(&mut state, args, request)
@@ -1073,11 +1071,29 @@ impl ExecutionEnvironment {
                 }
             }
 
-            // TODO(EXC-1599): implement ComputeInitialIDkgDealings.
+            // TODO(EXC-1627): add implementation.
             Ok(Ic00Method::ComputeInitialIDkgDealings) => ExecuteSubnetMessageResult::Finished {
                 response: Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
                     "ComputeInitialIDkgDealings API is not yet implemented.",
+                )),
+                refund: msg.take_cycles(),
+            },
+
+            // TODO(EXC-1628): add implementation.
+            Ok(Ic00Method::SchnorrPublicKey) => ExecuteSubnetMessageResult::Finished {
+                response: Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "SchnorrPublicKey API is not yet implemented.",
+                )),
+                refund: msg.take_cycles(),
+            },
+
+            // TODO(EXC-1629): add implementation.
+            Ok(Ic00Method::SignWithSchnorr) => ExecuteSubnetMessageResult::Finished {
+                response: Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "SignWithSchnorr API is not yet implemented.",
                 )),
                 refund: msg.take_cycles(),
             },
@@ -2198,67 +2214,6 @@ impl ExecutionEnvironment {
             metrics,
         )
         .1
-    }
-
-    /// Execute a query call that has no caller provided.
-    /// This type of query is triggered by the IC only when
-    /// there is a need to execute a query call on the provided canister.
-    pub fn execute_anonymous_query(
-        &self,
-        anonymous_query: AnonymousQuery,
-        state: Arc<ReplicatedState>,
-        max_instructions_per_query: NumInstructions,
-    ) -> Result<WasmResult, UserError> {
-        let canister_id = anonymous_query.receiver;
-        let canister = state.get_active_canister(&canister_id)?;
-        // An anonymous query is expected to finish quickly, so DTS is not
-        // supported for it.
-        let instruction_limits = InstructionLimits::new(
-            FlagStatus::Disabled,
-            max_instructions_per_query,
-            max_instructions_per_query,
-        );
-        let subnet_available_memory = subnet_memory_capacity(&self.config);
-        let execution_parameters = self.execution_parameters(
-            canister,
-            instruction_limits,
-            ExecutionMode::NonReplicated,
-            // Effectively disable subnet memory resource reservation for queries.
-            ResourceSaturation::default(),
-        );
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(max_instructions_per_query),
-            subnet_available_memory,
-            // Ignore compute allocation
-            compute_allocation_used: 0,
-        };
-        let result = execute_non_replicated_query(
-            NonReplicatedQueryKind::Pure {
-                caller: IC_00.get(),
-            },
-            WasmMethod::Query(anonymous_query.method_name.to_string()),
-            &anonymous_query.method_payload,
-            canister.clone(),
-            None,
-            state.time(),
-            execution_parameters,
-            &state.metadata.network_topology,
-            &self.hypervisor,
-            &mut round_limits,
-            &self.metrics.state_changes_error,
-        )
-        .2;
-
-        match result {
-            Ok(maybe_wasm_result) => match maybe_wasm_result {
-                Some(wasm_result) => Ok(wasm_result),
-                None => Err(UserError::new(
-                    ErrorCode::CanisterDidNotReply,
-                    format!("Canister {} did not reply to the call", canister_id),
-                )),
-            },
-            Err(err) => Err(err),
-        }
     }
 
     // Output the response of a subnet message depending on its type.
@@ -3602,15 +3557,15 @@ pub fn execute_canister(
     )
 }
 
-fn get_master_ecdsa_public_key<'a>(
-    ecdsa_subnet_public_keys: &'a BTreeMap<EcdsaKeyId, MasterPublicKey>,
+fn get_master_public_key<'a>(
+    idkg_subnet_public_keys: &'a BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     subnet_id: SubnetId,
-    key_id: &EcdsaKeyId,
+    key_id: &MasterPublicKeyId,
 ) -> Result<&'a MasterPublicKey, UserError> {
-    match ecdsa_subnet_public_keys.get(key_id) {
+    match idkg_subnet_public_keys.get(key_id) {
         None => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            format!("Subnet {} does not hold ECDSA key {}.", subnet_id, key_id),
+            format!("Subnet {} does not hold iDKG key {}.", subnet_id, key_id),
         )),
         Some(master_key) => Ok(master_key),
     }

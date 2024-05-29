@@ -591,14 +591,20 @@ pub fn load_pem(
     use rustls_pemfile::Item;
 
     // Convert certificate & key from PEM format
-    let certs = rustls_pemfile::certs(&mut certs.as_ref())?;
+    let mut temp = certs.as_ref();
+    let certs = rustls_pemfile::certs(&mut temp);
     let key = match rustls_pemfile::read_one(&mut key.as_ref())? {
-        Some(Item::RSAKey(v)) | Some(Item::PKCS8Key(v)) | Some(Item::ECKey(v)) => v,
+        Some(Item::Pkcs1Key(v)) => v.secret_pkcs1_der().to_vec(),
+        Some(Item::Pkcs8Key(v)) => v.secret_pkcs8_der().to_vec(),
+        Some(Item::Sec1Key(v)) => v.secret_sec1_der().to_vec(),
         _ => return Err(anyhow!("private key format not supported")),
     };
 
     // Cast into Rustls types
-    let certs = certs.into_iter().map(rustls::Certificate).collect();
+    let certs = certs
+        .filter_map(Result::ok)
+        .map(|cert| rustls::Certificate(cert.to_vec()))
+        .collect();
     let key = rustls::PrivateKey(key);
 
     Ok((certs, key))

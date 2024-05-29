@@ -869,7 +869,6 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1ad46c3ec4e12f4a4b6835e173ba21c25e484c9d02b49770bf006ce5367c036"
 dependencies = [
- "arc-swap",
  "bytes",
  "futures-util",
  "http 1.0.0",
@@ -878,10 +877,7 @@ dependencies = [
  "hyper 1.2.0",
  "hyper-util",
  "pin-project-lite",
- "rustls 0.21.12",
- "rustls-pemfile 2.0.0",
  "tokio",
- "tokio-rustls 0.24.1",
  "tower",
  "tower-service",
 ]
@@ -4821,10 +4817,15 @@ name = "httpbin-rs"
 version = "0.9.0"
 dependencies = [
  "axum 0.7.5",
- "axum-server 0.6.0",
  "clap 4.4.6",
+ "hyper 1.2.0",
+ "hyper-util",
+ "rustls 0.23.8",
+ "rustls-pemfile 2.0.0",
  "serde_json",
  "tokio",
+ "tokio-rustls 0.26.0",
+ "tower",
 ]
 
 [[package]]
@@ -5486,7 +5487,7 @@ dependencies = [
  "regex",
  "reqwest 0.11.22",
  "rustls 0.21.12",
- "rustls-pemfile 1.0.4",
+ "rustls-pemfile 2.0.0",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -5998,6 +5999,7 @@ dependencies = [
  "ic-base-types",
  "ic-certification-test-utils",
  "ic-crypto-internal-types",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig",
  "ic-crypto-utils-threshold-sig-der",
@@ -7933,12 +7935,13 @@ dependencies = [
 name = "ic-http-endpoints-metrics"
 version = "0.9.0"
 dependencies = [
- "hyper 0.14.26",
+ "axum 0.7.5",
  "ic-async-utils",
  "ic-config",
  "ic-metrics",
  "ic-test-utilities-logger",
  "prometheus",
+ "reqwest 0.12.4",
  "slog",
  "thiserror",
  "tokio",
@@ -8359,7 +8362,6 @@ dependencies = [
  "num-traits",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rand_core 0.6.4",
  "ring 0.16.20",
  "serde",
  "serde_bytes",
@@ -8390,7 +8392,6 @@ dependencies = [
  "num-traits",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "rand_core 0.6.4",
  "ring 0.16.20",
  "serde",
  "serde_bytes",
@@ -11702,7 +11703,6 @@ dependencies = [
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-ni-dkg",
- "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
  "ic-cycles-account-manager",
  "ic-interfaces",
@@ -11728,7 +11728,6 @@ dependencies = [
  "nix 0.24.3",
  "parking_lot 0.12.1",
  "rand 0.8.5",
- "rustls 0.21.12",
  "rusty-fork",
  "serde",
  "serde_cbor",
@@ -12653,7 +12652,7 @@ dependencies = [
  "reqwest 0.12.4",
  "rustls 0.23.8",
  "rustls-native-certs 0.7.0",
- "rustls-pemfile 1.0.4",
+ "rustls-pemfile 2.0.0",
  "serde",
  "serde_json",
  "thiserror",

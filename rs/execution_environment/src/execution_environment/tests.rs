@@ -7,8 +7,9 @@ use ic_management_canister_types::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType,
     DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod,
-    LogVisibility, Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, TransformContext, TransformFunc, IC_00,
+    LogVisibility, MasterPublicKeyId, Method, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrAlgorithm,
+    SchnorrKeyId, TransformContext, TransformFunc, IC_00,
 };
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -2052,9 +2053,16 @@ fn get_reject_message(response: RequestOrResponse) -> String {
     }
 }
 
-fn make_key(name: &str) -> EcdsaKeyId {
+fn make_ecdsa_key(name: &str) -> EcdsaKeyId {
     EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
+        name: name.to_string(),
+    }
+}
+
+fn make_shnorr_key(name: &str) -> SchnorrKeyId {
+    SchnorrKeyId {
+        algorithm: SchnorrAlgorithm::Ed25519,
         name: name.to_string(),
     }
 }
@@ -2069,12 +2077,12 @@ fn compute_initial_ecdsa_dealings_sender_on_nns() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
         .with_ecdsa_signature_fee(0)
-        .with_ecdsa_key(make_key("secp256k1"))
+        .with_ecdsa_key(make_ecdsa_key("secp256k1"))
         .build();
 
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
-        make_key("secp256k1"),
+        make_ecdsa_key("secp256k1"),
         own_subnet,
         node_ids,
         RegistryVersion::from(100),
@@ -2099,12 +2107,12 @@ fn compute_initial_ecdsa_dealings_sender_not_on_nns() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(other_subnet, other_canister)
         .with_ecdsa_signature_fee(0)
-        .with_ecdsa_key(make_key("secp256k1"))
+        .with_ecdsa_key(make_ecdsa_key("secp256k1"))
         .build();
 
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
-        make_key("secp256k1"),
+        make_ecdsa_key("secp256k1"),
         own_subnet,
         node_ids,
         RegistryVersion::from(100),
@@ -2139,7 +2147,7 @@ fn compute_initial_ecdsa_dealings_with_unknown_key() {
 
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
-        make_key("foo"),
+        make_ecdsa_key("foo"),
         own_subnet,
         node_ids,
         RegistryVersion::from(100),
@@ -2154,9 +2162,9 @@ fn compute_initial_ecdsa_dealings_with_unknown_key() {
     assert_eq!(
         get_reject_message(response),
         format!(
-            "Subnet {} does not hold ECDSA key {}.",
+            "Subnet {} does not hold iDKG key {}.",
             own_subnet,
-            make_key("foo")
+            MasterPublicKeyId::Ecdsa(make_ecdsa_key("foo"))
         ),
     )
 }
@@ -2165,7 +2173,7 @@ fn compute_initial_ecdsa_dealings_with_unknown_key() {
 fn ecdsa_signature_fee_charged() {
     let fee = 1_000_000;
     let payment = 2_000_000;
-    let ecdsa_key = make_key("secp256k1");
+    let ecdsa_key = make_ecdsa_key("secp256k1");
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_own_subnet_id(subnet_test_id(1))
@@ -2234,7 +2242,7 @@ fn ecdsa_signature_fee_charged() {
 #[test]
 fn ecdsa_signature_rejected_without_fee() {
     let fee = 2_000_000;
-    let ecdsa_key = make_key("secp256k1");
+    let ecdsa_key = make_ecdsa_key("secp256k1");
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_own_subnet_id(subnet_test_id(1))
@@ -2271,8 +2279,8 @@ fn ecdsa_signature_rejected_without_fee() {
 
 #[test]
 fn ecdsa_signature_with_unknown_key_rejected() {
-    let correct_key = make_key("correct_key");
-    let wrong_key = make_key("wrong_key");
+    let correct_key = make_ecdsa_key("correct_key");
+    let wrong_key = make_ecdsa_key("wrong_key");
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_own_subnet_id(subnet_test_id(1))
@@ -2299,7 +2307,10 @@ fn ecdsa_signature_with_unknown_key_rejected() {
     let result = test.ingress(canister_id, "update", run).unwrap();
     assert_eq!(
         WasmResult::Reject(
-            format!("Unable to route management canister request sign_with_ecdsa: IDkgKeyError(\"Requested unknown iDKG key: ecdsa:{}, existing keys with signing enabled: [ecdsa:{}]\")", wrong_key, correct_key
+            format!(
+                "Unable to route management canister request sign_with_ecdsa: IDkgKeyError(\"Requested unknown iDKG key: {}, existing keys with signing enabled: [{}]\")",
+                MasterPublicKeyId::Ecdsa(wrong_key),
+                MasterPublicKeyId::Ecdsa(correct_key),
         )),
         result
     );
@@ -2307,8 +2318,8 @@ fn ecdsa_signature_with_unknown_key_rejected() {
 
 #[test]
 fn ecdsa_signature_request_with_disabled_key_rejected() {
-    let disabled_key = make_key("disabled_key");
-    let wrong_key = make_key("wrong_key");
+    let disabled_key = make_ecdsa_key("disabled_key");
+    let wrong_key = make_ecdsa_key("wrong_key");
     let canister_id = canister_test_id(0x10);
     let own_subnet_id = subnet_test_id(1);
     let mut test = ExecutionTestBuilder::new()
@@ -2361,20 +2372,25 @@ fn ecdsa_signature_request_with_disabled_key_rejected() {
         // However, this is enough to assert that the correct endpoint is reached.
         "InternalError(\"InvalidPoint\")",
         "invalid or disabled key Secp256k1:disabled_key",
-        "does not hold ECDSA key Secp256k1:wrong_key",
+        "does not hold iDKG key ecdsa:Secp256k1:wrong_key",
     ];
 
     for (i, expected) in expected.iter().enumerate() {
         let result = test.xnet_messages()[i].clone();
         let message = get_reject_message(result);
-        assert!(message.contains(expected));
+        assert!(
+            message.contains(expected),
+            "Expected: {} \nActual: {}",
+            expected,
+            message
+        );
     }
 }
 
 #[test]
 fn ecdsa_public_key_req_with_unknown_key_rejected() {
-    let correct_key = make_key("correct_key");
-    let wrong_key = make_key("wrong_key");
+    let correct_key = make_ecdsa_key("correct_key");
+    let wrong_key = make_ecdsa_key("wrong_key");
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_own_subnet_id(subnet_test_id(1))
@@ -2401,7 +2417,10 @@ fn ecdsa_public_key_req_with_unknown_key_rejected() {
     let result = test.ingress(canister_id, "update", run).unwrap();
     assert_eq!(
         WasmResult::Reject(
-            format!("Unable to route management canister request ecdsa_public_key: IDkgKeyError(\"Requested unknown iDKG key: ecdsa:{}, existing keys: [ecdsa:{}]\")", wrong_key, correct_key
+            format!(
+                "Unable to route management canister request ecdsa_public_key: IDkgKeyError(\"Requested unknown iDKG key: {}, existing keys: [{}]\")",
+                MasterPublicKeyId::Ecdsa(wrong_key),
+                MasterPublicKeyId::Ecdsa(correct_key),
         )),
         result
     );
@@ -2409,7 +2428,7 @@ fn ecdsa_public_key_req_with_unknown_key_rejected() {
 
 #[test]
 fn ecdsa_signature_fee_ignored_for_nns() {
-    let ecdsa_key = make_key("secp256k1");
+    let ecdsa_key = make_ecdsa_key("secp256k1");
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_own_subnet_id(subnet_test_id(1))
@@ -2475,7 +2494,7 @@ fn ecdsa_signature_fee_ignored_for_nns() {
 fn ecdsa_signature_queue_fills_up() {
     let fee = 1_000_000;
     let payment = 2_000_000u128;
-    let ecdsa_key = make_key("secp256k1");
+    let ecdsa_key = make_ecdsa_key("secp256k1");
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_own_subnet_id(subnet_test_id(1))
@@ -3323,4 +3342,89 @@ fn test_fetch_canister_logs_should_accept_ingress_message_enabled() {
             "fetch_canister_logs API is only accessible in non-replicated mode"
         ))
     );
+}
+
+#[test]
+fn test_compute_initial_idkg_dealings_api_is_disabled() {
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .build();
+    test.inject_call_to_ic00(
+        Method::ComputeInitialIDkgDealings,
+        ic00::ComputeInitialIDkgDealingsArgs::new(
+            MasterPublicKeyId::Schnorr(make_shnorr_key("Ed25519")),
+            own_subnet,
+            Default::default(),
+            RegistryVersion::from(100),
+        )
+        .encode(),
+        Cycles::new(0),
+    );
+    test.execute_all();
+    let response = test.xnet_messages()[0].clone();
+    assert_eq!(
+        get_reject_message(response),
+        "ComputeInitialIDkgDealings API is not yet implemented.",
+    )
+}
+
+#[test]
+fn test_schnorr_public_key_api_is_disabled() {
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .build();
+    test.inject_call_to_ic00(
+        Method::SchnorrPublicKey,
+        ic00::SchnorrPublicKeyArgs {
+            canister_id: None,
+            derivation_path: DerivationPath::new(vec![]),
+            key_id: make_shnorr_key("Ed25519"),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
+    test.execute_all();
+    let response = test.xnet_messages()[0].clone();
+    assert_eq!(
+        get_reject_message(response),
+        "SchnorrPublicKey API is not yet implemented.",
+    )
+}
+
+#[test]
+fn test_sign_with_schnorr_api_is_disabled() {
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .build();
+    test.inject_call_to_ic00(
+        Method::SignWithSchnorr,
+        ic00::SignWithSchnorrArgs {
+            message: vec![],
+            derivation_path: DerivationPath::new(vec![]),
+            key_id: make_shnorr_key("Ed25519"),
+        }
+        .encode(),
+        Cycles::new(0),
+    );
+    test.execute_all();
+    let response = test.xnet_messages()[0].clone();
+    assert_eq!(
+        get_reject_message(response),
+        "SignWithSchnorr API is not yet implemented.",
+    )
 }

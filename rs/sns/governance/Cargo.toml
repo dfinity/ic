@@ -67,7 +67,7 @@ icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
 num-traits = { workspace = true }
 prost = { workspace = true }
-rand = "0.8"
+rand = { workspace = true }
 rand_chacha = "0.3"
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"

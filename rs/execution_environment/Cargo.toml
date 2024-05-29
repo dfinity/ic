@@ -46,7 +46,7 @@ num-rational = "0.2.2"
 num-traits = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
-rand = "0.8"
+rand = { workspace = true }
 scoped_threadpool = "0.1.*"
 serde = { workspace = true }
 serde_cbor = { workspace = true }
