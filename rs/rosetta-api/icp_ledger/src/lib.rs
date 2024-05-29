@@ -43,6 +43,7 @@ pub use validate_endpoints::{tokens_from_proto, tokens_into_proto};
 pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
 
 pub const MAX_BLOCKS_PER_REQUEST: usize = 2000;
+pub const MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST: usize = 50;
 
 pub const MEMO_SIZE_BYTES: usize = 32;
 
@@ -1250,6 +1251,13 @@ impl Default for FeatureFlags {
     fn default() -> Self {
         Self::const_default()
     }
+}
+
+pub fn max_blocks_per_request(principal_id: &PrincipalId) -> usize {
+    if ic_cdk::api::data_certificate().is_none() && principal_id.is_self_authenticating() {
+        return MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST;
+    }
+    MAX_BLOCKS_PER_REQUEST
 }
 
 #[cfg(test)]
