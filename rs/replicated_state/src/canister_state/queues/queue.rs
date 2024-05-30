@@ -22,33 +22,25 @@ mod tests;
 /// a specific callback.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum MessageReference {
-    /// Weak reference to a `Request` held in the message pool.
+    /// Weak reference to a `Request` or `Response` held in the message pool.
     ///
-    /// Guaranteed response call requests in output queues and best-effort requests
-    /// in input or output queues may time out and be dropped from the pool. Such
-    /// stale references can be safely ignored. Guaranteed response call requests in
-    /// input queues never time out.
+    /// Some messages (all best-effort messages; plus guaranteed response requests
+    /// in output queues) may time out or be load shed and be dropped from the pool.
+    /// The kind (`Request` or `Response`) of such a stale reference can be learned
+    /// from the contained `Id`.
     ///
-    /// All best-effort requests are subject to load shedding and may be dropped
-    /// from the pool at any time.
-    Request(message_pool::Id),
-
-    /// Weak reference to a `Response` held in the message pool.
-    ///
-    /// Best-effort responses in output queues may time out and be dropped from the
-    /// pool. Best-effort responses in input queues and guaranteed responses never
-    /// time out. Additionally, best-effort responses are subject to load shedding
-    /// and may be dropped from the pool at any time.
-    ///
-    /// Stale response references in output queues can be safely ignored.
-    ///
-    /// Stale response references in input queues were either enqueued as dangling
-    /// timeout reject response markers (with the corresponding response never
-    /// inserted into the pool); or they are the result of shedding a best-effort
-    /// response. Meaning that stale response references in input queues are always
-    /// `SYS_UNKNOWN` reject responses to best-effort calls ("timeout" if deadline
-    /// has expired, "drop" otherwise.)
-    Response(message_pool::Id),
+    ///  * Stale requests are to be ignored, whether they are found in an input or
+    ///    an output queue. They timed out or were shed while enqueued and, if in an
+    ///    output queue, a corresponding reject response was generated.
+    ///  * Stale responses in output queues (always best-effort) are also to be
+    ///    ignored. They timed out or were shed while enqueued and the originating
+    ///    canister is responsible for generating a timeout response instead.
+    ///  * Stale responses in input queues (always best-effort) are responses that
+    ///    were shed while enqueued or are `SYS_UNKNOWN` reject responses enqueued
+    ///    as dangling rererences to begin with. They are to be handled as
+    ///    `SYS_UNKNOWN` reject responses ("timeout" if their deadline expired,
+    ///    "drop" otherwise).
+    Pooled(message_pool::Id),
     //
     // TODO(MR-552) Define and use variants for best-effort and guaranteed reject
     // responses, so we don't need to allocate a full message.
@@ -65,13 +57,13 @@ pub(super) enum MessageReference {
 impl MessageReference {
     /// Returns `true` if this is a reference to a response; or a reject response.
     pub(super) fn is_response(&self) -> bool {
-        matches!(self, Self::Response(_))
+        matches!(self, Self::Pooled(id) if id.kind() == Kind::Response)
     }
 
     /// Returns the ID behind this reference.
     pub(super) fn id(&self) -> message_pool::Id {
         match self {
-            Self::Request(id) | Self::Response(id) => *id,
+            Self::Pooled(id) => *id,
         }
     }
 }
@@ -161,7 +153,7 @@ impl CanisterQueue {
         debug_assert!(id.kind() == Kind::Request);
         assert!(self.request_slots < self.capacity);
 
-        self.queue.push_back(MessageReference::Request(id));
+        self.queue.push_back(MessageReference::Pooled(id));
         self.request_slots += 1;
 
         debug_assert!(self.check_invariants());
@@ -213,7 +205,7 @@ impl CanisterQueue {
         debug_assert!(id.kind() == Kind::Response);
         self.check_has_reserved_response_slot().unwrap();
 
-        self.queue.push_back(MessageReference::Response(id));
+        self.queue.push_back(MessageReference::Pooled(id));
         debug_assert!(self.check_invariants());
     }
 
@@ -293,8 +285,7 @@ impl From<&CanisterQueue> for pb_queues::CanisterQueue {
                 .queue
                 .iter()
                 .map(|reference| match reference {
-                    MessageReference::Request(id) => id.into(),
-                    MessageReference::Response(id) => id.into(),
+                    MessageReference::Pooled(id) => id.into(),
                 })
                 .collect(),
             capacity: item.capacity as u64,
@@ -310,12 +301,9 @@ impl TryFrom<pb_queues::CanisterQueue> for CanisterQueue {
             .queue
             .into_iter()
             .map(|reference| match reference.r {
-                Some(pb_queues::canister_queue::message_reference::R::MessageId(_)) => {
+                Some(pb_queues::canister_queue::message_reference::R::Id(_)) => {
                     let id = message_pool::Id::try_from(reference)?;
-                    match id.kind() {
-                        Kind::Request => Ok(MessageReference::Request(id)),
-                        Kind::Response => Ok(MessageReference::Response(id)),
-                    }
+                    Ok(MessageReference::Pooled(id))
                 }
                 None => Err(ProxyDecodeError::MissingField("MessageReference::r")),
             })

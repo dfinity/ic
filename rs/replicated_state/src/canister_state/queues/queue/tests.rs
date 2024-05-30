@@ -54,8 +54,8 @@ fn canister_queue_push_request_succeeds() {
     );
 
     // Peek, then pop the request.
-    assert_eq!(Some(&MessageReference::Request(id)), queue.peek());
-    assert_eq!(Some(MessageReference::Request(id)), queue.pop());
+    assert_eq!(Some(&MessageReference::Pooled(id)), queue.peek());
+    assert_eq!(Some(MessageReference::Pooled(id)), queue.pop());
 
     assert_eq!(0, queue.len());
     assert!(!queue.has_used_slots());
@@ -104,8 +104,8 @@ fn canister_queue_push_response_succeeds() {
     );
 
     // Peek, then pop the response reference.
-    assert_eq!(Some(&MessageReference::Response(id)), queue.peek());
-    assert_eq!(Some(MessageReference::Response(id)), queue.pop());
+    assert_eq!(Some(&MessageReference::Pooled(id)), queue.peek());
+    assert_eq!(Some(MessageReference::Pooled(id)), queue.pop());
 
     assert_eq!(0, queue.len());
     assert!(!queue.has_used_slots());
@@ -242,10 +242,10 @@ fn canister_queue_push_without_reserved_slot_panics() {
 /// Generator for an arbitrary `MessageReference`.
 fn arbitrary_message_reference() -> impl Strategy<Value = MessageReference> {
     prop_oneof![
-        1 => any::<u64>().prop_map(|gen| MessageReference::Request(new_request_message_id(gen, Class::GuaranteedResponse))),
-        1 => any::<u64>().prop_map(|gen| MessageReference::Request(new_request_message_id(gen, Class::BestEffort))),
-        1 => any::<u64>().prop_map(|gen| MessageReference::Response(new_response_message_id(gen, Class::GuaranteedResponse))),
-        1 => any::<u64>().prop_map(|gen| MessageReference::Response(new_response_message_id(gen, Class::BestEffort))),
+        1 => any::<u64>().prop_map(|gen| MessageReference::Pooled(new_request_message_id(gen, Class::GuaranteedResponse))),
+        1 => any::<u64>().prop_map(|gen| MessageReference::Pooled(new_request_message_id(gen, Class::BestEffort))),
+        1 => any::<u64>().prop_map(|gen| MessageReference::Pooled(new_response_message_id(gen, Class::GuaranteedResponse))),
+        1 => any::<u64>().prop_map(|gen| MessageReference::Pooled(new_response_message_id(gen, Class::BestEffort))),
     ]
 }
 
@@ -263,10 +263,10 @@ proptest! {
         // Push all references onto the queue.
         for reference in references.iter() {
             match reference {
-                MessageReference::Request(id) => {
+                MessageReference::Pooled(id) if id.kind() == Kind::Request => {
                     queue.push_request(*id);
                 }
-                MessageReference::Response(id) => {
+                MessageReference::Pooled(id) => {
                     queue.try_reserve_response_slot().unwrap();
                     queue.push_response(*id);
                 }

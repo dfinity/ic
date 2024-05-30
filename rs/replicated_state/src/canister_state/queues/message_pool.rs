@@ -117,6 +117,26 @@ impl Id {
     }
 }
 
+impl From<&Id> for pb_queues::canister_queue::MessageReference {
+    fn from(item: &Id) -> Self {
+        use pb_queues::canister_queue::message_reference::R;
+
+        pb_queues::canister_queue::MessageReference {
+            r: Some(R::Id(item.0)),
+        }
+    }
+}
+
+impl TryFrom<pb_queues::canister_queue::MessageReference> for Id {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_queues::canister_queue::MessageReference) -> Result<Self, Self::Error> {
+        match item.r {
+            Some(pb_queues::canister_queue::message_reference::R::Id(id)) => Ok(Self(id)),
+            None => Err(ProxyDecodeError::MissingField("MessageReference::r")),
+        }
+    }
+}
+
 /// A placeholder for a potential late inbound best-effort response.
 ///
 /// Does not implement `Clone` or `Copy` to ensure that it can only be used
@@ -590,17 +610,17 @@ impl From<&MessagePool> for pb_queues::MessagePool {
             messages: item
                 .messages
                 .iter()
-                .map(|(message_id, message)| Entry {
-                    message_id: message_id.0,
+                .map(|(id, message)| Entry {
+                    id: id.0,
                     message: Some(message.into()),
                 })
                 .collect(),
             outbound_guaranteed_request_deadlines: item
                 .outbound_guaranteed_request_deadlines
                 .iter()
-                .map(|(message_id, deadline)| MessageDeadline {
+                .map(|(id, deadline)| MessageDeadline {
                     deadline_seconds: deadline.as_secs_since_unix_epoch(),
-                    message_id: message_id.0,
+                    id: id.0,
                 })
                 .collect(),
             message_id_generator: item.message_id_generator,
@@ -617,9 +637,9 @@ impl TryFrom<pb_queues::MessagePool> for MessagePool {
             .messages
             .into_iter()
             .map(|entry| {
-                let message_id = Id(entry.message_id);
+                let id = Id(entry.id);
                 let message = try_from_option_field(entry.message, "MessagePool::Entry::message")?;
-                Ok((message_id, message))
+                Ok((id, message))
             })
             .collect::<Result<_, Self::Error>>()?;
         if messages.len() != message_count {
@@ -631,9 +651,9 @@ impl TryFrom<pb_queues::MessagePool> for MessagePool {
             .outbound_guaranteed_request_deadlines
             .into_iter()
             .map(|entry| {
-                let message_id = Id(entry.message_id);
+                let id = Id(entry.id);
                 let deadline = CoarseTime::from_secs_since_unix_epoch(entry.deadline_seconds);
-                (message_id, deadline)
+                (id, deadline)
             })
             .collect();
 
@@ -653,26 +673,6 @@ impl TryFrom<pb_queues::MessagePool> for MessagePool {
         res.check_invariants().map_err(ProxyDecodeError::Other)?;
 
         Ok(res)
-    }
-}
-
-impl From<&Id> for pb_queues::canister_queue::MessageReference {
-    fn from(item: &Id) -> Self {
-        use pb_queues::canister_queue::message_reference::R;
-
-        pb_queues::canister_queue::MessageReference {
-            r: Some(R::MessageId(item.0)),
-        }
-    }
-}
-
-impl TryFrom<pb_queues::canister_queue::MessageReference> for Id {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb_queues::canister_queue::MessageReference) -> Result<Self, Self::Error> {
-        match item.r {
-            Some(pb_queues::canister_queue::message_reference::R::MessageId(id)) => Ok(Self(id)),
-            None => Err(ProxyDecodeError::MissingField("MessageReference::r")),
-        }
     }
 }
 

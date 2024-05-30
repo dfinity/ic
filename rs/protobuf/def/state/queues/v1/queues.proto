@@ -119,7 +119,7 @@ message QueueEntry {
 message MessagePool {
   // A pool entry: a message keyed by its ID.
   message Entry {
-    uint64 message_id = 1;
+    uint64 id = 1;
     RequestOrResponse message = 2;
   }
   // A message deadline.
@@ -127,7 +127,7 @@ message MessagePool {
   // Recorded explicitly for outbound guaranteed response requests only.
   // Best-effort messages have explicit deadlines.
   message MessageDeadline {
-    uint64 message_id = 1;
+    uint64 id = 1;
     uint32 deadline_seconds = 2;
   }
 
@@ -144,7 +144,7 @@ message CanisterQueue {
   message MessageReference {
     oneof r {
       // A reference into the message pool.
-      uint64 message_id = 1;
+      uint64 id = 1;
 
       // A marker for a transient reject response for the given callback ID.
       // uint64 transient_reject_for_callback_id = 2;

@@ -200,7 +200,7 @@ pub mod message_pool {
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Entry {
         #[prost(uint64, tag = "1")]
-        pub message_id: u64,
+        pub id: u64,
         #[prost(message, optional, tag = "2")]
         pub message: ::core::option::Option<super::RequestOrResponse>,
     }
@@ -212,7 +212,7 @@ pub mod message_pool {
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct MessageDeadline {
         #[prost(uint64, tag = "1")]
-        pub message_id: u64,
+        pub id: u64,
         #[prost(uint32, tag = "2")]
         pub deadline_seconds: u32,
     }
@@ -245,7 +245,7 @@ pub mod canister_queue {
         pub enum R {
             /// A reference into the message pool.
             #[prost(uint64, tag = "1")]
-            MessageId(u64),
+            Id(u64),
         }
     }
 }
