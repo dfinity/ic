@@ -12,9 +12,10 @@ use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, ArchiveOptions, ArchivedBlocksRange, Block, CandidBlock,
     CandidOperation, CandidTransaction, FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult,
-    InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, LedgerCanisterPayload,
-    Operation, QueryBlocksResponse, QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs,
-    DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
+    GetEncodedBlocksResult, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
+    LedgerCanisterPayload, Operation, QueryBlocksResponse, QueryEncodedBlocksResponse, TimeStamp,
+    UpgradeArgs, DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
+    MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -605,6 +606,253 @@ fn check_block_endpoint_limits() {
         env.query_as(
             user_principal.into(),
             canister_id,
+            "iter_blocks_pb".to_string(),
+            iter_blocks_pb_args.clone(),
+        )
+        .expect("query failed")
+        .bytes(),
+    )
+    .map(|c| c.0)
+    .unwrap();
+
+    assert_eq!(
+        ingress_update.0.len(),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+    assert_eq!(canister_update.0.len(), MAX_BLOCKS_PER_REQUEST);
+    assert_eq!(query.0.len(), MAX_BLOCKS_PER_REQUEST);
+}
+
+#[test]
+fn check_archive_block_endpoint_limits() {
+    let ledger_wasm_current = ledger_wasm();
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    let user_principal =
+        Principal::from_text("luwgt-ouvkc-k5rx5-xcqkq-jx5hm-r2rj2-ymqjc-pjvhb-kij4p-n4vms-gqe")
+            .unwrap();
+    let canister_principal = Principal::from_text("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap();
+
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    initial_balances.insert(Account::from(p1.0).into(), Tokens::from_e8s(1_000_000_000));
+
+    let payload = LedgerCanisterInitPayload::builder()
+        .archive_options(ArchiveOptions {
+            trigger_threshold: MAX_BLOCKS_PER_REQUEST + 1,
+            num_blocks_to_archive: MAX_BLOCKS_PER_REQUEST + 1,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId::new_anonymous(),
+            more_controller_ids: None,
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
+        })
+        .minting_account(MINTER.into())
+        .icrc1_minting_account(MINTER)
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(
+            ledger_wasm_current,
+            CandidOne(payload).into_bytes().unwrap(),
+            None,
+        )
+        .expect("Unable to install the Ledger canister with the new init");
+
+    for _ in 0..MAX_BLOCKS_PER_REQUEST {
+        transfer(&env, canister_id, p1.0, p2.0, 1).expect("transfer failed");
+    }
+
+    let res = query_blocks(
+        &env,
+        canister_principal,
+        canister_id,
+        0,
+        MAX_BLOCKS_PER_REQUEST as u64 + 1,
+    );
+    assert_eq!(res.chain_length, MAX_BLOCKS_PER_REQUEST as u64 + 1);
+    assert_eq!(res.first_block_index, MAX_BLOCKS_PER_REQUEST as u64 + 1);
+    assert_eq!(res.archived_blocks.len(), 1);
+    let ArchivedBlocksRange {
+        start,
+        length,
+        callback,
+    } = res.archived_blocks.first().unwrap();
+    assert_eq!(*start, 0);
+    assert_eq!(*length, MAX_BLOCKS_PER_REQUEST as u64 + 1);
+
+    let get_blocks_args = Encode!(&GetBlocksArgs {
+        start: 0,
+        length: MAX_BLOCKS_PER_REQUEST + 1
+    })
+    .unwrap();
+
+    // get_blocks
+    let query_blocks_len = Decode!(
+        &env.query(
+            CanisterId::unchecked_from_principal(callback.canister_id.into()),
+            "get_blocks",
+            get_blocks_args.clone()
+        )
+        .unwrap()
+        .bytes(),
+        GetBlocksResult
+    )
+    .unwrap()
+    .unwrap()
+    .blocks
+    .len();
+
+    let update_blocks_len = |caller: Principal| {
+        Decode!(
+            &env.execute_ingress_as(
+                PrincipalId(caller),
+                CanisterId::unchecked_from_principal(callback.canister_id.into()),
+                "get_blocks",
+                get_blocks_args.clone()
+            )
+            .unwrap()
+            .bytes(),
+            GetBlocksResult
+        )
+        .unwrap()
+        .unwrap()
+        .blocks
+        .len()
+    };
+
+    assert_eq!(
+        update_blocks_len(user_principal),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+    assert_eq!(
+        update_blocks_len(canister_principal),
+        MAX_BLOCKS_PER_REQUEST
+    );
+    assert_eq!(query_blocks_len, MAX_BLOCKS_PER_REQUEST);
+
+    // get_encoded_blocks
+    let query_blocks_len = Decode!(
+        &env.query(
+            CanisterId::unchecked_from_principal(callback.canister_id.into()),
+            "get_encoded_blocks",
+            get_blocks_args.clone()
+        )
+        .unwrap()
+        .bytes(),
+        GetEncodedBlocksResult
+    )
+    .unwrap()
+    .unwrap()
+    .len();
+
+    let update_blocks_len = |caller: Principal| {
+        Decode!(
+            &env.execute_ingress_as(
+                PrincipalId(caller),
+                CanisterId::unchecked_from_principal(callback.canister_id.into()),
+                "get_encoded_blocks",
+                get_blocks_args.clone()
+            )
+            .unwrap()
+            .bytes(),
+            GetEncodedBlocksResult
+        )
+        .unwrap()
+        .unwrap()
+        .len()
+    };
+
+    assert_eq!(
+        update_blocks_len(user_principal),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+    assert_eq!(
+        update_blocks_len(canister_principal),
+        MAX_BLOCKS_PER_REQUEST
+    );
+    assert_eq!(query_blocks_len, MAX_BLOCKS_PER_REQUEST);
+
+    // get_blocks_pb
+    let get_blocks_pb_args = ProtoBuf(GetBlocksArgs {
+        start: 0,
+        length: MAX_BLOCKS_PER_REQUEST + 1,
+    })
+    .into_bytes()
+    .unwrap();
+
+    let ingress_update = get_blocks_pb(
+        &env,
+        user_principal,
+        CanisterId::unchecked_from_principal(callback.canister_id.into()),
+        0,
+        MAX_BLOCKS_PER_REQUEST + 1,
+    );
+    let canister_update = get_blocks_pb(
+        &env,
+        canister_principal,
+        CanisterId::unchecked_from_principal(callback.canister_id.into()),
+        0,
+        MAX_BLOCKS_PER_REQUEST + 1,
+    );
+    let query: GetBlocksRes = ProtoBuf::from_bytes(
+        env.query_as(
+            user_principal.into(),
+            CanisterId::unchecked_from_principal(callback.canister_id.into()),
+            "get_blocks_pb".to_string(),
+            get_blocks_pb_args.clone(),
+        )
+        .expect("query failed")
+        .bytes(),
+    )
+    .map(|c| c.0)
+    .unwrap();
+
+    assert_eq!(
+        ingress_update.0.expect("failed to get blocks").len(),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+    assert_eq!(
+        canister_update.0.expect("failed to get blocks").len(),
+        MAX_BLOCKS_PER_REQUEST
+    );
+    assert_eq!(
+        query.0.expect("failed to get blocks").len(),
+        MAX_BLOCKS_PER_REQUEST
+    );
+
+    // iter_blocks_pb
+    let iter_blocks_pb_args = ProtoBuf(IterBlocksArgs {
+        start: 0,
+        length: MAX_BLOCKS_PER_REQUEST + 1,
+    })
+    .into_bytes()
+    .unwrap();
+
+    let ingress_update = iter_blocks_pb(
+        &env,
+        user_principal,
+        CanisterId::unchecked_from_principal(callback.canister_id.into()),
+        0,
+        MAX_BLOCKS_PER_REQUEST + 1,
+    );
+    let canister_update = iter_blocks_pb(
+        &env,
+        canister_principal,
+        CanisterId::unchecked_from_principal(callback.canister_id.into()),
+        0,
+        MAX_BLOCKS_PER_REQUEST + 1,
+    );
+    let query: IterBlocksRes = ProtoBuf::from_bytes(
+        env.query_as(
+            user_principal.into(),
+            CanisterId::unchecked_from_principal(callback.canister_id.into()),
             "iter_blocks_pb".to_string(),
             iter_blocks_pb_args.clone(),
         )
