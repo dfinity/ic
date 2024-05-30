@@ -3396,7 +3396,7 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
             };
             let (_metrics, dst_state_manager) = restart_fn(dst_state_manager, None);
 
-            // State manager archives unverided checkpoint and recovers from the last verified checkpoint.
+            // State manager archives unverified checkpoint and recovers from the last verified checkpoint.
             assert_eq!(dst_state_manager.latest_state_height(), height(1));
 
             // Continue execution and create the checkpoint @2.
