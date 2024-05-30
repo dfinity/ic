@@ -3,7 +3,7 @@ mod queue;
 #[cfg(test)]
 mod tests;
 
-use self::message_pool::{Context, MessageId, MessagePool};
+use self::message_pool::{Context, MessagePool};
 use self::queue::{CanisterQueue, IngressQueue};
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{CanisterState, InputQueueType, NextInputQueue, StateError};
@@ -1118,7 +1118,7 @@ impl CanisterQueues {
     /// to determine the correct input queue schedule to update (if applicable).
     fn on_message_dropped(
         &mut self,
-        id: &MessageId,
+        id: &message_pool::Id,
         msg: &RequestOrResponse,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,

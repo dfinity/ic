@@ -215,7 +215,7 @@ fn test_expiration() {
     let t41_plus_lifetime = Time::from(time(41)) + REQUEST_LIFETIME;
     let t_max = Time::from_nanos_since_unix_epoch(u64::MAX);
     let half_second = Duration::from_nanos(500_000_000);
-    let empty_vec = Vec::<(MessageId, RequestOrResponse)>::new();
+    let empty_vec = Vec::<(Id, RequestOrResponse)>::new();
 
     let mut pool = MessagePool::default();
 
@@ -452,7 +452,7 @@ fn test_message_id_sanity() {
     assert_eq!(1, Class::BIT.count_ones());
     // And they are the trailing three bits.
     assert_eq!(
-        MessageId::BITMASK_LEN,
+        Id::BITMASK_LEN,
         (Kind::BIT | Context::BIT | Class::BIT).trailing_ones()
     );
 
@@ -490,7 +490,7 @@ fn test_message_id_sanity() {
 #[test]
 fn test_message_id_flags() {
     // Guaranteed inbound request.
-    let giq_id = MessageId::new(
+    let giq_id = Id::new(
         Kind::Request,
         Context::Inbound,
         Class::GuaranteedResponse,
@@ -499,14 +499,14 @@ fn test_message_id_flags() {
     assert_eq!(Kind::Request, giq_id.kind());
     assert_eq!(Context::Inbound, giq_id.context());
     assert_eq!(Class::GuaranteedResponse, giq_id.class());
-    assert_eq!(13, giq_id.0 >> MessageId::BITMASK_LEN);
+    assert_eq!(13, giq_id.0 >> Id::BITMASK_LEN);
 
     // Best-effort outbound response, same generator.
-    let bop_id = MessageId::new(Kind::Response, Context::Outbound, Class::BestEffort, 13);
+    let bop_id = Id::new(Kind::Response, Context::Outbound, Class::BestEffort, 13);
     assert_eq!(Kind::Response, bop_id.kind());
     assert_eq!(Context::Outbound, bop_id.context());
     assert_eq!(Class::BestEffort, bop_id.class());
-    assert_eq!(13, bop_id.0 >> MessageId::BITMASK_LEN);
+    assert_eq!(13, bop_id.0 >> Id::BITMASK_LEN);
 
     // IDs should be different.
     assert_ne!(giq_id, bop_id);
@@ -521,20 +521,20 @@ fn test_message_id_range() {
     const INBOUND: Context = Context::Inbound;
     const GUARANTEED: Class = Class::GuaranteedResponse;
 
-    let id1 = MessageId::new(REQUEST, INBOUND, GUARANTEED, 0);
-    assert_eq!(0, id1.0 >> MessageId::BITMASK_LEN);
+    let id1 = Id::new(REQUEST, INBOUND, GUARANTEED, 0);
+    assert_eq!(0, id1.0 >> Id::BITMASK_LEN);
 
-    let id2 = MessageId::new(REQUEST, INBOUND, GUARANTEED, 13);
-    assert_eq!(13, id2.0 >> MessageId::BITMASK_LEN);
+    let id2 = Id::new(REQUEST, INBOUND, GUARANTEED, 13);
+    assert_eq!(13, id2.0 >> Id::BITMASK_LEN);
 
     // Maximum generator value that will be preserved
-    const GENERATOR_MAX: u64 = u64::MAX >> MessageId::BITMASK_LEN;
-    let id3 = MessageId::new(REQUEST, INBOUND, GUARANTEED, GENERATOR_MAX);
-    assert_eq!(GENERATOR_MAX, id3.0 >> MessageId::BITMASK_LEN);
+    const GENERATOR_MAX: u64 = u64::MAX >> Id::BITMASK_LEN;
+    let id3 = Id::new(REQUEST, INBOUND, GUARANTEED, GENERATOR_MAX);
+    assert_eq!(GENERATOR_MAX, id3.0 >> Id::BITMASK_LEN);
 
     // Larger generator values still work, their high bits are just ignored.
-    let id4 = MessageId::new(REQUEST, INBOUND, GUARANTEED, u64::MAX);
-    assert_eq!(GENERATOR_MAX, id4.0 >> MessageId::BITMASK_LEN);
+    let id4 = Id::new(REQUEST, INBOUND, GUARANTEED, u64::MAX);
+    assert_eq!(GENERATOR_MAX, id4.0 >> Id::BITMASK_LEN);
 }
 
 #[test]
@@ -851,22 +851,19 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
     CoarseTime::from_secs_since_unix_epoch(seconds_since_unix_epoch)
 }
 
-fn assert_exact_messages_in_queue<T>(
-    messages: BTreeSet<MessageId>,
-    queue: &BTreeSet<(T, MessageId)>,
-) {
+fn assert_exact_messages_in_queue<T>(messages: BTreeSet<Id>, queue: &BTreeSet<(T, Id)>) {
     assert_eq!(messages.len(), queue.len());
     assert_eq!(messages, queue.iter().map(|(_, id)| *id).collect())
 }
 
 /// Generates a `MessageId` for a best-effort inbound request.
-pub(crate) fn new_request_message_id(generator: u64, class: Class) -> MessageId {
-    MessageId::new(Kind::Request, Context::Inbound, class, generator)
+pub(crate) fn new_request_message_id(generator: u64, class: Class) -> Id {
+    Id::new(Kind::Request, Context::Inbound, class, generator)
 }
 
 /// Generates a `MessageId` for an inbound response.
-pub(crate) fn new_response_message_id(generator: u64, class: Class) -> MessageId {
-    MessageId::new(Kind::Response, Context::Inbound, class, generator)
+pub(crate) fn new_response_message_id(generator: u64, class: Class) -> Id {
+    Id::new(Kind::Response, Context::Inbound, class, generator)
 }
 
 #[derive(PartialEq, Eq)]
