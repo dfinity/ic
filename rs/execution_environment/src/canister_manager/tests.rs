@@ -4507,6 +4507,43 @@ fn test_upgrade_to_enhanced_orthogonal_persistence() {
     .unwrap();
 }
 
+#[test]
+fn test_invalid_wasm_with_enhanced_orthogonal_persistence() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let valid_version1_wat = r#"
+    (module
+        (memory 1)
+    )
+    "#;
+    let version1_wasm = wat::parse_str(valid_version1_wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    test.install_canister(canister_id, version1_wasm).unwrap();
+
+    let invalid_version2_wat = r#"
+    (module
+        (func $check
+            i32.const 1
+        )
+        (start $check)
+        (memory 1)
+        (@custom "icp:private enhanced-orthogonal-persistence" "")
+    )
+    "#;
+    let version2_wasm = wat::parse_str(invalid_version2_wat).unwrap();
+    let error = test
+        .upgrade_canister_v2(
+            canister_id,
+            version2_wasm,
+            CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+            },
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterInvalidWasm);
+}
+
 fn create_canisters(test: &mut ExecutionTest, canisters: usize) {
     for _ in 1..=canisters {
         test.canister_from_binary(MINIMAL_WASM.to_vec()).unwrap();
