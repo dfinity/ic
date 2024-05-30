@@ -3296,9 +3296,6 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
     use std::panic::{self, AssertUnwindSafe};
     use ic_state_layout::{CheckpointLayout, RwPolicy};
 
-    let pages_per_chunk = DEFAULT_CHUNK_SIZE as u64 / PAGE_SIZE as u64;
-    assert_eq!(DEFAULT_CHUNK_SIZE as usize % PAGE_SIZE, 0);
-
     let populate_original_state = |state: &mut ReplicatedState| {
         insert_dummy_canister(state, canister_test_id(90));
 
@@ -3310,6 +3307,16 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
         ]);
     };
 
+    let update_state = |state: &mut ReplicatedState| {
+        let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state
+            .wasm_memory
+            .page_map
+            .update(&[(PageIndex::new(300), &[3u8; PAGE_SIZE])]);
+
+    };
+
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         // Create initial state with a single canister.
         let (_height, mut state) = src_state_manager.take_tip();
@@ -3318,20 +3325,8 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
 
         let hash_1 = wait_for_checkpoint(&*src_state_manager, height(1));
 
-        // Create another state with an extra canister.
         let (_height, mut state) = src_state_manager.take_tip();
-        insert_dummy_canister(&mut state, canister_test_id(200));
-
-        let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        // Add a new page much further in the file so that the first one could
-        // be re-used as a chunk.
-        execution_state
-            .wasm_memory
-            .page_map
-            .update(&[(PageIndex::new(300), &[3u8; PAGE_SIZE])]);
-
-
+        update_state(&mut state);
         src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
 
         let hash_2 = wait_for_checkpoint(&*src_state_manager, height(2));
@@ -3364,13 +3359,13 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
                 .state_sync_scratchpad(height(2))
                 .expect("failed to create directory for state sync scratchpad");
 
-            let mutable_state_sync_scratchpad_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+            let state_sync_scratchpad_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
                 state_sync_scratchpad,
                 height(2),
             )
-                .unwrap();
+            .unwrap();
 
-            let canister_90_layout = mutable_state_sync_scratchpad_layout.canister(&canister_test_id(90)).unwrap();
+            let canister_90_layout = state_sync_scratchpad_layout.canister(&canister_test_id(90)).unwrap();
             let canister_90_memory = if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
                 canister_90_layout
                     .vmemory_0()
@@ -3389,19 +3384,9 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
 
             assert!(result.is_err());
             let (_metrics, dst_state_manager) = restart_fn(dst_state_manager, dst_state_sync, None);
-            // Create another state with an extra canister.
+
             let (_height, mut state) = dst_state_manager.take_tip();
-            insert_dummy_canister(&mut state, canister_test_id(200));
-
-            let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
-            let execution_state = canister_state.execution_state.as_mut().unwrap();
-            // Add a new page much further in the file so that the first one could
-            // be re-used as a chunk.
-            execution_state
-                .wasm_memory
-                .page_map
-                .update(&[(PageIndex::new(300), &[3u8; PAGE_SIZE])]);
-
+            update_state(&mut state);
 
             dst_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
 
