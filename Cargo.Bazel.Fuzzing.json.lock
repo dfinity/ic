@@ -1,5 +1,5 @@
 {
-  "checksum": "3e3fef0836f879c6a62dd9acead6e6437fc7d7b2d1ea046ad4890ef5fd5afca5",
+  "checksum": "b04bb22d533cf8e98534f9bd2944f9f0040a540e2484fc6181224d88ceb84732",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -349,7 +349,7 @@
               "target": "h2"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -529,7 +529,7 @@
               "target": "bytestring"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -1622,7 +1622,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -4174,11 +4174,11 @@
               "target": "headers"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
-              "id": "http-body 0.4.5",
+              "id": "http-body 0.4.6",
               "target": "http_body"
             },
             {
@@ -4356,7 +4356,7 @@
               "target": "futures_util"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -4534,11 +4534,11 @@
               "target": "futures_util"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
-              "id": "http-body 0.4.5",
+              "id": "http-body 0.4.6",
               "target": "http_body"
             },
             {
@@ -4650,7 +4650,7 @@
               "target": "futures_util"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -4779,7 +4779,7 @@
               "target": "headers"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -4933,7 +4933,7 @@
               "target": "futures_util"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -5036,11 +5036,11 @@
               "target": "futures_util"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
-              "id": "http-body 0.4.5",
+              "id": "http-body 0.4.6",
               "target": "http_body"
             },
             {
@@ -5138,7 +5138,7 @@
               "target": "futures_util"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -11981,7 +11981,7 @@
               "target": "chrono"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -17392,22 +17392,22 @@
               "target": "hkdf"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
+              "target": "http",
+              "alias": "http_0_2_12"
+            },
+            {
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
-              "id": "http 1.0.0",
-              "target": "http",
-              "alias": "http_1_0_0"
-            },
-            {
-              "id": "http-body 0.4.5",
-              "target": "http_body"
+              "id": "http-body 0.4.6",
+              "target": "http_body",
+              "alias": "http_body_0_4_6"
             },
             {
               "id": "http-body 1.0.0",
-              "target": "http_body",
-              "alias": "http_body_1_0_0"
+              "target": "http_body"
             },
             {
               "id": "http-body-util 0.1.0",
@@ -24284,7 +24284,7 @@
               "target": "futures_util"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -24371,7 +24371,7 @@
               "target": "futures_util"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -24761,7 +24761,7 @@
               "target": "headers_core"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -24832,7 +24832,7 @@
               "target": "headers_core"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -24891,7 +24891,7 @@
         "deps": {
           "common": [
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             }
           ],
@@ -24938,7 +24938,7 @@
         "deps": {
           "common": [
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             }
           ],
@@ -25750,14 +25750,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "http 0.2.9": {
+    "http 0.2.12": {
       "name": "http",
-      "version": "0.2.9",
+      "version": "0.2.12",
       "package_url": "https://github.com/hyperium/http",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/http/0.2.9/download",
-          "sha256": "bd6effc99afb63425aff9b05836f029929e345a6148a14b7ecd5ab67af944482"
+          "url": "https://static.crates.io/crates/http/0.2.12/download",
+          "sha256": "601cbb57e577e2f5ef5be8e7b83f0f63994f25aa94d673e54a92d5c516d101f1"
         }
       },
       "targets": [
@@ -25797,7 +25797,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.2.9"
+        "version": "0.2.12"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -25806,14 +25806,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "http 1.0.0": {
+    "http 1.1.0": {
       "name": "http",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "package_url": "https://github.com/hyperium/http",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/http/1.0.0/download",
-          "sha256": "b32afd38673a8016f7c9ae69e5af41a58f81b1d31689040f2f1959594ce194ea"
+          "url": "https://static.crates.io/crates/http/1.1.0/download",
+          "sha256": "21b9ddb458710bc376481b842f5da65cdf31522de232c1ca8146abce2a358258"
         }
       },
       "targets": [
@@ -25860,7 +25860,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.0"
+        "version": "1.1.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -25869,14 +25869,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "http-body 0.4.5": {
+    "http-body 0.4.6": {
       "name": "http-body",
-      "version": "0.4.5",
+      "version": "0.4.6",
       "package_url": "https://github.com/hyperium/http-body",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/http-body/0.4.5/download",
-          "sha256": "d5f38f16d184e36f2408a55281cd658ecbd3ca05cce6d6510a176eca393e26d1"
+          "url": "https://static.crates.io/crates/http-body/0.4.6/download",
+          "sha256": "7ceab25649e9960c0311ea418d17bee82c0dcec1bd053b5f9a66e265a693bed2"
         }
       },
       "targets": [
@@ -25905,7 +25905,7 @@
               "target": "bytes"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -25916,7 +25916,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.4.5"
+        "version": "0.4.6"
       },
       "license": "MIT",
       "license_ids": [
@@ -25960,7 +25960,7 @@
               "target": "bytes"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             }
           ],
@@ -26071,7 +26071,7 @@
               "target": "futures_util"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -26164,7 +26164,7 @@
         "deps": {
           "common": [
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -26251,7 +26251,7 @@
               "target": "futures_lite"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -26471,7 +26471,7 @@
               "target": "futures"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -26674,11 +26674,11 @@
               "target": "h2"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
-              "id": "http-body 0.4.5",
+              "id": "http-body 0.4.6",
               "target": "http_body"
             },
             {
@@ -26788,7 +26788,7 @@
               "target": "h2"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -26886,7 +26886,7 @@
               "target": "futures_util"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -26978,7 +26978,7 @@
               "target": "futures_util"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -27083,7 +27083,7 @@
               "target": "futures_util"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -27182,7 +27182,7 @@
               "target": "futures"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -27342,7 +27342,7 @@
               "target": "futures_util"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -27697,7 +27697,7 @@
               "target": "hex"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -28752,7 +28752,7 @@
               "target": "candid"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -28924,7 +28924,7 @@
               "target": "hex"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -32737,11 +32737,11 @@
               "target": "home"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
-              "id": "http-body 0.4.5",
+              "id": "http-body 0.4.6",
               "target": "http_body"
             },
             {
@@ -32894,7 +32894,7 @@
               "target": "form_urlencoded"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -36892,7 +36892,7 @@
               "target": "futures_util"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -37994,7 +37994,7 @@
               "target": "futures_util"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -40971,7 +40971,7 @@
               "target": "futures_core"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -51103,7 +51103,7 @@
               "target": "futures_util"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -51146,7 +51146,7 @@
                 "target": "h2"
               },
               {
-                "id": "http-body 0.4.5",
+                "id": "http-body 0.4.6",
                 "target": "http_body"
               },
               {
@@ -51417,7 +51417,7 @@
               "target": "futures_util"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -64783,11 +64783,11 @@
               "target": "h2"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
-              "id": "http-body 0.4.5",
+              "id": "http-body 0.4.6",
               "target": "http_body"
             },
             {
@@ -64917,11 +64917,11 @@
               "target": "h2"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
-              "id": "http-body 0.4.5",
+              "id": "http-body 0.4.6",
               "target": "http_body"
             },
             {
@@ -65273,11 +65273,11 @@
               "target": "futures_util"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
-              "id": "http-body 0.4.5",
+              "id": "http-body 0.4.6",
               "target": "http_body"
             },
             {
@@ -65404,7 +65404,7 @@
               "target": "futures_core"
             },
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -65529,7 +65529,7 @@
         "deps": {
           "common": [
             {
-              "id": "http 1.0.0",
+              "id": "http 1.1.0",
               "target": "http"
             },
             {
@@ -65713,7 +65713,7 @@
               "target": "governor"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -66990,7 +66990,7 @@
               "target": "data_encoding"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -69222,7 +69222,7 @@
               "target": "headers"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 0.2.12",
               "target": "http"
             },
             {
@@ -76810,9 +76810,9 @@
     "hex 0.4.3",
     "hex-literal 0.4.1",
     "hkdf 0.12.4",
-    "http 0.2.9",
-    "http 1.0.0",
-    "http-body 0.4.5",
+    "http 0.2.12",
+    "http 1.1.0",
+    "http-body 0.4.6",
     "http-body 1.0.0",
     "http-body-util 0.1.0",
     "http-serde 2.0.0",

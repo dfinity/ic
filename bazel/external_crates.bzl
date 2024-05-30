@@ -468,18 +468,18 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12",
             ),
             "http": crate.spec(
-                version = "^0.2.9",
+                version = "^1.1.0",
             ),
-            "http_1_0_0": crate.spec(
+            "http_0_2_12": crate.spec(
                 package = "http",
-                version = "^1.0.0",
+                version = "^0.2.12",
             ),
             "http-body": crate.spec(
-                version = "^0.4",
-            ),
-            "http-body_1_0_0": crate.spec(
-                package = "http-body",
                 version = "^1.0.0",
+            ),
+            "http_body_0_4_6": crate.spec(
+                package = "http-body",
+                version = "^0.4.6",
             ),
             "http-body-util": crate.spec(
                 version = "^0.1.0",

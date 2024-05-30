@@ -30,7 +30,7 @@ ethnum = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
-http = "0.2.6"
+http = "0.2.12"
 http-body = "0.4"
 hyper = "0.14.18"
 hyper-rustls = { workspace = true }
