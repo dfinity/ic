@@ -123,7 +123,7 @@ k8s-openapi = { version = "0.20.0", features = ["v1_22"] }
 kube = { version = "0.87.2", features = ["runtime", "derive", "ws"] }
 hyper = "0.14.18"
 hyper-rustls = { workspace = true }
-http = "0.2.9"
+http = "0.2.12"
 lazy_static = "1.4.0"
 icp-ledger = { path = "../rosetta-api/icp_ledger" }
 leb128 = "0.2.5"
