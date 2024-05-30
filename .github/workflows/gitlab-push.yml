@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 0
       - name: Push to GitLab
         run: |
-          url="https://push-from-github:${{ secrets.GITLAB_TOKEN }}@gitlab.com/dfinity-lab/public/ic.git"
+          url="https://push-from-github:${{ secrets.PUSH_TO_GITLAB_TOKEN }}@gitlab.com/dfinity-lab/public/ic.git"
           ((git remote | grep gitlab) && git remote set-url gitlab "$url") \
             || git remote add gitlab "$url"
           branch="mirroring-${BRANCH_NAME}"
