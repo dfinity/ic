@@ -513,7 +513,12 @@ pub(crate) fn create_data_payload_helper(
     else {
         return Ok(None);
     };
-    let valid_keys: BTreeSet<_> = ecdsa_config.key_ids.iter().cloned().collect();
+    let valid_keys: BTreeSet<_> = ecdsa_config
+        .key_ids
+        .iter()
+        .cloned()
+        .map(MasterPublicKeyId::Ecdsa)
+        .collect();
 
     let mut ecdsa_payload = if let Some(prev_payload) = parent_block.payload.as_ref().as_ecdsa() {
         prev_payload.clone()
@@ -569,7 +574,7 @@ pub(crate) fn create_data_payload_helper_2(
     height: Height,
     context_time: Time,
     ecdsa_config: &EcdsaConfig,
-    valid_keys: &BTreeSet<EcdsaKeyId>,
+    valid_keys: &BTreeSet<MasterPublicKeyId>,
     next_interval_registry_version: RegistryVersion,
     certified_height: CertifiedHeight,
     receivers: &[NodeId],
@@ -834,7 +839,7 @@ mod tests {
     fn test_quadruple_recreation() {
         let valid_key_id = EcdsaKeyId::from_str("Secp256k1:valid_key").unwrap();
         let disabled_key_id = EcdsaKeyId::from_str("Secp256k1:disabled_key").unwrap();
-        let valid_keys = BTreeSet::from([valid_key_id.clone()]);
+        let valid_keys = BTreeSet::from([MasterPublicKeyId::Ecdsa(valid_key_id.clone())]);
 
         let (mut ecdsa_payload, _env) =
             set_up_ecdsa_payload_with_keys(vec![MasterPublicKeyId::Ecdsa(valid_key_id.clone())]);
@@ -952,7 +957,7 @@ mod tests {
             &signature_builder,
             Some(expiry_time),
             &mut ecdsa_payload,
-            &BTreeSet::from([key_id]),
+            &BTreeSet::from([MasterPublicKeyId::Ecdsa(key_id)]),
             None,
         );
 
@@ -1009,7 +1014,7 @@ mod tests {
             &signature_builder,
             None,
             &mut ecdsa_payload,
-            &BTreeSet::from([valid_key_id]),
+            &BTreeSet::from([MasterPublicKeyId::Ecdsa(valid_key_id)]),
             None,
         );
 
@@ -1050,7 +1055,7 @@ mod tests {
         let context = fake_completed_sign_with_ecdsa_context(0, pre_sig_id);
         let sign_with_ecdsa_contexts = BTreeMap::from([context.clone()]);
 
-        let valid_keys = BTreeSet::from([key_id.clone()]);
+        let valid_keys = BTreeSet::from([MasterPublicKeyId::Ecdsa(key_id.clone())]);
 
         let block_reader = TestEcdsaBlockReader::new();
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
@@ -1788,7 +1793,7 @@ mod tests {
             let mut valid_keys = BTreeSet::new();
             let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
             let master_public_key_id = MasterPublicKeyId::Ecdsa(key_id.clone());
-            valid_keys.insert(key_id.clone());
+            valid_keys.insert(master_public_key_id.clone());
             let mut block_reader = TestEcdsaBlockReader::new();
 
             // Create a key transcript
@@ -2104,7 +2109,7 @@ mod tests {
             let registry_version = registry.get_latest_version();
             let mut valid_keys = BTreeSet::new();
             let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-            valid_keys.insert(key_id.clone());
+            valid_keys.insert(MasterPublicKeyId::Ecdsa(key_id.clone()));
             let block_reader = TestEcdsaBlockReader::new();
             let transcript_builder = TestEcdsaTranscriptBuilder::new();
             let signature_builder = TestEcdsaSignatureBuilder::new();
@@ -2238,7 +2243,7 @@ mod tests {
                 .build();
             let mut valid_keys = BTreeSet::new();
             let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-            valid_keys.insert(key_id.clone());
+            valid_keys.insert(MasterPublicKeyId::Ecdsa(key_id.clone()));
             let mut block_reader = TestEcdsaBlockReader::new();
             let transcript_builder = TestEcdsaTranscriptBuilder::new();
             let signature_builder = TestEcdsaSignatureBuilder::new();

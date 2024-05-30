@@ -832,7 +832,7 @@ mod test {
         let height = Height::from(1);
         let mut valid_keys = BTreeSet::new();
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        valid_keys.insert(key_id.clone());
+        valid_keys.insert(MasterPublicKeyId::Ecdsa(key_id.clone()));
 
         let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(
             subnet_id,
