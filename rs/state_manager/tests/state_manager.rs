@@ -2146,6 +2146,21 @@ fn set_fetch_state_and_start_start_sync(
         .expect("failed to start state sync")
 }
 
+fn set_fetch_state_and_start_start_sync_no_arc(
+    state_manager: &StateManagerImpl,
+    state_sync: &StateSync,
+    id: &StateSyncArtifactId,
+) -> Box<dyn Chunkable<StateSyncMessage> + Send> {
+    state_manager.fetch_state(
+        id.height,
+        CryptoHashOfState::from(id.hash.clone()),
+        Height::new(499),
+    );
+    state_sync
+        .start_state_sync(id)
+        .expect("failed to start state sync")
+}
+
 #[test]
 fn can_do_simple_state_sync_transfer() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
@@ -3386,7 +3401,7 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
 
         assert_error_counters(src_metrics);
 
-        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+        state_manager_restart_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync, restart_fn| {
             let (_height, mut state) = dst_state_manager.take_tip();
             populate_original_state(&mut state);
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
@@ -3395,7 +3410,7 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
             assert_eq!(hash_1, hash_dst_1);
 
             let mut chunkable =
-                set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
+                set_fetch_state_and_start_start_sync_no_arc(&dst_state_manager, &dst_state_sync, &id);
             let omit: HashSet<ChunkId> =
                 maplit::hashset! {ChunkId::new(FILE_GROUP_CHUNK_ID_OFFSET)};
             let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit, false);
@@ -3429,7 +3444,7 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
             }));
 
             assert!(result.is_err());
-
+            let (_metrics, state_manager) = restart_fn(dst_state_manager, dst_state_sync, None);
             // let expected_state = src_state_manager.get_latest_state();
             //
             // assert_eq!(dst_state_manager.get_latest_state(), expected_state);
