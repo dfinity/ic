@@ -531,7 +531,7 @@ fn test_message_id_flags() {
     assert_eq!(Kind::Request, giq_id.kind());
     assert_eq!(Context::Inbound, giq_id.context());
     assert_eq!(Class::GuaranteedResponse, giq_id.class());
-    assert_eq!(13, giq_id.0 >> MessageId::BITMASK_LEN);
+    assert_eq!(13, giq_id.0 >> Id::BITMASK_LEN);
 
     // Best-effort outbound response, same generator.
     let bop_id = Id::new(Kind::Response, Context::Outbound, Class::BestEffort, 13);
@@ -888,20 +888,14 @@ fn assert_exact_messages_in_queue<T>(messages: BTreeSet<Id>, queue: &BTreeSet<(T
     assert_eq!(messages, queue.iter().map(|(_, id)| *id).collect())
 }
 
-/// Generates a `MessageId` for a best-effort inbound request.
+/// Generates an `Id` for a best-effort inbound request.
 pub(crate) fn new_request_message_id(generator: u64, class: Class) -> Id {
     Id::new(Kind::Request, Context::Inbound, class, generator)
 }
 
-/// Generates a `MessageId` for an inbound response.
+/// Generates an `Id` for an inbound response.
 pub(crate) fn new_response_message_id(generator: u64, class: Class) -> Id {
     Id::new(Kind::Response, Context::Inbound, class, generator)
-}
-
-#[derive(PartialEq, Eq)]
-enum QueueOp {
-    Push,
-    Pop,
 }
 
 /// Fixture for validating updates to the message stats. Relies on a parallel
