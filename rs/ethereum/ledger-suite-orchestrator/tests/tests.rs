@@ -217,7 +217,7 @@ fn should_discover_new_archive_and_top_up() {
         .assert_ledger_has_cycles(100_000_000_000_000_u128)
         .assert_all_archives_have_cycles(100_000_000_000_000_u128);
 
-    managed_canisters.setup.advance_time_for_cycles_top_up();
+    managed_canisters.setup.advance_time_for_periodic_tasks();
 
     //[maybe_top_up] task started before archive discovery, so no top-up is expected.
     let managed_canisters = managed_canisters
@@ -225,7 +225,7 @@ fn should_discover_new_archive_and_top_up() {
         .check_metrics()
         .assert_contains_metric("ledger_suite_orchestrator_managed_archives 1");
 
-    managed_canisters.setup.advance_time_for_cycles_top_up();
+    managed_canisters.setup.advance_time_for_periodic_tasks();
 
     managed_canisters
         .assert_all_archives_have_cycles(110_000_000_000_000_u128)
@@ -285,7 +285,7 @@ fn should_top_up_spawned_canisters() {
     let pre_top_up_balance_ledger = orchestrator.canister_status_of(ledger_canister_id).cycles();
     let pre_top_up_balance_index = orchestrator.canister_status_of(index_canister_id).cycles();
 
-    orchestrator.advance_time_for_cycles_top_up();
+    orchestrator.advance_time_for_periodic_tasks();
     let balance_ledger_after_first_top_up =
         orchestrator.canister_status_of(ledger_canister_id).cycles();
     let balance_index_after_first_top_up =
@@ -299,7 +299,7 @@ fn should_top_up_spawned_canisters() {
         TEN_TRILLIONS as u128
     );
 
-    orchestrator.advance_time_for_cycles_top_up();
+    orchestrator.advance_time_for_periodic_tasks();
     let balance_ledger_after_second_top_up =
         orchestrator.canister_status_of(ledger_canister_id).cycles();
     let balance_index_after_second_top_up =
@@ -980,5 +980,94 @@ mod upgrade {
                 .assert_ledger_has_wasm_hash(&embedded_ledger_wasm_hash)
                 .assert_index_has_wasm_hash(&embedded_index_wasm_hash);
         }
+    }
+
+    // Upgrading the ledger is not an atomic operation and so the ledger could spawn a new archive:
+    // 1) before the upgrade: this case is potentially problematic since the new archive is spawned off from the not yet upgraded version of the ledger
+    // and upgrading the ledger afterwards won't automatically upgrade previously spawned archives.
+    // 2) after the upgrade: this case is typically fine since the new archive is spawned off from the upgraded version of the ledger,
+    // which typically corresponds to the new version of the archive that one wants to upgrade to.
+    #[test]
+    fn should_upgrade_archive_created_just_before_ledger_upgrade() {
+        let env = Arc::new(new_state_machine());
+        let orchestrator = LedgerSuiteOrchestrator::new(env.clone(), default_init_arg());
+        let universal_canister = UniversalCanister::new(env.clone());
+        let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+        let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+        let embedded_archive_wasm_hash = orchestrator.embedded_archive_wasm_hash.clone();
+
+        let has_been_upgraded_to = |canister_info: &CanisterInfoResponse, wasm_hash: &WasmHash| {
+            let changes: Vec<_> = canister_info
+                .changes()
+                .into_iter()
+                .map(|c| c.details().clone())
+                .collect();
+            let expected_change = CanisterChangeDetails::code_deployment(
+                CanisterInstallMode::Upgrade,
+                wasm_hash.clone().into(),
+            );
+            (matches!(changes.get(2), Some(c) if c == &expected_change)
+                || matches!(changes.get(3), Some(c) if c == &expected_change))
+                && changes.len() <= 4
+        };
+
+        let managed_canisters = orchestrator
+            .add_erc20_token(usdc(
+                Principal::anonymous(),
+                embedded_ledger_wasm_hash.clone(),
+                embedded_index_wasm_hash.clone(),
+            ))
+            .expect_new_ledger_and_index_canisters()
+            .assert_ledger_has_wasm_hash(&embedded_ledger_wasm_hash)
+            .assert_index_has_wasm_hash(&embedded_index_wasm_hash)
+            .check_metrics()
+            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0");
+
+        // Run task DiscoverArchives pre-emptively to ensure it's not run during upgrade
+        // so that we can test the case where the orchestrator doesn't know about the archive
+        managed_canisters.setup.advance_time_for_periodic_tasks();
+
+        let managed_canisters = managed_canisters
+            .check_metrics()
+            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0")
+            .trigger_creation_of_archive()
+            .check_metrics()
+            // the orchestrator is not yet aware of the archive
+            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0");
+
+        let orchestrator = managed_canisters.setup.upgrade_ledger_suite_orchestrator(
+            ledger_suite_orchestrator_wasm(),
+            UpgradeArg {
+                git_commit_hash: Some(GIT_COMMIT_HASH_UPGRADE.to_string()),
+                ledger_compressed_wasm_hash: Some(embedded_ledger_wasm_hash.to_string()),
+                index_compressed_wasm_hash: None,
+                archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
+                cycles_management: None,
+            },
+        );
+
+        orchestrator.env.tick();
+        orchestrator.env.tick();
+        orchestrator.env.tick();
+        let orchestrator = orchestrator
+            .assert_managed_canisters(&usdc_erc20_contract())
+            .assert_ledger_canister_info_satisfy(&universal_canister, |t| {
+                has_been_upgraded_to(t, &embedded_ledger_wasm_hash)
+            })
+            .check_metrics()
+            // the orchestrator is not yet aware of the archive
+            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0")
+            .setup;
+
+        orchestrator.env.tick();
+        orchestrator.env.tick();
+        orchestrator.env.tick();
+        orchestrator
+            .assert_managed_canisters(&usdc_erc20_contract())
+            .assert_all_archive_canister_info_satisfy(&universal_canister, |t| {
+                has_been_upgraded_to(t, &embedded_archive_wasm_hash)
+            })
+            .check_metrics()
+            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 1");
     }
 }
