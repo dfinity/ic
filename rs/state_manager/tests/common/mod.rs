@@ -624,6 +624,7 @@ pub fn state_manager_restart_test_with_state_sync<Test>(test: Test)
 
         let restart_fn = Box::new(move |state_manager, state_sync, starting_height| {
             drop(state_sync);
+            let state_manager = Arc::try_unwrap(state_manager).expect("Please make sure other strong references of state_manager have been dropped");
             drop(state_manager);
             make_state_manager(starting_height)
         });
