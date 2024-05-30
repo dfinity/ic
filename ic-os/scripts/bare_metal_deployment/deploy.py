@@ -425,8 +425,18 @@ def boot_images(bmc_infos: List[BMCInfo],
     with Pool(parallelism) as p:
         results = p.starmap(deploy_server, arg_tuples)
 
+    log.info("Deployment summary:")
+    deployment_failure = False
     for res in results:
         log.info(res)
+        if not res.success:
+            deployment_failure = True
+
+    if deployment_failure:
+        log.error("One or more node deployments failed")
+        return False
+
+    log.info("All deployments completed successfully.")
 
 
 def create_file_share_endpoint(file_share_url: str,
@@ -584,7 +594,7 @@ def main():
 
     wait_time_mins = args.wait_time
     parallelism = args.parallel
-    boot_images(
+    return boot_images(
         bmc_infos=bmc_infos,
         parallelism=parallelism,
         wait_time_mins=wait_time_mins,
