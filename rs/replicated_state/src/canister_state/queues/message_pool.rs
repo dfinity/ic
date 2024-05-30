@@ -70,14 +70,10 @@ impl Class {
 
 impl From<&RequestOrResponse> for Class {
     fn from(msg: &RequestOrResponse) -> Self {
-        match msg {
-            RequestOrResponse::Request(req) if req.deadline == NO_DEADLINE => {
-                Class::GuaranteedResponse
-            }
-            RequestOrResponse::Response(rep) if rep.deadline == NO_DEADLINE => {
-                Class::GuaranteedResponse
-            }
-            RequestOrResponse::Request(_) | RequestOrResponse::Response(_) => Class::BestEffort,
+        if msg.deadline() == NO_DEADLINE {
+            Class::GuaranteedResponse
+        } else {
+            Class::BestEffort
         }
     }
 }
@@ -162,12 +158,16 @@ pub struct MessagePool {
     /// Running message stats for the pool.
     message_stats: MessageStats,
 
-    /// Deadline priority queue.
+    /// Deadline priority queue. Holds all best-effort messages except responses in
+    /// input queues (which we don't want to expire); plus guaranteed response call
+    /// requests in output queues (which expire after `REQUEST_LIFETIME`); ordered
+    /// by deadline.
     ///
     /// Message IDs break ties, ensuring deterministic ordering.
     deadline_queue: BTreeSet<(CoarseTime, MessageId)>,
 
-    /// Load shedding priority queue.
+    /// Load shedding priority queue. Holds all best-effort messages, ordered by
+    /// size.
     ///
     /// Message IDs break ties, ensuring deterministic ordering.
     size_queue: BTreeSet<(usize, MessageId)>,
@@ -185,14 +185,14 @@ impl MessagePool {
     /// expire). It is added to the load shedding queue if it is a best-effort
     /// message.
     pub(crate) fn insert_inbound(&mut self, msg: RequestOrResponse) -> MessageId {
-        let deadline = match &msg {
+        let actual_deadline = match &msg {
             RequestOrResponse::Request(request) => request.deadline,
 
             // Never expire responses already enqueued in an input queue.
             RequestOrResponse::Response(_) => NO_DEADLINE,
         };
 
-        self.insert_impl(msg, deadline, Context::Inbound)
+        self.insert_impl(msg, actual_deadline, Context::Inbound)
     }
 
     /// Inserts an outbound request (one that is to be enqueued in an output queue)
@@ -207,7 +207,7 @@ impl MessagePool {
         request: Arc<Request>,
         now: Time,
     ) -> MessageId {
-        let deadline = if request.deadline == NO_DEADLINE {
+        let actual_deadline = if request.deadline == NO_DEADLINE {
             // Guaranteed response call requests in canister output queues expire after
             // `REQUEST_LIFETIME`.
             CoarseTime::floor(now + REQUEST_LIFETIME)
@@ -218,7 +218,7 @@ impl MessagePool {
 
         self.insert_impl(
             RequestOrResponse::Request(request),
-            deadline,
+            actual_deadline,
             Context::Outbound,
         )
     }
@@ -229,26 +229,26 @@ impl MessagePool {
     /// The response is added to both the deadline queue and the load shedding queue
     /// iff it is a best-effort response.
     pub(crate) fn insert_outbound_response(&mut self, response: Arc<Response>) -> MessageId {
-        let deadline = response.deadline;
+        let actual_deadline = response.deadline;
         self.insert_impl(
             RequestOrResponse::Response(response),
-            deadline,
+            actual_deadline,
             Context::Outbound,
         )
     }
 
-    /// Inserts the given message into the pool with the provided `deadline` (rather
-    /// than the message's actual deadline; this is so we can expire the outgoing
-    /// requests of guaranteed response calls; and not expire incoming best-effort
-    /// responses). Returns the ID assigned to the message.
+    /// Inserts the given message into the pool. Returns the ID assigned to the
+    /// message.
     ///
-    /// The message is recorded into the deadline queue with the provided `deadline`
-    /// iff that is non-zero. It is recorded in the load shedding priority queue iff
-    /// the message is a best-effort message.
+    /// The message is recorded into the deadline queue with the provided
+    /// `actual_deadline` iff it is non-zero (as opposed to the message's nominal
+    /// deadline; this is so we can expire outgoing guaranteed response requests;
+    /// and not expire incoming best-effort responses). It is recorded in the load
+    /// shedding priority queue iff it is a best-effort message.
     fn insert_impl(
         &mut self,
         msg: RequestOrResponse,
-        deadline: CoarseTime,
+        actual_deadline: CoarseTime,
         context: Context,
     ) -> MessageId {
         let kind = Kind::from(&msg);
@@ -267,16 +267,18 @@ impl MessagePool {
             self.message_stats
         );
 
-        // Record in deadline queue iff a deadline was provided.
-        if deadline != NO_DEADLINE {
-            self.deadline_queue.insert((deadline, id));
+        // Record in deadline queue iff `actual_deadline` is non-zero. This applies to
+        // all best-effort messages except responses in input queues; plus guaranteed
+        // response requests in output queues
+        if actual_deadline != NO_DEADLINE {
+            self.deadline_queue.insert((actual_deadline, id));
 
-            // And in the outbound guaranteed response deadline map, iff it's an outbound
+            // Record in the outbound guaranteed response deadline map, iff it's an outbound
             // guaranteed response request.
             if class == Class::GuaranteedResponse {
                 debug_assert_eq!((Context::Outbound, Kind::Request), (context, kind));
                 self.outbound_guaranteed_request_deadlines
-                    .insert(id, deadline);
+                    .insert(id, actual_deadline);
             }
         }
 
