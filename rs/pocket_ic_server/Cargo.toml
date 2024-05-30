@@ -40,7 +40,7 @@ icx-proxy = { path = "../boundary_node/icx_proxy", features = ["dev_proxy"] }
 hex = { workspace = true }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 clap = { version = "3.2.25", features = ["derive"] }
-time = "^0.3.20"
+time = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-appender = { workspace = true }

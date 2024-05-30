@@ -41,7 +41,7 @@ ic-types = { path = "../../../types/types" }
 parking_lot = "0.12.1"
 prost = { workspace = true }
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }
 rayon = "1.8"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
@@ -52,7 +52,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 tarpc = { version = "0.34", features = ["full"] }
 tempfile = { workspace = true }
-time = "0.3.20"
+time = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-serde = { version = "0.8", features = ["json", "bincode"] }

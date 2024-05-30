@@ -64,7 +64,7 @@ lazy_static = "1.4.0"
 maplit = "1.0.2"
 mockall = { workspace = true }
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }
 serde = "1.0"
 tempfile = { workspace = true }
 

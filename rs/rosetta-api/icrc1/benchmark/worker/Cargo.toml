@@ -29,7 +29,7 @@ icrc-ledger-client-cdk = { path = "../../../../../packages/icrc-ledger-client-cd
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
 rand = { workspace = true }
-rand_chacha = "0.3.1"
+rand_chacha = { workspace = true }
 ring = { version = "0.16.11", features = ["std"] }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

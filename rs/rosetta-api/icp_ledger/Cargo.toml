@@ -46,7 +46,7 @@ maplit = "1.0.2"
 pocket-ic = { path = "../../../packages/pocket-ic" }
 proptest = "1"
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }
 tempfile = { workspace = true }
 
 [[test]]

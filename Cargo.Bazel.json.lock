@@ -1,5 +1,5 @@
 {
-  "checksum": "b1e1fcc7fa2040f44f073a87cadd51634ac6351953af57146771777d7fda1b4a",
+  "checksum": "bd8f86a5d41ef5f53caa5bb27a4b3063f58193c51bcc90070209c3ae1e667c55",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -389,7 +389,7 @@
               "target": "rand"
             },
             {
-              "id": "sha1 0.10.5",
+              "id": "sha1 0.10.6",
               "target": "sha1"
             },
             {
@@ -988,7 +988,7 @@
               "target": "socket2"
             },
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             },
             {
@@ -2957,7 +2957,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             }
           ],
@@ -5180,7 +5180,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pemfile 2.0.0",
+              "id": "rustls-pemfile 2.1.2",
               "target": "rustls_pemfile"
             },
             {
@@ -10425,7 +10425,7 @@
               "target": "base64_url"
             },
             {
-              "id": "chrono 0.4.31",
+              "id": "chrono 0.4.38",
               "target": "chrono"
             },
             {
@@ -10798,14 +10798,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "chrono 0.4.31": {
+    "chrono 0.4.38": {
       "name": "chrono",
-      "version": "0.4.31",
+      "version": "0.4.38",
       "package_url": "https://github.com/chronotope/chrono",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/chrono/0.4.31/download",
-          "sha256": "7f2c685bad3eb3d45a01354cedb7d5faa66194d1d58ba6e267a8de788f79db38"
+          "url": "https://static.crates.io/crates/chrono/0.4.38/download",
+          "sha256": "a21f936df1771bf62b77f047b726c4625ff2e8aa607c01ec06e5a05bd8463401"
         }
       },
       "targets": [
@@ -10835,6 +10835,7 @@
             "default",
             "iana-time-zone",
             "js-sys",
+            "now",
             "oldtime",
             "serde",
             "std",
@@ -10881,14 +10882,14 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-targets 0.48.1",
+                "id": "windows-targets 0.52.0",
                 "target": "windows_targets"
               }
             ]
           }
         },
         "edition": "2021",
-        "version": "0.4.31"
+        "version": "0.4.38"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -11767,7 +11768,7 @@
               "target": "libc"
             },
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             }
           ],
@@ -11878,7 +11879,7 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.31",
+              "id": "chrono 0.4.38",
               "target": "chrono"
             },
             {
@@ -12738,7 +12739,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             }
           ],
@@ -17052,7 +17053,7 @@
               "target": "chacha20poly1305"
             },
             {
-              "id": "chrono 0.4.31",
+              "id": "chrono 0.4.38",
               "target": "chrono"
             },
             {
@@ -17812,7 +17813,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "rustls-pemfile 2.0.0",
+              "id": "rustls-pemfile 2.1.2",
               "target": "rustls_pemfile"
             },
             {
@@ -17993,7 +17994,7 @@
               "target": "threadpool"
             },
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             },
             {
@@ -18195,7 +18196,7 @@
               "target": "wycheproof"
             },
             {
-              "id": "x509-cert 0.2.4",
+              "id": "x509-cert 0.2.5",
               "target": "x509_cert"
             },
             {
@@ -18982,7 +18983,7 @@
               "target": "signature"
             },
             {
-              "id": "spki 0.7.2",
+              "id": "spki 0.7.3",
               "target": "spki"
             }
           ],
@@ -20704,7 +20705,7 @@
               "target": "bytes"
             },
             {
-              "id": "chrono 0.4.31",
+              "id": "chrono 0.4.38",
               "target": "chrono"
             },
             {
@@ -24676,7 +24677,7 @@
               "target": "mime"
             },
             {
-              "id": "sha1 0.10.5",
+              "id": "sha1 0.10.6",
               "target": "sha1"
             }
           ],
@@ -24747,7 +24748,7 @@
               "target": "mime"
             },
             {
-              "id": "sha1 0.10.5",
+              "id": "sha1 0.10.6",
               "target": "sha1"
             }
           ],
@@ -27688,7 +27689,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             },
             {
@@ -29154,7 +29155,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             },
             {
@@ -32451,7 +32452,7 @@
               "target": "bytes"
             },
             {
-              "id": "chrono 0.4.31",
+              "id": "chrono 0.4.38",
               "target": "chrono"
             },
             {
@@ -32695,7 +32696,7 @@
               "target": "bytes"
             },
             {
-              "id": "chrono 0.4.31",
+              "id": "chrono 0.4.38",
               "target": "chrono"
             },
             {
@@ -32860,7 +32861,7 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.31",
+              "id": "chrono 0.4.38",
               "target": "chrono"
             },
             {
@@ -39344,6 +39345,45 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "num-conv 0.1.0": {
+      "name": "num-conv",
+      "version": "0.1.0",
+      "package_url": "https://github.com/jhpratt/num-conv",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/num-conv/0.1.0/download",
+          "sha256": "51d515d32fb182ee37cda2ccdcb92950d6a3c2893aa280e540671c2cd0f3b1d9"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "num_conv",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "num_conv",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-Apache"
+    },
     "num-format 0.4.4": {
       "name": "num-format",
       "version": "0.4.4",
@@ -44526,7 +44566,7 @@
               "target": "pkcs8"
             },
             {
-              "id": "spki 0.7.2",
+              "id": "spki 0.7.3",
               "target": "spki"
             }
           ],
@@ -44586,7 +44626,7 @@
               "target": "der"
             },
             {
-              "id": "spki 0.7.2",
+              "id": "spki 0.7.3",
               "target": "spki"
             }
           ],
@@ -46891,7 +46931,7 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.31",
+              "id": "chrono 0.4.38",
               "target": "chrono"
             },
             {
@@ -50322,7 +50362,7 @@
               "target": "ring"
             },
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             },
             {
@@ -51532,7 +51572,7 @@
                 "target": "rustls_native_certs"
               },
               {
-                "id": "rustls-pemfile 2.0.0",
+                "id": "rustls-pemfile 2.1.2",
                 "target": "rustls_pemfile"
               },
               {
@@ -52484,7 +52524,7 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.31",
+              "id": "chrono 0.4.38",
               "target": "chrono"
             }
           ],
@@ -52591,7 +52631,7 @@
               "target": "signature"
             },
             {
-              "id": "spki 0.7.2",
+              "id": "spki 0.7.3",
               "target": "spki"
             },
             {
@@ -54237,7 +54277,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls-pemfile 2.0.0",
+              "id": "rustls-pemfile 2.1.2",
               "target": "rustls_pemfile"
             },
             {
@@ -54327,14 +54367,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rustls-pemfile 2.0.0": {
+    "rustls-pemfile 2.1.2": {
       "name": "rustls-pemfile",
-      "version": "2.0.0",
+      "version": "2.1.2",
       "package_url": "https://github.com/rustls/pemfile",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls-pemfile/2.0.0/download",
-          "sha256": "35e4980fa29e4c4b212ffb3db068a564cbf560e51d3944b7c88bd8bf5bec64f4"
+          "url": "https://static.crates.io/crates/rustls-pemfile/2.1.2/download",
+          "sha256": "29993a25686778eb88d4189742cd713c9bce943bc54251a33509dc63cbacf73d"
         }
       },
       "targets": [
@@ -54366,7 +54406,7 @@
         "deps": {
           "common": [
             {
-              "id": "base64 0.21.6",
+              "id": "base64 0.22.0",
               "target": "base64"
             },
             {
@@ -54378,7 +54418,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.0.0"
+        "version": "2.1.2"
       },
       "license": "Apache-2.0 OR ISC OR MIT",
       "license_ids": [
@@ -57827,14 +57867,14 @@
       ],
       "license_file": null
     },
-    "sha1 0.10.5": {
+    "sha1 0.10.6": {
       "name": "sha1",
-      "version": "0.10.5",
+      "version": "0.10.6",
       "package_url": "https://github.com/RustCrypto/hashes",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/sha1/0.10.5/download",
-          "sha256": "f04293dc80c3993519f2d7f6f511707ee7094fe0c6d3406feb330cdb3540eba3"
+          "url": "https://static.crates.io/crates/sha1/0.10.6/download",
+          "sha256": "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
         }
       },
       "targets": [
@@ -57884,7 +57924,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.10.5"
+        "version": "0.10.6"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -58712,7 +58752,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             }
           ],
@@ -58777,7 +58817,7 @@
               "target": "log"
             },
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             }
           ],
@@ -58894,7 +58934,7 @@
               "target": "termcolor"
             },
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             }
           ],
@@ -59452,7 +59492,7 @@
               "target": "slog"
             },
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             }
           ],
@@ -59637,7 +59677,7 @@
               "target": "thread_local"
             },
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             }
           ],
@@ -60074,14 +60114,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "spki 0.7.2": {
+    "spki 0.7.3": {
       "name": "spki",
-      "version": "0.7.2",
+      "version": "0.7.3",
       "package_url": "https://github.com/RustCrypto/formats/tree/master/spki",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/spki/0.7.2/download",
-          "sha256": "9d1e996ef02c474957d681f1b05213dfb0abab947b446a62d37770b23500184a"
+          "url": "https://static.crates.io/crates/spki/0.7.3/download",
+          "sha256": "d91ed6c858b01f942cd56b37a94b3e0a1798290327d1236e4d9cf4eaca44d29d"
         }
       },
       "targets": [
@@ -60121,7 +60161,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.7.2"
+        "version": "0.7.3"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -63354,14 +63394,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "time 0.3.31": {
+    "time 0.3.36": {
       "name": "time",
-      "version": "0.3.31",
+      "version": "0.3.36",
       "package_url": "https://github.com/time-rs/time",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/time/0.3.31/download",
-          "sha256": "f657ba42c3f86e7680e53c8cd3af8abbe56b5491790b46e22e19c0d57463583e"
+          "url": "https://static.crates.io/crates/time/0.3.36/download",
+          "sha256": "5dfd88e563464686c916c7e46e623e520ddc6d79fa6641390f2e3fa86e83e885"
         }
       },
       "targets": [
@@ -63406,6 +63446,10 @@
               "target": "itoa"
             },
             {
+              "id": "num-conv 0.1.0",
+              "target": "num_conv"
+            },
+            {
               "id": "powerfmt 0.2.0",
               "target": "powerfmt"
             },
@@ -63435,13 +63479,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "time-macros 0.2.16",
+              "id": "time-macros 0.2.18",
               "target": "time_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.3.31"
+        "version": "0.3.36"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -63489,14 +63533,14 @@
       ],
       "license_file": "LICENSE-Apache"
     },
-    "time-macros 0.2.16": {
+    "time-macros 0.2.18": {
       "name": "time-macros",
-      "version": "0.2.16",
+      "version": "0.2.18",
       "package_url": "https://github.com/time-rs/time",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/time-macros/0.2.16/download",
-          "sha256": "26197e33420244aeb70c3e8c78376ca46571bc4e701e4791c2cd9f57dcb3a43f"
+          "url": "https://static.crates.io/crates/time-macros/0.2.18/download",
+          "sha256": "3f252a68540fde3a3877aeea552b832b40ab9a69e318efd078774a01ddee1ccf"
         }
       },
       "targets": [
@@ -63528,6 +63572,10 @@
         "deps": {
           "common": [
             {
+              "id": "num-conv 0.1.0",
+              "target": "num_conv"
+            },
+            {
               "id": "time-core 0.1.2",
               "target": "time_core"
             }
@@ -63535,7 +63583,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.16"
+        "version": "0.2.18"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -63768,6 +63816,119 @@
         "Zlib"
       ],
       "license_file": "LICENSE-APACHE.md"
+    },
+    "tls_codec 0.4.1": {
+      "name": "tls_codec",
+      "version": "0.4.1",
+      "package_url": "https://github.com/RustCrypto/formats/tree/master/tls_codec",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tls_codec/0.4.1/download",
+          "sha256": "b5e78c9c330f8c85b2bae7c8368f2739157db9991235123aa1b15ef9502bfb6a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tls_codec",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tls_codec",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "zeroize 1.7.0",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "tls_codec_derive 0.4.1",
+              "target": "tls_codec_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.4.1"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "tls_codec_derive 0.4.1": {
+      "name": "tls_codec_derive",
+      "version": "0.4.1",
+      "package_url": "https://github.com/RustCrypto/formats/tree/master/tls_codec/derive",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tls_codec_derive/0.4.1/download",
+          "sha256": "8d9ef545650e79f30233c0003bcc2504d7efac6dad25fca40744de773fe2049c"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "tls_codec_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tls_codec_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.76",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.48",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.4.1"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
     },
     "tokio 1.37.0": {
       "name": "tokio",
@@ -66014,7 +66175,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             },
             {
@@ -67153,7 +67314,7 @@
               "target": "rand"
             },
             {
-              "id": "sha1 0.10.5",
+              "id": "sha1 0.10.6",
               "target": "sha1"
             },
             {
@@ -74749,14 +74910,14 @@
       ],
       "license_file": "LICENSE.txt"
     },
-    "x509-cert 0.2.4": {
+    "x509-cert 0.2.5": {
       "name": "x509-cert",
-      "version": "0.2.4",
+      "version": "0.2.5",
       "package_url": "https://github.com/RustCrypto/formats/tree/master/x509-cert",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/x509-cert/0.2.4/download",
-          "sha256": "25eefca1d99701da3a57feb07e5079fc62abba059fc139e98c13bbb250f3ef29"
+          "url": "https://static.crates.io/crates/x509-cert/0.2.5/download",
+          "sha256": "1301e935010a701ae5f8655edc0ad17c44bad3ac5ce8c39185f75453b720ae94"
         }
       },
       "targets": [
@@ -74801,7 +74962,7 @@
               "target": "der"
             },
             {
-              "id": "sha1 0.10.5",
+              "id": "sha1 0.10.6",
               "target": "sha1"
             },
             {
@@ -74809,14 +74970,14 @@
               "target": "signature"
             },
             {
-              "id": "spki 0.7.2",
+              "id": "spki 0.7.3",
               "target": "spki"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.4"
+        "version": "0.2.5"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -74895,7 +75056,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             }
           ],
@@ -75141,7 +75302,7 @@
         "deps": {
           "common": [
             {
-              "id": "time 0.3.31",
+              "id": "time 0.3.36",
               "target": "time"
             }
           ],
@@ -76849,7 +77010,7 @@
     "cddl 0.9.4",
     "cfg-if 1.0.0",
     "chacha20poly1305 0.10.1",
-    "chrono 0.4.31",
+    "chrono 0.4.38",
     "ciborium 0.2.1",
     "cidr 0.2.2",
     "clap 3.2.25",
@@ -77045,7 +77206,7 @@
     "rustls 0.21.12",
     "rustls 0.23.8",
     "rustls-native-certs 0.7.0",
-    "rustls-pemfile 2.0.0",
+    "rustls-pemfile 2.1.2",
     "rustls-pki-types 1.7.0",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",
@@ -77094,7 +77255,7 @@
     "thiserror 1.0.57",
     "thousands 0.2.0",
     "threadpool 1.8.1",
-    "time 0.3.31",
+    "time 0.3.36",
     "tokio 1.37.0",
     "tokio-io-timeout 1.2.0",
     "tokio-metrics 0.3.1",
@@ -77144,7 +77305,7 @@
     "wiremock 0.5.19",
     "wsl 0.1.0",
     "wycheproof 0.5.1",
-    "x509-cert 0.2.4",
+    "x509-cert 0.2.5",
     "x509-parser 0.15.1",
     "yansi 0.5.1",
     "zeroize 1.7.0",

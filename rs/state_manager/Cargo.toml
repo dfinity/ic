@@ -36,7 +36,7 @@ parking_lot = "0.12.1"
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }
 scoped_threadpool = "0.1.*"
 serde = { workspace = true }
 serde_bytes = { workspace = true }

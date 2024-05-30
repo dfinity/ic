@@ -14,7 +14,7 @@ num-bigint = "0.4"
 p256 = { workspace = true }
 pem = "1.1.0"
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }
 simple_asn1 = { workspace = true }
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 
