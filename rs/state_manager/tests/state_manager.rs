@@ -3292,7 +3292,7 @@ fn can_recover_from_corruption_on_state_sync() {
 }
 
 #[test]
-fn do_not_crash_in_loop_corrupted_state_sync() {
+fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
     use std::panic::{self, AssertUnwindSafe};
     use ic_state_layout::{CheckpointLayout, RwPolicy};
 
@@ -3325,6 +3325,7 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
 
         let hash_1 = wait_for_checkpoint(&*src_state_manager, height(1));
 
+        // Update the canister state.
         let (_height, mut state) = src_state_manager.take_tip();
         update_state(&mut state);
         src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
@@ -3350,6 +3351,8 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
 
             let mut chunkable =
                 set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
+
+            // Omit one chunk and corrupt some files in the state sync scratchpad before adding the final chunk.
             let omit: HashSet<ChunkId> =
                 maplit::hashset! {ChunkId::new(FILE_GROUP_CHUNK_ID_OFFSET)};
             let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit, false);
@@ -3365,24 +3368,27 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
             )
             .unwrap();
 
-            let canister_90_layout = state_sync_scratchpad_layout.canister(&canister_test_id(90)).unwrap();
-            let canister_90_memory = if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
-                canister_90_layout
+            // Write garbage to the canister memory file so that loading will fail.
+            let canister_layout = state_sync_scratchpad_layout.canister(&canister_test_id(90)).unwrap();
+            let canister_memory = if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
+                canister_layout
                     .vmemory_0()
                     .existing_overlays()
                     .unwrap()
                     .remove(0)
             } else {
-                canister_90_layout.vmemory_0().base()
+                canister_layout.vmemory_0().base()
             };
-            make_mutable(&canister_90_memory).unwrap();
-            std::fs::write(&canister_90_memory, b"Garbage").unwrap();
+            make_mutable(&canister_memory).unwrap();
+            std::fs::write(&canister_memory, b"Garbage").unwrap();
 
             let result = panic::catch_unwind(AssertUnwindSafe(|| {
                 pipe_state_sync(msg, chunkable);
             }));
 
             assert!(result.is_err());
+
+            // Restart the dst state manager.
             drop(dst_state_sync);
             let dst_state_manager = match Arc::try_unwrap(dst_state_manager) {
                 Ok(sm) => sm,
@@ -3390,17 +3396,21 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
             };
             let (_metrics, dst_state_manager) = restart_fn(dst_state_manager, None);
 
+            // State manager archives unverided checkpoint and recovers from the last verified checkpoint.
+            assert_eq!(dst_state_manager.latest_state_height(), height(1));
+
+            // Continue execution and create the checkpoint @2.
             let (_height, mut state) = dst_state_manager.take_tip();
             update_state(&mut state);
 
             dst_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
 
-            let dst_hash_2 = wait_for_checkpoint(&*dst_state_manager, height(2));
+            let hash_dst_2 = wait_for_checkpoint(&*dst_state_manager, height(2));
 
             let expected_state = src_state_manager.get_latest_state();
 
             assert_eq!(dst_state_manager.get_latest_state(), expected_state);
-            assert_eq!(dst_hash_2, hash_2);
+            assert_eq!(hash_dst_2, hash_2);
 
             let mut tip = dst_state_manager.take_tip().1;
             let state = expected_state.take();
