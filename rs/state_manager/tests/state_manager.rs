@@ -3383,7 +3383,12 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
             }));
 
             assert!(result.is_err());
-            let (_metrics, dst_state_manager) = restart_fn(dst_state_manager, dst_state_sync, None);
+            drop(dst_state_sync);
+            let dst_state_manager = match Arc::try_unwrap(dst_state_manager) {
+                Ok(sm) => sm,
+                Err(_) => panic!("Please make sure other strong references of dst_state_manager have been dropped"),
+            };
+            let (_metrics, dst_state_manager) = restart_fn(dst_state_manager, None);
 
             let (_height, mut state) = dst_state_manager.take_tip();
             update_state(&mut state);

@@ -592,7 +592,7 @@ pub fn state_manager_restart_test_with_state_sync<Test>(test: Test)
             &MetricsRegistry,
             Arc<StateManagerImpl>,
             StateSync,
-            Box<dyn Fn(Arc<StateManagerImpl>, StateSync, Option<Height>) -> (MetricsRegistry, Arc<StateManagerImpl>)>,
+            Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, Arc<StateManagerImpl>)>,
         ),
 {
     let tmp = tmpdir("sm");
@@ -622,12 +622,7 @@ pub fn state_manager_restart_test_with_state_sync<Test>(test: Test)
         let (metrics_registry, state_manager) = make_state_manager(None);
         let state_sync = StateSync::new(state_manager.clone(), log.clone());
 
-        let restart_fn = Box::new(move |state_manager, state_sync, starting_height| {
-            drop(state_sync);
-            let state_manager = match Arc::try_unwrap(state_manager) {
-                Ok(sm) => sm,
-                Err(_) => panic!("Please make sure other strong references of state_manager have been dropped"),
-            };
+        let restart_fn = Box::new(move |state_manager, starting_height| {
             drop(state_manager);
             make_state_manager(starting_height)
         });
