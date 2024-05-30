@@ -12,4 +12,4 @@ ic-types = { path = "../../types/types" }
 ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
 lazy_static = "1.4.0"
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }

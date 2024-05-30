@@ -7,7 +7,7 @@ edition = "2021"
 ic-crypto-sha2 = { path = "../sha2" }
 ic-types = { path = "../../types/types" }
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 

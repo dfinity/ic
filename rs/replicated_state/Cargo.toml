@@ -36,7 +36,7 @@ libc = "0.2.91"
 maplit = "1.0.2"
 nix = { workspace = true }
 rand = { workspace = true }
-rand_chacha = "0.3.0"
+rand_chacha = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 serde = { workspace = true }

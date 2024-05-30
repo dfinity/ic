@@ -441,7 +441,7 @@ build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "7
 bytes = "1.6.0"
 candid = { version = "0.10.6" }
 candid_parser = { version = "0.1.2" }
-chrono = { version = "0.4.31", default-features = false, features = [
+chrono = { version = "0.4.38", default-features = false, features = [
     "alloc",
     "clock",
     "serde",
@@ -518,6 +518,7 @@ prost-build = "0.12.3"
 quinn = { version = "0.10.2", features = ["ring"] }
 quinn-udp = "0.5.1"
 rand = { version = "0.8.5", features = ["small_rng"] }
+rand_chacha = "0.3.1"
 rcgen = { version = "0.11.1", features = ["zeroize"] }
 reqwest = { version = "0.12.3", default-features = false, features = [
     "blocking",
@@ -552,7 +553,7 @@ syn = { version = "1.0.109", features = ["fold", "full"] }
 sync_wrapper = "^1.0.1"
 tempfile = "3.10.1"
 thiserror = "1.0.57"
-time = { version = "0.3.20", features = ["formatting"] }
+time = { version = "0.3.36", features = ["formatting"] }
 tokio = { version = "1.37.0", features = ["full"] }
 tokio-metrics = "0.3.1"
 tokio-rustls = { version = "0.26.0", features = ["logging", "ring", "tls12"] }
@@ -576,7 +577,7 @@ tracing-subscriber = { version = "0.3.18", features = [
     "json",
 ] }
 turmoil = "0.6.2"
-x509-cert = { version = "0.2.4", features = ["builder", "hazmat"] }
+x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.15.1" }
 zstd = "0.13.1"
 

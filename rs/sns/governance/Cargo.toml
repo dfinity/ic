@@ -68,7 +68,7 @@ maplit = "1.0.2"
 num-traits = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"
 serde = { workspace = true }

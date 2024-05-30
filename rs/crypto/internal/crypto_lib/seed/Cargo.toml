@@ -10,6 +10,6 @@ documentation.workspace = true
 ic-crypto-sha2 = { path = "../../../sha2" }
 hex = { workspace = true }
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }
 serde = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }

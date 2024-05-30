@@ -14,4 +14,4 @@ ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" 
 ic-types = { path = "../../types/types" }
 ed25519-consensus = "2.0.1"
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }

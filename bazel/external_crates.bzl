@@ -296,7 +296,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.10.0",
             ),
             "chrono": crate.spec(
-                version = "^0.4.31",
+                version = "^0.4.38",
                 default_features = False,
                 features = [
                     "alloc",
@@ -1090,7 +1090,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.7.0",
             ),
             "rustls-pemfile": crate.spec(
-                version = "^2",
+                version = "^2.1.2",
             ),
             "rustls-pki-types": crate.spec(
                 version = "^1.7.0",
@@ -1276,7 +1276,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.8.1",
             ),
             "time": crate.spec(
-                version = "^0.3.31",
+                version = "^0.3.36",
             ),
             "tokio": crate.spec(
                 version = "^1.37.0",
@@ -1493,7 +1493,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.19",
             ),
             "x509-cert": crate.spec(
-                version = "^0.2.4",
+                version = "^0.2.5",
                 features = [
                     "builder",
                     "hazmat",
