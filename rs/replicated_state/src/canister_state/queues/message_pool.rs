@@ -78,9 +78,9 @@ impl From<&RequestOrResponse> for Class {
     }
 }
 
-/// A unique generated identifier for a message held in a `MessagePool` that
-/// also encodes the message kind (request or response) and context (incoming or
-/// outgoing).
+/// A generated identifier for a message held in a `MessagePool` that also
+/// encodes the message kind (request or response), context (incoming or
+/// outgoing) and class (guaranteed response or best-effort).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MessageId(u64);
 
