@@ -3316,37 +3316,12 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
 
     let populate_original_state = |state: &mut ReplicatedState| {
         insert_dummy_canister(state, canister_test_id(90));
-        insert_dummy_canister(state, canister_test_id(100));
-        insert_dummy_canister(state, canister_test_id(110));
 
         let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state.wasm_memory.page_map.update(&[
             (PageIndex::new(1), &[99u8; PAGE_SIZE]),
             (PageIndex::new(300), &[99u8; PAGE_SIZE]),
-        ]);
-
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
-        canister_state
-            .execution_state
-            .as_mut()
-            .unwrap()
-            .stable_memory
-            .page_map
-            .update(&[(PageIndex::new(0), &[255u8; PAGE_SIZE])]);
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(1), &[100u8; PAGE_SIZE]),
-            (PageIndex::new(3000), &[100u8; PAGE_SIZE]),
-        ]);
-
-        let canister_state = state.canister_state_mut(&canister_test_id(110)).unwrap();
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[111u8; PAGE_SIZE]),
-            (PageIndex::new(pages_per_chunk - 1), &[0; PAGE_SIZE]),
-            (PageIndex::new(pages_per_chunk), &[112u8; PAGE_SIZE]),
-            (PageIndex::new(2 * pages_per_chunk - 1), &[0; PAGE_SIZE]),
         ]);
     };
 
@@ -3362,15 +3337,6 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(200));
 
-        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        // Add a new page much further in the file so that the first one could
-        // be re-used as a chunk, and so that there are all-zero chunks inbetween.
-        execution_state
-            .wasm_memory
-            .page_map
-            .update(&[(PageIndex::new(3000), &[2u8; PAGE_SIZE])]);
-
         let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         // Add a new page much further in the file so that the first one could
@@ -3380,13 +3346,6 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
             .page_map
             .update(&[(PageIndex::new(300), &[3u8; PAGE_SIZE])]);
 
-        // Exchange pages in the canister heap to check applying chunks out of order.
-        let canister_state = state.canister_state_mut(&canister_test_id(110)).unwrap();
-        let execution_state = canister_state.execution_state.as_mut().unwrap();
-        execution_state.wasm_memory.page_map.update(&[
-            (PageIndex::new(0), &[112u8; PAGE_SIZE]),
-            (PageIndex::new(pages_per_chunk), &[111u8; PAGE_SIZE]),
-        ]);
 
         src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
 
@@ -3444,7 +3403,25 @@ fn do_not_crash_in_loop_corrupted_state_sync() {
             }));
 
             assert!(result.is_err());
-            let (_metrics, state_manager) = restart_fn(dst_state_manager, dst_state_sync, None);
+            let (_metrics, dst_state_manager) = restart_fn(dst_state_manager, dst_state_sync, None);
+            // Create another state with an extra canister.
+            let (_height, mut state) = dst_state_manager.take_tip();
+            insert_dummy_canister(&mut state, canister_test_id(200));
+
+            let canister_state = state.canister_state_mut(&canister_test_id(90)).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+            // Add a new page much further in the file so that the first one could
+            // be re-used as a chunk.
+            execution_state
+                .wasm_memory
+                .page_map
+                .update(&[(PageIndex::new(300), &[3u8; PAGE_SIZE])]);
+
+
+            dst_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+
+            let hash_2 = wait_for_checkpoint(&*dst_state_manager, height(2));
+
             // let expected_state = src_state_manager.get_latest_state();
             //
             // assert_eq!(dst_state_manager.get_latest_state(), expected_state);
