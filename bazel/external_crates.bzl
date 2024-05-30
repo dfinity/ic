@@ -376,9 +376,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "dashmap": crate.spec(
                 version = "^5.3.4",
             ),
-            "digest": crate.spec(
-                version = "^0.9.0",
-            ),
             "dyn-clone": crate.spec(
                 version = "^1.0.14",
             ),
@@ -725,9 +722,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "libnss": crate.spec(
                 version = "^0.5.0",
             ),
-            "linked-hash-map": crate.spec(
-                version = "^0.5.3",
-            ),
             "little-loadshedder": crate.spec(
                 version = "^0.1.0",
             ),
@@ -799,9 +793,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "nix": crate.spec(
                 version = "^0.24.3",
             ),
-            "notify": crate.spec(
-                version = "^4.0.12",
-            ),
             "num": crate.spec(
                 version = "^0.4.0",
             ),
@@ -811,9 +802,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "num-bigint-dig": crate.spec(
                 version = "^0.8",
                 features = ["prime"],
-            ),
-            "num-integer": crate.spec(
-                version = "^0.1.41",
             ),
             "num-rational": crate.spec(
                 version = "^0.2.2",

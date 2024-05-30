@@ -1,5 +1,5 @@
 {
-  "checksum": "c4abb50f3b73084be9d48bb93f132a874d47afd5b5abd4062f16be2d1a15dd51",
+  "checksum": "3e3fef0836f879c6a62dd9acead6e6437fc7d7b2d1ea046ad4890ef5fd5afca5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17292,10 +17292,6 @@
               "target": "dashmap"
             },
             {
-              "id": "digest 0.9.0",
-              "target": "digest"
-            },
-            {
               "id": "dyn-clone 1.0.14",
               "target": "dyn_clone"
             },
@@ -17648,10 +17644,6 @@
               "target": "libsecp256k1"
             },
             {
-              "id": "linked-hash-map 0.5.6",
-              "target": "linked_hash_map"
-            },
-            {
               "id": "little-loadshedder 0.1.0",
               "target": "little_loadshedder"
             },
@@ -17712,10 +17704,6 @@
               "target": "nix"
             },
             {
-              "id": "notify 4.0.17",
-              "target": "notify"
-            },
-            {
               "id": "num 0.4.1",
               "target": "num"
             },
@@ -17726,10 +17714,6 @@
             {
               "id": "num-bigint-dig 0.8.4",
               "target": "num_bigint_dig"
-            },
-            {
-              "id": "num-integer 0.1.45",
-              "target": "num_integer"
             },
             {
               "id": "num-rational 0.2.4",
@@ -22530,104 +22514,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "fsevent 0.4.0": {
-      "name": "fsevent",
-      "version": "0.4.0",
-      "package_url": "https://github.com/octplane/fsevent-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/fsevent/0.4.0/download",
-          "sha256": "5ab7d1bd1bd33cc98b0889831b72da23c0aa4df9cec7e0702f46ecea04b35db6"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "fsevent",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "fsevent",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 1.3.2",
-              "target": "bitflags"
-            },
-            {
-              "id": "fsevent-sys 2.0.1",
-              "target": "fsevent_sys"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.4.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "fsevent-sys 2.0.1": {
-      "name": "fsevent-sys",
-      "version": "2.0.1",
-      "package_url": "https://github.com/octplane/fsevent-rust/tree/master/fsevent-sys",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/fsevent-sys/2.0.1/download",
-          "sha256": "f41b048a94555da0f42f1d632e2e19510084fb8e303b0daa2816e733fb3644a0"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "fsevent_sys",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "fsevent_sys",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libc 0.2.153",
-              "target": "libc"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "2.0.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "fuchsia-cprng 0.1.1": {
       "name": "fuchsia-cprng",
       "version": "0.1.1",
@@ -22663,95 +22549,6 @@
       "license": null,
       "license_ids": [],
       "license_file": "LICENSE"
-    },
-    "fuchsia-zircon 0.3.3": {
-      "name": "fuchsia-zircon",
-      "version": "0.3.3",
-      "package_url": "https://fuchsia.googlesource.com/garnet/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/fuchsia-zircon/0.3.3/download",
-          "sha256": "2e9763c69ebaae630ba35f74888db465e49e259ba1bc0eda7d06f4a067615d82"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "fuchsia_zircon",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "fuchsia_zircon",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 1.3.2",
-              "target": "bitflags"
-            },
-            {
-              "id": "fuchsia-zircon-sys 0.3.3",
-              "target": "fuchsia_zircon_sys"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.3.3"
-      },
-      "license": "BSD-3-Clause",
-      "license_ids": [
-        "BSD-3-Clause"
-      ],
-      "license_file": "LICENSE"
-    },
-    "fuchsia-zircon-sys 0.3.3": {
-      "name": "fuchsia-zircon-sys",
-      "version": "0.3.3",
-      "package_url": "https://fuchsia.googlesource.com/garnet/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/fuchsia-zircon-sys/0.3.3/download",
-          "sha256": "3dcaa9ae7725d12cdb85b3ad99a434db70b468c09ded17e012d86b5c1010f7a7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "fuchsia_zircon_sys",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "fuchsia_zircon_sys",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.3.3"
-      },
-      "license": "BSD-3-Clause",
-      "license_ids": [
-        "BSD-3-Clause"
-      ],
-      "license_file": null
     },
     "funty 2.0.0": {
       "name": "funty",
@@ -31020,108 +30817,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "inotify 0.7.1": {
-      "name": "inotify",
-      "version": "0.7.1",
-      "package_url": "https://github.com/inotify-rs/inotify",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/inotify/0.7.1/download",
-          "sha256": "4816c66d2c8ae673df83366c18341538f234a26d65a9ecea5c348b453ac1d02f"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "inotify",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "inotify",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 1.3.2",
-              "target": "bitflags"
-            },
-            {
-              "id": "inotify-sys 0.1.5",
-              "target": "inotify_sys"
-            },
-            {
-              "id": "libc 0.2.153",
-              "target": "libc"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.7.1"
-      },
-      "license": "ISC",
-      "license_ids": [
-        "ISC"
-      ],
-      "license_file": null
-    },
-    "inotify-sys 0.1.5": {
-      "name": "inotify-sys",
-      "version": "0.1.5",
-      "package_url": "https://github.com/hannobraun/inotify-sys",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/inotify-sys/0.1.5/download",
-          "sha256": "e05c02b5e89bff3b946cedeca278abc628fe811e604f027c45a8aa3cf793d0eb"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "inotify_sys",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "inotify_sys",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libc 0.2.153",
-              "target": "libc"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.1.5"
-      },
-      "license": "ISC",
-      "license_ids": [
-        "ISC"
-      ],
-      "license_file": "LICENSE"
-    },
     "inout 0.1.3": {
       "name": "inout",
       "version": "0.1.3",
@@ -31418,56 +31113,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-MIT"
-    },
-    "iovec 0.1.4": {
-      "name": "iovec",
-      "version": "0.1.4",
-      "package_url": "https://github.com/carllerche/iovec",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/iovec/0.1.4/download",
-          "sha256": "b2b3ea6ff95e175473f8ffe6a7eb7c00d054240321b84c57051175fe3c1e075e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "iovec",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "iovec",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [],
-          "selects": {
-            "cfg(unix)": [
-              {
-                "id": "libc 0.2.153",
-                "target": "libc"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "0.1.4"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
     },
     "ipconfig 0.3.2": {
       "name": "ipconfig",
@@ -32918,83 +32563,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "kernel32-sys 0.2.2": {
-      "name": "kernel32-sys",
-      "version": "0.2.2",
-      "package_url": "https://github.com/retep998/winapi-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/kernel32-sys/0.2.2/download",
-          "sha256": "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "kernel32",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "kernel32",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "kernel32-sys 0.2.2",
-              "target": "build_script_build"
-            },
-            {
-              "id": "winapi 0.2.8",
-              "target": "winapi"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.2.2"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "winapi-build 0.1.1",
-              "target": "build"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": null
     },
     "kube 0.87.2": {
       "name": "kube",
@@ -37810,107 +37378,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "mio 0.6.23": {
-      "name": "mio",
-      "version": "0.6.23",
-      "package_url": "https://github.com/tokio-rs/mio",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/mio/0.6.23/download",
-          "sha256": "4afd66f5b91bf2a3bc13fad0e21caedac168ca4c707504e75585648ae80e4cc4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "mio",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "mio",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "with-deprecated"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 0.1.10",
-              "target": "cfg_if"
-            },
-            {
-              "id": "iovec 0.1.4",
-              "target": "iovec"
-            },
-            {
-              "id": "log 0.4.20",
-              "target": "log"
-            },
-            {
-              "id": "net2 0.2.39",
-              "target": "net2"
-            },
-            {
-              "id": "slab 0.4.9",
-              "target": "slab"
-            }
-          ],
-          "selects": {
-            "cfg(target_os = \"fuchsia\")": [
-              {
-                "id": "fuchsia-zircon 0.3.3",
-                "target": "fuchsia_zircon"
-              },
-              {
-                "id": "fuchsia-zircon-sys 0.3.3",
-                "target": "fuchsia_zircon_sys"
-              }
-            ],
-            "cfg(unix)": [
-              {
-                "id": "libc 0.2.153",
-                "target": "libc"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "kernel32-sys 0.2.2",
-                "target": "kernel32"
-              },
-              {
-                "id": "miow 0.2.2",
-                "target": "miow"
-              },
-              {
-                "id": "winapi 0.2.8",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "0.6.23"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "mio 0.8.10": {
       "name": "mio",
       "version": "0.8.10",
@@ -37990,126 +37457,6 @@
         "MIT"
       ],
       "license_file": "LICENSE"
-    },
-    "mio-extras 2.0.6": {
-      "name": "mio-extras",
-      "version": "2.0.6",
-      "package_url": "https://github.com/dimbleby/mio-extras",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/mio-extras/2.0.6/download",
-          "sha256": "52403fe290012ce777c4626790c8951324a2b9e3316b3143779c72b029742f19"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "mio_extras",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "mio_extras",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "lazycell 1.3.0",
-              "target": "lazycell"
-            },
-            {
-              "id": "log 0.4.20",
-              "target": "log"
-            },
-            {
-              "id": "mio 0.6.23",
-              "target": "mio"
-            },
-            {
-              "id": "slab 0.4.9",
-              "target": "slab"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "2.0.6"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "miow 0.2.2": {
-      "name": "miow",
-      "version": "0.2.2",
-      "package_url": "https://github.com/alexcrichton/miow",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/miow/0.2.2/download",
-          "sha256": "ebd808424166322d4a38da87083bfddd3ac4c131334ed55856112eb06d46944d"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "miow",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "miow",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "kernel32-sys 0.2.2",
-              "target": "kernel32"
-            },
-            {
-              "id": "net2 0.2.39",
-              "target": "net2"
-            },
-            {
-              "id": "winapi 0.2.8",
-              "target": "winapi"
-            },
-            {
-              "id": "ws2_32-sys 0.2.1",
-              "target": "ws2_32"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.2.2"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
     },
     "miracl_core_bls12381 4.2.2": {
       "name": "miracl_core_bls12381",
@@ -38872,74 +38219,6 @@
       ],
       "license_file": null
     },
-    "net2 0.2.39": {
-      "name": "net2",
-      "version": "0.2.39",
-      "package_url": "https://github.com/deprecrated/net2-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/net2/0.2.39/download",
-          "sha256": "b13b648036a2339d06de780866fbdfda0dde886de7b3af2ddeba8b14f4ee34ac"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "net2",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "net2",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "duration"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 0.1.10",
-              "target": "cfg_if"
-            }
-          ],
-          "selects": {
-            "cfg(any(unix, target_os = \"wasi\"))": [
-              {
-                "id": "libc 0.2.153",
-                "target": "libc"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "0.2.39"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "new_debug_unreachable 1.0.4": {
       "name": "new_debug_unreachable",
       "version": "1.0.4",
@@ -39506,96 +38785,6 @@
         "Apache-2.0"
       ],
       "license_file": "LICENSE"
-    },
-    "notify 4.0.17": {
-      "name": "notify",
-      "version": "4.0.17",
-      "package_url": "https://github.com/notify-rs/notify.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/notify/4.0.17/download",
-          "sha256": "ae03c8c853dba7bfd23e571ff0cff7bc9dceb40a4cd684cd1681824183f45257"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "notify",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "notify",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 1.3.2",
-              "target": "bitflags"
-            },
-            {
-              "id": "filetime 0.2.22",
-              "target": "filetime"
-            },
-            {
-              "id": "libc 0.2.153",
-              "target": "libc"
-            },
-            {
-              "id": "walkdir 2.4.0",
-              "target": "walkdir"
-            }
-          ],
-          "selects": {
-            "cfg(target_os = \"linux\")": [
-              {
-                "id": "inotify 0.7.1",
-                "target": "inotify"
-              },
-              {
-                "id": "mio 0.6.23",
-                "target": "mio"
-              },
-              {
-                "id": "mio-extras 2.0.6",
-                "target": "mio_extras"
-              }
-            ],
-            "cfg(target_os = \"macos\")": [
-              {
-                "id": "fsevent 0.4.0",
-                "target": "fsevent"
-              },
-              {
-                "id": "fsevent-sys 2.0.1",
-                "target": "fsevent_sys"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "4.0.17"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": null
     },
     "nu-ansi-term 0.46.0": {
       "name": "nu-ansi-term",
@@ -40176,7 +39365,6 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "i128",
             "std"
           ],
@@ -72881,7 +72069,6 @@
             "fileapi",
             "handleapi",
             "impl-default",
-            "ioapiset",
             "knownfolders",
             "libloaderapi",
             "memoryapi",
@@ -72946,44 +72133,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "winapi-build 0.1.1": {
-      "name": "winapi-build",
-      "version": "0.1.1",
-      "package_url": "https://github.com/retep998/winapi-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/winapi-build/0.1.1/download",
-          "sha256": "2d315eee3b34aca4797b2da6b13ed88266e6d612562a0c46390af8299fc699bc"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "build",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "build",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.1.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": null
     },
     "winapi-i686-pc-windows-gnu 0.4.0": {
       "name": "winapi-i686-pc-windows-gnu",
@@ -75338,83 +74487,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "ws2_32-sys 0.2.1": {
-      "name": "ws2_32-sys",
-      "version": "0.2.1",
-      "package_url": "https://github.com/retep998/winapi-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ws2_32-sys/0.2.1/download",
-          "sha256": "d59cefebd0c892fa2dd6de581e937301d8552cb44489cdff035c6187cb63fa5e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ws2_32",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ws2_32",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "winapi 0.2.8",
-              "target": "winapi"
-            },
-            {
-              "id": "ws2_32-sys 0.2.1",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.2.1"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "winapi-build 0.1.1",
-              "target": "build"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": null
-    },
     "wsl 0.1.0": {
       "name": "wsl",
       "version": "0.1.0",
@@ -77712,7 +76784,6 @@
     "curve25519-dalek 4.1.2",
     "cvt 0.1.2",
     "dashmap 5.5.3",
-    "digest 0.9.0",
     "dyn-clone 1.0.14",
     "ed25519-consensus 2.1.0",
     "ed25519-dalek 2.1.1",
@@ -77803,7 +76874,6 @@
     "libfuzzer-sys 0.4.7",
     "libnss 0.5.0",
     "libsecp256k1 0.7.1",
-    "linked-hash-map 0.5.6",
     "little-loadshedder 0.1.0",
     "local-ip-address 0.5.6",
     "log 0.4.20",
@@ -77820,11 +76890,9 @@
     "more-asserts 0.3.1",
     "nftables 0.4.0",
     "nix 0.24.3",
-    "notify 4.0.17",
     "num 0.4.1",
     "num-bigint 0.4.4",
     "num-bigint-dig 0.8.4",
-    "num-integer 0.1.45",
     "num-rational 0.2.4",
     "num-traits 0.2.17",
     "num_cpus 1.16.0",
