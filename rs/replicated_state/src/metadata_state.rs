@@ -527,6 +527,7 @@ impl SubnetMetrics {
                 | CyclesUseCase::RequestAndResponseTransmission
                 | CyclesUseCase::Uninstall
                 | CyclesUseCase::CanisterCreation
+                | CyclesUseCase::SchnorrOutcalls
                 | CyclesUseCase::BurnedCycles => total += *cycles,
             }
         }

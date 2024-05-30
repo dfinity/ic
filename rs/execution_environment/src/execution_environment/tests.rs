@@ -2060,7 +2060,7 @@ fn make_ecdsa_key(name: &str) -> EcdsaKeyId {
     }
 }
 
-fn make_shnorr_key(name: &str) -> SchnorrKeyId {
+fn make_schnorr_key(name: &str) -> SchnorrKeyId {
     SchnorrKeyId {
         algorithm: SchnorrAlgorithm::Ed25519,
         name: name.to_string(),
@@ -3345,7 +3345,8 @@ fn test_fetch_canister_logs_should_accept_ingress_message_enabled() {
 }
 
 #[test]
-fn test_compute_initial_idkg_dealings_api_is_disabled() {
+fn test_compute_initial_idkg_dealings_api_by_default_is_disabled() {
+    let key_id = make_schnorr_key("correct_key");
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
     let nns_canister = canister_test_id(0x10);
@@ -3353,11 +3354,12 @@ fn test_compute_initial_idkg_dealings_api_is_disabled() {
         .with_own_subnet_id(own_subnet)
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
+        .with_schnorr_key(key_id.clone())
         .build();
     test.inject_call_to_ic00(
         Method::ComputeInitialIDkgDealings,
         ic00::ComputeInitialIDkgDealingsArgs::new(
-            MasterPublicKeyId::Schnorr(make_shnorr_key("Ed25519")),
+            MasterPublicKeyId::Schnorr(key_id),
             own_subnet,
             Default::default(),
             RegistryVersion::from(100),
@@ -3369,12 +3371,13 @@ fn test_compute_initial_idkg_dealings_api_is_disabled() {
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "ComputeInitialIDkgDealings API is not yet implemented.",
+        "compute_initial_i_dkg_dealings API is not yet implemented.",
     )
 }
 
 #[test]
-fn test_schnorr_public_key_api_is_disabled() {
+fn test_schnorr_public_key_api_by_default_is_disabled() {
+    let key_id = make_schnorr_key("correct_key");
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
     let nns_canister = canister_test_id(0x10);
@@ -3382,13 +3385,14 @@ fn test_schnorr_public_key_api_is_disabled() {
         .with_own_subnet_id(own_subnet)
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
+        .with_schnorr_key(key_id.clone())
         .build();
     test.inject_call_to_ic00(
         Method::SchnorrPublicKey,
         ic00::SchnorrPublicKeyArgs {
             canister_id: None,
             derivation_path: DerivationPath::new(vec![]),
-            key_id: make_shnorr_key("Ed25519"),
+            key_id,
         }
         .encode(),
         Cycles::new(0),
@@ -3397,12 +3401,13 @@ fn test_schnorr_public_key_api_is_disabled() {
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "SchnorrPublicKey API is not yet implemented.",
+        "schnorr_public_key API is not yet implemented.",
     )
 }
 
 #[test]
-fn test_sign_with_schnorr_api_is_disabled() {
+fn test_sign_with_schnorr_api_by_default_is_disabled() {
+    let key_id = make_schnorr_key("correct_key");
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
     let nns_canister = canister_test_id(0x10);
@@ -3410,13 +3415,14 @@ fn test_sign_with_schnorr_api_is_disabled() {
         .with_own_subnet_id(own_subnet)
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
+        .with_schnorr_key(key_id.clone())
         .build();
     test.inject_call_to_ic00(
         Method::SignWithSchnorr,
         ic00::SignWithSchnorrArgs {
             message: vec![],
             derivation_path: DerivationPath::new(vec![]),
-            key_id: make_shnorr_key("Ed25519"),
+            key_id,
         }
         .encode(),
         Cycles::new(0),
@@ -3425,6 +3431,74 @@ fn test_sign_with_schnorr_api_is_disabled() {
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "SignWithSchnorr API is not yet implemented.",
+        "sign_with_schnorr API is not yet implemented.",
     )
+}
+
+#[test]
+fn test_sign_with_schnorr_api_is_enabled() {
+    // TODO(EXC-1629): upgrade to more of e2e test with mocking the response
+    // from consensus and producing the response to the canister.
+
+    // Arrange.
+    let key_id = make_schnorr_key("correct_key");
+    let own_subnet = subnet_test_id(1);
+    let nns_subnet = subnet_test_id(2);
+    let nns_canister = canister_test_id(0x10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_nns_subnet_id(nns_subnet)
+        .with_caller(nns_subnet, nns_canister)
+        .with_schnorr_key(key_id.clone())
+        .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    // Check that the SubnetCallContextManager is empty.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_schnorr_contexts_count(),
+        0
+    );
+
+    // Act.
+    let run = wasm()
+        .call_with_cycles(
+            ic00::IC_00,
+            Method::SignWithSchnorr,
+            call_args()
+                .other_side(
+                    ic00::SignWithSchnorrArgs {
+                        message: vec![],
+                        derivation_path: DerivationPath::new(vec![]),
+                        key_id,
+                    }
+                    .encode(),
+                )
+                .on_reject(wasm().reject_message().reject()),
+            Cycles::from(100_000_000_000u128),
+        )
+        .build();
+    let (_, ingress_status) = test.ingress_raw(canister_id, "update", run);
+
+    // Assert.
+    // Check that the request is accepted and processing.
+    assert_eq!(
+        ingress_status,
+        IngressStatus::Known {
+            receiver: canister_id.get(),
+            user_id: test.user_id(),
+            time: test.time(),
+            state: IngressState::Processing,
+        }
+    );
+    // Check that the SubnetCallContextManager contains the request.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_schnorr_contexts_count(),
+        1
+    );
 }
