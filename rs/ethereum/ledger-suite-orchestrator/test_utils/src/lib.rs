@@ -215,7 +215,7 @@ impl LedgerSuiteOrchestrator {
         .unwrap()
     }
 
-    pub fn advance_time_for_cycles_top_up(&self) {
+    pub fn advance_time_for_periodic_tasks(&self) {
         self.env
             .advance_time(std::time::Duration::from_secs(60 * 60 + 1));
         self.env.tick();
@@ -227,6 +227,7 @@ impl LedgerSuiteOrchestrator {
     }
 
     pub fn advance_time_for_upgrade(&self) {
+        self.env.tick();
         self.env.tick();
         self.env.tick();
         self.env.tick();

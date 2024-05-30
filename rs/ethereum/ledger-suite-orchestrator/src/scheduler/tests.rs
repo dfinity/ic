@@ -6,7 +6,7 @@ use crate::scheduler::{cycles_to_u128, InstallLedgerSuiteArgs, Task, TaskError, 
 use crate::state::test_fixtures::new_state;
 use crate::state::{
     read_state, Canisters, GitCommitHash, IndexCanister, LedgerCanister, ManagedCanisterStatus,
-    State, WasmHash, INDEX_BYTECODE, LEDGER_BYTECODE,
+    State, WasmHash, ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
 };
 use crate::storage::{mutate_wasm_store, record_icrc1_ledger_suite_wasms, TASKS};
 use candid::Principal;
@@ -569,7 +569,7 @@ mod discover_archives {
     };
     use crate::scheduler::tests::mock::MockCanisterRuntime;
     use crate::scheduler::tests::{expect_call_canister_archives, init_state, LEDGER_PRINCIPAL};
-    use crate::scheduler::{Erc20Token, Task, TaskError, TaskExecution};
+    use crate::scheduler::{DiscoverArchivesError, Erc20Token, Task, TaskError, TaskExecution};
     use crate::state::{mutate_state, read_state, Ledger};
     use candid::Principal;
     use icrc_ledger_types::icrc3::archive::ArchiveInfo;
@@ -627,9 +627,9 @@ mod discover_archives {
     #[tokio::test]
     async fn should_discover_archive_and_return_first_error() {
         init_state();
-        let (dai, dai_ledger) = (dai(), candid::Principal::from_slice(&[4_u8; 29]));
-        let (usdc, usdc_ledger) = (usdc(), candid::Principal::from_slice(&[5_u8; 29]));
-        let (usdt, usdt_ledger) = (usdt(), candid::Principal::from_slice(&[6_u8; 29]));
+        let (dai, dai_ledger) = (dai(), Principal::from_slice(&[4_u8; 29]));
+        let (usdc, usdc_ledger) = (usdc(), Principal::from_slice(&[5_u8; 29]));
+        let (usdt, usdt_ledger) = (usdt(), Principal::from_slice(&[6_u8; 29]));
         mutate_state(|s| {
             s.record_new_erc20_token(dai.clone(), dai_metadata());
             s.record_created_canister::<Ledger>(&dai, dai_ledger);
@@ -672,7 +672,9 @@ mod discover_archives {
         };
         assert_eq!(
             discover_archives_task.execute(&runtime).await,
-            Err(TaskError::InterCanisterCallError(first_error))
+            Err(TaskError::DiscoverArchivesError(
+                DiscoverArchivesError::InterCanisterCallError(first_error)
+            ))
         );
         assert_eq!(archives_from_state(&dai), vec![]);
         assert_eq!(archives_from_state(&usdc), vec![usdc_archive]);
@@ -688,8 +690,9 @@ mod upgrade_ledger_suite {
     use crate::management::CallError;
     use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
     use crate::scheduler::tests::{
-        execute_now, init_state, mock::MockCanisterRuntime, read_index_wasm_hash,
-        read_ledger_wasm_hash, task_queue_from_state, INDEX_PRINCIPAL, LEDGER_PRINCIPAL,
+        execute_now, expect_call_canister_archives, init_state, mock::MockCanisterRuntime,
+        read_archive_wasm_hash, read_index_wasm_hash, read_ledger_wasm_hash, task_queue_from_state,
+        INDEX_PRINCIPAL, LEDGER_PRINCIPAL,
     };
     use crate::scheduler::UpgradeLedgerSuiteError::{CanisterNotReady, Erc20TokenNotFound};
     use crate::scheduler::{
@@ -697,11 +700,14 @@ mod upgrade_ledger_suite {
         UpgradeLedgerSuiteSubtask,
     };
     use crate::state::{
-        mutate_state, Index, Ledger, ManagedCanisterStatus, WasmHash, INDEX_BYTECODE,
-        LEDGER_BYTECODE,
+        mutate_state, Index, Ledger, ManagedCanisterStatus, WasmHash, ARCHIVE_NODE_BYTECODE,
+        INDEX_BYTECODE, LEDGER_BYTECODE,
     };
     use candid::Principal;
-    use UpgradeLedgerSuiteSubtask::{UpgradeArchives, UpgradeIndex, UpgradeLedger};
+    use icrc_ledger_types::icrc3::archive::ArchiveInfo;
+    use UpgradeLedgerSuiteSubtask::{
+        DiscoverArchives, UpgradeArchives, UpgradeIndex, UpgradeLedger,
+    };
 
     #[test]
     fn should_upgrade_in_the_correct_order() {
@@ -761,10 +767,13 @@ mod upgrade_ledger_suite {
             .collect();
         assert_eq!(
             subtasks,
-            vec![UpgradeArchives {
-                contract: usdc(),
-                compressed_wasm_hash: archive_wasm_hash.clone()
-            }]
+            vec![
+                DiscoverArchives { contract: usdc() },
+                UpgradeArchives {
+                    contract: usdc(),
+                    compressed_wasm_hash: archive_wasm_hash.clone()
+                }
+            ]
         );
 
         let subtasks: Vec<_> = UpgradeLedgerSuite::builder(usdc())
@@ -779,6 +788,7 @@ mod upgrade_ledger_suite {
                     contract: usdc(),
                     compressed_wasm_hash: ledger_wasm_hash.clone()
                 },
+                DiscoverArchives { contract: usdc() },
                 UpgradeArchives {
                     contract: usdc(),
                     compressed_wasm_hash: archive_wasm_hash.clone()
@@ -798,6 +808,7 @@ mod upgrade_ledger_suite {
                     contract: usdc(),
                     compressed_wasm_hash: index_wasm_hash.clone()
                 },
+                DiscoverArchives { contract: usdc() },
                 UpgradeArchives {
                     contract: usdc(),
                     compressed_wasm_hash: archive_wasm_hash.clone()
@@ -822,6 +833,7 @@ mod upgrade_ledger_suite {
                     contract: usdc(),
                     compressed_wasm_hash: ledger_wasm_hash.clone()
                 },
+                DiscoverArchives { contract: usdc() },
                 UpgradeArchives {
                     contract: usdc(),
                     compressed_wasm_hash: archive_wasm_hash.clone()
@@ -838,24 +850,17 @@ mod upgrade_ledger_suite {
             .archive_wasm_hash(WasmHash::from([2_u8; 32]))
             .build();
 
-        assert_eq!(subtasks.size_hint(), (3, Some(3)));
-        assert_eq!(subtasks.len(), 3);
+        let mut expected_size: usize = 4;
+        assert_eq!(subtasks.size_hint(), (expected_size, Some(expected_size)));
+        assert_eq!(subtasks.len(), expected_size);
 
-        let _ = subtasks.next();
-        assert_eq!(subtasks.size_hint(), (2, Some(2)));
-        assert_eq!(subtasks.len(), 2);
+        while subtasks.next().is_some() {
+            expected_size -= 1;
+            assert_eq!(subtasks.size_hint(), (expected_size, Some(expected_size)));
+            assert_eq!(subtasks.len(), expected_size);
+        }
 
-        let _ = subtasks.next();
-        assert_eq!(subtasks.size_hint(), (1, Some(1)));
-        assert_eq!(subtasks.len(), 1);
-
-        let _ = subtasks.next();
-        assert_eq!(subtasks.size_hint(), (0, Some(0)));
-        assert_eq!(subtasks.len(), 0);
-
-        let _ = subtasks.next();
-        assert_eq!(subtasks.size_hint(), (0, Some(0)));
-        assert_eq!(subtasks.len(), 0);
+        assert_eq!(expected_size, 0);
     }
 
     #[tokio::test]
@@ -1040,6 +1045,109 @@ mod upgrade_ledger_suite {
         assert_eq!(result, Ok(()));
     }
 
+    #[tokio::test]
+    async fn should_upgrade_ledger_suite_with_archives() {
+        init_state();
+        let usdc = usdc();
+        mutate_state(|s| {
+            s.record_new_erc20_token(usdc.clone(), usdc_metadata());
+            s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
+            s.record_installed_canister::<Ledger>(&usdc, WasmHash::default());
+            s.record_created_canister::<Index>(&usdc, INDEX_PRINCIPAL);
+            s.record_installed_canister::<Index>(&usdc, WasmHash::default());
+        });
+        let mut runtime = MockCanisterRuntime::new();
+        let task = Task::UpgradeLedgerSuite(
+            UpgradeLedgerSuite::builder(usdc)
+                .ledger_wasm_hash(read_ledger_wasm_hash())
+                .index_wasm_hash(read_index_wasm_hash())
+                .archive_wasm_hash(read_archive_wasm_hash())
+                .build(),
+        );
+
+        expect_stop_canister(&mut runtime, INDEX_PRINCIPAL, Ok(()));
+        expect_upgrade_canister(
+            &mut runtime,
+            INDEX_PRINCIPAL,
+            INDEX_BYTECODE.to_vec(),
+            Ok(()),
+        );
+        expect_start_canister(&mut runtime, INDEX_PRINCIPAL, Ok(()));
+
+        runtime.expect_time().times(1).return_const(0_u64);
+        runtime.expect_global_timer_set().times(1).return_const(());
+
+        let result = execute_now(task.clone(), &runtime).await;
+        assert_eq!(result, Ok(()));
+        runtime.checkpoint();
+
+        runtime.expect_time().times(1).return_const(1_u64);
+        let upgrade_ledger_task = pop_if_ready(&runtime).expect("missing upgrade ledger task");
+        runtime.checkpoint();
+
+        expect_stop_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
+        expect_upgrade_canister(
+            &mut runtime,
+            LEDGER_PRINCIPAL,
+            LEDGER_BYTECODE.to_vec(),
+            Ok(()),
+        );
+        expect_start_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
+        runtime.expect_time().times(1).return_const(2_u64);
+        runtime.expect_global_timer_set().times(1).return_const(());
+
+        let result = upgrade_ledger_task.execute(&runtime).await;
+        assert_eq!(result, Ok(()));
+        runtime.checkpoint();
+
+        runtime.expect_time().times(1).return_const(2_u64);
+        let discover_archive_task = pop_if_ready(&runtime).expect("missing discover archives task");
+        runtime.checkpoint();
+
+        let first_archive = Principal::from_slice(&[4_u8; 29]);
+        let first_archive_info = ArchiveInfo {
+            canister_id: first_archive,
+            block_range_start: 0_u8.into(),
+            block_range_end: 1_u8.into(),
+        };
+        let second_archive = Principal::from_slice(&[5_u8; 29]);
+        let second_archive_info = ArchiveInfo {
+            canister_id: second_archive,
+            block_range_start: 2_u8.into(),
+            block_range_end: 3_u8.into(),
+        };
+        expect_call_canister_archives(
+            &mut runtime,
+            LEDGER_PRINCIPAL,
+            Ok(vec![first_archive_info, second_archive_info]),
+        );
+        runtime.expect_time().times(1).return_const(3_u64);
+        runtime.expect_global_timer_set().times(1).return_const(());
+
+        let result = discover_archive_task.execute(&runtime).await;
+        assert_eq!(result, Ok(()));
+        runtime.checkpoint();
+
+        runtime.expect_time().times(1).return_const(3_u64);
+        let upgrade_archives_task = pop_if_ready(&runtime).expect("missing upgrade archives task");
+        runtime.checkpoint();
+
+        for archive in [first_archive, second_archive] {
+            expect_stop_canister(&mut runtime, archive, Ok(()));
+            expect_upgrade_canister(
+                &mut runtime,
+                archive,
+                ARCHIVE_NODE_BYTECODE.to_vec(),
+                Ok(()),
+            );
+            expect_start_canister(&mut runtime, archive, Ok(()));
+        }
+        let result = upgrade_archives_task.execute(&runtime).await;
+        assert_eq!(result, Ok(()));
+        assert_eq!(task_queue_from_state(), vec![]);
+        runtime.checkpoint();
+    }
+
     fn expect_stop_canister(
         runtime: &mut MockCanisterRuntime,
         canister_id: Principal,
@@ -1174,6 +1282,10 @@ fn read_index_wasm_hash() -> WasmHash {
 
 fn read_ledger_wasm_hash() -> WasmHash {
     WasmHash::from(ic_crypto_sha2::Sha256::hash(LEDGER_BYTECODE))
+}
+
+fn read_archive_wasm_hash() -> WasmHash {
+    WasmHash::from(ic_crypto_sha2::Sha256::hash(ARCHIVE_NODE_BYTECODE))
 }
 
 fn expect_create_canister_returning(
