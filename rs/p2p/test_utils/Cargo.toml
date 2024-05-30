@@ -39,6 +39,6 @@ mockall = { workspace = true }
 quinn = { workspace = true }
 serde = "1.0.99"
 slog = { workspace = true }
-tempfile = "3.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
 turmoil = { workspace = true }

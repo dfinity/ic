@@ -1,5 +1,5 @@
 {
-  "checksum": "49c916e861e7d41bf4228b2fb9b5e393ca236ce1f9565210e6e97dabef044d58",
+  "checksum": "c4abb50f3b73084be9d48bb93f132a874d47afd5b5abd4062f16be2d1a15dd51",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7336,7 +7336,7 @@
               "target": "log"
             },
             {
-              "id": "tempfile 3.8.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -9784,7 +9784,7 @@
               "target": "sha256"
             },
             {
-              "id": "tempfile 3.8.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -18152,7 +18152,7 @@
               "target": "tarpc"
             },
             {
-              "id": "tempfile 3.8.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -20934,7 +20934,7 @@
           "selects": {
             "cfg(not(target_arch = \"wasm32\"))": [
               {
-                "id": "tempfile 3.8.0",
+                "id": "tempfile 3.10.1",
                 "target": "tempfile"
               }
             ]
@@ -45869,7 +45869,7 @@
               "target": "symbolic_demangle"
             },
             {
-              "id": "tempfile 3.8.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -47747,7 +47747,7 @@
               "target": "rusty_fork"
             },
             {
-              "id": "tempfile 3.8.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -48040,7 +48040,7 @@
               "target": "syn"
             },
             {
-              "id": "tempfile 3.8.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -55336,7 +55336,7 @@
               "target": "quick_error"
             },
             {
-              "id": "tempfile 3.8.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -59673,7 +59673,7 @@
               "target": "pulldown_cmark"
             },
             {
-              "id": "tempfile 3.8.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -63100,14 +63100,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tempfile 3.8.0": {
+    "tempfile 3.10.1": {
       "name": "tempfile",
-      "version": "3.8.0",
+      "version": "3.10.1",
       "package_url": "https://github.com/Stebalien/tempfile",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tempfile/3.8.0/download",
-          "sha256": "cb94d2f3cc536af71caac6b6fcebf65860b347e7ce0cc9ebe8f70d3e521054ef"
+          "url": "https://static.crates.io/crates/tempfile/3.10.1/download",
+          "sha256": "85b77fafb263dd9d05cbeac119526425676db3784113aa9295c88498cbf8bff1"
         }
       },
       "targets": [
@@ -63147,22 +63147,16 @@
                 "target": "rustix"
               }
             ],
-            "cfg(target_os = \"redox\")": [
-              {
-                "id": "redox_syscall 0.3.5",
-                "target": "syscall"
-              }
-            ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.48.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ]
           }
         },
-        "edition": "2018",
-        "version": "3.8.0"
+        "edition": "2021",
+        "version": "3.10.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -77942,7 +77936,7 @@
     "sync_wrapper 1.0.1",
     "tar 0.4.40",
     "tarpc 0.34.0",
-    "tempfile 3.8.0",
+    "tempfile 3.10.1",
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",

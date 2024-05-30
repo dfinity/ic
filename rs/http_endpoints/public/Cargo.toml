@@ -50,7 +50,7 @@ rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 threadpool = "1.8.1"
 tokio = { workspace = true }
 tokio-io-timeout = "1.2.0"

@@ -42,7 +42,7 @@ simple_asn1 = { workspace = true }
 [dev-dependencies]
 ic-nns-gtc-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }

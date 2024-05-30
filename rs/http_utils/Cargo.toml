@@ -21,4 +21,4 @@ tar = "0.4.38"
 assert_matches = { workspace = true }
 ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
 mockito = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }

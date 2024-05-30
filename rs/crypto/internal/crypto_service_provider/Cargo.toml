@@ -51,7 +51,7 @@ stubborn-io = "0.3.2"
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tarpc = { version = "0.34", features = ["full"] }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 time = "0.3.20"
 thiserror = { workspace = true }
 tokio = { workspace = true }

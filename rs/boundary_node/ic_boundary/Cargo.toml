@@ -109,7 +109,7 @@ x509-parser = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5.1", features = ["async_tokio"] }
-tempfile = "3.6.0"
+tempfile = { workspace = true }
 wiremock = "=0.5.19"
 
 [[bench]]

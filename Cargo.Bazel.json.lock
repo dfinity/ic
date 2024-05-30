@@ -1,5 +1,5 @@
 {
-  "checksum": "b78d757d69329cd0dd3d1cc857a409e2c43bb2e26646d622b70fae9581542c33",
+  "checksum": "3e1fa406ebaf8527a6858bcbc22ba988785b65e11fefa8e7badc414e2bd295b8",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7259,7 +7259,7 @@
               "target": "log"
             },
             {
-              "id": "tempfile 3.6.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -9707,7 +9707,7 @@
               "target": "sha256"
             },
             {
-              "id": "tempfile 3.6.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -17985,7 +17985,7 @@
               "target": "tarpc"
             },
             {
-              "id": "tempfile 3.6.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -20787,7 +20787,7 @@
           "selects": {
             "cfg(not(target_arch = \"wasm32\"))": [
               {
-                "id": "tempfile 3.6.0",
+                "id": "tempfile 3.10.1",
                 "target": "tempfile"
               }
             ]
@@ -21357,6 +21357,53 @@
         },
         "edition": "2018",
         "version": "1.9.0"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "fastrand 2.1.0": {
+      "name": "fastrand",
+      "version": "2.1.0",
+      "package_url": "https://github.com/smol-rs/fastrand",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/fastrand/2.1.0/download",
+          "sha256": "9fc0510504f03c51ada170672ac806f1f105a88aa97a5281117e1ddc3368e51a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "fastrand",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "fastrand",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "2.1.0"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -35498,12 +35545,33 @@
         ],
         "crate_features": {
           "common": [
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              "errno"
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              "errno"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "errno"
+            ],
+            "i686-unknown-linux-gnu": [
+              "errno"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "errno"
+            ],
+            "x86_64-unknown-nixos-gnu": [
+              "errno"
+            ]
+          }
         },
         "edition": "2018",
         "version": "0.3.8"
@@ -45870,7 +45938,7 @@
               "target": "symbolic_demangle"
             },
             {
-              "id": "tempfile 3.6.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -47749,7 +47817,7 @@
               "target": "rusty_fork"
             },
             {
-              "id": "tempfile 3.6.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -48042,7 +48110,7 @@
               "target": "syn"
             },
             {
-              "id": "tempfile 3.6.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -54376,6 +54444,7 @@
           "common": [
             "alloc",
             "default",
+            "fs",
             "std",
             "termios",
             "use-libc-auxv"
@@ -54397,7 +54466,6 @@
               "mm"
             ],
             "aarch64-unknown-linux-gnu": [
-              "fs",
               "mm",
               "param",
               "process",
@@ -54405,7 +54473,6 @@
               "thread"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "fs",
               "mm",
               "param",
               "process",
@@ -54416,7 +54483,6 @@
               "mm"
             ],
             "arm-unknown-linux-gnueabi": [
-              "fs",
               "mm",
               "param",
               "process",
@@ -54427,7 +54493,6 @@
               "mm"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "fs",
               "mm",
               "param",
               "process",
@@ -54444,7 +54509,6 @@
               "mm"
             ],
             "i686-unknown-linux-gnu": [
-              "fs",
               "mm",
               "param",
               "process",
@@ -54452,7 +54516,6 @@
               "thread"
             ],
             "powerpc-unknown-linux-gnu": [
-              "fs",
               "mm",
               "param",
               "process",
@@ -54460,7 +54523,6 @@
               "thread"
             ],
             "s390x-unknown-linux-gnu": [
-              "fs",
               "mm",
               "param",
               "process",
@@ -54483,7 +54545,6 @@
               "mm"
             ],
             "x86_64-unknown-linux-gnu": [
-              "fs",
               "mm",
               "param",
               "process",
@@ -54491,7 +54552,6 @@
               "thread"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "fs",
               "mm",
               "param",
               "process",
@@ -55423,7 +55483,7 @@
               "target": "quick_error"
             },
             {
-              "id": "tempfile 3.6.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -59760,7 +59820,7 @@
               "target": "pulldown_cmark"
             },
             {
-              "id": "tempfile 3.6.0",
+              "id": "tempfile 3.10.1",
               "target": "tempfile"
             },
             {
@@ -63187,14 +63247,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tempfile 3.6.0": {
+    "tempfile 3.10.1": {
       "name": "tempfile",
-      "version": "3.6.0",
+      "version": "3.10.1",
       "package_url": "https://github.com/Stebalien/tempfile",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tempfile/3.6.0/download",
-          "sha256": "31c0432476357e58790aaa47a8efb0c5138f137343f3b5f23bd36a27e3b0a6d6"
+          "url": "https://static.crates.io/crates/tempfile/3.10.1/download",
+          "sha256": "85b77fafb263dd9d05cbeac119526425676db3784113aa9295c88498cbf8bff1"
         }
       },
       "targets": [
@@ -63202,18 +63262,6 @@
           "Library": {
             "crate_name": "tempfile",
             "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": false,
               "include": [
@@ -63235,51 +63283,27 @@
               "target": "cfg_if"
             },
             {
-              "id": "fastrand 1.9.0",
+              "id": "fastrand 2.1.0",
               "target": "fastrand"
-            },
-            {
-              "id": "tempfile 3.6.0",
-              "target": "build_script_build"
             }
           ],
           "selects": {
             "cfg(any(unix, target_os = \"wasi\"))": [
               {
-                "id": "rustix 0.37.23",
+                "id": "rustix 0.38.32",
                 "target": "rustix"
-              }
-            ],
-            "cfg(target_os = \"redox\")": [
-              {
-                "id": "redox_syscall 0.3.5",
-                "target": "syscall"
               }
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.48.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ]
           }
         },
-        "edition": "2018",
-        "version": "3.6.0"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 1.1.0",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
+        "edition": "2021",
+        "version": "3.10.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -77995,7 +78019,7 @@
     "sync_wrapper 1.0.1",
     "tar 0.4.39",
     "tarpc 0.34.0",
-    "tempfile 3.6.0",
+    "tempfile 3.10.1",
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",

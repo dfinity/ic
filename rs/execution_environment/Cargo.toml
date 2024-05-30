@@ -79,7 +79,7 @@ libflate = "1.1.2"
 maplit = "1.0.2"
 more-asserts = "0.3.1"
 proptest = "1.0"
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 test-strategy = "0.3.1"
 wat = "1.0.52"
 wasmparser = "0.201.0"

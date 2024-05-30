@@ -54,7 +54,7 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 mockall = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 wat = "1.0.52"
 
 [features]

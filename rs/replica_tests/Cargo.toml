@@ -41,7 +41,7 @@ ic-base-types = { path = "../types/base_types" }
 rand = { workspace = true }
 slog = { workspace = true }
 slog-scope = "4.1.2"
-tempfile = "3.3.0"
+tempfile = { workspace = true }
 tonic = { workspace = true }
 tokio = { workspace = true }
 tracing-subscriber = { workspace = true }

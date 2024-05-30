@@ -20,7 +20,7 @@ num-bigint = "0.4"
 num-traits = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

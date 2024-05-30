@@ -50,7 +50,7 @@ slog = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
 url = "2.1.1"
 

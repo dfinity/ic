@@ -51,7 +51,7 @@ serde_json = { workspace = true }
 serde_with = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
 tower-http = { version = "^0.5.2", features = ["trace"] }
 tower-request-id = "^0.3.0"
