@@ -856,12 +856,12 @@ fn assert_exact_messages_in_queue<T>(messages: BTreeSet<Id>, queue: &BTreeSet<(T
     assert_eq!(messages, queue.iter().map(|(_, id)| *id).collect())
 }
 
-/// Generates a `MessageId` for a best-effort inbound request.
+/// Generates an `Id` for a best-effort inbound request.
 pub(crate) fn new_request_message_id(generator: u64, class: Class) -> Id {
     Id::new(Kind::Request, Context::Inbound, class, generator)
 }
 
-/// Generates a `MessageId` for an inbound response.
+/// Generates an `Id` for an inbound response.
 pub(crate) fn new_response_message_id(generator: u64, class: Class) -> Id {
     Id::new(Kind::Response, Context::Inbound, class, generator)
 }

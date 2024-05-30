@@ -68,7 +68,7 @@ impl MessageReference {
         matches!(self, Self::Response(_))
     }
 
-    /// Returns the `message_pool::Id` behind this reference.
+    /// Returns the ID behind this reference.
     pub(super) fn id(&self) -> message_pool::Id {
         match self {
             Self::Request(id) | Self::Response(id) => *id,

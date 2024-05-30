@@ -188,7 +188,8 @@ pub struct MessagePool {
     #[prost(message, repeated, tag = "2")]
     pub outbound_guaranteed_request_deadlines:
         ::prost::alloc::vec::Vec<message_pool::MessageDeadline>,
-    /// Monotonically increasing counter used to generate unique message IDs.
+    /// Strictly monotonically increasing counter used to generate unique message
+    /// IDs.
     #[prost(uint64, tag = "3")]
     pub message_id_generator: u64,
 }
