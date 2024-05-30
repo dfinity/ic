@@ -49,7 +49,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 url = { version = "2.1.1", features = ["serde"] }

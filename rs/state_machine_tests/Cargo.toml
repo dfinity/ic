@@ -63,7 +63,7 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
 slog-term = "2.6.0"
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
 wat = "1.0.52"
 maplit = "1.0.2"

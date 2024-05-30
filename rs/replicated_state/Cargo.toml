@@ -43,7 +43,7 @@ serde = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 uuid = { version = "1.2.1", features = ["v4", "serde"] }
 
 [dev-dependencies]

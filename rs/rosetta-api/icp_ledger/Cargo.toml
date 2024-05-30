@@ -47,7 +47,7 @@ pocket-ic = { path = "../../../packages/pocket-ic" }
 proptest = "1"
 rand = { workspace = true }
 rand_chacha = "0.3"
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 
 [[test]]
 name = "test"

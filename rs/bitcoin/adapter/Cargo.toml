@@ -44,7 +44,7 @@ ic-btc-interface = { workspace = true }
 ic-btc-types-internal = { path = "../types/internal" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
-tempfile = "^3.1.0"
+tempfile = { workspace = true }
 
 [[bench]]
 name = "e2e"

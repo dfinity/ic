@@ -36,5 +36,5 @@ ic-wasm-types = { path = "../../types/wasm_types" }
 maplit = "1.0.2"
 strum = { workspace = true }
 strum_macros = { workspace = true }
-tempfile = "3.4.0"
+tempfile = { workspace = true }
 wat = "1.0.52"

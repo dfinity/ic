@@ -28,7 +28,7 @@ ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" 
 ic-types = { path = "../../types/types" }
 rand = { workspace = true }
 rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
