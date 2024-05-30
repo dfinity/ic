@@ -38,9 +38,9 @@ use ic_management_canister_types::{
     ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs,
     InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
     Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs,
-    SignWithECDSAArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrKeyId,
+    SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -49,8 +49,9 @@ use ic_replicated_state::{
     canister_state::system_state::PausedExecutionId,
     canister_state::{system_state::CyclesUseCase, NextExecution},
     metadata_state::subnet_call_context_manager::{
-        EcdsaDealingsContext, InstallCodeCall, InstallCodeCallId, SetupInitialDkgContext,
-        SignWithEcdsaContext, StopCanisterCall, SubnetCallContext,
+        EcdsaDealingsContext, InstallCodeCall, InstallCodeCallId, SchnorrArguments,
+        SetupInitialDkgContext, SignWithEcdsaContext, SignWithThresholdContext, StopCanisterCall,
+        SubnetCallContext, ThresholdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
     CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
@@ -1071,31 +1072,90 @@ impl ExecutionEnvironment {
                 }
             }
 
-            // TODO(EXC-1627): add implementation.
-            Ok(Ic00Method::ComputeInitialIDkgDealings) => ExecuteSubnetMessageResult::Finished {
-                response: Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    "ComputeInitialIDkgDealings API is not yet implemented.",
-                )),
-                refund: msg.take_cycles(),
-            },
+            Ok(Ic00Method::ComputeInitialIDkgDealings) => {
+                Self::reject_due_to_api_not_implemented(&mut msg)
+            }
 
-            // TODO(EXC-1628): add implementation.
-            Ok(Ic00Method::SchnorrPublicKey) => ExecuteSubnetMessageResult::Finished {
-                response: Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    "SchnorrPublicKey API is not yet implemented.",
-                )),
-                refund: msg.take_cycles(),
-            },
+            Ok(Ic00Method::SchnorrPublicKey) => Self::reject_due_to_api_not_implemented(&mut msg),
 
-            // TODO(EXC-1629): add implementation.
-            Ok(Ic00Method::SignWithSchnorr) => ExecuteSubnetMessageResult::Finished {
-                response: Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    "SignWithSchnorr API is not yet implemented.",
-                )),
-                refund: msg.take_cycles(),
+            Ok(Ic00Method::SignWithSchnorr) => match self.config.ic00_sign_with_schnorr {
+                FlagStatus::Disabled => Self::reject_due_to_api_not_implemented(&mut msg),
+                FlagStatus::Enabled => match &msg {
+                    CanisterCall::Request(request) => {
+                        if payload.is_empty() {
+                            use ic_types::messages;
+                            state.push_subnet_output_response(
+                                Response {
+                                    originator: request.sender,
+                                    respondent: CanisterId::from(self.own_subnet_id),
+                                    originator_reply_callback: request.sender_reply_callback,
+                                    refund: request.payment,
+                                    response_payload: messages::Payload::Reject(
+                                        messages::RejectContext::new(
+                                            ic_error_types::RejectCode::CanisterReject,
+                                            "An empty message cannot be signed",
+                                        ),
+                                    ),
+                                    deadline: request.deadline,
+                                }
+                                .into(),
+                            );
+                            return (state, Some(NumInstructions::from(0)));
+                        }
+
+                        match SignWithSchnorrArgs::decode(payload) {
+                            Err(err) => ExecuteSubnetMessageResult::Finished {
+                                response: Err(err),
+                                refund: msg.take_cycles(),
+                            },
+                            Ok(args) => {
+                                match get_master_public_key(
+                                    idkg_subnet_public_keys,
+                                    self.own_subnet_id,
+                                    &MasterPublicKeyId::Schnorr(args.key_id.clone()),
+                                ) {
+                                    Err(err) => ExecuteSubnetMessageResult::Finished {
+                                        response: Err(err),
+                                        refund: msg.take_cycles(),
+                                    },
+                                    Ok(_) => match self.sign_with_schnorr(
+                                        (**request).clone(),
+                                        args.message,
+                                        args.derivation_path
+                                            .get()
+                                            .clone()
+                                            .into_iter()
+                                            .map(|x| x.into_vec())
+                                            .collect(),
+                                        args.key_id,
+                                        // TODO(EXC-1629): introduce max_schnorr_queue_size.
+                                        registry_settings.max_ecdsa_queue_size,
+                                        &mut state,
+                                        rng,
+                                        registry_settings.subnet_size,
+                                    ) {
+                                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                                            response: Err(err),
+                                            refund: msg.take_cycles(),
+                                        },
+                                        Ok(()) => {
+                                            self.metrics.observe_message_with_label(
+                                                &request.method_name,
+                                                since.elapsed().as_secs_f64(),
+                                                SUBMITTED_OUTCOME_LABEL.into(),
+                                                SUCCESS_STATUS_LABEL.into(),
+                                            );
+                                            ExecuteSubnetMessageResult::Processing
+                                        }
+                                    },
+                                }
+                            }
+                        }
+                    }
+                    CanisterCall::Ingress(_) => {
+                        self.reject_unexpected_ingress(Ic00Method::SignWithSchnorr)
+                    }
+                },
             },
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
@@ -1243,13 +1303,7 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::DeleteChunks) | Ok(Ic00Method::InstallChunkedCode) => {
-                ExecuteSubnetMessageResult::Finished {
-                    response: Err(UserError::new(
-                        ErrorCode::CanisterRejectedMessage,
-                        "Chunked upload API is not yet implemented.",
-                    )),
-                    refund: msg.take_cycles(),
-                }
+                Self::reject_due_to_api_not_implemented(&mut msg)
             }
 
             Ok(Ic00Method::NodeMetricsHistory) => {
@@ -1387,6 +1441,17 @@ impl ExecutionEnvironment {
         // these cases.
         let state = self.finish_subnet_message_execution(state, msg, result, since);
         (state, Some(NumInstructions::from(0)))
+    }
+
+    // Rejects message because API is not implemented.
+    fn reject_due_to_api_not_implemented(msg: &mut CanisterCall) -> ExecuteSubnetMessageResult {
+        ExecuteSubnetMessageResult::Finished {
+            response: Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!("{} API is not yet implemented.", msg.method_name()),
+            )),
+            refund: msg.take_cycles(),
+        }
     }
 
     /// Observes a subnet message metrics and outputs the given subnet response.
@@ -2441,18 +2506,21 @@ impl ExecutionEnvironment {
                 return Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
                     format!(
-                        "sign_with_ecdsa request sent with {} cycles, but {} cycles are required.",
-                        request.payment, signature_fee
+                        "{} request sent with {} cycles, but {} cycles are required.",
+                        request.method_name, request.payment, signature_fee
                     ),
                 ));
             } else {
                 request.payment -= signature_fee;
-                let ecdsa_fee = NominalCycles::from(signature_fee);
-                state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls += ecdsa_fee;
+                let nominal_fee = NominalCycles::from(signature_fee);
+                state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls += nominal_fee;
                 state
                     .metadata
                     .subnet_metrics
-                    .observe_consumed_cycles_with_use_case(CyclesUseCase::ECDSAOutcalls, ecdsa_fee);
+                    .observe_consumed_cycles_with_use_case(
+                        CyclesUseCase::ECDSAOutcalls,
+                        nominal_fee,
+                    );
             }
         }
 
@@ -2463,8 +2531,8 @@ impl ExecutionEnvironment {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "sign_with_ecdsa request could not be handled, invalid or disabled key {}.",
-                    key_id
+                    "{} request could not be handled, invalid or disabled key {}.",
+                    request.method_name, key_id
                 ),
             ));
         }
@@ -2478,8 +2546,10 @@ impl ExecutionEnvironment {
         {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
-                "sign_with_ecdsa request could not be handled, the ECDSA signature queue is full."
-                    .to_string(),
+                format!(
+                    "{} request could not be handled, the ECDSA signature queue is full.",
+                    request.method_name
+                ),
             ));
         }
 
@@ -2506,6 +2576,97 @@ impl ExecutionEnvironment {
                 matched_quadruple: None,
                 nonce: None,
             }));
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn sign_with_schnorr(
+        &self,
+        mut request: Request,
+        message: Vec<u8>,
+        derivation_path: Vec<Vec<u8>>,
+        key_id: SchnorrKeyId,
+        max_queue_size: u32,
+        state: &mut ReplicatedState,
+        rng: &mut dyn RngCore,
+        subnet_size: usize,
+    ) -> Result<(), UserError> {
+        let topology = &state.metadata.network_topology;
+        // If the request isn't from the NNS, then we need to charge for it.
+        let source_subnet = topology.routing_table.route(request.sender.get());
+        if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
+            // TODO(EXC-1629): implement schnorr fee.
+            let signature_fee = self.cycles_account_manager.ecdsa_signature_fee(subnet_size);
+            if request.payment < signature_fee {
+                return Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "{} request sent with {} cycles, but {} cycles are required.",
+                        request.method_name, request.payment, signature_fee
+                    ),
+                ));
+            } else {
+                request.payment -= signature_fee;
+                state
+                    .metadata
+                    .subnet_metrics
+                    .observe_consumed_cycles_with_use_case(
+                        CyclesUseCase::SchnorrOutcalls,
+                        NominalCycles::from(signature_fee),
+                    );
+            }
+        }
+
+        if !topology
+            .idkg_signing_subnets(&MasterPublicKeyId::Schnorr(key_id.clone()))
+            .contains(&state.metadata.own_subnet_id)
+        {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "{} request could not be handled, invalid or disabled key {}.",
+                    request.method_name, key_id
+                ),
+            ));
+        }
+
+        if state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_schnorr_contexts_count()
+            >= max_queue_size as usize
+        {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "{} request could not be handled, the Schnorr signature queue is full.",
+                    request.method_name
+                ),
+            ));
+        }
+
+        let mut pseudo_random_id = [0u8; 32];
+        rng.fill_bytes(&mut pseudo_random_id);
+
+        info!(
+            self.log,
+            "Assigned the pseudo_random_id {:?} to the new {} request from {:?}",
+            pseudo_random_id,
+            request.method_name,
+            request.sender(),
+        );
+
+        state.metadata.subnet_call_context_manager.push_context(
+            SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
+                request,
+                args: ThresholdArguments::Schnorr(SchnorrArguments { key_id, message }),
+                derivation_path,
+                pseudo_random_id,
+                batch_time: state.metadata.batch_time,
+                matched_pre_signature: None,
+                nonce: None,
+            }),
+        );
         Ok(())
     }
 

@@ -738,6 +738,7 @@ pub enum CyclesUseCase {
     DeletedCanisters = 10,
     NonConsumed = 11,
     BurnedCycles = 12,
+    SchnorrOutcalls = 13,
 }
 impl CyclesUseCase {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -761,6 +762,7 @@ impl CyclesUseCase {
             CyclesUseCase::DeletedCanisters => "CYCLES_USE_CASE_DELETED_CANISTERS",
             CyclesUseCase::NonConsumed => "CYCLES_USE_CASE_NON_CONSUMED",
             CyclesUseCase::BurnedCycles => "CYCLES_USE_CASE_BURNED_CYCLES",
+            CyclesUseCase::SchnorrOutcalls => "CYCLES_USE_CASE_SCHNORR_OUTCALLS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -781,6 +783,7 @@ impl CyclesUseCase {
             "CYCLES_USE_CASE_DELETED_CANISTERS" => Some(Self::DeletedCanisters),
             "CYCLES_USE_CASE_NON_CONSUMED" => Some(Self::NonConsumed),
             "CYCLES_USE_CASE_BURNED_CYCLES" => Some(Self::BurnedCycles),
+            "CYCLES_USE_CASE_SCHNORR_OUTCALLS" => Some(Self::SchnorrOutcalls),
             _ => None,
         }
     }

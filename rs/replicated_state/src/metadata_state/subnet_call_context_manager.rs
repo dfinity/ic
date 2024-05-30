@@ -1,6 +1,6 @@
 use ic_btc_types_internal::{GetSuccessorsRequestInitial, SendTransactionRequest};
 use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::crypto::v1 as pb_crypto,
@@ -22,6 +22,15 @@ use std::{
     sync::Arc,
 };
 
+/// ECDSA message hash size in bytes.
+const MESSAGE_HASH_SIZE: usize = 32;
+
+/// Threshold algorithm pseudo-random ID size in bytes.
+const PSEUDO_RANDOM_ID_SIZE: usize = 32;
+
+/// Threshold algorithm nonce size in bytes.
+const NONCE_SIZE: usize = 32;
+
 pub enum SubnetCallContext {
     SetupInitialDKG(SetupInitialDkgContext),
     SignWithEcdsa(SignWithEcdsaContext),
@@ -31,6 +40,7 @@ pub enum SubnetCallContext {
     IDkgDealings(IDkgDealingsContext),
     BitcoinGetSuccessors(BitcoinGetSuccessorsContext),
     BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext),
+    SignWithThreshold(SignWithThresholdContext),
 }
 
 impl SubnetCallContext {
@@ -43,6 +53,7 @@ impl SubnetCallContext {
             SubnetCallContext::IDkgDealings(context) => &context.request,
             SubnetCallContext::BitcoinGetSuccessors(context) => &context.request,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => &context.request,
+            SubnetCallContext::SignWithThreshold(context) => &context.request,
         }
     }
 
@@ -55,6 +66,7 @@ impl SubnetCallContext {
             SubnetCallContext::IDkgDealings(context) => context.time,
             SubnetCallContext::BitcoinGetSuccessors(context) => context.time,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => context.time,
+            SubnetCallContext::SignWithThreshold(context) => context.batch_time,
         }
     }
 }
@@ -204,7 +216,9 @@ pub struct SubnetCallContextManager {
     /// corresponds to a future state.
     next_callback_id: u64,
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
+    // TODO(EXC-1621): remove after fully migrating to `sign_with_threshold_contexts`.
     pub sign_with_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
+    sign_with_threshold_contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
     // TODO(EXC-1621): remove after fully migrating to `idkg_dealings_contexts`.
     pub ecdsa_dealings_contexts: BTreeMap<CallbackId, EcdsaDealingsContext>,
@@ -231,6 +245,10 @@ impl SubnetCallContextManager {
             }
             SubnetCallContext::SignWithEcdsa(context) => {
                 self.sign_with_ecdsa_contexts.insert(callback_id, context);
+            }
+            SubnetCallContext::SignWithThreshold(context) => {
+                self.sign_with_threshold_contexts
+                    .insert(callback_id, context);
             }
             SubnetCallContext::CanisterHttpRequest(context) => {
                 self.canister_http_request_contexts
@@ -281,6 +299,19 @@ impl SubnetCallContextManager {
                             context.request.sender
                         );
                         SubnetCallContext::SignWithEcdsa(context)
+                    })
+            })
+            .or_else(|| {
+                self.sign_with_threshold_contexts
+                    .remove(&callback_id)
+                    .map(|context| {
+                        info!(
+                            logger,
+                            "Received the response for SignWithThreshold request with id {:?} from {:?}",
+                            context.pseudo_random_id,
+                            context.request.sender
+                        );
+                        SubnetCallContext::SignWithThreshold(context)
                     })
             })
             .or_else(|| {
@@ -433,6 +464,14 @@ impl SubnetCallContextManager {
         });
         removed
     }
+
+    /// Returns the number of `sign_with_schnorr` contexts.
+    pub fn sign_with_schnorr_contexts_count(&self) -> usize {
+        self.sign_with_threshold_contexts
+            .iter()
+            .filter(|(_, context)| matches!(context.args, ThresholdArguments::Schnorr(_)))
+            .count()
+    }
 }
 
 impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
@@ -454,6 +493,16 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                 .iter()
                 .map(
                     |(callback_id, context)| pb_metadata::SignWithEcdsaContextTree {
+                        callback_id: callback_id.get(),
+                        context: Some(context.into()),
+                    },
+                )
+                .collect(),
+            sign_with_threshold_contexts: item
+                .sign_with_threshold_contexts
+                .iter()
+                .map(
+                    |(callback_id, context)| pb_metadata::SignWithThresholdContextTree {
                         callback_id: callback_id.get(),
                         context: Some(context.into()),
                     },
@@ -568,6 +617,14 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             sign_with_ecdsa_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
+        let mut sign_with_threshold_contexts =
+            BTreeMap::<CallbackId, SignWithThresholdContext>::new();
+        for entry in item.sign_with_threshold_contexts {
+            let context: SignWithThresholdContext =
+                try_from_option_field(entry.context, "SystemMetadata::SignWithThresholdContext")?;
+            sign_with_threshold_contexts.insert(CallbackId::new(entry.callback_id), context);
+        }
+
         let mut canister_http_request_contexts =
             BTreeMap::<CallbackId, CanisterHttpRequestContext>::new();
         for entry in item.canister_http_request_contexts {
@@ -656,6 +713,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             next_callback_id: item.next_callback_id,
             setup_initial_dkg_contexts,
             sign_with_ecdsa_contexts,
+            sign_with_threshold_contexts,
             canister_http_request_contexts,
             ecdsa_dealings_contexts,
             bitcoin_get_successors_contexts,
@@ -681,7 +739,7 @@ pub struct SetupInitialDkgContext {
 
 impl From<&SetupInitialDkgContext> for pb_metadata::SetupInitialDkgContext {
     fn from(context: &SetupInitialDkgContext) -> Self {
-        pb_metadata::SetupInitialDkgContext {
+        Self {
             request: Some((&context.request).into()),
             nodes_in_subnet: context
                 .nodes_in_target_subnet
@@ -721,21 +779,50 @@ impl TryFrom<(Time, pb_metadata::SetupInitialDkgContext)> for SetupInitialDkgCon
     }
 }
 
+/// Tries to convert a vector of bytes into an array of N bytes.
+fn try_into_array<const N: usize>(bytes: Vec<u8>, name: &str) -> Result<[u8; N], ProxyDecodeError> {
+    if bytes.len() != N {
+        return Err(ProxyDecodeError::Other(format!(
+            "{} is not {} bytes.",
+            name, N
+        )));
+    }
+    let mut id = [0; N];
+    id.copy_from_slice(&bytes);
+    Ok(id)
+}
+
+fn try_into_array_message_hash(
+    bytes: Vec<u8>,
+) -> Result<[u8; MESSAGE_HASH_SIZE], ProxyDecodeError> {
+    try_into_array::<MESSAGE_HASH_SIZE>(bytes, "message_hash")
+}
+
+fn try_into_array_pseudo_random_id(
+    bytes: Vec<u8>,
+) -> Result<[u8; PSEUDO_RANDOM_ID_SIZE], ProxyDecodeError> {
+    try_into_array::<PSEUDO_RANDOM_ID_SIZE>(bytes, "pseudo_random_id")
+}
+
+fn try_into_array_nonce(bytes: Vec<u8>) -> Result<[u8; NONCE_SIZE], ProxyDecodeError> {
+    try_into_array::<NONCE_SIZE>(bytes, "nonce")
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SignWithEcdsaContext {
     pub request: Request,
     pub key_id: EcdsaKeyId,
-    pub message_hash: [u8; 32],
+    pub message_hash: [u8; MESSAGE_HASH_SIZE],
     pub derivation_path: Vec<Vec<u8>>,
-    pub pseudo_random_id: [u8; 32],
+    pub pseudo_random_id: [u8; PSEUDO_RANDOM_ID_SIZE],
     pub batch_time: Time,
     pub matched_quadruple: Option<(PreSigId, Height)>,
-    pub nonce: Option<[u8; 32]>,
+    pub nonce: Option<[u8; NONCE_SIZE]>,
 }
 
 impl From<&SignWithEcdsaContext> for pb_metadata::SignWithEcdsaContext {
     fn from(context: &SignWithEcdsaContext) -> Self {
-        pb_metadata::SignWithEcdsaContext {
+        Self {
             request: Some((&context.request).into()),
             key_id: Some((&context.key_id).into()),
             message_hash: context.message_hash.to_vec(),
@@ -757,50 +844,157 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
         let key_id: EcdsaKeyId =
             try_from_option_field(context.key_id, "SignWithEcdsaContext::key_id")?;
         Ok(SignWithEcdsaContext {
-            message_hash: {
-                if context.message_hash.len() != NiDkgTargetId::SIZE {
-                    return Err(Self::Error::Other(format!(
-                        "message_hash is not {} bytes.",
-                        NiDkgTargetId::SIZE
-                    )));
-                }
-                let mut id = [0; NiDkgTargetId::SIZE];
-                id.copy_from_slice(&context.message_hash);
-                id
-            },
+            message_hash: try_into_array_message_hash(context.message_hash)?,
             derivation_path: context.derivation_path_vec,
             request,
             key_id: key_id.clone(),
-            pseudo_random_id: {
-                if context.pseudo_random_id.len() != NiDkgTargetId::SIZE {
-                    return Err(Self::Error::Other(format!(
-                        "pseudo_random_id is not {} bytes.",
-                        NiDkgTargetId::SIZE
-                    )));
-                }
-                let mut id = [0; NiDkgTargetId::SIZE];
-                id.copy_from_slice(&context.pseudo_random_id);
-                id
-            },
+            pseudo_random_id: try_into_array_pseudo_random_id(context.pseudo_random_id)?,
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
             matched_quadruple: context
                 .pre_signature_id
                 .map(PreSigId)
                 .zip(context.height)
                 .map(|(q, h)| (q, Height::from(h))),
-            nonce: if let Some(nonce) = context.nonce.as_ref() {
-                if nonce.len() != NiDkgTargetId::SIZE {
-                    return Err(Self::Error::Other(format!(
-                        "nonce is not {} bytes.",
-                        NiDkgTargetId::SIZE
-                    )));
-                }
-                let mut id = [0; NiDkgTargetId::SIZE];
-                id.copy_from_slice(nonce);
-                Some(id)
-            } else {
-                None
-            },
+            nonce: context.nonce.map(try_into_array_nonce).transpose()?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EcdsaArguments {
+    pub key_id: EcdsaKeyId,
+    pub message_hash: [u8; MESSAGE_HASH_SIZE],
+}
+
+impl From<&EcdsaArguments> for pb_metadata::EcdsaArguments {
+    fn from(args: &EcdsaArguments) -> Self {
+        Self {
+            key_id: Some((&args.key_id).into()),
+            message_hash: args.message_hash.to_vec(),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::EcdsaArguments> for EcdsaArguments {
+    type Error = ProxyDecodeError;
+    fn try_from(context: pb_metadata::EcdsaArguments) -> Result<Self, Self::Error> {
+        Ok(EcdsaArguments {
+            key_id: try_from_option_field(context.key_id, "EcdsaArguments::key_id")?,
+            message_hash: try_into_array_message_hash(context.message_hash)?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SchnorrArguments {
+    pub key_id: SchnorrKeyId,
+    pub message: Vec<u8>,
+}
+
+impl From<&SchnorrArguments> for pb_metadata::SchnorrArguments {
+    fn from(args: &SchnorrArguments) -> Self {
+        Self {
+            key_id: Some((&args.key_id).into()),
+            message: args.message.clone(),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::SchnorrArguments> for SchnorrArguments {
+    type Error = ProxyDecodeError;
+    fn try_from(context: pb_metadata::SchnorrArguments) -> Result<Self, Self::Error> {
+        Ok(SchnorrArguments {
+            key_id: try_from_option_field(context.key_id, "SchnorrArguments::key_id")?,
+            message: context.message,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ThresholdArguments {
+    Ecdsa(EcdsaArguments),
+    Schnorr(SchnorrArguments),
+}
+
+impl From<&ThresholdArguments> for pb_metadata::ThresholdArguments {
+    fn from(context: &ThresholdArguments) -> Self {
+        let threshold_scheme = match context {
+            ThresholdArguments::Ecdsa(args) => {
+                pb_metadata::threshold_arguments::ThresholdScheme::Ecdsa(args.into())
+            }
+            ThresholdArguments::Schnorr(args) => {
+                pb_metadata::threshold_arguments::ThresholdScheme::Schnorr(args.into())
+            }
+        };
+        Self {
+            threshold_scheme: Some(threshold_scheme),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::ThresholdArguments> for ThresholdArguments {
+    type Error = ProxyDecodeError;
+    fn try_from(context: pb_metadata::ThresholdArguments) -> Result<Self, Self::Error> {
+        let threshold_scheme = try_from_option_field(
+            context.threshold_scheme,
+            "ThresholdArguments::threshold_scheme",
+        )?;
+        match threshold_scheme {
+            pb_metadata::threshold_arguments::ThresholdScheme::Ecdsa(args) => {
+                Ok(ThresholdArguments::Ecdsa(EcdsaArguments::try_from(args)?))
+            }
+            pb_metadata::threshold_arguments::ThresholdScheme::Schnorr(args) => Ok(
+                ThresholdArguments::Schnorr(SchnorrArguments::try_from(args)?),
+            ),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SignWithThresholdContext {
+    pub request: Request,
+    pub args: ThresholdArguments,
+    pub derivation_path: Vec<Vec<u8>>,
+    pub pseudo_random_id: [u8; PSEUDO_RANDOM_ID_SIZE],
+    pub batch_time: Time,
+    pub matched_pre_signature: Option<(PreSigId, Height)>,
+    pub nonce: Option<[u8; NONCE_SIZE]>,
+}
+
+impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
+    fn from(context: &SignWithThresholdContext) -> Self {
+        Self {
+            request: Some((&context.request).into()),
+            args: Some((&context.args).into()),
+            derivation_path_vec: context.derivation_path.clone(),
+            pseudo_random_id: context.pseudo_random_id.to_vec(),
+            batch_time: context.batch_time.as_nanos_since_unix_epoch(),
+            pre_signature_id: context.matched_pre_signature.as_ref().map(|q| q.0.id()),
+            height: context.matched_pre_signature.as_ref().map(|q| q.1.get()),
+            nonce: context.nonce.map(|n| n.to_vec()),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext {
+    type Error = ProxyDecodeError;
+    fn try_from(context: pb_metadata::SignWithThresholdContext) -> Result<Self, Self::Error> {
+        let request: Request =
+            try_from_option_field(context.request, "SignWithThresholdContext::request")?;
+        let args: ThresholdArguments =
+            try_from_option_field(context.args, "SignWithThresholdContext::args")?;
+        Ok(SignWithThresholdContext {
+            request,
+            args,
+            derivation_path: context.derivation_path_vec,
+            pseudo_random_id: try_into_array_pseudo_random_id(context.pseudo_random_id)?,
+            batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
+            matched_pre_signature: context
+                .pre_signature_id
+                .map(PreSigId)
+                .zip(context.height)
+                .map(|(q, h)| (q, Height::from(h))),
+            nonce: context.nonce.map(try_into_array_nonce).transpose()?,
         })
     }
 }
@@ -817,7 +1011,7 @@ pub struct EcdsaDealingsContext {
 
 impl From<&EcdsaDealingsContext> for pb_metadata::EcdsaDealingsContext {
     fn from(context: &EcdsaDealingsContext) -> Self {
-        pb_metadata::EcdsaDealingsContext {
+        Self {
             request: Some((&context.request).into()),
             key_id: Some((&context.key_id).into()),
             nodes: context
@@ -915,7 +1109,7 @@ pub struct BitcoinGetSuccessorsContext {
 
 impl From<&BitcoinGetSuccessorsContext> for pb_metadata::BitcoinGetSuccessorsContext {
     fn from(context: &BitcoinGetSuccessorsContext) -> Self {
-        pb_metadata::BitcoinGetSuccessorsContext {
+        Self {
             request: Some((&context.request).into()),
             payload: Some((&context.payload).into()),
             time: Some(pb_metadata::Time {
@@ -955,7 +1149,7 @@ impl From<&BitcoinSendTransactionInternalContext>
     for pb_metadata::BitcoinSendTransactionInternalContext
 {
     fn from(context: &BitcoinSendTransactionInternalContext) -> Self {
-        pb_metadata::BitcoinSendTransactionInternalContext {
+        Self {
             request: Some((&context.request).into()),
             payload: Some((&context.payload).into()),
             time: Some(pb_metadata::Time {
@@ -1000,7 +1194,7 @@ impl From<&InstallCodeCall> for pb_metadata::InstallCodeCall {
             CanisterCall::Request(request) => PbCanisterCall::Request(request.as_ref().into()),
             CanisterCall::Ingress(ingress) => PbCanisterCall::Ingress(ingress.as_ref().into()),
         };
-        pb_metadata::InstallCodeCall {
+        Self {
             canister_call: Some(call),
             effective_canister_id: Some((install_code_call.effective_canister_id).into()),
             time: Some(pb_metadata::Time {
@@ -1083,7 +1277,7 @@ impl From<&StopCanisterCall> for pb_metadata::StopCanisterCall {
             CanisterCall::Request(request) => PbCanisterCall::Request(request.as_ref().into()),
             CanisterCall::Ingress(ingress) => PbCanisterCall::Ingress(ingress.as_ref().into()),
         };
-        pb_metadata::StopCanisterCall {
+        Self {
             canister_call: Some(call),
             effective_canister_id: Some((stop_canister_call.effective_canister_id).into()),
             time: Some(pb_metadata::Time {
@@ -1137,7 +1331,7 @@ pub struct RawRandContext {
 
 impl From<&RawRandContext> for pb_metadata::RawRandContext {
     fn from(context: &RawRandContext) -> Self {
-        pb_metadata::RawRandContext {
+        Self {
             request: Some((&context.request).into()),
             execution_round_id: context.execution_round_id.get(),
             time: Some(pb_metadata::Time {
@@ -1193,6 +1387,7 @@ mod testing {
             next_callback_id: 0,
             setup_initial_dkg_contexts: Default::default(),
             sign_with_ecdsa_contexts: Default::default(),
+            sign_with_threshold_contexts: Default::default(),
             canister_http_request_contexts: Default::default(),
             ecdsa_dealings_contexts: Default::default(),
             idkg_dealings_contexts: Default::default(),

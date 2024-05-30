@@ -23,7 +23,7 @@ use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EcdsaKeyId, EmptyBlob,
     InstallCodeArgs, InstallCodeArgsV2, LogVisibility, MasterPublicKeyId, Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
+    ProvisionalCreateCanisterWithCyclesArgs, SchnorrKeyId, UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1598,8 +1598,7 @@ pub struct ExecutionTestBuilder {
     log: ReplicaLogger,
     caller_canister_id: Option<CanisterId>,
     ecdsa_signature_fee: Option<Cycles>,
-    ecdsa_key: Option<EcdsaKeyId>,
-    ecdsa_signing_enabled: bool,
+    idkg_keys_with_signing_enabled: BTreeMap<MasterPublicKeyId, bool>,
     instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
     install_code_instruction_limit: NumInstructions,
@@ -1635,8 +1634,7 @@ impl Default for ExecutionTestBuilder {
             log: no_op_logger(),
             caller_canister_id: None,
             ecdsa_signature_fee: None,
-            ecdsa_key: None,
-            ecdsa_signing_enabled: false,
+            idkg_keys_with_signing_enabled: Default::default(),
             instruction_limit: scheduler_config.max_instructions_per_message,
             slice_instruction_limit: scheduler_config.max_instructions_per_slice,
             install_code_instruction_limit: scheduler_config.max_instructions_per_install_code,
@@ -1712,20 +1710,28 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_ecdsa_key(self, ecdsa_key: EcdsaKeyId) -> Self {
-        Self {
-            ecdsa_key: Some(ecdsa_key),
-            ecdsa_signing_enabled: true,
-            ..self
-        }
+    pub fn with_ecdsa_key(mut self, key_id: EcdsaKeyId) -> Self {
+        self.idkg_keys_with_signing_enabled
+            .insert(MasterPublicKeyId::Ecdsa(key_id), true);
+        self
     }
 
-    pub fn with_disabled_ecdsa_key(self, ecdsa_key: EcdsaKeyId) -> Self {
-        Self {
-            ecdsa_key: Some(ecdsa_key),
-            ecdsa_signing_enabled: false,
-            ..self
-        }
+    pub fn with_disabled_ecdsa_key(mut self, key_id: EcdsaKeyId) -> Self {
+        self.idkg_keys_with_signing_enabled
+            .insert(MasterPublicKeyId::Ecdsa(key_id), false);
+        self
+    }
+
+    pub fn with_schnorr_key(mut self, key_id: SchnorrKeyId) -> Self {
+        self.idkg_keys_with_signing_enabled
+            .insert(MasterPublicKeyId::Schnorr(key_id), true);
+        self
+    }
+
+    pub fn with_disabled_schnorr_key(mut self, key_id: SchnorrKeyId) -> Self {
+        self.idkg_keys_with_signing_enabled
+            .insert(MasterPublicKeyId::Schnorr(key_id), false);
+        self
     }
 
     pub fn with_instruction_limit(self, limit: u64) -> Self {
@@ -1983,6 +1989,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_ic00_sign_with_schnorr(mut self, status: FlagStatus) -> Self {
+        self.execution_config.ic00_sign_with_schnorr = status;
+        self
+    }
+
     pub fn with_time(mut self, time: Time) -> Self {
         self.time = time;
         self
@@ -2054,12 +2065,13 @@ impl ExecutionTestBuilder {
         if let Some(ecdsa_signature_fee) = self.ecdsa_signature_fee {
             config.ecdsa_signature_fee = ecdsa_signature_fee;
         }
-        if let Some(ecdsa_key) = &self.ecdsa_key {
-            if self.ecdsa_signing_enabled {
-                state.metadata.network_topology.idkg_signing_subnets.insert(
-                    MasterPublicKeyId::Ecdsa(ecdsa_key.clone()),
-                    vec![self.own_subnet_id],
-                );
+        for (key_id, is_signing_enabled) in &self.idkg_keys_with_signing_enabled {
+            if *is_signing_enabled {
+                state
+                    .metadata
+                    .network_topology
+                    .idkg_signing_subnets
+                    .insert(key_id.clone(), vec![self.own_subnet_id]);
             }
             state
                 .metadata
@@ -2068,7 +2080,7 @@ impl ExecutionTestBuilder {
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
                 .idkg_keys_held
-                .insert(MasterPublicKeyId::Ecdsa(ecdsa_key.clone()));
+                .insert(key_id.clone());
         }
 
         state.metadata.network_topology.bitcoin_mainnet_canister_id =
@@ -2078,18 +2090,26 @@ impl ExecutionTestBuilder {
             self.execution_config.bitcoin.testnet_canister_id;
 
         let idkg_subnet_public_keys = self
-            .ecdsa_key
-            .into_iter()
-            .map(|key_id| {
-                (
-                    MasterPublicKeyId::Ecdsa(key_id),
+            .idkg_keys_with_signing_enabled
+            .into_keys()
+            .map(|key_id| match key_id {
+                MasterPublicKeyId::Ecdsa(_) => (
+                    key_id,
                     MasterPublicKey {
                         algorithm_id: AlgorithmId::EcdsaSecp256k1,
                         public_key: b"abababab".to_vec(),
                     },
-                )
+                ),
+                MasterPublicKeyId::Schnorr(_) => (
+                    key_id,
+                    MasterPublicKey {
+                        algorithm_id: AlgorithmId::SchnorrSecp256k1,
+                        public_key: b"cdcdcdcd".to_vec(),
+                    },
+                ),
             })
             .collect();
+
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             self.instruction_limit,
             self.subnet_type,
