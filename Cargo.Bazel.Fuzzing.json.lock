@@ -1,5 +1,5 @@
 {
-  "checksum": "ea0ea837041da1cbf827103651454c6277b22fa0cd95ef0b40f8e3e4e1c679dc",
+  "checksum": "e13c0877201d0524b342e3a9d949f83224b18479bc7c196f7a452d3f0df3a6bc",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2886,14 +2886,14 @@
       ],
       "license_file": null
     },
-    "asn1-rs 0.5.2": {
+    "asn1-rs 0.6.1": {
       "name": "asn1-rs",
-      "version": "0.5.2",
+      "version": "0.6.1",
       "package_url": "https://github.com/rusticata/asn1-rs.git",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/asn1-rs/0.5.2/download",
-          "sha256": "7f6fd5ddaf0351dff5b8da21b2fb4ff8e08ddd02857f0bf69c47639106c0fff0"
+          "url": "https://static.crates.io/crates/asn1-rs/0.6.1/download",
+          "sha256": "22ad1373757efa0f70ec53939aabc7152e1591cb485208052993070ac8d2429d"
         }
       },
       "targets": [
@@ -2953,11 +2953,11 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "asn1-rs-derive 0.4.0",
+              "id": "asn1-rs-derive 0.5.0",
               "target": "asn1_rs_derive"
             },
             {
-              "id": "asn1-rs-impl 0.1.0",
+              "id": "asn1-rs-impl 0.2.0",
               "target": "asn1_rs_impl"
             },
             {
@@ -2967,7 +2967,7 @@
           ],
           "selects": {}
         },
-        "version": "0.5.2"
+        "version": "0.6.1"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -2976,14 +2976,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "asn1-rs-derive 0.4.0": {
+    "asn1-rs-derive 0.5.0": {
       "name": "asn1-rs-derive",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "package_url": "https://github.com/rusticata/asn1-rs.git",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/asn1-rs-derive/0.4.0/download",
-          "sha256": "726535892e8eae7e70657b4c8ea93d26b8553afb1ce617caee529ef96d7dee6c"
+          "url": "https://static.crates.io/crates/asn1-rs-derive/0.5.0/download",
+          "sha256": "7378575ff571966e99a744addeff0bff98b8ada0dedf1956d59e634db95eaac1"
         }
       },
       "targets": [
@@ -3016,18 +3016,18 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.48",
               "target": "syn"
             },
             {
-              "id": "synstructure 0.12.6",
+              "id": "synstructure 0.13.1",
               "target": "synstructure"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.4.0"
+        "version": "0.5.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -3036,14 +3036,14 @@
       ],
       "license_file": null
     },
-    "asn1-rs-impl 0.1.0": {
+    "asn1-rs-impl 0.2.0": {
       "name": "asn1-rs-impl",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "package_url": "https://github.com/rusticata/asn1-rs.git",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/asn1-rs-impl/0.1.0/download",
-          "sha256": "2777730b2039ac0f95f093556e61b6d26cebed5393ca6f152717777cec3a42ed"
+          "url": "https://static.crates.io/crates/asn1-rs-impl/0.2.0/download",
+          "sha256": "7b18050c2cd6fe86c3a76584ef5e0baf286d038cda203eb6223df2cc413565f7"
         }
       },
       "targets": [
@@ -3076,14 +3076,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.48",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.0"
+        "version": "0.2.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -16385,14 +16385,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "der-parser 8.2.0": {
+    "der-parser 9.0.0": {
       "name": "der-parser",
-      "version": "8.2.0",
+      "version": "9.0.0",
       "package_url": "https://github.com/rusticata/der-parser.git",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/der-parser/8.2.0/download",
-          "sha256": "dbd676fbbab537128ef0278adb5576cf363cff6aa22a7b24effe97347cfab61e"
+          "url": "https://static.crates.io/crates/der-parser/9.0.0/download",
+          "sha256": "5cd0a5c643689626bec213c4d8bd4d96acc8ffdb4ad4bb6bc16abf27d5f4b553"
         }
       },
       "targets": [
@@ -16426,7 +16426,7 @@
         "deps": {
           "common": [
             {
-              "id": "asn1-rs 0.5.2",
+              "id": "asn1-rs 0.6.1",
               "target": "asn1_rs"
             },
             {
@@ -16458,7 +16458,7 @@
           ],
           "selects": {}
         },
-        "version": "8.2.0"
+        "version": "9.0.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -17898,7 +17898,7 @@
               "target": "rayon"
             },
             {
-              "id": "rcgen 0.11.3",
+              "id": "rcgen 0.12.1",
               "target": "rcgen"
             },
             {
@@ -18061,7 +18061,7 @@
               "target": "signal_hook"
             },
             {
-              "id": "signature 2.1.0",
+              "id": "signature 2.2.0",
               "target": "signature"
             },
             {
@@ -18367,7 +18367,7 @@
               "target": "x509_cert"
             },
             {
-              "id": "x509-parser 0.15.1",
+              "id": "x509-parser 0.16.0",
               "target": "x509_parser"
             },
             {
@@ -19081,14 +19081,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "ecdsa 0.16.8": {
+    "ecdsa 0.16.9": {
       "name": "ecdsa",
-      "version": "0.16.8",
+      "version": "0.16.9",
       "package_url": "https://github.com/RustCrypto/signatures/tree/master/ecdsa",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ecdsa/0.16.8/download",
-          "sha256": "a4b1e0c257a9e9f25f90ff76d7a68360ed497ee519c8e428d1825ef0000799d4"
+          "url": "https://static.crates.io/crates/ecdsa/0.16.9/download",
+          "sha256": "ee27f32b5c5292967d2d4a9d7f1e0b0aed2c15daded5a60300e4abb9d8020bca"
         }
       },
       "targets": [
@@ -19146,7 +19146,7 @@
               "target": "rfc6979"
             },
             {
-              "id": "signature 2.1.0",
+              "id": "signature 2.2.0",
               "target": "signature"
             },
             {
@@ -19157,7 +19157,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.16.8"
+        "version": "0.16.9"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -19211,7 +19211,7 @@
               "target": "pkcs8"
             },
             {
-              "id": "signature 2.1.0",
+              "id": "signature 2.2.0",
               "target": "signature"
             }
           ],
@@ -19379,7 +19379,7 @@
               "target": "sha2"
             },
             {
-              "id": "signature 2.1.0",
+              "id": "signature 2.2.0",
               "target": "signature"
             },
             {
@@ -32380,7 +32380,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "ecdsa 0.16.8",
+              "id": "ecdsa 0.16.9",
               "target": "ecdsa",
               "alias": "ecdsa_core"
             },
@@ -32397,7 +32397,7 @@
               "target": "sha2"
             },
             {
-              "id": "signature 2.1.0",
+              "id": "signature 2.2.0",
               "target": "signature"
             }
           ],
@@ -40223,14 +40223,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "oid-registry 0.6.1": {
+    "oid-registry 0.7.0": {
       "name": "oid-registry",
-      "version": "0.6.1",
+      "version": "0.7.0",
       "package_url": "https://github.com/rusticata/oid-registry.git",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/oid-registry/0.6.1/download",
-          "sha256": "9bedf36ffb6ba96c2eb7144ef6270557b52e54b20c0a8e1eb2ff99a6c6959bff"
+          "url": "https://static.crates.io/crates/oid-registry/0.7.0/download",
+          "sha256": "1c958dd45046245b9c3c2547369bb634eb461670b2e7e0de552905801a648d1d"
         }
       },
       "targets": [
@@ -40283,25 +40283,25 @@
         "deps": {
           "common": [
             {
-              "id": "asn1-rs 0.5.2",
+              "id": "asn1-rs 0.6.1",
               "target": "asn1_rs"
             },
             {
-              "id": "oid-registry 0.6.1",
+              "id": "oid-registry 0.7.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.6.1"
+        "version": "0.7.0"
       },
       "build_script_attrs": {
         "data_glob": [
           "**"
         ]
       },
-      "license": "MIT/Apache-2.0",
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -42105,7 +42105,7 @@
         "deps": {
           "common": [
             {
-              "id": "ecdsa 0.16.8",
+              "id": "ecdsa 0.16.9",
               "target": "ecdsa",
               "alias": "ecdsa_core"
             },
@@ -50236,14 +50236,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rcgen 0.11.3": {
+    "rcgen 0.12.1": {
       "name": "rcgen",
-      "version": "0.11.3",
-      "package_url": "https://github.com/est31/rcgen",
+      "version": "0.12.1",
+      "package_url": "https://github.com/rustls/rcgen",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rcgen/0.11.3/download",
-          "sha256": "52c4f3084aa3bc7dfbba4eff4fab2a54db4324965d8872ab933565e6fbd83bc6"
+          "url": "https://static.crates.io/crates/rcgen/0.12.1/download",
+          "sha256": "48406db8ac1f3cbc7dcdb56ec355343817958a356ff430259bb07baf7607e1e1"
         }
       },
       "targets": [
@@ -50269,6 +50269,7 @@
           "common": [
             "default",
             "pem",
+            "ring",
             "zeroize"
           ],
           "selects": {}
@@ -50280,7 +50281,7 @@
               "target": "pem"
             },
             {
-              "id": "ring 0.16.20",
+              "id": "ring 0.17.7",
               "target": "ring"
             },
             {
@@ -50299,7 +50300,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.11.3"
+        "version": "0.12.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -52603,7 +52604,7 @@
               "target": "sha2"
             },
             {
-              "id": "signature 2.1.0",
+              "id": "signature 2.2.0",
               "target": "signature"
             },
             {
@@ -58415,14 +58416,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "signature 2.1.0": {
+    "signature 2.2.0": {
       "name": "signature",
-      "version": "2.1.0",
+      "version": "2.2.0",
       "package_url": "https://github.com/RustCrypto/traits/tree/master/signature",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/signature/2.1.0/download",
-          "sha256": "5e1788eed21689f9cf370582dfc467ef36ed9c707f073528ddafa8d83e3b8500"
+          "url": "https://static.crates.io/crates/signature/2.2.0/download",
+          "sha256": "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
         }
       },
       "targets": [
@@ -58467,7 +58468,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.1.0"
+        "version": "2.2.0"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -61693,14 +61694,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "synstructure 0.12.6": {
+    "synstructure 0.13.1": {
       "name": "synstructure",
-      "version": "0.12.6",
+      "version": "0.13.1",
       "package_url": "https://github.com/mystor/synstructure",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/synstructure/0.12.6/download",
-          "sha256": "f36bdaa60a83aca3921b5259d5400cbf5e90fc51931376a9bd4a0eb79aa7210f"
+          "url": "https://static.crates.io/crates/synstructure/0.13.1/download",
+          "sha256": "c8af7666ab7b6390ab78131fb5b0fce11d6b7a6951602017c35fa82800708971"
         }
       },
       "targets": [
@@ -61740,18 +61741,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.48",
               "target": "syn"
-            },
-            {
-              "id": "unicode-xid 0.2.4",
-              "target": "unicode_xid"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.12.6"
+        "version": "0.13.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -74848,7 +74845,7 @@
               "target": "sha1"
             },
             {
-              "id": "signature 2.1.0",
+              "id": "signature 2.2.0",
               "target": "signature"
             },
             {
@@ -74868,14 +74865,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "x509-parser 0.15.1": {
+    "x509-parser 0.16.0": {
       "name": "x509-parser",
-      "version": "0.15.1",
+      "version": "0.16.0",
       "package_url": "https://github.com/rusticata/x509-parser.git",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/x509-parser/0.15.1/download",
-          "sha256": "7069fba5b66b9193bd2c5d3d4ff12b839118f6bcbef5328efafafb5395cf63da"
+          "url": "https://static.crates.io/crates/x509-parser/0.16.0/download",
+          "sha256": "fcbc162f30700d6f3f82a24bf7cc62ffe7caea42c0b2cba8bf7f3ae50cf51f69"
         }
       },
       "targets": [
@@ -74906,7 +74903,7 @@
         "deps": {
           "common": [
             {
-              "id": "asn1-rs 0.5.2",
+              "id": "asn1-rs 0.6.1",
               "target": "asn1_rs"
             },
             {
@@ -74914,7 +74911,7 @@
               "target": "data_encoding"
             },
             {
-              "id": "der-parser 8.2.0",
+              "id": "der-parser 9.0.0",
               "target": "der_parser"
             },
             {
@@ -74926,7 +74923,7 @@
               "target": "nom"
             },
             {
-              "id": "oid-registry 0.6.1",
+              "id": "oid-registry 0.7.0",
               "target": "oid_registry"
             },
             {
@@ -74945,7 +74942,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.15.1"
+        "version": "0.16.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -77102,7 +77099,7 @@
     "randomkit 0.1.1",
     "ratelimit 0.9.1",
     "rayon 1.8.0",
-    "rcgen 0.11.3",
+    "rcgen 0.12.1",
     "regex 1.10.2",
     "reqwest 0.11.27",
     "reqwest 0.12.4",
@@ -77145,7 +77142,7 @@
     "sha2 0.10.8",
     "sha3 0.9.1",
     "signal-hook 0.3.17",
-    "signature 2.1.0",
+    "signature 2.2.0",
     "simple_asn1 0.6.2",
     "simple_moving_average 1.0.2",
     "slog 2.7.0",
@@ -77223,7 +77220,7 @@
     "wsl 0.1.0",
     "wycheproof 0.5.1",
     "x509-cert 0.2.5",
-    "x509-parser 0.15.1",
+    "x509-parser 0.16.0",
     "yansi 0.5.1",
     "zeroize 1.7.0",
     "zstd 0.13.1"

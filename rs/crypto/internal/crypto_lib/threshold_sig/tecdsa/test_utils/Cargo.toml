@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ed25519-dalek = "2.1"
+ed25519-dalek = { workspace = true }
 ic-crypto-internal-threshold-sig-ecdsa = { path = ".." }
 rand = { workspace = true }
 schnorr_fun = "0.10"

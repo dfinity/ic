@@ -990,7 +990,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.5.1",
             ),
             "rcgen": crate.spec(
-                version = "^0.11.1",
+                version = "^0.12.1",
                 features = [
                     "zeroize",
                 ],
@@ -1170,7 +1170,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "signature": crate.spec(
-                version = "^2.1.0",
+                version = "^2.2.0",
             ),
             "simple_asn1": crate.spec(
                 version = "^0.6.2",
@@ -1500,7 +1500,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "x509-parser": crate.spec(
-                version = "^0.15.1",
+                version = "^0.16.0",
             ),
             "yansi": crate.spec(
                 version = "^0.5.0",
