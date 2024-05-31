@@ -3392,6 +3392,8 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
                 assert!(result.is_err());
 
                 // Restart the dst state manager.
+                // restart_fn() needs to take the ownership of state manager to drop it.
+                // We need to manually ensure all other `Arc<StateManagerImpl>` have been dropped.
                 drop(dst_state_sync);
                 let dst_state_manager = match Arc::try_unwrap(dst_state_manager) {
                 Ok(sm) => sm,
