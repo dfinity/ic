@@ -50,6 +50,12 @@ pub fn config(
     let path = env.get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
 
     UniversalVm::new(JAEGER_VM_NAME.to_string())
+        .with_required_host_features(vec![HostFeature::Performance])
+        .with_vm_resources(VmResources {
+            vcpus: Some(NrOfVCPUs::new(16)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+        })
         .with_config_img(path)
         .start(&env)
         .expect("failed to setup Jaeger Universal VM");
