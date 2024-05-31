@@ -2789,7 +2789,26 @@ impl StateManager for StateManagerImpl {
                     info!(self.log,
                           "Copying checkpoint {} with root hash {:?} under new height {}",
                           checkpoint_height, root_hash, height);
+                    match self.state_layout.checkpoint_untracked(checkpoint_height) {
+                        Ok(cp_layout) => {
+                            if cp_layout.is_marked_as_unverified() {
+                                warn!(self.log,
+                                      "Unverified checkpoint @{} is not expected to be found in states metadata.",
+                                      checkpoint_height
+                                );
+                                return;
+                            }
+                        }
+                        Err(_) => {
+                            warn!(self.log,
+                                "Checkpoint @{} does not exist but it is found in states metadata.",
+                                checkpoint_height
+                            );
+                            return;
+                        }
+                    }
 
+                    // Clone the checkpoint if it is not marked as unverified.
                     match self.state_layout.clone_checkpoint(checkpoint_height, height) {
                         Ok(_) => {
                             let (state, cp_layout) = load_checkpoint(&self.state_layout, height, &self.metrics, self.own_subnet_type, Arc::clone(&self.get_fd_factory()))

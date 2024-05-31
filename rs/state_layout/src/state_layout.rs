@@ -364,15 +364,17 @@ impl TipHandler {
         debug_assert!(cp.root.exists());
 
         let file_copy_instruction = |path: &Path| {
-            if path.extension() == Some(OsStr::new("pbuf"))
-                || path.ends_with(UNVERIFIED_CHECKPOINT_MARKER)
-            {
+            if path.extension() == Some(OsStr::new("pbuf")) {
                 // Do not copy protobufs.
-                //
-                // At this point, the unverified checkpoint marker may still be present in the checkpoint.
-                // We should not copy it back to the tip because it will be created later when promoting the tip as the next checkpoint.
                 CopyInstruction::Skip
-            } else if path.extension() == Some(OsStr::new("bin"))
+            } else if path.ends_with(UNVERIFIED_CHECKPOINT_MARKER)
+                && lsmt_storage == FlagStatus::Disabled {
+                // With LSMT disabled, the unverified checkpoint marker is still present in the checkpoint at this point.
+                // We should not copy it back to the tip because it will be created later when promoting the tip as the next checkpoint.
+                // When we go for asynchronous checkpointing in the future, we should revisit this as the marker file will have a different lifespan.
+                CopyInstruction::Skip
+            }
+            else if path.extension() == Some(OsStr::new("bin"))
                 && lsmt_storage == FlagStatus::Disabled
             {
                 // PageMap files need to be modified in the tip,
