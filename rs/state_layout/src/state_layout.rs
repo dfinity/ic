@@ -368,13 +368,13 @@ impl TipHandler {
                 // Do not copy protobufs.
                 CopyInstruction::Skip
             } else if path.ends_with(UNVERIFIED_CHECKPOINT_MARKER)
-                && lsmt_storage == FlagStatus::Disabled {
+                && lsmt_storage == FlagStatus::Disabled
+            {
                 // With LSMT disabled, the unverified checkpoint marker is still present in the checkpoint at this point.
                 // We should not copy it back to the tip because it will be created later when promoting the tip as the next checkpoint.
                 // When we go for asynchronous checkpointing in the future, we should revisit this as the marker file will have a different lifespan.
                 CopyInstruction::Skip
-            }
-            else if path.extension() == Some(OsStr::new("bin"))
+            } else if path.extension() == Some(OsStr::new("bin"))
                 && lsmt_storage == FlagStatus::Disabled
             {
                 // PageMap files need to be modified in the tip,
@@ -1439,7 +1439,11 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     /// Creates the unverified checkpoint marker.
     pub fn create_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
-        open_for_write(&self.unverified_checkpoint_marker())?;
+        let marker = self.unverified_checkpoint_marker();
+        if marker.exists() {
+            return Ok(());
+        }
+        open_for_write(&marker)?;
         sync_path(&self.root).map_err(|err| LayoutError::IoError {
             path: self.root.clone(),
             message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
@@ -1449,14 +1453,14 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     /// Removes the unverified checkpoint marker.
     pub fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
-        let path = self.unverified_checkpoint_marker();
-        if !path.exists() {
+        let marker = self.unverified_checkpoint_marker();
+        if !marker.exists() {
             return Ok(());
         }
-        match std::fs::remove_file(&path) {
+        match std::fs::remove_file(&marker) {
             Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
                 return Err(LayoutError::IoError {
-                    path: path.to_path_buf(),
+                    path: marker.to_path_buf(),
                     message: "failed to remove file from disk".to_string(),
                     io_err: err,
                 });
