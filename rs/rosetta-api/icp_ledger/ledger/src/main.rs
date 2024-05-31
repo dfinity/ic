@@ -36,7 +36,11 @@ use icp_ledger::{
 };
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
-    icrc21::lib::ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE_DETAILS, icrc3::archive::QueryArchiveFn,
+    icrc21::lib::{
+        ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE_DETAILS, ICRC2_APPROVE_GENERIC_DISPLAY_MESSAGE,
+        ICRC2_APPROVE_GENERIC_DISPLAY_MESSAGE_DETAILS, ICRC2_APPROVE_LINE_DISPLAY_MESSAGE,
+    },
+    icrc3::archive::QueryArchiveFn,
 };
 use icrc_ledger_types::{
     icrc1::account::Account, icrc2::transfer_from::TransferFromArgs,
@@ -1543,9 +1547,69 @@ fn icrc21_canister_call_consent_message(
             ),
         }));
     }
-    match consent_msg_request.method.as_str() {
-        "icrc1_transfer" => {
-            match Decode!(&consent_msg_request.arg, TransferArg) {
+
+    // only English supported
+    let metadata = ConsentMessageMetadata {
+        language: "en".to_string(),
+    };
+    let caller_principal = caller().0;
+    let ledger_fee = Nat::from(LEDGER.read().unwrap().transfer_fee.get_e8s());
+    let token_symbol = LEDGER.read().unwrap().token_symbol.clone();
+
+    let get_generic_message_string = |details: bool| -> Result<String, Icrc21Error> {
+        Ok(match consent_msg_request.method.as_str() {
+            "icrc1_transfer" => {
+                if details {
+                    format!(
+                        "{}\n{}",
+                        ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE,
+                        ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE_DETAILS
+                    )
+                } else {
+                    ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE.to_string()
+                }
+            }
+            "icrc2_approve" => {
+                if details {
+                    format!(
+                        "{}\n{}",
+                        ICRC2_APPROVE_GENERIC_DISPLAY_MESSAGE,
+                        ICRC2_APPROVE_GENERIC_DISPLAY_MESSAGE_DETAILS
+                    )
+                } else {
+                    ICRC2_APPROVE_GENERIC_DISPLAY_MESSAGE.to_string()
+                }
+            }
+            _ => {
+                return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                    description: "Unsupported method.".to_string(),
+                }))
+            }
+        })
+    };
+
+    let get_line_message_str = || -> Result<String, Icrc21Error> {
+        Ok(match consent_msg_request.method.as_str() {
+            "icrc1_transfer" => ICRC1_TRANSFER_LINE_DISPLAY_MESSAGE.to_string(),
+            "icrc2_approve" => ICRC2_APPROVE_LINE_DISPLAY_MESSAGE.to_string(),
+            _ => {
+                return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                    description: "Unsupported method.".to_string(),
+                }))
+            }
+        })
+    };
+
+    // Extracts a mapping of variables from the final message that need to be replaced by the user's function parameters
+    let get_message_variables = || -> Result<HashMap<String, String>, Icrc21Error> {
+        // Variables in the returned message that need to be replaced by the user's function parameters
+        let mut display_message_variables = HashMap::new();
+
+        display_message_variables.insert("LEDGER_FEE".to_string(), ledger_fee.to_string());
+        display_message_variables.insert("TOKEN_SYMBOL".to_string(), token_symbol);
+
+        match consent_msg_request.method.as_str() {
+            "icrc1_transfer" => match Decode!(&consent_msg_request.arg, TransferArg) {
                 Ok(TransferArg {
                     from_subaccount,
                     to,
@@ -1554,98 +1618,121 @@ fn icrc21_canister_call_consent_message(
                     memo,
                     amount,
                 }) => {
-                    // only English supported
-                    let metadata = ConsentMessageMetadata {
-                        language: "en".to_string(),
-                    };
-                    let caller_principal = caller().0;
                     let sender_account = Account {
                         owner: caller_principal,
                         subaccount: from_subaccount,
                     };
-                    let transfer_fee = Nat::from(LEDGER.read().unwrap().transfer_fee.get_e8s());
-                    let token_symbol = LEDGER.read().unwrap().token_symbol.clone();
 
-                    match consent_msg_request.user_preferences.device_spec {
-                        Some(DisplayMessageType::LineDisplay {
-                            characters_per_line,
-                            lines_per_page,
-                        }) => {
-                            if characters_per_line == 0 || lines_per_page == 0 {
-                                return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                                    description: "Invalid display message specification."
-                                        .to_string(),
-                                }));
-                            }
-
-                            Ok(ConsentInfo {
-                                metadata,
-                                consent_message: ConsentMessage::LineDisplayMessage {
-                                    pages: consent_msg_text_pages(
-                                        &ICRC1_TRANSFER_LINE_DISPLAY_MESSAGE
-                                            .replace("{AMOUNT}", &amount.to_string())
-                                            .replace(
-                                                "{SENDER_ACCOUNT}",
-                                                &sender_account.to_string(),
-                                            )
-                                            .replace("{RECEIVER_ACCOUNT}", &to.to_string())
-                                            .replace("{LEDGER_FEE}", &transfer_fee.to_string())
-                                            .replace(
-                                                "{MEMO}",
-                                                &format!("{:?}", memo).replace(' ', ""),
-                                            )
-                                            .replace("{TOKEN_SYMBOL}", &token_symbol),
-                                        characters_per_line,
-                                        lines_per_page,
-                                    ),
-                                },
-                            })
-                        }
-                        Some(DisplayMessageType::GenericDisplay) => Ok(ConsentInfo {
-                            metadata,
-                            consent_message: ConsentMessage::GenericDisplayMessage(
-                                format!(
-                                    "{}\n{}\n{}",
-                                    ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE,
-                                    "-".repeat(3),
-                                    ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE_DETAILS
-                                )
-                                .replace("{AMOUNT}", &amount.to_string())
-                                .replace("{SENDER_ACCOUNT}", &sender_account.to_string())
-                                .replace("{RECEIVER_ACCOUNT}", &to.to_string())
-                                .replace("{LEDGER_FEE}", &transfer_fee.to_string())
-                                .replace("{TOKEN_SYMBOL}", &token_symbol.to_string())
-                                .replace("{MEMO}", &format!("{:?}", memo).replace(' ', ""))
-                                .replace("{FEE_SET}", &format!("{:?}", fee))
-                                .replace("{CREATED_AT_TIME}", &format!("{:?}", created_at_time)),
-                            ),
-                        }),
-
-                        None => Ok(ConsentInfo {
-                            metadata,
-                            consent_message: ConsentMessage::GenericDisplayMessage(
-                                ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE
-                                    .replace("{AMOUNT}", &amount.to_string())
-                                    .replace("{SENDER_ACCOUNT}", &sender_account.to_string())
-                                    .replace("{RECEIVER_ACCOUNT}", &to.to_string())
-                                    .replace("{LEDGER_FEE}", &transfer_fee.to_string())
-                                    .replace("{TOKEN_SYMBOL}", &token_symbol.to_string()),
-                            ),
-                        }),
-                    }
+                    display_message_variables.insert("AMOUNT".to_string(), amount.to_string());
+                    display_message_variables
+                        .insert("SENDER_ACCOUNT".to_string(), sender_account.to_string());
+                    display_message_variables
+                        .insert("RECEIVER_ACCOUNT".to_string(), to.to_string());
+                    display_message_variables
+                        .insert("MEMO".to_string(), format!("{:?}", memo).replace(' ', ""));
+                    display_message_variables.insert(
+                        "CREATED_AT_TIME".to_string(),
+                        format!("{:?}", created_at_time),
+                    );
+                    display_message_variables.insert("FEE_SET".to_string(), format!("{:?}", fee));
                 }
-                Err(err) => Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                    description: format!("Failed to decode the argument: {}", err),
-                })),
+                Err(err) => {
+                    return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                        description: format!("Failed to decode the argument: {}", err),
+                    }))
+                }
+            },
+            "icrc2_approve" => match Decode!(&consent_msg_request.arg, ApproveArgs) {
+                Ok(ApproveArgs {
+                    from_subaccount,
+                    spender,
+                    amount,
+                    fee,
+                    created_at_time,
+                    memo,
+                    expires_at,
+                    expected_allowance,
+                }) => {
+                    let approver_account = Account {
+                        owner: caller_principal,
+                        subaccount: from_subaccount,
+                    };
+
+                    display_message_variables.insert("AMOUNT".to_string(), amount.to_string());
+                    display_message_variables
+                        .insert("APPROVER_ACCOUNT".to_string(), approver_account.to_string());
+                    display_message_variables
+                        .insert("SPENDER_ACCOUNT".to_string(), spender.to_string());
+                    display_message_variables
+                        .insert("MEMO".to_string(), format!("{:?}", memo).replace(' ', ""));
+                    display_message_variables.insert(
+                        "CREATED_AT_TIME".to_string(),
+                        format!("{:?}", created_at_time),
+                    );
+                    display_message_variables.insert(
+                        "EXPECTED_ALLOWANCE".to_string(),
+                        format!("{:?}", expected_allowance),
+                    );
+                    display_message_variables
+                        .insert("EXPIRES_AT".to_string(), format!("{:?}", expires_at));
+                    display_message_variables.insert("FEE_SET".to_string(), format!("{:?}", fee));
+                }
+                Err(err) => {
+                    return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                        description: format!("Failed to decode the argument: {}", err),
+                    }))
+                }
+            },
+            _ => {
+                return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                    description: "Unsupported method.".to_string(),
+                }))
+            }
+        };
+        Ok(display_message_variables)
+    };
+
+    // Replaces the variables' placeholders of the message with the values set by the user
+    let replace_variables = |mut message: String, variables: HashMap<String, String>| -> String {
+        for (key, value) in variables {
+            message = message.replace(&key, &value);
+        }
+        message
+    };
+
+    let consent_message = match consent_msg_request.user_preferences.device_spec {
+        Some(DisplayMessageType::LineDisplay {
+            characters_per_line,
+            lines_per_page,
+        }) => {
+            // Cannot display a message if either characters_per_line or lines_per_page is 0
+            if characters_per_line == 0 || lines_per_page == 0 {
+                return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                    description: "Invalid display message specification.".to_string(),
+                }));
+            }
+
+            ConsentMessage::LineDisplayMessage {
+                pages: consent_msg_text_pages(
+                    &replace_variables(get_line_message_str()?, get_message_variables()?),
+                    characters_per_line,
+                    lines_per_page,
+                ),
             }
         }
-        method => Err(Icrc21Error::ConsentMessageUnavailable(ErrorInfo {
-            description: format!(
-                "Function method {} is not supported by the ICP ledger.",
-                method
-            ),
-        })),
-    }
+        Some(DisplayMessageType::GenericDisplay) => ConsentMessage::GenericDisplayMessage(
+            replace_variables(get_generic_message_string(true)?, get_message_variables()?),
+        ),
+        None => ConsentMessage::GenericDisplayMessage(replace_variables(
+            get_generic_message_string(false)?,
+            get_message_variables()?,
+        )),
+    };
+
+    Ok(ConsentInfo {
+        metadata,
+        consent_message,
+    })
 }
 
 #[export_name = "canister_query icrc21_canister_call_consent_message"]
