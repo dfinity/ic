@@ -267,13 +267,11 @@ go_deps.bzl               @dfinity/idx
 /rs/types/types/src/batch.rs                            @dfinity/consensus
 /rs/types/types/src/batch/                              @dfinity/consensus
 /rs/types/types/src/canister_http.rs                    @dfinity/execution @dfinity/consensus
-/rs/types/types/src/chunkable.rs                        @dfinity/networking
 /rs/types/types/src/consensus.rs                        @dfinity/consensus
 /rs/types/types/src/consensus/                          @dfinity/consensus
 /rs/types/types/src/crypto.rs                           @dfinity/dept-crypto-library
 /rs/types/types/src/crypto/                             @dfinity/dept-crypto-library
 /rs/types/types/src/exhaustive.rs                       @dfinity/consensus
-/rs/types/types/src/p2p.rs                              @dfinity/networking
 /rs/types/types/src/signature.rs                        @dfinity/consensus
 /rs/types/types/src/signature/                          @dfinity/consensus
 /rs/types/wasm_types/                                   @dfinity/runtime
