@@ -39,7 +39,7 @@ use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, Instant};
 use tower_http::trace::TraceLayer;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::EnvFilter;
 
@@ -235,7 +235,9 @@ async fn start(runtime: Arc<Runtime>) {
             drop(guard);
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
-        info!("The PocketIC server will terminate");
+
+        debug!("The PocketIC server will terminate");
+
         if use_port_file {
             // Clean up port file.
             let _ = std::fs::remove_file(port_file_path.unwrap());
