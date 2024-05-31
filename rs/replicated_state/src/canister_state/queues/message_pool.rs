@@ -650,17 +650,17 @@ impl From<&MessagePool> for pb_queues::MessagePool {
             messages: item
                 .messages
                 .iter()
-                .map(|(message_id, message)| Entry {
-                    message_id: message_id.0,
+                .map(|(id, message)| Entry {
+                    id: id.0,
                     message: Some(message.into()),
                 })
                 .collect(),
             outbound_guaranteed_request_deadlines: item
                 .outbound_guaranteed_request_deadlines
                 .iter()
-                .map(|(message_id, deadline)| MessageDeadline {
+                .map(|(id, deadline)| MessageDeadline {
                     deadline_seconds: deadline.as_secs_since_unix_epoch(),
-                    message_id: message_id.0,
+                    id: id.0,
                 })
                 .collect(),
             message_id_generator: item.message_id_generator,
@@ -677,9 +677,9 @@ impl TryFrom<pb_queues::MessagePool> for MessagePool {
             .messages
             .into_iter()
             .map(|entry| {
-                let message_id = Id(entry.message_id);
+                let id = Id(entry.id);
                 let message = try_from_option_field(entry.message, "MessagePool::Entry::message")?;
-                Ok((message_id, message))
+                Ok((id, message))
             })
             .collect::<Result<_, Self::Error>>()?;
         if messages.len() != message_count {
@@ -691,9 +691,9 @@ impl TryFrom<pb_queues::MessagePool> for MessagePool {
             .outbound_guaranteed_request_deadlines
             .into_iter()
             .map(|entry| {
-                let message_id = Id(entry.message_id);
+                let id = Id(entry.id);
                 let deadline = CoarseTime::from_secs_since_unix_epoch(entry.deadline_seconds);
-                (message_id, deadline)
+                (id, deadline)
             })
             .collect();
 
