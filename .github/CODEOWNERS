@@ -7,7 +7,7 @@
 /.github/                 @dfinity/idx
 /buf.yaml                 @dfinity/ic-message-routing-owners
 /cpp/                     @dfinity/node
-/hs/                      @dfinity-lab/teams/utopia
+/hs/                      @dfinity/utopia
 /licenses/                @dfinity/idx
 /bin/ict                  @dfinity/idx
 /bin/                     @dfinity/idx
@@ -47,7 +47,7 @@ go_deps.bzl               @dfinity/idx
 /packages/icrc-ledger-agent/         @dfinity/finint
 /packages/icrc-ledger-types/         @dfinity/finint
 /packages/ic-ledger-hash-of/         @dfinity/finint
-/packages/pocket-ic/                 @dfinity-lab/teams/utopia
+/packages/pocket-ic/                 @dfinity/utopia
 /packages/ic-vetkd-utils/            @dfinity/dept-crypto-library
 
 # [IC-OS]
@@ -159,10 +159,10 @@ go_deps.bzl               @dfinity/idx
 /rs/orchestrator/                                       @dfinity/consensus
 /rs/orchestrator/src/hostos_upgrade.rs                  @dfinity/consensus @dfinity/node
 /rs/p2p/                                                @dfinity/networking
-/rs/pocket_ic_server/                                   @dfinity-lab/teams/utopia
-/rs/prep/                                               @dfinity-lab/teams/utopia
+/rs/pocket_ic_server/                                   @dfinity/utopia
+/rs/prep/                                               @dfinity/utopia
 /rs/protobuf/                                           @dfinity/ic-interface-owners
-/rs/protobuf/def/bitcoin/                               @dfinity-lab/teams/execution-team
+/rs/protobuf/def/bitcoin/                               @dfinity/execution
 /rs/protobuf/def/canister_http/                         @dfinity/consensus
 /rs/protobuf/def/crypto/                                @dfinity/dept-crypto-library
 /rs/protobuf/def/messaging/                             @dfinity/ic-message-routing-owners
@@ -170,7 +170,7 @@ go_deps.bzl               @dfinity/idx
 /rs/protobuf/def/registry/                              @dfinity/nns-team
 /rs/protobuf/def/state/                                 @dfinity/execution @dfinity/ic-message-routing-owners
 /rs/protobuf/def/types/                                 @dfinity/ic-interface-owners
-/rs/protobuf/gen/bitcoin/                               @dfinity-lab/teams/execution-team
+/rs/protobuf/gen/bitcoin/                               @dfinity/execution
 /rs/protobuf/gen/canister_http/                         @dfinity/consensus
 /rs/protobuf/gen/crypto/                                @dfinity/dept-crypto-library
 /rs/protobuf/gen/messaging/                             @dfinity/ic-message-routing-owners
@@ -211,7 +211,7 @@ go_deps.bzl               @dfinity/idx
 /rs/stable-structures/                                  @dfinity/execution
 /rs/starter/                                            @dfinity/networking
 /rs/state_layout/                                       @dfinity/ic-message-routing-owners
-/rs/state_machine_tests/                                @dfinity/ic-message-routing-owners @dfinity-lab/teams/utopia
+/rs/state_machine_tests/                                @dfinity/ic-message-routing-owners @dfinity/utopia
 /rs/state_manager/                                      @dfinity/ic-message-routing-owners
 /rs/state_tool/                                         @dfinity/ic-message-routing-owners
 /rs/system_api/                                         @dfinity/execution
