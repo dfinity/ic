@@ -2813,10 +2813,6 @@ impl StateManager for StateManagerImpl {
                         Ok(_) => {
                             let (state, cp_layout) = load_checkpoint(&self.state_layout, height, &self.metrics, self.own_subnet_type, Arc::clone(&self.get_fd_factory()))
                                 .expect("failed to load checkpoint");
-                            // During subnet recovery, the cloned checkpoint does not include a marker file.
-                            // However, we still call `remove_unverified_checkpoint_marker()` to ensure consistent behavior.
-                            // Under normal circumstances, this function call should effectively be a no-op.
-                            cp_layout.remove_unverified_checkpoint_marker().expect("unexpected error happens when removing the marker");
                             self.on_synced_checkpoint(state, cp_layout, manifest, meta_manifest, root_hash);
                             return;
                         }
