@@ -682,7 +682,6 @@ mod tests {
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_sign_with_ecdsa_calls;
     use crate::ecdsa::payload_builder::pre_signatures::test_utils::create_available_quadruple;
-    use crate::ecdsa::payload_builder::pre_signatures::test_utils::create_new_quadruple_in_creation;
     use crate::ecdsa::test_utils::*;
     use crate::ecdsa::utils::block_chain_reader;
     use crate::ecdsa::utils::get_context_request_id;
@@ -1130,8 +1129,7 @@ mod tests {
                     expected_transcripts.insert(transcript_ref.transcript_id);
                 }
             };
-            let key_id = fake_ecdsa_key_id();
-            let master_key_id = MasterPublicKeyId::Ecdsa(key_id.clone());
+            let master_key_id = fake_ecdsa_master_public_key_id();
 
             // Create a summary block with transcripts
             let summary_height = Height::new(5);
@@ -1206,7 +1204,7 @@ mod tests {
                 .available_pre_signatures
                 .insert(pre_sig_id_2, PreSignatureRef::Ecdsa(quad_2.clone()));
 
-            let req_1 = create_reshare_request(master_key_id, 1, 1);
+            let req_1 = create_reshare_request(master_key_id.clone(), 1, 1);
             ecdsa_payload
                 .ongoing_xnet_reshares
                 .insert(req_1, reshare_params_1.clone());
@@ -1218,28 +1216,26 @@ mod tests {
 
             // Add some quadruples in creation
             let block_reader = TestEcdsaBlockReader::new();
-            let (kappa_config_ref, _lambda_config_ref) =
-                pre_signatures::test_utils::create_new_quadruple_in_creation(
+            let [_, ref kappa_config_ref] =
+                pre_signatures::test_utils::create_new_pre_signature_in_creation(
                     &subnet_nodes,
                     env.newest_registry_version,
                     &mut ecdsa_payload.uid_generator,
-                    key_id.clone(),
+                    master_key_id.clone(),
                     &mut ecdsa_payload.pre_signatures_in_creation,
-                );
-            let kappa_transcript = {
-                let param = kappa_config_ref.as_ref();
-                env.nodes.run_idkg_and_create_and_verify_transcript(
-                    &param.translate(&block_reader).unwrap(),
-                    &mut rng,
-                )
+                )[..]
+            else {
+                panic!("Should return two configs");
             };
-            transcript_builder.add_transcript(
-                kappa_config_ref.as_ref().transcript_id,
-                kappa_transcript.clone(),
+            let kappa_transcript = env.nodes.run_idkg_and_create_and_verify_transcript(
+                &kappa_config_ref.translate(&block_reader).unwrap(),
+                &mut rng,
             );
+            transcript_builder
+                .add_transcript(kappa_config_ref.transcript_id, kappa_transcript.clone());
             ecdsa_payload
                 .idkg_transcripts
-                .insert(kappa_config_ref.as_ref().transcript_id, kappa_transcript);
+                .insert(kappa_config_ref.transcript_id, kappa_transcript);
             let parent_block_height = Height::new(15);
             let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut ecdsa_payload,
@@ -1365,8 +1361,7 @@ mod tests {
             let mut rng = reproducible_rng();
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
-            let ecdsa_key_id = fake_ecdsa_key_id();
-            let master_public_key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
+            let master_public_key_id = fake_ecdsa_master_public_key_id();
             let transcript_builder = TestEcdsaTranscriptBuilder::new();
             // Create a summary block with transcripts
             let summary_height = Height::new(5);
@@ -1455,30 +1450,28 @@ mod tests {
                 idkg::CompletedReshareRequest::Unreported(empty_response()),
             );
 
-            // Add some quadruples in creation
+            // Add some pre-signature in creation
             let block_reader = TestEcdsaBlockReader::new();
-            let (kappa_config_ref, _lambda_config_ref) =
-                pre_signatures::test_utils::create_new_quadruple_in_creation(
+            let [_, ref kappa_config_ref] =
+                pre_signatures::test_utils::create_new_pre_signature_in_creation(
                     &subnet_nodes,
                     env.newest_registry_version,
                     &mut ecdsa_payload.uid_generator,
-                    ecdsa_key_id.clone(),
+                    master_public_key_id.clone(),
                     &mut ecdsa_payload.pre_signatures_in_creation,
-                );
-            let kappa_transcript = {
-                let param = kappa_config_ref.as_ref();
-                env.nodes.run_idkg_and_create_and_verify_transcript(
-                    &param.translate(&block_reader).unwrap(),
-                    &mut rng,
-                )
+                )[..]
+            else {
+                panic!("Should return two configs");
             };
-            transcript_builder.add_transcript(
-                kappa_config_ref.as_ref().transcript_id,
-                kappa_transcript.clone(),
+            let kappa_transcript = env.nodes.run_idkg_and_create_and_verify_transcript(
+                &kappa_config_ref.translate(&block_reader).unwrap(),
+                &mut rng,
             );
+            transcript_builder
+                .add_transcript(kappa_config_ref.transcript_id, kappa_transcript.clone());
             ecdsa_payload
                 .idkg_transcripts
-                .insert(kappa_config_ref.as_ref().transcript_id, kappa_transcript);
+                .insert(kappa_config_ref.transcript_id, kappa_transcript);
             let parent_block_height = Height::new(15);
             let result = pre_signatures::update_pre_signatures_in_creation(
                 &mut ecdsa_payload,
@@ -1867,11 +1860,11 @@ mod tests {
             for (transcript_ref, transcript) in test_inputs.idkg_transcripts {
                 block_reader.add_transcript(transcript_ref, transcript);
             }
-            create_new_quadruple_in_creation(
+            pre_signatures::test_utils::create_new_pre_signature_in_creation(
                 &env.nodes.ids::<Vec<_>>(),
                 env.newest_registry_version,
                 &mut payload_0.uid_generator,
-                key_id.clone(),
+                master_public_key_id.clone(),
                 &mut payload_0.pre_signatures_in_creation,
             );
             payload_0.ongoing_xnet_reshares.insert(
