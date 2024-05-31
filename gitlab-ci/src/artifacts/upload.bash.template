@@ -26,6 +26,11 @@ if [ -L "$f" ];then
     f=$(readlink "$f")
 fi
 
+if [ "$(basename $f)" == "SHA256SUMS" ]; then
+    echo "SHA256SUMS Content:" >&2
+    cat "$f" >&2
+fi
+
 # Multipart upload does not work trough the proxy for some reasons. Just disabling it for now.
 "@@RCLONE@@" \
     --config="@@RCLONE_CONFIG@@" \
