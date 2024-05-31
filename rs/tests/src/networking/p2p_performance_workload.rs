@@ -33,6 +33,12 @@ const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // Thi
 
 const JAEGER_VM_NAME: &str = "jaeger-vm";
 
+pub enum Latency {
+    No,
+    Lhg73,
+    Constant(Duration),
+}
+
 // Create an IC with two subnets, with variable number of nodes.
 // Install NNS canister on system subnet.
 pub fn config(
@@ -119,7 +125,7 @@ pub fn test(
     rps: usize,
     payload_size_bytes: usize,
     duration: Duration,
-    latency: Option<Duration>,
+    latency: Latency,
     download_prometheus_data: bool,
 ) {
     let log = env.logger();
@@ -178,16 +184,32 @@ pub fn test(
         }
     });
     info!(&log, "All agents observe the installed canister module.");
-
-    if let Some(latency) = latency {
-        info!(&log, "Step 4: Modify network control settings.");
-        app_subnet.nodes().for_each(|node| {
-            let session = node
-                .block_on_ssh_session()
-                .expect("Failed to ssh into node");
-            node.block_on_bash_script_from_session(&session, &limit_tc_ssh_command(latency))
-                .expect("Failed to execute bash script from session");
-        });
+    match latency {
+        Latency::No => {}
+        Latency::Lhg73 => {
+            let tc = lhg73_29_5_2024_latency(
+                &app_subnet
+                    .nodes()
+                    .map(|n| n.get_ip_addr())
+                    .collect::<Vec<_>>(),
+            );
+            app_subnet.nodes().enumerate().for_each(|(idx, node)| {
+                let session = node
+                    .block_on_ssh_session()
+                    .expect("Failed to ssh into node");
+                node.block_on_bash_script_from_session(&session, &tc[idx])
+                    .expect("Failed to execute bash script from session");
+            });
+        }
+        Latency::Constant(value) => {
+            app_subnet.nodes().enumerate().for_each(|(_, node)| {
+                let session = node
+                    .block_on_ssh_session()
+                    .expect("Failed to ssh into node");
+                node.block_on_bash_script_from_session(&session, &limit_tc_ssh_command(value))
+                    .expect("Failed to execute bash script from session");
+            });
+        }
     }
 
     info!(&log, "Step 5: Start workload.");
@@ -268,3 +290,418 @@ fn limit_tc_ssh_command(latency: Duration) -> String {
         latency_ms = latency.as_millis(),
     )
 }
+
+fn lhg73_29_5_2024_latency(nodes: &[IpAddr]) -> [String; 13] {
+    assert_eq!(nodes.len(), 13);
+
+    const ARRAY_REPEAT_VALUE: std::string::String = String::new();
+    let mut tcs: [String; 13] = [ARRAY_REPEAT_VALUE; 13];
+
+    for i in 0..13 {
+        let mut tc = String::from("sudo tc qdisc del dev enp1s0 root 2> /dev/null || true \n");
+        tc.push_str("sudo tc qdisc add dev enp1s0 root handle 1: prio \n");
+        let src_ip = nodes[i];
+        for j in 0..13 {
+            if i == j {
+                continue;
+            }
+            let dst_ip = nodes[j];
+            tc.push_str(&format!(
+                "sudo tc qdisc add dev enp1s0 parent 1:{j} handle {j}0: netem limit 10000000 loss {:.3}% delay {}ms \n",
+                LHG73_PACKET_LOSS[(12) * i + j].2 * 100.0,
+                (LHG_73_LATENCY[(12) * i + j].2 * 1000.0 / 2.0) as u64
+            ));
+            tc.push_str(&format!("sudo tc filter add dev enp1s0 protocol ip parent 1:0 prio {j} u32 match ip6 src {src_ip} match ip6 dst {dst_ip} flowid 1:{j} \n"));
+        }
+        tcs[i] = tc;
+    }
+    tcs
+}
+
+/*
+Small script to parse text formatted prometheus table data
+
+peer1 peer2 value
+peer1 peer3 value
+peer2 peer1 value
+...
+
+
+import sys
+
+"""
+LATENCY
+
+sum by (ic_node,peer) (quic_transport_quinn_path_rtt_seconds{ic_subnet="lhg73-sax6z-2zank-6oer2-575lz-zgbxx-ptudx-5korm-fy7we-kh4hl-pqe"})
+
+PACKETLOSS
+
+sum by (ic_node,peer) (
+  rate(quic_transport_quinn_path_lost_packets{ic_subnet="lhg73-sax6z-2zank-6oer2-575lz-zgbxx-ptudx-5korm-fy7we-kh4hl-pqe"}[10m]) /
+  rate(quic_transport_quinn_path_sent_packets{ic_subnet="lhg73-sax6z-2zank-6oer2-575lz-zgbxx-ptudx-5korm-fy7we-kh4hl-pqe"}[10m])
+)
+
+"""
+
+def process_data(input_file, output_file):
+    # Initialize a dictionary to hold ID to number mapping
+    id_to_number = {}
+    next_number = 1
+
+    # Read data from the input file
+    with open(input_file, 'r') as file:
+        data = file.readlines()
+
+    # Prepare to write to the output file
+    with open(output_file, 'w') as output:
+        # Process each line
+        for line in data:
+            # Split the line into components
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+
+            node_id, peer_id, value = parts[0], parts[1], parts[2]
+
+            # Assign numbers to node IDs if they haven't been assigned already
+            if node_id not in id_to_number:
+                id_to_number[node_id] = next_number
+                next_number += 1
+            if peer_id not in id_to_number:
+                id_to_number[peer_id] = next_number
+                next_number += 1
+
+            # Map node and peer IDs to their respective numbers
+            node_number = id_to_number[node_id]
+            peer_number = id_to_number[peer_id]
+
+            # Format the output
+            output_line = f"({node_number}, {peer_number}, {value}),\n"
+            output.write(output_line)
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: python process_data.py <input_file> <output_file>")
+    else:
+        input_file = sys.argv[1]
+        output_file = sys.argv[2]
+        process_data(input_file, output_file)
+*/
+
+const LHG_73_LATENCY: [(u64, u64, f64); 156] = [
+    (1, 2, 0.61712),
+    (1, 3, 0.16138),
+    (1, 4, 0.1979),
+    (1, 5, 0.31523),
+    (1, 6, 0.03331),
+    (1, 7, 0.0301),
+    (1, 8, 0.0968),
+    (1, 9, 0.1448),
+    (1, 10, 0.26926),
+    (1, 11, 0.04916),
+    (1, 12, 0.03823),
+    (1, 13, 0.31636),
+    (2, 1, 0.4457),
+    (2, 3, 0.21571),
+    (2, 4, 0.31776),
+    (2, 5, 0.31094),
+    (2, 6, 0.34994),
+    (2, 7, 0.24353),
+    (2, 8, 0.36381),
+    (2, 9, 0.05638),
+    (2, 10, 0.21407),
+    (2, 11, 0.33622),
+    (2, 12, 0.27787),
+    (2, 13, 0.03922),
+    (3, 1, 0.16143),
+    (3, 2, 0.21653),
+    (3, 4, 0.13629),
+    (3, 5, 0.1642),
+    (3, 6, 0.17138),
+    (3, 7, 0.13677),
+    (3, 8, 0.20414),
+    (3, 9, 0.24348),
+    (3, 10, 0.14349),
+    (3, 11, 0.15612),
+    (3, 12, 0.16038),
+    (3, 13, 0.16789),
+    (4, 1, 0.19735),
+    (4, 2, 0.32791),
+    (4, 3, 0.13626),
+    (4, 5, 0.24396),
+    (4, 6, 0.18301),
+    (4, 7, 0.16498),
+    (4, 8, 0.23006),
+    (4, 9, 0.28532),
+    (4, 10, 0.32546),
+    (4, 11, 0.17209),
+    (4, 12, 0.1687),
+    (4, 13, 0.3046),
+    (5, 1, 0.32781),
+    (5, 2, 0.31353),
+    (5, 3, 0.16413),
+    (5, 4, 0.24397),
+    (5, 6, 0.30252),
+    (5, 7, 0.28085),
+    (5, 8, 0.35983),
+    (5, 9, 0.25506),
+    (5, 10, 0.03217),
+    (5, 11, 0.2806),
+    (5, 12, 0.28543),
+    (5, 13, 0.39781),
+    (6, 1, 0.03333),
+    (6, 2, 0.35234),
+    (6, 3, 0.17143),
+    (6, 4, 0.18291),
+    (6, 5, 0.3025),
+    (6, 7, 0.02777),
+    (6, 8, 0.07972),
+    (6, 9, 0.1297),
+    (6, 10, 0.25978),
+    (6, 11, 0.02073),
+    (6, 12, 0.02456),
+    (6, 13, 0.33166),
+    (7, 1, 0.03004),
+    (7, 2, 0.24537),
+    (7, 3, 0.13675),
+    (7, 4, 0.16501),
+    (7, 5, 0.27803),
+    (7, 6, 0.02777),
+    (7, 8, 0.07466),
+    (7, 9, 0.13592),
+    (7, 10, 0.23801),
+    (7, 11, 0.01887),
+    (7, 12, 0.01972),
+    (7, 13, 0.29473),
+    (8, 1, 0.09677),
+    (8, 2, 0.34166),
+    (8, 3, 0.20411),
+    (8, 4, 0.23096),
+    (8, 5, 0.35981),
+    (8, 6, 0.0798),
+    (8, 7, 0.07474),
+    (8, 9, 0.17424),
+    (8, 10, 0.30549),
+    (8, 11, 0.08596),
+    (8, 12, 0.08187),
+    (8, 13, 0.27698),
+    (9, 1, 0.14482),
+    (9, 2, 0.05636),
+    (9, 3, 0.24343),
+    (9, 4, 0.28514),
+    (9, 5, 0.25525),
+    (9, 6, 0.12969),
+    (9, 7, 0.13586),
+    (9, 8, 0.17429),
+    (9, 10, 0.25616),
+    (9, 11, 0.10919),
+    (9, 12, 0.14037),
+    (9, 13, 0.23707),
+    (10, 1, 0.26862),
+    (10, 2, 0.19502),
+    (10, 3, 0.16683),
+    (10, 4, 0.29872),
+    (10, 5, 0.03211),
+    (10, 6, 0.25981),
+    (10, 7, 0.23806),
+    (10, 8, 0.30551),
+    (10, 9, 0.25588),
+    (10, 11, 0.2647),
+    (10, 12, 0.27553),
+    (10, 13, 0.05266),
+    (11, 1, 0.04922),
+    (11, 2, 0.32807),
+    (11, 3, 0.15616),
+    (11, 4, 0.17251),
+    (11, 5, 0.28066),
+    (11, 6, 0.02084),
+    (11, 7, 0.01885),
+    (11, 8, 0.08604),
+    (11, 9, 0.10918),
+    (11, 10, 0.26476),
+    (11, 12, 0.02555),
+    (11, 13, 0.2858),
+    (12, 1, 0.03829),
+    (12, 2, 0.27083),
+    (12, 3, 0.16036),
+    (12, 4, 0.16875),
+    (12, 5, 0.2854),
+    (12, 6, 0.02457),
+    (12, 7, 0.01961),
+    (12, 8, 0.08141),
+    (12, 9, 0.1404),
+    (12, 10, 0.27557),
+    (12, 11, 0.02553),
+    (12, 13, 0.30877),
+    (13, 1, 0.31634),
+    (13, 2, 0.03919),
+    (13, 3, 0.16781),
+    (13, 4, 0.31543),
+    (13, 5, 0.40834),
+    (13, 6, 0.32947),
+    (13, 7, 0.2947),
+    (13, 8, 0.27695),
+    (13, 9, 0.23713),
+    (13, 10, 0.05268),
+    (13, 11, 0.29273),
+    (13, 12, 0.30878),
+];
+
+const LHG73_PACKET_LOSS: [(u64, u64, f64); 156] = [
+    (1, 2, 0.10996749729144095),
+    (1, 3, 0.0),
+    (1, 4, 0.00014506208657305328),
+    (1, 5, 0.00017493731412910373),
+    (1, 6, 0.0),
+    (1, 7, 0.00021835849005104132),
+    (1, 8, 0.000028244598220590316),
+    (1, 9, 0.0),
+    (1, 10, 0.00017437298381237467),
+    (1, 11, 0.0004203211253397596),
+    (1, 12, 0.00025079418157498745),
+    (1, 13, 0.00017522852720422885),
+    (2, 1, 0.46462264150943394),
+    (2, 3, 0.0),
+    (2, 4, 0.004377136649733218),
+    (2, 5, 0.0),
+    (2, 6, 0.0038299891540130152),
+    (2, 7, 0.5499092558983666),
+    (2, 8, 0.13039882959099292),
+    (2, 9, 0.0),
+    (2, 10, 0.00035081564637782847),
+    (2, 11, 0.00006247461968575268),
+    (2, 12, 0.00002988196623337816),
+    (2, 13, 0.0),
+    (3, 1, 0.00011286681715575621),
+    (3, 2, 0.0398395352054226),
+    (3, 4, 0.0),
+    (3, 5, 0.0),
+    (3, 6, 0.0),
+    (3, 7, 0.0),
+    (3, 8, 0.0008279800142755175),
+    (3, 9, 0.0),
+    (3, 10, 0.00046834536338090247),
+    (3, 11, 0.0),
+    (3, 12, 0.0),
+    (3, 13, 0.0),
+    (4, 1, 0.0),
+    (4, 2, 0.016789015769439915),
+    (4, 3, 0.0),
+    (4, 5, 0.0),
+    (4, 6, 0.0),
+    (4, 7, 0.0),
+    (4, 8, 0.000058462437883659755),
+    (4, 9, 0.0),
+    (4, 10, 0.0009978868278938716),
+    (4, 11, 0.0),
+    (4, 12, 0.0),
+    (4, 13, 0.000029207313511303232),
+    (5, 1, 0.0008459496514104023),
+    (5, 2, 0.0),
+    (5, 3, 0.0),
+    (5, 4, 0.0),
+    (5, 6, 0.0),
+    (5, 7, 0.0),
+    (5, 8, 0.0),
+    (5, 9, 0.0),
+    (5, 10, 0.0),
+    (5, 11, 0.0),
+    (5, 12, 0.000028875028875028877),
+    (5, 13, 0.00707166153564788),
+    (6, 1, 0.00016115602589240148),
+    (6, 2, 0.022668947818648418),
+    (6, 3, 0.0),
+    (6, 4, 0.0),
+    (6, 5, 0.0),
+    (6, 7, 0.0),
+    (6, 8, 0.00005460601758313766),
+    (6, 9, 0.0),
+    (6, 10, 0.0),
+    (6, 11, 0.0),
+    (6, 12, 0.0),
+    (6, 13, 0.0),
+    (7, 1, 0.0029997857295907438),
+    (7, 2, 0.0033869115958668193),
+    (7, 3, 0.0032367831355299198),
+    (7, 4, 0.0033353887549750546),
+    (7, 5, 0.003399915002124947),
+    (7, 6, 0.0025975461478943297),
+    (7, 8, 0.0030563669804176134),
+    (7, 9, 0.0035285815102328866),
+    (7, 10, 0.002148109388339622),
+    (7, 11, 0.003549532107131333),
+    (7, 12, 0.003492063492063492),
+    (7, 13, 0.003373956545766557),
+    (8, 1, 0.00011341404632963793),
+    (8, 2, 0.021753561762753407),
+    (8, 3, 0.0),
+    (8, 4, 0.0),
+    (8, 5, 0.00023399338968674137),
+    (8, 6, 0.0),
+    (8, 7, 0.0),
+    (8, 9, 0.0),
+    (8, 10, 0.0009087977485268681),
+    (8, 11, 0.00016970725498515062),
+    (8, 12, 0.0),
+    (8, 13, 0.0),
+    (9, 1, 0.000055850321139346556),
+    (9, 2, 0.0),
+    (9, 3, 0.0),
+    (9, 4, 0.0),
+    (9, 5, 0.0),
+    (9, 6, 0.0),
+    (9, 7, 0.000027785495971103084),
+    (9, 8, 0.0003091190108191654),
+    (9, 10, 0.0),
+    (9, 11, 0.0),
+    (9, 12, 0.0),
+    (9, 13, 0.000029191114224829965),
+    (10, 1, 0.0013883264881124544),
+    (10, 2, 0.0),
+    (10, 3, 0.0),
+    (10, 4, 0.0),
+    (10, 5, 0.0),
+    (10, 6, 0.0),
+    (10, 7, 0.0),
+    (10, 8, 0.00002900063801403631),
+    (10, 9, 0.0),
+    (10, 11, 0.0),
+    (10, 12, 0.00014441684478077522),
+    (10, 13, 0.0),
+    (11, 1, 0.0),
+    (11, 2, 0.017175265040440823),
+    (11, 3, 0.0),
+    (11, 4, 0.0),
+    (11, 5, 0.0),
+    (11, 6, 0.0),
+    (11, 7, 0.0),
+    (11, 8, 0.000055944055944055945),
+    (11, 9, 0.0),
+    (11, 10, 0.0024500510427300573),
+    (11, 12, 0.0),
+    (11, 13, 0.20009510223490254),
+    (12, 1, 0.00005495562333415767),
+    (12, 2, 0.008612001832340814),
+    (12, 3, 0.00005611672278338946),
+    (12, 4, 0.0005651313930488839),
+    (12, 5, 0.000028395377232586536),
+    (12, 6, 0.00018987685129930016),
+    (12, 7, 0.0001321912013536379),
+    (12, 8, 0.00005529902950203224),
+    (12, 9, 0.00027585445918733276),
+    (12, 10, 0.0013517400057520852),
+    (12, 11, 0.0),
+    (12, 13, 0.00005702554744525548),
+    (13, 1, 0.00008762705923589204),
+    (13, 2, 0.0),
+    (13, 3, 0.0),
+    (13, 4, 0.0),
+    (13, 5, 0.000240132072639952),
+    (13, 6, 0.0),
+    (13, 7, 0.0),
+    (13, 8, 0.000057097179399337676),
+    (13, 9, 0.0),
+    (13, 10, 0.0),
+    (13, 11, 0.0),
+    (13, 12, 0.00002901073397156948),
+];
