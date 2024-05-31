@@ -3401,7 +3401,15 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
             };
                 let (_metrics, dst_state_manager) = restart_fn(dst_state_manager, None);
 
-                // State manager archives unverified checkpoint and recovers from the last verified checkpoint.
+                // Unverified checkpoint @2 should be archived and moved to the backups folder.
+                let backup_heights = dst_state_manager
+                    .state_layout()
+                    .backup_heights()
+                    .expect("failed to get backup heights");
+                assert_eq!(backup_heights, vec![height(2)]);
+
+                // Only checkpoint @1 remains in the checkpoints folder and the state manager should recover from this checkpoint.
+                assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(1)]);
                 assert_eq!(dst_state_manager.latest_state_height(), height(1));
 
                 // Continue execution and create the checkpoint @2.
