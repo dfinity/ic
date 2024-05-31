@@ -449,41 +449,54 @@ pub(super) mod test_utils {
 
     use ic_management_canister_types::EcdsaKeyId;
     use ic_types::{
-        consensus::idkg::{self, EcdsaPayload, PreSigId, UnmaskedTranscript},
+        consensus::idkg::{
+            self, EcdsaPayload, IDkgTranscriptParamsRef, PreSigId, UnmaskedTranscript,
+        },
         NodeId, RegistryVersion,
     };
 
-    pub fn create_new_quadruple_in_creation(
+    pub fn create_new_pre_signature_in_creation(
         subnet_nodes: &[NodeId],
         registry_version: RegistryVersion,
         uid_generator: &mut idkg::EcdsaUIDGenerator,
-        key_id: EcdsaKeyId,
-        quadruples_in_creation: &mut BTreeMap<idkg::PreSigId, PreSignatureInCreation>,
-    ) -> (
-        idkg::RandomUnmaskedTranscriptParams,
-        idkg::RandomTranscriptParams,
-    ) {
-        let kappa_config_ref = new_random_unmasked_config(
-            &MasterPublicKeyId::Ecdsa(key_id.clone()),
-            subnet_nodes,
-            registry_version,
-            uid_generator,
-        );
-        let lambda_config_ref = new_random_config(
-            &MasterPublicKeyId::Ecdsa(key_id.clone()),
-            subnet_nodes,
-            registry_version,
-            uid_generator,
-        );
-        quadruples_in_creation.insert(
-            uid_generator.next_pre_signature_id(),
-            PreSignatureInCreation::Ecdsa(QuadrupleInCreation::new(
-                key_id,
-                kappa_config_ref.clone(),
-                lambda_config_ref.clone(),
-            )),
-        );
-        (kappa_config_ref, lambda_config_ref)
+        key_id: MasterPublicKeyId,
+        pre_signatures_in_creation: &mut BTreeMap<idkg::PreSigId, PreSignatureInCreation>,
+    ) -> Vec<IDkgTranscriptParamsRef> {
+        let pre_signature = match key_id.clone() {
+            MasterPublicKeyId::Ecdsa(ecdsa_key_id) => {
+                let kappa_config_ref = new_random_unmasked_config(
+                    &key_id,
+                    subnet_nodes,
+                    registry_version,
+                    uid_generator,
+                );
+                let lambda_config_ref =
+                    new_random_config(&key_id, subnet_nodes, registry_version, uid_generator);
+                PreSignatureInCreation::Ecdsa(QuadrupleInCreation::new(
+                    ecdsa_key_id,
+                    kappa_config_ref,
+                    lambda_config_ref,
+                ))
+            }
+            MasterPublicKeyId::Schnorr(schnorr_key_id) => {
+                let blinder_config_ref = new_random_unmasked_config(
+                    &key_id,
+                    subnet_nodes,
+                    registry_version,
+                    uid_generator,
+                );
+                PreSignatureInCreation::Schnorr(TranscriptInCreation::new(
+                    schnorr_key_id,
+                    blinder_config_ref,
+                ))
+            }
+        };
+        let configs = pre_signature
+            .iter_transcript_configs_in_creation()
+            .cloned()
+            .collect::<Vec<_>>();
+        pre_signatures_in_creation.insert(uid_generator.next_pre_signature_id(), pre_signature);
+        configs
     }
 
     pub fn create_available_quadruple(
@@ -555,9 +568,10 @@ pub(super) mod tests {
     use super::*;
 
     use crate::ecdsa::test_utils::{
-        fake_ecdsa_key_id, fake_schnorr_key_id, fake_schnorr_master_public_key_id,
-        fake_sign_with_ecdsa_context_with_quadruple, set_up_ecdsa_payload, EcdsaPayloadTestHelper,
-        TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
+        fake_ecdsa_key_id, fake_ecdsa_master_public_key_id, fake_schnorr_key_id,
+        fake_schnorr_master_public_key_id, fake_sign_with_ecdsa_context_with_quadruple,
+        set_up_ecdsa_payload, EcdsaPayloadTestHelper, TestEcdsaBlockReader,
+        TestEcdsaTranscriptBuilder,
     };
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
@@ -801,23 +815,23 @@ pub(super) mod tests {
     fn test_ecdsa_update_pre_signatures_in_creation() {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
-        let key_id = fake_ecdsa_key_id();
-        let (mut payload, env, mut block_reader) = set_up(
-            &mut rng,
-            subnet_id,
-            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
-            Height::from(100),
-        );
+        let key_id = fake_ecdsa_master_public_key_id();
+        let (mut payload, env, mut block_reader) =
+            set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
 
         // Start quadruple creation
-        let (kappa_unmasked_config_ref, lambda_config_ref) = create_new_quadruple_in_creation(
-            &env.nodes.ids::<Vec<_>>(),
-            env.newest_registry_version,
-            &mut payload.uid_generator,
-            key_id,
-            &mut payload.pre_signatures_in_creation,
-        );
+        let [ref lambda_config_ref, ref kappa_unmasked_config_ref] =
+            create_new_pre_signature_in_creation(
+                &env.nodes.ids::<Vec<_>>(),
+                env.newest_registry_version,
+                &mut payload.uid_generator,
+                key_id,
+                &mut payload.pre_signatures_in_creation,
+            )[..]
+        else {
+            panic!("Should return two configs");
+        };
 
         // 0. No action case
         let cur_height = Height::new(1000);
@@ -838,15 +852,11 @@ pub(super) mod tests {
         assert_eq!(config_ids(&payload), [0, 1]);
 
         // 1. When lambda_masked is ready, expect a new key_times_lambda config.
-        let lambda_transcript = {
-            let param = lambda_config_ref.as_ref();
-            env.nodes.run_idkg_and_create_and_verify_transcript(
-                &param.translate(&block_reader).unwrap(),
-                &mut rng,
-            )
-        };
-        transcript_builder
-            .add_transcript(lambda_config_ref.as_ref().transcript_id, lambda_transcript);
+        let lambda_transcript = env.nodes.run_idkg_and_create_and_verify_transcript(
+            &lambda_config_ref.translate(&block_reader).unwrap(),
+            &mut rng,
+        );
+        transcript_builder.add_transcript(lambda_config_ref.transcript_id, lambda_transcript);
         let cur_height = Height::new(2000);
         let update_res = payload.uid_generator.update_height(cur_height);
         assert!(update_res.is_ok());
@@ -873,15 +883,12 @@ pub(super) mod tests {
 
         // 2. When kappa_unmasked and lambda_masked is ready, expect kappa_times_lambda
         // config.
-        let kappa_unmasked_transcript = {
-            let param = kappa_unmasked_config_ref.as_ref();
-            env.nodes.run_idkg_and_create_and_verify_transcript(
-                &param.translate(&block_reader).unwrap(),
-                &mut rng,
-            )
-        };
+        let kappa_unmasked_transcript = env.nodes.run_idkg_and_create_and_verify_transcript(
+            &kappa_unmasked_config_ref.translate(&block_reader).unwrap(),
+            &mut rng,
+        );
         transcript_builder.add_transcript(
-            kappa_unmasked_config_ref.as_ref().transcript_id,
+            kappa_unmasked_config_ref.transcript_id,
             kappa_unmasked_transcript,
         );
         let cur_height = Height::new(3000);
@@ -966,6 +973,97 @@ pub(super) mod tests {
         quadruple
             .translate(&block_reader)
             .expect("Translating should succeed");
+    }
+
+    #[test]
+    fn test_schnorr_update_pre_signatures_in_creation_all_algorithms() {
+        for algorithm in SchnorrAlgorithm::iter() {
+            test_schnorr_update_pre_signatures_in_creation(algorithm)
+        }
+    }
+
+    fn test_schnorr_update_pre_signatures_in_creation(algorithm: SchnorrAlgorithm) {
+        let mut rng = reproducible_rng();
+        let subnet_id = subnet_test_id(1);
+        let key_id = fake_schnorr_master_public_key_id(algorithm);
+        let (mut payload, env, mut block_reader) =
+            set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
+        let transcript_builder = TestEcdsaTranscriptBuilder::new();
+
+        // Start quadruple creation
+        let [ref blinder_config_ref] = create_new_pre_signature_in_creation(
+            &env.nodes.ids::<Vec<_>>(),
+            env.newest_registry_version,
+            &mut payload.uid_generator,
+            key_id.clone(),
+            &mut payload.pre_signatures_in_creation,
+        )[..] else {
+            panic!("Should return one config");
+        };
+
+        // 0. No action case
+        let cur_height = Height::new(1000);
+        let update_res = payload.uid_generator.update_height(cur_height);
+        assert!(update_res.is_ok());
+        let result = update_pre_signatures_in_creation(
+            &mut payload,
+            &transcript_builder,
+            cur_height,
+            &no_op_logger(),
+        );
+        assert!(result.unwrap().is_empty());
+
+        // check if nothing has changed
+        assert!(payload.available_pre_signatures.is_empty());
+        assert_eq!(payload.peek_next_transcript_id().id(), 1);
+        assert!(transcript_ids(&payload).is_empty());
+        assert_eq!(config_ids(&payload), [0]);
+
+        // 1. When blinder_unmasked is ready, pre-signature should be completed.
+        let blinder_transcript = env.nodes.run_idkg_and_create_and_verify_transcript(
+            &blinder_config_ref.translate(&block_reader).unwrap(),
+            &mut rng,
+        );
+        transcript_builder.add_transcript(blinder_config_ref.transcript_id, blinder_transcript);
+        let cur_height = Height::new(2000);
+        let update_res = payload.uid_generator.update_height(cur_height);
+        assert!(update_res.is_ok());
+        let result = update_pre_signatures_in_creation(
+            &mut payload,
+            &transcript_builder,
+            cur_height,
+            &no_op_logger(),
+        )
+        .unwrap();
+        assert_eq!(result.len(), 1);
+        for completed_transcript in result {
+            block_reader.add_transcript(
+                idkg::TranscriptRef::new(cur_height, completed_transcript.transcript_id),
+                completed_transcript,
+            );
+        }
+        assert_eq!(payload.available_pre_signatures.len(), 1);
+        assert_eq!(payload.pre_signatures_in_creation.len(), 0);
+        assert_eq!(payload.peek_next_transcript_id().id(), 1);
+        assert_eq!(transcript_ids(&payload), [0]);
+        assert!(config_ids(&payload).is_empty());
+
+        let PreSignatureRef::Schnorr(transcript) =
+            payload.available_pre_signatures.values().next().unwrap()
+        else {
+            panic!("Expected Schnorr pre-signature");
+        };
+        assert_eq!(
+            MasterPublicKeyId::Schnorr(transcript.key_id.clone()),
+            key_id
+        );
+        let translated = transcript
+            .translate(&block_reader)
+            .expect("Translating should succeed");
+        assert_eq!(
+            translated.blinder_unmasked().algorithm_id,
+            algorithm_for_key_id(&key_id)
+        );
     }
 
     fn get_current_unmasked_key_transcript(payload: &EcdsaPayload) -> UnmaskedTranscript {
