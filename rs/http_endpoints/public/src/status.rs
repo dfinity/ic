@@ -1,14 +1,13 @@
 //! Module that deals with requests to /api/v2/status
-use crate::{
-    common::{self, Cbor},
-    state_reader_executor::StateReaderExecutor,
-};
+use crate::common::{self, Cbor};
 
 use axum::{extract::State, Router};
 use crossbeam::atomic::AtomicCell;
 use ic_crypto_utils_threshold_sig_der::public_key_to_der;
 use ic_interfaces_registry::RegistryClient;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{warn, ReplicaLogger};
+use ic_replicated_state::ReplicatedState;
 use ic_types::{
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     replica_version::REPLICA_BINARY_HASH,
@@ -26,7 +25,7 @@ pub(crate) struct StatusService {
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
     replica_health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    state_read_executor: StateReaderExecutor,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
 
 impl StatusService {
@@ -41,14 +40,14 @@ impl StatusService {
         nns_subnet_id: SubnetId,
         registry_client: Arc<dyn RegistryClient>,
         replica_health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-        state_read_executor: StateReaderExecutor,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Router {
         let state = Self {
             log,
             nns_subnet_id,
             registry_client,
             replica_health_status,
-            state_read_executor,
+            state_reader,
         };
         Router::new().route_service(
             StatusService::route(),
@@ -71,6 +70,7 @@ pub(crate) async fn status(State(state): State<StatusService>) -> Cbor<HttpStatu
             .map_err(|err| warn!(state.log, "Failed to parse threshold root key to DER {err}"))
             .ok()
     });
+
     let response = HttpStatusResponse {
         ic_api_version: IC_API_VERSION.to_string(),
         // For test networks, and networks that we still reset
@@ -83,7 +83,7 @@ pub(crate) async fn status(State(state): State<StatusService>) -> Cbor<HttpStatu
         impl_version: Some(ReplicaVersion::default().to_string()),
         impl_hash: REPLICA_BINARY_HASH.get().map(|s| s.to_string()),
         replica_health_status: Some(state.replica_health_status.load()),
-        certified_height: Some(state.state_read_executor.latest_certified_height()),
+        certified_height: Some(state.state_reader.latest_certified_height()),
     };
     Cbor(response)
 }
