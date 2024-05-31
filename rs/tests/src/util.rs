@@ -1142,7 +1142,10 @@ pub async fn deposit_cycles(
 pub fn block_on<F: Future>(f: F) -> F::Output {
     // Try to get the current tokio runtime, otherwise create a new one
     match THandle::try_current() {
-        Ok(h) => h.block_on(f),
+        Ok(h) => {
+            let _ = h.enter();
+            futures::executor::block_on(f)
+        }
         Err(_) => {
             let rt = {
                 let cpus = num_cpus::get();
