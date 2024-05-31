@@ -27,7 +27,7 @@ fn should_display_metadata() {
     let mut dashboard = DashboardTemplate {
         minter_address: "0x1789F79e95324A47c5Fd6693071188e82E9a3558".to_string(),
         eth_helper_contract_address: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
-        ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
+        cketh_ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
             .expect("BUG: invalid principal"),
         ecdsa_key_name: "key_1".to_string(),
         next_transaction_nonce: TransactionNonce::from(42_u8),
@@ -40,7 +40,7 @@ fn should_display_metadata() {
         .has_minter_address("0x1789F79e95324A47c5Fd6693071188e82E9a3558")
         .has_eth_helper_contract_address("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34")
         .has_erc20_helper_contract_address("N/A")
-        .has_ledger_canister_id("apia6-jaaaa-aaaar-qabma-cai")
+        .has_cketh_ledger_canister_id("apia6-jaaaa-aaaar-qabma-cai")
         .has_tecdsa_key_name("key_1")
         .has_next_transaction_nonce("42")
         .has_minimum_withdrawal_amount("10_000_000_000_000_000")
@@ -1287,9 +1287,9 @@ mod assertions {
             )
         }
 
-        pub fn has_ledger_canister_id(&self, expected_id: &str) -> &Self {
+        pub fn has_cketh_ledger_canister_id(&self, expected_id: &str) -> &Self {
             self.has_string_value(
-                "#ledger-canister-id > td",
+                "#cketh-ledger-canister-id > td",
                 expected_id,
                 "wrong ledger canister ID",
             )

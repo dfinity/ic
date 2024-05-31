@@ -52,7 +52,7 @@ impl MintedEvent {
 pub struct State {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
-    pub ledger_id: Principal,
+    pub cketh_ledger_id: Principal,
     pub eth_helper_contract_address: Option<Address>,
     pub erc20_helper_contract_address: Option<Address>,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
@@ -145,7 +145,7 @@ impl State {
                 "ecdsa_key_name cannot be blank".to_string(),
             ));
         }
-        if self.ledger_id == Principal::anonymous() {
+        if self.cketh_ledger_id == Principal::anonymous() {
             return Err(InvalidStateError::InvalidLedgerId(
                 "ledger_id cannot be the anonymous principal".to_string(),
             ));
@@ -519,7 +519,7 @@ impl State {
         use ic_utils_ensure::ensure_eq;
 
         ensure_eq!(self.ethereum_network, other.ethereum_network);
-        ensure_eq!(self.ledger_id, other.ledger_id);
+        ensure_eq!(self.cketh_ledger_id, other.cketh_ledger_id);
         ensure_eq!(self.ecdsa_key_name, other.ecdsa_key_name);
         ensure_eq!(
             self.eth_helper_contract_address,

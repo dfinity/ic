@@ -51,6 +51,10 @@ spec:
           interfaces:
           - name: default
             passt: {}
+            ports:
+            - port: 22
+            - port: 8332
+            - port: 18444
         resources:
           requests:
             memory: {memory}Ki
@@ -147,9 +151,11 @@ spec:
               - port: 4444
               - port: 7070
               - port: 8080
+              - port: 8332
               - port: 9090
               - port: 9091
               - port: 9100
+              - port: 18444
               - port: 19100
               - port: 19531
         resources:

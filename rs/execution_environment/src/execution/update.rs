@@ -450,7 +450,7 @@ impl UpdateHelper {
         );
 
         let heap_delta = if output.wasm_result.is_ok() {
-            NumBytes::from((output.instance_stats.dirty_pages * ic_sys::PAGE_SIZE) as u64)
+            NumBytes::from((output.instance_stats.dirty_pages() * ic_sys::PAGE_SIZE) as u64)
         } else {
             NumBytes::from(0)
         };
@@ -498,7 +498,7 @@ impl UpdateHelper {
                 round.log,
                 &original.canister_id,
                 &original.method.name(),
-                output.instance_stats.dirty_pages,
+                output.instance_stats.dirty_pages(),
                 instructions_used,
             );
         }

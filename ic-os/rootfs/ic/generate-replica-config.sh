@@ -255,7 +255,7 @@ MALICIOUS_BEHAVIOR="${malicious_behavior:-null}"
 QUERY_STATS_AGGREGATION="${query_stats_aggregation:-\"Enabled\"}"
 # Default is 600 blocks i.e. around 10min
 QUERY_STATS_EPOCH_LENGTH="${query_stats_epoch_length:-600}"
-# Default is None
+# TODO: If the Jaeger address is not specified the config file will contain Some(""). This needs to be fixed.
 JAEGER_ADDR="${jaeger_addr:-}"
 
 if [ "${IPV6_ADDRESS}" == "" ]; then

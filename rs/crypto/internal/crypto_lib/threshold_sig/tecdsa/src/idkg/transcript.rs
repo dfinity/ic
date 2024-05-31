@@ -432,7 +432,7 @@ impl CommitmentOpening {
         receiver_index: NodeIndex,
         secret_key: &MEGaPrivateKey,
         public_key: &MEGaPublicKey,
-    ) -> Result<Self, IDkgComputeSecretSharesInternalError> {
+    ) -> Result<Self, IDkgComputeSecretSharesWithOpeningsInternalError> {
         let mut openings = Vec::with_capacity(verified_dealings.len());
 
         for (dealer_index, dealing) in verified_dealings {
@@ -442,12 +442,13 @@ impl CommitmentOpening {
                 reconstruct_share_from_openings(dealing, shares, receiver_index).map_err(|e| {
                     match e {
                         CanisterThresholdError::InsufficientOpenings(have, req) => {
-                            IDkgComputeSecretSharesInternalError::InsufficientOpenings(have, req)
+                            IDkgComputeSecretSharesWithOpeningsInternalError::InsufficientOpenings(
+                                have, req,
+                            )
                         }
-                        e => IDkgComputeSecretSharesInternalError::UnableToReconstruct(format!(
-                            "{:?}",
-                            e
-                        )),
+                        e => IDkgComputeSecretSharesWithOpeningsInternalError::UnableToReconstruct(
+                            format!("{:?}", e),
+                        ),
                     }
                 })?
             } else {
@@ -463,9 +464,9 @@ impl CommitmentOpening {
                     )
                     .map_err(|e| match e {
                         CanisterThresholdError::InvalidCommitment => {
-                            IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued
+                            IDkgComputeSecretSharesWithOpeningsInternalError::ComplaintShouldBeIssued
                         }
-                        e => IDkgComputeSecretSharesInternalError::InvalidCiphertext(format!(
+                        e => IDkgComputeSecretSharesWithOpeningsInternalError::InvalidCiphertext(format!(
                             "Ciphertext {}/{} failed to decrypt {:?}",
                             dealer_index,
                             verified_dealings.len(),
@@ -480,12 +481,13 @@ impl CommitmentOpening {
         Self::combine_openings(&openings, transcript_commitment, receiver_index).map_err(
             |e| match e {
                 CanisterThresholdError::InsufficientOpenings(have, req) => {
-                    IDkgComputeSecretSharesInternalError::InsufficientOpenings(have, req)
+                    IDkgComputeSecretSharesWithOpeningsInternalError::InsufficientOpenings(
+                        have, req,
+                    )
                 }
-                e => IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(format!(
-                    "{:?}",
-                    e
-                )),
+                e => IDkgComputeSecretSharesWithOpeningsInternalError::UnableToCombineOpenings(
+                    format!("{:?}", e),
+                ),
             },
         )
     }

@@ -1,7 +1,3 @@
-use hyper::{
-    client::{connect::HttpConnector, Client},
-    Body, Error, Method, Request, Response, StatusCode,
-};
 use ic_config::metrics::{Config, Exporter};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_metrics::registry::MetricsRegistry;
@@ -10,18 +6,16 @@ use prometheus::{
     core::{Collector, Desc},
     proto::MetricFamily,
 };
+use reqwest::{Body, Client, Error, Method, Response, StatusCode};
 use std::net::SocketAddr;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
-use std::time::Duration;
 use tokio::{
-    net::{TcpSocket, TcpStream},
+    net::TcpSocket,
     sync::mpsc::{channel, Sender},
-    time::sleep,
 };
-use tower::util::ServiceExt;
 
 // Get a free port on this host to which we can connect transport to.
 fn get_free_localhost_port() -> std::io::Result<SocketAddr> {
@@ -32,64 +26,12 @@ fn get_free_localhost_port() -> std::io::Result<SocketAddr> {
     socket.local_addr()
 }
 
-async fn send_request(
-    client: &Client<HttpConnector, Body>,
-    addr: SocketAddr,
-) -> Result<Response<Body>, Error> {
-    let req = Request::builder()
-        .method(Method::GET)
-        .uri(format!("http://{}", addr))
+async fn send_request(client: &Client, addr: SocketAddr) -> Result<Response, Error> {
+    client
+        .request(Method::GET, format!("http://{}", addr))
         .body(Body::from(""))
-        .expect("Building the request failed.");
-
-    client.request(req).await
-}
-
-/// Once no bytes are read for the duration of 'connection_read_timeout_seconds', then
-/// the connection is dropped.
-#[tokio::test]
-async fn test_connection_read_timeout() {
-    with_test_replica_logger(|log| async move {
-        let rt_handle = tokio::runtime::Handle::current();
-        let addr = get_free_localhost_port().unwrap();
-        let config = Config {
-            exporter: Exporter::Http(addr),
-            connection_read_timeout_seconds: 2,
-            ..Default::default()
-        };
-        let metrics_registry = MetricsRegistry::default();
-        let _metrics_endpoint = MetricsHttpEndpoint::new(
-            rt_handle,
-            config.clone(),
-            metrics_registry,
-            &log.inner_logger.root,
-        );
-
-        let target_stream = TcpStream::connect(addr).await.unwrap();
-
-        let (mut request_sender, connection) =
-            hyper::client::conn::handshake(target_stream).await.unwrap();
-
-        // Spawn a task to poll the connection and drive the HTTP state.
-        tokio::spawn(async move {
-            connection.await.unwrap();
-        });
-
-        let request = Request::builder()
-            .method(Method::GET)
-            .uri(format!("http://{}", addr))
-            .body(Body::from(""))
-            .expect("Building the request failed.");
-        let response = request_sender.send_request(request).await.unwrap();
-        assert!(response.status() == StatusCode::OK);
-
-        sleep(Duration::from_secs(
-            config.connection_read_timeout_seconds + 1,
-        ))
-        .await;
-        assert!(request_sender.ready().await.err().unwrap().is_closed());
-    })
-    .await
+        .send()
+        .await
 }
 
 #[derive(Clone)]
@@ -152,12 +94,7 @@ async fn test_load_shedding() {
             &log.inner_logger.root,
         );
 
-        // Use a single client so we don't hit the max TCP connetions limit.
-        let client = Client::builder()
-            .http2_only(true)
-            .retry_canceled_requests(false)
-            .http2_max_concurrent_reset_streams(config.max_concurrent_requests * 2)
-            .build_http();
+        let client = Client::new();
 
         let mut set = tokio::task::JoinSet::new();
 
@@ -224,11 +161,7 @@ async fn test_request_timeout() {
         );
 
         // Use a single client so we don't hit the max TCP connetions limit.
-        let client = Client::builder()
-            .http2_only(true)
-            .retry_canceled_requests(false)
-            .http2_max_concurrent_reset_streams(config.max_concurrent_requests * 2)
-            .build_http();
+        let client = Client::new();
 
         assert_eq!(
             send_request(&client, addr).await.unwrap().status(),
@@ -254,7 +187,6 @@ async fn test_connection_is_alive_with_slow_downstream() {
         let config = Config {
             exporter: Exporter::Http(addr),
             request_timeout_seconds: 2,
-            connection_read_timeout_seconds: 3,
             ..Default::default()
         };
         let metrics_registry = MetricsRegistry::default();
@@ -268,17 +200,13 @@ async fn test_connection_is_alive_with_slow_downstream() {
         );
 
         // Use a single client so we don't hit the max TCP connetions limit.
-        let client = Client::builder()
-            .http2_only(true)
-            .retry_canceled_requests(false)
-            .http2_max_concurrent_reset_streams(config.max_concurrent_requests * 2)
-            .build_http();
+        let client = Client::new();
 
         assert_eq!(
             send_request(&client, addr).await.unwrap().status(),
             StatusCode::OK
         );
-        let n = config.connection_read_timeout_seconds / config.request_timeout_seconds + 2;
+        let n = 3;
         for _i in 0..n {
             assert_eq!(
                 send_request(&client, addr).await.unwrap().status(),

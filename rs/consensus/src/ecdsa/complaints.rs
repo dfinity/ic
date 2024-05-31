@@ -983,6 +983,7 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_types::consensus::idkg::{EcdsaObject, TranscriptRef};
+    use ic_types::crypto::AlgorithmId;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::Height;
 
@@ -1795,14 +1796,27 @@ mod tests {
         })
     }
 
-    // Tests loading of a valid transcript without complaints
     #[test]
-    fn test_ecdsa_load_transcript_success() {
+    fn test_load_transcript_success_all_ecdsa_algorithms() {
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            test_load_transcript_success(alg);
+        }
+    }
+
+    #[test]
+    fn test_load_transcript_success_all_schnorr_algorithms() {
+        for alg in AlgorithmId::all_threshold_schnorr_algorithms() {
+            test_load_transcript_success(alg);
+        }
+    }
+
+    // Tests loading of a valid transcript without complaints
+    fn test_load_transcript_success(algorithm: AlgorithmId) {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                let (_, _, idkg_transcript) = create_valid_transcript(&env, &mut rng);
+                let (_, _, idkg_transcript) = create_valid_transcript(&env, &mut rng, algorithm);
 
                 let crypto = env
                     .nodes
@@ -1846,7 +1860,11 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                let (_, _, transcript) = create_corrupted_transcript(&env, &mut rng);
+                let (_, _, transcript) = create_corrupted_transcript(
+                    &env,
+                    &mut rng,
+                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                );
 
                 let crypto = env
                     .nodes
@@ -1865,15 +1883,28 @@ mod tests {
         })
     }
 
+    #[test]
+    fn test_load_transcripts_with_complaints_and_openings_all_ecdsa_algorithms() {
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            test_load_transcripts_with_complaints_and_openings(alg);
+        }
+    }
+
+    #[test]
+    fn test_load_transcripts_with_complaints_and_openings_all_schnorr_algorithms() {
+        for alg in AlgorithmId::all_threshold_schnorr_algorithms() {
+            test_load_transcripts_with_complaints_and_openings(alg);
+        }
+    }
+
     // Tests that attempt of loading a corrupted transcript leads to complaints and
     // loading succeeds after openings are generated.
-    #[test]
-    fn test_ecdsa_load_transcripts_with_complaints_and_openings() {
+    fn test_load_transcripts_with_complaints_and_openings(algorithm: AlgorithmId) {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                let (complainer, _, t) = create_corrupted_transcript(&env, &mut rng);
+                let (complainer, _, t) = create_corrupted_transcript(&env, &mut rng, algorithm);
 
                 let mut components = env.nodes.filter_by_receivers(&t);
 

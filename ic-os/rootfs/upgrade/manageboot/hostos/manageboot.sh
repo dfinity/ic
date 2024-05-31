@@ -6,7 +6,7 @@ set -e
 source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename "$0")[$$]"
-HOSTOS_VERSION_FILE="/opt/ic/share/version.txt"
+VERSION_FILE="/opt/ic/share/version.txt"
 
 write_log() {
     local message=$1
@@ -15,16 +15,16 @@ write_log() {
         echo "${SCRIPT} ${message}" >/dev/stdout
     fi
 
-    logger -t ${SCRIPT} "${message}"
+    logger -t "${SCRIPT}" "${message}"
 }
 
-function get_hostos_version_noreport() {
-    if [ -r ${HOSTOS_VERSION_FILE} ]; then
-        HOSTOS_VERSION=$(cat ${HOSTOS_VERSION_FILE})
-        HOSTOS_VERSION_OK=1
+function get_version_noreport() {
+    if [ -r "${VERSION_FILE}" ]; then
+        VERSION=$(cat ${VERSION_FILE})
+        VERSION_OK=1
     else
-        HOSTOS_VERSION="unknown"
-        HOSTOS_VERSION_OK=0
+        VERSION="unknown"
+        VERSION_OK=0
     fi
 }
 
@@ -154,13 +154,13 @@ while getopts ":f" OPT; do
             GRUBENV_FILE="${OPTARG}"
             ;;
         *)
-            usage
+            usage >&2
             exit 1
             ;;
     esac
 done
 
-get_hostos_version_noreport
+get_version_noreport
 
 # Read current state
 read_grubenv "${GRUBENV_FILE}"
@@ -194,7 +194,7 @@ if [ "${boot_cycle}" == "failsafe_check" ]; then
         "HostOS is boot stable" \
         "gauge"
     write_metric_attr "hostos_boot_action" \
-        "{next_boot=\"${NEXT_BOOT}\",version=\"${HOSTOS_VERSION}\"}" \
+        "{next_boot=\"${NEXT_BOOT}\",version=\"${VERSION}\"}" \
         "2" \
         "HostOS boot action" \
         "gauge"
@@ -224,11 +224,11 @@ case "${ACTION}" in
         ROOT_IMG="$2"
 
         if [ "${BOOT_IMG}" == "" -o "${ROOT_IMG}" == "" ]; then
-            usage
+            usage >&2
             exit 1
         fi
 
-        write_log "HostOS current version ${HOSTOS_VERSION} at slot ${CURRENT_ALTERNATIVE}"
+        write_log "HostOS current version ${VERSION} at slot ${CURRENT_ALTERNATIVE}"
         write_log "HostOS upgrade started, modifying slot ${TARGET_ALTERNATIVE} at ${TARGET_BOOT} and ${TARGET_ROOT}"
 
         # Write to target partitions, and "wipe" header of var partition
@@ -275,7 +275,7 @@ case "${ACTION}" in
                 "HostOS is boot stable" \
                 "gauge"
             write_metric_attr "hostos_boot_action" \
-                "{confirm_boot=\"${CURRENT_BOOT}\",version=\"${HOSTOS_VERSION}\"}" \
+                "{confirm_boot=\"${CURRENT_BOOT}\",version=\"${VERSION}\"}" \
                 "1" \
                 "HostOS boot action" \
                 "gauge"

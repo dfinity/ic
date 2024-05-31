@@ -263,19 +263,15 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
                         cert_path.display()
                     );
                     let mut pem = Cursor::new(buf);
-                    let certs = match rustls_pemfile::certs(&mut pem) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            tracing::warn!(
-                                "No valid certificate was found `{}`: {}",
-                                cert_path.display(),
-                                e
-                            );
-                            continue;
-                        }
-                    };
+                    let certs: Vec<_> = rustls_pemfile::certs(&mut pem)
+                        .filter_map(Result::ok)
+                        .collect();
+                    if certs.is_empty() {
+                        tracing::warn!("No valid certificate was found `{}`", cert_path.display(),);
+                        continue;
+                    }
                     for c in certs {
-                        if let Err(e) = root_cert_store.add(c.into()) {
+                        if let Err(e) = root_cert_store.add(c) {
                             tracing::warn!(
                                 "Could not add part of cert `{}`: {}",
                                 cert_path.display(),

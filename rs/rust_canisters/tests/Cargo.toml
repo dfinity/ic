@@ -12,7 +12,7 @@ serde_json = { workspace = true }
 dfn_core = { path = "../dfn_core" }
 dfn_macro = { path = "../dfn_macro" }
 dfn_json = { path = "../dfn_json" }
-rand = "0.8.4"
+rand = { workspace = true }
 rand_pcg = "0.3.1"
 on_wire = { path = "../on_wire" }
 

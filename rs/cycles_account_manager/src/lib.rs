@@ -886,6 +886,7 @@ impl CyclesAccountManager {
             | CyclesUseCase::RequestAndResponseTransmission
             | CyclesUseCase::CanisterCreation
             | CyclesUseCase::ECDSAOutcalls
+            | CyclesUseCase::SchnorrOutcalls
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed

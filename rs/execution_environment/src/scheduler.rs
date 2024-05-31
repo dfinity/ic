@@ -17,7 +17,9 @@ use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
 };
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
-use ic_management_canister_types::{CanisterStatusType, EcdsaKeyId, Method as Ic00Method};
+use ic_management_canister_types::{
+    CanisterStatusType, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     canister_state::{
@@ -28,7 +30,7 @@ use ic_replicated_state::{
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
-    consensus::idkg::QuadrupleId,
+    consensus::idkg::PreSigId,
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, Response, StopCanisterContext, NO_DEADLINE},
@@ -479,7 +481,7 @@ impl SchedulerImpl {
         ongoing_long_install_code: bool,
         long_running_canister_ids: BTreeSet<CanisterId>,
         registry_settings: &RegistryExecutionSettings,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterPublicKey>,
+        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> ReplicatedState {
         loop {
             let mut available_subnet_messages = false;
@@ -506,7 +508,7 @@ impl SchedulerImpl {
                     round_limits,
                     registry_settings,
                     measurement_scope,
-                    ecdsa_subnet_public_keys,
+                    idkg_subnet_public_keys,
                 );
                 state = new_state;
 
@@ -538,7 +540,7 @@ impl SchedulerImpl {
         round_limits: &mut RoundLimits,
         registry_settings: &RegistryExecutionSettings,
         measurement_scope: &MeasurementScope,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterPublicKey>,
+        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let instruction_limits = get_instructions_limits_for_subnet_message(
             self.deterministic_time_slicing,
@@ -552,7 +554,7 @@ impl SchedulerImpl {
             state,
             instruction_limits,
             csprng,
-            ecdsa_subnet_public_keys,
+            idkg_subnet_public_keys,
             registry_settings,
             round_limits,
         );
@@ -645,7 +647,7 @@ impl SchedulerImpl {
         root_measurement_scope: &MeasurementScope<'a>,
         scheduler_round_limits: &mut SchedulerRoundLimits,
         registry_settings: &RegistryExecutionSettings,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterPublicKey>,
+        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> (ReplicatedState, BTreeSet<CanisterId>) {
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
@@ -698,7 +700,7 @@ impl SchedulerImpl {
                         ongoing_long_install_code,
                         long_running_canister_ids,
                         registry_settings,
-                        ecdsa_subnet_public_keys,
+                        idkg_subnet_public_keys,
                     );
                     scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
                 }
@@ -1405,8 +1407,8 @@ impl Scheduler for SchedulerImpl {
         &self,
         mut state: ReplicatedState,
         randomness: Randomness,
-        ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
-        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
+        idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
         current_round: ExecutionRound,
         _next_checkpoint_round: Option<ExecutionRound>,
         current_round_type: ExecutionRoundType,
@@ -1560,7 +1562,7 @@ impl Scheduler for SchedulerImpl {
                     &mut subnet_round_limits,
                     registry_settings,
                     &measurement_scope,
-                    &ecdsa_subnet_public_keys,
+                    &idkg_subnet_public_keys,
                 );
                 state = new_state;
                 if subnet_round_limits.reached() {
@@ -1614,7 +1616,7 @@ impl Scheduler for SchedulerImpl {
                     &mut subnet_round_limits,
                     registry_settings,
                     &measurement_scope,
-                    &ecdsa_subnet_public_keys,
+                    &idkg_subnet_public_keys,
                 );
                 state = new_state;
             }
@@ -1673,7 +1675,7 @@ impl Scheduler for SchedulerImpl {
             &root_measurement_scope,
             &mut scheduler_round_limits,
             registry_settings,
-            &ecdsa_subnet_public_keys,
+            &idkg_subnet_public_keys,
         );
 
         // Update [`SignWithEcdsaContext`]s by assigning randomness and matching quadruples.
@@ -2333,6 +2335,8 @@ fn get_instructions_limits_for_subnet_message(
             | SignWithECDSA
             | ComputeInitialEcdsaDealings
             | ComputeInitialIDkgDealings
+            | SchnorrPublicKey
+            | SignWithSchnorr
             | StartCanister
             | StopCanister
             | UninstallCode

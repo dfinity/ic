@@ -33,7 +33,7 @@ use ic_types::{
         },
         CryptoError,
     },
-    p2p, Height, NodeId, PrincipalId, ReplicaVersion, SubnetId,
+    Height, NodeId, PrincipalId, ReplicaVersion, SubnetId,
 };
 use thiserror::Error;
 
@@ -310,7 +310,7 @@ impl SubnetConfig {
             replica_version_id: self.replica_version_id.to_string(),
             dkg_interval_length: self.dkg_interval_length.get(),
             dkg_dealings_per_block: self.dkg_dealings_per_block as u64,
-            gossip_config: Some(p2p::build_default_gossip_config()),
+            gossip_config: None,
             // This is not something ic-prep will participate in, so it is safe
             // to set it to false. ic-admin can set it to true when adding a
             // subnet via NNS.

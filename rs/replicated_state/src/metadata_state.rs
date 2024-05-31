@@ -185,11 +185,6 @@ pub struct NetworkTopology {
     pub canister_migrations: Arc<CanisterMigrations>,
     pub nns_subnet_id: SubnetId,
 
-    // TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
-    /// Mapping from ECDSA key_id to a list of subnets which can sign with the
-    /// given key. Keys without any signing subnets are not included in the map.
-    pub ecdsa_signing_subnets: BTreeMap<EcdsaKeyId, Vec<SubnetId>>,
-
     /// Mapping from iDKG key_id to a list of subnets which can sign with the
     /// given key. Keys without any signing subnets are not included in the map.
     pub idkg_signing_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
@@ -223,7 +218,6 @@ impl Default for NetworkTopology {
             routing_table: Default::default(),
             canister_migrations: Default::default(),
             nns_subnet_id: SubnetId::new(PrincipalId::new_anonymous()),
-            ecdsa_signing_subnets: Default::default(),
             idkg_signing_subnets: Default::default(),
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
@@ -232,13 +226,6 @@ impl Default for NetworkTopology {
 }
 
 impl NetworkTopology {
-    /// Returns a list of subnets where the ECDSA feature is enabled.
-    pub fn ecdsa_signing_subnets(&self, key_id: &EcdsaKeyId) -> &[SubnetId] {
-        self.ecdsa_signing_subnets
-            .get(key_id)
-            .map_or(&[], |ids| &ids[..])
-    }
-
     /// Returns a list of subnets where the iDKG feature is enabled.
     pub fn idkg_signing_subnets(&self, key_id: &MasterPublicKeyId) -> &[SubnetId] {
         self.idkg_signing_subnets
@@ -268,17 +255,22 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
             routing_table: Some(item.routing_table.as_ref().into()),
             nns_subnet_id: Some(subnet_id_into_protobuf(item.nns_subnet_id)),
             canister_migrations: Some(item.canister_migrations.as_ref().into()),
+            // Serialize both `ecdsa_signing_subnets` and `idkg_signing_subnets` with the same ECDSA entries.
             ecdsa_signing_subnets: item
-                .ecdsa_signing_subnets
+                .idkg_signing_subnets
                 .iter()
-                .map(|(key_id, subnet_ids)| {
-                    let subnet_ids = subnet_ids
-                        .iter()
-                        .map(|id| subnet_id_into_protobuf(*id))
-                        .collect();
-                    pb_metadata::EcdsaKeyEntry {
-                        key_id: Some(key_id.into()),
-                        subnet_ids,
+                .filter_map(|(key_id, subnet_ids)| {
+                    if let MasterPublicKeyId::Ecdsa(ecdsa_key_id) = key_id {
+                        let subnet_ids = subnet_ids
+                            .iter()
+                            .map(|id| subnet_id_into_protobuf(*id))
+                            .collect();
+                        Some(pb_metadata::EcdsaKeyEntry {
+                            key_id: Some(ecdsa_key_id.into()),
+                            subnet_ids,
+                        })
+                    } else {
+                        None
                     }
                 })
                 .collect(),
@@ -339,16 +331,24 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             );
         }
 
+        // First try to deserialize `ecdsa_signing_subnets` and if it is empty
+        // then try to deserialize `idkg_signing_subnets`.
         let mut idkg_signing_subnets = BTreeMap::new();
-        for entry in item.idkg_signing_subnets {
-            let mut subnet_ids = vec![];
-            for subnet_id in entry.subnet_ids {
-                subnet_ids.push(subnet_id_try_from_protobuf(subnet_id)?);
+        if !ecdsa_signing_subnets.is_empty() {
+            for (key_id, subnet_ids) in ecdsa_signing_subnets {
+                idkg_signing_subnets.insert(MasterPublicKeyId::Ecdsa(key_id), subnet_ids);
             }
-            idkg_signing_subnets.insert(
-                try_from_option_field(entry.key_id, "IDkgKeyEntry::key_id")?,
-                subnet_ids,
-            );
+        } else {
+            for entry in item.idkg_signing_subnets {
+                let mut subnet_ids = vec![];
+                for subnet_id in entry.subnet_ids {
+                    subnet_ids.push(subnet_id_try_from_protobuf(subnet_id)?);
+                }
+                idkg_signing_subnets.insert(
+                    try_from_option_field(entry.key_id, "IDkgKeyEntry::key_id")?,
+                    subnet_ids,
+                );
+            }
         }
 
         let bitcoin_testnet_canister_id = match item.bitcoin_testnet_canister_ids.first() {
@@ -376,7 +376,6 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                 .unwrap_or_default()
                 .into(),
             nns_subnet_id,
-            ecdsa_signing_subnets,
             idkg_signing_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
@@ -392,13 +391,6 @@ pub struct SubnetTopology {
     pub nodes: BTreeSet<NodeId>,
     pub subnet_type: SubnetType,
     pub subnet_features: SubnetFeatures,
-    // TODO(EXC-1621): Remove after fully migrating to idkg_keys_held.
-    /// ECDSA keys held by this subnet. Just because a subnet holds an ECDSA key
-    /// doesn't mean the subnet has been enabled to sign with that key. This
-    /// will happen when a key is shared with a second subnet which holds it as
-    /// a backup. An additional NNS proposal will be needed to allow the subnet
-    /// holding the key as backup to actually produce signatures.
-    pub ecdsa_keys_held: BTreeSet<EcdsaKeyId>,
     /// iDKG keys held by this subnet. Just because a subnet holds an iDKG key
     /// doesn't mean the subnet has been enabled to sign with that key. This
     /// will happen when a key is shared with a second subnet which holds it as
@@ -420,7 +412,18 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
                 .collect(),
             subnet_type: i32::from(item.subnet_type),
             subnet_features: Some(pb_subnet::SubnetFeatures::from(item.subnet_features)),
-            ecdsa_keys_held: item.ecdsa_keys_held.iter().map(|k| k.into()).collect(),
+            // Serialize both `ecdsa_keys_held` and `idkg_keys_held` with the same ECDSA entries.
+            ecdsa_keys_held: item
+                .idkg_keys_held
+                .iter()
+                .filter_map(|k| {
+                    if let MasterPublicKeyId::Ecdsa(ecdsa_key_id) = k {
+                        Some(ecdsa_key_id.into())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
             idkg_keys_held: item.idkg_keys_held.iter().map(|k| k.into()).collect(),
         }
     }
@@ -438,10 +441,16 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
         for key in item.ecdsa_keys_held {
             ecdsa_keys_held.insert(EcdsaKeyId::try_from(key)?);
         }
-
+        // First try to deserialize `ecdsa_keys_held` and if it is empty then try to deserialize `idkg_keys_held`.
         let mut idkg_keys_held = BTreeSet::new();
-        for key in item.idkg_keys_held {
-            idkg_keys_held.insert(MasterPublicKeyId::try_from(key)?);
+        if !ecdsa_keys_held.is_empty() {
+            for key in ecdsa_keys_held {
+                idkg_keys_held.insert(MasterPublicKeyId::Ecdsa(key));
+            }
+        } else {
+            for key in item.idkg_keys_held {
+                idkg_keys_held.insert(MasterPublicKeyId::try_from(key)?);
+            }
         }
 
         Ok(Self {
@@ -455,7 +464,6 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 .subnet_features
                 .map(SubnetFeatures::from)
                 .unwrap_or_default(),
-            ecdsa_keys_held,
             idkg_keys_held,
         })
     }
@@ -519,6 +527,7 @@ impl SubnetMetrics {
                 | CyclesUseCase::RequestAndResponseTransmission
                 | CyclesUseCase::Uninstall
                 | CyclesUseCase::CanisterCreation
+                | CyclesUseCase::SchnorrOutcalls
                 | CyclesUseCase::BurnedCycles => total += *cycles,
             }
         }

@@ -150,7 +150,7 @@ pub struct DashboardTemplate {
     pub last_eth_synced_block: BlockNumber,
     pub last_erc20_synced_block: Option<BlockNumber>,
     pub last_observed_block: Option<BlockNumber>,
-    pub ledger_id: Principal,
+    pub cketh_ledger_id: Principal,
     pub minted_events: Vec<MintedEvent>,
     pub pending_deposits: Vec<DashboardPendingDeposit>,
     pub invalid_events: BTreeMap<EventSource, InvalidEventReason>,
@@ -322,7 +322,7 @@ impl DashboardTemplate {
             erc20_helper_contract_address: state
                 .erc20_helper_contract_address
                 .map_or("N/A".to_string(), |address| address.to_string()),
-            ledger_id: state.ledger_id,
+            cketh_ledger_id: state.cketh_ledger_id,
             next_transaction_nonce: state.eth_transactions.next_transaction_nonce(),
             minimum_withdrawal_amount: state.cketh_minimum_withdrawal_amount,
             first_synced_block: state.first_scraped_block_number,

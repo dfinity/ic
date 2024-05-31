@@ -79,8 +79,12 @@ pub enum Method {
     StopCanister,
     UninstallCode,
     UpdateSettings,
-    ComputeInitialEcdsaDealings, // TODO(EXC-1599): remove after ComputeInitialIDkgDealings is released.
+    ComputeInitialEcdsaDealings, // TODO(EXC-1630): remove after ComputeInitialIDkgDealings is released.
     ComputeInitialIDkgDealings,
+
+    // Schnorr interface.
+    SchnorrPublicKey,
+    SignWithSchnorr,
 
     // Bitcoin Interface.
     BitcoinGetBalance,
@@ -2366,6 +2370,83 @@ pub struct ComputeInitialIDkgDealingsArgs {
 }
 
 impl Payload<'_> for ComputeInitialIDkgDealingsArgs {}
+
+impl ComputeInitialIDkgDealingsArgs {
+    pub fn new(
+        key_id: MasterPublicKeyId,
+        subnet_id: SubnetId,
+        nodes: BTreeSet<NodeId>,
+        registry_version: RegistryVersion,
+    ) -> Self {
+        Self {
+            key_id,
+            subnet_id,
+            nodes: nodes.iter().map(|id| id.get()).collect(),
+            registry_version: registry_version.get(),
+        }
+    }
+}
+
+/// Represents the argument of the sign_with_schnorr API.
+/// ```text
+/// (record {
+///   message : blob;
+///   derivation_path : vec blob;
+///   key_id : schnorr_key_id;
+/// })
+/// ```
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub struct SignWithSchnorrArgs {
+    #[serde(with = "serde_bytes")]
+    pub message: Vec<u8>,
+    pub derivation_path: DerivationPath,
+    pub key_id: SchnorrKeyId,
+}
+
+impl Payload<'_> for SignWithSchnorrArgs {}
+
+/// Struct used to return an Schnorr signature.
+#[derive(CandidType, Deserialize, Debug)]
+pub struct SignWithSchnorrReply {
+    #[serde(with = "serde_bytes")]
+    pub signature: Vec<u8>,
+}
+
+impl Payload<'_> for SignWithSchnorrReply {}
+
+/// Represents the argument of the schnorr_public_key API.
+/// ```text
+/// (record {
+///   canister_id : opt canister_id;
+///   derivation_path : vec blob;
+///   key_id : schnorr_key_id;
+/// })
+/// ```
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub struct SchnorrPublicKeyArgs {
+    pub canister_id: Option<CanisterId>,
+    pub derivation_path: DerivationPath,
+    pub key_id: SchnorrKeyId,
+}
+
+impl Payload<'_> for SchnorrPublicKeyArgs {}
+
+/// Represents the response of the schnorr_public_key API.
+/// ```text
+/// (record {
+///   public_key : blob;
+///   chain_code : blob;
+/// })
+/// ```
+#[derive(CandidType, Deserialize, Debug)]
+pub struct SchnorrPublicKeyResponse {
+    #[serde(with = "serde_bytes")]
+    pub public_key: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    pub chain_code: Vec<u8>,
+}
+
+impl Payload<'_> for SchnorrPublicKeyResponse {}
 
 /// Struct used to return the xnet initial dealings.
 #[derive(Debug)]

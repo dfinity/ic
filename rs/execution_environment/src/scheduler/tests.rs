@@ -4909,11 +4909,11 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     let mut test = SchedulerTestBuilder::new()
         .with_ecdsa_key(key_id.clone())
         .build();
-    let quadruple_id = QuadrupleId::new(0);
-    let quadruple_ids = BTreeSet::from_iter([quadruple_id.clone()]);
+    let pre_sig_id = PreSigId(0);
+    let pre_sig_ids = BTreeSet::from_iter([pre_sig_id]);
 
     inject_ecdsa_signing_request(&mut test, &key_id);
-    test.deliver_quadruple_ids(BTreeMap::from_iter([(key_id, quadruple_ids)]));
+    test.deliver_pre_signature_ids(BTreeMap::from_iter([(key_id, pre_sig_ids)]));
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let sign_with_ecdsa_context = &test
@@ -4928,7 +4928,7 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     // Check that quadruple was matched
     assert_eq!(
         sign_with_ecdsa_context.matched_quadruple,
-        Some((quadruple_id.clone(), expected_height))
+        Some((pre_sig_id, expected_height))
     );
     // Check that nonce is still none
     assert!(sign_with_ecdsa_context.nonce.is_none());
@@ -4944,7 +4944,7 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     // Check that quadruple is still matched
     assert_eq!(
         sign_with_ecdsa_context.matched_quadruple,
-        Some((quadruple_id, expected_height))
+        Some((pre_sig_id, expected_height))
     );
     // Check that nonce is set
     let nonce = sign_with_ecdsa_context.nonce;
@@ -4971,13 +4971,13 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
         .build();
 
     // Deliver 2 quadruples for the first key, 1 for the second, 0 for the third
-    let quadruple_ids0 = BTreeSet::from_iter([QuadrupleId::new(0), QuadrupleId::new(1)]);
-    let quadruple_ids1 = BTreeSet::from_iter([QuadrupleId::new(2)]);
-    let quadruple_id_map = BTreeMap::from_iter([
-        (key_ids[0].clone(), quadruple_ids0.clone()),
-        (key_ids[1].clone(), quadruple_ids1.clone()),
+    let pre_sig_ids0 = BTreeSet::from_iter([PreSigId(0), PreSigId(1)]);
+    let pre_sig_ids1 = BTreeSet::from_iter([PreSigId(2)]);
+    let pre_sig_id_map = BTreeMap::from_iter([
+        (key_ids[0].clone(), pre_sig_ids0.clone()),
+        (key_ids[1].clone(), pre_sig_ids1.clone()),
     ]);
-    test.deliver_quadruple_ids(quadruple_id_map);
+    test.deliver_pre_signature_ids(pre_sig_id_map);
 
     // Inject 3 contexts requesting the third, second and first key in order
     for i in (0..3).rev() {
@@ -5002,14 +5002,14 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     assert!(context1.nonce.is_some());
     assert_eq!(
         context1.matched_quadruple,
-        Some((quadruple_ids1.first().unwrap().clone(), expected_height))
+        Some((*pre_sig_ids1.first().unwrap(), expected_height))
     );
 
     let context2 = sign_with_ecdsa_contexts.get(&CallbackId::from(2)).unwrap();
     assert!(context2.nonce.is_some());
     assert_eq!(
         context2.matched_quadruple,
-        Some((quadruple_ids0.first().unwrap().clone(), expected_height))
+        Some((*pre_sig_ids0.first().unwrap(), expected_height))
     );
 }
 

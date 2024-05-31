@@ -7,11 +7,11 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ed25519-dalek = { version = "2.1.1", features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem", "hazmat"] }
 curve25519-dalek = { workspace = true }
+ed25519-dalek = { workspace = true }
 hkdf = "0.12"
 sha2 = "0.10"
-rand = "0.8"
+rand = { workspace = true }
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 pem = "1"
 

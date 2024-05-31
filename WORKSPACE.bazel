@@ -2,7 +2,7 @@ workspace(
     name = "ic",
 )
 
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
 load("//third_party/lmdb-0.9.70:repository.bzl", "lmdb_repository")
 load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
@@ -87,10 +87,12 @@ rust_register_toolchains(
     ],
 )
 
-git_repository(
+# Necessary for our ic-os Makefile build
+http_archive(
     name = "rules_foreign_cc",
-    commit = "9acbb356916760192d4c16301a69267fe44e6dec",
-    remote = "https://github.com/bazelbuild/rules_foreign_cc.git",
+    sha256 = "db6fcdb4f5ac217658f2c3aabd61e618d7fadc1cdf7d806ab1b52f2709d3fc66",
+    strip_prefix = "rules_foreign_cc-9acbb356916760192d4c16301a69267fe44e6dec",
+    url = "https://github.com/bazelbuild/rules_foreign_cc/archive/9acbb356916760192d4c16301a69267fe44e6dec.tar.gz",
 )
 
 load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
@@ -417,11 +419,6 @@ ormolu(name = "ormolu")
 load("//pre-commit:buf.bzl", "buf")
 
 buf(name = "buf")
-
-# shellcheck binary
-load("//pre-commit:shellcheck.bzl", "shellcheck")
-
-shellcheck(name = "shellcheck")
 
 # candid binary
 load("//pre-commit:candid.bzl", "candid")

@@ -239,34 +239,34 @@ fn main() -> io::Result<()> {
     // Set up tracing
     let mut tracing_layers = vec![];
 
-    if let Some(ref jaeger_collector_addr) = config.tracing.jaeger_addr {
-        let _rt_guard = rt_main.enter();
-        let jaeger_collector_addr = jaeger_collector_addr.trim().to_string();
+    // TODO: the replica config has empty string instead of a None value for the 'jaeger_addr'. It needs to be fixed.
+    match config.tracing.jaeger_addr.as_ref() {
+        Some(jaeger_collector_addr) if !jaeger_collector_addr.is_empty() => {
+            let _rt_guard = rt_main.enter();
 
-        let span_exporter = opentelemetry_otlp::new_exporter()
-            .tonic()
-            .with_endpoint(jaeger_collector_addr)
-            .with_protocol(opentelemetry_otlp::Protocol::Grpc);
+            let span_exporter = opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(jaeger_collector_addr)
+                .with_protocol(opentelemetry_otlp::Protocol::Grpc);
 
-        match opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(span_exporter)
-            .with_trace_config(
-                trace::config().with_resource(Resource::new(vec![KeyValue::new(
-                    "service.name",
-                    "Replica Jaeger Service",
-                )])),
-            )
-            .install_simple()
-        {
-            Ok(tracer) => {
-                let otel_layer = tracing_opentelemetry::OpenTelemetryLayer::new(tracer);
-                tracing_layers.push(otel_layer.boxed());
-            }
-            Err(err) => {
-                tracing::warn!("Failed to create the opentelemetry tracer: {:#?}", err);
+            match opentelemetry_otlp::new_pipeline()
+                .tracing()
+                .with_exporter(span_exporter)
+                .with_trace_config(trace::config().with_resource(Resource::new(vec![
+                    KeyValue::new("service.name", "Replica Jaeger Service"),
+                ])))
+                .install_simple()
+            {
+                Ok(tracer) => {
+                    let otel_layer = tracing_opentelemetry::OpenTelemetryLayer::new(tracer);
+                    tracing_layers.push(otel_layer.boxed());
+                }
+                Err(err) => {
+                    tracing::warn!("Failed to create the opentelemetry tracer: {:#?}", err);
+                }
             }
         }
+        _ => {}
     }
 
     let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);

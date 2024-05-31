@@ -17,11 +17,11 @@ DEPENDENCIES = [
     "//rs/registry/proto_data_provider",
     "@crate_index//:pkcs8",
     "@crate_index//:rand",
-    "@crate_index//:rustls",
+    "@crate_index//:rustls_0_21_12",
     "@crate_index//:signature",
     "@crate_index//:time",
     "@crate_index//:tokio",
-    "@crate_index//:tokio-rustls",
+    "@crate_index//:tokio_rustls_0_24_1",
     "@crate_index//:x509-cert",
 ]
 

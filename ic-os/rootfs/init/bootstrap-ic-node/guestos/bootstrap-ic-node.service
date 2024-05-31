@@ -7,9 +7,11 @@ Requires=var-lib-ic-crypto.mount
 After=var-lib-ic-crypto.mount
 Requires=var-lib-ic-backup.mount
 After=var-lib-ic-backup.mount
+Before=setup-ssh-account-keys.service
 
 [Install]
 WantedBy=multi-user.target
+RequiredBy=setup-ssh-account-keys.service
 
 [Service]
 Type=oneshot

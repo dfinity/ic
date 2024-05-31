@@ -20,7 +20,7 @@ use ic_nns_governance::{
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{p2p, ReplicaVersion};
+use ic_types::ReplicaVersion;
 use ic_types_test_utils::ids::subnet_test_id;
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
 use registry_canister::mutations::{
@@ -349,7 +349,6 @@ pub(crate) async fn create_new_subnet_with_keys(
         SubnetType::Application,
         node_ids.len(),
     );
-    let gossip = p2p::build_default_gossip_config();
     let scheduler = ic_config::subnet_config::SchedulerConfig::application_subnet();
     let payload = CreateSubnetPayload {
         node_ids,
@@ -365,14 +364,14 @@ pub(crate) async fn create_new_subnet_with_keys(
         ),
         dkg_interval_length: DKG_INTERVAL,
         dkg_dealings_per_block: config.dkg_dealings_per_block as u64,
-        gossip_max_artifact_streams_per_peer: gossip.max_artifact_streams_per_peer,
-        gossip_max_chunk_wait_ms: gossip.max_chunk_wait_ms,
-        gossip_max_duplicity: gossip.max_duplicity,
-        gossip_max_chunk_size: gossip.max_chunk_size,
-        gossip_receive_check_cache_size: gossip.receive_check_cache_size,
-        gossip_pfn_evaluation_period_ms: gossip.pfn_evaluation_period_ms,
-        gossip_registry_poll_period_ms: gossip.registry_poll_period_ms,
-        gossip_retransmission_request_ms: gossip.retransmission_request_ms,
+        gossip_max_artifact_streams_per_peer: 0,
+        gossip_max_chunk_wait_ms: 0,
+        gossip_max_duplicity: 0,
+        gossip_max_chunk_size: 0,
+        gossip_receive_check_cache_size: 0,
+        gossip_pfn_evaluation_period_ms: 0,
+        gossip_registry_poll_period_ms: 0,
+        gossip_retransmission_request_ms: 0,
         start_as_nns: false,
         subnet_type: SubnetType::Application,
         is_halted: false,

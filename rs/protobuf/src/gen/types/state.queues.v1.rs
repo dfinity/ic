@@ -238,15 +238,10 @@ pub struct CanisterQueues {
     pub ingress_queue: ::prost::alloc::vec::Vec<super::super::ingress::v1::Ingress>,
     #[prost(message, repeated, tag = "3")]
     pub input_queues: ::prost::alloc::vec::Vec<QueueEntry>,
-    /// Upgrade: input_schedule is mapped to local_subnet_input_schedule.
-    #[prost(message, repeated, tag = "4")]
-    pub input_schedule: ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "5")]
     pub output_queues: ::prost::alloc::vec::Vec<QueueEntry>,
     #[prost(enumeration = "canister_queues::NextInputQueue", tag = "6")]
     pub next_input_queue: i32,
-    /// Downgrade: both queues are mapped back to input_schedule in the current
-    /// release.
     #[prost(message, repeated, tag = "7")]
     pub local_subnet_input_schedule:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,

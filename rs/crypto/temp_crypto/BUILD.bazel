@@ -22,7 +22,7 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:rand",
-    "@crate_index//:rustls",
+    "@crate_index//:rustls_0_21_12",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
 ]

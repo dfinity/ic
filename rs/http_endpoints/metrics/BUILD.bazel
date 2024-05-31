@@ -6,7 +6,7 @@ DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/config",
     "//rs/monitoring/metrics",
-    "@crate_index//:hyper_0_14_27",
+    "@crate_index//:axum",
     "@crate_index//:prometheus",
     "@crate_index//:slog",
     "@crate_index//:thiserror",
@@ -17,6 +17,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/test_utilities/logger",
+    "@crate_index//:reqwest",
 ]
 
 rust_library(

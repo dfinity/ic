@@ -25,7 +25,8 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
-    CanisterInstallMode, CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method, Payload, IC_00,
+    CanisterInstallMode, CanisterStatusType, EcdsaKeyId, InstallCodeArgs, MasterPublicKeyId,
+    Method, Payload, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -47,7 +48,7 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
-    consensus::idkg::QuadrupleId,
+    consensus::idkg::PreSigId,
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},
     messages::{
@@ -108,10 +109,10 @@ pub(crate) struct SchedulerTest {
     registry_settings: RegistryExecutionSettings,
     // Metrics Registry.
     metrics_registry: MetricsRegistry,
-    // ECDSA subnet public keys.
-    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
+    // iDKG subnet public keys.
+    idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     // ECDSA quadruple IDs.
-    ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
+    ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
 }
 
 impl std::fmt::Debug for SchedulerTest {
@@ -471,7 +472,7 @@ impl SchedulerTest {
         let state = self.scheduler.execute_round(
             state,
             Randomness::from([0; 32]),
-            self.ecdsa_subnet_public_keys.clone(),
+            self.idkg_subnet_public_keys.clone(),
             self.ecdsa_quadruple_ids.clone(),
             self.round,
             None,
@@ -593,9 +594,9 @@ impl SchedulerTest {
             .memory_cost(bytes, duration, self.subnet_size())
     }
 
-    pub(crate) fn deliver_quadruple_ids(
+    pub(crate) fn deliver_pre_signature_ids(
         &mut self,
-        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
+        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
     ) {
         self.ecdsa_quadruple_ids = ecdsa_quadruple_ids;
     }
@@ -724,26 +725,25 @@ impl SchedulerTestBuilder {
 
         let config = SubnetConfig::new(self.subnet_type).cycles_account_manager_config;
         for ecdsa_key in &self.ecdsa_keys {
-            state
-                .metadata
-                .network_topology
-                .ecdsa_signing_subnets
-                .insert(ecdsa_key.clone(), vec![self.own_subnet_id]);
+            state.metadata.network_topology.idkg_signing_subnets.insert(
+                MasterPublicKeyId::Ecdsa(ecdsa_key.clone()),
+                vec![self.own_subnet_id],
+            );
             state
                 .metadata
                 .network_topology
                 .subnets
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
-                .ecdsa_keys_held
-                .insert(ecdsa_key.clone());
+                .idkg_keys_held
+                .insert(MasterPublicKeyId::Ecdsa(ecdsa_key.clone()));
         }
-        let ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey> = self
+        let idkg_subnet_public_keys: BTreeMap<_, _> = self
             .ecdsa_keys
             .into_iter()
-            .map(|key| {
+            .map(|key_id| {
                 (
-                    key,
+                    MasterPublicKeyId::Ecdsa(key_id),
                     MasterPublicKey {
                         algorithm_id: AlgorithmId::Secp256k1,
                         public_key: b"abababab".to_vec(),
@@ -841,7 +841,7 @@ impl SchedulerTestBuilder {
             wasm_executor,
             registry_settings: self.registry_settings,
             metrics_registry: self.metrics_registry,
-            ecdsa_subnet_public_keys,
+            idkg_subnet_public_keys,
             ecdsa_quadruple_ids: BTreeMap::new(),
         }
     }
@@ -1108,14 +1108,10 @@ impl TestWasmExecutorCore {
         };
 
         let instance_stats = InstanceStats {
-            accessed_pages: message.dirty_pages,
-            dirty_pages: message.dirty_pages,
-            read_before_write_count: message.dirty_pages,
-            direct_write_count: 0,
-            sigsegv_count: 0,
-            mmap_count: 0,
-            mprotect_count: 0,
-            copy_page_count: 0,
+            wasm_accessed_pages: message.dirty_pages,
+            wasm_dirty_pages: message.dirty_pages,
+            wasm_read_before_write_count: message.dirty_pages,
+            ..Default::default()
         };
         let slice = SliceExecutionOutput {
             executed_instructions: instructions_to_execute,

@@ -18,7 +18,7 @@ pub use self::{
     xnet::XNetPayload,
 };
 use crate::{
-    consensus::idkg::QuadrupleId,
+    consensus::idkg::PreSigId,
     crypto::canister_threshold_sig::MasterPublicKey,
     messages::{CallbackId, Payload, SignedIngress},
     xnet::CertifiedStreamSlice,
@@ -61,7 +61,7 @@ pub struct Batch {
     /// The ECDSA public keys of the subnet.
     pub ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
     /// The ECDSA quadruple Ids available to be matched with signature requests.
-    pub ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
+    pub ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
     /// The version of the registry to be referenced when processing the batch.
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.
