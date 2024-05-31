@@ -88,6 +88,9 @@ impl Id {
     /// Number of `Id` bits used as flags.
     const BITMASK_LEN: u32 = 3;
 
+    /// The minimum `Id` value, for use in e.g. `BTreeSet::split_off()` calls.
+    const MIN: Self = Self(0);
+
     fn new(kind: Kind, context: Context, class: Class, generator: u64) -> Self {
         Self(kind as u64 | context as u64 | class as u64 | generator << Id::BITMASK_LEN)
     }
@@ -359,8 +362,21 @@ impl MessagePool {
 
     /// Removes the message with the given `Id` from the pool.
     ///
-    /// Updates the stats; and updates the priority queues, if necessary.
+    /// Updates the stats; and the priority queues, where applicable.
     pub(super) fn take(&mut self, id: Id) -> Option<RequestOrResponse> {
+        let msg = self.take_impl(id)?;
+
+        self.remove_from_deadline_queue(id, &msg);
+        self.remove_from_size_queue(id, &msg);
+
+        debug_assert_eq!(Ok(()), self.check_invariants());
+        Some(msg)
+    }
+
+    /// Removes the message with the given `Id` from the pool.
+    ///
+    /// Updates the stats, but not the priority queues.
+    fn take_impl(&mut self, id: Id) -> Option<RequestOrResponse> {
         let msg = self.messages.remove(&id)?;
         // Sanity check.
         debug_assert_eq!(
@@ -374,9 +390,16 @@ impl MessagePool {
             self.message_stats
         );
 
+        Some(msg)
+    }
+
+    /// Removes the given message from the deadline queue and from
+    /// `self.outbound_guaranteed_request_deadlines`, if applicable.
+    fn remove_from_deadline_queue(&mut self, id: Id, msg: &RequestOrResponse) {
         use Class::*;
         use Context::*;
         use Kind::*;
+
         match (id.context(), id.class(), id.kind()) {
             // Outbound guaranteed response requests have (separately recorded) deadlines.
             (Outbound, GuaranteedResponse, Request) => {
@@ -384,26 +407,30 @@ impl MessagePool {
                     .outbound_guaranteed_request_deadlines
                     .remove(&id)
                     .unwrap();
-                self.deadline_queue.remove(&(deadline, id));
+                let removed = self.deadline_queue.remove(&(deadline, id));
+                debug_assert!(removed);
             }
 
-            // All other guaranteed response messages neither expire nor can be shed.
+            // All other guaranteed response messages do not expire.
             (_, GuaranteedResponse, _) => {}
 
-            // Inbound best-effort responses don't expire, but can be shed.
-            (Inbound, BestEffort, Response) => {
-                self.size_queue.remove(&(msg.count_bytes(), id));
-            }
+            // Inbound best-effort responses do not expire.
+            (Inbound, BestEffort, Response) => {}
 
-            // All other best-effort messages are enqueued in both priority queues.
+            // All other best-effort messages do expire.
             (_, BestEffort, _) => {
-                self.size_queue.remove(&(msg.count_bytes(), id));
-                self.deadline_queue.remove(&(msg.deadline(), id));
+                let removed = self.deadline_queue.remove(&(msg.deadline(), id));
+                debug_assert!(removed);
             }
         }
-        debug_assert_eq!(Ok(()), self.check_invariants());
+    }
 
-        Some(msg)
+    /// Removes the given message from the load shedding queue.
+    fn remove_from_size_queue(&mut self, id: Id, msg: &RequestOrResponse) {
+        if id.class() == Class::BestEffort {
+            let removed = self.size_queue.remove(&(msg.count_bytes(), id));
+            debug_assert!(removed);
+        }
     }
 
     /// Queries whether any message's deadline has expired.
@@ -420,36 +447,51 @@ impl MessagePool {
     }
 
     /// Removes and returns all messages with expired deadlines (i.e. `deadline <
-    /// now`).
+    /// now`). Updates the stats; and the priority queues, where applicable.
     ///
     /// Time complexity per expired message: `O(log(self.len()))`.
     pub(super) fn expire_messages(&mut self, now: Time) -> Vec<(Id, RequestOrResponse)> {
         if self.deadline_queue.is_empty() {
+            // No messages with deadlines, bail out.
             return Vec::new();
         }
 
         let now = CoarseTime::floor(now);
-        let mut expired = Vec::new();
-        while let Some((deadline, id)) = self.deadline_queue.first() {
-            if *deadline >= now {
-                break;
-            }
-            let id = *id;
-
-            // Pop the deadline queue entry.
-            self.deadline_queue.pop_first();
-
-            // Drop the message.
-            expired.push((id, self.take(id).unwrap()));
+        if self.deadline_queue.first().unwrap().0 >= now {
+            // No expired messages, bail out.
+            return Vec::new();
         }
 
+        // Split the deadline queue at `now`.
+        let mut temp = self.deadline_queue.split_off(&(now, Id::MIN));
+        std::mem::swap(&mut temp, &mut self.deadline_queue);
+
+        // Take and return all expired messages.
+        let expired = temp
+            .into_iter()
+            .map(|(_, id)| {
+                let msg = self.take_impl(id).unwrap();
+                self.outbound_guaranteed_request_deadlines.remove(&id);
+                self.remove_from_size_queue(id, &msg);
+                (id, msg)
+            })
+            .collect();
+
+        debug_assert_eq!(Ok(()), self.check_invariants());
         expired
     }
 
     /// Removes and returns the largest best-effort message in the pool, if any.
+    /// Updates the stats; and the priority queues, where applicable.
+    ///
+    /// Time complexity: `O(log(self.len()))`.
     pub(super) fn shed_largest_message(&mut self) -> Option<(Id, RequestOrResponse)> {
         if let Some((_, id)) = self.size_queue.pop_last() {
-            return Some((id, self.take(id).unwrap()));
+            let msg = self.take_impl(id).unwrap();
+            self.remove_from_deadline_queue(id, &msg);
+
+            debug_assert_eq!(Ok(()), self.check_invariants());
+            return Some((id, msg));
         }
 
         // Nothing to shed.
