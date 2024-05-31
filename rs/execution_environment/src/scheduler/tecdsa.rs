@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ic_crypto_prng::Csprng;
 use ic_interfaces::execution_environment::RegistryExecutionSettings;
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_types::{consensus::idkg::PreSigId, messages::CallbackId, ExecutionRound, Height};
 use rand::RngCore;
@@ -12,7 +12,7 @@ use super::SchedulerMetrics;
 /// Update [`SignWithEcdsaContext`]s by assigning randomness and matching quadruples.
 pub(crate) fn update_sign_with_ecdsa_contexts(
     current_round: ExecutionRound,
-    ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
+    idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
     contexts: &mut BTreeMap<CallbackId, SignWithEcdsaContext>,
     csprng: &mut Csprng,
     registry_settings: &RegistryExecutionSettings,
@@ -43,11 +43,15 @@ pub(crate) fn update_sign_with_ecdsa_contexts(
 
     // Match up to the maximum number of contexts per key ID to delivered quadruples.
     let max_ongoing_signatures = registry_settings.quadruples_to_create_in_advance as usize;
-    for (key_id, pre_sig_ids) in ecdsa_quadruple_ids {
+    for (key_id, pre_sig_ids) in idkg_pre_signature_ids {
         metrics
             .ecdsa_delivered_quadruples
             .with_label_values(&[&key_id.to_string()])
             .observe(pre_sig_ids.len() as f64);
+        let MasterPublicKeyId::Ecdsa(key_id) = key_id else {
+            //TODO(EXC-1598): Support matching tSchnorr pre-signatures
+            continue;
+        };
         match_quadruples_by_key_id(
             key_id,
             pre_sig_ids,

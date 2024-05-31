@@ -17,9 +17,7 @@ use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
 };
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
-use ic_management_canister_types::{
-    CanisterStatusType, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
-};
+use ic_management_canister_types::{CanisterStatusType, MasterPublicKeyId, Method as Ic00Method};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     canister_state::{
@@ -1408,7 +1406,7 @@ impl Scheduler for SchedulerImpl {
         mut state: ReplicatedState,
         randomness: Randomness,
         idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
+        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
         current_round: ExecutionRound,
         _next_checkpoint_round: Option<ExecutionRound>,
         current_round_type: ExecutionRoundType,
@@ -1681,7 +1679,7 @@ impl Scheduler for SchedulerImpl {
         // Update [`SignWithEcdsaContext`]s by assigning randomness and matching quadruples.
         update_sign_with_ecdsa_contexts(
             current_round,
-            ecdsa_quadruple_ids,
+            idkg_pre_signature_ids,
             &mut state
                 .metadata
                 .subnet_call_context_manager
