@@ -587,13 +587,13 @@ fn state_manager_test_with_state_sync_and_verifier_result<
 }
 
 pub fn state_manager_restart_test_with_state_sync<Test>(test: Test)
-    where
-        Test: FnOnce(
-            &MetricsRegistry,
-            Arc<StateManagerImpl>,
-            StateSync,
-            Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, Arc<StateManagerImpl>)>,
-        ),
+where
+    Test: FnOnce(
+        &MetricsRegistry,
+        Arc<StateManagerImpl>,
+        StateSync,
+        Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, Arc<StateManagerImpl>)>,
+    ),
 {
     let tmp = tmpdir("sm");
     let config = Config::new(tmp.path().into());
@@ -629,7 +629,6 @@ pub fn state_manager_restart_test_with_state_sync<Test>(test: Test)
         test(&metrics_registry, state_manager, state_sync, restart_fn);
     });
 }
-
 
 pub fn state_manager_test<F: FnOnce(&MetricsRegistry, StateManagerImpl)>(f: F) {
     state_manager_test_with_verifier_result(true, f)
