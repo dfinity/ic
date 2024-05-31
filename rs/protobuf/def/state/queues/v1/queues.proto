@@ -141,10 +141,10 @@ message MessagePool {
 }
 
 message CanisterQueue {
-  message MessageReference {
+  message QueueItem {
     oneof r {
-      // A reference into the message pool.
-      uint64 id = 1;
+      // A reference into the message pool (a pool assigned ID).
+      uint64 reference = 1;
 
       // A marker for a transient reject response for the given callback ID.
       // uint64 transient_reject_for_callback_id = 2;
@@ -154,7 +154,7 @@ message CanisterQueue {
   }
 
   // FIFO queue of references into the pool and reject response markers.
-  repeated MessageReference queue = 1;
+  repeated QueueItem queue = 1;
   // Maximum number of requests or responses that can be enqueued at any one time.
   uint64 capacity = 2;
   // Number of slots used by or reserved for responses.

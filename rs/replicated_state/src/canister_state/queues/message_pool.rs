@@ -120,21 +120,21 @@ impl Id {
     }
 }
 
-impl From<&Id> for pb_queues::canister_queue::MessageReference {
+impl From<&Id> for pb_queues::canister_queue::QueueItem {
     fn from(item: &Id) -> Self {
-        use pb_queues::canister_queue::message_reference::R;
+        use pb_queues::canister_queue::queue_item::R;
 
-        pb_queues::canister_queue::MessageReference {
-            r: Some(R::Id(item.0)),
+        pb_queues::canister_queue::QueueItem {
+            r: Some(R::Reference(item.0)),
         }
     }
 }
 
-impl TryFrom<pb_queues::canister_queue::MessageReference> for Id {
+impl TryFrom<pb_queues::canister_queue::QueueItem> for Id {
     type Error = ProxyDecodeError;
-    fn try_from(item: pb_queues::canister_queue::MessageReference) -> Result<Self, Self::Error> {
+    fn try_from(item: pb_queues::canister_queue::QueueItem) -> Result<Self, Self::Error> {
         match item.r {
-            Some(pb_queues::canister_queue::message_reference::R::Id(id)) => Ok(Self(id)),
+            Some(pb_queues::canister_queue::queue_item::R::Reference(id)) => Ok(Self(id)),
             None => Err(ProxyDecodeError::MissingField("MessageReference::r")),
         }
     }

@@ -54,8 +54,8 @@ fn canister_queue_push_request_succeeds() {
     );
 
     // Peek, then pop the request.
-    assert_eq!(Some(&MessageReference::Pooled(id)), queue.peek());
-    assert_eq!(Some(MessageReference::Pooled(id)), queue.pop());
+    assert_eq!(Some(&CanisterQueueItem::Reference(id)), queue.peek());
+    assert_eq!(Some(CanisterQueueItem::Reference(id)), queue.pop());
 
     assert_eq!(0, queue.len());
     assert!(!queue.has_used_slots());
@@ -104,8 +104,8 @@ fn canister_queue_push_response_succeeds() {
     );
 
     // Peek, then pop the response reference.
-    assert_eq!(Some(&MessageReference::Pooled(id)), queue.peek());
-    assert_eq!(Some(MessageReference::Pooled(id)), queue.pop());
+    assert_eq!(Some(&CanisterQueueItem::Reference(id)), queue.peek());
+    assert_eq!(Some(CanisterQueueItem::Reference(id)), queue.pop());
 
     assert_eq!(0, queue.len());
     assert!(!queue.has_used_slots());
@@ -240,12 +240,12 @@ fn canister_queue_push_without_reserved_slot_panics() {
 }
 
 /// Generator for an arbitrary `MessageReference`.
-fn arbitrary_message_reference() -> impl Strategy<Value = MessageReference> {
+fn arbitrary_message_reference() -> impl Strategy<Value = CanisterQueueItem> + Clone {
     prop_oneof![
-        1 => any::<u64>().prop_map(|gen| MessageReference::Pooled(new_request_message_id(gen, Class::GuaranteedResponse))),
-        1 => any::<u64>().prop_map(|gen| MessageReference::Pooled(new_request_message_id(gen, Class::BestEffort))),
-        1 => any::<u64>().prop_map(|gen| MessageReference::Pooled(new_response_message_id(gen, Class::GuaranteedResponse))),
-        1 => any::<u64>().prop_map(|gen| MessageReference::Pooled(new_response_message_id(gen, Class::BestEffort))),
+        1 => any::<u64>().prop_map(|gen| CanisterQueueItem::Reference(new_request_message_id(gen, Class::GuaranteedResponse))),
+        1 => any::<u64>().prop_map(|gen| CanisterQueueItem::Reference(new_request_message_id(gen, Class::BestEffort))),
+        1 => any::<u64>().prop_map(|gen| CanisterQueueItem::Reference(new_response_message_id(gen, Class::GuaranteedResponse))),
+        1 => any::<u64>().prop_map(|gen| CanisterQueueItem::Reference(new_response_message_id(gen, Class::BestEffort))),
     ]
 }
 
@@ -263,10 +263,10 @@ proptest! {
         // Push all references onto the queue.
         for reference in references.iter() {
             match reference {
-                MessageReference::Pooled(id) if id.kind() == Kind::Request => {
+                CanisterQueueItem::Reference(id) if id.kind() == Kind::Request => {
                     queue.push_request(*id);
                 }
-                MessageReference::Pooled(id) => {
+                CanisterQueueItem::Reference(id) => {
                     queue.try_reserve_response_slot().unwrap();
                     queue.push_response(*id);
                 }
@@ -283,6 +283,42 @@ proptest! {
 
         // All references should have been consumed.
         prop_assert!(references.is_empty());
+    }
+
+    #[test]
+    fn encode_roundtrip(
+        references in proptest::collection::vec_deque(
+            arbitrary_message_reference(),
+            10..20,
+        ),
+        reserved_slots in 0..3
+    ) {
+        // Create a queue with large enough capacity.
+        let mut queue = CanisterQueue::new(23);
+
+        // Push all references onto the queue.
+        for reference in references.iter() {
+            match reference {
+                CanisterQueueItem::Reference(id) if id.kind() == Kind::Request => {
+                    queue.push_request(*id);
+                }
+                CanisterQueueItem::Reference(id) => {
+                    queue.try_reserve_response_slot().unwrap();
+                    queue.push_response(*id);
+                }
+            }
+            prop_assert!(queue.check_invariants());
+        }
+        // And make `reserved_slots` additional reservations.
+        for _ in 0..reserved_slots {
+            queue.try_reserve_response_slot().unwrap();
+        }
+        prop_assert!(queue.check_invariants());
+
+        let encoded: pb_queues::CanisterQueue = (&queue).into();
+        let decoded = encoded.try_into().unwrap();
+
+        assert_eq!(queue, decoded);
     }
 }
 

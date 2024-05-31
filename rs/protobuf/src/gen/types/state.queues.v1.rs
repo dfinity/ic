@@ -236,7 +236,7 @@ pub mod message_pool {
 pub struct CanisterQueue {
     /// FIFO queue of references into the pool and reject response markers.
     #[prost(message, repeated, tag = "1")]
-    pub queue: ::prost::alloc::vec::Vec<canister_queue::MessageReference>,
+    pub queue: ::prost::alloc::vec::Vec<canister_queue::QueueItem>,
     /// Maximum number of requests or responses that can be enqueued at any one time.
     #[prost(uint64, tag = "2")]
     pub capacity: u64,
@@ -249,19 +249,19 @@ pub mod canister_queue {
     #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct MessageReference {
-        #[prost(oneof = "message_reference::R", tags = "1")]
-        pub r: ::core::option::Option<message_reference::R>,
+    pub struct QueueItem {
+        #[prost(oneof = "queue_item::R", tags = "1")]
+        pub r: ::core::option::Option<queue_item::R>,
     }
-    /// Nested message and enum types in `MessageReference`.
-    pub mod message_reference {
+    /// Nested message and enum types in `QueueItem`.
+    pub mod queue_item {
         #[derive(serde::Serialize, serde::Deserialize)]
         #[allow(clippy::derive_partial_eq_without_eq)]
         #[derive(Clone, PartialEq, ::prost::Oneof)]
         pub enum R {
-            /// A reference into the message pool.
+            /// A reference into the message pool (a pool assigned ID).
             #[prost(uint64, tag = "1")]
-            Id(u64),
+            Reference(u64),
         }
     }
 }

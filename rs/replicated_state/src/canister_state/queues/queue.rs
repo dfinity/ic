@@ -16,12 +16,12 @@ use std::sync::Arc;
 #[cfg(test)]
 mod tests;
 
-/// A reference to a message, used as `CanisterQueue` item.
+/// An item enqueued into a `CanisterQueue`.
 ///
 /// May be a weak reference into the message pool; or identify a reject response to
 /// a specific callback.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum MessageReference {
+pub(super) enum CanisterQueueItem {
     /// Weak reference to a `Request` or `Response` held in the message pool.
     ///
     /// Some messages (all best-effort messages; plus guaranteed response requests
@@ -40,7 +40,7 @@ pub(super) enum MessageReference {
     ///    as dangling rererences to begin with. They are to be handled as
     ///    `SYS_UNKNOWN` reject responses ("timeout" if their deadline expired,
     ///    "drop" otherwise).
-    Pooled(message_pool::Id),
+    Reference(message_pool::Id),
     //
     // TODO(MR-552) Define and use variants for best-effort and guaranteed reject
     // responses, so we don't need to allocate a full message.
@@ -54,16 +54,16 @@ pub(super) enum MessageReference {
     // LocalRejectBestEffortResponse(CallbackId),
 }
 
-impl MessageReference {
+impl CanisterQueueItem {
     /// Returns `true` if this is a reference to a response; or a reject response.
     pub(super) fn is_response(&self) -> bool {
-        matches!(self, Self::Pooled(id) if id.kind() == Kind::Response)
+        matches!(self, Self::Reference(id) if id.kind() == Kind::Response)
     }
 
     /// Returns the ID behind this reference.
     pub(super) fn id(&self) -> message_pool::Id {
         match self {
-            Self::Pooled(id) => *id,
+            Self::Reference(id) => *id,
         }
     }
 }
@@ -94,14 +94,14 @@ impl MessageReference {
 /// by requests to the queue capacity.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CanisterQueue {
-    /// A FIFO queue of all requests and responses.
+    /// A FIFO queue of requests and responses.
     ///
     /// Since responses may be enqueued at arbitrary points in time, reserved slots
     /// for responses cannot be explicitly represented in `queue`. They only exist
     /// as the difference between `response_slots` and the number of actually
     /// enqueued response references (calculated as `request_slots + response_slots
     /// - queue.len()`).
-    queue: VecDeque<MessageReference>,
+    queue: VecDeque<CanisterQueueItem>,
 
     /// Maximum number of requests; or responses + reserved slots; that can be held
     /// in the queue at any one time.
@@ -153,7 +153,7 @@ impl CanisterQueue {
         debug_assert!(id.kind() == Kind::Request);
         assert!(self.request_slots < self.capacity);
 
-        self.queue.push_back(MessageReference::Pooled(id));
+        self.queue.push_back(CanisterQueueItem::Reference(id));
         self.request_slots += 1;
 
         debug_assert!(self.check_invariants());
@@ -205,15 +205,15 @@ impl CanisterQueue {
         debug_assert!(id.kind() == Kind::Response);
         self.check_has_reserved_response_slot().unwrap();
 
-        self.queue.push_back(MessageReference::Pooled(id));
+        self.queue.push_back(CanisterQueueItem::Reference(id));
         debug_assert!(self.check_invariants());
     }
 
-    /// Pops a reference from the queue. Returns `None` if the queue is empty.
-    pub(super) fn pop(&mut self) -> Option<MessageReference> {
-        let reference = self.queue.pop_front()?;
+    /// Pops an item from the queue. Returns `None` if the queue is empty.
+    pub(super) fn pop(&mut self) -> Option<CanisterQueueItem> {
+        let item = self.queue.pop_front()?;
 
-        if reference.is_response() {
+        if item.is_response() {
             debug_assert!(self.response_slots > 0);
             self.response_slots -= 1;
         } else {
@@ -222,12 +222,11 @@ impl CanisterQueue {
         }
         debug_assert!(self.check_invariants());
 
-        Some(reference)
+        Some(item)
     }
 
-    /// Returns a reference to the next item in the queue; or `None` if
-    /// the queue is empty.
-    pub(super) fn peek(&self) -> Option<&MessageReference> {
+    /// Returns the next item in the queue; or `None` if the queue is empty.
+    pub(super) fn peek(&self) -> Option<&CanisterQueueItem> {
         self.queue.front()
     }
 
@@ -274,7 +273,7 @@ impl CanisterQueue {
         // FIXME: Get rid of this.
         self.queue
             .iter()
-            .filter_map(|reference| pool.get(reference.id()).cloned())
+            .filter_map(|item| pool.get(item.id()).cloned())
     }
 }
 
@@ -284,8 +283,8 @@ impl From<&CanisterQueue> for pb_queues::CanisterQueue {
             queue: item
                 .queue
                 .iter()
-                .map(|reference| match reference {
-                    MessageReference::Pooled(id) => id.into(),
+                .map(|queue_item| match queue_item {
+                    CanisterQueueItem::Reference(id) => id.into(),
                 })
                 .collect(),
             capacity: item.capacity as u64,
@@ -297,13 +296,13 @@ impl From<&CanisterQueue> for pb_queues::CanisterQueue {
 impl TryFrom<pb_queues::CanisterQueue> for CanisterQueue {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_queues::CanisterQueue) -> Result<Self, Self::Error> {
-        let queue: VecDeque<MessageReference> = item
+        let queue: VecDeque<CanisterQueueItem> = item
             .queue
             .into_iter()
-            .map(|reference| match reference.r {
-                Some(pb_queues::canister_queue::message_reference::R::Id(_)) => {
-                    let id = message_pool::Id::try_from(reference)?;
-                    Ok(MessageReference::Pooled(id))
+            .map(|queue_item| match queue_item.r {
+                Some(pb_queues::canister_queue::queue_item::R::Reference(_)) => {
+                    let id = message_pool::Id::try_from(queue_item)?;
+                    Ok(CanisterQueueItem::Reference(id))
                 }
                 None => Err(ProxyDecodeError::MissingField("MessageReference::r")),
             })
