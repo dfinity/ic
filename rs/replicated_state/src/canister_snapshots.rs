@@ -83,6 +83,21 @@ impl CanisterSnapshots {
         }
     }
 
+    /// Remove all snapshots identified by `canister_id` from the collections of snapshots.
+    ///
+    /// Additionally, new items are added to the `unflushed_changes`,
+    /// representing the deleted backups since the last flush to the disk.
+    pub fn delete_snapshots(&mut self, canister_id: CanisterId) {
+        if let Some(snapshot_ids) = self.snapshot_ids.remove(&canister_id) {
+            for snapshot_id in snapshot_ids {
+                debug_assert!(self.snapshots.contains_key(&snapshot_id));
+                self.snapshots.remove(&snapshot_id).unwrap();
+                self.unflushed_changes
+                    .push(SnapshotOperation::Delete(snapshot_id));
+            }
+        }
+    }
+
     /// Selects the snapshots associated with the provided canister ID.
     /// Returns a list of tuples containing the ID and the canister snapshot.
     pub fn list_snapshots(
