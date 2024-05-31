@@ -11,6 +11,7 @@ declare -A teamsMap=(
     ["@dfinity-lab/teams/cross-chain-team"]="@dfinity/cross-chain-team"
     ["@dfinity-lab/teams/crypto-owners"]="@dfinity/dept-crypto-library"
     ["@dfinity-lab/teams/execution-owners"]="@dfinity/execution"
+    ["@dfinity-lab/teams/execution-team"]="@dfinity/execution"
     ["@dfinity-lab/teams/financial-integrations"]="@dfinity/finint"
     ["@dfinity-lab/teams/ic-support"]="@dfinity/ic-support"
     ["@dfinity-lab/teams/ic-testing-verification"]="@dfinity/ic-testing-verification"
@@ -25,6 +26,7 @@ declare -A teamsMap=(
     ["@dfinity-lab/teams/prodsec"]="@dfinity/product-security"
     ["@dfinity-lab/teams/runtime-owners"]="@dfinity/runtime"
     ["@dfinity-lab/teams/sdk-team"]="@dfinity/sdk"
+    ["@dfinity-lab/teams/utopia"]="@dfinity/utopia"
     ["@dfinity-lab/teams/ghost"]="@ghost"
 )
 
