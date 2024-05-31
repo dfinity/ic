@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/certification",
+    "//rs/crypto/sha2",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
@@ -13,6 +14,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:chrono",
+    "@crate_index//:leb128",
     "@crate_index//:ic-agent",
     "@crate_index//:rusqlite",
     "@crate_index//:serde",

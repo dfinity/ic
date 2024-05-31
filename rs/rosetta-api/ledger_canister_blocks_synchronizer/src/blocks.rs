@@ -1,20 +1,23 @@
 use self::database_access::INSERT_INTO_TRANSACTIONS_STATEMENT;
-use crate::iso8601_to_timestamp;
+use crate::{iso8601_to_timestamp, timestamp_to_iso8601};
+use ic_crypto_sha2::Sha256;
+use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_hash_of::HashOf;
-use icp_ledger::{AccountIdentifier, Block, TimeStamp, Tokens};
-use rusqlite::{params, OptionalExtension};
+use icp_ledger::{AccountIdentifier, Block, TimeStamp, Tokens, Transaction};
+use rusqlite::{named_params, params, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Mutex;
 
 mod database_access {
-    use super::vec_into_array;
+    use super::{row_to_block, vec_into_array};
     use crate::{
         blocks::{BlockStoreError, HashedBlock},
-        iso8601_to_timestamp, timestamp_to_iso8601,
+        timestamp_to_iso8601,
     };
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::{
@@ -240,14 +243,7 @@ mod database_access {
             .unwrap();
         let mut transactions = stmt
             .query_map(params![block_idx], |row| {
-                Ok(row
-                    .get(0)
-                    .map(|b| {
-                        Block::decode(EncodedBlock::from_vec(b))
-                            .unwrap()
-                            .transaction
-                    })
-                    .unwrap())
+                row.get(0).and_then(row_to_block).map(|b| b.transaction)
             })
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         match transactions.next() {
@@ -255,42 +251,34 @@ mod database_access {
             None => Err(BlockStoreError::NotFound(*block_idx)),
         }
     }
+
     pub fn get_hashed_block(
         con: &mut Connection,
         block_idx: &u64,
     ) -> Result<HashedBlock, BlockStoreError> {
-        let command = format!(
-            "SELECT  hash, block, parent_hash, idx, timestamp from blocks where idx = {}",
-            block_idx
-        );
-        let mut blocks = read_hashed_block(con, command.as_str())?.into_iter();
-        match blocks.next() {
-            Some(block) => block.map_err(|e| BlockStoreError::Other(e.to_string())),
-            None => Err(BlockStoreError::NotFound(*block_idx)),
-        }
+        let mut statement = con
+            .prepare_cached(
+                r#"SELECT hash, block, parent_hash, idx, timestamp
+                   FROM blocks
+                   WHERE idx = :idx"#,
+            )
+            .map_err(|e| format!("Unable to prepare statement: {e:?}"))?;
+        let block = statement
+            .query_row(named_params! { ":idx": block_idx }, |row| {
+                HashedBlock::try_from(row)
+            })
+            .map_err(|e| format!("Unable to query hashed block: {e:?}"))?;
+        Ok(block)
     }
 
     fn read_hashed_block(
         con: &mut Connection,
         command: &str,
     ) -> Result<Vec<Result<HashedBlock, Error>>, BlockStoreError> {
-        let mut stmt = con
-            .prepare(command)
-            .map_err(|e| BlockStoreError::Other(e.to_string()))
-            .unwrap();
+        let mut stmt = con.prepare(command).map_err(|e| e.to_string())?;
         let block = stmt
-            .query_map(params![], |row| {
-                Ok(HashedBlock {
-                    hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
-                    block: row.get(1).map(EncodedBlock::from_vec)?,
-                    parent_hash: row.get(2).map(|opt_bytes: Option<Vec<u8>>| {
-                        opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
-                    })?,
-                    index: row.get(3)?,
-                    timestamp: iso8601_to_timestamp(row.get(4)?),
-                })
-            })
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            .query_map(params![], |row| HashedBlock::try_from(row))
+            .map_err(|e| e.to_string())?;
         Ok(block.collect())
     }
 
@@ -706,11 +694,33 @@ impl HashedBlock {
     }
 }
 
+impl TryFrom<&Row<'_>> for HashedBlock {
+    type Error = rusqlite::Error;
+
+    fn try_from(row: &Row) -> Result<HashedBlock, Self::Error> {
+        Ok(HashedBlock {
+            hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
+            block: row.get(1).map(EncodedBlock::from_vec)?,
+            parent_hash: row.get(2).map(|opt_bytes: Option<Vec<u8>>| {
+                opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
+            })?,
+            index: row.get(3)?,
+            timestamp: iso8601_to_timestamp(row.get(4)?),
+        })
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum BlockStoreError {
     NotFound(BlockIndex),
     NotAvailable(BlockIndex),
     Other(String),
+}
+
+impl From<String> for BlockStoreError {
+    fn from(error: String) -> Self {
+        Self::Other(error)
+    }
 }
 
 fn vec_into_array(v: Vec<u8>) -> [u8; 32] {
@@ -838,6 +848,7 @@ impl Blocks {
                 r#"
                 CREATE TABLE IF NOT EXISTS rosetta_blocks (
                     idx INTEGER NOT NULL PRIMARY KEY,
+                    parent_hash BLOB,
                     hash BLOB NOT NULL,
                     timestamp TEXT
                 )
@@ -1330,5 +1341,289 @@ impl Blocks {
                 Ok(())
             }
         }
+    }
+
+    // Returns the index of the next Rosetta Block and of the first block
+    // to be put inside the next Rosetta Block
+    //
+    // Note: this method requires that the rosetta blocks table exist but
+    // it doesn't need them to be populated.
+    fn get_next_rosetta_block_indices(
+        &self,
+    ) -> Result<Option<RosettaBlockIndices>, BlockStoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|e| format!("Unable to acquire the connection mutex: {e:?}"))?;
+        let last_rosetta_block_index: Option<BlockIndex> = connection
+            .query_row("SELECT max(idx) FROM rosetta_blocks", [], |row| row.get(0))
+            .map_err(|e| format!("Unable to get the max index from the rosetta_blocks: {e:?}"))?;
+        let last_rosetta_block_index = match last_rosetta_block_index {
+            None => return Ok(None),
+            Some(last_rosetta_block_index) => last_rosetta_block_index,
+        };
+        let last_block_index_in_rosetta_block: BlockIndex = connection.query_row(
+            "SELECT max(block_idx) FROM rosetta_blocks_transactions WHERE idx = :idx",
+            named_params! { ":idx": last_rosetta_block_index },
+            |row| row.get(0),
+        ).map_err(|e| format!("Unable to get the max block index for the rosetta block {last_rosetta_block_index}: {e:?}"))?;
+        Ok(Some(RosettaBlockIndices {
+            rosetta_block_index: last_rosetta_block_index + 1,
+            first_block_index: last_block_index_in_rosetta_block + 1,
+        }))
+    }
+
+    pub fn make_rosetta_blocks_if_enabled(
+        &self,
+        certified_tip_index: BlockIndex,
+    ) -> Result<(), BlockStoreError> {
+        let next_block_indices = match self.rosetta_blocks_mode {
+            RosettaBlocksMode::Disabled => return Ok(()),
+            RosettaBlocksMode::Enabled {
+                first_rosetta_block_index,
+            } => self
+                .get_next_rosetta_block_indices()?
+                .unwrap_or_else(|| RosettaBlockIndices {
+                    rosetta_block_index: first_rosetta_block_index,
+                    first_block_index: first_rosetta_block_index,
+                }),
+        };
+
+        let mut block_indices = next_block_indices.first_block_index..=certified_tip_index;
+        let block_index = match block_indices.next() {
+            None => return Ok(()),
+            Some(index) => index,
+        };
+        let Block {
+            parent_hash,
+            timestamp,
+            transaction,
+        } = Block::decode(self.get_hashed_block(&block_index)?.block)?;
+
+        let mut rosetta_block = RosettaBlock {
+            index: next_block_indices.rosetta_block_index,
+            parent_hash: parent_hash.map(|h| h.into_bytes()),
+            timestamp,
+            transactions: [(block_index, transaction)].into_iter().collect(),
+        };
+        for block_index in block_indices {
+            let block = self.get_hashed_block(&block_index)?;
+            let transaction = Block::decode(block.block)?.transaction;
+            if block.timestamp == rosetta_block.timestamp {
+                rosetta_block.transactions.insert(block_index, transaction);
+            } else {
+                let next_rosetta_block_index = rosetta_block.index + 1;
+                let parent_hash = rosetta_block.hash();
+                self.store_rosetta_block(rosetta_block)?;
+                rosetta_block = RosettaBlock {
+                    index: next_rosetta_block_index,
+                    parent_hash: Some(parent_hash),
+                    timestamp: block.timestamp,
+                    transactions: [(block_index, transaction)].into_iter().collect(),
+                }
+            }
+        }
+        self.store_rosetta_block(rosetta_block)?;
+
+        Ok(())
+    }
+
+    fn store_rosetta_block(&self, rosetta_block: RosettaBlock) -> Result<(), BlockStoreError> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+
+        let transaction = connection
+            .transaction()
+            .map_err(|e| format!("Unable to initialize a transaction: {e:?}"))?;
+
+        // Store the metainfo of the rosetta block
+        {
+            let mut statement = transaction
+                .prepare_cached(
+                    r#"INSERT INTO rosetta_blocks (idx, hash, timestamp)
+                                VALUES (:idx, :hash, :timestamp)"#,
+                )
+                .map_err(|e| format!("Unable to insert into rosetta_blocks table: {e:?}"))?;
+            let _ = statement
+                .execute(named_params! {
+                    ":idx": rosetta_block.index,
+                    ":hash": rosetta_block.hash(),
+                    ":timestmap": timestamp_to_iso8601(rosetta_block.timestamp)
+                })
+                .map_err(|e| format!("Unable to insert into rosetta_blocks table: {e:?}"))?;
+        }
+
+        // Store the blocks that form this rosetta block
+        {
+            let mut statement = transaction
+                .prepare_cached(
+                    r#"INSERT INTO rosetta_blocks_transactions (idx, block_idx)
+                    VALUES (:idx, :block_idx)"#,
+                )
+                .map_err(|e| {
+                    format!("Unable to insert into rosetta_blocks_transactions table: {e:?}")
+                })?;
+            for block_index in rosetta_block.transactions.keys() {
+                let _ = statement
+                    .execute(named_params! {
+                        ":idx": rosetta_block.index,
+                        ":block_idx": block_index,
+                    })
+                    .map_err(|e| {
+                        format!("Unable to insert into rosetta_blocks_transactions table: {e:?}")
+                    })?;
+            }
+        }
+
+        let _ = transaction.commit().map_err(|e| {
+            format!("Error while finishing the transaction to store a rosetta block: {e:?}")
+        })?;
+        Ok(())
+    }
+
+    pub fn get_rosetta_block(
+        &self,
+        rosetta_block_index: BlockIndex,
+    ) -> Result<RosettaBlock, BlockStoreError> {
+        let (parent_hash, timestamp) =
+            self.get_rosetta_block_phash_timestamp(rosetta_block_index)?;
+        let transactions = self.get_rosetta_block_transactions(rosetta_block_index)?;
+        Ok(RosettaBlock {
+            index: rosetta_block_index,
+            parent_hash,
+            timestamp,
+            transactions,
+        })
+    }
+
+    fn get_rosetta_block_phash_timestamp(
+        &self,
+        rosetta_block_index: BlockIndex,
+    ) -> Result<(Option<[u8; 32]>, TimeStamp), BlockStoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+
+        connection
+            .query_row(
+                "SELECT parent_hash, timestamp FROM rosetta_blocks WHERE idx=:idx",
+                named_params! { ":idx": rosetta_block_index },
+                |row| {
+                    let parent_hash = row.get(0)?;
+                    let timestamp = row.get(1).map(iso8601_to_timestamp)?;
+                    Ok((parent_hash, timestamp))
+                },
+            )
+            .map_err(|e| {
+                BlockStoreError::from(format!("Unable to select from rosetta_blocks: {e:?}"))
+            })
+    }
+
+    fn get_rosetta_block_transactions(
+        &self,
+        rosetta_block_index: BlockIndex,
+    ) -> Result<BTreeMap<BlockIndex, Transaction>, BlockStoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+        let mut statement = connection
+            .prepare_cached(
+                r#"SELECT blocks.idx, block
+                   FROM rosetta_blocks_transactions JOIN blocks
+                   WHERE rosetta_blocks_transactions.idx=:idx"#,
+            )
+            .map_err(|e| format!("Unable to select block: {e:?}"))?;
+        let blocks = statement
+            .query_map(named_params! { ":idx": rosetta_block_index }, |row| {
+                let block_index: BlockIndex = row.get(0)?;
+                let block = row.get(1).and_then(row_to_block)?;
+                Ok((block_index, block))
+            })
+            .map_err(|e| format!("Unable to select block: {e:?}"))?;
+        let mut transactions = BTreeMap::new();
+        for index_and_block in blocks {
+            let (block_index, block) =
+                index_and_block.map_err(|e| format!("Unable to select block: {e:?}"))?;
+            let transaction = block.transaction;
+            transactions.insert(block_index, transaction);
+        }
+        Ok(transactions)
+    }
+}
+
+fn row_to_block(cell: Vec<u8>) -> Result<Block, rusqlite::Error> {
+    let encoded_block = EncodedBlock::from(cell);
+    Block::decode(encoded_block).map_err(|e| {
+        rusqlite::Error::FromSqlConversionFailure(
+            0,
+            rusqlite::types::Type::Blob,
+            format!("Unable to decode block: {e:?}").into(),
+        )
+    })
+}
+
+struct RosettaBlockIndices {
+    pub rosetta_block_index: BlockIndex,
+    pub first_block_index: BlockIndex,
+}
+
+pub struct RosettaBlock {
+    pub index: BlockIndex,
+    pub parent_hash: Option<[u8; 32]>,
+    pub timestamp: TimeStamp,
+    pub transactions: BTreeMap<BlockIndex, Transaction>,
+}
+
+impl RosettaBlock {
+    pub fn hash(&self) -> [u8; 32] {
+        // The hash of a rosetta block is calculated
+        // using representation-independent hashing.
+        // https://internetcomputer.org/docs/current/references/ic-interface-spec#hash-of-map
+
+        fn hash_nat(n: u64) -> [u8; 32] {
+            let mut buf = vec![];
+            let _ = leb128::write::unsigned(&mut buf, n).expect("Unable to leb128 encode number");
+            Sha256::hash(&buf)
+        }
+
+        fn hash_field(name: &str, value: &[u8]) -> Vec<u8> {
+            let mut field_hash = Sha256::hash(name.as_bytes()).to_vec();
+            field_hash.extend(value);
+            field_hash
+        }
+
+        // The transactions field is encoded as vector of tuples
+        // (block_id, transaction) where the tuples are encoded
+        // as arrays of two elements.
+        let mut transactions_hashes = vec![];
+        for (block_index, transaction) in &self.transactions {
+            let mut hash = hash_nat(*block_index).to_vec();
+            hash.extend(transaction.hash().as_slice());
+            transactions_hashes.append(&mut hash);
+        }
+
+        let mut fields = vec![
+            hash_field("index", &hash_nat(self.index)),
+            hash_field(
+                "timestamp",
+                &hash_nat(self.timestamp.as_nanos_since_unix_epoch()),
+            ),
+            hash_field("transactions", &Sha256::hash(&transactions_hashes)),
+        ];
+        if let Some(parent_hash) = self.parent_hash {
+            fields.push(hash_field("parent_hash", &parent_hash));
+        }
+
+        fields.sort();
+
+        let mut sha256 = Sha256::new();
+        for field in fields.into_iter() {
+            sha256.write(&field);
+        }
+        sha256.finish()
     }
 }

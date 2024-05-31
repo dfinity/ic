@@ -14,8 +14,8 @@ use crate::models::{AccountBalanceMetadata, CallResponse, NetworkIdentifier};
 use crate::request_types::GetProposalInfo;
 use crate::transaction_id::TransactionIdentifier;
 use crate::{convert, models, API_VERSION, NODE_VERSION};
-use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
+use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlock;
 use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
@@ -156,14 +156,12 @@ impl RosettaRequestHandler {
                 &msg.account_identifier.address, e,
             ))
         })?;
+        let block = self.get_block(msg.block_identifier).await?;
         let blocks = self.ledger.read_blocks().await;
-        let block = get_block(&blocks, msg.block_identifier)?;
-
-        let tokens = blocks.get_account_balance(&account_id, &block.index)?;
+        let tokens = blocks.get_account_balance(&account_id, &block.block_identifier.index)?;
         let amount = tokens_to_amount(tokens, self.ledger.token_symbol())?;
-        let b = convert::block_id(&block)?;
         Ok(AccountBalanceResponse {
-            block_identifier: b,
+            block_identifier: block.block_identifier,
             balances: vec![amount],
             metadata: neuron_info.map(|ni| ni.into()),
         })
@@ -211,31 +209,186 @@ impl RosettaRequestHandler {
     /// Get a Block
     pub async fn block(&self, msg: models::BlockRequest) -> Result<BlockResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
-
-        let blocks = self.ledger.read_blocks().await;
-        let hb = get_block(&blocks, Some(msg.block_identifier))?;
-        let block = Block::decode(hb.block.clone())
-            .map_err(|err| ApiError::internal_error(format!("Cannot decode block: {}", err)))?;
-        let b_id = convert::block_id(&hb)?;
-        let parent_id = create_parent_block_id(&blocks, &hb)?;
-
-        let transactions = vec![convert::block_to_transaction(
-            &hb,
-            self.ledger.token_symbol(),
-        )?];
-        let block = Some(models::Block::new(
-            b_id,
-            parent_id,
-            models::timestamp::from_system_time(block.timestamp.into())?
-                .0
-                .try_into()?,
-            transactions,
-        ));
-
+        let block = self.get_block(Some(msg.block_identifier)).await?;
         Ok(BlockResponse {
-            block,
+            block: Some(block),
             other_transactions: None,
         })
+    }
+
+    async fn is_a_rosetta_block_index(&self, block_index: BlockIndex) -> bool {
+        match self.rosetta_blocks_mode().await {
+            RosettaBlocksMode::Disabled => false,
+            RosettaBlocksMode::Enabled {
+                first_rosetta_block_index,
+            } => block_index >= first_rosetta_block_index,
+        }
+    }
+
+    async fn is_rosetta_blocks_mode_enabled(&self) -> bool {
+        match self.rosetta_blocks_mode().await {
+            RosettaBlocksMode::Disabled => false,
+            RosettaBlocksMode::Enabled { .. } => true,
+        }
+    }
+
+    async fn get_block(
+        &self,
+        block_id: Option<PartialBlockIdentifier>,
+    ) -> Result<rosetta_core::objects::Block, ApiError> {
+        match block_id {
+            Some(PartialBlockIdentifier {
+                index: Some(index),
+                hash: Some(hash),
+            }) => {
+                if self.is_a_rosetta_block_index(index).await {
+                    self.get_rosetta_block_by_index_and_hash(index, &hash).await
+                } else {
+                    self.get_verified_block_by_index_and_hash(index, &hash)
+                        .await
+                }
+            }
+            Some(PartialBlockIdentifier {
+                index: Some(index),
+                hash: None,
+            }) => {
+                if self.is_a_rosetta_block_index(index).await {
+                    self.get_rosetta_block_by_index(index).await
+                } else {
+                    self.get_verified_block_by_index(index).await
+                }
+            }
+            Some(PartialBlockIdentifier {
+                index: None,
+                hash: Some(hash),
+            }) => {
+                if self.is_rosetta_blocks_mode_enabled().await {
+                    // We cannot tell whether the hash is of a normal block
+                    // or a Rosetta block so we need to try both sequentially
+                    match self.get_verified_block_by_hash(&hash).await {
+                        Ok(block) => Ok(block),
+                        Err(ApiError::InvalidBlockId(_, _)) => {
+                            todo!("Fetching Rosetta Blocks by hash is not supported yet")
+                        }
+                        e => e,
+                    }
+                } else {
+                    self.get_verified_block_by_hash(&hash).await
+                }
+            }
+            _ => {
+                if self.is_rosetta_blocks_mode_enabled().await {
+                    todo!("Fetching the latest block is not supported yet")
+                } else {
+                    self.get_latest_verified_block().await
+                }
+            }
+        }
+    }
+
+    async fn create_parent_block_id(
+        &self,
+        block_index: BlockIndex,
+    ) -> Result<BlockIdentifier, ApiError> {
+        let blocks = self.ledger.read_blocks().await;
+        if self.is_a_rosetta_block_index(block_index).await {
+            todo!("Rosetta Block index parent id not supported yet")
+        } else {
+            // For the first block, we return the block itself as its parent
+            let parent_block_index = block_index.saturating_sub(1);
+            if blocks.is_verified_by_idx(&parent_block_index)? {
+                let parent_block = &blocks.get_hashed_block(&parent_block_index)?;
+                convert::block_id(parent_block)
+            } else {
+                Err(ApiError::InvalidBlockId(true, Default::default()))
+            }
+        }
+    }
+
+    async fn hashed_block_to_rosetta_core_block(
+        &self,
+        block: HashedBlock,
+    ) -> Result<rosetta_core::objects::Block, ApiError> {
+        let parent_block_id = self.create_parent_block_id(block.index).await?;
+        let token_symbol = self.ledger.token_symbol();
+        hashed_block_to_rosetta_core_block(block, parent_block_id, token_symbol)
+    }
+
+    async fn get_latest_verified_block(&self) -> Result<rosetta_core::objects::Block, ApiError> {
+        let block = {
+            let blocks = self.ledger.read_blocks().await;
+            blocks
+                .get_latest_verified_hashed_block()
+                .map_err(ApiError::from)
+        }?;
+        self.hashed_block_to_rosetta_core_block(block).await
+    }
+
+    async fn get_verified_block_by_index(
+        &self,
+        block_index: BlockIndex,
+    ) -> Result<rosetta_core::objects::Block, ApiError> {
+        let block = {
+            let blocks = self.ledger.read_blocks().await;
+            if !blocks.is_verified_by_idx(&block_index)? {
+                return Err(ApiError::InvalidBlockId(false, Default::default()));
+            }
+            blocks.get_hashed_block(&block_index)
+        }?;
+        self.hashed_block_to_rosetta_core_block(block).await
+    }
+
+    async fn get_verified_block_by_index_and_hash(
+        &self,
+        block_index: BlockIndex,
+        block_hash: &str,
+    ) -> Result<rosetta_core::objects::Block, ApiError> {
+        let block = self.get_verified_block_by_index(block_index).await?;
+        if block.block_identifier.hash != block_hash {
+            return Err(ApiError::InvalidBlockId(false, Default::default()));
+        }
+        Ok(block)
+    }
+
+    async fn get_verified_block_by_hash(
+        &self,
+        block_hash: &str,
+    ) -> Result<rosetta_core::objects::Block, ApiError> {
+        let hash = convert::to_hash::<ic_ledger_core::block::EncodedBlock>(&block_hash)?;
+        let block = {
+            let blocks = self.ledger.read_blocks().await;
+            if !blocks.is_verified_by_hash(&hash)? {
+                return Err(ApiError::InvalidBlockId(true, Default::default()));
+            }
+            let block_index = blocks.get_block_idx_by_block_hash(&hash)?;
+            blocks.get_hashed_block(&block_index)
+        }?;
+        self.hashed_block_to_rosetta_core_block(block).await
+    }
+
+    async fn get_rosetta_block_by_index(
+        &self,
+        block_index: BlockIndex,
+    ) -> Result<rosetta_core::objects::Block, ApiError> {
+        let rosetta_block = {
+            let blocks = self.ledger.read_blocks().await;
+            blocks.get_rosetta_block(block_index)
+        }?;
+        let parent_block_id = self.create_parent_block_id(block_index).await?;
+        let token_symbol = self.ledger.token_symbol();
+        rosetta_block_to_rosetta_core_block(rosetta_block, parent_block_id, token_symbol)
+    }
+
+    async fn get_rosetta_block_by_index_and_hash(
+        &self,
+        block_index: BlockIndex,
+        block_hash: &str,
+    ) -> Result<rosetta_core::objects::Block, ApiError> {
+        let rosetta_block = self.get_rosetta_block_by_index(block_index).await?;
+        if rosetta_block.block_identifier.hash != block_hash {
+            return Err(ApiError::InvalidBlockId(false, Default::default()));
+        }
+        Ok(rosetta_block)
     }
 
     /// Get a Block Transfer
@@ -244,13 +397,18 @@ impl RosettaRequestHandler {
         msg: models::BlockTransactionRequest,
     ) -> Result<BlockTransactionResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
-        let blocks = self.ledger.read_blocks().await;
-        let b_id = Some(PartialBlockIdentifier {
+        let block_id = Some(PartialBlockIdentifier {
             index: Some(msg.block_identifier.index),
             hash: Some(msg.block_identifier.hash),
         });
-        let hb = get_block(&blocks, b_id)?;
-        let transaction = convert::block_to_transaction(&hb, self.ledger.token_symbol())?;
+        let mut block = self.get_block(block_id).await?;
+        // TODO: for Rosetta blocks fetch the right transactions
+        let transaction = match self.rosetta_blocks_mode().await {
+            RosettaBlocksMode::Disabled => block.transactions.remove(0),
+            RosettaBlocksMode::Enabled { .. } => {
+                todo!("/block/transaction not supported in rosetta block mode yet")
+            }
+        };
         Ok(BlockTransactionResponse::new(transaction))
     }
 
@@ -638,81 +796,6 @@ impl RosettaRequestHandler {
     }
 }
 
-fn create_parent_block_id(
-    blocks: &Blocks,
-    block: &HashedBlock,
-) -> Result<BlockIdentifier, ApiError> {
-    // For the first block, we return the block itself as its parent
-    let idx = std::cmp::max(0, block_height_to_index(block.index) - 1);
-    if blocks.is_verified_by_idx(&(idx as u64))? {
-        let parent = blocks.get_hashed_block(&(idx as u64))?;
-        convert::block_id(&parent)
-    } else {
-        Err(ApiError::InvalidBlockId(true, Default::default()))
-    }
-}
-
-fn block_height_to_index(height: BlockIndex) -> i128 {
-    i128::from(height)
-}
-
-fn get_block(
-    blocks: &Blocks,
-    block_id: Option<PartialBlockIdentifier>,
-) -> Result<HashedBlock, ApiError> {
-    match block_id {
-        Some(PartialBlockIdentifier {
-            index: Some(block_height),
-            hash: Some(block_hash),
-        }) => {
-            let hash: ic_ledger_hash_of::HashOf<ic_ledger_core::block::EncodedBlock> =
-                convert::to_hash(&block_hash)?;
-
-            let idx = block_height as usize;
-            if !blocks.is_verified_by_idx(&(idx as u64))? {
-                return Err(ApiError::InvalidBlockId(false, Default::default()));
-            }
-            let block = blocks.get_hashed_block(&(idx as u64))?;
-            if block.hash != hash {
-                return Err(ApiError::InvalidBlockId(false, Default::default()));
-            }
-
-            Ok(block)
-        }
-        Some(PartialBlockIdentifier {
-            index: Some(block_height),
-            hash: None,
-        }) => {
-            let idx = block_height as usize;
-            if blocks.is_verified_by_idx(&(idx as u64))? {
-                Ok(blocks.get_hashed_block(&(idx as u64))?)
-            } else {
-                Err(ApiError::InvalidBlockId(true, Default::default()))
-            }
-        }
-        Some(PartialBlockIdentifier {
-            index: None,
-            hash: Some(block_hash),
-        }) => {
-            let hash: ic_ledger_hash_of::HashOf<ic_ledger_core::block::EncodedBlock> =
-                convert::to_hash(&block_hash)?;
-            if blocks.is_verified_by_hash(&hash)? {
-                let idx = blocks.get_block_idx_by_block_hash(&hash)?;
-                Ok(blocks.get_hashed_block(&idx)?)
-            } else {
-                Err(ApiError::InvalidBlockId(true, Default::default()))
-            }
-        }
-        Some(PartialBlockIdentifier {
-            index: None,
-            hash: None,
-        })
-        | None => blocks
-            .get_latest_verified_hashed_block()
-            .map_err(ApiError::from),
-    }
-}
-
 fn verify_network_id(canister_id: &CanisterId, net_id: &NetworkIdentifier) -> Result<(), ApiError> {
     verify_network_blockchain(net_id)?;
     let id: CanisterId = net_id
@@ -740,4 +823,54 @@ pub fn make_sig_data(message_id: &MessageId) -> Vec<u8> {
     sig_data.extend_from_slice(DOMAIN_IC_REQUEST);
     sig_data.extend_from_slice(message_id.as_bytes());
     sig_data
+}
+
+fn hashed_block_to_rosetta_core_block(
+    hashed_block: HashedBlock,
+    parent_id: BlockIdentifier,
+    token_symbol: &str,
+) -> Result<rosetta_core::objects::Block, ApiError> {
+    let block = Block::decode(hashed_block.block.clone())
+        .map_err(|err| ApiError::internal_error(format!("Cannot decode block: {}", err)))?;
+    let block_id = convert::block_id(&hashed_block)?;
+    let transactions = vec![convert::block_to_transaction(&hashed_block, token_symbol)?];
+    Ok(models::Block::new(
+        block_id,
+        parent_id,
+        models::timestamp::from_system_time(block.timestamp.into())?
+            .0
+            .try_into()?,
+        transactions,
+    ))
+}
+
+fn rosetta_block_to_rosetta_core_block(
+    rosetta_block: RosettaBlock,
+    parent_id: BlockIdentifier,
+    token_symbol: &str,
+) -> Result<rosetta_core::objects::Block, ApiError> {
+    let block_id = rosetta_core::identifiers::BlockIdentifier {
+        index: rosetta_block.index,
+        hash: hex::encode(rosetta_block.hash()),
+    };
+    let timestamp = models::timestamp::from_system_time(rosetta_block.timestamp.into())?
+        .0
+        .try_into()?;
+    let mut transactions = vec![];
+    for (index, transaction) in rosetta_block.transactions {
+        let transaction = convert::to_rosetta_core_transaction(
+            index,
+            transaction,
+            rosetta_block.timestamp,
+            token_symbol,
+        )?;
+        transactions.push(transaction);
+    }
+
+    Ok(models::Block::new(
+        block_id,
+        parent_id,
+        timestamp,
+        transactions,
+    ))
 }
