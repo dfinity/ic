@@ -1,11 +1,9 @@
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Cycles {
     #[prost(bytes = "vec", tag = "2")]
     pub raw_cycles: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Funds {
@@ -14,14 +12,12 @@ pub struct Funds {
     #[prost(message, optional, tag = "3")]
     pub cycles_struct: ::core::option::Option<Cycles>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StreamFlags {
     #[prost(bool, tag = "1")]
     pub deprecated_responses_only: bool,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Stream {
@@ -36,7 +32,6 @@ pub struct Stream {
     #[prost(message, optional, tag = "7")]
     pub reverse_stream_flags: ::core::option::Option<StreamFlags>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StreamEntry {
@@ -45,7 +40,6 @@ pub struct StreamEntry {
     #[prost(message, optional, tag = "2")]
     pub subnet_stream: ::core::option::Option<Stream>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RequestMetadata {
@@ -63,7 +57,6 @@ pub struct RequestMetadata {
     #[prost(uint64, optional, tag = "3")]
     pub call_subtree_deadline_nanos: ::core::option::Option<u64>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Request {
@@ -87,7 +80,6 @@ pub struct Request {
     #[prost(uint32, tag = "9")]
     pub deadline_seconds: u32,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RejectContext {
@@ -96,7 +88,6 @@ pub struct RejectContext {
     #[prost(string, tag = "2")]
     pub reject_message: ::prost::alloc::string::String,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Response {
@@ -118,7 +109,6 @@ pub struct Response {
 }
 /// Nested message and enum types in `Response`.
 pub mod response {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum ResponsePayload {
@@ -128,7 +118,6 @@ pub mod response {
         Reject(super::RejectContext),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RequestOrResponse {
@@ -137,7 +126,6 @@ pub struct RequestOrResponse {
 }
 /// Nested message and enum types in `RequestOrResponse`.
 pub mod request_or_response {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum R {
@@ -147,7 +135,6 @@ pub mod request_or_response {
         Response(super::Response),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MessageDeadline {
@@ -156,7 +143,6 @@ pub struct MessageDeadline {
     #[prost(uint64, tag = "2")]
     pub index: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InputOutputQueue {
@@ -178,7 +164,6 @@ pub struct InputOutputQueue {
     #[prost(uint64, tag = "6")]
     pub timeout_index: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueueEntry {
@@ -187,7 +172,6 @@ pub struct QueueEntry {
     #[prost(message, optional, tag = "2")]
     pub queue: ::core::option::Option<InputOutputQueue>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterQueues {
@@ -208,19 +192,7 @@ pub struct CanisterQueues {
 }
 /// Nested message and enum types in `CanisterQueues`.
 pub mod canister_queues {
-    #[derive(
-        serde::Serialize,
-        serde::Deserialize,
-        Clone,
-        Copy,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-        PartialOrd,
-        Ord,
-        ::prost::Enumeration,
-    )]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum NextInputQueue {
         Unspecified = 0,

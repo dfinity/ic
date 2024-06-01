@@ -1,5 +1,4 @@
 /// State tree root hash.
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertificationContent {
@@ -7,7 +6,6 @@ pub struct CertificationContent {
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
 /// Certification of state tree root hash.
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Certification {
@@ -19,7 +17,6 @@ pub struct Certification {
     pub signature: ::core::option::Option<super::super::super::types::v1::ThresholdSignature>,
 }
 /// Certification signed by a single replica
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertificationShare {
@@ -31,7 +28,6 @@ pub struct CertificationShare {
     pub signature: ::core::option::Option<super::super::super::types::v1::ThresholdSignatureShare>,
 }
 /// XNet stream slice with certification and matching Merkle proof.
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertifiedStreamSlice {
