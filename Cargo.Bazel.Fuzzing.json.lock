@@ -1,5 +1,5 @@
 {
-  "checksum": "ea979753df444ab8bf2ff79216e908601f5a95fd208c15153ddb16f622007a9a",
+  "checksum": "16521394bd233d5b17c5e44558d6beff0f4597e7c9ac05e59377725dd11d520a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6639,7 +6639,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -10881,7 +10881,7 @@
               "target": "poly1305"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -11246,7 +11246,7 @@
               "target": "inout"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -14779,7 +14779,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -15224,7 +15224,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -15393,7 +15393,7 @@
               "alias": "subtle"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -16360,7 +16360,7 @@
               "target": "pem_rfc7468"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -17898,7 +17898,7 @@
               "target": "rayon"
             },
             {
-              "id": "rcgen 0.12.1",
+              "id": "rcgen 0.13.1",
               "target": "rcgen"
             },
             {
@@ -18375,7 +18375,7 @@
               "target": "yansi"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             },
             {
@@ -19293,7 +19293,7 @@
               "target": "thiserror"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -19387,7 +19387,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -19658,7 +19658,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -23469,7 +23469,7 @@
               "target": "typenum"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -29661,7 +29661,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -36802,7 +36802,7 @@
               "target": "rand_core"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -39196,7 +39196,7 @@
               "target": "smallvec"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -50236,14 +50236,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rcgen 0.12.1": {
+    "rcgen 0.13.1": {
       "name": "rcgen",
-      "version": "0.12.1",
+      "version": "0.13.1",
       "package_url": "https://github.com/rustls/rcgen",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rcgen/0.12.1/download",
-          "sha256": "48406db8ac1f3cbc7dcdb56ec355343817958a356ff430259bb07baf7607e1e1"
+          "url": "https://static.crates.io/crates/rcgen/0.13.1/download",
+          "sha256": "54077e1872c46788540de1ea3d7f4ccb1983d12f9aa909b234468676c1a36779"
         }
       },
       "targets": [
@@ -50267,6 +50267,7 @@
         ],
         "crate_features": {
           "common": [
+            "crypto",
             "default",
             "pem",
             "ring",
@@ -50285,6 +50286,11 @@
               "target": "ring"
             },
             {
+              "id": "rustls-pki-types 1.7.0",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            },
+            {
               "id": "time 0.3.36",
               "target": "time"
             },
@@ -50293,14 +50299,14 @@
               "target": "yasna"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.12.1"
+        "version": "0.13.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -52616,7 +52622,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -53886,7 +53892,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -54000,7 +54006,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -55434,7 +55440,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -56037,7 +56043,7 @@
               "target": "serde"
             },
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -63699,7 +63705,7 @@
         "deps": {
           "common": [
             {
-              "id": "zeroize 1.7.0",
+              "id": "zeroize 1.8.1",
               "target": "zeroize"
             }
           ],
@@ -75311,14 +75317,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "zeroize 1.7.0": {
+    "zeroize 1.8.1": {
       "name": "zeroize",
-      "version": "1.7.0",
+      "version": "1.8.1",
       "package_url": "https://github.com/RustCrypto/utils/tree/master/zeroize",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/zeroize/1.7.0/download",
-          "sha256": "525b4ec142c6b68a2d10f01f7bbf6755599ca3f81ea53b8431b7dd348f5fdb2d"
+          "url": "https://static.crates.io/crates/zeroize/1.8.1/download",
+          "sha256": "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
         }
       },
       "targets": [
@@ -75358,7 +75364,7 @@
           ],
           "selects": {}
         },
-        "version": "1.7.0"
+        "version": "1.8.1"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -77099,7 +77105,7 @@
     "randomkit 0.1.1",
     "ratelimit 0.9.1",
     "rayon 1.8.0",
-    "rcgen 0.12.1",
+    "rcgen 0.13.1",
     "regex 1.10.2",
     "reqwest 0.11.27",
     "reqwest 0.12.4",
@@ -77222,7 +77228,7 @@
     "x509-cert 0.2.5",
     "x509-parser 0.16.0",
     "yansi 0.5.1",
-    "zeroize 1.7.0",
+    "zeroize 1.8.1",
     "zstd 0.13.1"
   ],
   "direct_dev_deps": []

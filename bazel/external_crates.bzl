@@ -991,7 +991,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.5.1",
             ),
             "rcgen": crate.spec(
-                version = "^0.12.1",
+                version = "^0.13.1",
                 features = [
                     "zeroize",
                 ],
@@ -1507,7 +1507,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "zeroize": crate.spec(
-                version = "^1.4.3",
+                version = "^1.8.1",
                 features = [
                     "zeroize_derive",
                 ],

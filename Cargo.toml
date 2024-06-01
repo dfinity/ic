@@ -520,7 +520,7 @@ quinn = { version = "0.10.2", features = ["ring"] }
 quinn-udp = "0.5.1"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rand_chacha = "0.3.1"
-rcgen = { version = "0.12.1", features = ["zeroize"] }
+rcgen = { version = "0.13.1", features = ["zeroize"] }
 reqwest = { version = "0.12.3", default-features = false, features = [
     "blocking",
     "http2",
@@ -580,6 +580,7 @@ tracing-subscriber = { version = "0.3.18", features = [
 turmoil = "0.6.2"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
+zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
 zstd = "0.13.1"
 
 [workspace.dependencies.ic-wasm]
