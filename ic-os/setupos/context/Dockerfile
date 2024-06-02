@@ -73,6 +73,7 @@ RUN \
     done
 
 RUN systemctl enable \
+    chrony \
     systemd-networkd \
     systemd-networkd-wait-online \
     systemd-resolved
