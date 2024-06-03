@@ -33,7 +33,7 @@ use ic_types::{
     },
     nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
-    CanisterId, Cycles, PrincipalId, RegistryVersion,
+    CanisterId, Cycles, PrincipalId, RegistryVersion, SubnetId,
 };
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -2067,106 +2067,131 @@ fn make_schnorr_key(name: &str) -> SchnorrKeyId {
     }
 }
 
-#[test]
-fn compute_initial_ecdsa_dealings_sender_on_nns() {
-    let own_subnet = subnet_test_id(1);
-    let nns_subnet = subnet_test_id(2);
-    let nns_canister = canister_test_id(0x10);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_nns_subnet_id(nns_subnet)
-        .with_caller(nns_subnet, nns_canister)
-        .with_ecdsa_signature_fee(0)
-        .with_ecdsa_key(make_ecdsa_key("secp256k1"))
-        .build();
-
-    let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
-    let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
-        make_ecdsa_key("secp256k1"),
-        own_subnet,
-        node_ids,
-        RegistryVersion::from(100),
-    );
-    test.inject_call_to_ic00(
-        Method::ComputeInitialEcdsaDealings,
-        args.encode(),
-        Cycles::new(0),
-    );
-    test.execute_all();
-    assert_eq!(0, test.xnet_messages().len());
-}
-
-#[test]
-fn compute_initial_ecdsa_dealings_sender_not_on_nns() {
-    let own_subnet = subnet_test_id(1);
-    let nns_subnet = subnet_test_id(2);
-    let other_subnet = subnet_test_id(3);
-    let other_canister = canister_test_id(0x10);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_nns_subnet_id(nns_subnet)
-        .with_caller(other_subnet, other_canister)
-        .with_ecdsa_signature_fee(0)
-        .with_ecdsa_key(make_ecdsa_key("secp256k1"))
-        .build();
-
-    let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
-    let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
-        make_ecdsa_key("secp256k1"),
-        own_subnet,
-        node_ids,
-        RegistryVersion::from(100),
-    );
-    test.inject_call_to_ic00(
-        Method::ComputeInitialEcdsaDealings,
-        args.encode(),
-        Cycles::new(0),
-    );
-    test.execute_all();
-    let response = test.xnet_messages()[0].clone();
-    assert_eq!(
-        get_reject_message(response),
-        format!(
-            "{} is called by {other_canister}. It can only be called by NNS.",
-            Method::ComputeInitialEcdsaDealings
-        )
-    );
-}
-
-#[test]
-fn compute_initial_ecdsa_dealings_with_unknown_key() {
-    let own_subnet = subnet_test_id(1);
-    let nns_subnet = subnet_test_id(2);
-    let nns_canister = canister_test_id(0x10);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_nns_subnet_id(nns_subnet)
-        .with_caller(nns_subnet, nns_canister)
-        .with_ecdsa_signature_fee(0)
-        .build();
-
-    let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
-    let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
-        make_ecdsa_key("foo"),
-        own_subnet,
-        node_ids,
-        RegistryVersion::from(100),
-    );
-    test.inject_call_to_ic00(
-        Method::ComputeInitialEcdsaDealings,
-        args.encode(),
-        Cycles::new(0),
-    );
-    test.execute_all();
-    let response = test.xnet_messages()[0].clone();
-    assert_eq!(
-        get_reject_message(response),
-        format!(
-            "Subnet {} does not hold iDKG key {}.",
-            own_subnet,
-            MasterPublicKeyId::Ecdsa(make_ecdsa_key("foo"))
+fn compute_initial_x_dealings_test_cases() -> Vec<(Method, MasterPublicKeyId)> {
+    vec![
+        (
+            Method::ComputeInitialEcdsaDealings,
+            MasterPublicKeyId::Ecdsa(make_ecdsa_key("secp256k1")),
         ),
-    )
+        (
+            Method::ComputeInitialIDkgDealings,
+            MasterPublicKeyId::Ecdsa(make_ecdsa_key("secp256k1")),
+        ),
+        (
+            Method::ComputeInitialIDkgDealings,
+            MasterPublicKeyId::Schnorr(make_schnorr_key("ed25519")),
+        ),
+    ]
+}
+
+fn compute_initial_x_dealings_payload(
+    method: Method,
+    key_id: MasterPublicKeyId,
+    subnet_id: SubnetId,
+) -> Vec<u8> {
+    let nodes = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
+    let registry_version = RegistryVersion::from(100);
+    match method {
+        Method::ComputeInitialEcdsaDealings => {
+            let key_id = match key_id {
+                MasterPublicKeyId::Ecdsa(key) => key,
+                _ => panic!("unexpected key"),
+            };
+            ic00::ComputeInitialEcdsaDealingsArgs::new(key_id, subnet_id, nodes, registry_version)
+                .encode()
+        }
+        Method::ComputeInitialIDkgDealings => {
+            ic00::ComputeInitialIDkgDealingsArgs::new(key_id, subnet_id, nodes, registry_version)
+                .encode()
+        }
+        _ => panic!("unexpected method"),
+    }
+}
+
+#[test]
+fn test_compute_initial_idkg_dealings_sender_on_nns() {
+    for (method, key_id) in compute_initial_x_dealings_test_cases() {
+        let own_subnet = subnet_test_id(1);
+        let nns_subnet = subnet_test_id(2);
+        let nns_canister = canister_test_id(0x10);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_nns_subnet_id(nns_subnet)
+            .with_caller(nns_subnet, nns_canister)
+            .with_idkg_key(key_id.clone())
+            .with_ic00_compute_initial_i_dkg_dealings(FlagStatus::Enabled)
+            .build();
+
+        test.inject_call_to_ic00(
+            method,
+            compute_initial_x_dealings_payload(method, key_id, own_subnet),
+            Cycles::new(0),
+        );
+        test.execute_all();
+        assert_eq!(0, test.xnet_messages().len());
+    }
+}
+
+#[test]
+fn test_compute_initial_idkg_dealings_sender_not_on_nns() {
+    for (method, key_id) in compute_initial_x_dealings_test_cases() {
+        let own_subnet = subnet_test_id(1);
+        let nns_subnet = subnet_test_id(2);
+        let other_subnet = subnet_test_id(3);
+        let other_canister = canister_test_id(0x10);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_nns_subnet_id(nns_subnet)
+            .with_caller(other_subnet, other_canister)
+            .with_idkg_key(key_id.clone())
+            .with_ic00_compute_initial_i_dkg_dealings(FlagStatus::Enabled)
+            .build();
+
+        test.inject_call_to_ic00(
+            method,
+            compute_initial_x_dealings_payload(method, key_id, own_subnet),
+            Cycles::new(0),
+        );
+        test.execute_all();
+        let response = test.xnet_messages()[0].clone();
+        assert_eq!(
+            get_reject_message(response),
+            format!(
+                "{} is called by {other_canister}. It can only be called by NNS.",
+                method
+            )
+        );
+    }
+}
+
+#[test]
+fn test_compute_initial_idkg_dealings_with_unknown_key() {
+    for (method, unknown_key) in compute_initial_x_dealings_test_cases() {
+        let own_subnet = subnet_test_id(1);
+        let nns_subnet = subnet_test_id(2);
+        let nns_canister = canister_test_id(0x10);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_nns_subnet_id(nns_subnet)
+            .with_caller(nns_subnet, nns_canister)
+            .with_ic00_compute_initial_i_dkg_dealings(FlagStatus::Enabled)
+            .build();
+
+        test.inject_call_to_ic00(
+            method,
+            compute_initial_x_dealings_payload(method, unknown_key.clone(), own_subnet),
+            Cycles::new(0),
+        );
+        test.execute_all();
+        let response = test.xnet_messages()[0].clone();
+        assert_eq!(
+            get_reject_message(response),
+            format!(
+                "Subnet {} does not hold iDKG key {}.",
+                own_subnet, unknown_key
+            ),
+        )
+    }
 }
 
 #[test]
@@ -3346,7 +3371,7 @@ fn test_fetch_canister_logs_should_accept_ingress_message_enabled() {
 
 #[test]
 fn test_compute_initial_idkg_dealings_api_by_default_is_disabled() {
-    let key_id = make_schnorr_key("correct_key");
+    let key_id = MasterPublicKeyId::Schnorr(make_schnorr_key("correct_key"));
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
     let nns_canister = canister_test_id(0x10);
@@ -3354,12 +3379,12 @@ fn test_compute_initial_idkg_dealings_api_by_default_is_disabled() {
         .with_own_subnet_id(own_subnet)
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
-        .with_schnorr_key(key_id.clone())
+        .with_idkg_key(key_id.clone())
         .build();
     test.inject_call_to_ic00(
         Method::ComputeInitialIDkgDealings,
         ic00::ComputeInitialIDkgDealingsArgs::new(
-            MasterPublicKeyId::Schnorr(key_id),
+            key_id,
             own_subnet,
             Default::default(),
             RegistryVersion::from(100),
@@ -3385,7 +3410,7 @@ fn test_schnorr_public_key_api_by_default_is_disabled() {
         .with_own_subnet_id(own_subnet)
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
-        .with_schnorr_key(key_id.clone())
+        .with_idkg_key(MasterPublicKeyId::Schnorr(key_id.clone()))
         .build();
     test.inject_call_to_ic00(
         Method::SchnorrPublicKey,
@@ -3415,7 +3440,7 @@ fn test_sign_with_schnorr_api_by_default_is_disabled() {
         .with_own_subnet_id(own_subnet)
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
-        .with_schnorr_key(key_id.clone())
+        .with_idkg_key(MasterPublicKeyId::Schnorr(key_id.clone()))
         .build();
     test.inject_call_to_ic00(
         Method::SignWithSchnorr,
@@ -3449,7 +3474,7 @@ fn test_sign_with_schnorr_api_is_enabled() {
         .with_own_subnet_id(own_subnet)
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
-        .with_schnorr_key(key_id.clone())
+        .with_idkg_key(MasterPublicKeyId::Schnorr(key_id.clone()))
         .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
         .build();
     let canister_id = test.universal_canister().unwrap();
