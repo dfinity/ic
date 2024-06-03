@@ -6,7 +6,7 @@ use crate::consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager};
 use crate::ecdsa::{
     make_bootstrap_summary,
     payload_builder::make_bootstrap_summary_with_initial_dealings,
-    utils::{get_ecdsa_config_if_enabled, inspect_ecdsa_initializations},
+    utils::{get_ecdsa_config_if_enabled, inspect_chain_key_initializations},
 };
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
@@ -537,7 +537,10 @@ fn bootstrap_ecdsa_summary_from_cup_contents(
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
-    let initial_dealings = inspect_ecdsa_initializations(&cup_contents.ecdsa_initializations)?;
+    let initial_dealings = inspect_chain_key_initializations(
+        &cup_contents.ecdsa_initializations,
+        &cup_contents.chain_key_initializations,
+    )?;
     if initial_dealings.is_empty() {
         return Ok(None);
     };
