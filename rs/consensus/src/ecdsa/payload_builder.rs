@@ -1698,8 +1698,8 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     current_key_transcript.unmasked_transcript(),
                 ),
-                key_id: key_id.clone(),
-                master_key_id: Some(master_public_key_id.clone()),
+                key_id: Some(key_id.clone()),
+                master_key_id: master_public_key_id.clone(),
             };
 
             // Initial bootstrap payload should be created successfully
@@ -1735,8 +1735,8 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     next_key_transcript.unmasked_transcript(),
                 ),
-                key_id: key_id.clone(),
-                master_key_id: Some(master_public_key_id.clone()),
+                key_id: Some(key_id.clone()),
+                master_key_id: master_public_key_id.clone(),
             };
 
             let mut payload_2 = payload_1.clone();
@@ -1751,8 +1751,8 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     next_key_transcript.unmasked_transcript(),
                 ),
-                key_id: key_id.clone(),
-                master_key_id: Some(master_public_key_id),
+                key_id: Some(key_id.clone()),
+                master_key_id: master_public_key_id,
             };
 
             let payload_3 = create_summary_payload_helper(
@@ -1827,8 +1827,8 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     current_key_transcript.unmasked_transcript(),
                 ),
-                key_id: key_id.clone(),
-                master_key_id: Some(master_public_key_id.clone()),
+                key_id: Some(key_id.clone()),
+                master_key_id: master_public_key_id.clone(),
             };
 
             let mut payload_0 =
