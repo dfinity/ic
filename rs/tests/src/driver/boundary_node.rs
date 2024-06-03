@@ -253,20 +253,19 @@ impl BoundaryNodeWithVm {
         };
 
         let opt_existing_playnet_cert: Option<PlaynetCertificate> = if self.use_ipv6_certs {
-            let subject_alt_names = vec![format!("ip:{}", self.allocated_vm.ipv6)];
+            let root_key_pair = rcgen::KeyPair::generate().expect("failed to create root key pair");
             let mut params = rcgen::CertificateParams::default();
             params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
-            let root_key_pair = rcgen::KeyPair::generate().expect("failed to create root key pair");
             let root_cert = params
                 .self_signed(&root_key_pair)
                 .expect("failed to create X.509 self-signed CA certificate");
 
             let cert_key_pair = rcgen::KeyPair::generate().expect("failed to create cert key pair");
-            let cert_params = rcgen::CertificateParams::new(subject_alt_names)
-                .expect("failed to create X.509 self-signed certificate");
-            let cert = cert_params
+            let subject_alt_names = vec![format!("ip:{}", self.allocated_vm.ipv6)];
+            let cert = rcgen::CertificateParams::new(subject_alt_names)
+                .expect("failed to create certificate params for root-signed certificate")
                 .signed_by(&cert_key_pair, &root_cert, &root_key_pair)
-                .expect("failed to create X.509 root-signed CA certificate");
+                .expect("failed to create X.509 root-signed certificate");
 
             Some(PlaynetCertificate {
                 playnet: format!("[{}]", self.allocated_vm.ipv6),
