@@ -1,8 +1,8 @@
 """
-Enumerate every rootfs file dependency for SetupOS
+Enumerate every component file dependency for SetupOS
 """
 
-rootfs_files = {
+component_files = {
     # setupos-scripts
     Label("setupos-scripts/check-setupos-age.sh"): "/opt/ic/bin/check-setupos-age.sh",
     Label("setupos-scripts/config.sh"): "/opt/ic/bin/config.sh",

@@ -53,11 +53,11 @@ go_deps.bzl               @dfinity/idx
 # [IC-OS]
 /ic-os/                                          @dfinity/node
 /ic-os/boundary-guestos/                         @dfinity/boundary-node @dfinity/node
-/ic-os/rootfs/boundary-guestos/                  @dfinity/boundary-node @dfinity/node
+/ic-os/components/boundary-guestos/              @dfinity/boundary-node @dfinity/node
 /toolchains/                                     @dfinity/node
 
 # [metrics-proxy]
-/ic-os/rootfs/monitoring/metrics-proxy/          @dfinity/dre
+/ic-os/components/monitoring/metrics-proxy/      @dfinity/dre
 
 # [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity/idx

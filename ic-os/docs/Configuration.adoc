@@ -17,7 +17,7 @@ SetupOS validates, sanitizes, and copies all of its configuration files to the H
 
 === HostOS -> GuestOS
 
-HostOS builds the "bootstrap config image". Refer to link:../scripts/build-bootstrap-config-image.sh[build-bootstrap-config-image.sh]
+HostOS builds the "bootstrap config image". Refer to link:../rootfs/hostos-scripts/build-bootstrap-config-image.sh[build-bootstrap-config-image.sh]
 
 The bootstrap config image contains a tar file with the GuestOS configuration files.
 When the HostOS launches the GuestOS, the bootstrap config image is attached to the GuestOS as a virtual USB. Refer to link:../rootfs/hostos-scripts/guestos/guestos.xml.template[guestos.xml.template]

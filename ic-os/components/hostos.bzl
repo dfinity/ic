@@ -1,8 +1,8 @@
 """
-Enumerate every rootfs file dependency for HostOS
+Enumerate every component file dependency for HostOS
 """
 
-rootfs_files = {
+component_files = {
     # hostos-scripts
     Label("hostos-scripts/generate-guestos-config/generate-guestos-config.sh"): "/opt/ic/bin/generate-guestos-config.sh",
     Label("hostos-scripts/generate-guestos-config/generate-guestos-config.service"): "/etc/systemd/system/generate-guestos-config.service",
@@ -26,6 +26,7 @@ rootfs_files = {
     Label("hostos-scripts/monitoring/monitor-power.sh"): "/opt/ic/bin/monitor-power.sh",
     Label("hostos-scripts/monitoring/monitor-power.service"): "/etc/systemd/system/monitor-power.service",
     Label("hostos-scripts/monitoring/monitor-power.timer"): "/etc/systemd/system/monitor-power.timer",
+    Label("hostos-scripts/build-bootstrap-config-image.sh"): "/opt/ic/bin/build-bootstrap-config-image.sh",
 
     # early-boot
     Label("early-boot/relabel-machine-id/relabel-machine-id.sh"): "/opt/ic/bin/relabel-machine-id.sh",
