@@ -387,11 +387,8 @@ jobs:
           SETUPOS_FLAG: ${{ matrix.SETUPOS_FLAG }}
   cargo-clippy-linux:
     name: Cargo Clippy Linux
-    runs-on:
-      labels: bazel-runner-small
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
-    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Before script
