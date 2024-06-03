@@ -35,7 +35,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
+      image: ghcr.io/dfinity-sandbox/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     env:
@@ -91,7 +91,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
+      image: ghcr.io/dfinity-sandbox/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     name: Bazel Build All Config Check
@@ -190,7 +190,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
+      image: ghcr.io/dfinity-sandbox/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
     timeout-minutes: 45
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -218,7 +218,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
+      image: ghcr.io/dfinity-sandbox/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
     timeout-minutes: 45
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -275,7 +275,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
+      image: ghcr.io/dfinity-sandbox/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' && github.event_name != 'merge_group' }}
     steps:
@@ -328,7 +328,7 @@ jobs:
     runs-on:
       labels: default-runner
     container:
-      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
+      image: ghcr.io/dfinity-sandbox/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     needs: [build-ic, bazel-test-all]
@@ -390,7 +390,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
+      image: ghcr.io/dfinity-sandbox/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
     timeout-minutes: 45
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -426,7 +426,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
+      image: ghcr.io/dfinity-sandbox/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
     if: ${{ vars.RUN_CI == 'true' }}
     timeout-minutes: 60
     steps:

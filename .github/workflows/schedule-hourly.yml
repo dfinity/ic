@@ -60,7 +60,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
+      image: ghcr.io/dfinity-sandbox/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
     timeout-minutes: 120
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -89,7 +89,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
+      image: ghcr.io/dfinity-sandbox/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
     timeout-minutes: 120
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
