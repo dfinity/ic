@@ -102,7 +102,7 @@ jobs:
           #sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- *
           #popd
           pushd .github
-          sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- workflow*/*
+          sed -i -E "s|ic-build(:\|@)[^\"]+|ic-build@${{ env.IMAGE_SHA }}|g" -- workflow*/*
           popd
 
           git config --global user.name "IDX GitHub Automation"
