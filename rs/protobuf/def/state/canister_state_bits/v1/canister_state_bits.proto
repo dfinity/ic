@@ -43,8 +43,9 @@ message CallContextEntry {
 }
 
 message WasmClosure {
+  // The number of functions will never exceed 2^32.
   uint32 func_idx = 1;
-  uint32 env = 2;
+  uint64 env = 2;
 }
 
 message Callback {
