@@ -671,6 +671,7 @@ impl StateLayout {
         Ok(())
     }
 
+    /// Returns the untracked `CheckpointLayout` for the given height (if there is one).
     pub fn checkpoint_untracked(
         &self,
         height: Height,
@@ -762,7 +763,7 @@ impl StateLayout {
         }
     }
 
-    /// Returns a sorted list of `Height`s for which a checkpoint is available.
+    /// Returns a sorted list of `Height`s for which a checkpoint is available and verified.
     pub fn checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
         let checkpoint_heights = self
             .unfiltered_checkpoint_heights()?
@@ -777,6 +778,7 @@ impl StateLayout {
         Ok(checkpoint_heights)
     }
 
+    /// Returns a sorted list of `Height`s for which a checkpoint is available, regardless of verification status.
     pub fn unfiltered_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
         let names = dir_file_names(&self.checkpoints()).map_err(|err| LayoutError::IoError {
             path: self.checkpoints(),
@@ -1429,6 +1431,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         &self.root
     }
 
+    /// Returns if the checkpoint is marked as unverified or not.
     pub fn is_marked_as_unverified(&self) -> bool {
         self.unverified_checkpoint_marker().exists()
     }
@@ -1439,6 +1442,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     }
 
     /// Creates the unverified checkpoint marker.
+    /// If the marker already exists, this function does nothing and returns `Ok(())`.
     pub fn create_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
         let marker = self.unverified_checkpoint_marker();
         if marker.exists() {
@@ -1453,6 +1457,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     }
 
     /// Removes the unverified checkpoint marker.
+    /// If the marker does not exist, this function does nothing and returns `Ok(())`.
     pub fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
         let marker = self.unverified_checkpoint_marker();
         if !marker.exists() {
