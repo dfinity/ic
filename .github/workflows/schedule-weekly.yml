@@ -10,7 +10,7 @@ jobs:
     runs-on:
         labels: bazel-runner-small
     container:
-        image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
+        image: ghcr.io/dfinity/ic-build@sha256:bbe796f7841329576e4d83144a9f378bd90152d0d365be1b1f59f27bba476dce
     timeout-minutes: 60 # 1 hour
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     steps:
