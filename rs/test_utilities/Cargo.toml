@@ -46,7 +46,7 @@ serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
 socket2 = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
 wat = "1.0.52"
 tower = { workspace = true }

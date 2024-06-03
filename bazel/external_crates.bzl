@@ -296,7 +296,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.10.0",
             ),
             "chrono": crate.spec(
-                version = "^0.4.31",
+                version = "^0.4.38",
                 default_features = False,
                 features = [
                     "alloc",
@@ -375,9 +375,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "dashmap": crate.spec(
                 version = "^5.3.4",
-            ),
-            "digest": crate.spec(
-                version = "^0.9.0",
             ),
             "dyn-clone": crate.spec(
                 version = "^1.0.14",
@@ -471,18 +468,18 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12",
             ),
             "http": crate.spec(
-                version = "^0.2.9",
+                version = "^1.1.0",
             ),
-            "http_1_0_0": crate.spec(
+            "http_0_2_12": crate.spec(
                 package = "http",
-                version = "^1.0.0",
+                version = "^0.2.12",
             ),
             "http-body": crate.spec(
-                version = "^0.4",
-            ),
-            "http-body_1_0_0": crate.spec(
-                package = "http-body",
                 version = "^1.0.0",
+            ),
+            "http_body_0_4_6": crate.spec(
+                package = "http-body",
+                version = "^0.4.6",
             ),
             "http-body-util": crate.spec(
                 version = "^0.1.0",
@@ -509,7 +506,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "hyper": crate.spec(
-                version = "^1.2.0",
+                version = "^1.3.1",
                 features = [
                     "full",
                 ],
@@ -725,9 +722,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "libnss": crate.spec(
                 version = "^0.5.0",
             ),
-            "linked-hash-map": crate.spec(
-                version = "^0.5.3",
-            ),
             "little-loadshedder": crate.spec(
                 version = "^0.1.0",
             ),
@@ -799,9 +793,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "nix": crate.spec(
                 version = "^0.24.3",
             ),
-            "notify": crate.spec(
-                version = "^4.0.12",
-            ),
             "num": crate.spec(
                 version = "^0.4.0",
             ),
@@ -811,9 +802,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "num-bigint-dig": crate.spec(
                 version = "^0.8",
                 features = ["prime"],
-            ),
-            "num-integer": crate.spec(
-                version = "^0.1.41",
             ),
             "num-rational": crate.spec(
                 version = "^0.2.2",
@@ -857,6 +845,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.21.2",
                 features = [
                     "trace",
+                    "rt-tokio",
                 ],
             ),
             "opentelemetry-prometheus": crate.spec(
@@ -933,7 +922,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "prometheus": crate.spec(
-                version = "^0.13.3",
+                version = "^0.13.4",
                 features = [
                     "process",
                 ],
@@ -971,6 +960,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "ring",
                 ],
             ),
+            "quinn-udp": crate.spec(
+                version = "^0.5.1",
+            ),
             "quote": crate.spec(
                 version = "^1.0",
             ),
@@ -999,7 +991,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.5.1",
             ),
             "rcgen": crate.spec(
-                version = "^0.11.1",
+                version = "^0.12.1",
                 features = [
                     "zeroize",
                 ],
@@ -1099,7 +1091,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.7.0",
             ),
             "rustls-pemfile": crate.spec(
-                version = "^2",
+                version = "^2.1.2",
             ),
             "rustls-pki-types": crate.spec(
                 version = "^1.7.0",
@@ -1179,7 +1171,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "signature": crate.spec(
-                version = "^2.1.0",
+                version = "^2.2.0",
             ),
             "simple_asn1": crate.spec(
                 version = "^0.6.2",
@@ -1218,7 +1210,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^2.6.0",
             ),
             "socket2": crate.spec(
-                version = "^0.5.6",
+                version = "^0.5.7",
                 features = [
                     "all",
                 ],
@@ -1264,7 +1256,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "tempfile": crate.spec(
-                version = "^3.1.0",
+                version = "^3.10.1",
             ),
             "tester": crate.spec(
                 version = "^0.7.0",
@@ -1285,7 +1277,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.8.1",
             ),
             "time": crate.spec(
-                version = "^0.3.31",
+                version = "^0.3.36",
             ),
             "tokio": crate.spec(
                 version = "^1.37.0",
@@ -1297,7 +1289,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.2.0",
             ),
             "tokio-metrics": crate.spec(
-                version = "^0.3.0",
+                version = "^0.3.1",
             ),
             "tokio_rustls_0_24_1": crate.spec(
                 package = "tokio-rustls",
@@ -1329,7 +1321,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4.2",
             ),
             "tokio-util": crate.spec(
-                version = "^0.7.10",
+                version = "^0.7.11",
                 features = [
                     "codec",
                     "time",
@@ -1412,7 +1404,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.22.0",
             ),
             "turmoil": crate.spec(
-                version = "^0.6",
+                version = "^0.6.2",
             ),
             "url": crate.spec(
                 version = "^2.4.1",
@@ -1502,14 +1494,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.19",
             ),
             "x509-cert": crate.spec(
-                version = "^0.2.4",
+                version = "^0.2.5",
                 features = [
                     "builder",
                     "hazmat",
                 ],
             ),
             "x509-parser": crate.spec(
-                version = "^0.15.1",
+                version = "^0.16.0",
             ),
             "yansi": crate.spec(
                 version = "^0.5.0",
@@ -1521,7 +1513,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "zstd": crate.spec(
-                version = "^0.13.0",
+                version = "^0.13.1",
             ),
         },
         splicing_config = splicing_config(

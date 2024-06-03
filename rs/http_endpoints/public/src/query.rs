@@ -1,6 +1,9 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
-use crate::{common::Cbor, validator_executor::ValidatorExecutor, ReplicaHealthStatus};
+use crate::{
+    common::{build_validator, validation_error_to_http_error, Cbor},
+    ReplicaHealthStatus,
+};
 
 use axum::{
     body::Body,
@@ -20,6 +23,7 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_types::{
     ingress::WasmResult,
     malicious_flags::MaliciousFlags,
@@ -28,8 +32,10 @@ use ic_types::{
         HttpQueryResponseReply, HttpRequest, HttpRequestEnvelope, HttpSignedQueryResponse,
         NodeSignature, Query, QueryResponseHash,
     },
+    time::current_time,
     CanisterId, NodeId,
 };
+use ic_validator::HttpRequestVerifier;
 use std::sync::{Arc, RwLock};
 use std::{
     convert::{Infallible, TryFrom},
@@ -44,7 +50,7 @@ pub struct QueryService {
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-    validator_executor: ValidatorExecutor<Query>,
+    validator: Arc<dyn HttpRequestVerifier<Query, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: Arc<Mutex<QueryExecutionService>>,
 }
@@ -118,12 +124,7 @@ impl QueryServiceBuilder {
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
             delegation_from_nns: self.delegation_from_nns,
-            validator_executor: ValidatorExecutor::new(
-                self.registry_client.clone(),
-                self.ingress_verifier,
-                &self.malicious_flags.unwrap_or_default(),
-                log,
-            ),
+            validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
             query_execution_service: Arc::new(Mutex::new(self.query_execution_service)),
         };
@@ -147,7 +148,7 @@ pub(crate) async fn query(
         log,
         node_id,
         registry_client,
-        validator_executor,
+        validator,
         health_status,
         signer,
         delegation_from_nns,
@@ -186,11 +187,24 @@ pub(crate) async fn query(
         );
         return (status, text).into_response();
     }
-    if let Err(http_err) = validator_executor
-        .validate_request(request.clone(), registry_version)
-        .await
+
+    let root_of_trust_provider =
+        RegistryRootOfTrustProvider::new(Arc::clone(&registry_client), registry_version);
+    // Since spawn blocking requires 'static we can't use any references
+    let request_c = request.clone();
+    match tokio::task::spawn_blocking(move || {
+        validator.validate_request(&request_c, current_time(), &root_of_trust_provider)
+    })
+    .await
     {
-        return (http_err.status, http_err.message).into_response();
+        Ok(Ok(_)) => {}
+        Ok(Err(err)) => {
+            let http_err = validation_error_to_http_error(request.id(), err, &log);
+            return (http_err.status, http_err.message).into_response();
+        }
+        Err(_) => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
     };
 
     let user_query = request.take_content();

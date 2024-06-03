@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ic_error_types::RejectCode;
-use ic_management_canister_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
+use ic_management_canister_types::{MasterPublicKeyId, Payload, SignWithECDSAReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_types::{
     consensus::idkg,
@@ -37,7 +37,7 @@ pub(crate) fn update_signature_agreements(
     signature_builder: &dyn EcdsaSignatureBuilder,
     request_expiry_time: Option<Time>,
     payload: &mut idkg::EcdsaPayload,
-    valid_keys: &BTreeSet<EcdsaKeyId>,
+    valid_keys: &BTreeSet<MasterPublicKeyId>,
     ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
 ) {
     let all_random_ids = all_requests
@@ -64,7 +64,7 @@ pub(crate) fn update_signature_agreements(
         {
             continue;
         }
-        if !valid_keys.contains(&context.key_id) {
+        if !valid_keys.contains(&MasterPublicKeyId::Ecdsa(context.key_id.clone())) {
             // Reject new requests with unknown key Ids.
             // Note that no quadruples are consumed at this stage.
             payload.signature_agreements.insert(
@@ -230,7 +230,7 @@ mod tests {
             &TestEcdsaSignatureBuilder::new(),
             None,
             &mut ecdsa_payload,
-            &BTreeSet::from([key_id]),
+            &BTreeSet::from([MasterPublicKeyId::Ecdsa(key_id)]),
             None,
         );
 
@@ -252,7 +252,7 @@ mod tests {
             subnet_id,
             vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
         );
-        let valid_keys = BTreeSet::from_iter([key_id.clone()]);
+        let valid_keys = BTreeSet::from_iter([MasterPublicKeyId::Ecdsa(key_id.clone())]);
         let pre_sig_ids = (0..4)
             .map(|i| create_available_quadruple(&mut ecdsa_payload, key_id.clone(), i as u8))
             .collect::<Vec<_>>();

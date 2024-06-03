@@ -12,4 +12,4 @@ ic-base-types = { path = "../../../types/base_types" }
 ic-types = { path = "../../../types/types" }
 lazy_static = "1.4.0"
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }

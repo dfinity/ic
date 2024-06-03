@@ -14,4 +14,4 @@ ic-crypto-temp-crypto = { path = "../../temp_crypto" }
 ic-crypto-test-utils = { path = ".." }
 ic-types = { path = "../../../types/types" }
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }

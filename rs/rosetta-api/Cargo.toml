@@ -67,4 +67,4 @@ ic-nns-governance = { path = "../nns/governance" }
 ic-rosetta-test-utils = { path = "test_utils" }
 ic-types = { path = "../types/types" }
 proptest = "1.0"
-rand_chacha = "0.3.1"
+rand_chacha = { workspace = true }

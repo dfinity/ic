@@ -263,6 +263,10 @@ pub struct Config {
 
     /// Indicates whether dirty page logging is enabled or not.
     pub dirty_page_logging: FlagStatus,
+
+    // TODO(EXC-1633): remove this flag once the feature is enabled by default.
+    /// Indicates whether `Ic00Method::SignWithSchnorr` is enabled.
+    pub ic00_sign_with_schnorr: FlagStatus,
 }
 
 impl Default for Config {
@@ -334,6 +338,7 @@ impl Default for Config {
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
             canister_snapshots: FlagStatus::Disabled,
             dirty_page_logging: FlagStatus::Disabled,
+            ic00_sign_with_schnorr: FlagStatus::Disabled,
         }
     }
 }

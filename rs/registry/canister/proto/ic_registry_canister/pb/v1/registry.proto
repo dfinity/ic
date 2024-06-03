@@ -99,7 +99,7 @@ message GetSubnetForCanisterRequest {
     ic_base_types.pb.v1.PrincipalId principal = 1;
 }
 
-// Response if the supplied PrincipalId is assigned to a subnet.
-message GetSubnetForCanisterResponse {
+// The subnet id of a canister.
+message SubnetForCanister {
     ic_base_types.pb.v1.PrincipalId subnet_id = 1;
 }

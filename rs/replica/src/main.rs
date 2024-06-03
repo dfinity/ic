@@ -16,7 +16,7 @@ use ic_types::{
 use nix::unistd::{setpgid, Pid};
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{trace, Resource};
+use opentelemetry_sdk::{runtime, trace, Resource};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
 use tracing_subscriber::layer::SubscriberExt;
@@ -251,11 +251,16 @@ fn main() -> io::Result<()> {
 
             match opentelemetry_otlp::new_pipeline()
                 .tracing()
+                .with_trace_config(
+                    trace::config()
+                        .with_sampler(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(0.01))
+                        .with_resource(Resource::new(vec![KeyValue::new(
+                            "service.name",
+                            "Replica Jaeger Service",
+                        )])),
+                )
                 .with_exporter(span_exporter)
-                .with_trace_config(trace::config().with_resource(Resource::new(vec![
-                    KeyValue::new("service.name", "Replica Jaeger Service"),
-                ])))
-                .install_simple()
+                .install_batch(runtime::Tokio)
             {
                 Ok(tracer) => {
                     let otel_layer = tracing_opentelemetry::OpenTelemetryLayer::new(tracer);

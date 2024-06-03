@@ -65,5 +65,5 @@ maplit = "1"
 proptest = "1.0"
 rand = { workspace = true }
 scraper = "0.17.1"
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }

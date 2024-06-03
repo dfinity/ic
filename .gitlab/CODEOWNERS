@@ -6,6 +6,7 @@
 /.devcontainer/           @dfinity-lab/teams/idx
 /.github/                 @dfinity-lab/teams/idx
 /buf.yaml                 @dfinity-lab/teams/message-routing-owners
+/cpp/                     @dfinity-lab/teams/node-team
 /hs/                      @dfinity-lab/teams/utopia
 /licenses/                @dfinity-lab/teams/idx
 /bin/ict                  @dfinity-lab/teams/idx
@@ -205,7 +206,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/rust_canisters/stable_memory_integrity              @dfinity-lab/teams/runtime-owners
 /rs/rust_canisters/canister_creator                     @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/execution-owners
 /rs/rust_canisters/xnet_test/                           @dfinity-lab/teams/message-routing-owners
-/rs/scenario_tests/                                     @dfinity-lab/teams/ic-testing-verification
+/rs/scenario_tests/                                     @dfinity-lab/teams/idx
 /rs/sns/                                                @dfinity-lab/teams/nns-team
 /rs/stable-structures/                                  @dfinity-lab/teams/execution-owners
 /rs/starter/                                            @dfinity-lab/teams/networking-team
@@ -266,13 +267,11 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/types/types/src/batch.rs                            @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/batch/                              @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/canister_http.rs                    @dfinity-lab/teams/execution-owners @dfinity-lab/teams/consensus-owners
-/rs/types/types/src/chunkable.rs                        @dfinity-lab/teams/networking-team
 /rs/types/types/src/consensus.rs                        @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/consensus/                          @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/crypto.rs                           @dfinity-lab/teams/crypto-owners
 /rs/types/types/src/crypto/                             @dfinity-lab/teams/crypto-owners
 /rs/types/types/src/exhaustive.rs                       @dfinity-lab/teams/consensus-owners
-/rs/types/types/src/p2p.rs                              @dfinity-lab/teams/networking-team
 /rs/types/types/src/signature.rs                        @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/signature/                          @dfinity-lab/teams/consensus-owners
 /rs/types/wasm_types/                                   @dfinity-lab/teams/runtime-owners

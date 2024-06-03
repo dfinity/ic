@@ -21,4 +21,4 @@ ic-wasm-types = { path = "../../types/wasm_types" }
 mockall = { workspace = true }
 proptest = "1.0"
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }

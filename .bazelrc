@@ -37,6 +37,8 @@ build --strip=never
 
 build --strategy_regexp=ic-os/.*=local
 
+build    --remote_upload_local_results=false
+build:ci --remote_upload_local_results=true
 build --remote_cache=bazel-remote.idx.dfinity.network
 build --experimental_remote_cache_async
 build --experimental_remote_cache_compression # If enabled, compress/decompress cache blobs with zstd.

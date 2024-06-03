@@ -19,5 +19,5 @@ rand = { workspace = true }
 rand_distr = "0.4"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }

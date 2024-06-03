@@ -27,6 +27,7 @@ use ic_ckbtc_minter::{
     storage, {Log, LogEntry, Priority},
 };
 use icrc_ledger_types::icrc1::account::Account;
+use std::str::FromStr;
 
 #[init]
 fn init(args: MinterArg) {
@@ -245,14 +246,26 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             }
         }
     } else if req.path() == "/dashboard" {
-        let dashboard: Vec<u8> = build_dashboard();
+        let account_to_utxos_start = match req.raw_query_param("account_to_utxos_start") {
+            Some(arg) => match u64::from_str(arg) {
+                Ok(value) => value,
+                Err(_) => {
+                    return HttpResponseBuilder::bad_request()
+                        .with_body_and_content_length(
+                            "failed to parse the 'account_to_utxos_start' parameter",
+                        )
+                        .build()
+                }
+            },
+            None => 0,
+        };
+        let dashboard: Vec<u8> = build_dashboard(account_to_utxos_start);
         HttpResponseBuilder::ok()
             .header("Content-Type", "text/html; charset=utf-8")
             .with_body_and_content_length(dashboard)
             .build()
     } else if req.path() == "/logs" {
         use serde_json;
-        use std::str::FromStr;
 
         let max_skip_timestamp = match req.raw_query_param("time") {
             Some(arg) => match u64::from_str(arg) {

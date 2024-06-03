@@ -27,5 +27,5 @@ ic-test-utilities-types = { path = "../../../test_utilities/types" }
 ic-types = { path = "../../../types/types" }
 ic-wasm-types = { path = "../../../types/wasm_types" }
 lazy_static = "1.4.0"
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 wat = "1.0.52"

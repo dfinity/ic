@@ -59,7 +59,6 @@ lifeline = { path = "../handlers/lifeline/impl" }
 prometheus-parse = "0.2.4"
 prost = { workspace = true }
 strum = { workspace = true }
-tempfile = "3.1.0"
 
 # Dependencies required to compile the tests.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -104,3 +103,6 @@ tokio = { workspace = true }
 wat = "1.0.52"
 assert_matches = { workspace = true }
 xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
+
+[dev-dependencies]
+ic-nns-test-utils-golden-nns-state = { path = "../test_utils/golden_nns_state" }

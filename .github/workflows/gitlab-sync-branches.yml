@@ -3,15 +3,14 @@
 name: GitLab Sync Branches
 
 on:
-  push:
-    branches:
-      - master
+  schedule:
+    - cron: '0 */3 * * *'
   workflow_dispatch:
 
 jobs:
   sync-branches:
     runs-on: ubuntu-latest
-    if: ${{ vars.RUN_CI == 'true' }}
+    if: ${{ vars.RUN_SYNC == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3

@@ -47,7 +47,7 @@ ic-exhaustive-derive = { path = "../exhaustive_derive" }
 ic-types-test-utils = { path = "../types_test_utils" }
 pretty_assertions = { workspace = true }
 rand = { workspace = true }
-rand_chacha = "0.3.1"
+rand_chacha = { workspace = true }
 rusty-fork = "0.3.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]

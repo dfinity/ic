@@ -111,8 +111,8 @@ pub(crate) struct SchedulerTest {
     metrics_registry: MetricsRegistry,
     // iDKG subnet public keys.
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    // ECDSA quadruple IDs.
-    ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
+    // Pre-signature IDs.
+    idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
 }
 
 impl std::fmt::Debug for SchedulerTest {
@@ -473,7 +473,7 @@ impl SchedulerTest {
             state,
             Randomness::from([0; 32]),
             self.idkg_subnet_public_keys.clone(),
-            self.ecdsa_quadruple_ids.clone(),
+            self.idkg_pre_signature_ids.clone(),
             self.round,
             None,
             round_type,
@@ -596,9 +596,9 @@ impl SchedulerTest {
 
     pub(crate) fn deliver_pre_signature_ids(
         &mut self,
-        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
+        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
     ) {
-        self.ecdsa_quadruple_ids = ecdsa_quadruple_ids;
+        self.idkg_pre_signature_ids = idkg_pre_signature_ids;
     }
 }
 
@@ -842,7 +842,7 @@ impl SchedulerTestBuilder {
             registry_settings: self.registry_settings,
             metrics_registry: self.metrics_registry,
             idkg_subnet_public_keys,
-            ecdsa_quadruple_ids: BTreeMap::new(),
+            idkg_pre_signature_ids: BTreeMap::new(),
         }
     }
 }

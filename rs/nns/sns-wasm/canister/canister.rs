@@ -44,6 +44,11 @@ use dfn_core::println;
 
 pub const LOG_PREFIX: &str = "[SNS-WASM] ";
 
+/// The current value is 4 GiB, s.t. the SNS framework canisters never hit the soft memory limit.
+/// This mitigates the risk that an SNS Governance canister runs out of memory and proposals cannot
+/// be passed anymore.
+pub const DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT: u64 = 1 << 32;
+
 thread_local! {
     static SNS_WASM: RefCell<SnsWasmCanister<CanisterStableMemory>> = RefCell::new(SnsWasmCanister::new());
 }
@@ -78,6 +83,7 @@ impl CanisterApi for CanisterApiImpl {
                 settings: Some(
                     CanisterSettingsArgsBuilder::new()
                         .with_controllers(vec![controller_id])
+                        .with_wasm_memory_limit(DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT)
                         .build(),
                 ),
                 sender_canister_version: Some(dfn_core::api::canister_version()),

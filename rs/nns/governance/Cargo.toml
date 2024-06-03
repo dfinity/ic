@@ -75,7 +75,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 strum_macros = { workspace = true }
 strum = { workspace = true }
@@ -102,7 +102,7 @@ ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 proptest = "1.0"
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-test = "0.4.2"
 

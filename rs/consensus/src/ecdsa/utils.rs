@@ -415,60 +415,48 @@ pub(crate) fn get_enabled_signing_keys(
 
 /// Return the set of quadruple IDs to be delivered in the batch of this block.
 /// We deliver IDs of all available quadruples that were created using the current key transcript.
-pub(crate) fn get_quadruple_ids_to_deliver(
+pub(crate) fn get_pre_signature_ids_to_deliver(
     block: &Block,
-) -> BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>> {
+) -> BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>> {
     let Some(ecdsa) = block.payload.as_ref().as_ecdsa() else {
         return BTreeMap::new();
     };
 
-    let mut pre_sig_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>> = BTreeMap::new();
-
+    let mut pre_sig_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>> = BTreeMap::new();
     for key_id in ecdsa.key_transcripts.keys() {
-        let MasterPublicKeyId::Ecdsa(key_id) = key_id else {
-            //TODO(CON-1260): Deliver Schnorr pre-signatures to execution
-            continue;
-        };
-
         pre_sig_ids.insert(key_id.clone(), BTreeSet::default());
     }
 
-    for (pre_sig_id, quadruple) in &ecdsa.available_pre_signatures {
-        if !ecdsa
-            .current_key_transcript(&quadruple.key_id())
+    for (pre_sig_id, pre_signature) in &ecdsa.available_pre_signatures {
+        let key_id = pre_signature.key_id();
+        if ecdsa
+            .current_key_transcript(&key_id)
             .is_some_and(|current_key_transcript| {
                 current_key_transcript.transcript_id()
-                    == quadruple.key_unmasked().as_ref().transcript_id
+                    == pre_signature.key_unmasked().as_ref().transcript_id
             })
         {
-            continue;
+            pre_sig_ids.entry(key_id).or_default().insert(*pre_sig_id);
         }
-
-        let MasterPublicKeyId::Ecdsa(key_id) = quadruple.key_id() else {
-            //TODO(CON-1260): Deliver Schnorr pre-signatures to execution
-            continue;
-        };
-
-        pre_sig_ids.entry(key_id).or_default().insert(*pre_sig_id);
     }
 
     pre_sig_ids
 }
 
-/// This function returns the ECDSA subnet public keys to be added to the batch, if required.
+/// This function returns the subnet master public keys to be added to the batch, if required.
 /// We return `Ok(Some(key))`, if
-/// - The block contains an ECDSA payload with current key transcript ref, and
+/// - The block contains an IDKG payload with current key transcript ref, and
 /// - the corresponding transcript exists in past blocks, and
-/// - we can extract the tECDSA master public key from the transcript.
+/// - we can extract the threshold master public key from the transcript.
 /// Otherwise `Ok(None)` is returned.
 /// Additionally, we return `Err(string)` if we were unable to find a dkg summary block for the height
 /// of the given block (as the lower bound for past blocks to lookup the transcript in). In that case
 /// a newer CUP is already present in the pool and we should continue from there.
-pub(crate) fn get_ecdsa_subnet_public_key(
+pub(crate) fn get_idkg_subnet_public_keys(
     block: &Block,
     pool: &PoolReader<'_>,
     log: &ReplicaLogger,
-) -> Result<BTreeMap<EcdsaKeyId, MasterPublicKey>, String> {
+) -> Result<BTreeMap<MasterPublicKeyId, MasterPublicKey>, String> {
     let Some(ecdsa_payload) = block.payload.as_ref().as_ecdsa() else {
         return Ok(BTreeMap::new());
     };
@@ -485,11 +473,6 @@ pub(crate) fn get_ecdsa_subnet_public_key(
     let mut public_keys = BTreeMap::new();
 
     for (key_id, key_transcript) in &ecdsa_payload.key_transcripts {
-        let MasterPublicKeyId::Ecdsa(key_id) = key_id else {
-            //TODO(CON-1260): Deliver Schnorr public keys to execution
-            continue;
-        };
-
         let Some(transcript_ref) = key_transcript
             .current
             .as_ref()
@@ -499,7 +482,7 @@ pub(crate) fn get_ecdsa_subnet_public_key(
         };
 
         let ecdsa_subnet_public_key = match block_reader.transcript(&transcript_ref) {
-            Ok(transcript) => get_ecdsa_subnet_public_key_(&transcript, log),
+            Ok(transcript) => get_subnet_master_public_key(&transcript, log),
             Err(err) => {
                 warn!(
                     log,
@@ -518,14 +501,17 @@ pub(crate) fn get_ecdsa_subnet_public_key(
     Ok(public_keys)
 }
 
-fn get_ecdsa_subnet_public_key_(
+fn get_subnet_master_public_key(
     transcript: &IDkgTranscript,
     log: &ReplicaLogger,
 ) -> Option<MasterPublicKey> {
     match get_master_public_key_from_transcript(transcript) {
         Ok(public_key) => Some(public_key),
         Err(err) => {
-            warn!(log, "Failed to retrieve ECDSA subnet public key: {:?}", err);
+            warn!(
+                log,
+                "Failed to retrieve IDKg subnet master public key: {:?}", err
+            );
 
             None
         }
@@ -832,7 +818,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_quadruple_ids_to_deliver() {
+    fn test_get_pre_signature_ids_to_deliver() {
         let mut rng = reproducible_rng();
         let key_id = fake_ecdsa_key_id();
         let (mut ecdsa_payload, env, _) = set_up_ecdsa_payload(
@@ -875,9 +861,11 @@ mod tests {
         );
 
         let block = make_block(Some(ecdsa_payload));
-        let mut delivered_map = get_quadruple_ids_to_deliver(&block);
+        let mut delivered_map = get_pre_signature_ids_to_deliver(&block);
         assert_eq!(delivered_map.len(), 1);
-        let delivered_ids = delivered_map.remove(&key_id).unwrap();
+        let delivered_ids = delivered_map
+            .remove(&MasterPublicKeyId::Ecdsa(key_id))
+            .unwrap();
 
         assert!(!pre_signature_ids_not_to_be_delivered
             .into_iter()
@@ -891,7 +879,7 @@ mod tests {
     #[test]
     fn test_block_without_ecdsa_should_not_deliver_quadruples() {
         let block = make_block(None);
-        let delivered_ids = get_quadruple_ids_to_deliver(&block);
+        let delivered_ids = get_pre_signature_ids_to_deliver(&block);
 
         assert!(delivered_ids.is_empty());
     }
@@ -928,8 +916,11 @@ mod tests {
         );
 
         let block = make_block(Some(ecdsa_payload));
-        let delivered_ids = get_quadruple_ids_to_deliver(&block);
+        let delivered_ids = get_pre_signature_ids_to_deliver(&block);
 
-        assert_eq!(delivered_ids.get(&key_id), Some(&BTreeSet::default()));
+        assert_eq!(
+            delivered_ids.get(&MasterPublicKeyId::Ecdsa(key_id)),
+            Some(&BTreeSet::default())
+        );
     }
 }

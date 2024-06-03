@@ -114,7 +114,7 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
-    p2p, CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
+    CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use indexmap::IndexMap;
 use itertools::izip;
@@ -249,7 +249,6 @@ impl ProposeToCreateSubnetCmd {
     fn apply_defaults_for_unset_fields(&mut self) {
         let subnet_config =
             subnet_configuration::get_default_config_params(self.subnet_type, self.node_ids.len());
-        let gossip_config = p2p::build_default_gossip_config();
         // set subnet params
         self.max_ingress_bytes_per_message
             .get_or_insert(subnet_config.max_ingress_bytes_per_message);
@@ -266,22 +265,14 @@ impl ProposeToCreateSubnetCmd {
         self.dkg_interval_length
             .get_or_insert(subnet_config.dkg_interval_length.get());
         // set gossip params
-        self.gossip_max_artifact_streams_per_peer
-            .get_or_insert(gossip_config.max_artifact_streams_per_peer);
-        self.gossip_max_chunk_wait_ms
-            .get_or_insert(gossip_config.max_chunk_wait_ms);
-        self.gossip_max_duplicity
-            .get_or_insert(gossip_config.max_duplicity);
-        self.gossip_max_chunk_size
-            .get_or_insert(gossip_config.max_chunk_size);
-        self.gossip_receive_check_cache_size
-            .get_or_insert(gossip_config.receive_check_cache_size);
-        self.gossip_pfn_evaluation_period_ms
-            .get_or_insert(gossip_config.pfn_evaluation_period_ms);
-        self.gossip_registry_poll_period_ms
-            .get_or_insert(gossip_config.registry_poll_period_ms);
-        self.gossip_retransmission_request_ms
-            .get_or_insert(gossip_config.retransmission_request_ms);
+        self.gossip_max_artifact_streams_per_peer.get_or_insert(0);
+        self.gossip_max_chunk_wait_ms.get_or_insert(0);
+        self.gossip_max_duplicity.get_or_insert(0);
+        self.gossip_max_chunk_size.get_or_insert(0);
+        self.gossip_receive_check_cache_size.get_or_insert(0);
+        self.gossip_pfn_evaluation_period_ms.get_or_insert(0);
+        self.gossip_registry_poll_period_ms.get_or_insert(0);
+        self.gossip_retransmission_request_ms.get_or_insert(0);
     }
 }
 

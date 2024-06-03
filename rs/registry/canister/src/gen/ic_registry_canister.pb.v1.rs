@@ -127,11 +127,11 @@ pub struct GetSubnetForCanisterRequest {
     #[prost(message, optional, tag = "1")]
     pub principal: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
-/// Response if the supplied PrincipalId is assigned to a subnet.
+/// The subnet id of a canister.
 #[derive(candid::CandidType, candid::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetSubnetForCanisterResponse {
+pub struct SubnetForCanister {
     #[prost(message, optional, tag = "1")]
     pub subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }

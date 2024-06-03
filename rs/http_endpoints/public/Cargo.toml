@@ -15,9 +15,9 @@ byte-unit = "4.0.14"
 cfg-if = "1.0.0"
 crossbeam = "0.8.4"
 hex = { workspace = true }
-http = "1"
-http-body = "1.0.0"
-http-body-util = "0.1.0"
+http = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 hyper = { workspace = true }
@@ -50,13 +50,13 @@ rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 threadpool = "1.8.1"
 tokio = { workspace = true }
 tokio-io-timeout = "1.2.0"
-tokio-rustls = { workspace = true }
+tokio-rustls = { version = "0.24.1", features = ["dangerous_configuration"] }
 tower = { workspace = true }
-tower-http = { version = "0.5.2", features = ["limit", "cors"] }
+tower-http = { workspace = true }
 tracing-flame = "0.2.0"
 tracing-subscriber = { workspace = true }
 url = "2.1.1"

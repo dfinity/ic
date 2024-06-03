@@ -18,7 +18,7 @@ ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
 rand = { workspace = true }
-rand_chacha = "0.3.1"
+rand_chacha = { workspace = true }
 serde = { workspace = true }
 simple_asn1 = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }

@@ -1,7 +1,6 @@
 use super::{parse_principal_id, verify_principal_ids};
 use crate::{
     common::{into_cbor, Cbor},
-    state_reader_executor::StateReaderExecutor,
     HttpError, ReplicaHealthStatus,
 };
 
@@ -9,6 +8,8 @@ use axum::{extract::State, response::IntoResponse, Router};
 use crossbeam::atomic::AtomicCell;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
+use ic_interfaces_state_manager::StateReader;
+use ic_replicated_state::ReplicatedState;
 use ic_types::{
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadStateContent, HttpReadStateResponse,
@@ -23,7 +24,7 @@ use std::sync::{Arc, RwLock};
 pub(crate) struct SubnetReadStateService {
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-    state_reader_executor: StateReaderExecutor,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
 
 impl SubnetReadStateService {
@@ -37,12 +38,12 @@ impl SubnetReadStateService {
     pub(crate) fn new_router(
         health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
         delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-        state_reader_executor: StateReaderExecutor,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Router {
         let state = Self {
             health_status,
             delegation_from_nns,
-            state_reader_executor,
+            state_reader,
         };
         Router::new().route_service(
             Self::route(),
@@ -56,7 +57,7 @@ pub(crate) async fn read_state_subnet(
     State(SubnetReadStateService {
         health_status,
         delegation_from_nns,
-        state_reader_executor,
+        state_reader,
     }): State<SubnetReadStateService>,
     Cbor(request): Cbor<HttpRequestEnvelope<HttpReadStateContent>>,
 ) -> impl IntoResponse {
@@ -86,10 +87,16 @@ pub(crate) async fn read_state_subnet(
         }
     };
     let read_state = request.content().clone();
-    let certified_state_reader = match state_reader_executor.get_certified_state_snapshot().await {
+    let certified_state_reader = match tokio::task::spawn_blocking(move || {
+        state_reader.get_certified_state_snapshot()
+    })
+    .await
+    {
         Ok(Some(reader)) => reader,
         Ok(None) => return make_service_unavailable_response(),
-        Err(HttpError { status, message }) => return (status, message).into_response(),
+        Err(_) => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
     };
 
     // Verify authorization for requested paths.

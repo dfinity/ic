@@ -116,7 +116,7 @@ DEPENDENCIES = [
     "@crate_index//:flate2",
     "@crate_index//:futures",
     "@crate_index//:hex",
-    "@crate_index//:http",
+    "@crate_index//:http_0_2_12",
     "@crate_index//:humantime",
     "@crate_index//:hyper-rustls",
     "@crate_index//:hyper_0_14_27",

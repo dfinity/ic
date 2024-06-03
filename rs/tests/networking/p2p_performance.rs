@@ -2,16 +2,15 @@ use anyhow::Result;
 use std::time::Duration;
 
 use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::networking::p2p_performance_workload::{config, test};
+use ic_tests::networking::p2p_performance_workload::{config, test, Latency};
 use ic_tests::systest;
 
 // Test parameters
 const RPS: usize = 20;
-const PAYLOAD_SIZE_BYTES: usize = 100_000;
+const PAYLOAD_SIZE_BYTES: usize = 10_000;
 const WORKLOAD_RUNTIME: Duration = Duration::from_secs(5 * 60);
 const NNS_SUBNET_MAX_SIZE: usize = 5;
 const APP_SUBNET_MAX_SIZE: usize = 13;
-const LATENCY: Option<Duration> = Some(Duration::from_millis(120));
 const DOWNLOAD_PROMETHEUS_DATA: bool = false;
 // Timeout parameters
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
@@ -27,7 +26,7 @@ fn main() -> Result<()> {
             RPS,
             PAYLOAD_SIZE_BYTES,
             WORKLOAD_RUNTIME,
-            LATENCY,
+            Latency::Lhg73,
             DOWNLOAD_PROMETHEUS_DATA,
         )
     };

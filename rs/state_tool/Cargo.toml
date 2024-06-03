@@ -32,4 +32,4 @@ slog = { workspace = true }
 slog-term = "2.6.0"
 
 [dev-dependencies]
-tempfile = "3.1.0"
+tempfile = { workspace = true }

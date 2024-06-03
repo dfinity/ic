@@ -30,7 +30,7 @@ ic-types = { path = "../types/types" }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }
 rayon = "1.5.1"
 slog = { workspace = true }
 strum_macros = { workspace = true }
@@ -72,7 +72,7 @@ strum = { workspace = true }
 slog-async = "2.5.0"
 slog-envlogger = "2.2.0"
 slog-term = "2.6.0"
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 
 [[bench]]
 name = "validate_payload"

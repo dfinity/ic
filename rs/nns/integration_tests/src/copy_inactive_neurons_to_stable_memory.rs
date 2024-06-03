@@ -1,58 +1,21 @@
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::governance::migration::MigrationStatus;
 use ic_nns_test_utils::state_test_helpers::{
     get_canister_status, get_gauge, nns_create_super_powerful_neuron, nns_get_migrations,
-    nns_propose_upgrade_nns_canister, scrape_metrics, state_machine_builder_for_nns_tests,
+    nns_propose_upgrade_nns_canister, scrape_metrics,
 };
-use std::{env, fs, io::Write, path::Path, process::Command, str::FromStr};
-use tempfile::TempDir;
-
-const NNS_STATE_TARBALL_PATH: &str = "nns_state.tar.zst";
-
-const NNS_STATE_SOURCE: ScpLocation = ScpLocation {
-    user: "dev",
-    host: "zh1-pyr07.zh1.dfinity.network",
-    path: "/home/dev/nns_state.tar.zst",
-};
-
-/// A place that you can download from or upload to using the `scp` command.
-#[derive(Debug)]
-struct ScpLocation {
-    user: &'static str,
-    host: &'static str,
-    path: &'static str,
-}
-
-impl ScpLocation {
-    pub fn to_argument(&self) -> String {
-        let Self { user, host, path } = self;
-
-        format!("{}@{}:{}", user, host, path)
-    }
-}
+use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
+use std::{env, fs};
 
 #[test]
 fn test_copy_inactive_neurons_to_stable_memory() {
     // Step 1: Prepare the world
-    let nns_subnet_id = SubnetId::new(
-        PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
-            .unwrap(),
-    );
 
     // Step 1.1: Populate StateMachine from a state_dir.
-    let state_dir = populate_state_dir();
-    println!("Building StateMachine...");
-    let mut state_machine = state_machine_builder_for_nns_tests()
-        .with_state_dir(state_dir)
-        // Patch StateMachine. This is a bit of a hack that we need because we are initializing from
-        // a state_dir.
-        .with_nns_subnet_id(nns_subnet_id)
-        .with_subnet_id(nns_subnet_id)
-        .build();
-    println!("Done building StateMachine...");
+    let mut state_machine = new_state_machine_with_golden_nns_state_or_panic();
 
     // Step 1.2: Create a super powerful Neuron.
     println!("Creating super powerful Neuron.");
@@ -183,97 +146,4 @@ fn test_copy_inactive_neurons_to_stable_memory() {
     assert!(len > 100_000, "{}", len);
 
     // TODO(NNS1-2682): Validate copy.
-}
-
-// state_dir
-// =========
-
-/// If available, the TEST_TEMPDIR environment variable is used (bazel test sets that environment
-/// variable). See bazel_test_compatible_temp_dir_or_panic.
-fn populate_state_dir() -> TempDir {
-    // TODO(NNS1-2623): User should be able to supply their own test data. Whereas, the default
-    // behavior should be as it is now, to wit, download (big) golden test data set.
-
-    let state_dir = bazel_test_compatible_temp_dir_or_panic();
-    download_and_untar_golden_nns_state(state_dir.path());
-    state_dir
-}
-
-fn download_and_untar_golden_nns_state(state_dir: &Path) {
-    let download_destination = NNS_STATE_TARBALL_PATH;
-    download_golden_nns_state(Path::new(download_destination));
-
-    let unpack_destination = bazel_test_compatible_temp_dir_or_panic();
-    untar(Path::new(download_destination), unpack_destination.path());
-
-    // Move $UNTAR_DESTINATION/nns_state/ic_state to final output dir path, StateMachine's so-called
-    // state_dir.
-    fs::rename(
-        unpack_destination.path().join("nns_state").join("ic_state"),
-        state_dir,
-    )
-    .unwrap();
-}
-
-fn download_golden_nns_state(destination: &Path) {
-    // Get ready to download.
-    let source = NNS_STATE_SOURCE.to_argument();
-    println!("Downloading {} to {:?} ...", source, destination,);
-
-    // Actually download.
-    let scp_out = Command::new("scp")
-        .arg("-oUserKnownHostsFile=/dev/null")
-        .arg("-oStrictHostKeyChecking=no")
-        .arg("-v")
-        .arg(source.clone())
-        .arg(destination)
-        .output()
-        .unwrap_or_else(|err| {
-            panic!(
-                "Could not scp from {:?} because: {:?}!",
-                NNS_STATE_SOURCE, err
-            )
-        });
-
-    // Inspect result.
-    if !scp_out.status.success() {
-        std::io::stdout().write_all(&scp_out.stdout).unwrap();
-        std::io::stderr().write_all(&scp_out.stderr).unwrap();
-        panic!("Could not scp the {}!", source);
-    }
-    println!("Downloaded {:} to {:?}.", source, destination,);
-}
-
-fn untar(source: &Path, destination: &Path) {
-    // Get ready to untar.
-    println!("Unpacking {:?} to {:?}...", source, destination);
-
-    // Actually untar.
-    let tar_out = Command::new("tar")
-        .arg("-xf")
-        .arg(source)
-        .arg("-C")
-        .arg(destination)
-        .output()
-        .unwrap_or_else(|err| panic!("Could not unpack {:?}: {}", source, err));
-
-    // Inspect result.
-    if !tar_out.status.success() {
-        std::io::stdout().write_all(&tar_out.stdout).unwrap();
-        std::io::stderr().write_all(&tar_out.stderr).unwrap();
-        panic!("Could not unpack {:?}!", source);
-    }
-    println!("Unpacked {:?} to {:?}", source, destination);
-}
-
-// Misc
-// ----
-
-/// If available, the `TEST_TMPDIR` environment variable, which is set by `bazel test`. Otherwise,
-/// just falls back on vanilla TempDir::new.
-fn bazel_test_compatible_temp_dir_or_panic() -> TempDir {
-    match std::env::var("TEST_TMPDIR") {
-        Ok(dir) => TempDir::new_in(dir).unwrap(),
-        Err(_err) => TempDir::new().unwrap(),
-    }
 }

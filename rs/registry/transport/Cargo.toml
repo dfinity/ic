@@ -18,4 +18,4 @@ ic-registry-transport-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ic-registry-keys = { path = "../keys" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
-tempfile = "3.1.0"
+tempfile = { workspace = true }

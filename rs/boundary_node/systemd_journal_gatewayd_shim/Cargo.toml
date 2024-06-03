@@ -13,7 +13,7 @@ axum = { workspace = true }
 bytes = { workspace = true }
 clap = { workspace = true }
 futures-util = { workspace = true }
-http = "0.2.9"
+http = { workspace = true }
 itertools = { workspace = true }
 reqwest = { workspace = true }
 sync_wrapper = { workspace = true }

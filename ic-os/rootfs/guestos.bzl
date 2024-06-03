@@ -126,7 +126,7 @@ rootfs_files = {
     Label("ssh/provision-ssh-keys.sh"): "/opt/ic/bin/provision-ssh-keys.sh",
     Label("ssh/setup-ssh-keys/setup-ssh-keys.sh"): "/opt/ic/bin/setup-ssh-keys.sh",
     Label("ssh/setup-ssh-keys/setup-ssh-keys.service"): "/etc/systemd/system/setup-ssh-keys.service",
-    Label("ssh/setup-ssh-account-keys/guestos/setup-ssh-account-keys.sh"): "/opt/ic/bin/setup-ssh-account-keys.sh",
+    Label("ssh/setup-ssh-account-keys/setup-ssh-account-keys.sh"): "/opt/ic/bin/setup-ssh-account-keys.sh",
     Label("ssh/setup-ssh-account-keys/setup-ssh-account-keys.service"): "/etc/systemd/system/setup-ssh-account-keys.service",
     Label("ssh/read-ssh-keys.sh"): "/opt/ic/bin/read-ssh-keys.sh",
 

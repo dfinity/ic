@@ -123,7 +123,7 @@ k8s-openapi = { version = "0.20.0", features = ["v1_22"] }
 kube = { version = "0.87.2", features = ["runtime", "derive", "ws"] }
 hyper = "0.14.18"
 hyper-rustls = { workspace = true }
-http = "0.2.9"
+http = "0.2.12"
 lazy_static = "1.4.0"
 icp-ledger = { path = "../rosetta-api/icp_ledger" }
 leb128 = "0.2.5"
@@ -142,7 +142,7 @@ proptest = "1.0"
 prost = { workspace = true }
 quickcheck = "1.0.3"
 rand = { workspace = true }
-rand_chacha = "0.3"
+rand_chacha = { workspace = true }
 rayon = "1"
 rcgen = { workspace = true }
 regex = "1.5.0"
@@ -169,9 +169,9 @@ slog-term = "2.6.0"
 ssh2 = "0.9.4"
 strum = { workspace = true }
 strum_macros = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 thiserror = { workspace = true }
-time = "^0.3.20"
+time = { workspace = true }
 walkdir = "2.3.1"
 tokio = { workspace = true }
 tokio-util = { workspace = true }

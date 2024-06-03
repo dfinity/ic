@@ -16,6 +16,7 @@ dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-cdk = { workspace = true }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
@@ -45,8 +46,8 @@ maplit = "1.0.2"
 pocket-ic = { path = "../../../packages/pocket-ic" }
 proptest = "1"
 rand = { workspace = true }
-rand_chacha = "0.3"
-tempfile = "3.1.0"
+rand_chacha = { workspace = true }
+tempfile = { workspace = true }
 
 [[test]]
 name = "test"
