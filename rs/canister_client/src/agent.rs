@@ -195,17 +195,24 @@ impl Agent {
         //     )
         //     .await?;
 
+        let url = self.url.join(CATCH_UP_PACKAGE_PATH).map_err(|e| {
+            format!(
+                "Failed to create URL for {}: {:?}",
+                CATCH_UP_PACKAGE_PATH, e
+            )
+        })?;
         let (bytes, status) = self
             .http_client
             .send_post_request(
-                &(self.url.to_string() + CATCH_UP_PACKAGE_PATH),
+                url.as_str(),
                 body,
                 tokio::time::Instant::now() + Duration::from_secs(10),
             )
             .await?;
 
         // Response is either empty or a protobuf encoded byte stream.
-        let cup = if bytes.is_empty() || !status.is_success() {
+        let cup = if bytes.is_empty() {
+            //|| !status.is_success() {
             None
         } else {
             Some(pb::CatchUpPackage::decode(&bytes[..]).map_err(|e| {
