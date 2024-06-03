@@ -367,7 +367,7 @@ impl TipHandler {
             if path.extension() == Some(OsStr::new("pbuf")) {
                 // Do not copy protobufs.
                 CopyInstruction::Skip
-            } else if path.ends_with(UNVERIFIED_CHECKPOINT_MARKER)
+            } else if path == cp.unverified_checkpoint_marker()
                 && lsmt_storage == FlagStatus::Disabled
             {
                 // With LSMT disabled, the unverified checkpoint marker is still present in the checkpoint at this point.
@@ -764,16 +764,17 @@ impl StateLayout {
 
     /// Returns a sorted list of `Height`s for which a checkpoint is available.
     pub fn checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
-        let heights = self.unfiltered_checkpoint_heights()?;
-        let mut verified_heights = vec![];
-        for h in heights {
-            if let Ok(cp) = self.checkpoint_untracked(h) {
-                if !cp.is_marked_as_unverified() {
-                    verified_heights.push(h);
-                }
-            }
-        }
-        Ok(verified_heights)
+        let checkpoint_heights = self
+            .unfiltered_checkpoint_heights()?
+            .into_iter()
+            .filter(|h| {
+                self.checkpoint_untracked(*h)
+                    .map(|cp| !cp.is_marked_as_unverified())
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        Ok(checkpoint_heights)
     }
 
     pub fn unfiltered_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
