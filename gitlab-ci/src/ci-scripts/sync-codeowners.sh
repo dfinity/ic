@@ -27,7 +27,7 @@ declare -A teamsMap=(
     ["@dfinity-lab/teams/runtime-owners"]="@dfinity/runtime"
     ["@dfinity-lab/teams/sdk-team"]="@dfinity/sdk"
     ["@dfinity-lab/teams/utopia"]="@dfinity/utopia"
-    ["@dfinity-lab/teams/ghost"]="@ghost"
+    ["@dfinity-lab/teams/ghost"]="@dfinity/core" # change from no approvals to everyone can approve
 )
 
 cp $inputFilePath $outputFilePath
