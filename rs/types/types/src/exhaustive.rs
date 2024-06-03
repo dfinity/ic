@@ -7,8 +7,8 @@ use crate::consensus::idkg::ecdsa::{
 };
 use crate::consensus::idkg::{
     CompletedReshareRequest, CompletedSignature, EcdsaKeyTranscript, EcdsaPayload,
-    EcdsaPayloadLayout, EcdsaReshareRequest, EcdsaUIDGenerator, KeyTranscriptCreation,
-    MaskedTranscript, PreSigId, PseudoRandomId, RandomTranscriptParams,
+    EcdsaPayloadLayout, EcdsaReshareRequest, EcdsaUIDGenerator, HasMasterPublicKeyId,
+    KeyTranscriptCreation, MaskedTranscript, PreSigId, PseudoRandomId, RandomTranscriptParams,
     RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
     UnmaskedTimesMaskedParams, UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
 };
@@ -794,6 +794,7 @@ impl ExhaustiveSet for EcdsaPayload {
 pub struct DerivedEcdsaKeyTranscript {
     pub current: Option<UnmaskedTranscriptWithAttributes>,
     pub next_in_creation: KeyTranscriptCreation,
+    pub master_key_id: MasterPublicKeyId,
     pub key_id: EcdsaKeyId,
 }
 
@@ -802,8 +803,8 @@ impl ExhaustiveSet for EcdsaKeyTranscript {
         DerivedEcdsaKeyTranscript::exhaustive_set(rng)
             .into_iter()
             .map(|r| EcdsaKeyTranscript {
-                key_id: r.key_id.clone(),
-                master_key_id: Some(MasterPublicKeyId::Ecdsa(r.key_id)),
+                key_id: Some(r.key_id),
+                master_key_id: r.master_key_id,
                 current: r.current,
                 next_in_creation: r.next_in_creation,
             })
@@ -894,7 +895,7 @@ impl HasId<PreSigId> for PreSignatureQuadrupleRef {}
 
 impl HasId<MasterPublicKeyId> for EcdsaKeyTranscript {
     fn get_id(&self) -> Option<MasterPublicKeyId> {
-        Some(self.get_master_public_key_id())
+        Some(self.key_id())
     }
 }
 

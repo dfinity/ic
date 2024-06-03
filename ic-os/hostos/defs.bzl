@@ -2,7 +2,7 @@
 Hold manifest common to all HostOS variants.
 """
 
-load("//ic-os/rootfs:hostos.bzl", "rootfs_files")
+load("//ic-os/components:hostos.bzl", "component_files")
 load("//toolchains/sysimage:toolchain.bzl", "lvm_image")
 
 # Declare the dependencies that we will have for the built filesystem images.
@@ -31,7 +31,6 @@ def image_deps(mode, _malicious = False):
             "//publish/binaries:vsock_host": "/opt/ic/bin/vsock_host:0755",
             "//publish/binaries:hostos_tool": "/opt/ic/bin/hostos_tool:0755",
             "//publish/binaries:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
-            "//ic-os:scripts/build-bootstrap-config-image.sh": "/opt/ic/bin/build-bootstrap-config-image.sh:0755",
 
             # additional libraries to install
             "//publish/binaries:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",
@@ -39,7 +38,7 @@ def image_deps(mode, _malicious = False):
 
         # Set various configuration values
         "container_context_files": Label("//ic-os/hostos/context:context-files"),
-        "rootfs_files": rootfs_files,
+        "component_files": component_files,
         "partition_table": Label("//ic-os/hostos:partitions.csv"),
         "volume_table": Label("//ic-os/hostos:volumes.csv"),
         "rootfs_size": "3G",

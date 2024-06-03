@@ -316,7 +316,7 @@ function build_bootstrap_images() {
         fi
 
         set -x
-        "${REPO_ROOT}"/ic-os/scripts/build-bootstrap-config-image.sh \
+        "${REPO_ROOT}"/ic-os/components/hostos-scripts/build-bootstrap-config-image.sh \
             "${OUTPUT}/${NODE_PREFIX}.img" \
             ${root_subnet:+"--ic_registry_local_store"} ${root_subnet:+"${IC_PREP_DIR}/ic_registry_local_store"} \
             ${use_crypto:+"--ic_crypto"} ${use_crypto:+"${IC_PREP_DIR}/node-${node_idx}/crypto/"} \
