@@ -90,6 +90,11 @@ anchors:
           - "**/*.rs"
           - "**/*.toml"
           - "**/*.lock"
+  python-setup: &python-setup
+    name: Set up Python
+    uses: actions/setup-python@v2
+    with:
+      python-version: '3.10'
 
 jobs:
   bazel-test-all:
@@ -239,6 +244,7 @@ jobs:
     steps:
       - <<: *before-script
       - <<: *checkout
+      - <<: *python-setup
       - name: Run Python CI Tests
         id: python-ci-tests
         shell: bash
