@@ -87,7 +87,7 @@ rust_register_toolchains(
     ],
 )
 
-# Necessary for our ic-os Makefile build
+# Necessary for our ic-os Makefile build.
 http_archive(
     name = "rules_foreign_cc",
     sha256 = "db6fcdb4f5ac217658f2c3aabd61e618d7fadc1cdf7d806ab1b52f2709d3fc66",
