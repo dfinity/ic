@@ -18,7 +18,7 @@ use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
-    CanisterStatusType, DerivationPath, EcdsaCurve, EmptyBlob, Method, Payload as _,
+    CanisterStatusType, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, Method, Payload as _,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -4913,7 +4913,10 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     let pre_sig_ids = BTreeSet::from_iter([pre_sig_id]);
 
     inject_ecdsa_signing_request(&mut test, &key_id);
-    test.deliver_pre_signature_ids(BTreeMap::from_iter([(key_id, pre_sig_ids)]));
+    test.deliver_pre_signature_ids(BTreeMap::from_iter([(
+        MasterPublicKeyId::Ecdsa(key_id),
+        pre_sig_ids,
+    )]));
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let sign_with_ecdsa_context = &test
@@ -4974,8 +4977,14 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     let pre_sig_ids0 = BTreeSet::from_iter([PreSigId(0), PreSigId(1)]);
     let pre_sig_ids1 = BTreeSet::from_iter([PreSigId(2)]);
     let pre_sig_id_map = BTreeMap::from_iter([
-        (key_ids[0].clone(), pre_sig_ids0.clone()),
-        (key_ids[1].clone(), pre_sig_ids1.clone()),
+        (
+            MasterPublicKeyId::Ecdsa(key_ids[0].clone()),
+            pre_sig_ids0.clone(),
+        ),
+        (
+            MasterPublicKeyId::Ecdsa(key_ids[1].clone()),
+            pre_sig_ids1.clone(),
+        ),
     ]);
     test.deliver_pre_signature_ids(pre_sig_id_map);
 

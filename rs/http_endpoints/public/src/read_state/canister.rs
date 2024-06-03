@@ -1,8 +1,6 @@
 use super::{parse_principal_id, verify_principal_ids};
 use crate::{
-    common::{into_cbor, Cbor},
-    state_reader_executor::StateReaderExecutor,
-    validator_executor::ValidatorExecutor,
+    common::{build_validator, into_cbor, validation_error_to_http_error, Cbor},
     HttpError, ReplicaHealthStatus,
 };
 
@@ -20,6 +18,7 @@ use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPa
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
 use ic_types::{
     malicious_flags::MaliciousFlags,
@@ -27,19 +26,21 @@ use ic_types::{
         Blob, Certificate, CertificateDelegation, HttpReadStateContent, HttpReadStateResponse,
         HttpRequest, HttpRequestEnvelope, MessageId, ReadState, EXPECTED_MESSAGE_ID_LENGTH,
     },
+    time::current_time,
     CanisterId, PrincipalId, UserId,
 };
-use ic_validator::CanisterIdSet;
+use ic_validator::{CanisterIdSet, HttpRequestVerifier};
 use std::convert::{Infallible, TryFrom};
 use std::sync::{Arc, RwLock};
 use tower::{util::BoxCloneService, ServiceBuilder};
 
 #[derive(Clone)]
 pub struct CanisterReadStateService {
+    log: ReplicaLogger,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-    state_reader_executor: StateReaderExecutor,
-    validator_executor: ValidatorExecutor<ReadState>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    validator: Arc<dyn HttpRequestVerifier<ReadState, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
 }
 
@@ -96,19 +97,14 @@ impl CanisterReadStateServiceBuilder {
     }
 
     pub(crate) fn build_router(self) -> Router {
-        let log = self.log.unwrap_or(no_op_logger());
         let state = CanisterReadStateService {
+            log: self.log.unwrap_or_else(no_op_logger),
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
             delegation_from_nns: self.delegation_from_nns,
-            state_reader_executor: StateReaderExecutor::new(self.state_reader),
-            validator_executor: ValidatorExecutor::new(
-                self.registry_client.clone(),
-                self.ingress_verifier,
-                &self.malicious_flags.unwrap_or_default(),
-                log,
-            ),
+            state_reader: self.state_reader,
+            validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
         };
         Router::new().route(
@@ -128,10 +124,11 @@ impl CanisterReadStateServiceBuilder {
 pub(crate) async fn canister_read_state(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
     State(CanisterReadStateService {
+        log,
         health_status,
         delegation_from_nns,
-        state_reader_executor,
-        validator_executor,
+        state_reader,
+        validator,
         registry_client,
     }): State<CanisterReadStateService>,
     Cbor(request): Cbor<HttpRequestEnvelope<HttpReadStateContent>>,
@@ -158,12 +155,23 @@ pub(crate) async fn canister_read_state(
     };
     let read_state = request.content().clone();
     let registry_version = registry_client.get_latest_version();
-    let targets_fut = validator_executor.validate_request(request.clone(), registry_version);
 
-    let targets = match targets_fut.await {
-        Ok(targets) => targets,
-        Err(http_err) => {
+    let root_of_trust_provider =
+        RegistryRootOfTrustProvider::new(Arc::clone(&registry_client), registry_version);
+    // Since spawn blocking requires 'static we can't use any references
+    let request_c = request.clone();
+    let targets = match tokio::task::spawn_blocking(move || {
+        validator.validate_request(&request_c, current_time(), &root_of_trust_provider)
+    })
+    .await
+    {
+        Ok(Ok(targets)) => targets,
+        Ok(Err(err)) => {
+            let http_err = validation_error_to_http_error(request.id(), err, &log);
             return (http_err.status, http_err.message).into_response();
+        }
+        Err(_) => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
     let make_service_unavailable_response = || {
@@ -171,11 +179,15 @@ pub(crate) async fn canister_read_state(
         let text = "Certified state is not available yet. Please try again...".to_string();
         (status, text).into_response()
     };
-    let certified_state_reader = match state_reader_executor.get_certified_state_snapshot().await {
+    let certified_state_reader = match tokio::task::spawn_blocking(move || {
+        state_reader.get_certified_state_snapshot()
+    })
+    .await
+    {
         Ok(Some(reader)) => reader,
         Ok(None) => return make_service_unavailable_response(),
-        Err(HttpError { status, message }) => {
-            return (status, message).into_response();
+        Err(_) => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
 

@@ -1,20 +1,37 @@
 use super::responses::LineDisplayPage;
 use itertools::Itertools;
 
-pub const ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE: &str = "Transfer {AMOUNT} **{TOKEN_SYMBOL}** from the **Sender** {SENDER_ACCOUNT} to the **Receiver**: {RECEIVER_ACCOUNT}. 
-The fee payed by the **Sender** is {LEDGER_FEE} **{TOKEN_SYMBOL}**.";
+pub const ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE: &str = "Transfer AMOUNT **TOKEN_SYMBOL** from the **Sender** SENDER_ACCOUNT to the **Receiver**: RECEIVER_ACCOUNT. 
+The fee paid by the **Sender** is LEDGER_FEE **TOKEN_SYMBOL**.";
 
 pub const ICRC1_TRANSFER_GENERIC_DISPLAY_MESSAGE_DETAILS: &str = "
 **Request Details**
-* Sender:  {SENDER_ACCOUNT}
-* Receiver: {RECEIVER_ACCOUNT}
-* Transferred amount of **{TOKEN_SYMBOL}**: {AMOUNT}
-* Memo: {MEMO}
-* The fee that was set by the **Sender**: {FEE_SET} 
-* The effective fee paid by the **Sender** for the transaction: {LEDGER_FEE} **{TOKEN_SYMBOL}** e8s
-* The timestamp of creation of this transaction by the user: {CREATED_AT_TIME}";
+* Sender:  SENDER_ACCOUNT
+* Receiver: RECEIVER_ACCOUNT
+* Transferred amount of **TOKEN_SYMBOL**: AMOUNT
+* Memo: MEMO
+* The fee that was set by the **Sender**: FEE_SET 
+* The effective fee paid by the **Sender** for the transaction: LEDGER_FEE **TOKEN_SYMBOL** e8s
+* The timestamp of creation of this transaction by the user: CREATED_AT_TIME";
 
-pub const ICRC1_TRANSFER_LINE_DISPLAY_MESSAGE: &str = "Transfer {AMOUNT} {TOKEN_SYMBOL} from {SENDER_ACCOUNT} to {RECEIVER_ACCOUNT}. Fee payed by {SENDER_ACCOUNT} is {LEDGER_FEE} {TOKEN_SYMBOL}. Memo is {MEMO}.";
+pub const ICRC1_TRANSFER_LINE_DISPLAY_MESSAGE: &str = "Transfer AMOUNT TOKEN_SYMBOL from SENDER_ACCOUNT to RECEIVER_ACCOUNT. Fee paid by SENDER_ACCOUNT is LEDGER_FEE TOKEN_SYMBOL. Memo is MEMO.";
+
+pub const ICRC2_APPROVE_GENERIC_DISPLAY_MESSAGE: &str = "Approve AMOUNT **TOKEN_SYMBOL** of the **Approvers** APPROVER_ACCOUNT tokens to be spent by the **Spender**: SPENDER_ACCOUNT. 
+The fee paid by the **Approver** is LEDGER_FEE **TOKEN_SYMBOL**.";
+
+pub const ICRC2_APPROVE_GENERIC_DISPLAY_MESSAGE_DETAILS: &str = "
+**Request Details**
+* Approver:  APPROVER_ACCOUNT
+* Receiver: SPENDER_ACCOUNT
+* Approved allowance of **TOKEN_SYMBOL**: AMOUNT
+* Memo: MEMO
+* The fee that was set by the **Approver**: FEE_SET 
+* The effective fee paid by the **Approver** for the transaction: LEDGER_FEE **TOKEN_SYMBOL** e8s
+* The timestamp of creation of this transaction by the user: CREATED_AT_TIME
+* The expected allowance of the **Spender** before this transaction: EXPECTED_ALLOWANCE
+* The expiry time of this approval: EXPIRES_AT";
+
+pub const ICRC2_APPROVE_LINE_DISPLAY_MESSAGE: &str = "Approve AMOUNT TOKEN_SYMBOL from APPROVER_ACCOUNT to be spent by SPENDER_ACCOUNT. Fee paid by SPENDER_ACCOUNT is LEDGER_FEE TOKEN_SYMBOL. Memo is MEMO.";
 
 // Maximum number of bytes that an argument to an ICRC-1 ledger function can have when passed to the ICRC-21 endpoint.
 pub const MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES: u16 = 500;

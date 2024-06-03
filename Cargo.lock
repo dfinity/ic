@@ -9441,6 +9441,7 @@ name = "ic-nns-constants"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
+ "maplit",
 ]
 
 [[package]]
@@ -9741,6 +9742,7 @@ dependencies = [
  "ic-nns-gtc",
  "ic-nns-handler-root",
  "ic-nns-test-utils",
+ "ic-nns-test-utils-golden-nns-state",
  "ic-nns-test-utils-macros",
  "ic-protobuf",
  "ic-registry-keys",
@@ -9772,7 +9774,6 @@ dependencies = [
  "serde",
  "serde_bytes",
  "strum 0.26.2",
- "tempfile",
  "tokio",
  "wat",
  "xrc-mock",
@@ -9844,6 +9845,18 @@ dependencies = [
  "serde",
  "tokio",
  "walrus 0.19.0",
+]
+
+[[package]]
+name = "ic-nns-test-utils-golden-nns-state"
+version = "0.0.1"
+dependencies = [
+ "ic-base-types",
+ "ic-config",
+ "ic-registry-subnet-type",
+ "ic-state-machine-tests",
+ "ic-types",
+ "tempfile",
 ]
 
 [[package]]
@@ -14887,6 +14900,8 @@ dependencies = [
  "percent-encoding",
  "rand 0.8.5",
  "thiserror",
+ "tokio",
+ "tokio-stream",
 ]
 
 [[package]]

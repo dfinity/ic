@@ -19,7 +19,8 @@ use ic_management_canister_types::{
     UpdateSettingsArgs,
 };
 use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+    canister_id_record::CanisterIdRecord,
+    canister_status::{CanisterStatusResult, CanisterStatusType},
 };
 use ic_nervous_system_common::{
     ledger::{compute_neuron_staking_subaccount, compute_neuron_staking_subaccount_bytes},
@@ -28,11 +29,11 @@ use ic_nervous_system_common::{
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
-    memory_allocation_of, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID,
-    LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID,
-    SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET, SUBNET_RENTAL_CANISTER_ID,
+    canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_MINTING_CANISTER_ID,
+    GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
+    IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
+    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, ROOT_CANISTER_INDEX_IN_NNS_SUBNET,
+    SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET, SUBNET_RENTAL_CANISTER_ID,
     SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_governance::pb::v1::{
@@ -52,6 +53,7 @@ use ic_nns_governance::pb::v1::{
     MostRecentMonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal, ProposalInfo,
     RewardNodeProviders, Vote,
 };
+use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_registry_subnet_type::SubnetType;
 use ic_sns_governance::pb::v1::{
@@ -1025,41 +1027,53 @@ pub fn nns_propose_upgrade_nns_canister(
     neuron_controller: PrincipalId,
     proposer_neuron_id: NeuronId,
     target_canister_id: CanisterId,
-    wasm_content: Vec<u8>,
+    wasm_module: Vec<u8>,
 ) -> ProposalId {
-    assert_ne!(
-        target_canister_id, ROOT_CANISTER_ID,
-        "Upgrading root via proposal is not supported yet."
-    );
-    let wasm_len = wasm_content.len();
+    let action = if target_canister_id != ROOT_CANISTER_ID {
+        let payload = ChangeCanisterRequest::new(
+            true, // stop_before_installing,
+            CanisterInstallMode::Upgrade,
+            target_canister_id,
+        )
+        .with_memory_allocation(memory_allocation_of(target_canister_id))
+        .with_wasm(wasm_module);
 
-    // Construct main proposal content. To wit, specify that the WASM is to be installed in the
-    // target canister.
-    let payload = Encode!(&ChangeCanisterRequest::new(
-        true, // stop_before_installing,
-        CanisterInstallMode::Upgrade,
-        target_canister_id,
-    )
-    .with_memory_allocation(memory_allocation_of(target_canister_id))
-    .with_wasm(wasm_content))
-    .unwrap();
+        let payload = Encode!(&payload).unwrap();
 
-    // Call governance. (Use the specified Neuron.)
+        Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
+            nns_function: NnsFunction::NnsCanisterUpgrade as i32,
+            payload,
+        }))
+    } else {
+        let module_arg = Encode!(&()).unwrap();
+
+        let payload = UpgradeRootProposal {
+            wasm_module,
+            module_arg,
+            stop_upgrade_start: true,
+        };
+        let payload = Encode!(&payload).unwrap();
+
+        Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
+            nns_function: NnsFunction::NnsRootUpgrade as i32,
+            payload,
+        }))
+    };
+
+    let target_canister_name = canister_id_to_nns_canister_name(target_canister_id);
+
+    let proposal = Proposal {
+        title: Some(format!("Upgrade {}", target_canister_name)),
+        action,
+        ..Default::default()
+    };
+
+    // Make the proposal
     let manage_neuron_response = nns_governance_make_proposal(
         state_machine,
         neuron_controller, // sender
         proposer_neuron_id,
-        &Proposal {
-            title: Some(format!(
-                "Upgrade {} (wasm len = {})",
-                target_canister_id, wasm_len
-            )),
-            action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                nns_function: NnsFunction::NnsCanisterUpgrade as i32,
-                payload,
-            })),
-            ..Default::default()
-        },
+        &proposal,
     );
 
     // Unpack response.
@@ -1076,6 +1090,79 @@ pub fn nns_propose_upgrade_nns_canister(
 
         _ => panic!("{:#?}", manage_neuron_response),
     }
+}
+
+fn slice_to_hex(slice: &[u8]) -> String {
+    slice
+        .iter()
+        .map(|b| format!("{:02X}", *b))
+        .collect::<Vec<String>>()
+        .join("")
+}
+
+pub fn wait_for_canister_upgrade_to_succeed(
+    state_machine: &mut StateMachine,
+    canister_id: CanisterId,
+    new_wasm_hash: &[u8; 32],
+    // For most NNS canisters, ROOT_CANISTER_ID would be passed here (modulo conversion).
+    controller_principal_id: PrincipalId,
+) {
+    let mut last_status = None;
+    for i in 0..25 {
+        state_machine.tick();
+
+        // Fetch status of governance.
+        let status_result = get_canister_status(
+            state_machine,
+            controller_principal_id,
+            canister_id,
+            CanisterId::ic_00(), // callee: the management canister.
+        );
+
+        // Continue if call was an err. This isn't necessarily a problem,
+        // because there is a brief period when the canister is being upgraded
+        // during which, it is temporarily unavailable.
+        let status = match status_result {
+            Ok(ok) => ok,
+            Err(err) => {
+                println!(
+                    "Unable to read the status of {} on iteration {}. \
+                     This is most likely a transient error:\n{:?}",
+                    canister_id, i, err,
+                );
+                continue;
+            }
+        };
+
+        last_status = Some(status.clone());
+
+        // Return if done.
+        let done = status.status == CanisterStatusType::Running
+            // Hash matches.
+            && status.module_hash.as_ref().unwrap() == &new_wasm_hash.to_vec();
+        if done {
+            println!(
+                "Yay! We were able to upgrade {} to {} on iteration {}.",
+                canister_id_to_nns_canister_name(canister_id),
+                slice_to_hex(new_wasm_hash),
+                i,
+            );
+            return;
+        }
+
+        println!(
+            "Upgrade is not done yet (as of iteration {}): {}.",
+            i, status.status,
+        );
+    }
+
+    panic!(
+        "After waiting a long time, Canister {} never ended up with WASM {}. \
+         last status: {:#?}",
+        canister_id,
+        slice_to_hex(new_wasm_hash),
+        last_status,
+    );
 }
 
 pub fn nns_cast_vote(
