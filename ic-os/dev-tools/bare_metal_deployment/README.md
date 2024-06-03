@@ -21,7 +21,7 @@ The config files must be accessible from inside the container - e.g., at the roo
 
 ```bash
 bazel run //ic-os/setupos/envs/dev:launch_bare_metal --config=local -- \
-    --config_path $(realpath ./ic-os/scripts/bare_metal_deployment/zh2-dll01.yaml) \
+    --config_path $(realpath ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml) \
     --csv_filename $(realpath ./zh2-dll01.csv)
 ```
 
@@ -30,7 +30,7 @@ If your current username does not match the username used to log into the file s
 bazel run //ic-os/setupos/envs/dev:launch_bare_metal --config=local -- \
     --file_share_username <your username per infrasec> \
     # --file_share_ssh_key <custom ssh private key> # Specify if a special ssh key is needed \
-    --config_path $(realpath ./ic-os/scripts/bare_metal_deployment/zh2-dll01.yaml) \
+    --config_path $(realpath ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml) \
     --csv_filename $(realpath ./zh2-dll01.csv)
 ```
 
