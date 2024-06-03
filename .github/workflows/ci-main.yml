@@ -413,6 +413,7 @@ jobs:
         shell: bash
         run: |
           set -eExuo pipefail
+          sudo apt update && sudo apt install -y protobuf-compiler
           "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/rust-lint.sh
       - name: No run
         if: steps.filter.outputs.cargo == 'false'
