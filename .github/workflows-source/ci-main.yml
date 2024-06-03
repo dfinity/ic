@@ -362,8 +362,7 @@ jobs:
         shell: bash
         run: |
           set -eExuo pipefail
-          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
-              "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/rust-lint.sh
+          "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/rust-lint.sh
       - name: No run
         if: steps.filter.outputs.cargo == 'false'
         run: echo "No cargo changes, skipping run"
