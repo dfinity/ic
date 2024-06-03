@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Load Service Account Key to file 
+      - name: Load Service Account Key to file
         env:
           FUZZING_GCP_SERVICE_KEY: ${{ secrets.FUZZING_GCP_SERVICE_KEY }}
         run: |
