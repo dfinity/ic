@@ -18,7 +18,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
+      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
     if: ${{ vars.RUN_CI == 'true' }}
     timeout-minutes: 60
     steps:
@@ -57,7 +57,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
+      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -94,7 +94,7 @@ jobs:
     runs-on:
       labels: default-runner
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
+      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -114,7 +114,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:67b1e54f4472900bdb6a94af73c18da3f81652df597120437f69cc6532b34922
+      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
