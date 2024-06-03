@@ -25,6 +25,7 @@ rootfs_files = {
     Label("early-boot/initramfs-tools/setupos/initramfs.conf"): "/etc/initramfs-tools/initramfs.conf",
 
     # misc
+    Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",
     Label("misc/serial-getty@/setupos/serial-getty@.service"): "/etc/systemd/system/serial-getty@.service",
 

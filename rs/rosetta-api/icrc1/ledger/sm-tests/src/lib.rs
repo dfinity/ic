@@ -3349,8 +3349,9 @@ where
         fee_set: Option<Nat>,
         token_symbol: Option<&str>,
         consent_message: ConsentMessage,
+        expires_at: Option<u64>,
+        expected_allowance: Option<Nat>,
     ) {
-        println!("Message: {:?}", consent_message.clone());
         let message = match consent_message {
             ConsentMessage::GenericDisplayMessage(message) => message,
             ConsentMessage::LineDisplayMessage { pages } => pages
@@ -3412,6 +3413,20 @@ where
         if let Some(token_symbol) = token_symbol {
             assert!(message.contains(token_symbol), "Message: {}", message);
         }
+        if let Some(expires_at) = expires_at {
+            assert!(
+                message.contains(&format!("{:?}", Some(expires_at))),
+                "Message: {}",
+                message
+            );
+        }
+        if let Some(expected_allowance) = expected_allowance {
+            assert!(
+                message.contains(&expected_allowance.to_string()),
+                "Message: {}",
+                message
+            );
+        }
     }
 
     let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
@@ -3464,6 +3479,8 @@ where
         transfer_args.fee.clone(),
         Some(TOKEN_SYMBOL),
         consent_info.consent_message,
+        None,
+        None,
     );
 
     // We also check the LineDisplay type and confirm the constraints are met.
@@ -3506,6 +3523,8 @@ where
         None,
         Some(TOKEN_SYMBOL),
         consent_info.consent_message,
+        None,
+        None,
     );
 
     // Check that for 0 length LineDisplay, the message is not created.
@@ -3565,5 +3584,70 @@ where
         None,
         Some(TOKEN_SYMBOL),
         consent_info.consent_message,
+        None,
+        None,
+    );
+
+    let approve_args = ApproveArgs {
+        spender: receiver,
+        amount: Nat::from(1_000_000u32),
+        expires_at: Some(now + 1),
+        from_subaccount: sender.subaccount,
+        expected_allowance: Some(Nat::from(1_000u32)),
+        created_at_time: Some(now),
+        fee: Some(Nat::from(10u32)),
+        memo: Some(Memo::from(b"test_bytes".to_vec())),
+    };
+    let args = ConsentMessageRequest {
+        method: "icrc2_approve".to_owned(),
+        arg: Encode!(&approve_args.clone()).unwrap(),
+        user_preferences: ConsentMessageSpec {
+            metadata: ConsentMessageMetadata {
+                language: "en".to_string(),
+            },
+            device_spec: Some(DisplayMessageType::GenericDisplay),
+        },
+    };
+    let consent_info = icrc21_consent_message(&env, canister_id, caller.0, args).unwrap();
+    check_consent_message(
+        Some(sender),
+        Some(approve_args.spender),
+        approve_args.memo.clone(),
+        approve_args.created_at_time,
+        Some(approve_args.amount.clone()),
+        Some(Nat::from(FEE)),
+        approve_args.fee.clone(),
+        Some(TOKEN_SYMBOL),
+        consent_info.consent_message,
+        approve_args.expires_at,
+        approve_args.expected_allowance.clone(),
+    );
+
+    let args = ConsentMessageRequest {
+        method: "icrc2_approve".to_owned(),
+        arg: Encode!(&approve_args).unwrap(),
+        user_preferences: ConsentMessageSpec {
+            metadata: ConsentMessageMetadata {
+                language: "en".to_string(),
+            },
+            device_spec: Some(DisplayMessageType::LineDisplay {
+                characters_per_line: 10,
+                lines_per_page: 3,
+            }),
+        },
+    };
+    let consent_info = icrc21_consent_message(&env, canister_id, caller.0, args).unwrap();
+    check_consent_message(
+        Some(sender),
+        Some(approve_args.spender),
+        approve_args.memo,
+        None,
+        Some(approve_args.amount.clone()),
+        Some(Nat::from(FEE)),
+        None,
+        Some(TOKEN_SYMBOL),
+        consent_info.consent_message,
+        None,
+        None,
     );
 }

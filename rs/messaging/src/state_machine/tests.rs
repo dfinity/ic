@@ -6,7 +6,7 @@ use crate::{
 };
 use ic_interfaces::execution_environment::Scheduler;
 use ic_interfaces_state_manager::StateManager;
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -35,7 +35,7 @@ mock! {
             state: ic_replicated_state::ReplicatedState,
             randomness: ic_types::Randomness,
             idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-            ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
+            idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
             current_round: ExecutionRound,
             next_checkpoint_round: Option<ExecutionRound>,
             current_round_type: ExecutionRoundType,
@@ -82,12 +82,6 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .with(always(), eq(provided_batch.messages.clone()))
         .returning(|state, _| state);
 
-    let idkg_subnet_public_keys: BTreeMap<_, _> = provided_batch
-        .ecdsa_subnet_public_keys
-        .iter()
-        .map(|(key_id, key)| (MasterPublicKeyId::Ecdsa(key_id.clone()), key.clone()))
-        .collect();
-
     let mut scheduler = Box::new(MockScheduler::new());
     scheduler
         .expect_execute_round()
@@ -96,8 +90,8 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .with(
             always(),
             eq(provided_batch.randomness),
-            eq(idkg_subnet_public_keys.clone()),
-            eq(provided_batch.ecdsa_quadruple_ids.clone()),
+            eq(provided_batch.idkg_subnet_public_keys.clone()),
+            eq(provided_batch.idkg_pre_signature_ids.clone()),
             eq(round),
             eq(None),
             eq(round_type),

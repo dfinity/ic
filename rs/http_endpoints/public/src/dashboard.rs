@@ -1,7 +1,8 @@
 //! Module that serves the human-readable replica dashboard, which provide
 //! information about the state of the replica.
 
-use crate::state_reader_executor::StateReaderExecutor;
+use std::sync::Arc;
+
 use askama::Template;
 use axum::{
     extract::State,
@@ -10,7 +11,9 @@ use axum::{
 };
 use hyper::StatusCode;
 use ic_config::http_handler::Config;
+use ic_interfaces_state_manager::StateReader;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::ReplicatedState;
 use ic_types::{Height, ReplicaVersion};
 
 // See build.rs
@@ -20,7 +23,7 @@ include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
 pub(crate) struct DashboardService {
     config: Config,
     subnet_type: SubnetType,
-    state_reader_executor: StateReaderExecutor,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
 
 impl DashboardService {
@@ -31,12 +34,12 @@ impl DashboardService {
     pub(crate) fn new_router(
         config: Config,
         subnet_type: SubnetType,
-        state_reader_executor: StateReaderExecutor,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Router {
         let state = DashboardService {
             config,
             subnet_type,
-            state_reader_executor,
+            state_reader,
         };
         Router::new().route(
             DashboardService::route(),
@@ -49,13 +52,20 @@ async fn dashboard(
     State(DashboardService {
         config,
         subnet_type,
-        state_reader_executor,
+        state_reader,
     }): State<DashboardService>,
 ) -> impl IntoResponse {
-    let labeled_state = match state_reader_executor.get_latest_state().await {
-        Ok(ls) => ls,
-        Err(e) => return (e.status, e.message).into_response(),
-    };
+    let labeled_state =
+        match tokio::task::spawn_blocking(move || state_reader.get_latest_state()).await {
+            Ok(labeled_state) => labeled_state,
+            Err(err) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Internal Error: {}", err),
+                )
+                    .into_response();
+            }
+        };
 
     // See https://github.com/djc/askama/issues/333
     let canisters: Vec<&ic_replicated_state::CanisterState> =

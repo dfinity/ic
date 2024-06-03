@@ -196,6 +196,7 @@ members = [
     "rs/nns/integration_tests",
     "rs/nns/nns-ui",
     "rs/nns/test_utils",
+    "rs/nns/test_utils/golden_nns_state",
     "rs/nns/test_utils_macros",
     "rs/nns/gtc",
     "rs/nns/gtc/protobuf_generator",

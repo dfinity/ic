@@ -864,25 +864,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "axum-server"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1ad46c3ec4e12f4a4b6835e173ba21c25e484c9d02b49770bf006ce5367c036"
-dependencies = [
- "bytes",
- "futures-util",
- "http 1.1.0",
- "http-body 1.0.0",
- "http-body-util",
- "hyper 1.3.1",
- "hyper-util",
- "pin-project-lite",
- "tokio",
- "tower",
- "tower-service",
-]
-
-[[package]]
 name = "backoff"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5435,7 +5416,7 @@ dependencies = [
  "async-trait",
  "axum 0.6.20",
  "axum-extra",
- "axum-server 0.5.1",
+ "axum-server",
  "bytes",
  "candid",
  "clap 4.4.6",
@@ -9443,6 +9424,7 @@ name = "ic-nns-constants"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
+ "maplit",
 ]
 
 [[package]]
@@ -9743,6 +9725,7 @@ dependencies = [
  "ic-nns-gtc",
  "ic-nns-handler-root",
  "ic-nns-test-utils",
+ "ic-nns-test-utils-golden-nns-state",
  "ic-nns-test-utils-macros",
  "ic-protobuf",
  "ic-registry-keys",
@@ -9774,7 +9757,6 @@ dependencies = [
  "serde",
  "serde_bytes",
  "strum 0.26.2",
- "tempfile",
  "tokio",
  "wat",
  "xrc-mock",
@@ -9846,6 +9828,18 @@ dependencies = [
  "serde",
  "tokio",
  "walrus 0.19.0",
+]
+
+[[package]]
+name = "ic-nns-test-utils-golden-nns-state"
+version = "0.0.1"
+dependencies = [
+ "ic-base-types",
+ "ic-config",
+ "ic-registry-subnet-type",
+ "ic-state-machine-tests",
+ "ic-types",
+ "tempfile",
 ]
 
 [[package]]
@@ -12630,7 +12624,6 @@ dependencies = [
  "arc-swap",
  "async-trait",
  "axum 0.7.5",
- "axum-server 0.6.0",
  "bytes",
  "candid",
  "clap 4.4.6",
