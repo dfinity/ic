@@ -30,7 +30,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:prometheus-parse",
     "@crate_index//:prost",
     "@crate_index//:strum",
-    "@crate_index//:tempfile",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
@@ -115,6 +114,7 @@ MACRO_DEPENDENCIES = [
 })
 
 DEV_DEPENDENCIES = [
+    "//rs/nns/test_utils/golden_nns_state",
     "//rs/types/types_test_utils",
 ]
 
@@ -132,6 +132,7 @@ DEV_DATA = [
     "//rs/nns/governance:governance-canister-test",
     "//rs/nns/gtc:genesis-token-canister",
     "//rs/nns/handlers/root/impl:root-canister",
+    "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
     "//rs/registry/canister:registry-canister",
     "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
@@ -152,6 +153,7 @@ DEV_DATA = [
 
 DEV_ENV = {
     "CARGO_MANIFEST_DIR": "rs/nns/integration_tests",
+    "NEURON_CSV_PATH": "rs/nns/integration_tests/src/neurons.csv",
     "CYCLES_LEDGER_WASM_PATH": "$(rootpath @cycles-ledger.wasm.gz//file)",
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
@@ -159,6 +161,7 @@ DEV_ENV = {
     "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
     "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
     "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm)",
+    "LIFELINE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
     "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister)",
     "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index:index_canister)",
     "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister)",
@@ -174,7 +177,6 @@ DEV_ENV = {
     "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
     "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
-    "NEURON_CSV_PATH": "rs/nns/integration_tests/src/neurons.csv",
     "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
     "SUBNET_RENTAL_CANISTER_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
 }
@@ -255,9 +257,10 @@ rust_ic_test_suite_with_extra_srcs(
             "src/lib.rs",
             # Tests that are broken out into their own rules below,
             # mostly due to long running times.
+            "src/canister_playground.rs",
             "src/copy_inactive_neurons_to_stable_memory.rs",
             "src/governance_mem_test.rs",
-            "src/canister_playground.rs",
+            "src/upgrade_canisters_with_golden_nns_state.rs",
         ],
     ),
     aliases = ALIASES,
@@ -326,13 +329,64 @@ rust_ic_test(
 # See the .bazelrc for more configuration information.
 rust_ic_test(
     name = "copy_inactive_neurons_to_stable_memory_test",
-    size = "large",
+    # This uses on the order of 10 GB of disk space.
+    # Therefore, size = "large" is not large enough.
+    size = "enormous",
     srcs = [
         "src/copy_inactive_neurons_to_stable_memory.rs",
-        "src/lib.rs",
     ],
     aliases = ALIASES,
     crate_root = "src/copy_inactive_neurons_to_stable_memory.rs",
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "manual",  # CI should not be downloading nns_state.tar.zst.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+# This test has tag "manual", which means it only runs when you explicitly specify it. In addition,
+# this requires a couple of environment variables.
+#
+# To run this test,
+#
+#     bazel \
+#         test \
+#         --test_env=SSH_AUTH_SOCK \
+#         --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=governance,root \
+#         --test_output=streamed \
+#         --test_arg=--nocapture \
+#         //rs/nns/integration_tests:upgrade_canisters_with_golden_nns_state
+#
+# Required Environment Variables:
+#
+#     * `--test_env=SSH_AUTH_SOCK`: This causes the SSH_AUTH_SOCK environment
+#       variable to be "forwarded" from your shell to the sandbox where the test
+#       is run. This authorizes the test to download the test data.
+#
+#     * `--test_env=NNS_CANISTER_UPGRADE_SEQUENCE=`. The value is a comma
+#       separated list of NNS canister names, or 'all'. When 'all' is used, it
+#       takes about 5 minutes to run the test on my devenv machine.
+#
+# Additionally, the following flags are recommended (but not required):
+#
+# --test_output=streamed
+# --test_arg=--nocapture
+#
+# These let you watch the progress of the test, rather than only being able to see the output only
+# at the end.
+rust_ic_test(
+    name = "upgrade_canisters_with_golden_nns_state",
+    # This uses on the order of 10 GB of disk space.
+    # Therefore, size = "large" is not large enough.
+    size = "enormous",
+    srcs = [
+        "src/upgrade_canisters_with_golden_nns_state.rs",
+    ],
+    aliases = ALIASES,
+    crate_root = "src/upgrade_canisters_with_golden_nns_state.rs",
     data = DEV_DATA,
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

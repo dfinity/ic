@@ -845,6 +845,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.21.2",
                 features = [
                     "trace",
+                    "rt-tokio",
                 ],
             ),
             "opentelemetry-prometheus": crate.spec(

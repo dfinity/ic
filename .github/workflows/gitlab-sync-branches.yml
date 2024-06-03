@@ -10,7 +10,7 @@ on:
 jobs:
   sync-branches:
     runs-on: ubuntu-latest
-    if: ${{ vars.RUN_CI == 'true' }}
+    if: ${{ vars.RUN_SYNC == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3

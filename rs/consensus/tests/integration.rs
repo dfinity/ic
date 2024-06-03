@@ -316,7 +316,7 @@ fn run_n_rounds_and_check_pubkey(
         let Some(batch) = batches.last() else {
             return false;
         };
-        if !batch.ecdsa_subnet_public_keys.is_empty() {
+        if !batch.idkg_subnet_public_keys.is_empty() {
             *pubkey_exists_clone.borrow_mut() = true;
         }
         *pubkey_exists_clone.borrow()
