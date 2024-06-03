@@ -391,8 +391,7 @@ jobs:
         run: |
           set -eExuo pipefail
           sudo apt update && sudo apt install -y curl
-          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
-              "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-determinism.sh
+          "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-determinism.sh
         env:
           TARGET: ${{ matrix.TARGET }}
           PATH0: ${{ matrix.PATH0 }}
