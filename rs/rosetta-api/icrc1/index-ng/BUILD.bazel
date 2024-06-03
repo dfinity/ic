@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_ic_test")
+load("//bazel:defs.bzl", "rust_ic_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -86,10 +86,13 @@ rust_test(
 )
 
 [
-    rust_ic_test(
+    rust_ic_test_suite_with_extra_srcs(
         name = "index_ng_test" + conf["test_suffix"],
         timeout = "long",
-        srcs = ["tests/tests.rs"],
+        srcs = [
+            "tests/retrieve_blocks_from_ledger_interval.rs",
+            "tests/tests.rs",
+        ],
         crate_features = conf["crate_features"],
         data = [
             "//rs/rosetta-api/icrc1/index:index_canister.wasm",
@@ -103,6 +106,7 @@ rust_test(
             "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index:index_canister.wasm)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath " + conf["ledger_wasm"] + ")",
         },
+        extra_srcs = ["tests/common/mod.rs"],
         deps = [
             ":index-ng",
             "//packages/icrc-ledger-types:icrc_ledger_types",
