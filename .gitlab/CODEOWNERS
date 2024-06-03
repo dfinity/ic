@@ -53,11 +53,11 @@ go_deps.bzl               @dfinity-lab/teams/idx
 # [IC-OS]
 /ic-os/                                          @dfinity-lab/teams/node-team
 /ic-os/boundary-guestos/                         @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
-/ic-os/rootfs/boundary-guestos/                  @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
+/ic-os/components/boundary-guestos/              @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
 /toolchains/                                     @dfinity-lab/teams/node-team
 
 # [metrics-proxy]
-/ic-os/rootfs/monitoring/metrics-proxy/          @dfinity-lab/teams/DRE
+/ic-os/components/monitoring/metrics-proxy/      @dfinity-lab/teams/DRE
 
 # [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity-lab/teams/idx

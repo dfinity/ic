@@ -1,15 +1,13 @@
 """
-Enumerate every rootfs file dependency for GuestOS
+Enumerate every component file dependency for GuestOS
 """
 
-rootfs_files = {
+component_files = {
     # unconsolidated files:
-    Label("//ic-os/rootfs/guestos:dev-certs/canister_http_test_ca.cert"): "/dev-certs/canister_http_test_ca.cert",
-    Label("//ic-os/rootfs/guestos:etc/crypttab"): "/etc/crypttab",
-    Label("//ic-os/rootfs/guestos:etc/sysctl.d/dfn-max-map-count.conf"): "/etc/sysctl.d/dfn-max-map-count.conf",
-    Label("//ic-os/rootfs/guestos:etc/sysctl.d/privileged-ports.conf"): "/etc/sysctl.d/privileged-ports.conf",
-    Label("//ic-os/rootfs/guestos:etc/sysfs.d/hugepage.conf"): "/etc/sysfs.d/hugepage.conf",
-    Label("//ic-os/rootfs/guestos:opt/ic/share/ic.json5.template"): "/opt/ic/share/ic.json5.template",
+    Label("guestos/etc/crypttab"): "/etc/crypttab",
+    Label("guestos/etc/sysctl.d/dfn-max-map-count.conf"): "/etc/sysctl.d/dfn-max-map-count.conf",
+    Label("guestos/etc/sysctl.d/privileged-ports.conf"): "/etc/sysctl.d/privileged-ports.conf",
+    Label("guestos/etc/sysfs.d/hugepage.conf"): "/etc/sysfs.d/hugepage.conf",
 
     # early-boot
     Label("early-boot/relabel-machine-id/guestos/relabel-machine-id.sh"): "/opt/ic/bin/relabel-machine-id.sh",
@@ -43,6 +41,7 @@ rootfs_files = {
     Label("ic/ic-https-outcalls-adapter/generate-https-outcalls-adapter-config.sh"): "/opt/ic/bin/generate-https-outcalls-adapter-config.sh",
     Label("ic/ic-replica.service"): "/etc/systemd/system/ic-replica.service",
     Label("ic/generate-replica-config.sh"): "/opt/ic/bin/generate-replica-config.sh",
+    Label("ic/ic.json5.template"): "/opt/ic/share/ic.json5.template",
 
     # init
     Label("init/bootstrap-ic-node/guestos/bootstrap-ic-node.sh"): "/opt/ic/bin/bootstrap-ic-node.sh",
@@ -95,6 +94,7 @@ rootfs_files = {
     Label("networking/resolv.conf"): "/etc/resolv.conf",
     Label("networking/network-tweaks.conf"): "/etc/sysctl.d/network-tweaks.conf",
     Label("networking/hosts"): "/etc/hosts",
+    Label("networking/dev-certs/canister_http_test_ca.cert"): "/dev-certs/canister_http_test_ca.cert",
 
     # prep
     Label("prep/guestos/filebeat/filebeat.fc"): "/prep/filebeat/filebeat.fc",
