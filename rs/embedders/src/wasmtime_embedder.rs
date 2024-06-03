@@ -958,27 +958,35 @@ impl WasmtimeInstance {
 
         let result = match &func_ref {
             FuncRef::Method(wasm_method) => self.invoke_export(&wasm_method.to_string(), &[]),
-            FuncRef::QueryClosure(closure) | FuncRef::UpdateClosure(closure) => self
-                .instance
-                .get_export(&mut self.store, "table")
-                .ok_or_else(|| HypervisorError::ToolchainContractViolation {
-                    error: "table not found".to_string(),
-                })?
-                .into_table()
-                .ok_or_else(|| HypervisorError::ToolchainContractViolation {
-                    error: "export 'table' is not a table".to_string(),
-                })?
-                .get(&mut self.store, closure.func_idx)
-                .ok_or(HypervisorError::FunctionNotFound(0, closure.func_idx))?
-                .as_func()
-                .ok_or_else(|| HypervisorError::ToolchainContractViolation {
-                    error: "not a function reference".to_string(),
-                })?
-                .ok_or_else(|| HypervisorError::ToolchainContractViolation {
-                    error: "unexpected null function reference".to_string(),
-                })?
-                .call(&mut self.store, &[Val::I32(closure.env as i32)], &mut [])
-                .map_err(wasmtime_error_to_hypervisor_error),
+            FuncRef::QueryClosure(closure) | FuncRef::UpdateClosure(closure) => {
+                // As the 64-bit `env` values will be supported in `wasm64`,
+                // which is disabled for now, the conversion should always succeed.
+                let Ok(env32): Result<u32, _> = closure.env.try_into() else {
+                    return Err(HypervisorError::ToolchainContractViolation {
+                        error: format!("error converting additional value {} to u32", closure.env),
+                    });
+                };
+                self.instance
+                    .get_export(&mut self.store, "table")
+                    .ok_or_else(|| HypervisorError::ToolchainContractViolation {
+                        error: "table not found".to_string(),
+                    })?
+                    .into_table()
+                    .ok_or_else(|| HypervisorError::ToolchainContractViolation {
+                        error: "export 'table' is not a table".to_string(),
+                    })?
+                    .get(&mut self.store, closure.func_idx)
+                    .ok_or(HypervisorError::FunctionNotFound(0, closure.func_idx))?
+                    .as_func()
+                    .ok_or_else(|| HypervisorError::ToolchainContractViolation {
+                        error: "not a function reference".to_string(),
+                    })?
+                    .ok_or_else(|| HypervisorError::ToolchainContractViolation {
+                        error: "unexpected null function reference".to_string(),
+                    })?
+                    .call(&mut self.store, &[Val::I32(env32 as i32)], &mut [])
+                    .map_err(wasmtime_error_to_hypervisor_error)
+            }
         }
         .map_err(|e| {
             let exec_err = self
