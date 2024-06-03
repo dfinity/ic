@@ -116,7 +116,7 @@ pub(crate) struct CanisterQueue {
 }
 
 impl CanisterQueue {
-    /// The memoty overhead of an empty `CanisterQueue`, in bytes.
+    /// The memory overhead of an empty `CanisterQueue`, in bytes.
     pub const EMPTY_SIZE_BYTES: usize = size_of::<CanisterQueue>();
 
     /// Creates a new `CanisterQueue` with the given capacity.
@@ -129,7 +129,7 @@ impl CanisterQueue {
         }
     }
 
-    /// Returns the number slots available for requests.
+    /// Returns the number of slots available for requests.
     pub(super) fn available_request_slots(&self) -> usize {
         debug_assert!(self.request_slots <= self.capacity);
         self.capacity - self.request_slots
