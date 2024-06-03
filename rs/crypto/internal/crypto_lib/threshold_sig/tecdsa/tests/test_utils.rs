@@ -13,36 +13,27 @@ use std::collections::BTreeMap;
 
 #[derive(Copy, Clone, Debug)]
 pub struct TestConfig {
-    signature_alg: CanisterThresholdSignatureAlgorithm,
+    signature_alg: IdkgProtocolAlgorithm,
     key_curve: EccCurveType,
 }
 
 impl TestConfig {
     pub fn all() -> Vec<Self> {
         vec![
-            Self::new(
-                CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
-                EccCurveType::K256,
-            ),
-            Self::new(
-                CanisterThresholdSignatureAlgorithm::EcdsaSecp256r1,
-                EccCurveType::K256,
-            ),
-            Self::new(
-                CanisterThresholdSignatureAlgorithm::EcdsaSecp256r1,
-                EccCurveType::P256,
-            ),
+            Self::new(IdkgProtocolAlgorithm::EcdsaSecp256k1, EccCurveType::K256),
+            Self::new(IdkgProtocolAlgorithm::EcdsaSecp256r1, EccCurveType::K256),
+            Self::new(IdkgProtocolAlgorithm::EcdsaSecp256r1, EccCurveType::P256),
         ]
     }
 
-    pub fn new(alg: CanisterThresholdSignatureAlgorithm, key_curve: EccCurveType) -> Self {
+    pub fn new(alg: IdkgProtocolAlgorithm, key_curve: EccCurveType) -> Self {
         Self {
             signature_alg: alg,
             key_curve,
         }
     }
 
-    pub fn signature_alg(&self) -> CanisterThresholdSignatureAlgorithm {
+    pub fn signature_alg(&self) -> IdkgProtocolAlgorithm {
         self.signature_alg
     }
 
@@ -125,7 +116,7 @@ impl ProtocolSetup {
         })
     }
 
-    pub fn signature_alg(&self) -> CanisterThresholdSignatureAlgorithm {
+    pub fn signature_alg(&self) -> IdkgProtocolAlgorithm {
         self.cfg.signature_alg()
     }
 
@@ -468,6 +459,7 @@ impl ProtocolRound {
         // Ensure every receiver can open
         for receiver in 0..setup.receivers {
             let opening = compute_secret_shares(
+                setup.alg,
                 dealings,
                 transcript,
                 &setup.ad,
@@ -493,7 +485,7 @@ impl ProtocolRound {
 
                 let mut provided_openings = BTreeMap::new();
 
-                let ctsa = CanisterThresholdSignatureAlgorithm::from_algorithm(setup.alg).unwrap();
+                let ctsa = IdkgProtocolAlgorithm::from_algorithm(setup.alg).unwrap();
 
                 for (dealer_index, complaint) in &complaints {
                     let dealing = dealings.get(dealer_index).unwrap();
@@ -533,6 +525,7 @@ impl ProtocolRound {
                         }
 
                         let dopening = open_dealing(
+                            setup.alg,
                             dealing,
                             &setup.ad,
                             *dealer_index,
@@ -560,6 +553,7 @@ impl ProtocolRound {
                 }
 
                 let opening = compute_secret_shares_with_openings(
+                    setup.alg,
                     dealings,
                     &provided_openings,
                     transcript,

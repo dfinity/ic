@@ -396,10 +396,7 @@ fn should_be_able_to_perform_bip340_signature() -> Result<(), CanisterThresholdE
 
         let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
-        let cfg = TestConfig::new(
-            CanisterThresholdSignatureAlgorithm::Bip340,
-            EccCurveType::K256,
-        );
+        let cfg = TestConfig::new(IdkgProtocolAlgorithm::Bip340, EccCurveType::K256);
 
         let setup = SchnorrSignatureProtocolSetup::new(
             cfg,
@@ -457,10 +454,7 @@ fn should_be_able_to_perform_ed25519_signature() -> Result<(), CanisterThreshold
     let random_seed = Seed::from_rng(&mut rng);
 
     // Ed25519 signatures using secp256k1 MEGa keys
-    let cfg = TestConfig::new(
-        CanisterThresholdSignatureAlgorithm::Ed25519,
-        EccCurveType::K256,
-    );
+    let cfg = TestConfig::new(IdkgProtocolAlgorithm::Ed25519, EccCurveType::K256);
 
     let setup =
         SchnorrSignatureProtocolSetup::new(cfg, nodes, threshold, corrupted_dealings, random_seed)?;
