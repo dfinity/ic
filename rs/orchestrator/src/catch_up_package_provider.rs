@@ -47,6 +47,7 @@ use ic_types::{
     crypto::*,
     NodeId, RegistryVersion, SubnetId,
 };
+use prost::Message;
 use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc};
 use url::Url;
 
@@ -219,11 +220,44 @@ impl CatchUpPackageProvider {
         url: Url,
         param: Option<CatchUpPackageParam>,
     ) -> Option<pb::CatchUpPackage> {
-        Agent::new_with_client(self.client.clone(), url, Sender::Anonymous)
-            .query_cup_endpoint(param)
+        let client = reqwest::Client::builder()
+            .use_rustls_tls()
+            .https_only(true)
+            .http2_prior_knowledge()
+            .pool_idle_timeout(tokio::time::Duration::from_secs(600))
+            .pool_max_idle_per_host(1)
+            .build()
+            .ok()?;
+
+        let url = url.join("/_/catch_up_package").ok()?;
+
+        let body = param
+            .and_then(|param| serde_cbor::to_vec(&param).ok())
+            .unwrap_or_default();
+
+        let res = client
+            .request(reqwest::Method::POST, url)
+            .body(body)
+            .send()
             .await
-            .map_err(|e| warn!(self.logger, "Failed to query CUP endpoint: {:?}", e))
-            .ok()?
+            .ok()?;
+
+        let bytes = res.bytes().await.ok()?;
+
+        if bytes.is_empty() {
+            None
+        } else {
+            Some(
+                pb::CatchUpPackage::decode(&bytes[..])
+                    .map_err(|e| {
+                        format!(
+                            "Failed to deserialize CUP from protobuf, got: {:?} - error {:?}",
+                            bytes, e
+                        )
+                    })
+                    .ok()?,
+            )
+        }
     }
 
     /// Persist the given CUP to disk.

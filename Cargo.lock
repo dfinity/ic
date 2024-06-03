@@ -14957,6 +14957,7 @@ dependencies = [
  "prost 0.12.3",
  "rand 0.8.5",
  "registry-canister",
+ "reqwest 0.12.4",
  "serde",
  "serde_cbor",
  "slog",

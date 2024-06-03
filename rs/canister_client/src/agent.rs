@@ -211,8 +211,7 @@ impl Agent {
             .await?;
 
         // Response is either empty or a protobuf encoded byte stream.
-        let cup = if bytes.is_empty() {
-            //|| !status.is_success() {
+        let cup = if bytes.is_empty() || !status.is_success() {
             None
         } else {
             Some(pb::CatchUpPackage::decode(&bytes[..]).map_err(|e| {

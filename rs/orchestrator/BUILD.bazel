@@ -51,6 +51,7 @@ rust_library(
         "@crate_index//:prometheus",
         "@crate_index//:prost",
         "@crate_index//:rand",
+        "@crate_index//:reqwest",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:slog",
