@@ -70,6 +70,8 @@ pub enum OrchestratorInstantiationError {
     KeyGenerationError(String),
     /// If an error occurs while reading the replica version from the file system
     VersionFileError,
+    /// If an error occurs when creating the catch up package provider
+    CatchUpPackageProviderError,
 }
 
 // Loads the replica version from the file specified as argument on
@@ -213,13 +215,16 @@ impl Orchestrator {
             .unwrap_or(&PathBuf::from("/tmp"))
             .clone();
 
-        let cup_provider = Arc::new(CatchUpPackageProvider::new(
-            Arc::clone(&registry),
-            args.cup_dir.clone(),
-            Arc::clone(&crypto) as _,
-            logger.clone(),
-            node_id,
-        ));
+        let cup_provider = Arc::new(
+            CatchUpPackageProvider::new(
+                Arc::clone(&registry),
+                args.cup_dir.clone(),
+                Arc::clone(&crypto) as _,
+                logger.clone(),
+                node_id,
+            )
+            .ok_or(OrchestratorInstantiationError::CatchUpPackageProviderError)?,
+        );
 
         if args.enable_provisional_registration {
             // will not return until the node is registered

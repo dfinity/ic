@@ -883,7 +883,8 @@ mod tests {
             Arc::new(CryptoReturningOk::default()),
             no_op_logger(),
             node,
-        );
+        )
+        .unwrap();
 
         Firewall::new(
             node,

@@ -185,33 +185,18 @@ impl Agent {
         let body = param
             .and_then(|param| serde_cbor::to_vec(&param).ok())
             .unwrap_or_default();
-        // let bytes = self
-        //     .http_client
-        //     .post_with_response(
-        //         &self.url,
-        //         CATCH_UP_PACKAGE_PATH,
-        //         body,
-        //         tokio::time::Instant::now() + Duration::from_secs(10),
-        //     )
-        //     .await?;
-
-        let url = self.url.join(CATCH_UP_PACKAGE_PATH).map_err(|e| {
-            format!(
-                "Failed to create URL for {}: {:?}",
-                CATCH_UP_PACKAGE_PATH, e
-            )
-        })?;
-        let (bytes, status) = self
+        let bytes = self
             .http_client
-            .send_post_request(
-                url.as_str(),
+            .post_with_response(
+                &self.url,
+                CATCH_UP_PACKAGE_PATH,
                 body,
                 tokio::time::Instant::now() + Duration::from_secs(10),
             )
             .await?;
 
         // Response is either empty or a protobuf encoded byte stream.
-        let cup = if bytes.is_empty() || !status.is_success() {
+        let cup = if bytes.is_empty() {
             None
         } else {
             Some(pb::CatchUpPackage::decode(&bytes[..]).map_err(|e| {

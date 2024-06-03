@@ -34,7 +34,6 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     registry_helper::RegistryHelper,
 };
-use ic_canister_client::{Agent, HttpClient, Sender};
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::{registry::node::v1::NodeRecord, types::v1 as pb};
@@ -48,6 +47,7 @@ use ic_types::{
     NodeId, RegistryVersion, SubnetId,
 };
 use prost::Message;
+use reqwest::Client as ReqwestClient;
 use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc};
 use url::Url;
 
@@ -59,7 +59,7 @@ use url::Url;
 pub(crate) struct CatchUpPackageProvider {
     registry: Arc<RegistryHelper>,
     cup_dir: PathBuf,
-    client: HttpClient,
+    client: ReqwestClient,
     crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
     logger: ReplicaLogger,
     node_id: NodeId,
@@ -73,15 +73,24 @@ impl CatchUpPackageProvider {
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
         logger: ReplicaLogger,
         node_id: NodeId,
-    ) -> Self {
-        Self {
+    ) -> Option<Self> {
+        let client = reqwest::Client::builder()
+            .use_rustls_tls()
+            .https_only(true)
+            .http2_prior_knowledge()
+            .pool_idle_timeout(tokio::time::Duration::from_secs(600))
+            .pool_max_idle_per_host(1)
+            .build()
+            .ok()?;
+
+        Some(Self {
             node_id,
             registry,
             cup_dir,
-            client: HttpClient::new(),
+            client,
             crypto,
             logger,
-        }
+        })
     }
 
     // Randomly selects a peer from the subnet and pulls its CUP. If this CUP is
@@ -220,22 +229,14 @@ impl CatchUpPackageProvider {
         url: Url,
         param: Option<CatchUpPackageParam>,
     ) -> Option<pb::CatchUpPackage> {
-        let client = reqwest::Client::builder()
-            .use_rustls_tls()
-            .https_only(true)
-            .http2_prior_knowledge()
-            .pool_idle_timeout(tokio::time::Duration::from_secs(600))
-            .pool_max_idle_per_host(1)
-            .build()
-            .ok()?;
-
         let url = url.join("/_/catch_up_package").ok()?;
 
         let body = param
             .and_then(|param| serde_cbor::to_vec(&param).ok())
             .unwrap_or_default();
 
-        let res = client
+        let res = self
+            .client
             .request(reqwest::Method::POST, url)
             .body(body)
             .send()
