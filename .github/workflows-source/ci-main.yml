@@ -95,7 +95,7 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     <<: *bazel-large-setup
-    env: 
+    env:
       TITLE: ${{ github.event.pull_request.title }}
     steps:
       - <<: *before-script
@@ -254,6 +254,7 @@ jobs:
   build-ic:
     name: Build IC
     <<: *bazel-large-setup
+    if: ${{ vars.RUN_CI == 'true' && github.event_name != 'merge_group' }}
     steps:
       - <<: *before-script
       - <<: *checkout
