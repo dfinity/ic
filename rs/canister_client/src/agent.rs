@@ -185,18 +185,27 @@ impl Agent {
         let body = param
             .and_then(|param| serde_cbor::to_vec(&param).ok())
             .unwrap_or_default();
-        let bytes = self
+        // let bytes = self
+        //     .http_client
+        //     .post_with_response(
+        //         &self.url,
+        //         CATCH_UP_PACKAGE_PATH,
+        //         body,
+        //         tokio::time::Instant::now() + Duration::from_secs(10),
+        //     )
+        //     .await?;
+
+        let (bytes, status) = self
             .http_client
-            .post_with_response(
-                &self.url,
-                CATCH_UP_PACKAGE_PATH,
+            .send_post_request(
+                &(self.url.to_string() + CATCH_UP_PACKAGE_PATH),
                 body,
                 tokio::time::Instant::now() + Duration::from_secs(10),
             )
             .await?;
 
         // Response is either empty or a protobuf encoded byte stream.
-        let cup = if bytes.is_empty() {
+        let cup = if bytes.is_empty() || !status.is_success() {
             None
         } else {
             Some(pb::CatchUpPackage::decode(&bytes[..]).map_err(|e| {
