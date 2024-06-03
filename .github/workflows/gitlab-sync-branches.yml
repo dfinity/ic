@@ -27,5 +27,5 @@ jobs:
         run: |
           git fetch origin master mirroring
           git checkout -B mirroring
-          git rebase --onto master origin/mirroring
+          git rebase --onto origin/master origin/mirroring
           git push origin mirroring --force-with-lease

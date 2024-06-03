@@ -1199,10 +1199,7 @@ impl TestWasmExecutorCore {
         let receiver = call.other_side.canister.unwrap();
         let call_message_id = self.next_message_id();
         let response_message_id = self.next_message_id();
-        let closure = WasmClosure {
-            func_idx: 0,
-            env: response_message_id,
-        };
+        let closure = WasmClosure::new(0, response_message_id.into());
         let prepayment_for_response_execution = self
             .cycles_account_manager
             .prepayment_for_response_execution(self.subnet_size);
@@ -1273,7 +1270,9 @@ impl TestWasmExecutorCore {
             } => {
                 let message_id = match &input.func_ref {
                     FuncRef::Method(_) => unreachable!("A callback requires a closure"),
-                    FuncRef::UpdateClosure(closure) | FuncRef::QueryClosure(closure) => closure.env,
+                    FuncRef::UpdateClosure(closure) | FuncRef::QueryClosure(closure) => {
+                        closure.env.try_into().unwrap()
+                    }
                 };
                 let message = self.messages.remove(&message_id).unwrap();
                 (message_id, message, Some(*call_context_id))
