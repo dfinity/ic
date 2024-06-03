@@ -62,13 +62,21 @@ pub(crate) fn make_bootstrap_summary(
 pub(crate) fn make_bootstrap_summary_with_initial_dealings(
     subnet_id: SubnetId,
     height: Height,
-    initial_dealings_per_key_id: BTreeMap<EcdsaKeyId, InitialIDkgDealings>,
+    initial_dealings_per_key_id: BTreeMap<MasterPublicKeyId, InitialIDkgDealings>,
     log: &ReplicaLogger,
 ) -> Result<idkg::Summary, EcdsaPayloadError> {
     let mut idkg_transcripts = BTreeMap::new();
     let mut key_transcripts = Vec::new();
 
     for (key_id, initial_dealings) in initial_dealings_per_key_id {
+        // TODO(CON-1331): Generalize creation of summary payloads
+        let MasterPublicKeyId::Ecdsa(key_id) = key_id else {
+            warn!(
+                log,
+                "Creating summary blocks with SchnorrKeyId is unsupported"
+            );
+            continue;
+        };
         match idkg::unpack_reshare_of_unmasked_params(height, initial_dealings.params()) {
             Some((params, transcript)) => {
                 idkg_transcripts.insert(transcript.transcript_id, transcript);
@@ -2258,7 +2266,7 @@ mod tests {
             let payload_0 = make_bootstrap_summary_with_initial_dealings(
                 subnet_id,
                 Height::from(0),
-                BTreeMap::from([(key_id, initial_dealings)]),
+                BTreeMap::from([(MasterPublicKeyId::Ecdsa(key_id), initial_dealings)]),
                 &no_op_logger(),
             );
             assert_matches!(payload_0, Ok(Some(_)));
