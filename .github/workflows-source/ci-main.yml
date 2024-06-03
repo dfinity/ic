@@ -349,7 +349,9 @@ jobs:
 
   cargo-clippy-linux:
     name: Cargo Clippy Linux
-    <<: *bazel-small-setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - <<: *before-script
       - <<: *checkout
