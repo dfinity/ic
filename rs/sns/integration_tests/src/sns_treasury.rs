@@ -113,7 +113,7 @@ lazy_static! {
 ///
 /// The swap establishes that 1 SNS token is worth slightly less than 1 ICP.
 fn new_treasury_scenario(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
 ) -> (/* whale */ SnsNeuronId, SnsTestCanisterIds) {
     let start_time = SystemTime::UNIX_EPOCH
         .checked_add(Duration::from_secs(START_TIMESTAMP_SECONDS))
@@ -282,9 +282,9 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
     // Step 1: Prepare the world.
 
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let mut state_machine = state_machine_builder_for_sns_tests().build();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
-    let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&mut state_machine);
+    let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&state_machine);
 
     let SnsTestCanisterIds {
         governance_canister_id,
@@ -519,9 +519,9 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
     // tokens that proposals can transfer from the treasury.
 
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let mut state_machine = state_machine_builder_for_sns_tests().build();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
-    let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&mut state_machine);
+    let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&state_machine);
 
     let SnsTestCanisterIds {
         governance_canister_id,
@@ -690,9 +690,9 @@ fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
     // Step 1: Prepare the world.
 
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let mut state_machine = state_machine_builder_for_sns_tests().build();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
-    let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&mut state_machine);
+    let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&state_machine);
 
     let SnsTestCanisterIds {
         governance_canister_id,
@@ -780,7 +780,7 @@ fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
 
     // Make the second proposal pass.
     sns_cast_vote(
-        &mut state_machine,
+        &state_machine,
         governance_canister_id,
         *COUNTERWEIGHT,
         counterweight_neuron_id.clone(),
@@ -791,7 +791,7 @@ fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
 
     // Make the first proposal pass.
     sns_cast_vote(
-        &mut state_machine,
+        &state_machine,
         governance_canister_id,
         *COUNTERWEIGHT,
         counterweight_neuron_id,
@@ -857,9 +857,9 @@ fn sns_can_mint_funds_via_proposals() {
     // Step 1: Prepare the world.
 
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let mut state_machine = state_machine_builder_for_sns_tests().build();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
-    let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&mut state_machine);
+    let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&state_machine);
 
     let SnsTestCanisterIds {
         governance_canister_id,
