@@ -19,7 +19,7 @@ use ic_nns_test_utils::{
 
 #[test]
 fn test_reset_root_with_governance_proposal() {
-    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
@@ -49,7 +49,7 @@ fn test_reset_root_with_governance_proposal() {
     );
 
     let response = nns_governance_make_proposal(
-        &mut state_machine,
+        &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         neuron_id,
         &proposal,
@@ -63,7 +63,7 @@ fn test_reset_root_with_governance_proposal() {
         ),
     };
 
-    nns_wait_for_proposal_execution(&mut state_machine, proposal_id.id);
+    nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
 
     // Assert the root canister was upgraded
     assert_eq!(

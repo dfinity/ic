@@ -1479,12 +1479,17 @@ impl Scheduler for SchedulerImpl {
                 self.purge_expired_ingress_messages(&mut state);
             }
 
-            // Once the subnet messages are executed in threads, each thread will
-            // need its own Csprng instance which is initialized with a distinct
-            // "ExecutionThread". Otherwise, two Csprng instances that are
-            // initialized with the same Randomness and ExecutionThread would
-            // reveal the same bytes and break the guarantees that we provide for
-            // raw_rand method of the virtual canister.
+            // In the future, subnet messages might be executed in threads. In
+            // that case each thread will need its own Csprng instance which
+            // is initialized with a distinct "ExecutionThread". Otherwise,
+            // two Csprng instances that are initialized with the same Randomness
+            // and ExecutionThread would reveal the same bytes and break the
+            // guarantees that we provide for raw_rand method of the virtual canister.
+            //
+            // Currently subnet messages are still executed in a single thread so
+            // passing the number of scheduler cores is ok. It would need to be
+            // updated in case the execution of subnet messages is running across
+            // many threads to ensure a unique execution thread id.
             csprng = Csprng::from_seed_and_purpose(
                 &randomness,
                 &ExecutionThread(self.config.scheduler_cores as u32),

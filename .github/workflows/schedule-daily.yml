@@ -92,7 +92,7 @@ jobs:
           # shellcheck disable=SC2046,SC2086
           bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
             //ic-os/setupos/envs/dev:launch_bare_metal -- \
-              --config_path "$(realpath  ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml)" \
+              --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
               --csv_filename "$(realpath file1)" \
               --file_share_ssh_key "$(realpath file2)" \
               --file_share_username ci_interim \

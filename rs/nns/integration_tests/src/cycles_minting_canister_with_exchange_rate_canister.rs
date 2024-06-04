@@ -52,7 +52,7 @@ fn reinstall_mock_exchange_rate_canister(
 
 // Creates an ICP/XDR conversion rate proposal.
 fn propose_icp_xdr_rate(
-    machine: &mut StateMachine,
+    machine: &StateMachine,
     xdr_permyriad_per_icp: u64,
     timestamp_seconds: u64,
     reason: Option<UpdateIcpXdrConversionRatePayloadReason>,
@@ -330,7 +330,7 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
 #[test]
 fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rate_proposal() {
     // Step 1: Prepare the world.
-    let mut state_machine = state_machine_builder_for_nns_tests()
+    let state_machine = state_machine_builder_for_nns_tests()
         .with_time(GENESIS)
         .build();
 
@@ -391,12 +391,12 @@ fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rat
     // Step 3: Send in a proposal with a diverged rate reason. Ensure that the CMC
     // stops calling the mock exchange rate canister.
     let proposal_id = propose_icp_xdr_rate(
-        &mut state_machine,
+        &state_machine,
         210_000,
         cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS + ONE_MINUTE_SECONDS,
         Some(UpdateIcpXdrConversionRatePayloadReason::DivergedRate),
     );
-    nns_wait_for_proposal_execution(&mut state_machine, proposal_id);
+    nns_wait_for_proposal_execution(&state_machine, proposal_id);
 
     // Check if proposal has set the rate.
     let response = get_icp_xdr_conversion_rate(&state_machine);
@@ -423,12 +423,12 @@ fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rat
     // Ensure that a proposal with a OldRate reason does not reactivate the
     // update cycle.
     let proposal_id = propose_icp_xdr_rate(
-        &mut state_machine,
+        &state_machine,
         200_000,
         cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS * 2,
         Some(UpdateIcpXdrConversionRatePayloadReason::OldRate),
     );
-    nns_wait_for_proposal_execution(&mut state_machine, proposal_id);
+    nns_wait_for_proposal_execution(&state_machine, proposal_id);
 
     let response = get_icp_xdr_conversion_rate(&state_machine);
     assert_eq!(
@@ -450,12 +450,12 @@ fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rat
 
     // Re-enable calls to the exchange rate canister.
     let proposal_id = propose_icp_xdr_rate(
-        &mut state_machine,
+        &state_machine,
         220_000,
         cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS * 3,
         Some(UpdateIcpXdrConversionRatePayloadReason::EnableAutomaticExchangeRateUpdates),
     );
-    nns_wait_for_proposal_execution(&mut state_machine, proposal_id);
+    nns_wait_for_proposal_execution(&state_machine, proposal_id);
 
     let response = get_icp_xdr_conversion_rate(&state_machine);
     assert_eq!(

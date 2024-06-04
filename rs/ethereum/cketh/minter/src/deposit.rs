@@ -52,7 +52,7 @@ async fn mint() {
                 if let Some(result) = read_state(|s| {
                     s.ckerc20_tokens
                         .get_entry_alt(&event.erc20_contract_address)
-                        .map(|(symbol, principal)| (symbol.to_string(), *principal))
+                        .map(|(principal, symbol)| (symbol.to_string(), *principal))
                 }) {
                     result
                 } else {
