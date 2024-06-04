@@ -883,7 +883,7 @@ impl EcdsaPayloadMetrics {
         );
         self.payload_metrics_set_without_key_id_label(
             "payload_layout_generalized_pre_signatures",
-            payload.is_generalized_pre_signatures_layout() as usize,
+            1,
         );
         self.payload_metrics_set_without_key_id_label(
             "key_transcripts",
