@@ -135,7 +135,7 @@ impl TryFrom<pb_queues::canister_queue::QueueItem> for Id {
     fn try_from(item: pb_queues::canister_queue::QueueItem) -> Result<Self, Self::Error> {
         match item.r {
             Some(pb_queues::canister_queue::queue_item::R::Reference(id)) => Ok(Self(id)),
-            None => Err(ProxyDecodeError::MissingField("MessageReference::r")),
+            None => Err(ProxyDecodeError::MissingField("QueueItem::r")),
         }
     }
 }

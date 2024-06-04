@@ -1,6 +1,6 @@
+use super::super::message_pool::tests::*;
+use super::super::message_pool::Class;
 use super::*;
-use crate::canister_state::queues::message_pool::tests::*;
-use crate::canister_state::queues::message_pool::Class;
 use assert_matches::assert_matches;
 use ic_test_utilities_types::arbitrary;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
