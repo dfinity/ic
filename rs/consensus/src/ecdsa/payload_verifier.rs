@@ -37,6 +37,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_replicated_state::ReplicatedState;
+use ic_types::consensus::{DataPayload, SummaryPayload};
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -276,47 +277,39 @@ fn validate_data_payload(
     data_payload: Option<&idkg::EcdsaPayload>,
     metrics: &HistogramVec,
 ) -> ValidationResult<EcdsaValidationError> {
-    if parent_block.payload.as_ref().as_ecdsa().is_none() {
-        if data_payload.is_some() {
-            return Err(InvalidEcdsaPayloadReason::UnexpectedDataPayload(None).into());
-        } else {
+    let (prev_payload, curr_payload) = match (parent_block.payload.as_ref(), data_payload) {
+        (BlockPayload::Summary(SummaryPayload { ecdsa: None, .. }), None) => {
             return Ok(());
         }
-    }
-
-    let block_payload = &parent_block.payload.as_ref();
-    let (prev_payload, curr_payload) = if block_payload.is_summary() {
-        match &block_payload.as_summary().ecdsa {
-            None => {
-                if data_payload.is_some() {
-                    return Err(InvalidEcdsaPayloadReason::UnexpectedDataPayload(None).into());
-                } else {
-                    return Ok(());
-                }
-            }
-            Some(ecdsa_summary) => {
-                if data_payload.is_none() {
-                    return Err(InvalidEcdsaPayloadReason::MissingEcdsaDataPayload.into());
-                }
-                (ecdsa_summary.clone(), data_payload.as_ref().unwrap())
-            }
+        (BlockPayload::Data(DataPayload { ecdsa: None, .. }), None) => {
+            return Ok(());
         }
-    } else {
-        match &block_payload.as_data().ecdsa {
-            None => {
-                if data_payload.is_some() {
-                    return Err(InvalidEcdsaPayloadReason::UnexpectedDataPayload(None).into());
-                } else {
-                    return Ok(());
-                }
-            }
-            Some(payload) => {
-                if data_payload.is_none() {
-                    return Err(InvalidEcdsaPayloadReason::MissingEcdsaDataPayload.into());
-                }
-                (payload.clone(), data_payload.as_ref().unwrap())
-            }
+        (BlockPayload::Summary(SummaryPayload { ecdsa: Some(_), .. }), None) => {
+            return Err(InvalidEcdsaPayloadReason::MissingEcdsaDataPayload.into());
         }
+        (BlockPayload::Data(DataPayload { ecdsa: Some(_), .. }), None) => {
+            return Err(InvalidEcdsaPayloadReason::MissingEcdsaDataPayload.into());
+        }
+        (BlockPayload::Summary(SummaryPayload { ecdsa: None, .. }), Some(_)) => {
+            return Err(InvalidEcdsaPayloadReason::UnexpectedDataPayload(None).into());
+        }
+        (BlockPayload::Data(DataPayload { ecdsa: None, .. }), Some(_)) => {
+            return Err(InvalidEcdsaPayloadReason::UnexpectedDataPayload(None).into());
+        }
+        (
+            BlockPayload::Summary(SummaryPayload {
+                ecdsa: Some(parent),
+                ..
+            }),
+            Some(current),
+        ) => (parent, current),
+        (
+            BlockPayload::Data(DataPayload {
+                ecdsa: Some(parent),
+                ..
+            }),
+            Some(current),
+        ) => (parent, current),
     };
 
     let summary_block = pool_reader
@@ -338,7 +331,7 @@ fn validate_data_payload(
             validate_transcript_refs(
                 crypto,
                 &block_reader,
-                &prev_payload,
+                prev_payload,
                 curr_payload,
                 curr_height,
             )
@@ -347,7 +340,7 @@ fn validate_data_payload(
     )?;
     let dealings = timed_call(
         "validate_reshare_dealings",
-        || validate_reshare_dealings(crypto, &block_reader, &prev_payload, curr_payload),
+        || validate_reshare_dealings(crypto, &block_reader, prev_payload, curr_payload),
         metrics,
     )?;
     let state = state_manager
@@ -360,7 +353,7 @@ fn validate_data_payload(
                 crypto,
                 &block_reader,
                 state.get_ref(),
-                &prev_payload,
+                prev_payload,
                 curr_payload,
             )
         },
