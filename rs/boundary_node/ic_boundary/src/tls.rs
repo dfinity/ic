@@ -252,7 +252,7 @@ impl Provision for Provisioner {
         key_pair.zeroize();
         Ok(ProvisionResult::Issued(TLSCert(
             cert_chain_pem, // Certificate Chain
-            key_pair_pem,   // Private Key
+            key_pair_pem,   // Key pair
         )))
     }
 }

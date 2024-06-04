@@ -160,7 +160,7 @@ impl Finalize for Acme {
         key_pair.zeroize();
         Ok((
             cert_chain_pem, // Certificate Chain
-            key_pair_pem,   // Private Key
+            key_pair_pem,   // Key pair
         ))
     }
 }
