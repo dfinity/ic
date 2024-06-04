@@ -7,6 +7,7 @@ use discower_bowndary::{
     route_provider::HealthCheckRouteProvider,
     snapshot::IC0_SEED_DOMAIN,
     snapshot_health_based::HealthBasedSnapshot,
+    transport::{TransportProvider, TransportProviderImpl},
 };
 use ic_agent::{
     agent::http_transport::{
@@ -33,7 +34,10 @@ async fn main() {
         .expect("Could not create HTTP client.");
     let route_provider = {
         let subnet_id = Principal::from_text(MAINNET_ROOT_SUBNET_ID).unwrap();
-        let fetcher = Arc::new(NodesFetcherImpl::new(client.clone(), subnet_id));
+        let http_client = Client::builder().build().expect("failed to build client");
+        let transport_provider =
+            Arc::new(TransportProviderImpl { http_client }) as Arc<dyn TransportProvider>;
+        let fetcher = Arc::new(NodesFetcherImpl::new(transport_provider, subnet_id));
         let fetch_interval = Duration::from_secs(5); // periodicity of checking current topology
         let health_timeout = Duration::from_secs(3);
         let checker = Arc::new(HealthCheckImpl::new(client.clone(), health_timeout));
