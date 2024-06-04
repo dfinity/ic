@@ -20,30 +20,30 @@ jobs:
             const { owner, repo, number: issue_number } = context.issue;
             const team_reviewers = context.payload.pull_request.requested_teams.requested_team.map(team => team.name);
             return team_reviewers;
-      - name: Lookup Slack channel
-        id: lookup
-        run: |
-          TEAM_REVIEWERS=$(echo '${{ steps.get-reviewers.outputs.result }}' | jq -c '.[]')
-          CHANNELS=""
-          for TEAM in $TEAM_REVIEWERS; do
-            CHANNEL=$(jq -r ".$TEAM" .github/workflows/team-channels.json)
-            if [ "$CHANNEL" != "null" ]; then
-              if [ -z "$CHANNELS" ]; then
-                CHANNELS="$CHANNEL"
-              else
-                CHANNELS="$CHANNELS,$CHANNEL"
-              fi
-            fi
-          done
-          echo "channels=${CHANNELS}" >> $GITHUB_OUTPUT
-          echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
-        env:
-          MESSAGE: ":github: <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>"
-      - name: Post to a Slack channel
-        id: slack
-        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
-        with:
-          channel-id: ${{ steps.lookup.outputs.channels }}
-          slack-message: "${{ steps.lookup.outputs.message }}"
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
+      # - name: Lookup Slack channel
+      #   id: lookup
+      #   run: |
+      #     TEAM_REVIEWERS=$(echo '${{ steps.get-reviewers.outputs.result }}' | jq -c '.[]')
+      #     CHANNELS=""
+      #     for TEAM in $TEAM_REVIEWERS; do
+      #       CHANNEL=$(jq -r ".$TEAM" .github/workflows/team-channels.json)
+      #       if [ "$CHANNEL" != "null" ]; then
+      #         if [ -z "$CHANNELS" ]; then
+      #           CHANNELS="$CHANNEL"
+      #         else
+      #           CHANNELS="$CHANNELS,$CHANNEL"
+      #         fi
+      #       fi
+      #     done
+      #     echo "channels=${CHANNELS}" >> $GITHUB_OUTPUT
+      #     echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
+      #   env:
+      #     MESSAGE: ":github: <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>"
+      # - name: Post to a Slack channel
+      #   id: slack
+      #   uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+      #   with:
+      #     channel-id: ${{ steps.lookup.outputs.channels }}
+      #     slack-message: "${{ steps.lookup.outputs.message }}"
+      #   env:
+      #     SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
