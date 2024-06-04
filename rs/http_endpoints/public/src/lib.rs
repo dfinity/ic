@@ -12,18 +12,15 @@ mod health_status_refresher;
 mod pprof;
 mod query;
 mod read_state;
-mod state_reader_executor;
 mod status;
 mod threads;
 mod tracing_flamegraph;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "fuzzing_code")] {
-        pub mod validator_executor;
         pub mod metrics;
         pub mod call;
     } else {
-        mod validator_executor;
         mod metrics;
         mod call;
     }
@@ -46,7 +43,6 @@ use crate::{
     },
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
     read_state::subnet::SubnetReadStateService,
-    state_reader_executor::StateReaderExecutor,
     status::StatusService,
     tracing_flamegraph::TracingFlamegraphService,
 };
@@ -165,7 +161,7 @@ fn start_server_initialization(
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
-    state_reader_executor: StateReaderExecutor,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     rt_handle: tokio::runtime::Handle,
@@ -185,7 +181,7 @@ fn start_server_initialization(
             .inc();
         health_status.store(ReplicaHealthStatus::WaitingForCertifiedState);
 
-        while common::get_latest_certified_state(&state_reader_executor)
+        while common::get_latest_certified_state(state_reader.clone())
             .await
             .is_none()
         {
@@ -311,8 +307,6 @@ pub fn start_server(
 
     let delegation_from_nns = Arc::new(RwLock::new(delegation_from_nns));
     let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
-    let state_reader_clone = state_reader.clone();
-    let state_reader_executor = StateReaderExecutor::new(state_reader);
     let call_router = CallServiceBuilder::builder(
         node_id,
         subnet_id,
@@ -339,7 +333,7 @@ pub fn start_server(
     .build_router();
 
     let canister_read_state_router = CanisterReadStateServiceBuilder::builder(
-        state_reader_clone,
+        state_reader.clone(),
         registry_client.clone(),
         ingress_verifier,
         delegation_from_nns.clone(),
@@ -352,17 +346,17 @@ pub fn start_server(
     let subnet_read_state_router = SubnetReadStateService::new_router(
         Arc::clone(&health_status),
         Arc::clone(&delegation_from_nns),
-        state_reader_executor.clone(),
+        state_reader.clone(),
     );
     let status_router = StatusService::build_router(
         log.clone(),
         nns_subnet_id,
         Arc::clone(&registry_client),
         Arc::clone(&health_status),
-        state_reader_executor.clone(),
+        state_reader.clone(),
     );
     let dashboard_router =
-        DashboardService::new_router(config.clone(), subnet_type, state_reader_executor.clone());
+        DashboardService::new_router(config.clone(), subnet_type, state_reader.clone());
     let catchup_router = CatchUpPackageService::new_router(consensus_pool_cache.clone());
 
     let pprof_home_router = PprofHomeService::new_router();
@@ -376,7 +370,7 @@ pub fn start_server(
         metrics.clone(),
         Arc::clone(&health_status),
         consensus_pool_cache,
-        state_reader_executor.clone(),
+        state_reader.clone(),
     );
 
     start_server_initialization(
@@ -386,7 +380,7 @@ pub fn start_server(
         subnet_id,
         nns_subnet_id,
         registry_client.clone(),
-        state_reader_executor,
+        state_reader,
         Arc::clone(&delegation_from_nns),
         Arc::clone(&health_status),
         rt_handle.clone(),
@@ -1104,8 +1098,8 @@ mod tests {
 
         let metrics = HttpHandlerMetrics::new(&MetricsRegistry::default());
 
-        let mut state_reader_executor = MockStateManager::new();
-        state_reader_executor
+        let mut state_manager = MockStateManager::new();
+        state_manager
             .expect_latest_certified_height()
             .return_const(Height::from(1));
 
@@ -1123,7 +1117,7 @@ mod tests {
                 metrics,
                 Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy)),
                 Arc::new(consensus_pool_cache),
-                StateReaderExecutor::new(Arc::new(state_reader_executor)),
+                Arc::new(state_manager),
             ),
         )
     }

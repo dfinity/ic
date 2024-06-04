@@ -21,6 +21,8 @@ lint:
     - DEFAULT
 breaking:
   ignore:
+    # Temporarily disabling to work around buf limitation. Remove ASAP after merge.
+    - state/canister_state_bits/v1/canister_state_bits.proto
   use:
     - WIRE
   except:

@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ic_crypto_prng::Csprng;
 use ic_interfaces::execution_environment::RegistryExecutionSettings;
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
-use ic_types::{consensus::idkg::QuadrupleId, messages::CallbackId, ExecutionRound, Height};
+use ic_types::{consensus::idkg::PreSigId, messages::CallbackId, ExecutionRound, Height};
 use rand::RngCore;
 
 use super::SchedulerMetrics;
@@ -12,7 +12,7 @@ use super::SchedulerMetrics;
 /// Update [`SignWithEcdsaContext`]s by assigning randomness and matching quadruples.
 pub(crate) fn update_sign_with_ecdsa_contexts(
     current_round: ExecutionRound,
-    ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
+    idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
     contexts: &mut BTreeMap<CallbackId, SignWithEcdsaContext>,
     csprng: &mut Csprng,
     registry_settings: &RegistryExecutionSettings,
@@ -43,14 +43,18 @@ pub(crate) fn update_sign_with_ecdsa_contexts(
 
     // Match up to the maximum number of contexts per key ID to delivered quadruples.
     let max_ongoing_signatures = registry_settings.quadruples_to_create_in_advance as usize;
-    for (key_id, quadruple_ids) in ecdsa_quadruple_ids {
+    for (key_id, pre_sig_ids) in idkg_pre_signature_ids {
         metrics
             .ecdsa_delivered_quadruples
             .with_label_values(&[&key_id.to_string()])
-            .observe(quadruple_ids.len() as f64);
+            .observe(pre_sig_ids.len() as f64);
+        let MasterPublicKeyId::Ecdsa(key_id) = key_id else {
+            //TODO(EXC-1598): Support matching tSchnorr pre-signatures
+            continue;
+        };
         match_quadruples_by_key_id(
             key_id,
-            quadruple_ids,
+            pre_sig_ids,
             contexts,
             max_ongoing_signatures,
             Height::from(current_round.get()),
@@ -62,19 +66,19 @@ pub(crate) fn update_sign_with_ecdsa_contexts(
 /// of the given `key_id`.
 fn match_quadruples_by_key_id(
     key_id: EcdsaKeyId,
-    mut quadruple_ids: BTreeSet<QuadrupleId>,
+    mut pre_sig_ids: BTreeSet<PreSigId>,
     contexts: &mut BTreeMap<CallbackId, SignWithEcdsaContext>,
     max_ongoing_signatures: usize,
     height: Height,
 ) {
     // Remove and count already matched quadruples.
     let mut matched = 0;
-    for (quadruple_id, _) in contexts
+    for (pre_sig_id, _) in contexts
         .values()
         .filter(|context| context.key_id == key_id)
         .flat_map(|context| context.matched_quadruple.as_ref())
     {
-        quadruple_ids.remove(quadruple_id);
+        pre_sig_ids.remove(pre_sig_id);
         matched += 1;
     }
 
@@ -86,10 +90,10 @@ fn match_quadruples_by_key_id(
         if matched >= max_ongoing_signatures {
             break;
         }
-        let Some(quadruple_id) = quadruple_ids.pop_first() else {
+        let Some(pre_sig_id) = pre_sig_ids.pop_first() else {
             break;
         };
-        context.matched_quadruple = Some((quadruple_id, height));
+        context.matched_quadruple = Some((pre_sig_id, height));
         matched += 1;
     }
 }
@@ -115,7 +119,7 @@ mod tests {
                 message_hash: [0; 32],
                 derivation_path: vec![],
                 batch_time: UNIX_EPOCH,
-                matched_quadruple: matched_quadruple.map(|(id, h)| (QuadrupleId::new(id), h)),
+                matched_quadruple: matched_quadruple.map(|(id, h)| (PreSigId(id), h)),
                 nonce: None,
             },
         )
@@ -123,7 +127,7 @@ mod tests {
 
     fn match_quadruples_basic_test(
         key_id: EcdsaKeyId,
-        quadruple_ids: BTreeSet<QuadrupleId>,
+        pre_sig_ids: BTreeSet<PreSigId>,
         mut contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
         max_ongoing_signatures: usize,
         height: Height,
@@ -131,7 +135,7 @@ mod tests {
     ) {
         match_quadruples_by_key_id(
             key_id,
-            quadruple_ids,
+            pre_sig_ids,
             &mut contexts,
             max_ongoing_signatures,
             height,
@@ -143,7 +147,7 @@ mod tests {
             if id.get() <= cutoff {
                 assert!(context
                     .matched_quadruple
-                    .is_some_and(|(qid, h)| qid.id() == id.get() && h == height))
+                    .is_some_and(|(pid, h)| pid.id() == id.get() && h == height))
             } else {
                 assert!(context.matched_quadruple.is_none())
             }
@@ -155,7 +159,7 @@ mod tests {
         let key_id1 = make_key_id(1);
         let key_id2 = make_key_id(2);
         // 2 quadruples for key 1
-        let ids = BTreeSet::from_iter((1..3).map(QuadrupleId::new));
+        let ids = BTreeSet::from_iter((1..3).map(PreSigId));
         // 3 contexts for key 2
         let contexts = BTreeMap::from_iter((1..4).map(|i| fake_context(i, key_id2.clone(), None)));
         // No contexts should be matched
@@ -166,7 +170,7 @@ mod tests {
     fn test_match_quadruples_doesnt_match_more_than_delivered() {
         let key_id = make_key_id(1);
         // 2 quadruples for key 1
-        let ids = BTreeSet::from_iter((1..3).map(QuadrupleId::new));
+        let ids = BTreeSet::from_iter((1..3).map(PreSigId));
         // 4 contexts for key 1
         let contexts = BTreeMap::from_iter((1..5).map(|i| fake_context(i, key_id.clone(), None)));
         // The first 2 contexts should be matched
@@ -177,7 +181,7 @@ mod tests {
     fn test_match_quadruples_doesnt_match_more_than_requested() {
         let key_id = make_key_id(1);
         // 3 quadruples for key 1
-        let ids = BTreeSet::from_iter((1..4).map(QuadrupleId::new));
+        let ids = BTreeSet::from_iter((1..4).map(PreSigId));
         // 2 contexts for key 1
         let contexts = BTreeMap::from_iter((1..3).map(|i| fake_context(i, key_id.clone(), None)));
         // The first 2 contexts should be matched
@@ -188,7 +192,7 @@ mod tests {
     fn test_match_quadruples_respects_max() {
         let key_id = make_key_id(1);
         // 4 quadruples for key 1
-        let ids = BTreeSet::from_iter((1..5).map(QuadrupleId::new));
+        let ids = BTreeSet::from_iter((1..5).map(PreSigId));
         // 4 contexts for key 1
         let contexts = BTreeMap::from_iter((1..5).map(|i| fake_context(i, key_id.clone(), None)));
         // The first 3 contexts (up to max_ongoing_signatures) should be matched
@@ -200,12 +204,7 @@ mod tests {
         let key_id1 = make_key_id(1);
         let key_id2 = make_key_id(2);
         // 4 quadruples for key 1
-        let ids = BTreeSet::from_iter([
-            QuadrupleId::new(1),
-            QuadrupleId::new(3),
-            QuadrupleId::new(4),
-            QuadrupleId::new(5),
-        ]);
+        let ids = BTreeSet::from_iter([PreSigId(1), PreSigId(3), PreSigId(4), PreSigId(5)]);
         let height = Height::from(1);
         // 4 contexts for key 1 and 1 context for key 2
         let contexts = BTreeMap::from_iter([
@@ -223,7 +222,7 @@ mod tests {
     fn test_matched_quadruples_arent_matched_again() {
         let key_id = make_key_id(1);
         // 4 quadruples for key 1
-        let ids = BTreeSet::from_iter((1..5).map(QuadrupleId::new));
+        let ids = BTreeSet::from_iter((1..5).map(PreSigId));
         let height = Height::from(1);
         // 5 contexts for key 1, 2 are already matched
         let contexts = BTreeMap::from_iter([
@@ -241,7 +240,7 @@ mod tests {
     fn test_matched_quadruples_arent_overwritten() {
         let key_id = make_key_id(1);
         // 4 quadruples for key 1
-        let ids = BTreeSet::from_iter((3..7).map(QuadrupleId::new));
+        let ids = BTreeSet::from_iter((3..7).map(PreSigId));
         let height = Height::from(2);
         // 4 contexts for key 1, the first 3 are already matched
         let contexts = BTreeMap::from_iter([
@@ -258,7 +257,7 @@ mod tests {
     fn test_match_quadruples_doesnt_update_height() {
         let key_id = make_key_id(1);
         // 2 quadruples for key 1
-        let ids = BTreeSet::from_iter([QuadrupleId::new(5), QuadrupleId::new(6)]);
+        let ids = BTreeSet::from_iter([PreSigId(5), PreSigId(6)]);
         // 2 contexts for key 1, the first was already matched to the first quadruple
         // in the previous round.
         let mut contexts = BTreeMap::from_iter([
@@ -272,12 +271,12 @@ mod tests {
         let first_context = contexts.pop_first().unwrap().1;
         assert!(first_context
             .matched_quadruple
-            .is_some_and(|(qid, h)| { qid == QuadrupleId::new(5) && h == Height::from(2) }));
+            .is_some_and(|(pid, h)| { pid == PreSigId(5) && h == Height::from(2) }));
 
         // The second context should have been matched to the second quadruple at height 3.
         let second_context = contexts.pop_first().unwrap().1;
         assert!(second_context
             .matched_quadruple
-            .is_some_and(|(qid, h)| { qid == QuadrupleId::new(6) && h == Height::from(3) }));
+            .is_some_and(|(pid, h)| { pid == PreSigId(6) && h == Height::from(3) }));
     }
 }

@@ -5,7 +5,7 @@ use crate::metadata_state::subnet_call_context_manager::{
 use assert_matches::assert_matches;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, UserError};
-use ic_management_canister_types::{EcdsaCurve, IC_00};
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, IC_00};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities_types::{
     ids::{
@@ -812,27 +812,27 @@ fn empty_network_topology() {
     };
 
     assert_eq!(
-        network_topology.ecdsa_signing_subnets(&make_key_id()),
+        network_topology.idkg_signing_subnets(&MasterPublicKeyId::Ecdsa(make_key_id())),
         vec![]
     );
 }
 
 #[test]
 fn network_topology_ecdsa_subnets() {
-    let key = make_key_id();
+    let key = MasterPublicKeyId::Ecdsa(make_key_id());
     let network_topology = NetworkTopology {
         subnets: Default::default(),
         routing_table: Arc::new(RoutingTable::default()),
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(42),
-        ecdsa_signing_subnets: btreemap! {
+        idkg_signing_subnets: btreemap! {
             key.clone() => vec![subnet_test_id(1)],
         },
         ..Default::default()
     };
 
     assert_eq!(
-        network_topology.ecdsa_signing_subnets(&key),
+        network_topology.idkg_signing_subnets(&key),
         &[subnet_test_id(1)]
     );
 }
@@ -1934,7 +1934,7 @@ fn compatibility_for_cycles_use_case() {
         CyclesUseCase::iter()
             .map(|x| x as i32)
             .collect::<Vec<i32>>(),
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
     );
 }
 

@@ -43,8 +43,9 @@ message CallContextEntry {
 }
 
 message WasmClosure {
+  // The number of functions will never exceed 2^32.
   uint32 func_idx = 1;
-  uint32 env = 2;
+  uint64 env = 2;
 }
 
 message Callback {
@@ -228,6 +229,7 @@ enum CyclesUseCase {
   CYCLES_USE_CASE_DELETED_CANISTERS = 10;
   CYCLES_USE_CASE_NON_CONSUMED = 11;
   CYCLES_USE_CASE_BURNED_CYCLES = 12;
+  CYCLES_USE_CASE_SCHNORR_OUTCALLS = 13;
 }
 
 message ConsumedCyclesByUseCase {

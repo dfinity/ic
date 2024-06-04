@@ -12,4 +12,4 @@ crate-type = ["cdylib"]
 candid = "0.9.6"
 ic-cdk = "0.11.3"
 serde = "1.0.171"
-futures = "0.3.28"
+futures = { workspace = true }

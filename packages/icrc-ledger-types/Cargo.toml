@@ -20,6 +20,7 @@ num-traits = { workspace = true }
 serde_bytes = { workspace = true }
 serde = { workspace = true }
 sha2 = "0.10"
+itertools ={ workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

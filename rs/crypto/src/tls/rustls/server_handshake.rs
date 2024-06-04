@@ -62,7 +62,7 @@ pub fn server_config_without_client_auth<P: CspTlsHandshakeSignerProvider>(
     let ed25519_signing_key =
         CspServerEd25519SigningKey::new(self_tls_cert_key_id, signer_provider.handshake_signer());
     let config = server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
-        NoClientAuth::boxed(),
+        Arc::new(NoClientAuth),
         self_tls_cert,
         ed25519_signing_key,
     );

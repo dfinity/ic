@@ -177,6 +177,46 @@ pub struct QueueEntry {
     #[prost(message, optional, tag = "2")]
     pub queue: ::core::option::Option<InputOutputQueue>,
 }
+/// A pool holding all of a canister's incoming and outgoing canister messages.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MessagePool {
+    /// Map of messages by message ID.
+    #[prost(message, repeated, tag = "1")]
+    pub messages: ::prost::alloc::vec::Vec<message_pool::Entry>,
+    /// The (implicit) deadlines of all outbound guaranteed response requests (only).
+    #[prost(message, repeated, tag = "2")]
+    pub outbound_guaranteed_request_deadlines:
+        ::prost::alloc::vec::Vec<message_pool::MessageDeadline>,
+    /// Strictly monotonically increasing counter used to generate unique message
+    /// IDs.
+    #[prost(uint64, tag = "3")]
+    pub message_id_generator: u64,
+}
+/// Nested message and enum types in `MessagePool`.
+pub mod message_pool {
+    /// A pool entry: a message keyed by its ID.
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Entry {
+        #[prost(uint64, tag = "1")]
+        pub id: u64,
+        #[prost(message, optional, tag = "2")]
+        pub message: ::core::option::Option<super::RequestOrResponse>,
+    }
+    /// A message deadline.
+    ///
+    /// Recorded explicitly for outbound guaranteed response requests only.
+    /// Best-effort messages have explicit deadlines.
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct MessageDeadline {
+        #[prost(uint64, tag = "1")]
+        pub id: u64,
+        #[prost(uint32, tag = "2")]
+        pub deadline_seconds: u32,
+    }
+}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterQueues {
@@ -184,15 +224,10 @@ pub struct CanisterQueues {
     pub ingress_queue: ::prost::alloc::vec::Vec<super::super::ingress::v1::Ingress>,
     #[prost(message, repeated, tag = "3")]
     pub input_queues: ::prost::alloc::vec::Vec<QueueEntry>,
-    /// Upgrade: input_schedule is mapped to local_subnet_input_schedule.
-    #[prost(message, repeated, tag = "4")]
-    pub input_schedule: ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "5")]
     pub output_queues: ::prost::alloc::vec::Vec<QueueEntry>,
     #[prost(enumeration = "canister_queues::NextInputQueue", tag = "6")]
     pub next_input_queue: i32,
-    /// Downgrade: both queues are mapped back to input_schedule in the current
-    /// release.
     #[prost(message, repeated, tag = "7")]
     pub local_subnet_input_schedule:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,

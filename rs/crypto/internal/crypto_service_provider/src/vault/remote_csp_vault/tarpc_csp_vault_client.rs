@@ -640,6 +640,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
 
     fn idkg_load_transcript_with_openings(
         &self,
+        alg: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
         context_data: Vec<u8>,
@@ -649,6 +650,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
     ) -> Result<(), IDkgLoadTranscriptError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_load_transcript_with_openings(
             context_with_timeout(self.rpc_timeout),
+            alg,
             dealings,
             openings,
             ByteBuf::from(context_data),
@@ -694,6 +696,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
 
     fn idkg_open_dealing(
         &self,
+        alg: AlgorithmId,
         dealing: BatchSignedIDkgDealing,
         dealer_index: NodeIndex,
         context_data: Vec<u8>,
@@ -702,6 +705,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_open_dealing(
             context_with_timeout(self.rpc_timeout),
+            alg,
             dealing,
             dealer_index,
             ByteBuf::from(context_data),

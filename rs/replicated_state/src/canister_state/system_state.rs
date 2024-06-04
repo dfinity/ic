@@ -60,6 +60,7 @@ pub enum CyclesUseCase {
     DeletedCanisters = 10,
     NonConsumed = 11,
     BurnedCycles = 12,
+    SchnorrOutcalls = 13,
 }
 
 impl CyclesUseCase {
@@ -79,6 +80,7 @@ impl CyclesUseCase {
             Self::DeletedCanisters => "DeletedCanisters",
             Self::NonConsumed => "NonConsumed",
             Self::BurnedCycles => "BurnedCycles",
+            Self::SchnorrOutcalls => "SchnorrOutcalls",
         }
     }
 }
@@ -100,6 +102,7 @@ impl From<CyclesUseCase> for pb::CyclesUseCase {
             CyclesUseCase::DeletedCanisters => pb::CyclesUseCase::DeletedCanisters,
             CyclesUseCase::NonConsumed => pb::CyclesUseCase::NonConsumed,
             CyclesUseCase::BurnedCycles => pb::CyclesUseCase::BurnedCycles,
+            CyclesUseCase::SchnorrOutcalls => pb::CyclesUseCase::SchnorrOutcalls,
         }
     }
 }
@@ -126,6 +129,7 @@ impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
             pb::CyclesUseCase::DeletedCanisters => Ok(Self::DeletedCanisters),
             pb::CyclesUseCase::NonConsumed => Ok(Self::NonConsumed),
             pb::CyclesUseCase::BurnedCycles => Ok(Self::BurnedCycles),
+            pb::CyclesUseCase::SchnorrOutcalls => Ok(Self::SchnorrOutcalls),
         }
     }
 }
@@ -1349,6 +1353,7 @@ impl SystemState {
             | CyclesUseCase::RequestAndResponseTransmission
             | CyclesUseCase::CanisterCreation
             | CyclesUseCase::ECDSAOutcalls
+            | CyclesUseCase::SchnorrOutcalls
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed

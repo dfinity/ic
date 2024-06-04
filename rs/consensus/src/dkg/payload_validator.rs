@@ -20,13 +20,13 @@ use ic_types::{
 };
 use prometheus::IntCounterVec;
 
-/// Permanent Dkg message validation errors.
+/// Reasons for why a dkg payload might be invalid.
 // The `Debug` implementation is ignored during the dead code analysis and we are getting a `field
 // is never used` warning on this enum even though we are implicitly reading them when we log the
 // enum. See https://github.com/rust-lang/rust/issues/88900
 #[allow(dead_code)]
 #[derive(Debug)]
-pub(crate) enum PermanentPayloadValidationError {
+pub(crate) enum InvalidDkgPayloadReason {
     CryptoError(CryptoError),
     DkgVerifyDealingError(DkgVerifyDealingError),
     MismatchedDkgSummary(dkg::Summary, dkg::Summary),
@@ -38,10 +38,11 @@ pub(crate) enum PermanentPayloadValidationError {
     DealerAlreadyDealt(NodeId),
 }
 
-/// Transient Dkg message validation errors.
+/// Possible failures which could occur while validating a dkg payload. They don't imply that the
+/// payload is invalid.
 #[allow(dead_code)]
 #[derive(Debug)]
-pub(crate) enum TransientPayloadValidationError {
+pub(crate) enum DkgPayloadValidationFailure {
     PayloadCreationFailed(PayloadCreationError),
     /// Crypto related errors.
     CryptoError(CryptoError),
@@ -50,49 +51,49 @@ pub(crate) enum TransientPayloadValidationError {
 
 /// Dkg errors.
 pub(crate) type PayloadValidationError =
-    ValidationError<PermanentPayloadValidationError, TransientPayloadValidationError>;
+    ValidationError<InvalidDkgPayloadReason, DkgPayloadValidationFailure>;
 
-impl From<DkgVerifyDealingError> for PermanentPayloadValidationError {
+impl From<DkgVerifyDealingError> for InvalidDkgPayloadReason {
     fn from(err: DkgVerifyDealingError) -> Self {
-        PermanentPayloadValidationError::DkgVerifyDealingError(err)
+        InvalidDkgPayloadReason::DkgVerifyDealingError(err)
     }
 }
 
-impl From<DkgVerifyDealingError> for TransientPayloadValidationError {
+impl From<DkgVerifyDealingError> for DkgPayloadValidationFailure {
     fn from(err: DkgVerifyDealingError) -> Self {
-        TransientPayloadValidationError::DkgVerifyDealingError(err)
+        DkgPayloadValidationFailure::DkgVerifyDealingError(err)
     }
 }
 
-impl From<CryptoError> for PermanentPayloadValidationError {
+impl From<CryptoError> for InvalidDkgPayloadReason {
     fn from(err: CryptoError) -> Self {
-        PermanentPayloadValidationError::CryptoError(err)
+        InvalidDkgPayloadReason::CryptoError(err)
     }
 }
 
-impl From<CryptoError> for TransientPayloadValidationError {
+impl From<CryptoError> for DkgPayloadValidationFailure {
     fn from(err: CryptoError) -> Self {
-        TransientPayloadValidationError::CryptoError(err)
+        DkgPayloadValidationFailure::CryptoError(err)
     }
 }
 
-impl From<PermanentPayloadValidationError> for PayloadValidationError {
-    fn from(err: PermanentPayloadValidationError) -> Self {
-        PayloadValidationError::Permanent(err)
+impl From<InvalidDkgPayloadReason> for PayloadValidationError {
+    fn from(err: InvalidDkgPayloadReason) -> Self {
+        PayloadValidationError::InvalidArtifact(err)
     }
 }
 
-impl From<TransientPayloadValidationError> for PayloadValidationError {
-    fn from(err: TransientPayloadValidationError) -> Self {
-        PayloadValidationError::Transient(err)
+impl From<DkgPayloadValidationFailure> for PayloadValidationError {
+    fn from(err: DkgPayloadValidationFailure) -> Self {
+        PayloadValidationError::ValidationFailed(err)
     }
 }
 
 impl From<PayloadCreationError> for PayloadValidationError {
     fn from(err: PayloadCreationError) -> Self {
-        PayloadValidationError::Transient(TransientPayloadValidationError::PayloadCreationFailed(
-            err,
-        ))
+        PayloadValidationError::ValidationFailed(
+            DkgPayloadValidationFailure::PayloadCreationFailed(err),
+        )
     }
 }
 
@@ -122,10 +123,7 @@ pub(crate) fn validate_payload(
 
     if payload.is_summary() {
         if !is_dkg_start_height {
-            return Err(PermanentPayloadValidationError::DkgSummaryAtNonStartHeight(
-                current_height,
-            )
-            .into());
+            return Err(InvalidDkgPayloadReason::DkgSummaryAtNonStartHeight(current_height).into());
         }
         let registry_version = pool_reader
             .registry_version(current_height)
@@ -143,7 +141,7 @@ pub(crate) fn validate_payload(
             ic_logger::replica_logger::no_op_logger(),
         )?;
         if payload.as_summary().dkg != expected_summary {
-            return Err(PermanentPayloadValidationError::MismatchedDkgSummary(
+            return Err(InvalidDkgPayloadReason::MismatchedDkgSummary(
                 expected_summary,
                 payload.as_summary().dkg.clone(),
             )
@@ -152,9 +150,7 @@ pub(crate) fn validate_payload(
         Ok(())
     } else {
         if is_dkg_start_height {
-            return Err(
-                PermanentPayloadValidationError::DkgDealingAtStartHeight(current_height).into(),
-            );
+            return Err(InvalidDkgPayloadReason::DkgDealingAtStartHeight(current_height).into());
         }
         validate_dealings_payload(
             crypto,
@@ -183,7 +179,7 @@ fn validate_dealings_payload(
 ) -> ValidationResult<PayloadValidationError> {
     let valid_start_height = parent.payload.as_ref().dkg_interval_start_height();
     if start_height != valid_start_height {
-        return Err(PermanentPayloadValidationError::DkgStartHeightDoesNotMatchParentBlock.into());
+        return Err(InvalidDkgPayloadReason::DkgStartHeightDoesNotMatchParentBlock.into());
     }
 
     // Get a list of all dealers, who created a dealing already, indexed by DKG id.
@@ -204,13 +200,13 @@ fn validate_dealings_payload(
 
         match config {
             None => {
-                return Err(PermanentPayloadValidationError::MissingDkgConfigForDealing.into());
+                return Err(InvalidDkgPayloadReason::MissingDkgConfigForDealing.into());
             }
             Some(config) => {
                 let dealer_id = message.signature.signer;
                 // If the dealer is not in the set of dealers, reject.
                 if !config.dealers().get().contains(&dealer_id) {
-                    return Err(PermanentPayloadValidationError::InvalidDealer(dealer_id).into());
+                    return Err(InvalidDkgPayloadReason::InvalidDealer(dealer_id).into());
                 }
 
                 // If the dealer created a dealing already, reject.
@@ -219,9 +215,7 @@ fn validate_dealings_payload(
                     .map(|dealers| dealers.contains(&dealer_id))
                     .unwrap_or(false)
                 {
-                    return Err(
-                        PermanentPayloadValidationError::DealerAlreadyDealt(dealer_id).into(),
-                    );
+                    return Err(InvalidDkgPayloadReason::DealerAlreadyDealt(dealer_id).into());
                 }
 
                 // Verify the signature.
@@ -392,8 +386,8 @@ mod tests {
             let result = validate_dealings_payload(&messages, &parent);
             assert_matches!(
                 result,
-                Err(PayloadValidationError::Permanent(
-                    PermanentPayloadValidationError::MissingDkgConfigForDealing
+                Err(PayloadValidationError::InvalidArtifact(
+                    InvalidDkgPayloadReason::MissingDkgConfigForDealing
                 ))
             );
 
@@ -405,8 +399,8 @@ mod tests {
             let result = validate_dealings_payload(&messages, &parent);
             assert_matches!(
                 result,
-                Err(PayloadValidationError::Permanent(
-                    PermanentPayloadValidationError::InvalidDealer(_)
+                Err(PayloadValidationError::InvalidArtifact(
+                    InvalidDkgPayloadReason::InvalidDealer(_)
                 ))
             );
 
@@ -427,8 +421,8 @@ mod tests {
             let result = validate_dealings_payload(&messages, &parent);
             assert_matches!(
                 result,
-                Err(PayloadValidationError::Permanent(
-                    PermanentPayloadValidationError::DealerAlreadyDealt(_)
+                Err(PayloadValidationError::InvalidArtifact(
+                    InvalidDkgPayloadReason::DealerAlreadyDealt(_)
                 ))
             );
         })

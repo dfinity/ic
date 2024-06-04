@@ -13,6 +13,8 @@ path = "src/main.rs"
 [dependencies]
 candid = { workspace = true }
 ciborium = { workspace = true }
+dfn_core = { path = "../../../rust_canisters/dfn_core" }
+ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
@@ -32,7 +34,8 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-ic-base-types = { path = "../../../types/base_types" }
+dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
+on_wire = { path = "../../../rust_canisters/on_wire" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }

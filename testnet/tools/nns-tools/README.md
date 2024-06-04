@@ -24,7 +24,59 @@ my_useful_function() {
 }
 ```
 
+## Upgrade Testing via Bazel
+
+TL;DR:
+
+```
+bazel test \
+    --test_env=SSH_AUTH_SOCK \
+    --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
+    --test_output=streamed \
+    --test_arg=--nocapture \
+    //rs/nns/integration_tests:upgrade_canisters_with_golden_nns_state
+```
+
+This is a new way of doing upgrade/release testing (as of May 2024). (The old way is still
+documented elsewhere in this README.)
+
+Perform these instructions from the usual place:
+
+```
+ssh -A devenv
+cd src/ic
+./gitlab-ci/container/container-run.sh
+```
+
+One special requirement for this to work is access to zh1-pyr07. This can be
+requested from the consensus team, e.g. Christian Müller.
+
+If your devenv is not in zh1, this test will run much slower, because it
+downloads a large file.
+
+Other than that, the only thing non-standard about the above command are the two
+`--test_env` flags. Let us explain:
+
+* `SSH_AUTH_SOCK`: This copies the value of the `SSH_AUTH_SOCK` environment
+  variable from the environment where you are running into bazel's sandbox where
+  it runs the test.
+
+* `NNS_CANISTER_UPGRADE_SEQUENCE=...`: Here, you need to supply either a comma
+  separated list of NNS canister names (e.g. `governance,root`), or `all` (as
+  shown in the example).
+
+The other `--test_*` flags are not strictly _required_, but rather, highly
+recommended. Together, their effect is that you can watch the progress of the
+test. Whereas, by default, you would have to wait until the end to see test
+output (if there is a failure). For tests that take a longer time to run (like
+this one), live results is better.
+
 ## Replicate mainnet state in a dynamic testnet
+
+*Warning*: There is now a [new (May, 2024)/better way to do release/upgrade
+testing][bazel-based-upgrade-testing].
+
+[bazel-based-upgrade-testing]: #upgrade-testing-via-bazel
 
 An overview of this procedure
 

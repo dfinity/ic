@@ -583,8 +583,20 @@ fn canister_state_callback_round_trip() {
         Some(WasmClosure::new(2, 2)),
         ic_types::time::CoarseTime::from_secs_since_unix_epoch(329),
     );
+    let u64_callback = Callback::new(
+        CallContextId::new(u64::MAX - 1),
+        CanisterId::from_u64(u64::MAX - 2),
+        CanisterId::from_u64(u64::MAX - 3),
+        Cycles::new(u128::MAX - 4),
+        Cycles::new(u128::MAX - 5),
+        Cycles::new(u128::MAX - 6),
+        WasmClosure::new(u32::MAX - 7, u64::MAX - 8),
+        WasmClosure::new(u32::MAX - 9, u64::MAX - 10),
+        Some(WasmClosure::new(u32::MAX - 11, u64::MAX - 12)),
+        ic_types::time::CoarseTime::from_secs_since_unix_epoch(u32::MAX - 13),
+    );
 
-    for callback in [minimal_callback, maximal_callback] {
+    for callback in [minimal_callback, maximal_callback, u64_callback] {
         let pb_callback = pb::Callback::from(&callback);
         let round_trip = Callback::try_from(pb_callback).unwrap();
 

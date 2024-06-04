@@ -1,5 +1,6 @@
 use candid::Decode;
 use core::sync::atomic::Ordering;
+use ic00::MasterPublicKeyId;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{
     execution_environment::Config as HypervisorConfig, state_manager::LsmtConfig,
@@ -110,8 +111,8 @@ use ic_types::{
     consensus::certification::Certification,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
-        HttpRequestEnvelope, Payload as MsgPayload, RejectContext, SignedIngress,
-        SignedIngressContent, UserQuery, EXPECTED_MESSAGE_ID_LENGTH,
+        HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
+        SignedIngress, SignedIngressContent, EXPECTED_MESSAGE_ID_LENGTH,
     },
     xnet::StreamIndex,
     CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
@@ -585,13 +586,13 @@ pub struct StateMachine {
     metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_handler:
-        tower::buffer::Buffer<QueryExecutionService, (UserQuery, Option<CertificateDelegation>)>,
+        tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
     runtime: Arc<Runtime>,
     pub state_dir: TempDir,
     checkpoints_enabled: std::sync::atomic::AtomicBool,
     nonce: std::sync::atomic::AtomicU64,
     time: std::sync::atomic::AtomicU64,
-    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
+    idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     replica_logger: ReplicaLogger,
     pub nodes: Vec<StateMachineNode>,
 }
@@ -926,6 +927,9 @@ impl Default for StateMachineBuilder {
 }
 
 impl StateMachine {
+    /// Provides the time increment for a single round of execution.
+    pub const EXECUTE_ROUND_TIME_INCREMENT: Duration = Duration::from_nanos(1);
+
     // TODO: cleanup, replace external calls with `StateMachineBuilder`.
     /// Constructs a new environment that uses a temporary directory for storing
     /// states.
@@ -1167,25 +1171,26 @@ impl StateMachine {
         let ecdsa_secret_key: PrivateKey =
             PrivateKey::deserialize_sec1(private_key_bytes.as_slice()).unwrap();
 
-        let mut ecdsa_subnet_public_keys = BTreeMap::new();
+        let mut idkg_subnet_public_keys = BTreeMap::new();
 
+        //TODO: support schnorr keys
         for ecdsa_key in ecdsa_keys {
-            ecdsa_subnet_public_keys.insert(
-                ecdsa_key,
+            idkg_subnet_public_keys.insert(
+                MasterPublicKeyId::Ecdsa(ecdsa_key),
                 MasterPublicKey {
-                    algorithm_id: AlgorithmId::EcdsaSecp256k1,
+                    algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
                     public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
                 },
             );
         }
 
-        ecdsa_subnet_public_keys.insert(
-            EcdsaKeyId {
+        idkg_subnet_public_keys.insert(
+            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: "master_ecdsa_public_key".to_string(),
-            },
+            }),
             MasterPublicKey {
-                algorithm_id: AlgorithmId::EcdsaSecp256k1,
+                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
                 public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
             },
         );
@@ -1241,7 +1246,7 @@ impl StateMachine {
             checkpoints_enabled: std::sync::atomic::AtomicBool::new(checkpoints_enabled),
             nonce: std::sync::atomic::AtomicU64::new(nonce),
             time: std::sync::atomic::AtomicU64::new(time.as_nanos_since_unix_epoch()),
-            ecdsa_subnet_public_keys,
+            idkg_subnet_public_keys,
             replica_logger,
             nodes,
         }
@@ -1578,7 +1583,7 @@ impl StateMachine {
     /// Advances time by 1ns (to make sure time is strictly monotone)
     /// and triggers a single round of execution with block payload as an input.
     pub fn execute_payload(&self, payload: PayloadBuilder) -> Height {
-        self.advance_time(Duration::from_nanos(1));
+        self.advance_time(Self::EXECUTE_ROUND_TIME_INCREMENT);
 
         let batch_number = self.message_routing.expected_batch_height();
 
@@ -1597,8 +1602,8 @@ impl StateMachine {
                 query_stats: payload.query_stats,
             },
             randomness: Randomness::from(seed),
-            ecdsa_subnet_public_keys: self.ecdsa_subnet_public_keys.clone(),
-            ecdsa_quadruple_ids: BTreeMap::new(),
+            idkg_subnet_public_keys: self.idkg_subnet_public_keys.clone(),
+            idkg_pre_signature_ids: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(self.time.load(Ordering::Relaxed)),
             consensus_responses: payload.consensus_responses,
@@ -1698,7 +1703,7 @@ impl StateMachine {
 
     /// Returns the state machine time at the beginning of next round.
     pub fn time_of_next_round(&self) -> SystemTime {
-        self.time() + Duration::from_nanos(1)
+        self.time() + Self::EXECUTE_ROUND_TIME_INCREMENT
     }
 
     /// Returns the current state machine time.
@@ -2188,13 +2193,15 @@ impl StateMachine {
         delegation: Option<CertificateDelegation>,
     ) -> Result<WasmResult, UserError> {
         self.certify_latest_state();
-        let user_query = UserQuery {
+        let user_query = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(sender),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver,
-            source: UserId::from(sender),
             method_name: method.to_string(),
             method_payload,
-            ingress_expiry: 0,
-            nonce: None,
         };
         if let Ok((result, _)) = self
             .runtime
@@ -2858,7 +2865,7 @@ impl PayloadBuilder {
         .unwrap();
 
         self.ingress_messages.push(msg);
-        self.expiry_time += Duration::from_nanos(1);
+        self.expiry_time += StateMachine::EXECUTE_ROUND_TIME_INCREMENT;
         self.nonce = self.nonce.map(|n| n + 1);
         self
     }

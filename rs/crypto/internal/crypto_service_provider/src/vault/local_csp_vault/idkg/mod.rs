@@ -21,10 +21,10 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     compute_secret_shares, compute_secret_shares_with_openings,
     create_dealing as clib_create_dealing, gen_keypair, generate_complaints, open_dealing,
     privately_verify_dealing, CommitmentOpening, CommitmentOpeningBytes, EccCurveType,
-    IDkgComplaintInternal, IDkgComputeSecretSharesInternalError, IDkgDealingInternal,
-    IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaKeySetK256Bytes, MEGaPrivateKey,
-    MEGaPrivateKeyK256Bytes, MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment,
-    SecretShares, Seed,
+    IDkgComplaintInternal, IDkgComputeSecretSharesInternalError,
+    IDkgComputeSecretSharesWithOpeningsInternalError, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal, MEGaKeySetK256Bytes, MEGaPrivateKey, MEGaPrivateKeyK256Bytes,
+    MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment, SecretShares, Seed,
 };
 use ic_crypto_node_key_validation::ValidIDkgDealingEncryptionPublicKey;
 use ic_logger::debug;
@@ -176,6 +176,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn idkg_load_transcript_with_openings(
         &self,
+        alg: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
         context_data: Vec<u8>,
@@ -190,6 +191,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 internal_error: format!("failed to deserialize internal transcript: {:?}", e.0),
             })?;
         let result = self.idkg_load_transcript_with_openings_internal(
+            alg,
             &internal_dealings,
             &openings,
             &context_data,
@@ -223,6 +225,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn idkg_open_dealing(
         &self,
+        alg: AlgorithmId,
         dealing: BatchSignedIDkgDealing,
         dealer_index: NodeIndex,
         context_data: Vec<u8>,
@@ -239,6 +242,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             }
         })?;
         let result = self.idkg_open_dealing_internal(
+            alg,
             internal_dealing,
             dealer_index,
             &context_data,
@@ -346,6 +350,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             let (public_key, private_key) = self.mega_keyset_from_sks(key_id)?;
 
             let compute_secret_shares_result = compute_secret_shares(
+                alg,
                 dealings,
                 transcript,
                 context_data,
@@ -391,12 +396,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                     )?;
                     Ok(complaints)
                 }
-                Err(IDkgComputeSecretSharesInternalError::InsufficientOpenings(_, _)) => {
-                    Err(IDkgLoadTranscriptError::InsufficientOpenings {
-                        internal_error: format!("{:?}", compute_secret_shares_result),
-                    })
-                }
                 Err(IDkgComputeSecretSharesInternalError::InvalidCiphertext(_))
+                | Err(IDkgComputeSecretSharesInternalError::UnsupportedAlgorithm)
                 | Err(IDkgComputeSecretSharesInternalError::UnableToReconstruct(_))
                 | Err(IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(_)) => {
                     Err(IDkgLoadTranscriptError::InvalidArguments {
@@ -410,6 +411,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn idkg_load_transcript_with_openings_internal(
         &self,
+        alg: AlgorithmId,
         dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
         openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
         context_data: &[u8],
@@ -426,6 +428,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         } else {
             let (public_key, private_key) = self.mega_keyset_from_sks(key_id)?;
             let compute_secret_shares_with_openings_result = compute_secret_shares_with_openings(
+                alg,
                 dealings,
                 openings,
                 transcript,
@@ -460,24 +463,29 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                         })?;
                     Ok(())
                 }
-                Err(IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued) => {
+                Err(IDkgComputeSecretSharesWithOpeningsInternalError::ComplaintShouldBeIssued) => {
                     Err(IDkgLoadTranscriptError::InvalidArguments {
                         internal_error: "An invalid dealing with no openings was provided"
                             .to_string(),
                     })
                 }
-                Err(e @ IDkgComputeSecretSharesInternalError::InsufficientOpenings(_, _)) => {
-                    Err(IDkgLoadTranscriptError::InsufficientOpenings {
-                        internal_error: format!("{:?}", e),
-                    })
-                }
-                Err(e @ IDkgComputeSecretSharesInternalError::InvalidCiphertext(_))
-                | Err(e @ IDkgComputeSecretSharesInternalError::UnableToReconstruct(_))
-                | Err(e @ IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(_)) => {
-                    Err(IDkgLoadTranscriptError::InvalidArguments {
-                        internal_error: format!("{:?}", e),
-                    })
-                }
+                Err(
+                    e
+                    @ IDkgComputeSecretSharesWithOpeningsInternalError::InsufficientOpenings(_, _),
+                ) => Err(IDkgLoadTranscriptError::InsufficientOpenings {
+                    internal_error: format!("{:?}", e),
+                }),
+                Err(e @ IDkgComputeSecretSharesWithOpeningsInternalError::InvalidCiphertext(_))
+                | Err(e @ IDkgComputeSecretSharesWithOpeningsInternalError::UnsupportedAlgorithm)
+                | Err(
+                    e @ IDkgComputeSecretSharesWithOpeningsInternalError::UnableToReconstruct(_),
+                )
+                | Err(
+                    e
+                    @ IDkgComputeSecretSharesWithOpeningsInternalError::UnableToCombineOpenings(_),
+                ) => Err(IDkgLoadTranscriptError::InvalidArguments {
+                    internal_error: format!("{:?}", e),
+                }),
             }
         }
     }
@@ -541,6 +549,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn idkg_open_dealing_internal(
         &self,
+        alg: AlgorithmId,
         dealing: IDkgDealingInternal,
         dealer_index: NodeIndex,
         context_data: &[u8],
@@ -562,6 +571,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 }
             })?;
         open_dealing(
+            alg,
             &dealing,
             context_data,
             dealer_index,

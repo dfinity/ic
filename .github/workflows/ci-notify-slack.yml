@@ -13,7 +13,7 @@ jobs:
         uses: actions/checkout@v4
       - name: Get requested team reviewers
         id: get-reviewers
-        uses: actions/github-script@v5
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -41,7 +41,7 @@ jobs:
           MESSAGE: ":github: <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>"
       - name: Post to a Slack channel
         id: slack
-        uses: slackapi/slack-github-action@v1.25.0
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         with:
           channel-id: ${{ steps.lookup.outputs.channels }}
           slack-message: "${{ steps.lookup.outputs.message }}"

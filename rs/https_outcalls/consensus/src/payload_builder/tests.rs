@@ -11,10 +11,10 @@ use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
     canister_http::{
-        CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPermanentValidationError,
-        CanisterHttpTransientValidationError,
+        CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPayloadValidationFailure,
+        InvalidCanisterHttpPayloadReason,
     },
-    consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
+    consensus::{InvalidPayloadReason, PayloadValidationError, PayloadValidationFailure},
     p2p::consensus::{MutablePool, UnvalidatedArtifact},
     validation::ValidationError,
 };
@@ -499,9 +499,9 @@ fn oversized_validation() {
         &default_validation_context(),
     );
     match validation_result {
-        Err(ValidationError::Permanent(
-            PayloadPermanentError::CanisterHttpPayloadValidationError(
-                CanisterHttpPermanentValidationError::PayloadTooBig { expected, received },
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::PayloadTooBig { expected, received },
             ),
         )) if expected == 2 * 1024 * 1024 && received > expected => (),
         x => panic!("Expected PayloadTooBig, got {:?}", x),
@@ -522,9 +522,9 @@ fn registry_version_validation() {
         },
     );
     match validation_result {
-        Err(ValidationError::Permanent(
-            PayloadPermanentError::CanisterHttpPayloadValidationError(
-                CanisterHttpPermanentValidationError::RegistryVersionMismatch { .. },
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::RegistryVersionMismatch { .. },
             ),
         )) => (),
         x => panic!("Expected RegistryVersionMismatch, got {:?}", x),
@@ -543,9 +543,9 @@ fn hash_validation() {
         &default_validation_context(),
     );
     match validation_result {
-        Err(ValidationError::Permanent(
-            PayloadPermanentError::CanisterHttpPayloadValidationError(
-                CanisterHttpPermanentValidationError::ContentHashMismatch { .. },
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::ContentHashMismatch { .. },
             ),
         )) => (),
         x => panic!("Expected ContentHashMismatch, got {:?}", x),
@@ -565,9 +565,9 @@ fn timeout_validation() {
         },
     );
     match validation_result {
-        Err(ValidationError::Permanent(
-            PayloadPermanentError::CanisterHttpPayloadValidationError(
-                CanisterHttpPermanentValidationError::Timeout {
+        Err(ValidationError::InvalidArtifact(
+            InvalidPayloadReason::InvalidCanisterHttpPayload(
+                InvalidCanisterHttpPayloadReason::Timeout {
                     timed_out_at,
                     validation_time,
                 },
@@ -590,7 +590,7 @@ fn registry_unavailable_validation() {
         },
     );
     match validation_result {
-        Err(ValidationError::Transient(PayloadTransientError::RegistryUnavailable(
+        Err(ValidationError::ValidationFailed(PayloadValidationFailure::RegistryUnavailable(
             RegistryClientError::VersionNotAvailable { version },
         ))) if version == RegistryVersion::new(2) => (),
         x => panic!("Expected RegistryUnavailable, got {:?}", x),
@@ -605,9 +605,9 @@ fn registry_unavailable_validation() {
 fn feature_disabled_validation() {
     let validation_result = run_validatation_test(false, |_, _| {}, &default_validation_context());
     match validation_result {
-        Err(ValidationError::Transient(
-            PayloadTransientError::CanisterHttpPayloadValidationError(
-                CanisterHttpTransientValidationError::Disabled,
+        Err(ValidationError::ValidationFailed(
+            PayloadValidationFailure::CanisterHttpPayloadValidationFailed(
+                CanisterHttpPayloadValidationFailure::Disabled,
             ),
         )) => (),
         x => panic!("Expected Disabled, got {:?}", x),
@@ -641,9 +641,9 @@ fn duplicate_validation() {
         );
 
         match validation_result {
-            Err(ValidationError::Permanent(
-                PayloadPermanentError::CanisterHttpPayloadValidationError(
-                    CanisterHttpPermanentValidationError::DuplicateResponse(id),
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::DuplicateResponse(id),
                 ),
             )) if id == CallbackId::new(0) => (),
             x => panic!("Expected DuplicateResponse, got {:?}", x),
@@ -708,15 +708,16 @@ fn divergence_response_validation_test() {
             );
 
             match validation_result {
-            Err(ValidationError::Permanent(
-                PayloadPermanentError::CanisterHttpPayloadValidationError(
-                    CanisterHttpPermanentValidationError::DivergenceProofDoesNotMeetDivergenceCriteria
-            ))) => (),
-            x => panic!(
-                "Expected DivergenceProofDoesNotMeetDivergenceCriteria, got {:?}",
-                x
-            ),
-        }
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidCanisterHttpPayload(
+                        InvalidCanisterHttpPayloadReason::DivergenceProofDoesNotMeetDivergenceCriteria,
+                    ),
+                )) => (),
+                x => panic!(
+                    "Expected DivergenceProofDoesNotMeetDivergenceCriteria, got {:?}",
+                    x
+                ),
+            }
 
             let (_, other_callback_id_metadata) = test_response_and_metadata(1);
 
@@ -745,15 +746,16 @@ fn divergence_response_validation_test() {
             );
 
             match validation_result {
-            Err(ValidationError::Permanent(
-                PayloadPermanentError::CanisterHttpPayloadValidationError(
-                    CanisterHttpPermanentValidationError::DivergenceProofContainsMultipleCallbackIds
-            ))) => (),
-            x => panic!(
-                "Expected DivergenceProofContainsMultipleCallbackIds, got {:?}",
-                x
-            ),
-        }
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidCanisterHttpPayload(
+                        InvalidCanisterHttpPayloadReason::DivergenceProofContainsMultipleCallbackIds,
+                    ),
+                )) => (),
+                x => panic!(
+                    "Expected DivergenceProofContainsMultipleCallbackIds, got {:?}",
+                    x
+                ),
+            }
         });
     }
 }

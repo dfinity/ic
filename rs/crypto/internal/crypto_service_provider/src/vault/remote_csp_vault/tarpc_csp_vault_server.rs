@@ -403,6 +403,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     async fn idkg_load_transcript_with_openings(
         self,
         _: context::Context,
+        alg: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
         context_data: ByteBuf,
@@ -413,6 +414,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         let vault = self.local_csp_vault;
         let job = move || {
             vault.idkg_load_transcript_with_openings(
+                alg,
                 dealings,
                 openings,
                 context_data.into_vec(),
@@ -447,6 +449,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     async fn idkg_open_dealing(
         self,
         _: context::Context,
+        alg: AlgorithmId,
         dealing: BatchSignedIDkgDealing,
         dealer_index: NodeIndex,
         context_data: ByteBuf,
@@ -456,6 +459,7 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         let vault = self.local_csp_vault;
         let job = move || {
             vault.idkg_open_dealing(
+                alg,
                 dealing,
                 dealer_index,
                 context_data.into_vec(),

@@ -111,7 +111,7 @@ mod client_cert_verifier_tests {
         let result = verifier.verify_client_cert(
             &Certificate(untrusted_node_cert.cert_der()),
             &[],
-            UNIX_EPOCH,
+            SystemTime::now(),
         );
 
         assert_eq!(
@@ -172,7 +172,7 @@ mod client_cert_verifier_tests {
         let result = verifier.verify_client_cert(
             &Certificate(cert_with_no_node_id_as_cn.cert_der()),
             &[],
-            UNIX_EPOCH,
+            SystemTime::now(),
         );
 
         assert_matches!(
@@ -194,7 +194,7 @@ mod client_cert_verifier_tests {
         let result = verifier.verify_client_cert(
             &Certificate(cert_with_duplicate_cn.cert_der()),
             &[],
-            std::time::UNIX_EPOCH,
+            SystemTime::now(),
         );
 
         assert_matches!(
@@ -217,7 +217,7 @@ mod client_cert_verifier_tests {
         let result = verifier.verify_client_cert(
             &Certificate(node_1_cert_1.cert_der()),
             &[Certificate(node_1_cert_2.cert_der())],
-            std::time::UNIX_EPOCH,
+            SystemTime::now(),
         );
 
         assert_eq!(
@@ -266,8 +266,11 @@ mod client_cert_verifier_tests {
             .add_cert(NODE_2, x509_public_key_cert(&node_2_cert.x509()))
             .update();
 
-        let result =
-            verifier.verify_client_cert(&Certificate(node_1_cert.cert_der()), &[], UNIX_EPOCH);
+        let result = verifier.verify_client_cert(
+            &Certificate(node_1_cert.cert_der()),
+            &[],
+            SystemTime::now(),
+        );
 
         assert_eq!(
             result.err(),
@@ -328,7 +331,8 @@ mod client_cert_verifier_tests {
             der
         };
 
-        let result = verifier.verify_client_cert(&Certificate(invalid_cert_der), &[], UNIX_EPOCH);
+        let result =
+            verifier.verify_client_cert(&Certificate(invalid_cert_der), &[], SystemTime::now());
 
         assert_matches!(
             result,
@@ -435,7 +439,7 @@ mod server_cert_verifier_tests {
             &ServerName::try_from("www.irrelevant.com").expect("could not parse DNS name"),
             &mut [].iter().copied(),
             &[],
-            UNIX_EPOCH,
+            SystemTime::now(),
         );
 
         assert_eq!(
@@ -465,7 +469,7 @@ mod server_cert_verifier_tests {
             &ServerName::try_from("www.irrelevant.com").expect("could not parse DNS name"),
             &mut [].iter().copied(),
             &[],
-            UNIX_EPOCH,
+            SystemTime::now(),
         );
 
         assert_eq!(
@@ -497,7 +501,7 @@ mod server_cert_verifier_tests {
             &ServerName::try_from("www.irrelevant.com").expect("could not parse DNS name"),
             &mut [].iter().copied(),
             &[],
-            UNIX_EPOCH,
+            SystemTime::now(),
         );
 
         assert_matches!(

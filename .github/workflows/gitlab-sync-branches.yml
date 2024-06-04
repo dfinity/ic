@@ -3,21 +3,20 @@
 name: GitLab Sync Branches
 
 on:
-  push:
-    branches:
-      - master
+  schedule:
+    - cron: '0 */3 * * *'
   workflow_dispatch:
 
 jobs:
   sync-branches:
     runs-on: ubuntu-latest
-    if: ${{ vars.RUN_CI == 'true' }}
+    if: ${{ vars.RUN_SYNC == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          token: ${{ secrets.GH_CI_TOKEN }}
+          token: ${{ secrets.IDX_PUSH_TO_PR }}
       - name: Setup Git User
         run: |
           git config user.name "GitHub Actions Bot"
@@ -28,5 +27,5 @@ jobs:
         run: |
           git fetch origin master mirroring
           git checkout -B mirroring
-          git rebase --onto master origin/mirroring
+          git rebase --onto origin/master origin/mirroring
           git push origin mirroring --force-with-lease

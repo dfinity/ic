@@ -220,7 +220,9 @@ pub(crate) mod utils;
 pub(crate) use payload_builder::{
     create_data_payload, create_summary_payload, make_bootstrap_summary,
 };
-pub(crate) use payload_verifier::{validate_payload, PermanentError, TransientError};
+pub(crate) use payload_verifier::{
+    validate_payload, EcdsaPayloadValidationFailure, InvalidEcdsaPayloadReason,
+};
 pub use stats::EcdsaStatsImpl;
 
 use self::utils::get_context_request_id;
@@ -597,7 +599,7 @@ mod tests {
     use super::test_utils::fake_ecdsa_key_id;
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_types::consensus::idkg::{EcdsaUIDGenerator, QuadrupleId};
+    use ic_types::consensus::idkg::{EcdsaUIDGenerator, PreSigId};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::{consensus::idkg::RequestId, PrincipalId, SubnetId};
     use tests::test_utils::create_sig_inputs;
@@ -608,9 +610,8 @@ mod tests {
         let height = Height::from(100);
         let key_id = fake_ecdsa_key_id();
         // Add two contexts to state, one with, and one without quadruple
-        let quadruple_id = QuadrupleId::new(0);
-        let context_with_quadruple =
-            fake_completed_sign_with_ecdsa_context(0, quadruple_id.clone());
+        let pre_sig_id = PreSigId(0);
+        let context_with_quadruple = fake_completed_sign_with_ecdsa_context(0, pre_sig_id);
         let context_without_quadruple =
             fake_sign_with_ecdsa_context_with_quadruple(1, key_id.clone(), None);
         let snapshot = fake_state_with_ecdsa_contexts(
@@ -627,7 +628,7 @@ mod tests {
 
         let expected_request_id = get_context_request_id(&context_with_quadruple.1).unwrap();
         assert_eq!(expected_request_id.pseudo_random_id, [0; 32]);
-        assert_eq!(expected_request_id.quadruple_id, quadruple_id);
+        assert_eq!(expected_request_id.pre_signature_id, pre_sig_id);
 
         let block_reader = TestEcdsaBlockReader::for_signer_test(
             height,
@@ -727,22 +728,22 @@ mod tests {
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
         let mut uid_generator = EcdsaUIDGenerator::new(subnet_id, Height::new(0));
         let request_id_fetch_1 = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            pre_signature_id: uid_generator.next_pre_signature_id(),
             pseudo_random_id: [1; 32],
             height: Height::from(80),
         };
         let request_id_drop = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            pre_signature_id: uid_generator.next_pre_signature_id(),
             pseudo_random_id: [2; 32],
             height: Height::from(70),
         };
         let request_id_fetch_2 = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            pre_signature_id: uid_generator.next_pre_signature_id(),
             pseudo_random_id: [3; 32],
             height: Height::from(102),
         };
         let request_id_stash = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            pre_signature_id: uid_generator.next_pre_signature_id(),
             pseudo_random_id: [4; 32],
             height: Height::from(200),
         };

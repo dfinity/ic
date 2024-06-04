@@ -41,6 +41,9 @@ pub trait Approvals {
         expected_allowance: Option<Self::Tokens>,
     ) -> Result<Self::Tokens, ApproveError<Self::Tokens>>;
 
+    /// Returns the number of approvals.
+    fn get_num_approvals(&self) -> usize;
+
     /// Consumes amount from the spender's allowance for the account.
     ///
     /// This method behaves like [decrease_amount] but bails out if the
@@ -250,6 +253,10 @@ where
                 }
             }
         })
+    }
+
+    fn get_num_approvals(&self) -> usize {
+        self.allowances.len()
     }
 
     fn use_allowance(

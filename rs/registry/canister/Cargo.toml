@@ -66,7 +66,7 @@ ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 lazy_static = "1.4.0"
 maplit = "1.0"
-rand = { version = "0.8.4", features = ["small_rng"] }
+rand = { workspace = true }
 rand_distr = "0.4.0"
 serde_json = { workspace = true }
 
@@ -83,5 +83,5 @@ ic-nns-test-utils-macros = { path = "../../nns/test_utils_macros" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 registry-canister-protobuf-generator = { path = "./protobuf_generator" }
 tokio = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 itertools = { workspace = true }

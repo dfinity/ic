@@ -1151,10 +1151,11 @@ bazel-test-bare-metal:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "setupos-bare-metal-smoke-test"
   script:
     - |
+      set -euo pipefail
       # shellcheck disable=SC2046,SC2086
       bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
         //ic-os/setupos/envs/dev:launch_bare_metal -- \
-          --config_path "$(realpath  ./ic-os/scripts/bare_metal_deployment/zh2-dll01.yaml)" \
+          --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
           --csv_filename "$(realpath "$ZH2_DLL01_CSV_SECRETS_PATH")" \
           --file_share_ssh_key "$(realpath "$ZH2_FILE_SHARE_KEY_PATH")" \
           --file_share_username ci_interim \
@@ -2013,7 +2014,7 @@ default:
     expire_in: 3 days
     when: always
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:550641b3bf3d8b3f6f92860b115b85f922d3e9fe25163fe418780b5e6f609f91
   interruptible: true
   retry:
     max: 2

@@ -6,7 +6,8 @@ use crate::{
             add_wasm_response, AddWasmRequest, AddWasmResponse, DappCanistersTransferResult,
             DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns,
             GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
-            GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsResponse,
+            GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetProposalIdThatAddedWasmRequest,
+            GetProposalIdThatAddedWasmResponse, GetSnsSubnetIdsResponse,
             GetWasmMetadataRequest as GetWasmMetadataRequestPb,
             GetWasmMetadataResponse as GetWasmMetadataResponsePb, GetWasmRequest, GetWasmResponse,
             InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
@@ -295,6 +296,20 @@ where
         let hash = vec_to_hash(get_wasm_payload.hash).unwrap();
         GetWasmResponse {
             wasm: self.read_wasm(&hash),
+        }
+    }
+
+    /// Returns an Option(ProposalId) in the GetProposalIdThatAddedWasmResponse (a struct with the proposal ID
+    /// that blessed the given wasm hash)
+    pub fn get_proposal_id_that_added_wasm(
+        &self,
+        payload: GetProposalIdThatAddedWasmRequest,
+    ) -> GetProposalIdThatAddedWasmResponse {
+        let hash = vec_to_hash(payload.hash).unwrap();
+        GetProposalIdThatAddedWasmResponse {
+            proposal_id: self
+                .read_wasm(&hash)
+                .and_then(|sns_wasm| sns_wasm.proposal_id),
         }
     }
 
@@ -2104,7 +2119,7 @@ mod test {
         SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_type: i32::from(SnsCanisterType::Governance),
-            ..SnsWasm::default()
+            proposal_id: Some(2),
         }
     }
 
@@ -2306,6 +2321,38 @@ mod test {
         });
         // When given valid hash return correct SnsWasm
         assert_eq!(wasm_response.wasm.unwrap(), wasm);
+    }
+
+    #[test]
+    fn test_api_get_proposal_id_that_added_wasm_returns_right_response() {
+        let mut canister = new_wasm_canister();
+
+        let wasm = smallest_valid_wasm();
+        let expected_hash = Sha256::hash(&wasm.wasm);
+        let expected_proposal_id = wasm.proposal_id.unwrap();
+
+        canister.add_wasm(AddWasmRequest {
+            wasm: Some(wasm.clone()),
+            hash: expected_hash.to_vec(),
+        });
+
+        // When given non-existent hash, return None
+        let bad_hash = Sha256::hash("something_else".as_bytes());
+        let proposal_id_response =
+            canister.get_proposal_id_that_added_wasm(GetProposalIdThatAddedWasmRequest {
+                hash: bad_hash.to_vec(),
+            });
+        assert!(proposal_id_response.proposal_id.is_none());
+
+        // When given valid hash return correct proposal ID
+        let proposal_id_response =
+            canister.get_proposal_id_that_added_wasm(GetProposalIdThatAddedWasmRequest {
+                hash: expected_hash.to_vec(),
+            });
+        assert_eq!(
+            proposal_id_response.proposal_id.unwrap(),
+            expected_proposal_id
+        );
     }
 
     #[test]

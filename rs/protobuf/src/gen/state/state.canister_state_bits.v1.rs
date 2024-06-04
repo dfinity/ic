@@ -67,10 +67,11 @@ pub struct CallContextEntry {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WasmClosure {
+    /// The number of functions will never exceed 2^32.
     #[prost(uint32, tag = "1")]
     pub func_idx: u32,
-    #[prost(uint32, tag = "2")]
-    pub env: u32,
+    #[prost(uint64, tag = "2")]
+    pub env: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -738,6 +739,7 @@ pub enum CyclesUseCase {
     DeletedCanisters = 10,
     NonConsumed = 11,
     BurnedCycles = 12,
+    SchnorrOutcalls = 13,
 }
 impl CyclesUseCase {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -761,6 +763,7 @@ impl CyclesUseCase {
             CyclesUseCase::DeletedCanisters => "CYCLES_USE_CASE_DELETED_CANISTERS",
             CyclesUseCase::NonConsumed => "CYCLES_USE_CASE_NON_CONSUMED",
             CyclesUseCase::BurnedCycles => "CYCLES_USE_CASE_BURNED_CYCLES",
+            CyclesUseCase::SchnorrOutcalls => "CYCLES_USE_CASE_SCHNORR_OUTCALLS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -781,6 +784,7 @@ impl CyclesUseCase {
             "CYCLES_USE_CASE_DELETED_CANISTERS" => Some(Self::DeletedCanisters),
             "CYCLES_USE_CASE_NON_CONSUMED" => Some(Self::NonConsumed),
             "CYCLES_USE_CASE_BURNED_CYCLES" => Some(Self::BurnedCycles),
+            "CYCLES_USE_CASE_SCHNORR_OUTCALLS" => Some(Self::SchnorrOutcalls),
             _ => None,
         }
     }

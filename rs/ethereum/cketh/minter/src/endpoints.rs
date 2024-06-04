@@ -71,6 +71,7 @@ pub struct MinterInfo {
     pub erc20_balances: Option<Vec<Erc20Balance>>,
     pub last_eth_scraped_block_number: Option<Nat>,
     pub last_erc20_scraped_block_number: Option<Nat>,
+    pub cketh_ledger_id: Option<Principal>,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
@@ -423,6 +424,7 @@ pub mod events {
             transaction_hash: Option<String>,
         },
         SkippedBlock {
+            contract_address: Option<String>,
             block_number: Nat,
         },
         AddedCkErc20Token {

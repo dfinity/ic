@@ -17,5 +17,5 @@ serde = { workspace = true }
 # No other ic-dependencies are allowed.
 
 serde_cbor = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }

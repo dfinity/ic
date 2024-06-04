@@ -195,6 +195,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                 / 1_000_000_000) as f64,
             "IC timestamp of the most recent block.",
         )?;
+        w.encode_gauge(
+            "ledger_num_approvals",
+            ledger.approvals().get_num_approvals() as f64,
+            "Total number of approvals.",
+        )?;
         Ok(())
     })
 }

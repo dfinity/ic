@@ -5,6 +5,7 @@ use ic_protobuf::state::canister_state_bits::v1::CyclesAccount as pbCyclesAccoun
 use ic_protobuf::state::queues::v1::Cycles as PbCycles;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
+use std::iter::Sum;
 use std::{
     fmt,
     ops::{Add, AddAssign, Div, Mul, Sub, SubAssign},
@@ -186,6 +187,12 @@ impl Div<usize> for Cycles {
 
     fn div(self, rhs: usize) -> Self {
         Self(self.0.saturating_div(Cycles::from(rhs as u128).0))
+    }
+}
+
+impl Sum for Cycles {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Cycles::zero(), Cycles::add)
     }
 }
 
