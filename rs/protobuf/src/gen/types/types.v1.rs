@@ -384,8 +384,6 @@ pub struct ThresholdSignatureShare {
 pub struct EcdsaPayload {
     #[prost(message, repeated, tag = "1")]
     pub signature_agreements: ::prost::alloc::vec::Vec<CompletedSignature>,
-    #[prost(message, repeated, tag = "2")]
-    pub ongoing_signatures: ::prost::alloc::vec::Vec<OngoingSignature>,
     #[prost(message, optional, tag = "5")]
     pub next_unused_transcript_id:
         ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscriptId>,
@@ -412,10 +410,6 @@ pub struct EcdsaPayload {
     #[prost(message, optional, tag = "12")]
     pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
     /// TODO: retire these fields, once we start using `pre_signatures`.
-    #[prost(message, repeated, tag = "3")]
-    pub available_quadruples: ::prost::alloc::vec::Vec<AvailableQuadruple>,
-    #[prost(message, repeated, tag = "4")]
-    pub quadruples_in_creation: ::prost::alloc::vec::Vec<QuadrupleInProgress>,
     #[prost(bool, tag = "16")]
     pub generalized_pre_signatures: bool,
 }
