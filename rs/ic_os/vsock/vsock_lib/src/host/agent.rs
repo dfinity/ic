@@ -191,18 +191,3 @@ fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
     println!("Starting upgrade...");
     run_upgrade()
 }
-
-/*
-pub mod tests {
-    #[test]
-    fn create_hostos_upgrade_file_and_verify_hash() {
-        use super::*;
-
-        let upgrade_url = std::env::var("URL").unwrap_or_else(|_| "dummy url".to_string());
-        let hash = std::env::var("HASH").unwrap_or_else(|_| "dummy hash".to_string());
-
-        create_hostos_upgrade_file(&upgrade_url).unwrap();
-        assert!(verify_hash(&hash).unwrap())
-    }
-}
-*/
