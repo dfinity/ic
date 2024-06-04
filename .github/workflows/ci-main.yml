@@ -316,7 +316,7 @@ jobs:
           RUN_ON_DIFF_ONLY: "true"
           BAZEL_COMMAND: "build"
       - name: Upload build-ic.tar
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 #v4.3.3
         with:
           name: build-ic
           retention-days: 1
