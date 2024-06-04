@@ -283,11 +283,10 @@ go_deps.bzl               @dfinity/idx
 /rs/xnet/                                               @dfinity/ic-message-routing-owners
 
 # [Scalability]
-/scalability/                                                       @dfinity/runtime
+/scalability/                                           @dfinity/runtime
 
 # [No-Approvals]
-# Ghost is a group with no direct members. GitLab will bypass codeowners for files that match ghost ownership.
-*.lock                    @dfinity/core
-Cargo.toml                @dfinity/core
-.gitignore                @dfinity/core
-stackage_snapshot.json    @dfinity/core
+*.lock
+Cargo.toml
+.gitignore
+stackage_snapshot.json
