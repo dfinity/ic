@@ -15,6 +15,7 @@ use ic_cketh_minter::endpoints::{
     RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError,
     WithdrawalSearchParameter,
 };
+use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_withdraw_guard;
 use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
@@ -300,9 +301,10 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
                 withdrawal_id: *request.cketh_ledger_burn_index().as_ref(),
                 recipient_address: request.payee().to_string(),
                 token_symbol: match request {
-                    CkEth(_) => "ckETH".to_string(),
+                    CkEth(_) => CkTokenSymbol::cketh_symbol_from_state(s).to_string(),
                     CkErc20(r) => s
-                        .ckerc20_token_symbol(&r.erc20_contract_address)
+                        .ckerc20_tokens
+                        .get_alt(&r.erc20_contract_address)
                         .unwrap()
                         .to_string(),
                 },
