@@ -763,7 +763,7 @@ pub struct KeyTranscriptCreation {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaMessage {
-    #[prost(oneof = "ecdsa_message::Msg", tags = "1, 2, 3, 4, 5")]
+    #[prost(oneof = "ecdsa_message::Msg", tags = "1, 2, 3, 4, 5, 6")]
     pub msg: ::core::option::Option<ecdsa_message::Msg>,
 }
 /// Nested message and enum types in `EcdsaMessage`.
@@ -776,16 +776,28 @@ pub mod ecdsa_message {
         #[prost(message, tag = "2")]
         DealingSupport(super::IDkgDealingSupport),
         #[prost(message, tag = "3")]
-        SigShare(super::EcdsaSigShare),
+        EcdsaSigShare(super::EcdsaSigShare),
         #[prost(message, tag = "4")]
         Complaint(super::EcdsaComplaint),
         #[prost(message, tag = "5")]
         Opening(super::EcdsaOpening),
+        #[prost(message, tag = "6")]
+        SchnorrSigShare(super::SchnorrSigShare),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaSigShare {
+    #[prost(message, optional, tag = "1")]
+    pub signer_id: ::core::option::Option<NodeId>,
+    #[prost(message, optional, tag = "2")]
+    pub request_id: ::core::option::Option<RequestId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub sig_share_raw: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SchnorrSigShare {
     #[prost(message, optional, tag = "1")]
     pub signer_id: ::core::option::Option<NodeId>,
     #[prost(message, optional, tag = "2")]
@@ -854,7 +866,7 @@ pub struct PrefixHashPair {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaArtifactId {
-    #[prost(oneof = "ecdsa_artifact_id::Kind", tags = "1, 2, 3, 4, 5")]
+    #[prost(oneof = "ecdsa_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6")]
     pub kind: ::core::option::Option<ecdsa_artifact_id::Kind>,
 }
 /// Nested message and enum types in `EcdsaArtifactId`.
@@ -867,11 +879,13 @@ pub mod ecdsa_artifact_id {
         #[prost(message, tag = "2")]
         DealingSupport(super::PrefixHashPair),
         #[prost(message, tag = "3")]
-        SigShare(super::PrefixHashPair),
+        EcdsaSigShare(super::PrefixHashPair),
         #[prost(message, tag = "4")]
         Complaint(super::PrefixHashPair),
         #[prost(message, tag = "5")]
         Opening(super::PrefixHashPair),
+        #[prost(message, tag = "6")]
+        SchnorrSigShare(super::PrefixHashPair),
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -1385,7 +1399,7 @@ pub mod canister_http_response_message {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaMessageAttribute {
-    #[prost(oneof = "ecdsa_message_attribute::Kind", tags = "1, 2, 3, 4, 5")]
+    #[prost(oneof = "ecdsa_message_attribute::Kind", tags = "1, 2, 3, 4, 5, 6")]
     pub kind: ::core::option::Option<ecdsa_message_attribute::Kind>,
 }
 /// Nested message and enum types in `EcdsaMessageAttribute`.
@@ -1398,11 +1412,13 @@ pub mod ecdsa_message_attribute {
         #[prost(message, tag = "2")]
         DealingSupport(super::super::super::registry::subnet::v1::IDkgTranscriptId),
         #[prost(message, tag = "3")]
-        SigShare(super::RequestId),
+        EcdsaSigShare(super::RequestId),
         #[prost(message, tag = "4")]
         Complaint(super::super::super::registry::subnet::v1::IDkgTranscriptId),
         #[prost(message, tag = "5")]
         Opening(super::super::super::registry::subnet::v1::IDkgTranscriptId),
+        #[prost(message, tag = "6")]
+        SchnorrSigShare(super::RequestId),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

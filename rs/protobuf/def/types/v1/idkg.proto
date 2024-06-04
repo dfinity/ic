@@ -252,13 +252,20 @@ message EcdsaMessage {
   oneof msg {
     registry.subnet.v1.IDkgSignedDealingTuple signed_dealing = 1;
     IDkgDealingSupport dealing_support = 2;
-    EcdsaSigShare sig_share = 3;
+    EcdsaSigShare ecdsa_sig_share = 3;
     EcdsaComplaint complaint = 4;
     EcdsaOpening opening = 5;
+    SchnorrSigShare schnorr_sig_share = 6;
   }
 }
 
 message EcdsaSigShare {
+  NodeId signer_id = 1;
+  RequestId request_id = 2;
+  bytes sig_share_raw = 3;
+}
+
+message SchnorrSigShare {
   NodeId signer_id = 1;
   RequestId request_id = 2;
   bytes sig_share_raw = 3;
@@ -304,8 +311,9 @@ message EcdsaArtifactId {
   oneof kind {
     PrefixHashPair dealing = 1;
     PrefixHashPair dealing_support = 2;
-    PrefixHashPair sig_share = 3;
+    PrefixHashPair ecdsa_sig_share = 3;
     PrefixHashPair complaint = 4;
     PrefixHashPair opening = 5;
+    PrefixHashPair schnorr_sig_share = 6;
   }
 }
