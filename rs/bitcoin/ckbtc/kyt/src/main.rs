@@ -613,7 +613,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
         writer
             .encode_gauge(
                 "stable_memory_bytes",
-                ic_cdk::api::stable::stable_size() as f64 * 65536.0,
+                ic_cdk::api::stable::stable64_size() as f64 * 65536.0,
                 "Size of the stable memory allocated by this canister.",
             )
             .unwrap();
