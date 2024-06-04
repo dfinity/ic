@@ -18,7 +18,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const { owner, repo, number: issue_number } = context.issue;
-            const team_reviewers = context.payload.pull_request.requested_teams.map(team => team.name);
+            const team_reviewers = context.payload.pull_request.requested_teams.requested_team.map(team => team.name);
             return team_reviewers;
       - name: Lookup Slack channel
         id: lookup
