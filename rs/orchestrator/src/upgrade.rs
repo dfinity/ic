@@ -859,8 +859,8 @@ mod tests {
             vec![EcdsaKeyTranscript {
                 current: unmasked,
                 next_in_creation: idkg::KeyTranscriptCreation::Begin,
-                master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id.clone())),
-                key_id,
+                master_key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
+                key_id: Some(key_id),
             }],
         );
         ecdsa.idkg_transcripts = idkg_transcripts;

@@ -36,7 +36,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/${{ github.repository_owner }}/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
+    image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
   bazel-large-setup: &bazel-large-setup
     runs-on:
       labels: bazel-runner-large
@@ -77,6 +77,8 @@ anchors:
     id: before-script
     shell: bash
     run: |
+      git config --global http.postBuffer 524288000
+      git config --global safe.directory '*'
       if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
   checkout: &checkout
     name: Checkout
@@ -297,7 +299,9 @@ jobs:
 
   build-determinism:
     name: Build Determinism
-    <<: *default-setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ vars.RUN_CI == 'true' }}
     needs: [build-ic, bazel-test-all]
     strategy:
       matrix:
@@ -338,9 +342,8 @@ jobs:
         shell: bash
         run: |
           set -eExuo pipefail
-          git config --global safe.directory '*'
-          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
-              "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-determinism.sh
+          sudo apt update && sudo apt install -y curl
+          "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-determinism.sh
         env:
           TARGET: ${{ matrix.TARGET }}
           PATH0: ${{ matrix.PATH0 }}

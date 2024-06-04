@@ -1,7 +1,7 @@
 // TODO(MR-569) Remove when `CanisterQueues` has been updated to use this.
 #![allow(dead_code)]
 
-use super::message_pool::{Class, MessageId, MessagePool};
+use super::message_pool::{self, Class, MessagePool};
 use crate::StateError;
 use ic_base_types::CanisterId;
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -31,7 +31,7 @@ pub(super) enum MessageReference {
     ///
     /// All best-effort requests are subject to load shedding and may be dropped
     /// from the pool at any time.
-    Request(MessageId),
+    Request(message_pool::Id),
 
     /// Weak reference to a `Response` held in the message pool.
     ///
@@ -48,7 +48,7 @@ pub(super) enum MessageReference {
     /// response. Meaning that stale response references in input queues are always
     /// `SYS_UNKNOWN` reject responses to best-effort calls ("timeout" if deadline
     /// has expired, "drop" otherwise.)
-    Response(MessageId),
+    Response(message_pool::Id),
     //
     // TODO(MR-552) Define and use variants for best-effort and guaranteed reject
     // responses, so we don't need to allocate a full message.
@@ -68,8 +68,8 @@ impl MessageReference {
         matches!(self, Self::Response(_))
     }
 
-    /// Returns the `MessageId` behind this reference.
-    pub(super) fn id(&self) -> MessageId {
+    /// Returns the ID behind this reference.
+    pub(super) fn id(&self) -> message_pool::Id {
         match self {
             Self::Request(id) | Self::Response(id) => *id,
         }
@@ -161,7 +161,7 @@ impl CanisterQueue {
     /// Enqueues a request.
     ///
     /// Panics if there is no available request slot.
-    pub(super) fn push_request(&mut self, id: MessageId) {
+    pub(super) fn push_request(&mut self, id: message_pool::Id) {
         assert!(self.request_slots < self.capacity);
 
         self.queue.push_back(MessageReference::Request(id));
@@ -232,7 +232,7 @@ impl CanisterQueue {
     ///
     /// Panics if there is no reserved response slot or if this is a guaranteed
     /// response and there is no matching guaranteed response memory reservation.
-    pub(super) fn push_response(&mut self, id: MessageId) {
+    pub(super) fn push_response(&mut self, id: message_pool::Id) {
         self.check_has_reserved_response_slot(id.class()).unwrap();
 
         if id.class() == Class::GuaranteedResponse {

@@ -1801,7 +1801,7 @@ impl SetupInitialDKGArgs {
         for node_id in self.node_ids.iter() {
             if !set.insert(NodeId::new(*node_id)) {
                 return Err(UserError::new(
-                    ErrorCode::CanisterContractViolation,
+                    ErrorCode::InvalidManagementPayload,
                     format!(
                         "Expected a set of NodeIds. The NodeId {} is repeated",
                         node_id
@@ -2304,7 +2304,7 @@ impl ComputeInitialEcdsaDealingsArgs {
         for node_id in self.nodes.iter() {
             if !set.insert(NodeId::new(*node_id)) {
                 return Err(UserError::new(
-                    ErrorCode::CanisterContractViolation,
+                    ErrorCode::InvalidManagementPayload,
                     format!(
                         "Expected a set of NodeIds. The NodeId {} is repeated",
                         node_id
@@ -2384,6 +2384,26 @@ impl ComputeInitialIDkgDealingsArgs {
             nodes: nodes.iter().map(|id| id.get()).collect(),
             registry_version: registry_version.get(),
         }
+    }
+
+    pub fn get_set_of_nodes(&self) -> Result<BTreeSet<NodeId>, UserError> {
+        let mut set = BTreeSet::<NodeId>::new();
+        for node_id in self.nodes.iter() {
+            if !set.insert(NodeId::new(*node_id)) {
+                return Err(UserError::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!(
+                        "Expected a set of NodeIds. The NodeId {} is repeated",
+                        node_id
+                    ),
+                ));
+            }
+        }
+        Ok(set)
+    }
+
+    pub fn get_registry_version(&self) -> RegistryVersion {
+        RegistryVersion::new(self.registry_version)
     }
 }
 

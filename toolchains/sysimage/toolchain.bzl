@@ -78,8 +78,8 @@ def _build_container_filesystem_impl(ctx):
     for context_file in ctx.files.context_files:
         args.extend(["--context-file", context_file.path])
 
-    for input_target, install_target in ctx.attr.rootfs_files.items():
-        args.extend(["--rootfs-file", input_target.files.to_list()[0].path + ":" + install_target])
+    for input_target, install_target in ctx.attr.component_files.items():
+        args.extend(["--component-file", input_target.files.to_list()[0].path + ":" + install_target])
         inputs += input_target.files.to_list()
 
     config_file = ctx.file.config_file
@@ -120,7 +120,7 @@ build_container_filesystem = rule(
         "context_files": attr.label_list(
             allow_files = True,
         ),
-        "rootfs_files": attr.label_keyed_string_dict(
+        "component_files": attr.label_keyed_string_dict(
             allow_files = True,
         ),
         "config_file": attr.label(

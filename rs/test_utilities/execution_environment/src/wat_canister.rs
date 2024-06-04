@@ -283,7 +283,12 @@ pub fn wat_canister() -> WatCanisterBuilder {
     WatCanisterBuilder::new()
 }
 
-/// WAT canister builder, allows to create a WAT canister with multiple functions with different content.
+/// The WAT canister builder creates a WAT canister with multiple functions of varying content.
+///
+/// A WAT canister allows for modifiable behavior within tests.
+/// It is similar to the `universal_canister` but addresses specific cases the UC can't.
+/// It modifies methods that occur right after start and before any update call,
+/// covering `init()`, `start()`, and `post_upgrade()` methods.
 pub struct WatCanisterBuilder {
     functions: Vec<WatFunc>,
     memory_offset: i32,
@@ -402,6 +407,11 @@ impl WatCanisterBuilder {
             {data}
         )"#
         )
+    }
+
+    /// Build the Wasm for the WAT canister.
+    pub fn build_wasm(&self) -> Vec<u8> {
+        wat::parse_str(self.build()).unwrap()
     }
 
     fn get_memory_offset(&mut self, message: &[u8]) -> i32 {

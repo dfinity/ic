@@ -680,31 +680,6 @@ impl NnsFunction {
     }
 }
 
-/// Given two quantities of stake with possible associated age, return the
-/// combined stake and the combined age.
-pub fn combine_aged_stakes(
-    x_stake_e8s: u64,
-    x_age_seconds: u64,
-    y_stake_e8s: u64,
-    y_age_seconds: u64,
-) -> (u64, u64) {
-    if x_stake_e8s == 0 && y_stake_e8s == 0 {
-        (0, 0)
-    } else {
-        let total_age_seconds: u128 = (x_stake_e8s as u128 * x_age_seconds as u128
-            + y_stake_e8s as u128 * y_age_seconds as u128)
-            / (x_stake_e8s as u128 + y_stake_e8s as u128);
-
-        // Note that age is adjusted in proportion to the stake, but due to the
-        // discrete nature of u64 numbers, some resolution is lost due to the
-        // division above. Only if x_age * x_stake is a multiple of y_stake does
-        // the age remain constant after this operation. However, in the end, the
-        // most that can be lost due to rounding from the actual age, is always
-        // less than 1 second, so this is not a problem.
-        (x_stake_e8s + y_stake_e8s, total_age_seconds as u64)
-    }
-}
-
 impl Proposal {
     /// Whether this proposal is restricted, that is, whether neuron voting
     /// eligibility depends on the content of this proposal.

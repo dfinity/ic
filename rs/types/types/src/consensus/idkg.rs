@@ -186,7 +186,7 @@ impl EcdsaPayload {
         Self {
             key_transcripts: key_transcripts
                 .into_iter()
-                .map(|key_transcript| (key_transcript.get_master_public_key_id(), key_transcript))
+                .map(|key_transcript| (key_transcript.key_id(), key_transcript))
                 .collect(),
             uid_generator: EcdsaUIDGenerator::new(subnet_id, height),
             signature_agreements: BTreeMap::new(),
@@ -469,9 +469,9 @@ pub struct EcdsaKeyTranscript {
     /// Progress of creating the next ECDSA key transcript.
     pub next_in_creation: KeyTranscriptCreation,
     /// Key id.
-    pub key_id: EcdsaKeyId,
+    pub key_id: Option<EcdsaKeyId>,
     /// Master key Id allowing different signature schemes.
-    pub master_key_id: Option<MasterPublicKeyId>,
+    pub master_key_id: MasterPublicKeyId,
 }
 
 impl Hash for EcdsaKeyTranscript {
@@ -484,10 +484,10 @@ impl Hash for EcdsaKeyTranscript {
         } = self;
         current.hash(state);
         next_in_creation.hash(state);
-        key_id.hash(state);
-        if let Some(master_key_id) = master_key_id {
-            master_key_id.hash(state);
+        if let Some(key_id) = key_id {
+            key_id.hash(state);
         }
+        master_key_id.hash(state);
     }
 }
 
@@ -495,9 +495,9 @@ impl EcdsaKeyTranscript {
     pub fn new(key_id: EcdsaKeyId, next_in_creation: KeyTranscriptCreation) -> Self {
         Self {
             current: None,
-            master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id.clone())),
+            master_key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
             next_in_creation,
-            key_id,
+            key_id: Some(key_id),
         }
     }
 
@@ -510,15 +510,8 @@ impl EcdsaKeyTranscript {
             current: current.or_else(|| self.current.clone()),
             next_in_creation,
             key_id: self.key_id.clone(),
-            master_key_id: Some(MasterPublicKeyId::Ecdsa(self.key_id.clone())),
+            master_key_id: self.master_key_id.clone(),
         }
-    }
-
-    // TODO: Adapt this function once `[EcdsaKeyTranscript::master_key_id]` is available.
-    pub(crate) fn get_master_public_key_id(&self) -> MasterPublicKeyId {
-        self.master_key_id
-            .clone()
-            .unwrap_or_else(|| MasterPublicKeyId::Ecdsa(self.key_id.clone()))
     }
 
     pub fn get_refs(&self) -> Vec<TranscriptRef> {
@@ -616,11 +609,10 @@ impl From<EcdsaKeyTranscript> for pb::EcdsaKeyTranscript {
             next_in_creation: Some(pb::KeyTranscriptCreation::from(
                 &transcript.next_in_creation,
             )),
-            key_id: Some(crypto_pb::EcdsaKeyId::from(&transcript.key_id)),
-            master_key_id: transcript
-                .master_key_id
-                .as_ref()
-                .map(|key_id| key_id.into()),
+            key_id: transcript.key_id.as_ref().map(|key_id| key_id.into()),
+            master_key_id: Some(crypto_pb::MasterPublicKeyId::from(
+                &transcript.master_key_id,
+            )),
         }
     }
 }
@@ -635,7 +627,11 @@ impl TryFrom<pb::EcdsaKeyTranscript> for EcdsaKeyTranscript {
     type Error = ProxyDecodeError;
 
     fn try_from(proto: pb::EcdsaKeyTranscript) -> Result<Self, Self::Error> {
-        let key_id = try_from_option_field(proto.key_id, "KeyTranscript::key_id")?;
+        let key_id = proto
+            .key_id
+            .clone()
+            .map(|key_id| key_id.try_into())
+            .transpose()?;
 
         let current = proto
             .current
@@ -648,11 +644,8 @@ impl TryFrom<pb::EcdsaKeyTranscript> for EcdsaKeyTranscript {
             "KeyTranscript::next_in_creation",
         )?;
 
-        let master_key_id = proto
-            .master_key_id
-            .clone()
-            .map(|key_id| key_id.try_into())
-            .transpose()?;
+        let master_key_id =
+            try_from_option_field(proto.master_key_id, "KeyTranscript::master_key_id")?;
 
         Ok(Self {
             key_id,
@@ -1841,7 +1834,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         for key_transcript_proto in key_transcripts_protos {
             let key_transcript = EcdsaKeyTranscript::try_from(key_transcript_proto)?;
 
-            key_transcripts.insert(key_transcript.get_master_public_key_id(), key_transcript);
+            key_transcripts.insert(key_transcript.key_id(), key_transcript);
         }
 
         let mut signature_agreements = BTreeMap::new();
@@ -2172,7 +2165,7 @@ impl HasMasterPublicKeyId for EcdsaReshareRequest {
 
 impl HasMasterPublicKeyId for EcdsaKeyTranscript {
     fn key_id(&self) -> MasterPublicKeyId {
-        self.get_master_public_key_id()
+        self.master_key_id.clone()
     }
 }
 
