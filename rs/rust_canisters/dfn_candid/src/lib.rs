@@ -11,7 +11,7 @@ use serde::de::DeserializeOwned;
 pub struct Candid<T>(pub T);
 
 pub trait HasCandidDecoderConfig {
-    fn decoding_quota() -> Option<usize>;
+    fn decoding_quota() -> usize;
 }
 
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
@@ -27,9 +27,7 @@ fn default_decoder_config() -> DecoderConfig {
 
 fn decoder_config<T: HasCandidDecoderConfig>() -> DecoderConfig {
     let mut config = DecoderConfig::new();
-    if let Some(decoding_quota) = T::decoding_quota() {
-        config.set_decoding_quota(decoding_quota);
-    }
+    config.set_decoding_quota(T::decoding_quota());
     config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
     config.set_full_error_message(false);
     config

@@ -40,11 +40,11 @@ impl HttpRequest {
 }
 
 impl HasCandidDecoderConfig for HttpRequest {
-    fn decoding_quota() -> Option<usize> {
+    fn decoding_quota() -> usize {
         // We don't expect HTTP requests exceeding a few KiB in size
         // and thus a decoding quota of 10K is supposed to cover
         // all legit use cases.
-        Some(10_000)
+        10_000
     }
 }
 
