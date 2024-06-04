@@ -1015,6 +1015,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "blocking",
                     "http2",
                     "json",
+                    "multipart",
                     "rustls-tls",
                     "rustls-tls-native-roots",
                     "stream",
