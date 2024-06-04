@@ -2,7 +2,6 @@ workspace(
     name = "ic",
 )
 
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
 load("//third_party/lmdb-0.9.70:repository.bzl", "lmdb_repository")
 load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
@@ -470,16 +469,16 @@ http_jar(
 
 # Official WebAssembly test suite.
 # To be used for testing libraries that handle canister Wasm code.
-
-new_git_repository(
+http_archive(
     name = "wasm_spec_testsuite",
     build_file_content = """filegroup(
-        name = "wast_files",
-        srcs = glob(["**/*.wast"]),
-        visibility = ["//visibility:public"]
-    )""",
-    commit = "4f77306bb63151631d84f58dedf67958eb9911b9",
-    remote = "https://github.com/WebAssembly/testsuite.git",
+         name = "wast_files",
+         srcs = glob(["**/*.wast"]),
+         visibility = ["//visibility:public"]
+     )""",
+    sha256 = "9afc0e7c250b5f0dcf32e9a95860b99a392ab78a653fcf3705778e8a9357f3c4",
+    strip_prefix = "testsuite-4f77306bb63151631d84f58dedf67958eb9911b9",
+    url = "https://github.com/WebAssembly/testsuite/archive/4f77306bb63151631d84f58dedf67958eb9911b9.tar.gz",
 )
 
 mainnet_core_nns_canisters()
