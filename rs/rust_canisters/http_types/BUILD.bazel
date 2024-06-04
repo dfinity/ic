@@ -7,6 +7,7 @@ rust_library(
     srcs = ["src/lib.rs"],
     crate_name = "ic_canisters_http_types",
     deps = [
+        "//rs/rust_canisters/dfn_candid",
         "@crate_index//:candid",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",

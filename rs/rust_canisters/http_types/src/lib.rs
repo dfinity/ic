@@ -1,4 +1,5 @@
 use candid::{CandidType, Deserialize};
+use dfn_candid::HasCandidDecoderConfig;
 use serde_bytes::ByteBuf;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -35,6 +36,15 @@ impl HttpRequest {
             }
         }
         None
+    }
+}
+
+impl HasCandidDecoderConfig for HttpRequest {
+    fn decoding_quota() -> Option<usize> {
+        // We don't expect HTTP requests exceeding a few KiB in size
+        // and thus a decoding quota of 10K is supposed to cover
+        // all legit use cases.
+        Some(10_000)
     }
 }
 
