@@ -116,7 +116,7 @@ DEPENDENCIES = [
     "@crate_index//:flate2",
     "@crate_index//:futures",
     "@crate_index//:hex",
-    "@crate_index//:http",
+    "@crate_index//:http_0_2_12",
     "@crate_index//:humantime",
     "@crate_index//:hyper-rustls",
     "@crate_index//:hyper_0_14_27",
@@ -182,7 +182,7 @@ GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
 
 GUESTOS_RUNTIME_DEPS = [
     GUESTOS_DEV_VERSION,
-    "//ic-os:scripts/build-bootstrap-config-image.sh",
+    "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
 ]
 
 MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]

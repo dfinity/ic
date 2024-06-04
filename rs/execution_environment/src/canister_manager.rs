@@ -448,6 +448,8 @@ impl CanisterManager {
             | Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::ComputeInitialEcdsaDealings)
             | Ok(Ic00Method::ComputeInitialIDkgDealings)
+            | Ok(Ic00Method::SchnorrPublicKey)
+            | Ok(Ic00Method::SignWithSchnorr)
             // "DepositCycles" can be called by anyone however as ingress message
             // cannot carry cycles, it does not make sense to allow them from users.
             | Ok(Ic00Method::DepositCycles)
@@ -1255,6 +1257,10 @@ impl CanisterManager {
 
         // Take out the canister from `ReplicatedState`.
         let canister_to_delete = state.take_canister_state(&canister_id_to_delete).unwrap();
+        state
+            .canister_snapshots
+            .delete_snapshots(canister_to_delete.canister_id());
+
         // Leftover cycles in the balance are considered `consumed`.
         let leftover_cycles = NominalCycles::from(canister_to_delete.system_state.balance());
         let consumed_cycles_by_canister_to_delete = leftover_cycles

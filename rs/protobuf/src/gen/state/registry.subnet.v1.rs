@@ -100,6 +100,14 @@ pub struct EcdsaInitialization {
     #[prost(message, optional, tag = "2")]
     pub dealings: ::core::option::Option<InitialIDkgDealings>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ChainKeyInitialization {
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::crypto::v1::MasterPublicKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub dealings: ::core::option::Option<InitialIDkgDealings>,
+}
 /// Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
 /// a CUP with no dependencies on previous CUPs or blocks). Such CUP materials can be used to
 /// construct the genesis CUP or a recovery CUP in the event of a subnet stall.
@@ -129,6 +137,9 @@ pub struct CatchUpPackageContents {
     /// / The initial ECDSA dealings for boot strapping target subnets.
     #[prost(message, repeated, tag = "7")]
     pub ecdsa_initializations: ::prost::alloc::vec::Vec<EcdsaInitialization>,
+    /// / The initial IDkg dealings for boot strapping target chain key subnets.
+    #[prost(message, repeated, tag = "8")]
+    pub chain_key_initializations: ::prost::alloc::vec::Vec<ChainKeyInitialization>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

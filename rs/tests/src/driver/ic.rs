@@ -12,12 +12,10 @@ use crate::util::block_on;
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
-use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_regedit;
 use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
-use ic_types::p2p::build_default_gossip_config;
 use ic_types::{Height, NodeId, PrincipalId};
 use phantom_newtype::AmountOf;
 use registry_canister::mutations::node_management::do_update_node_ipv4_config_directly::IPv4Config;
@@ -414,7 +412,6 @@ pub struct Subnet {
     pub dkg_dealings_per_block: Option<usize>,
     // NOTE: Some values in this config, like the http port,
     // are overwritten in `update_and_write_node_config`.
-    pub gossip_config: GossipConfig,
     pub subnet_type: SubnetType,
     pub max_instructions_per_message: Option<u64>,
     pub max_instructions_per_round: Option<u64>,
@@ -444,7 +441,6 @@ impl Subnet {
             initial_notary_delay: None,
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
-            gossip_config: build_default_gossip_config(),
             max_instructions_per_message: None,
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
@@ -678,7 +674,6 @@ impl Default for Subnet {
             initial_notary_delay: None,
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
-            gossip_config: build_default_gossip_config(),
             subnet_type: SubnetType::System,
             max_instructions_per_message: None,
             max_instructions_per_round: None,

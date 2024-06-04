@@ -37,7 +37,7 @@ pub use inter_canister::{
 };
 pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
 use phantom_newtype::Id;
-pub use query::{AnonymousQuery, AnonymousQueryResponse, AnonymousQueryResponseReply, UserQuery};
+pub use query::{Query, QuerySource};
 pub use read_state::ReadState;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug, Display, Formatter};

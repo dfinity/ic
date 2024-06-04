@@ -1,0 +1,12 @@
+[Unit]
+Description=Set up ssh account keys
+Before=ssh.service
+# bootstrap-ic-node.service (if it exists) lists this service as a reverse dependency
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-ssh-account-keys.sh

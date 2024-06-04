@@ -1,8 +1,7 @@
 //! Module that deals with requests to /api/v2/canister/.../call
 
 use crate::{
-    common::{Cbor, CborUserError},
-    validator_executor::ValidatorExecutor,
+    common::{build_validator, validation_error_to_http_error, Cbor, CborUserError},
     HttpError, IngressFilterService,
 };
 
@@ -19,6 +18,7 @@ use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info_sample, replica_logger::no_op_logger, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
+    crypto::root_of_trust::RegistryRootOfTrustProvider,
     provisional_whitelist::ProvisionalWhitelistRegistry,
     subnet::{IngressMessageSettings, SubnetRegistry},
 };
@@ -28,8 +28,10 @@ use ic_types::{
     artifact_kind::IngressArtifact,
     malicious_flags::MaliciousFlags,
     messages::{HttpCallContent, HttpRequestEnvelope, SignedIngress, SignedIngressContent},
+    time::current_time,
     CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
 };
+use ic_validator::HttpRequestVerifier;
 use std::convert::{Infallible, TryInto};
 use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
@@ -42,7 +44,7 @@ pub struct CallService {
     node_id: NodeId,
     subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
-    validator_executor: ValidatorExecutor<SignedIngressContent>,
+    validator: Arc<dyn HttpRequestVerifier<SignedIngressContent, RegistryRootOfTrustProvider>>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
@@ -106,12 +108,7 @@ impl CallServiceBuilder {
             node_id: self.node_id,
             subnet_id: self.subnet_id,
             registry_client: self.registry_client.clone(),
-            validator_executor: ValidatorExecutor::new(
-                self.registry_client,
-                self.ingress_verifier,
-                &self.malicious_flags.unwrap_or_default(),
-                log,
-            ),
+            validator: build_validator(self.ingress_verifier, self.malicious_flags),
             ingress_filter: self.ingress_filter,
             ingress_throttler: self.ingress_throttler,
             ingress_tx: self.ingress_tx,
@@ -186,7 +183,7 @@ pub(crate) async fn call(
         node_id,
         subnet_id,
         registry_client,
-        validator_executor,
+        validator,
         ingress_filter,
         ingress_throttler,
         ingress_tx,
@@ -237,11 +234,23 @@ pub(crate) async fn call(
         return (status, text).into_response();
     }
 
-    if let Err(http_err) = validator_executor
-        .validate_request(msg.as_ref().clone(), registry_version)
-        .await
+    let root_of_trust_provider =
+        RegistryRootOfTrustProvider::new(Arc::clone(&registry_client), registry_version);
+    // Since spawn blocking requires 'static we can't use any references
+    let request_c = msg.as_ref().clone();
+    match tokio::task::spawn_blocking(move || {
+        validator.validate_request(&request_c, current_time(), &root_of_trust_provider)
+    })
+    .await
     {
-        return (http_err.status, http_err.message).into_response();
+        Ok(Ok(_)) => {}
+        Ok(Err(err)) => {
+            let http_err = validation_error_to_http_error(message_id, err, &log);
+            return (http_err.status, http_err.message).into_response();
+        }
+        Err(_) => {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
     }
 
     let ingress_filter = ingress_filter.lock().unwrap().clone();

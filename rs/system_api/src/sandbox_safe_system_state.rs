@@ -240,6 +240,8 @@ impl SystemStateChanges {
             | Ok(Ic00Method::ECDSAPublicKey)
             | Ok(Ic00Method::ComputeInitialEcdsaDealings)
             | Ok(Ic00Method::ComputeInitialIDkgDealings)
+            | Ok(Ic00Method::SchnorrPublicKey)
+            | Ok(Ic00Method::SignWithSchnorr)
             | Ok(Ic00Method::ProvisionalTopUpCanister)
             | Ok(Ic00Method::BitcoinSendTransactionInternal)
             | Ok(Ic00Method::BitcoinGetSuccessors)
@@ -453,7 +455,7 @@ impl SystemStateChanges {
 
         // Verify new certified data isn't too long and set it.
         if let Some(certified_data) = self.new_certified_data.as_ref() {
-            if certified_data.len() > CERTIFIED_DATA_MAX_LENGTH as usize {
+            if certified_data.len() > CERTIFIED_DATA_MAX_LENGTH {
                 return Err(Self::error("Certified data is too large"));
             }
             system_state.certified_data = certified_data.clone();

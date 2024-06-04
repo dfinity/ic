@@ -13,5 +13,5 @@ ic-registry-client-fake = { path = "../../../registry/fake" }
 ic-registry-keys = { path = "../../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provider" }
 ic-types = { path = "../../../types/types" }
-rand = "0.8"
-rand_chacha = "0.3"
+rand = { workspace = true }
+rand_chacha = { workspace = true }

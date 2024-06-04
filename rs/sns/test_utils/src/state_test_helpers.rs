@@ -181,7 +181,7 @@ pub fn setup_sns_canisters(
 }
 
 pub fn sns_governance_list_neurons(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     sns_governance_canister_id: CanisterId,
     request: &ListNeurons,
 ) -> ListNeuronsResponse {
@@ -205,7 +205,7 @@ pub fn sns_governance_list_neurons(
 }
 
 pub fn sns_governance_get_nervous_system_parameters(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     sns_governance_canister_id: CanisterId,
 ) -> NervousSystemParameters {
     let result = state_machine
@@ -229,7 +229,7 @@ pub fn sns_governance_get_nervous_system_parameters(
 
 #[must_use]
 fn manage_neuron(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     sns_governance_canister_id: CanisterId,
     sender: PrincipalId,
     neuron_id: NeuronId,
@@ -257,7 +257,7 @@ fn manage_neuron(
 }
 
 pub fn sns_cast_vote(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     sns_governance_canister_id: CanisterId,
     sender: PrincipalId,
     neuron_id: NeuronId,
@@ -279,7 +279,7 @@ pub fn sns_cast_vote(
 }
 
 pub fn participate_in_swap(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     swap_canister_id: CanisterId,
     participant_principal_id: PrincipalId,
     amount: ExplosiveTokens,
@@ -361,7 +361,7 @@ pub fn init_canister(
 }
 
 pub fn send_participation_funds(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     swap_canister_id: CanisterId,
     participant_principal_id: PrincipalId,
     amount: ExplosiveTokens,
@@ -400,7 +400,7 @@ pub fn send_participation_funds(
 }
 
 pub fn swap_get_state(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     swap_canister_id: CanisterId,
     request: &swap_pb::GetStateRequest,
 ) -> swap_pb::GetStateResponse {

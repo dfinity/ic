@@ -995,7 +995,7 @@ mod authenticated_requests_delegations {
     use crate::RequestValidationError::{CanisterNotInDelegationTargets, InvalidSignature};
     use crate::{HttpRequestVerifier, RequestValidationError};
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_types::messages::{HttpRequest, ReadState, SignedIngressContent, UserQuery};
+    use ic_types::messages::{HttpRequest, Query, ReadState, SignedIngressContent};
     use ic_types::{CanisterId, Time};
     use ic_validator_http_request_test_utils::{
         AuthenticationScheme, DelegationChain, DelegationChainBuilder,
@@ -1820,7 +1820,7 @@ mod authenticated_requests_delegations {
     fn test_all_request_types_with_delegation_chain<
         Verifier: HttpRequestVerifier<SignedIngressContent>
             + HttpRequestVerifier<ReadState>
-            + HttpRequestVerifier<UserQuery>,
+            + HttpRequestVerifier<Query>,
         F: FnMut(Result<(), RequestValidationError>, String),
     >(
         verifier: &Verifier,

@@ -956,3 +956,36 @@ fn load_canister_snapshot_decode_round_trip() {
         LoadCanisterSnapshotArgs::decode(encoded_args.as_slice()).unwrap()
     );
 }
+
+#[test]
+fn snapshot_is_deleted_with_canister_delete() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create new canister.
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    let snapshot_id = CanisterSnapshotResponse::decode(&result.unwrap().bytes())
+        .unwrap()
+        .snapshot_id();
+    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+
+    // Delete the canister, snapshot is also deleted.
+    test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    test.delete_canister(canister_id).unwrap();
+
+    // Canister is deleted together with the canister snapshot.
+    assert!(test.state().canister_state(&canister_id).is_none());
+    assert!(test.state().canister_snapshots.get(snapshot_id).is_none());
+}

@@ -20,6 +20,7 @@ system_test(
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],
@@ -33,6 +34,7 @@ system_test(
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "system_test_hotfix",
         "system_test_nightly",
     ],
@@ -48,10 +50,11 @@ system_test(
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = ["//ic-os:scripts/build-bootstrap-config-image.sh"] + GRAFANA_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS,
+    runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"] + GRAFANA_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )

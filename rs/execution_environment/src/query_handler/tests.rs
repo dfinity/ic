@@ -8,7 +8,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_types::ids::user_test_id;
-use ic_types::{ingress::WasmResult, messages::UserQuery, Cycles, NumInstructions};
+use ic_types::{
+    ingress::WasmResult,
+    messages::{Query, QuerySource},
+    Cycles, NumInstructions,
+};
 use std::sync::Arc;
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -47,8 +51,12 @@ fn query_metrics_are_reported() {
     let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
     let output = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_a,
             method_name: "query".to_string(),
             method_payload: wasm()
@@ -57,8 +65,6 @@ fn query_metrics_are_reported() {
                     call_args().other_side(wasm().reply_data(b"pong".as_ref())),
                 )
                 .build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -202,8 +208,12 @@ fn query_call_with_side_effects() {
     let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
     let output = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_a,
             method_name: "query".to_string(),
             method_payload: wasm()
@@ -215,8 +225,6 @@ fn query_call_with_side_effects() {
                         .on_reply(wasm().stable_size().reply_int()),
                 )
                 .build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -236,8 +244,12 @@ fn query_calls_disabled_for_application_subnet() {
     let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
     let output = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_a,
             method_name: "query".to_string(),
             method_payload: wasm()
@@ -249,8 +261,6 @@ fn query_calls_disabled_for_application_subnet() {
                         .on_reply(wasm().stable_size().reply_int()),
                 )
                 .build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -305,13 +315,15 @@ fn query_callgraph_depth_is_enforced() {
         num_calls: usize,
     ) -> Result<WasmResult, UserError> {
         test.query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "query".to_string(),
                 method_payload: generate_call_to(canisters, num_calls).build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -387,13 +399,15 @@ fn query_callgraph_max_instructions_is_enforced() {
     // Those should succeed
     for num_calls in 1..NUM_SUCCESSFUL_QUERIES {
         let test = test.query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "query".to_string(),
                 method_payload: generate_call_to(&canisters, num_calls as usize).build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -408,13 +422,15 @@ fn query_callgraph_max_instructions_is_enforced() {
     }
     for num_calls in NUM_SUCCESSFUL_QUERIES..NUM_CANISTERS {
         let test = test.query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "query".to_string(),
                 method_payload: generate_call_to(&canisters, num_calls as usize).build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -471,13 +487,15 @@ fn composite_query_callgraph_depth_is_enforced() {
         num_calls: usize,
     ) -> Result<WasmResult, UserError> {
         test.query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
                 method_payload: generate_composite_call_to(canisters, num_calls).build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -541,13 +559,15 @@ fn composite_query_recursive_calls() {
     }
 
     test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister,
             method_name: "composite_query".to_string(),
             method_payload: generate_composite_call_to(canister, NUM_CALLS).build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -599,13 +619,15 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
     // Those should succeed
     for num_calls in 1..NUM_SUCCESSFUL_QUERIES {
         let test = test.query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
                 method_payload: generate_call_to(&canisters, num_calls as usize).build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -620,13 +642,15 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
     }
     for num_calls in NUM_SUCCESSFUL_QUERIES..NUM_CANISTERS {
         let test = test.query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
                 method_payload: generate_call_to(&canisters, num_calls as usize).build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -670,13 +694,15 @@ fn query_compiled_once() {
         .clear_compilation_cache_for_testing();
 
     let result = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_id,
             method_name: "query".to_string(),
             method_payload: wasm().reply().build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -690,13 +716,15 @@ fn query_compiled_once() {
     assert_eq!(2, query_handler.hypervisor.compile_count());
 
     let result = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_id,
             method_name: "query".to_string(),
             method_payload: wasm().reply().build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -737,13 +765,15 @@ fn queries_to_frozen_canisters_are_rejected() {
 
     // Canister A is below its freezing threshold, so queries will be rejected.
     let result = test.query(
-        UserQuery {
-            source: user_test_id(0),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(0),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_a,
             method_name: "query".to_string(),
             method_payload: wasm().reply().build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -762,13 +792,15 @@ fn queries_to_frozen_canisters_are_rejected() {
     // Canister B has a high cycles balance that's above its freezing
     // threshold and so it can still process queries.
     let result = test.query(
-        UserQuery {
-            source: user_test_id(1),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(1),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_b,
             method_name: "query".to_string(),
             method_payload: wasm().reply().build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -798,13 +830,15 @@ fn composite_query_works_in_non_replicated_mode() {
 
     let result = test
         .query(
-            UserQuery {
-                source: user_test_id(0),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(0),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canister,
                 method_name: "query".to_string(),
                 method_payload: vec![],
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -822,13 +856,15 @@ fn composite_query_fails_if_disabled() {
 
     let result = test
         .query(
-            UserQuery {
-                source: user_test_id(0),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(0),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canister,
                 method_name: "query".to_string(),
                 method_payload: vec![],
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -887,13 +923,15 @@ fn composite_query_single_user_response() {
 
     let result = test
         .query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
                 method_payload: canister_0.build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -932,13 +970,15 @@ fn composite_query_single_canister_response() {
 
     let result = test
         .query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
                 method_payload: canister_0.build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -976,13 +1016,15 @@ fn composite_query_no_user_response() {
 
     let err = test
         .query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
                 method_payload: canister_0.build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -1033,13 +1075,15 @@ fn composite_query_no_canister_response() {
 
     let result = test
         .query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
                 method_payload: canister_0.build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -1072,13 +1116,15 @@ fn composite_query_chained_calls() {
 
     let result = test
         .query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canister_a,
                 method_name: "composite_query".to_string(),
                 method_payload: a.build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -1140,13 +1186,15 @@ fn composite_query_syscalls_from_reply_reject_callback() {
             );
 
             let output = test.query(
-                UserQuery {
-                    source: user_test_id(2),
+                Query {
+                    source: QuerySource::User {
+                        user_id: user_test_id(2),
+                        ingress_expiry: 0,
+                        nonce: None,
+                    },
                     receiver: canisters[0],
                     method_name: "composite_query".to_string(),
                     method_payload: canister_0.build(),
-                    ingress_expiry: 0,
-                    nonce: None,
                 },
                 Arc::new(test.state().clone()),
                 vec![],
@@ -1208,13 +1256,15 @@ fn composite_query_state_preserved_across_sequential_calls() {
     );
 
     let output = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canisters[0],
             method_name: "composite_query".to_string(),
             method_payload: payload.build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -1276,13 +1326,15 @@ fn composite_query_state_preserved_across_parallel_calls() {
     );
 
     let output = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canisters[0],
             method_name: "composite_query".to_string(),
             method_payload: payload.build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -1348,13 +1400,15 @@ fn query_stats_are_collected() {
 
     // Run query
     let _ = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canisters[0],
             method_name: "composite_query".to_string(),
             method_payload: payload.build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -1397,13 +1451,15 @@ fn test_incorrect_query_name() {
     let test = ExecutionTestBuilder::new().build();
     let method = "unknown method".to_string();
     let Err(err) = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: CanisterId::ic_00(),
             method_name: method.clone(),
             method_payload: vec![],
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -1455,13 +1511,15 @@ fn test_bitcoin_query_bitcoin_canister_not_set() {
 
         for (method, payload) in tests {
             match test.query(
-                UserQuery {
-                    source: user_test_id(2),
+                Query {
+                    source: QuerySource::User {
+                        user_id: user_test_id(2),
+                        ingress_expiry: 0,
+                        nonce: None,
+                    },
                     receiver: CanisterId::ic_00(),
                     method_name: method.to_string(),
                     method_payload: payload,
-                    ingress_expiry: 0,
-                    nonce: None,
                 },
                 Arc::new(test.state().clone()),
                 vec![],
@@ -1538,13 +1596,15 @@ fn test_canister_routing(test: ExecutionTest, networks: Vec<BitcoinNetwork>) {
         ];
         for (method, payload) in tests {
             match test.query(
-                UserQuery {
-                    source: user_test_id(2),
+                Query {
+                    source: QuerySource::User {
+                        user_id: user_test_id(2),
+                        ingress_expiry: 0,
+                        nonce: None,
+                    },
                     receiver: CanisterId::ic_00(),
                     method_name: method.to_string(),
                     method_payload: payload,
-                    ingress_expiry: 0,
-                    nonce: None,
                 },
                 Arc::new(test.state().clone()),
                 vec![],
@@ -1729,13 +1789,15 @@ fn query_call_exceeds_instructions_limit() {
     let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
     let output = test.query(
-        UserQuery {
-            source: user_test_id(1),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(1),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister,
             method_name: "query".to_string(),
             method_payload: wasm().stable_grow(10).build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],

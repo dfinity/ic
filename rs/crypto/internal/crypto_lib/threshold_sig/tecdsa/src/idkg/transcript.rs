@@ -425,6 +425,7 @@ impl CommitmentOpening {
     /// * `UnableToReconstruct`: internal error denoting that the received openings
     ///   cannot be used to recompute a share.
     pub(crate) fn from_dealings_and_openings(
+        alg: IdkgProtocolAlgorithm,
         verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
         provided_openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
         transcript_commitment: &CombinedCommitment,
@@ -432,7 +433,7 @@ impl CommitmentOpening {
         receiver_index: NodeIndex,
         secret_key: &MEGaPrivateKey,
         public_key: &MEGaPublicKey,
-    ) -> Result<Self, IDkgComputeSecretSharesInternalError> {
+    ) -> Result<Self, IDkgComputeSecretSharesWithOpeningsInternalError> {
         let mut openings = Vec::with_capacity(verified_dealings.len());
 
         for (dealer_index, dealing) in verified_dealings {
@@ -442,18 +443,20 @@ impl CommitmentOpening {
                 reconstruct_share_from_openings(dealing, shares, receiver_index).map_err(|e| {
                     match e {
                         CanisterThresholdError::InsufficientOpenings(have, req) => {
-                            IDkgComputeSecretSharesInternalError::InsufficientOpenings(have, req)
+                            IDkgComputeSecretSharesWithOpeningsInternalError::InsufficientOpenings(
+                                have, req,
+                            )
                         }
-                        e => IDkgComputeSecretSharesInternalError::UnableToReconstruct(format!(
-                            "{:?}",
-                            e
-                        )),
+                        e => IDkgComputeSecretSharesWithOpeningsInternalError::UnableToReconstruct(
+                            format!("{:?}", e),
+                        ),
                     }
                 })?
             } else {
                 dealing
                     .ciphertext
                     .decrypt_and_check(
+                        alg,
                         &dealing.commitment,
                         context_data,
                         *dealer_index,
@@ -463,9 +466,9 @@ impl CommitmentOpening {
                     )
                     .map_err(|e| match e {
                         CanisterThresholdError::InvalidCommitment => {
-                            IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued
+                            IDkgComputeSecretSharesWithOpeningsInternalError::ComplaintShouldBeIssued
                         }
-                        e => IDkgComputeSecretSharesInternalError::InvalidCiphertext(format!(
+                        e => IDkgComputeSecretSharesWithOpeningsInternalError::InvalidCiphertext(format!(
                             "Ciphertext {}/{} failed to decrypt {:?}",
                             dealer_index,
                             verified_dealings.len(),
@@ -480,12 +483,13 @@ impl CommitmentOpening {
         Self::combine_openings(&openings, transcript_commitment, receiver_index).map_err(
             |e| match e {
                 CanisterThresholdError::InsufficientOpenings(have, req) => {
-                    IDkgComputeSecretSharesInternalError::InsufficientOpenings(have, req)
+                    IDkgComputeSecretSharesWithOpeningsInternalError::InsufficientOpenings(
+                        have, req,
+                    )
                 }
-                e => IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(format!(
-                    "{:?}",
-                    e
-                )),
+                e => IDkgComputeSecretSharesWithOpeningsInternalError::UnableToCombineOpenings(
+                    format!("{:?}", e),
+                ),
             },
         )
     }
@@ -506,6 +510,7 @@ impl CommitmentOpening {
     /// * `UnableToCombineOpenings`: internal error denoting that the decrypted
     ///   share cannot be combined.
     pub(crate) fn from_dealings(
+        alg: IdkgProtocolAlgorithm,
         verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
         transcript_commitment: &CombinedCommitment,
         context_data: &[u8],
@@ -520,6 +525,7 @@ impl CommitmentOpening {
             let opening = dealing
                 .ciphertext
                 .decrypt_and_check(
+                    alg,
                     &dealing.commitment,
                     context_data,
                     *dealer_index,

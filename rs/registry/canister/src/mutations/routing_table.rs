@@ -1,6 +1,6 @@
 use crate::{
-    common::LOG_PREFIX, mutations::common::decode_registry_value,
-    pb::v1::GetSubnetForCanisterResponse, registry::Registry,
+    common::LOG_PREFIX, mutations::common::decode_registry_value, pb::v1::SubnetForCanister,
+    registry::Registry,
 };
 
 use std::convert::TryFrom;
@@ -196,7 +196,7 @@ impl Registry {
     pub fn get_subnet_for_canister(
         &self,
         principal_id: &PrincipalId,
-    ) -> Result<GetSubnetForCanisterResponse, GetSubnetForCanisterError> {
+    ) -> Result<SubnetForCanister, GetSubnetForCanisterError> {
         let latest_version = self.latest_version();
         let routing_table = self.get_routing_table_or_panic(latest_version);
         let canister_id = CanisterId::try_from(*principal_id)
@@ -206,7 +206,7 @@ impl Registry {
             .lookup_entry(canister_id)
             .map(|(_, subnet_id)| subnet_id.get())
         {
-            Some(subnet_id) => Ok(GetSubnetForCanisterResponse {
+            Some(subnet_id) => Ok(SubnetForCanister {
                 subnet_id: Some(subnet_id),
             }),
             None => Err(GetSubnetForCanisterError::NoSubnetAssigned),

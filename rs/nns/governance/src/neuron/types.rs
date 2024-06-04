@@ -1,18 +1,12 @@
 use crate::{
-    audit_event::add_audit_event,
-    governance::LOG_PREFIX,
     neuron::dissolve_state_and_age::DissolveStateAndAge,
     neuron_store::NeuronStoreError,
     pb::v1::{
         abridged_neuron::DissolveState as AbridgedNeuronDissolveState,
-        audit_event::{NormalizeDissolveStateAndAge, Payload},
         neuron::{DissolveState as NeuronDissolveState, Followees},
-        AbridgedNeuron, AuditEvent, BallotInfo, KnownNeuronData, Neuron as NeuronProto,
-        NeuronStakeTransfer,
+        AbridgedNeuron, BallotInfo, KnownNeuronData, Neuron as NeuronProto, NeuronStakeTransfer,
     },
 };
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::Subaccount;
@@ -136,59 +130,6 @@ impl Neuron {
     /// Sets a neuron's dissolve state and age.
     pub fn set_dissolve_state_and_age(&mut self, dissolve_state_and_age: DissolveStateAndAge) {
         self.dissolve_state_and_age = dissolve_state_and_age;
-    }
-
-    /// Normalizes the dissolve state and age of the neuron. If any changes are made, stores an
-    /// audit event.
-    // TODO(NNS1-3068): clean up after the migration is performed.
-    pub fn normalize_dissolve_state_and_age(&mut self, now_seconds: u64) {
-        let previous_dissolve_state_and_age = self.dissolve_state_and_age();
-
-        let (normalized, legacy_case) =
-            match previous_dissolve_state_and_age.normalize(self.created_timestamp_seconds) {
-                Some((normalized, legacy_case)) => (normalized, legacy_case),
-                None => return,
-            };
-
-        println!(
-            "{}Neuron {} dissolve state and age got normaized from {:?} to {:?}",
-            LOG_PREFIX,
-            self.id().id,
-            previous_dissolve_state_and_age,
-            normalized
-        );
-
-        // Collect attributes for audit event logging.
-        let StoredDissolveStateAndAge {
-            dissolve_state: previous_dissolve_state,
-            aging_since_timestamp_seconds: previous_aging_since_timestamp_seconds,
-        } = StoredDissolveStateAndAge::from(self.dissolve_state_and_age());
-        let previous_when_dissolved_timestamp_seconds = if let Some(
-            NeuronDissolveState::WhenDissolvedTimestampSeconds(when_dissolved_timestamp_seconds),
-        ) = previous_dissolve_state
-        {
-            Some(when_dissolved_timestamp_seconds)
-        } else {
-            None
-        };
-        let previous_aging_since_timestamp_seconds = Some(previous_aging_since_timestamp_seconds);
-        let neuron_id = Some(self.id().id);
-
-        // Apply the normalized dissolve state and age.
-        self.set_dissolve_state_and_age(normalized);
-
-        // Log an audit event.
-        add_audit_event(AuditEvent {
-            timestamp_seconds: now_seconds,
-            payload: Some(Payload::NormalizeDissolveStateAndAge(
-                NormalizeDissolveStateAndAge {
-                    neuron_id,
-                    neuron_legacy_case: legacy_case as i32,
-                    previous_when_dissolved_timestamp_seconds,
-                    previous_aging_since_timestamp_seconds,
-                },
-            )),
-        });
     }
 }
 

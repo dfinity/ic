@@ -57,10 +57,10 @@ impl RequestInPrep {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         sender: CanisterId,
-        callee_src: u32,
-        callee_size: u32,
-        method_name_src: u32,
-        method_name_len: u32,
+        callee_src: usize,
+        callee_size: usize,
+        method_name_src: usize,
+        method_name_len: usize,
         heap: &[u8],
         on_reply: WasmClosure,
         on_reject: WasmClosure,
@@ -74,7 +74,7 @@ impl RequestInPrep {
             // the minimum of the limits.
 
             // method_name checked against sum of exported function names.
-            if method_name_len as usize > max_sum_exported_function_name_lengths {
+            if method_name_len > max_sum_exported_function_name_lengths {
                 return Err(HypervisorError::UserContractViolation {
                     error: format!(
                         "Size of method_name {} exceeds the allowed limit of {}.",
@@ -144,8 +144,8 @@ impl RequestInPrep {
 
     pub(crate) fn extend_method_payload(
         &mut self,
-        src: u32,
-        size: u32,
+        src: usize,
+        size: usize,
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let current_size = self.method_name.len() + self.method_payload.len();
@@ -157,7 +157,7 @@ impl RequestInPrep {
                 "Request to {}:{} has a payload size of {}, which exceeds the allowed limit of {}.",
                 self.callee,
                 self.method_name,
-                current_size + size as usize,
+                current_size + size,
                 max_size_local_subnet
             ),
                 suggestion: "".to_string(),

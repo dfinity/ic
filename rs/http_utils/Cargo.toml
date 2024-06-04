@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 flate2 = "1.0.20"
 hex = { workspace = true }
-http = "0.2.1"
+http = { workspace = true }
 tokio = { workspace = true }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-logger = { path = "../monitoring/logger" }
@@ -21,4 +21,4 @@ tar = "0.4.38"
 assert_matches = { workspace = true }
 ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
 mockito = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }

@@ -360,7 +360,18 @@ fn build_state_proto(def: &Path, out: &Path) {
 /// Generates Rust structs from types Protobuf messages.
 fn build_types_proto(def: &Path, out: &Path) {
     let mut config = base_config(out, "types");
-    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
+    for path in [
+        ".types.v1.CanisterId",
+        ".types.v1.CatchUpPackage",
+        ".types.v1.NiDkgId",
+        ".types.v1.NodeId",
+        ".types.v1.PrincipalId",
+        ".types.v1.SubnetId",
+        ".types.v1.ThresholdSignature",
+        ".types.v1.ThresholdSignatureShare",
+    ] {
+        config.type_attribute(path, "#[derive(serde::Serialize, serde::Deserialize)]");
+    }
     config.type_attribute(".types.v1.CatchUpPackage", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.SubnetId", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.NiDkgId", "#[derive(Eq, Hash)]");

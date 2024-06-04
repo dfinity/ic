@@ -586,7 +586,7 @@ mod test {
             signatures::update_signature_agreements,
         },
         test_utils::*,
-        utils::get_context_request_id,
+        utils::{algorithm_for_key_id, get_context_request_id},
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_dealings;
@@ -594,7 +594,9 @@ mod test {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces_state_manager::CertifiedStateSnapshot;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
+    use ic_management_canister_types::{
+        EcdsaKeyId, MasterPublicKeyId, Payload, SignWithECDSAReply,
+    };
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
@@ -608,16 +610,22 @@ mod test {
     use std::{collections::BTreeSet, str::FromStr};
 
     #[test]
-    fn test_validate_transcript_refs() {
+    fn test_validate_transcript_refs_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_validate_transcript_refs(key_id);
+        }
+    }
+
+    fn test_validate_transcript_refs(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let num_of_nodes = 4;
         let subnet_id = subnet_test_id(1);
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
         let registry_version = env.newest_registry_version;
-        let algorithm_id = AlgorithmId::ThresholdEcdsaSecp256k1;
         let crypto = &CryptoReturningOk::default();
         let mut block_reader = TestEcdsaBlockReader::new();
-        let mut prev_payload = empty_ecdsa_payload(subnet_id);
+        let mut prev_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let mut curr_payload = prev_payload.clone();
 
         // Empty payload verifies
@@ -633,7 +641,7 @@ mod test {
         // Add a transcript
         let height_100 = Height::new(100);
         let (transcript_0, transcript_ref_0, _) =
-            generate_key_transcript(&env, &mut rng, height_100);
+            generate_key_transcript(&key_id, &env, &mut rng, height_100);
         let transcript_id_0 = transcript_0.transcript_id;
         curr_payload
             .idkg_transcripts
@@ -659,7 +667,7 @@ mod test {
                 env.nodes.ids(),
                 env.nodes.ids(),
                 registry_version,
-                algorithm_id,
+                algorithm_for_key_id(&key_id),
             ));
         curr_payload.single_key_transcript_mut().next_in_creation =
             idkg::KeyTranscriptCreation::Created(transcript_ref_0);
@@ -688,7 +696,7 @@ mod test {
 
         // Add another reference
         let (transcript_1, transcript_ref_1, _) =
-            generate_key_transcript(&env, &mut rng, height_100);
+            generate_key_transcript(&key_id, &env, &mut rng, height_100);
         curr_payload.single_key_transcript_mut().next_in_creation =
             idkg::KeyTranscriptCreation::Created(transcript_ref_1);
         assert_matches!(
@@ -724,13 +732,13 @@ mod test {
         let crypto = &CryptoReturningOk::default();
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
 
-        let key_id = fake_ecdsa_key_id();
+        let key_id = fake_ecdsa_master_public_key_id();
         let mut payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let mut block_reader = TestEcdsaBlockReader::new();
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
 
-        let req_1 = create_reshare_request(1, 1);
-        let req_2 = create_reshare_request(2, 2);
+        let req_1 = create_reshare_request(key_id.clone(), 1, 1);
+        let req_2 = create_reshare_request(key_id.clone(), 2, 2);
         let reshare_requests = BTreeSet::from([req_1.clone(), req_2.clone()]);
 
         let contexts = BTreeMap::from([
@@ -824,23 +832,22 @@ mod test {
         let height = Height::from(1);
         let mut valid_keys = BTreeSet::new();
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        valid_keys.insert(key_id.clone());
+        valid_keys.insert(MasterPublicKeyId::Ecdsa(key_id.clone()));
 
-        let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
-        let quadruple_id1 = ecdsa_payload.uid_generator.next_quadruple_id();
-        let quadruple_id2 = ecdsa_payload.uid_generator.next_quadruple_id();
-        let quadruple_id3 = ecdsa_payload.uid_generator.next_quadruple_id();
+        let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(
+            subnet_id,
+            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
+        );
+        let pre_sig_id1 = ecdsa_payload.uid_generator.next_pre_signature_id();
+        let pre_sig_id2 = ecdsa_payload.uid_generator.next_pre_signature_id();
+        let pre_sig_id3 = ecdsa_payload.uid_generator.next_pre_signature_id();
 
         // There are three requests in state, two are completed, one is still
         // missing its nonce.
         let sign_with_ecdsa_contexts = BTreeMap::from_iter([
-            fake_completed_sign_with_ecdsa_context(1, quadruple_id1.clone()),
-            fake_completed_sign_with_ecdsa_context(2, quadruple_id2.clone()),
-            fake_sign_with_ecdsa_context_with_quadruple(
-                3,
-                key_id.clone(),
-                Some(quadruple_id3.clone()),
-            ),
+            fake_completed_sign_with_ecdsa_context(1, pre_sig_id1),
+            fake_completed_sign_with_ecdsa_context(2, pre_sig_id2),
+            fake_sign_with_ecdsa_context_with_quadruple(3, key_id.clone(), Some(pre_sig_id3)),
         ]);
         let snapshot = fake_state_with_ecdsa_contexts(height, sign_with_ecdsa_contexts.clone());
 
@@ -850,7 +857,7 @@ mod test {
             .collect::<Vec<_>>();
 
         let (key_transcript, key_transcript_ref) =
-            ecdsa_payload.generate_current_key(&key_id, &env, &mut rng);
+            ecdsa_payload.generate_current_key(&MasterPublicKeyId::Ecdsa(key_id), &env, &mut rng);
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
 
         // Add the quadruples and transcripts to block reader and payload
@@ -869,9 +876,9 @@ mod test {
             &mut block_reader,
             &mut ecdsa_payload,
             [
-                (quadruple_id1, sig_inputs[0].clone()),
-                (quadruple_id2, sig_inputs[1].clone()),
-                (quadruple_id3, sig_inputs[2].clone()),
+                (pre_sig_id1, sig_inputs[0].clone()),
+                (pre_sig_id2, sig_inputs[1].clone()),
+                (pre_sig_id3, sig_inputs[2].clone()),
             ],
         );
 
@@ -974,14 +981,17 @@ mod test {
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         valid_keys.insert(key_id.clone());
 
-        let mut prev_payload = empty_ecdsa_payload(subnet_id);
-        let quadruple_id = prev_payload.uid_generator.next_quadruple_id();
+        let mut prev_payload = empty_ecdsa_payload_with_key_ids(
+            subnet_id,
+            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
+        );
+        let pre_sig_id = prev_payload.uid_generator.next_pre_signature_id();
 
         let sign_with_ecdsa_contexts =
             BTreeMap::from_iter([fake_sign_with_ecdsa_context_with_quadruple(
                 1,
                 key_id.clone(),
-                Some(quadruple_id.clone()),
+                Some(pre_sig_id),
             )]);
         let snapshot = fake_state_with_ecdsa_contexts(height, sign_with_ecdsa_contexts.clone());
 
@@ -995,7 +1005,10 @@ mod test {
             ));
 
         // Insert agreement for incomplete context
-        let mut ecdsa_payload_incomplete_context = empty_ecdsa_payload(subnet_id);
+        let mut ecdsa_payload_incomplete_context = empty_ecdsa_payload_with_key_ids(
+            subnet_id,
+            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
+        );
         ecdsa_payload_incomplete_context
             .signature_agreements
             .insert([1; 32], fake_response.clone());
@@ -1014,7 +1027,10 @@ mod test {
         );
 
         // Insert agreement for unknown context
-        let mut ecdsa_payload_missing_context = empty_ecdsa_payload(subnet_id);
+        let mut ecdsa_payload_missing_context = empty_ecdsa_payload_with_key_ids(
+            subnet_id,
+            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
+        );
         ecdsa_payload_missing_context
             .signature_agreements
             .insert(fake_context.pseudo_random_id, fake_response);
@@ -1045,12 +1061,14 @@ mod test {
         let crypto = &CryptoReturningOk::default();
         let mut block_reader = TestEcdsaBlockReader::new();
         let key_id = fake_ecdsa_key_id();
-        let mut prev_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
+        let master_public_key_id = MasterPublicKeyId::Ecdsa(key_id.clone());
+        let mut prev_payload =
+            empty_ecdsa_payload_with_key_ids(subnet_id, vec![master_public_key_id.clone()]);
         let mut curr_payload = prev_payload.clone();
 
         // Add a unmasked transcript
         let (transcript_0, transcript_ref_0, _) =
-            generate_key_transcript(&env, &mut rng, Height::new(100));
+            generate_key_transcript(&master_public_key_id, &env, &mut rng, Height::new(100));
         let transcript_id_0 = transcript_0.transcript_id;
 
         // Add a masked transcript
@@ -1063,7 +1081,7 @@ mod test {
                 dealers,
                 receivers,
                 registry_version,
-                AlgorithmId::ThresholdEcdsaSecp256k1,
+                algorithm_for_key_id(&master_public_key_id),
             );
             env.nodes.run_idkg_and_create_and_verify_transcript(
                 &param.as_ref().translate(&block_reader).unwrap(),
@@ -1099,7 +1117,7 @@ mod test {
             let malicious_transcript_ref =
                 idkg::UnmaskedTranscript::try_from((Height::new(i as u64), &transcript_0)).unwrap();
             curr_payload.available_pre_signatures.insert(
-                curr_payload.uid_generator.next_quadruple_id(),
+                curr_payload.uid_generator.next_pre_signature_id(),
                 PreSignatureRef::Ecdsa(PreSignatureQuadrupleRef {
                     key_id: key_id.clone(),
                     kappa_unmasked_ref: malicious_transcript_ref,

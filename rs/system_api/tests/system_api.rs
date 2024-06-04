@@ -1643,7 +1643,7 @@ fn ic0_is_controller_test() {
     for i in 1..5 {
         let controller = user_test_id(i).get();
         assert_eq!(
-            api.ic0_is_controller(0, controller.as_slice().len() as u32, controller.as_slice())
+            api.ic0_is_controller(0, controller.as_slice().len(), controller.as_slice())
                 .unwrap(),
             (i <= 2) as u32
         );
@@ -1659,7 +1659,7 @@ fn ic0_is_controller_invalid_principal_id() {
     );
     let controller = [0u8; 70];
     assert!(matches!(
-        api.ic0_is_controller(0, controller.len() as u32, &controller),
+        api.ic0_is_controller(0, controller.len(), &controller),
         Err(HypervisorError::InvalidPrincipalId(
             PrincipalIdBlobParseError(..)
         ))
@@ -1718,12 +1718,7 @@ fn test_save_log_message_adds_canister_log_records() {
     let initial_records_number = api.canister_log().records().len();
     // Save several log messages.
     for message in &messages {
-        api.save_log_message(
-            CANISTER_LOGGING_IS_ENABLED,
-            0,
-            message.len() as u32,
-            message,
-        );
+        api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, message.len(), message);
     }
     let records = api.canister_log().records();
     // Expect increased number of log records and the content to match the messages.
@@ -1737,7 +1732,7 @@ fn test_save_log_message_adds_canister_log_records() {
 #[test]
 fn test_save_log_message_invalid_message_size() {
     let message = b"Hello, world!";
-    let invalid_size = (message.len() + 1) as u32;
+    let invalid_size = message.len() + 1;
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &SystemStateBuilder::default().build(),
@@ -1769,7 +1764,7 @@ fn test_save_log_message_invalid_message_offset() {
     api.save_log_message(
         CANISTER_LOGGING_IS_ENABLED,
         invalid_src,
-        message.len() as u32,
+        message.len(),
         message,
     );
     // Expect added log record with an error message.
@@ -1792,7 +1787,7 @@ fn test_save_log_message_trims_long_message() {
     let initial_records_number = api.canister_log().records().len();
     // Save a long log message.
     let bytes = vec![b'x'; long_message_size];
-    api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, bytes.len() as u32, &bytes);
+    api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, bytes.len(), &bytes);
     // Expect added log record with the content trimmed to the allowed size.
     let records = api.canister_log().records();
     assert_eq!(records.len(), initial_records_number + 1);
@@ -1812,7 +1807,7 @@ fn test_save_log_message_keeps_total_log_size_limited() {
     // Save several long messages.
     for _ in 0..messages_number {
         let bytes = vec![b'x'; long_message_size];
-        api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, bytes.len() as u32, &bytes);
+        api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, bytes.len(), &bytes);
     }
     // Expect only one log record to be kept, with the total size kept within the limit.
     let records = api.canister_log().records();

@@ -55,7 +55,7 @@ use ic_types::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
     malicious_flags::MaliciousFlags,
-    messages::{CertificateDelegation, SignedIngressContent, UserQuery},
+    messages::{CertificateDelegation, Query, SignedIngressContent},
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
     CryptoHashOfPartialState, Height, RegistryVersion,
@@ -73,16 +73,14 @@ use tower_test::mock::Handle;
 pub type IngressFilterHandle =
     Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
 pub type QueryExecutionHandle =
-    Handle<(UserQuery, Option<CertificateDelegation>), QueryExecutionResponse>;
+    Handle<(Query, Option<CertificateDelegation>), QueryExecutionResponse>;
 
 fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
-    let (service, handle) = tower_test::mock::pair::<
-        (UserQuery, Option<CertificateDelegation>),
-        QueryExecutionResponse,
-    >();
+    let (service, handle) =
+        tower_test::mock::pair::<(Query, Option<CertificateDelegation>), QueryExecutionResponse>();
 
     let infallible_service =
-        tower::service_fn(move |request: (UserQuery, Option<CertificateDelegation>)| {
+        tower::service_fn(move |request: (Query, Option<CertificateDelegation>)| {
             let mut service_clone = service.clone();
             async move {
                 Ok::<QueryExecutionResponse, Infallible>(
@@ -190,11 +188,10 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
     let mut metadata = SystemMetadata::new(subnet_test_id(1), SubnetType::Application);
 
     let network_topology = NetworkTopology {
-        subnets: BTreeMap::new(),
+        subnets: Default::default(),
         routing_table: Arc::new(RoutingTable::default()),
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(1),
-        ecdsa_signing_subnets: Default::default(),
         idkg_signing_subnets: Default::default(),
         bitcoin_mainnet_canister_id: None,
         bitcoin_testnet_canister_id: None,

@@ -32,13 +32,14 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     uses_guestos_dev = True,
-    runtime_deps = ["//ic-os:scripts/build-bootstrap-config-image.sh"] + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"] + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -48,12 +49,13 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
-    runtime_deps = ["//ic-os:scripts/build-bootstrap-config-image.sh"] + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"] + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -92,7 +94,7 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
-    runtime_deps = ["//ic-os:scripts/build-bootstrap-config-image.sh"],
+    runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"],
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -162,7 +164,7 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
-    runtime_deps = ["//ic-os:scripts/build-bootstrap-config-image.sh"],
+    runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"],
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -177,7 +179,7 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
-    runtime_deps = ["//ic-os:scripts/build-bootstrap-config-image.sh"],
+    runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"],
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -192,7 +194,7 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
-    runtime_deps = ["//ic-os:scripts/build-bootstrap-config-image.sh"],
+    runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"],
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 

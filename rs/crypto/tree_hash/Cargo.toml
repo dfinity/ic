@@ -22,7 +22,7 @@ ic-crypto-tree-hash-test-utils = { path = "test_utils" }
 maplit = "1.0.2"
 proptest = "1.0"
 prost = { workspace = true }
-rand = "0.8.4"
+rand = { workspace = true }
 serde_cbor = { workspace = true }
 
 [[bench]]

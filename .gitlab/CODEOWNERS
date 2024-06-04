@@ -6,9 +6,10 @@
 /.devcontainer/           @dfinity-lab/teams/idx
 /.github/                 @dfinity-lab/teams/idx
 /buf.yaml                 @dfinity-lab/teams/message-routing-owners
-/hs/                      @dfinity-lab/teams/ic-testing-verification
+/cpp/                     @dfinity-lab/teams/node-team
+/hs/                      @dfinity-lab/teams/utopia
 /licenses/                @dfinity-lab/teams/idx
-/bin/ict                  @dfinity-lab/teams/ic-testing-verification
+/bin/ict                  @dfinity-lab/teams/idx
 /bin/                     @dfinity-lab/teams/idx
 /bin/afl_test.sh          @dfinity-lab/teams/prodsec
 /bin/afl_wrapper.sh       @dfinity-lab/teams/prodsec
@@ -46,20 +47,17 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /packages/icrc-ledger-agent/         @dfinity-lab/teams/financial-integrations
 /packages/icrc-ledger-types/         @dfinity-lab/teams/financial-integrations
 /packages/ic-ledger-hash-of/         @dfinity-lab/teams/financial-integrations
-/packages/pocket-ic/                 @dfinity-lab/teams/ic-testing-verification
+/packages/pocket-ic/                 @dfinity-lab/teams/utopia
 /packages/ic-vetkd-utils/            @dfinity-lab/teams/crypto-owners
 
 # [IC-OS]
 /ic-os/                                          @dfinity-lab/teams/node-team
 /ic-os/boundary-guestos/                         @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
-/ic-os/rootfs/boundary-guestos/                  @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
+/ic-os/components/boundary-guestos/              @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
 /toolchains/                                     @dfinity-lab/teams/node-team
 
 # [metrics-proxy]
-/ic-os/rootfs/hostos/etc/metrics-proxy.yaml                              @dfinity-lab/teams/DRE
-/ic-os/rootfs/hostos/etc/systemd/system/metrics-proxy.service            @dfinity-lab/teams/DRE
-/ic-os/rootfs/guestos/etc/metrics-proxy.yaml                             @dfinity-lab/teams/DRE
-/ic-os/rootfs/guestos/etc/systemd/system/metrics-proxy.service           @dfinity-lab/teams/DRE
+/ic-os/components/monitoring/metrics-proxy/      @dfinity-lab/teams/DRE
 
 # [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity-lab/teams/idx
@@ -71,7 +69,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /gitlab-ci/src/std-fs-check/                                            @dfinity-lab/teams/node-team
 /gitlab-ci/src/dependencies/                                            @dfinity-lab/teams/prodsec
 /gitlab-ci/config/dependencies.yml                                      @dfinity-lab/teams/prodsec
-/gitlab-ci/src/gen_gitlab_cargo_pipeline/farm_rate_limit.py             @dfinity-lab/teams/idx @dfinity-lab/teams/ic-testing-verification
+/gitlab-ci/src/gen_gitlab_cargo_pipeline/farm_rate_limit.py             @dfinity-lab/teams/idx
 /gitlab-ci/config/child-pipeline--benchmark.yml                         @dfinity-lab/teams/runtime-owners
 /gitlab-ci/config/spawn-pipeline--benchmark.yml                         @dfinity-lab/teams/runtime-owners
 /gitlab-ci/config/rosetta.yml                                           @dfinity-lab/teams/financial-integrations
@@ -79,13 +77,11 @@ go_deps.bzl               @dfinity-lab/teams/idx
 # [Testnet]
 /testnet/                                                  @dfinity-lab/teams/node-team @dfinity-lab/teams/DRE
 /testnet/ansible/                                          @dfinity-lab/teams/platform-operations
-/testnet/docs/                                             @dfinity-lab/teams/ic-support-eu @dfinity-lab/teams/ic-support-na
+/testnet/docs/                                             @dfinity-lab/teams/ic-support
 /testnet/env/                                              @dfinity-lab/teams/platform-operations
 /testnet/release/                                          @dfinity-lab/teams/DRE
-/testnet/tests/pipeline/                                   @dfinity-lab/teams/ic-testing-verification
-/testnet/tests/scripts/                                    @dfinity-lab/teams/ic-testing-verification
 /testnet/tools/nns-tools/                                  @dfinity-lab/teams/nns-team
-/testnet/mainnet_revisions.json                            @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
+/testnet/mainnet_revisions.json                            @dfinity-lab/teams/consensus-owners
 
 # [Rust]
 /rs/                                                    @dfinity-lab/teams/interface-owners
@@ -152,7 +148,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/interfaces/src/p2p.rs                               @dfinity-lab/teams/networking-team
 /rs/interfaces/src/p2p/                                 @dfinity-lab/teams/networking-team
 /rs/interfaces/state_manager/                           @dfinity-lab/teams/message-routing-owners
-/rs/log_analyzer/                                       @dfinity-lab/teams/ic-testing-verification
 /rs/memory_tracker/                                     @dfinity-lab/teams/runtime-owners
 /rs/messaging/                                          @dfinity-lab/teams/message-routing-owners
 /rs/monitoring/adapter_metrics/                         @dfinity-lab/teams/networking-team
@@ -164,8 +159,8 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/orchestrator/                                       @dfinity-lab/teams/consensus-owners
 /rs/orchestrator/src/hostos_upgrade.rs                  @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/node-team
 /rs/p2p/                                                @dfinity-lab/teams/networking-team
-/rs/pocket_ic_server/                                   @dfinity-lab/teams/ic-testing-verification
-/rs/prep/                                               @dfinity-lab/teams/ic-testing-verification
+/rs/pocket_ic_server/                                   @dfinity-lab/teams/utopia
+/rs/prep/                                               @dfinity-lab/teams/utopia
 /rs/protobuf/                                           @dfinity-lab/teams/interface-owners
 /rs/protobuf/def/bitcoin/                               @dfinity-lab/teams/execution-team
 /rs/protobuf/def/canister_http/                         @dfinity-lab/teams/consensus-owners
@@ -186,9 +181,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/recovery/                                           @dfinity-lab/teams/consensus-owners
 /rs/query_stats/                                        @dfinity-lab/teams/execution-owners @dfinity-lab/teams/consensus-owners
 /rs/registry/                                           @dfinity-lab/teams/nns-team
-/rs/registry/admin/                                     @dfinity-lab/teams/nns-team
-/rs/registry/canister/                                  @dfinity-lab/teams/nns-team
-/rs/registry/client/                                    @dfinity-lab/teams/nns-team
 /rs/registry/helpers/src/crypto.rs                      @dfinity-lab/teams/crypto-owners
 /rs/registry/helpers/src/crypto/                        @dfinity-lab/teams/crypto-owners
 /rs/registry/helpers/src/firewall.rs                    @dfinity-lab/teams/networking-team
@@ -198,9 +190,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/registry/helpers/src/subnet.rs                      @dfinity-lab/teams/consensus-owners
 /rs/registry/helpers/src/unassigned_nodes.rs            @dfinity-lab/teams/consensus-owners
 /rs/registry/helpers/tests/root_of_trust.rs             @dfinity-lab/teams/crypto-owners
-/rs/registry/nns_data_provider/                         @dfinity-lab/teams/nns-team
-/rs/registry/regedit/                                   @dfinity-lab/teams/ic-testing-verification
-/rs/registry/transport/                                 @dfinity-lab/teams/nns-team
 /rs/replay/                                             @dfinity-lab/teams/consensus-owners
 /rs/replica/                                            @dfinity-lab/teams/networking-team
 /rs/replica_tests/                                      @dfinity-lab/teams/execution-owners
@@ -217,12 +206,12 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/rust_canisters/stable_memory_integrity              @dfinity-lab/teams/runtime-owners
 /rs/rust_canisters/canister_creator                     @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/execution-owners
 /rs/rust_canisters/xnet_test/                           @dfinity-lab/teams/message-routing-owners
-/rs/scenario_tests/                                     @dfinity-lab/teams/ic-testing-verification
+/rs/scenario_tests/                                     @dfinity-lab/teams/idx
 /rs/sns/                                                @dfinity-lab/teams/nns-team
 /rs/stable-structures/                                  @dfinity-lab/teams/execution-owners
 /rs/starter/                                            @dfinity-lab/teams/networking-team
 /rs/state_layout/                                       @dfinity-lab/teams/message-routing-owners
-/rs/state_machine_tests/                                @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/ic-testing-verification
+/rs/state_machine_tests/                                @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/utopia
 /rs/state_manager/                                      @dfinity-lab/teams/message-routing-owners
 /rs/state_tool/                                         @dfinity-lab/teams/message-routing-owners
 /rs/system_api/                                         @dfinity-lab/teams/execution-owners
@@ -235,41 +224,41 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/test_utilities/src/crypto/                          @dfinity-lab/teams/crypto-owners
 /rs/test_utilities/src/cycles_account_manager.rs        @dfinity-lab/teams/execution-owners
 /rs/test_utilities/types/src/batch/                     @dfinity-lab/teams/consensus-owners
-/rs/tests/                                              @dfinity-lab/teams/idx @dfinity-lab/teams/ic-testing-verification
-/rs/tests/boundary_nodes/                               @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/idx
-/rs/tests/consensus/                                    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/idx
-/rs/tests/crypto/                                       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/crypto-owners @dfinity-lab/teams/idx
-/rs/tests/execution/                                    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners @dfinity-lab/teams/idx
-/rs/tests/financial_integrations/                       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations @dfinity-lab/teams/idx
-/rs/tests/gix/                                          @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/idx
-/rs/tests/message_routing/                              @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/idx
+/rs/tests/                                              @dfinity-lab/teams/idx
+/rs/tests/boundary_nodes/                               @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/idx
+/rs/tests/consensus/                                    @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/idx
+/rs/tests/crypto/                                       @dfinity-lab/teams/crypto-owners @dfinity-lab/teams/idx
+/rs/tests/execution/                                    @dfinity-lab/teams/execution-owners @dfinity-lab/teams/idx
+/rs/tests/financial_integrations/                       @dfinity-lab/teams/financial-integrations @dfinity-lab/teams/idx
+/rs/tests/gix/                                          @dfinity-lab/teams/idx
+/rs/tests/message_routing/                              @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/idx
 /rs/tests/networking/                                   @dfinity-lab/teams/networking-team @dfinity-lab/teams/idx
-/rs/tests/nns/                                          @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/nns-team @dfinity-lab/teams/idx
-/rs/tests/node/                                         @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/node-team @dfinity-lab/teams/idx
+/rs/tests/nns/                                          @dfinity-lab/teams/nns-team @dfinity-lab/teams/idx
+/rs/tests/node/                                         @dfinity-lab/teams/node-team @dfinity-lab/teams/idx
 /rs/tests/query_stats/                                  @dfinity-lab/teams/execution-owners @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/idx
 /rs/tests/sdk/                                          @dfinity-lab/teams/sdk-team @dfinity-lab/teams/idx
-/rs/tests/src/basic_health_test.rs                      @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/idx
-/rs/tests/src/boundary_nodes/                           @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/idx
+/rs/tests/src/basic_health_test.rs                      @dfinity-lab/teams/idx
+/rs/tests/src/boundary_nodes/                           @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/idx
 /rs/tests/src/btc_integration/                          @dfinity-lab/teams/execution-owners @dfinity-lab/teams/idx
 /rs/tests/src/canister_http/                            @dfinity-lab/teams/networking-team @dfinity-lab/teams/idx
-/rs/tests/src/canister_sig_verification_cache_test/     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/crypto-owners @dfinity-lab/teams/idx
-/rs/tests/src/certificate_orchestrator.rs               @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/idx
-/rs/tests/src/ckbtc/                                    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/cross-chain-team @dfinity-lab/teams/idx
-/rs/tests/src/consensus/                                @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/idx
+/rs/tests/src/canister_sig_verification_cache_test/     @dfinity-lab/teams/crypto-owners @dfinity-lab/teams/idx
+/rs/tests/src/certificate_orchestrator.rs               @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/idx
+/rs/tests/src/ckbtc/                                    @dfinity-lab/teams/cross-chain-team @dfinity-lab/teams/idx
+/rs/tests/src/consensus/                                @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/idx
 /rs/tests/src/cross_chain/                              @dfinity-lab/teams/cross-chain-team @dfinity-lab/teams/idx
-/rs/tests/src/crypto/                                   @dfinity-lab/teams/crypto-owners @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/idx
-/rs/tests/src/custom_domains_integration/               @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/idx
+/rs/tests/src/crypto/                                   @dfinity-lab/teams/crypto-owners @dfinity-lab/teams/idx
+/rs/tests/src/custom_domains_integration/               @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/idx
 /rs/tests/src/execution/                                @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/idx
-/rs/tests/src/ipv4_tests/                               @dfinity-lab/teams/node-team  @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/idx
-/rs/tests/src/ledger_tests/                             @dfinity-lab/teams/financial-integrations  @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/idx
-/rs/tests/src/message_routing/                          @dfinity-lab/teams/message-routing-owners  @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/idx
+/rs/tests/src/ipv4_tests/                               @dfinity-lab/teams/node-team  @dfinity-lab/teams/idx
+/rs/tests/src/ledger_tests/                             @dfinity-lab/teams/financial-integrations  @dfinity-lab/teams/idx
+/rs/tests/src/message_routing/                          @dfinity-lab/teams/message-routing-owners  @dfinity-lab/teams/idx
 /rs/tests/src/networking/                               @dfinity-lab/teams/networking-team @dfinity-lab/teams/idx
-/rs/tests/src/nns_tests/                                @dfinity-lab/teams/nns-team @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/idx
-/rs/tests/src/orchestrator/                             @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/idx
+/rs/tests/src/nns_tests/                                @dfinity-lab/teams/nns-team @dfinity-lab/teams/idx
+/rs/tests/src/orchestrator/                             @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/idx
 /rs/tests/src/query_stats/                              @dfinity-lab/teams/execution-owners @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/idx
-/rs/tests/src/rosetta_test.rs                           @dfinity-lab/teams/financial-integrations @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/idx
-/rs/tests/src/tecdsa/                                   @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/idx
-/rs/tests/k8s/                                          @dfinity-lab/teams/idx @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/node-team
+/rs/tests/src/rosetta_test.rs                           @dfinity-lab/teams/financial-integrations @dfinity-lab/teams/idx
+/rs/tests/src/tecdsa/                                   @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/idx
+/rs/tests/k8s/                                          @dfinity-lab/teams/idx @dfinity-lab/teams/node-team
 /rs/tools/check_did/                                    @dfinity-lab/teams/financial-integrations
 /rs/tree_deserializer/                                  @dfinity-lab/teams/message-routing-owners
 /rs/types/                                              @dfinity-lab/teams/interface-owners
@@ -277,18 +266,16 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/types/management_canister_types/                    @dfinity-lab/teams/execution-owners
 /rs/types/types/src/batch.rs                            @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/batch/                              @dfinity-lab/teams/consensus-owners
-/rs/types/types/src/canister_http.rs                    @dfinity-lab/teams/execution-team @dfinity-lab/teams/consensus-owners
-/rs/types/types/src/chunkable.rs                        @dfinity-lab/teams/networking-team
+/rs/types/types/src/canister_http.rs                    @dfinity-lab/teams/execution-owners @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/consensus.rs                        @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/consensus/                          @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/crypto.rs                           @dfinity-lab/teams/crypto-owners
 /rs/types/types/src/crypto/                             @dfinity-lab/teams/crypto-owners
 /rs/types/types/src/exhaustive.rs                       @dfinity-lab/teams/consensus-owners
-/rs/types/types/src/p2p.rs                              @dfinity-lab/teams/networking-team
 /rs/types/types/src/signature.rs                        @dfinity-lab/teams/consensus-owners
 /rs/types/types/src/signature/                          @dfinity-lab/teams/consensus-owners
 /rs/types/wasm_types/                                   @dfinity-lab/teams/runtime-owners
-/rs/universal_canister/                                 @dfinity-lab/teams/execution-owners @dfinity-lab/teams/ic-testing-verification
+/rs/universal_canister/                                 @dfinity-lab/teams/execution-owners
 /rs/utils/ensure/                                       @dfinity-lab/teams/financial-integrations
 /rs/validator/                                          @dfinity-lab/teams/crypto-owners
 /rs/wasm_transform/                                     @dfinity-lab/teams/runtime-owners

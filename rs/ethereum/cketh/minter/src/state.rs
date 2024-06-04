@@ -6,7 +6,7 @@ use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::DEBUG;
-use crate::map::MultiKeyMap;
+use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
@@ -52,7 +52,7 @@ impl MintedEvent {
 pub struct State {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
-    pub ledger_id: Principal,
+    pub cketh_ledger_id: Principal,
     pub eth_helper_contract_address: Option<Address>,
     pub erc20_helper_contract_address: Option<Address>,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
@@ -66,7 +66,7 @@ pub struct State {
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, InvalidEventReason>,
     pub eth_transactions: EthTransactions,
-    pub skipped_blocks: BTreeSet<BlockNumber>,
+    pub skipped_blocks: BTreeMap<Address, BTreeSet<BlockNumber>>,
 
     /// Current balance of ETH held by the minter.
     /// Computed based on audit events.
@@ -93,10 +93,10 @@ pub struct State {
     pub ledger_suite_orchestrator_id: Option<Principal>,
 
     /// ERC-20 tokens that the minter can mint:
-    /// - primary key: ckERC20 token symbol
+    /// - primary key: ledger ID for the ckERC20 token
     /// - secondary key: ERC-20 contract address on Ethereum
-    /// - value: ledger ID for the ckERC20 token
-    pub ckerc20_tokens: MultiKeyMap<CkTokenSymbol, Address, Principal>,
+    /// - value: ckERC20 token symbol
+    pub ckerc20_tokens: DedupMultiKeyMap<Principal, Address, CkTokenSymbol>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -145,7 +145,7 @@ impl State {
                 "ecdsa_key_name cannot be blank".to_string(),
             ));
         }
-        if self.ledger_id == Principal::anonymous() {
+        if self.cketh_ledger_id == Principal::anonymous() {
             return Err(InvalidStateError::InvalidLedgerId(
                 "ledger_id cannot be the anonymous principal".to_string(),
             ));
@@ -223,42 +223,25 @@ impl State {
         &self,
         ckerc20_ledger_id: &Principal,
     ) -> Option<CkErc20Token> {
-        //TODO XC-83: refactor data structure for ckerc20_tokens
-        let results: Vec<_> = self
-            .supported_ck_erc20_tokens()
-            .filter(|supported_ckerc20_token| {
-                &supported_ckerc20_token.ckerc20_ledger_id == ckerc20_ledger_id
-            })
-            .collect();
-        assert!(
-            results.len() <= 1,
-            "BUG: multiple ckERC20 tokens with the same ledger ID {ckerc20_ledger_id}"
-        );
-        results.into_iter().next()
-    }
-
-    pub fn supported_ck_erc20_tokens(&self) -> impl Iterator<Item = CkErc20Token> + '_ {
         self.ckerc20_tokens
-            .iter()
-            .map(|(symbol, erc20_address, ledger_id)| CkErc20Token {
+            .get_entry(ckerc20_ledger_id)
+            .map(|(erc20_address, symbol)| CkErc20Token {
                 erc20_contract_address: *erc20_address,
-                ckerc20_ledger_id: *ledger_id,
+                ckerc20_ledger_id: *ckerc20_ledger_id,
                 erc20_ethereum_network: self.ethereum_network,
                 ckerc20_token_symbol: symbol.clone(),
             })
     }
 
-    pub fn ckerc20_token_symbol(&self, erc20_contract_address: &Address) -> Option<&CkTokenSymbol> {
-        self.ckerc20_tokens
-            .get_entry_alt(erc20_contract_address)
-            .map(|(symbol, _)| symbol)
-    }
-
-    pub fn ckerc20_token_symbol_for_ledger(&self, ledger_id: &Principal) -> Option<&CkTokenSymbol> {
+    pub fn supported_ck_erc20_tokens(&self) -> impl Iterator<Item = CkErc20Token> + '_ {
         self.ckerc20_tokens
             .iter()
-            .find(|(_, _, id)| *id == ledger_id)
-            .map(|(symbol, _, _)| symbol)
+            .map(|(ledger_id, erc20_address, symbol)| CkErc20Token {
+                erc20_contract_address: *erc20_address,
+                ckerc20_ledger_id: *ledger_id,
+                erc20_ethereum_network: self.ethereum_network,
+                ckerc20_token_symbol: symbol.clone(),
+            })
     }
 
     /// Quarantine the deposit event to prevent double minting.
@@ -397,10 +380,23 @@ impl State {
     }
 
     pub fn record_skipped_block(&mut self, block_number: BlockNumber) {
+        let address = self
+            .eth_helper_contract_address
+            .expect("BUG: Missing eth_helper_contract_address");
+        self.record_skipped_block_for_contract(address, block_number)
+    }
+
+    pub fn record_skipped_block_for_contract(
+        &mut self,
+        contract_address: Address,
+        block_number: BlockNumber,
+    ) {
+        let entry = self.skipped_blocks.entry(contract_address).or_default();
         assert!(
-            self.skipped_blocks.insert(block_number),
-            "BUG: block {} was already skipped",
-            block_number
+            entry.insert(block_number),
+            "BUG: block {} was already skipped for contract {}",
+            block_number,
+            contract_address,
         );
     }
 
@@ -410,27 +406,25 @@ impl State {
             "ERROR: Expected {}, but got {}",
             self.ethereum_network, ckerc20_token.erc20_ethereum_network
         );
-        let duplicate_ledger_id: MultiKeyMap<_, _, _> = self
-            .ckerc20_tokens
-            .iter()
-            .filter(|(_erc20_address, _ckerc20_token_symbol, &ledger_id)| {
-                ledger_id == ckerc20_token.ckerc20_ledger_id
-            })
-            .collect();
+        let ckerc20_with_same_symbol = self
+            .supported_ck_erc20_tokens()
+            .filter(|ckerc20| ckerc20.ckerc20_token_symbol == ckerc20_token.ckerc20_token_symbol)
+            .collect::<Vec<_>>();
         assert_eq!(
-            duplicate_ledger_id,
-            MultiKeyMap::default(),
-            "ERROR: ledger ID {} is already in use",
-            ckerc20_token.ckerc20_ledger_id
+            ckerc20_with_same_symbol,
+            vec![],
+            "ERROR: ckERC20 token symbol {} is already used by {:?}",
+            ckerc20_token.ckerc20_token_symbol,
+            ckerc20_with_same_symbol
         );
         assert_eq!(
             self.ckerc20_tokens.try_insert(
-                ckerc20_token.ckerc20_token_symbol,
-                ckerc20_token.erc20_contract_address,
                 ckerc20_token.ckerc20_ledger_id,
+                ckerc20_token.erc20_contract_address,
+                ckerc20_token.ckerc20_token_symbol,
             ),
             Ok(()),
-            "ERROR: some ckERC20 tokens use the same ERC-20 address or symbol"
+            "ERROR: some ckERC20 tokens use the same ckERC20 ledger ID or ERC-20 address"
         );
     }
 
@@ -440,7 +434,8 @@ impl State {
             .iter()
             .map(|(erc20_contract, balance)| {
                 let symbol = self
-                    .ckerc20_token_symbol(erc20_contract)
+                    .ckerc20_tokens
+                    .get_alt(erc20_contract)
                     .unwrap_or_else(|| {
                         panic!("BUG: missing symbol for ERC-20 contract {}", erc20_contract)
                     });
@@ -519,7 +514,7 @@ impl State {
         use ic_utils_ensure::ensure_eq;
 
         ensure_eq!(self.ethereum_network, other.ethereum_network);
-        ensure_eq!(self.ledger_id, other.ledger_id);
+        ensure_eq!(self.cketh_ledger_id, other.cketh_ledger_id);
         ensure_eq!(self.ecdsa_key_name, other.ecdsa_key_name);
         ensure_eq!(
             self.eth_helper_contract_address,

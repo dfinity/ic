@@ -17,5 +17,5 @@ serde = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
 slog = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 url = "2.1.1"
