@@ -4,7 +4,7 @@
 
 # [Misc]
 /.devcontainer/           @dfinity/idx
-/.github/                 
+/.github/                 @dfinity/idx
 /buf.yaml                 @dfinity/ic-message-routing-owners
 /cpp/                     @dfinity/node
 /hs/                      @dfinity/utopia
