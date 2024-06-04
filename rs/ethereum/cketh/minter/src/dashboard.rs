@@ -160,7 +160,7 @@ pub struct DashboardTemplate {
     pub finalized_transactions: Vec<DashboardFinalizedTransaction>,
     pub reimbursed_transactions: Vec<DashboardReimbursedTransaction>,
     pub eth_balance: EthBalance,
-    pub skipped_blocks: BTreeSet<BlockNumber>,
+    pub skipped_blocks: BTreeMap<String, BTreeSet<BlockNumber>>,
     pub supported_ckerc20_tokens: Vec<DashboardCkErc20Token>,
 }
 
@@ -345,7 +345,11 @@ impl DashboardTemplate {
             finalized_transactions,
             reimbursed_transactions,
             eth_balance: state.eth_balance.clone(),
-            skipped_blocks: state.skipped_blocks.clone(),
+            skipped_blocks: state
+                .skipped_blocks
+                .iter()
+                .map(|(contract_address, blocks)| (contract_address.to_string(), blocks.clone()))
+                .collect(),
             supported_ckerc20_tokens,
         }
     }
