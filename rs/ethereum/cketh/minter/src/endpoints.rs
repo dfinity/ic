@@ -424,6 +424,7 @@ pub mod events {
             transaction_hash: Option<String>,
         },
         SkippedBlock {
+            contract_address: Option<String>,
             block_number: Nat,
         },
         AddedCkErc20Token {

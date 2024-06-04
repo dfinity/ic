@@ -378,9 +378,13 @@ impl GetEventsFile {
                         transaction_hash: transaction_hash.map(|h| h.parse().unwrap()),
                     },
                 },
-                EventPayload::SkippedBlock { block_number } => {
-                    ET::SkippedBlock(block_number.try_into().unwrap())
-                }
+                EventPayload::SkippedBlock {
+                    contract_address,
+                    block_number,
+                } => ET::SkippedBlockForContract {
+                    contract_address: contract_address.unwrap().parse().unwrap(),
+                    block_number: block_number.try_into().unwrap(),
+                },
                 EventPayload::AddedCkErc20Token {
                     chain_id,
                     address,

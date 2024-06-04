@@ -66,7 +66,7 @@ pub struct State {
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, InvalidEventReason>,
     pub eth_transactions: EthTransactions,
-    pub skipped_blocks: BTreeSet<BlockNumber>,
+    pub skipped_blocks: BTreeMap<Address, BTreeSet<BlockNumber>>,
 
     /// Current balance of ETH held by the minter.
     /// Computed based on audit events.
@@ -397,10 +397,23 @@ impl State {
     }
 
     pub fn record_skipped_block(&mut self, block_number: BlockNumber) {
+        let address = self
+            .eth_helper_contract_address
+            .expect("BUG: Missing eth_helper_contract_address");
+        self.record_skipped_block_for_contract(address, block_number)
+    }
+
+    pub fn record_skipped_block_for_contract(
+        &mut self,
+        contract_address: Address,
+        block_number: BlockNumber,
+    ) {
+        let entry = self.skipped_blocks.entry(contract_address).or_default();
         assert!(
-            self.skipped_blocks.insert(block_number),
-            "BUG: block {} was already skipped",
-            block_number
+            entry.insert(block_number),
+            "BUG: block {} was already skipped for contract {}",
+            block_number,
+            contract_address,
         );
     }
 

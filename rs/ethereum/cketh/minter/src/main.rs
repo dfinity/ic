@@ -718,7 +718,18 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     reimbursed_amount: reimbursed.reimbursed_amount.into(),
                     transaction_hash: reimbursed.transaction_hash.map(|h| h.to_string()),
                 },
+                #[allow(deprecated)]
                 EventType::SkippedBlock(block_number) => EP::SkippedBlock {
+                    contract_address: read_state(|s| {
+                        s.eth_helper_contract_address.map(|s| s.to_string())
+                    }),
+                    block_number: block_number.into(),
+                },
+                EventType::SkippedBlockForContract {
+                    contract_address,
+                    block_number,
+                } => EP::SkippedBlock {
+                    contract_address: Some(contract_address.to_string()),
                     block_number: block_number.into(),
                 },
                 EventType::AddedCkErc20Token(token) => EP::AddedCkErc20Token {
@@ -845,7 +856,10 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 
                 w.encode_counter(
                     "cketh_minter_skipped_blocks",
-                    s.skipped_blocks.len() as f64,
+                    s.skipped_blocks
+                        .values()
+                        .flat_map(|blocks| blocks.iter())
+                        .count() as f64,
                     "Total count of Ethereum blocks that were skipped for deposits.",
                 )?;
 
