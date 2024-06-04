@@ -425,6 +425,7 @@ impl CommitmentOpening {
     /// * `UnableToReconstruct`: internal error denoting that the received openings
     ///   cannot be used to recompute a share.
     pub(crate) fn from_dealings_and_openings(
+        alg: IdkgProtocolAlgorithm,
         verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
         provided_openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
         transcript_commitment: &CombinedCommitment,
@@ -455,6 +456,7 @@ impl CommitmentOpening {
                 dealing
                     .ciphertext
                     .decrypt_and_check(
+                        alg,
                         &dealing.commitment,
                         context_data,
                         *dealer_index,
@@ -508,6 +510,7 @@ impl CommitmentOpening {
     /// * `UnableToCombineOpenings`: internal error denoting that the decrypted
     ///   share cannot be combined.
     pub(crate) fn from_dealings(
+        alg: IdkgProtocolAlgorithm,
         verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
         transcript_commitment: &CombinedCommitment,
         context_data: &[u8],
@@ -522,6 +525,7 @@ impl CommitmentOpening {
             let opening = dealing
                 .ciphertext
                 .decrypt_and_check(
+                    alg,
                     &dealing.commitment,
                     context_data,
                     *dealer_index,

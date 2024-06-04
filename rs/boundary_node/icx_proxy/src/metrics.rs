@@ -196,10 +196,13 @@ impl Runner {
             }))),
         );
 
-        axum_server::bind(self.metrics_addr.unwrap())
-            .serve(add_trace_layer(metrics_router).into_make_service())
-            .await
-            .context("failed to start metrics server")?;
+        let listener = tokio::net::TcpListener::bind(self.metrics_addr.unwrap()).await?;
+        axum::serve(
+            listener,
+            add_trace_layer(metrics_router).into_make_service(),
+        )
+        .await
+        .context("failed to start metrics server")?;
 
         Ok(())
     }

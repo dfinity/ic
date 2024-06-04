@@ -140,7 +140,10 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 Some(_) = advertise_task.join_next() => {}
             }
         }
-        advertise_task.shutdown().await;
+        while advertise_task.join_next().await.is_some() {}
+        if let Some(ongoing_state_sync) = self.ongoing_state_sync.take() {
+            ongoing_state_sync.shutdown.shutdown().await;
+        }
     }
 
     async fn handle_advert(&mut self, artifact_id: StateSyncArtifactId, peer_id: NodeId) {
@@ -247,8 +250,6 @@ impl<T: 'static + Send> StateSyncManager<T> {
 
 #[cfg(test)]
 mod tests {
-    use std::backtrace::Backtrace;
-
     use axum::{http::StatusCode, response::Response};
     use bytes::{Bytes, BytesMut};
     use ic_interfaces::p2p::state_sync::ChunkId;
@@ -277,13 +278,6 @@ mod tests {
     /// Don't add peers that advertise a state that differs from the current sync.
     #[test]
     fn test_reject_peer_with_different_state() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
         with_test_replica_logger(|log| {
             let finished = Arc::new(Notify::new());
             let finished_c = finished.clone();

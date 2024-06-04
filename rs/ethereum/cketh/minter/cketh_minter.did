@@ -461,6 +461,7 @@ type Event = record {
             transaction_hash : opt text;
         };
         SkippedBlock : record {
+            contract_address: opt text;
             block_number : nat;
         };
         AddedCkErc20Token : record {

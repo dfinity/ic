@@ -1474,13 +1474,13 @@ pub(crate) fn empty_ecdsa_payload_with_key_ids(
             .map(|key_id| EcdsaKeyTranscript {
                 current: None,
                 next_in_creation: KeyTranscriptCreation::Begin,
-                master_key_id: Some(key_id.clone()),
+                master_key_id: key_id.clone(),
                 key_id: if let MasterPublicKeyId::Ecdsa(ecdsa_key_id) = key_id {
-                    ecdsa_key_id
+                    Some(ecdsa_key_id)
                 } else {
                     // Schnorr key transcripts still need a dummy ECDSA key Id,
                     // until the field is no longer mandatory.
-                    fake_ecdsa_key_id()
+                    Some(fake_ecdsa_key_id())
                 },
             })
             .collect(),

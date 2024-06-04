@@ -890,11 +890,11 @@ impl EcdsaPayloadMetrics {
             payload.key_transcripts.len(),
         );
         self.payload_metrics_set_without_key_id_label(
-            "key_transcripts_with_master_public_key_id",
+            "key_transcripts_with_ecdsa_key_id",
             payload
                 .key_transcripts
                 .values()
-                .filter(|k| k.master_key_id.is_some())
+                .filter(|k| k.key_id.is_some())
                 .count(),
         );
     }

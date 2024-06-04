@@ -15,12 +15,12 @@ fn test_copy_inactive_neurons_to_stable_memory() {
     // Step 1: Prepare the world
 
     // Step 1.1: Populate StateMachine from a state_dir.
-    let mut state_machine = new_state_machine_with_golden_nns_state_or_panic();
+    let state_machine = new_state_machine_with_golden_nns_state_or_panic();
 
     // Step 1.2: Create a super powerful Neuron.
     println!("Creating super powerful Neuron.");
     let controller = PrincipalId::new_self_authenticating(&[1, 2, 3, 4]);
-    let neuron_id = nns_create_super_powerful_neuron(&mut state_machine, controller);
+    let neuron_id = nns_create_super_powerful_neuron(&state_machine, controller);
     println!("Done creating super powerful Neuron.");
 
     // Step 1.3: Install NNS governance WASM built with `feature = "test"`. In the future, `feature
@@ -31,7 +31,7 @@ fn test_copy_inactive_neurons_to_stable_memory() {
     let new_wasm_hash = Sha256::hash(&new_wasm_content);
     println!("Proposing governance upgrade... ");
     let proposal_id = nns_propose_upgrade_nns_canister(
-        &mut state_machine,
+        &state_machine,
         controller,
         neuron_id,
         GOVERNANCE_CANISTER_ID, // Target, i.e. the canister that we want to upgrade.
@@ -106,7 +106,7 @@ fn test_copy_inactive_neurons_to_stable_memory() {
     for i in 0..600 {
         state_machine.tick();
 
-        last_migration = nns_get_migrations(&mut state_machine)
+        last_migration = nns_get_migrations(&state_machine)
             .copy_inactive_neurons_to_stable_memory_migration
             .unwrap_or_default();
 
@@ -141,7 +141,7 @@ fn test_copy_inactive_neurons_to_stable_memory() {
     assert_eq!(status, MigrationStatus::Succeeded);
 
     // Step 3.2: Assert that there is now a large number of neurons in stable memory.
-    let scrape = scrape_metrics(&mut state_machine, GOVERNANCE_CANISTER_ID);
+    let scrape = scrape_metrics(&state_machine, GOVERNANCE_CANISTER_ID);
     let len = get_gauge(&scrape, "governance_stable_memory_neuron_count") as u64;
     assert!(len > 100_000, "{}", len);
 

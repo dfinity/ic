@@ -34,10 +34,10 @@ use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType, ClearChunkStoreArgs,
-    ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs,
-    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
-    Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    ComputeInitialEcdsaDealingsArgs, ComputeInitialIDkgDealingsArgs, CreateCanisterArgs,
+    DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
     ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrKeyId,
     SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs,
     TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
@@ -49,9 +49,9 @@ use ic_replicated_state::{
     canister_state::system_state::PausedExecutionId,
     canister_state::{system_state::CyclesUseCase, NextExecution},
     metadata_state::subnet_call_context_manager::{
-        EcdsaDealingsContext, InstallCodeCall, InstallCodeCallId, SchnorrArguments,
-        SetupInitialDkgContext, SignWithEcdsaContext, SignWithThresholdContext, StopCanisterCall,
-        SubnetCallContext, ThresholdArguments,
+        EcdsaDealingsContext, IDkgDealingsContext, InstallCodeCall, InstallCodeCallId,
+        SchnorrArguments, SetupInitialDkgContext, SignWithEcdsaContext, SignWithThresholdContext,
+        StopCanisterCall, SubnetCallContext, ThresholdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
     CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
@@ -1073,7 +1073,47 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::ComputeInitialIDkgDealings) => {
-                Self::reject_due_to_api_not_implemented(&mut msg)
+                match self.config.ic00_compute_initial_i_dkg_dealings {
+                    FlagStatus::Disabled => Self::reject_due_to_api_not_implemented(&mut msg),
+                    FlagStatus::Enabled => {
+                        let cycles = msg.take_cycles();
+                        match &msg {
+                            CanisterCall::Request(request) => {
+                                match ComputeInitialIDkgDealingsArgs::decode(
+                                    request.method_payload(),
+                                ) {
+                                    Ok(args) => match get_master_public_key(
+                                        idkg_subnet_public_keys,
+                                        self.own_subnet_id,
+                                        &args.key_id,
+                                    ) {
+                                        Ok(_) => self
+                                            .compute_initial_idkg_dealings(
+                                                &mut state, args, request,
+                                            )
+                                            .map_or_else(
+                                                |err| ExecuteSubnetMessageResult::Finished {
+                                                    response: Err(err),
+                                                    refund: cycles,
+                                                },
+                                                |()| ExecuteSubnetMessageResult::Processing,
+                                            ),
+                                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                                            response: Err(err),
+                                            refund: cycles,
+                                        },
+                                    },
+                                    Err(err) => ExecuteSubnetMessageResult::Finished {
+                                        response: Err(err),
+                                        refund: cycles,
+                                    },
+                                }
+                            }
+                            CanisterCall::Ingress(_) => self
+                                .reject_unexpected_ingress(Ic00Method::ComputeInitialIDkgDealings),
+                        }
+                    }
+                }
             }
 
             Ok(Ic00Method::SchnorrPublicKey) => Self::reject_due_to_api_not_implemented(&mut msg),
@@ -2682,6 +2722,27 @@ impl ExecutionEnvironment {
             .metadata
             .subnet_call_context_manager
             .push_context(SubnetCallContext::EcdsaDealings(EcdsaDealingsContext {
+                request: request.clone(),
+                key_id: args.key_id,
+                nodes,
+                registry_version,
+                time: state.time(),
+            }));
+        Ok(())
+    }
+
+    fn compute_initial_idkg_dealings(
+        &self,
+        state: &mut ReplicatedState,
+        args: ComputeInitialIDkgDealingsArgs,
+        request: &Request,
+    ) -> Result<(), UserError> {
+        let nodes = args.get_set_of_nodes()?;
+        let registry_version = args.get_registry_version();
+        state
+            .metadata
+            .subnet_call_context_manager
+            .push_context(SubnetCallContext::IDkgDealings(IDkgDealingsContext {
                 request: request.clone(),
                 key_id: args.key_id,
                 nodes,

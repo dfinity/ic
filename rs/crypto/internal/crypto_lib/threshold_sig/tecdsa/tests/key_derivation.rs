@@ -18,10 +18,7 @@ fn verify_bip32_extended_key_derivation_max_length_enforced() -> Result<(), Cani
     let seed = Seed::from_bytes(b"verify_bip32_extended_key_derivation_max_length");
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(
-            CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
-            EccCurveType::K256,
-        ),
+        TestConfig::new(IdkgProtocolAlgorithm::EcdsaSecp256k1, EccCurveType::K256),
         nodes,
         threshold,
         threshold,
@@ -366,10 +363,7 @@ fn verify_bip32_secp256k1_extended_key_derivation() -> Result<(), CanisterThresh
     let seed = Seed::from_bytes(b"verify_bip32_extended_key_derivation");
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(
-            CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
-            EccCurveType::K256,
-        ),
+        TestConfig::new(IdkgProtocolAlgorithm::EcdsaSecp256k1, EccCurveType::K256),
         nodes,
         threshold,
         threshold,
@@ -432,10 +426,7 @@ fn should_secp256k1_derivation_match_external_bip32_lib() -> Result<(), Canister
     let random_seed = Seed::from_rng(rng);
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(
-            CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
-            EccCurveType::K256,
-        ),
+        TestConfig::new(IdkgProtocolAlgorithm::EcdsaSecp256k1, EccCurveType::K256),
         nodes,
         threshold,
         threshold,

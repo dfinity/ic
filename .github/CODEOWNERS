@@ -53,11 +53,11 @@ go_deps.bzl               @dfinity/idx
 # [IC-OS]
 /ic-os/                                          @dfinity/node
 /ic-os/boundary-guestos/                         @dfinity/boundary-node @dfinity/node
-/ic-os/rootfs/boundary-guestos/                  @dfinity/boundary-node @dfinity/node
+/ic-os/components/boundary-guestos/              @dfinity/boundary-node @dfinity/node
 /toolchains/                                     @dfinity/node
 
 # [metrics-proxy]
-/ic-os/rootfs/monitoring/metrics-proxy/          @dfinity/dre
+/ic-os/components/monitoring/metrics-proxy/      @dfinity/dre
 
 # [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity/idx
@@ -287,7 +287,7 @@ go_deps.bzl               @dfinity/idx
 
 # [No-Approvals]
 # Ghost is a group with no direct members. GitLab will bypass codeowners for files that match ghost ownership.
-*.lock                    @ghost
-Cargo.toml                @ghost
-.gitignore                @ghost
-stackage_snapshot.json    @ghost
+*.lock                    @dfinity/core
+Cargo.toml                @dfinity/core
+.gitignore                @dfinity/core
+stackage_snapshot.json    @dfinity/core

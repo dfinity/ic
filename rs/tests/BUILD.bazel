@@ -29,7 +29,7 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     compile_data = [
-        "//ic-os/rootfs/guestos:opt/ic/share/ic.json5.template",
+        "//ic-os/components:ic/ic.json5.template",
         "src/consensus/cow_safety.wasm",
         "src/message.wasm",
         "src/counter.wat",

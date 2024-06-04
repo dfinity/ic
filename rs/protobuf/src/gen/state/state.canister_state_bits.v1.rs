@@ -67,10 +67,11 @@ pub struct CallContextEntry {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WasmClosure {
+    /// The number of functions will never exceed 2^32.
     #[prost(uint32, tag = "1")]
     pub func_idx: u32,
-    #[prost(uint32, tag = "2")]
-    pub env: u32,
+    #[prost(uint64, tag = "2")]
+    pub env: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

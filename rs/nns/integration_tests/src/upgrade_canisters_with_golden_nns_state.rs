@@ -146,12 +146,12 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 
     // Step 1.1: Load golden nns state into a StateMachine.
     // TODO: Use PocketIc instead of StateMachine.
-    let mut state_machine = new_state_machine_with_golden_nns_state_or_panic();
+    let state_machine = new_state_machine_with_golden_nns_state_or_panic();
 
     // Step 1.2: Create a super powerful Neuron.
     println!("Creating super powerful Neuron.");
     let neuron_controller = PrincipalId::new_self_authenticating(&[1, 2, 3, 4]);
-    let neuron_id = nns_create_super_powerful_neuron(&mut state_machine, neuron_controller);
+    let neuron_id = nns_create_super_powerful_neuron(&state_machine, neuron_controller);
     println!("Done creating super powerful Neuron.");
 
     let mut repetition_number = 1;
@@ -201,7 +201,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                     nns_canister_name, repetition_number,
                 );
                 let _proposal_id = nns_propose_upgrade_nns_canister(
-                    &mut state_machine,
+                    &state_machine,
                     neuron_controller,
                     neuron_id,
                     *canister_id,
@@ -211,7 +211,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                 // Step 3: Verify result(s): In a short while, the canister should
                 // be running the new code.
                 wait_for_canister_upgrade_to_succeed(
-                    &mut state_machine,
+                    &state_machine,
                     *canister_id,
                     wasm_hash,
                     nns_canister_upgrade.controller_principal_id(),

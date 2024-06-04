@@ -128,10 +128,7 @@ fn verify_protocol_output_remains_unchanged_over_time_k256() -> Result<(), Canis
     let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed");
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(
-            CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
-            EccCurveType::K256,
-        ),
+        TestConfig::new(IdkgProtocolAlgorithm::EcdsaSecp256k1, EccCurveType::K256),
         nodes,
         threshold,
         0,
@@ -251,10 +248,7 @@ fn verify_protocol_output_remains_unchanged_over_time_k256_unmasked_kappa(
         Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed-for-k256-unmasked-kappa-stability-test");
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(
-            CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1,
-            EccCurveType::K256,
-        ),
+        TestConfig::new(IdkgProtocolAlgorithm::EcdsaSecp256k1, EccCurveType::K256),
         nodes,
         threshold,
         0,
@@ -372,10 +366,7 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Canis
     let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed-for-p256-stability-test");
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(
-            CanisterThresholdSignatureAlgorithm::EcdsaSecp256r1,
-            EccCurveType::P256,
-        ),
+        TestConfig::new(IdkgProtocolAlgorithm::EcdsaSecp256r1, EccCurveType::P256),
         nodes,
         threshold,
         0,
@@ -386,70 +377,70 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Canis
     check_dealings(
         "key",
         &setup.key,
-        "dc918ee1d73355e5",
-        "f8bbd6baf59737c6",
+        "57aca428a42a3774",
+        "0b45f8ac30391fc1",
         &[
-            "e86a88a44f693f00",
-            "f46e7cef32a25a0b",
-            "b9498502dabac019",
-            "afee7214cc5f3699",
-            "91ee02132762390d",
+            "84223bc65fa597ad",
+            "e6305e9c308fb599",
+            "caf01b8138a46e76",
+            "fd4fdb5832a66368",
+            "0c0631e7b2a88660",
         ],
     )?;
 
     check_dealings(
         "key*lambda",
         &setup.key_times_lambda,
-        "d80ba060e9d626ee",
-        "19d079d4653de58a",
+        "aadfa658e9ab4edd",
+        "db755534d152d48a",
         &[
-            "89edf2b0c56e2973",
-            "62737b2926c8459c",
-            "657fe16995b9e60d",
-            "19bbaa2ec157b080",
-            "b5f00531d057abe2",
+            "6fbbb342ca7dce0b",
+            "62b64ce8eb66038b",
+            "1090b25b73f41aed",
+            "94301205a8d69918",
+            "e80f6122eec0926d",
         ],
     )?;
 
     check_dealings(
         "lambda",
         &setup.lambda,
-        "526fc2021f8437b9",
-        "fcf8db82d75a2721",
+        "a3c15cf8fc91ac59",
+        "4aa76a784787afca",
         &[
-            "cc8222bf553ba800",
-            "80d9b8d52a64060d",
-            "56ebb454140f84d0",
-            "a14f4e83ca79ec5f",
-            "356a4e85b188afb9",
+            "4c12e43d8fcc2fe0",
+            "ddbed36a446fc478",
+            "8a374349bb48a029",
+            "b6d99f9c207ad7eb",
+            "86cdd6170652ae81",
         ],
     )?;
 
     check_dealings(
         "kappa",
         &setup.kappa,
-        "5ac536fcb96011e7",
-        "9ee8551c0a991ace",
+        "12ef49bc52d8404c",
+        "40330a049570c4bd",
         &[
-            "191bd6e1a3049b2d",
-            "23c892f03b2b6681",
-            "5119183f814da146",
-            "010eb6aa49124a01",
-            "f1ec18388ea33870",
+            "fca98b65204c12dc",
+            "1d4fd7cc4ef5fe9f",
+            "6d2d459e15d0f0b5",
+            "8d806521c42fd7d8",
+            "13462b4571b74bc7",
         ],
     )?;
 
     check_dealings(
         "kappa*lambda",
         &setup.kappa_times_lambda,
-        "d147b2e286a0601f",
-        "39eee21a5fca606b",
+        "a7c118c4864af7b2",
+        "eeaebef0aecf27f1",
         &[
-            "d1f72446c7d1e70d",
-            "9a2d6e1f48c38cfb",
-            "77a2e31612dc689d",
-            "b726a8253f12e6b0",
-            "1c4624d5b02e91f9",
+            "c101169675afb7ae",
+            "e8f395804bbbe4dc",
+            "b8ce0fd3b5d2f632",
+            "90154a70a3089714",
+            "e85a29c25e3cde09",
         ],
     )?;
 
@@ -466,11 +457,11 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Canis
     check_ecdsa_shares(
         &shares,
         &[
-            "dcd41127ca62253e",
-            "d14ed8886a1cb164",
-            "bb8bbcd522414b82",
-            "e63f19db064fd61b",
-            "83033dc640e40a83",
+            "db8147dca7d0a751",
+            "7a193718d67d2bbc",
+            "4fe9e795491a1a73",
+            "2a8db02316b3bee4",
+            "0e31aa88ee8dd26d",
         ],
     )?;
 
@@ -478,7 +469,7 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Canis
 
     verify_data(
         "signature".to_string(),
-        "751198d811154531",
+        "bb02bf80a51dd013",
         &sig.serialize(),
     );
 
@@ -494,10 +485,7 @@ fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
     let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed-for-p256-sig-and-k256-mega");
 
     let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(
-            CanisterThresholdSignatureAlgorithm::EcdsaSecp256r1,
-            EccCurveType::K256,
-        ),
+        TestConfig::new(IdkgProtocolAlgorithm::EcdsaSecp256r1, EccCurveType::K256),
         nodes,
         threshold,
         0,
@@ -508,70 +496,70 @@ fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
     check_dealings(
         "key",
         &setup.key,
-        "4d9040a1feeec927",
-        "4bf89efcb451357e",
+        "c9875afb79900e44",
+        "94365159a32b2331",
         &[
-            "1a2aaa14df6a9f94",
-            "3ae09ff1b237fa72",
-            "671cd863a272c52d",
-            "5f06286179bddad7",
-            "ddaeec0c1c078794",
+            "ff9738598036bfcb",
+            "3e544e898e8556ef",
+            "73baf9fb3d008e42",
+            "3d7d9f63fb7a314c",
+            "ad6594c48bd74174",
         ],
     )?;
 
     check_dealings(
         "key*lambda",
         &setup.key_times_lambda,
-        "7a73f78ed62eef95",
-        "0fddc53737adbdfe",
+        "d72b3943c9ffec62",
+        "5ca3a0bf99a154aa",
         &[
-            "dd0502015735bc00",
-            "4ecb20719862a1e5",
-            "2b468d8042cd0610",
-            "f7732f23ce42839a",
-            "c6c51f23968c9eed",
+            "3d9b841aa5b443cf",
+            "11e2f6c46a9beb0d",
+            "4bde35ab78cdc664",
+            "83a98817c2b7edf4",
+            "311d92582d3948a3",
         ],
     )?;
 
     check_dealings(
         "lambda",
         &setup.lambda,
-        "e8b34856638342f4",
-        "95c003633b20c504",
+        "e533a3d24221b8ef",
+        "f4949dc28348b02c",
         &[
-            "9495b2456e5ef5b6",
-            "b1816dc6a89c4f76",
-            "9b125b5fdbfaa750",
-            "59b0cd35f87e8928",
-            "cc9f2d420f2c208b",
+            "05919c0698fb6f13",
+            "d8fda7f4fd6f711d",
+            "5d68570cd2e82c24",
+            "d69fd9c55bec90bd",
+            "1c41ab5d8f62607a",
         ],
     )?;
 
     check_dealings(
         "kappa",
         &setup.kappa,
-        "71fe8d76f790e4d9",
-        "f0e92fcf6ad2623f",
+        "9090aaa5dc1c488b",
+        "eb3010f61d926794",
         &[
-            "697115459c795774",
-            "3139ee79fe726241",
-            "e5dda8ab6919d7f4",
-            "13100f6d0cfe9e12",
-            "7907d0f49a92df09",
+            "7b042234c436db10",
+            "d2e14a79d3b1feae",
+            "4ecfef4b58fb537b",
+            "2429ab1a8808f905",
+            "704903eb1b98cefb",
         ],
     )?;
 
     check_dealings(
         "kappa*lambda",
         &setup.kappa_times_lambda,
-        "956b943e0c856668",
-        "e3751d0d2a9b3bc7",
+        "266449ff46acb6b7",
+        "daecd8e6a6d052bf",
         &[
-            "a6798556cb3a72b7",
-            "aec9625b6ca14d07",
-            "f7c40b4cec507004",
-            "44ac292c7e9185b9",
-            "89c3575da08a7e09",
+            "8e5a1a6d49bdce44",
+            "4a02bc7a20c07550",
+            "260dc294ac419cf3",
+            "4dbaa3529dede11a",
+            "ac5e624f2534d6d6",
         ],
     )?;
 
@@ -588,11 +576,11 @@ fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
     check_ecdsa_shares(
         &shares,
         &[
-            "ec49c07026fad455",
-            "204a07eaecef9521",
-            "395636ecd1a40ee0",
-            "d4c1a235edb058d4",
-            "074a90109c969974",
+            "a3011fe4b38de5e8",
+            "2345d5274a84690f",
+            "47affce36ff68b99",
+            "173804f86f557ace",
+            "e19924ed36e89c0d",
         ],
     )?;
 
@@ -600,7 +588,7 @@ fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
 
     verify_data(
         "signature".to_string(),
-        "b1522949be1e9cab",
+        "07ec19ab78215b25",
         &sig.serialize(),
     );
 
@@ -616,10 +604,7 @@ fn verify_protocol_output_remains_unchanged_over_time_bip340_sig_with_k256_mega(
     let seed = Seed::from_bytes(b"ic-crypto-fixed-seed-for-bip340-with-k256-mega");
 
     let setup = SchnorrSignatureProtocolSetup::new(
-        TestConfig::new(
-            CanisterThresholdSignatureAlgorithm::Bip340,
-            EccCurveType::K256,
-        ),
+        TestConfig::new(IdkgProtocolAlgorithm::Bip340, EccCurveType::K256),
         nodes,
         threshold,
         0,
@@ -629,28 +614,28 @@ fn verify_protocol_output_remains_unchanged_over_time_bip340_sig_with_k256_mega(
     check_dealings(
         "key",
         &setup.key,
-        "6a94ce5970653eae",
-        "bf1314c2d8495ca2",
+        "1c9c1ae081f01333",
+        "a5a39ea1368a7eaf",
         &[
-            "7517c25dba8cf187",
-            "3bf871020aa6e96e",
-            "816e3549f5e2a8b8",
-            "4ba40bcef67fe52d",
-            "689c0ceae46267a2",
+            "381968318ce1a972",
+            "a64b36f75ab54e21",
+            "8130efaa7a966d2b",
+            "7c0fda52e3638cbb",
+            "09c86538386a2373",
         ],
     )?;
 
     check_dealings(
         "presignature",
         &setup.presig,
-        "fd49455efe238ca9",
-        "bc0f01d2aa451d6c",
+        "2ee7c97f0c3aa2d0",
+        "708015ca0764b96b",
         &[
-            "6dd3b882e6bc97fd",
-            "78d303e6c9b42dfa",
-            "abcad5b680a959af",
-            "bfb8c9bdc34c276b",
-            "bdcd11bd1fa59489",
+            "e1bda72a2363c83e",
+            "033a4b7d3c6d7b35",
+            "0d883aca685b888d",
+            "babed7a860f38993",
+            "c541088384582f9e",
         ],
     )?;
 
@@ -671,11 +656,11 @@ fn verify_protocol_output_remains_unchanged_over_time_bip340_sig_with_k256_mega(
     check_bip340_shares(
         &shares,
         &[
-            "bb6c8b9551250d56",
-            "2a5999a29f00c05f",
-            "b8a733fb0d74f5da",
-            "3e5f66fa12e37824",
-            "7e211324eacfc147",
+            "12e004e15a48699b",
+            "5233d7a0f522d41a",
+            "d3c478beef7fcf69",
+            "7b43000b5fb724d2",
+            "69b109d0bc023c50",
         ],
     )?;
 
@@ -683,7 +668,7 @@ fn verify_protocol_output_remains_unchanged_over_time_bip340_sig_with_k256_mega(
 
     verify_data(
         "signature".to_string(),
-        "f17223e84b22b6f1",
+        "49a5195e5ac54a6d",
         &sig.serialize().unwrap(),
     );
 
@@ -699,10 +684,7 @@ fn verify_protocol_output_remains_unchanged_over_time_ed25519_sig_with_k256_mega
     let seed = Seed::from_bytes(b"ic-crypto-fixed-seed-for-ed25519-with-k256-mega");
 
     let setup = SchnorrSignatureProtocolSetup::new(
-        TestConfig::new(
-            CanisterThresholdSignatureAlgorithm::Ed25519,
-            EccCurveType::K256,
-        ),
+        TestConfig::new(IdkgProtocolAlgorithm::Ed25519, EccCurveType::K256),
         nodes,
         threshold,
         0,
@@ -712,28 +694,28 @@ fn verify_protocol_output_remains_unchanged_over_time_ed25519_sig_with_k256_mega
     check_dealings(
         "key",
         &setup.key,
-        "904041b4304a5773",
-        "581d0154b6c5f41d",
+        "de28aec1408afb48",
+        "7797fa45df1fcd13",
         &[
-            "23fa953ba92e5102",
-            "19afc3e77f2dc277",
-            "ba92ecf9b3143d12",
-            "06453e6ba0a85cde",
-            "021d037b9db16e33",
+            "f36040a6b41e3908",
+            "3eb6ac994d151800",
+            "4af0cad4ad64e34b",
+            "a625f366fb63867d",
+            "a2ef0bbf4c6d2f6c",
         ],
     )?;
 
     check_dealings(
         "presignature",
         &setup.presig,
-        "9cc1616cd58e54bb",
-        "01c3d11318f8e7f5",
+        "effd5d953be5452f",
+        "c1d97f34370ed3c9",
         &[
-            "3c7b469d4811ff9e",
-            "9ab0aac91db88c6b",
-            "4ac37d70190d6fdf",
-            "a5507c04d54d1284",
-            "0680c52dab755f00",
+            "a58e4c739e56920c",
+            "601805cd26f7c1e2",
+            "0416173015da91be",
+            "af45434844419435",
+            "037b1e9b2409060d",
         ],
     )?;
 
@@ -754,11 +736,11 @@ fn verify_protocol_output_remains_unchanged_over_time_ed25519_sig_with_k256_mega
     check_ed25519_shares(
         &shares,
         &[
-            "391770613942806b",
-            "7e9bf1bbbfb77563",
-            "574714c5212e1b71",
-            "3a6767a145356358",
-            "376d30bbc07b279e",
+            "fff354b51e340f21",
+            "1bdc843038096cbd",
+            "92df60247f781e56",
+            "2a4cbf5672d728d5",
+            "eea7a9410ea5e773",
         ],
     )?;
 
@@ -766,7 +748,7 @@ fn verify_protocol_output_remains_unchanged_over_time_ed25519_sig_with_k256_mega
 
     verify_data(
         "signature".to_string(),
-        "ff747b71eb5cc045",
+        "9fae525b533ec83a",
         &sig.serialize(),
     );
 
@@ -973,10 +955,7 @@ fn bip340_combined_share_serialization_roundtrip_works_correctly() {
     let random_beacon = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
-    let cfg = TestConfig::new(
-        CanisterThresholdSignatureAlgorithm::Bip340,
-        EccCurveType::K256,
-    );
+    let cfg = TestConfig::new(IdkgProtocolAlgorithm::Bip340, EccCurveType::K256);
 
     let seed = Seed::from_bytes(&random_bytes(rng));
     let setup = SchnorrSignatureProtocolSetup::new(cfg, nodes, threshold, 0, seed).unwrap();
@@ -1011,10 +990,7 @@ fn ed25519_combined_share_serialization_roundtrip_works_correctly() {
     let random_beacon = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
-    let cfg = TestConfig::new(
-        CanisterThresholdSignatureAlgorithm::Ed25519,
-        EccCurveType::K256,
-    );
+    let cfg = TestConfig::new(IdkgProtocolAlgorithm::Ed25519, EccCurveType::K256);
 
     let seed = Seed::from_bytes(&random_bytes(rng));
     let setup =

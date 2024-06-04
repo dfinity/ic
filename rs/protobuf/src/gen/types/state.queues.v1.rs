@@ -227,7 +227,6 @@ pub struct CanisterQueue {
 }
 /// Nested message and enum types in `CanisterQueue`.
 pub mod canister_queue {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct QueueItem {
@@ -236,7 +235,6 @@ pub mod canister_queue {
     }
     /// Nested message and enum types in `QueueItem`.
     pub mod queue_item {
-        #[derive(serde::Serialize, serde::Deserialize)]
         #[allow(clippy::derive_partial_eq_without_eq)]
         #[derive(Clone, PartialEq, ::prost::Oneof)]
         pub enum R {
@@ -246,7 +244,6 @@ pub mod canister_queue {
         }
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterQueues {
