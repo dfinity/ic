@@ -11,6 +11,7 @@ pub use crate::consensus::idkg::common::{
 use crate::consensus::idkg::ecdsa::{
     PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsRef,
 };
+use crate::crypto::canister_threshold_sig::ThresholdSchnorrSigShare;
 use crate::{
     consensus::BasicSignature,
     crypto::{
@@ -907,6 +908,7 @@ pub enum EcdsaMessage {
     EcdsaSignedDealing(SignedIDkgDealing),
     EcdsaDealingSupport(IDkgDealingSupport),
     EcdsaSigShare(EcdsaSigShare),
+    SchnorrSigShare(SchnorrSigShare),
     EcdsaComplaint(EcdsaComplaint),
     EcdsaOpening(EcdsaOpening),
 }
@@ -917,7 +919,8 @@ impl From<EcdsaMessage> for pb::EcdsaMessage {
         let msg = match &value {
             EcdsaMessage::EcdsaSignedDealing(x) => Msg::SignedDealing(x.into()),
             EcdsaMessage::EcdsaDealingSupport(x) => Msg::DealingSupport(x.into()),
-            EcdsaMessage::EcdsaSigShare(x) => Msg::SigShare(x.into()),
+            EcdsaMessage::EcdsaSigShare(x) => Msg::EcdsaSigShare(x.into()),
+            EcdsaMessage::SchnorrSigShare(x) => Msg::SchnorrSigShare(x.into()),
             EcdsaMessage::EcdsaComplaint(x) => Msg::Complaint(x.into()),
             EcdsaMessage::EcdsaOpening(x) => Msg::Opening(x.into()),
         };
@@ -936,7 +939,8 @@ impl TryFrom<pb::EcdsaMessage> for EcdsaMessage {
         Ok(match &msg {
             Msg::SignedDealing(x) => EcdsaMessage::EcdsaSignedDealing(x.try_into()?),
             Msg::DealingSupport(x) => EcdsaMessage::EcdsaDealingSupport(x.try_into()?),
-            Msg::SigShare(x) => EcdsaMessage::EcdsaSigShare(x.try_into()?),
+            Msg::EcdsaSigShare(x) => EcdsaMessage::EcdsaSigShare(x.try_into()?),
+            Msg::SchnorrSigShare(x) => EcdsaMessage::SchnorrSigShare(x.try_into()?),
             Msg::Complaint(x) => EcdsaMessage::EcdsaComplaint(x.try_into()?),
             Msg::Opening(x) => EcdsaMessage::EcdsaOpening(x.try_into()?),
         })
@@ -1068,11 +1072,26 @@ pub fn dealing_support_prefix(
     ))
 }
 
-pub fn sig_share_prefix(
+pub fn ecdsa_sig_share_prefix(
     request_id: &RequestId,
     sig_share_node_id: &NodeId,
 ) -> EcdsaPrefixOf<EcdsaSigShare> {
     // Group_tag: quadruple Id, Meta info: <sig share sender>
+    let mut hasher = Sha256::new();
+    sig_share_node_id.hash(&mut hasher);
+
+    EcdsaPrefixOf::new(EcdsaPrefix::new(
+        request_id.pre_signature_id.id(),
+        hasher.finish(),
+        request_id.height,
+    ))
+}
+
+pub fn schnorr_sig_share_prefix(
+    request_id: &RequestId,
+    sig_share_node_id: &NodeId,
+) -> EcdsaPrefixOf<SchnorrSigShare> {
+    // Group_tag: pre-signature Id, Meta info: <sig share sender>
     let mut hasher = Sha256::new();
     sig_share_node_id.hash(&mut hasher);
 
@@ -1128,7 +1147,11 @@ pub enum EcdsaArtifactId {
         EcdsaPrefixOf<IDkgDealingSupport>,
         CryptoHashOf<IDkgDealingSupport>,
     ),
-    SigShare(EcdsaPrefixOf<EcdsaSigShare>, CryptoHashOf<EcdsaSigShare>),
+    EcdsaSigShare(EcdsaPrefixOf<EcdsaSigShare>, CryptoHashOf<EcdsaSigShare>),
+    SchnorrSigShare(
+        EcdsaPrefixOf<SchnorrSigShare>,
+        CryptoHashOf<SchnorrSigShare>,
+    ),
     Complaint(EcdsaPrefixOf<EcdsaComplaint>, CryptoHashOf<EcdsaComplaint>),
     Opening(EcdsaPrefixOf<EcdsaOpening>, CryptoHashOf<EcdsaOpening>),
 }
@@ -1138,7 +1161,8 @@ impl EcdsaArtifactId {
         match self {
             EcdsaArtifactId::Dealing(prefix, _) => prefix.as_ref().clone(),
             EcdsaArtifactId::DealingSupport(prefix, _) => prefix.as_ref().clone(),
-            EcdsaArtifactId::SigShare(prefix, _) => prefix.as_ref().clone(),
+            EcdsaArtifactId::EcdsaSigShare(prefix, _) => prefix.as_ref().clone(),
+            EcdsaArtifactId::SchnorrSigShare(prefix, _) => prefix.as_ref().clone(),
             EcdsaArtifactId::Complaint(prefix, _) => prefix.as_ref().clone(),
             EcdsaArtifactId::Opening(prefix, _) => prefix.as_ref().clone(),
         }
@@ -1148,7 +1172,8 @@ impl EcdsaArtifactId {
         match self {
             EcdsaArtifactId::Dealing(_, hash) => hash.as_ref().clone(),
             EcdsaArtifactId::DealingSupport(_, hash) => hash.as_ref().clone(),
-            EcdsaArtifactId::SigShare(_, hash) => hash.as_ref().clone(),
+            EcdsaArtifactId::EcdsaSigShare(_, hash) => hash.as_ref().clone(),
+            EcdsaArtifactId::SchnorrSigShare(_, hash) => hash.as_ref().clone(),
             EcdsaArtifactId::Complaint(_, hash) => hash.as_ref().clone(),
             EcdsaArtifactId::Opening(_, hash) => hash.as_ref().clone(),
         }
@@ -1178,7 +1203,11 @@ impl From<(EcdsaMessageType, EcdsaPrefix, CryptoHash)> for EcdsaArtifactId {
                 EcdsaPrefixOf::new(prefix),
                 CryptoHashOf::new(crypto_hash),
             ),
-            EcdsaMessageType::SigShare => EcdsaArtifactId::SigShare(
+            EcdsaMessageType::EcdsaSigShare => EcdsaArtifactId::EcdsaSigShare(
+                EcdsaPrefixOf::new(prefix),
+                CryptoHashOf::new(crypto_hash),
+            ),
+            EcdsaMessageType::SchnorrSigShare => EcdsaArtifactId::SchnorrSigShare(
                 EcdsaPrefixOf::new(prefix),
                 CryptoHashOf::new(crypto_hash),
             ),
@@ -1205,7 +1234,11 @@ impl From<EcdsaArtifactId> for pb::EcdsaArtifactId {
                 prefix: Some((&p.get()).into()),
                 hash: h.get().0,
             }),
-            EcdsaArtifactId::SigShare(p, h) => Kind::SigShare(pb::PrefixHashPair {
+            EcdsaArtifactId::EcdsaSigShare(p, h) => Kind::EcdsaSigShare(pb::PrefixHashPair {
+                prefix: Some((&p.get()).into()),
+                hash: h.get().0,
+            }),
+            EcdsaArtifactId::SchnorrSigShare(p, h) => Kind::SchnorrSigShare(pb::PrefixHashPair {
                 prefix: Some((&p.get()).into()),
                 hash: h.get().0,
             }),
@@ -1243,10 +1276,17 @@ impl TryFrom<pb::EcdsaArtifactId> for EcdsaArtifactId {
                 )?),
                 CryptoHashOf::new(CryptoHash(p.hash)),
             ),
-            Kind::SigShare(p) => Self::SigShare(
+            Kind::EcdsaSigShare(p) => Self::EcdsaSigShare(
                 EcdsaPrefixOf::new(try_from_option_field(
                     p.prefix.as_ref(),
-                    "SigShare::prefix",
+                    "EcdsaSigShare::prefix",
+                )?),
+                CryptoHashOf::new(CryptoHash(p.hash)),
+            ),
+            Kind::SchnorrSigShare(p) => Self::SchnorrSigShare(
+                EcdsaPrefixOf::new(try_from_option_field(
+                    p.prefix.as_ref(),
+                    "SchnorrSigShare::prefix",
                 )?),
                 CryptoHashOf::new(CryptoHash(p.hash)),
             ),
@@ -1271,7 +1311,8 @@ impl TryFrom<pb::EcdsaArtifactId> for EcdsaArtifactId {
 pub enum EcdsaMessageType {
     Dealing,
     DealingSupport,
-    SigShare,
+    EcdsaSigShare,
+    SchnorrSigShare,
     Complaint,
     Opening,
 }
@@ -1281,7 +1322,8 @@ impl From<&EcdsaMessage> for EcdsaMessageType {
         match msg {
             EcdsaMessage::EcdsaSignedDealing(_) => EcdsaMessageType::Dealing,
             EcdsaMessage::EcdsaDealingSupport(_) => EcdsaMessageType::DealingSupport,
-            EcdsaMessage::EcdsaSigShare(_) => EcdsaMessageType::SigShare,
+            EcdsaMessage::EcdsaSigShare(_) => EcdsaMessageType::EcdsaSigShare,
+            EcdsaMessage::SchnorrSigShare(_) => EcdsaMessageType::SchnorrSigShare,
             EcdsaMessage::EcdsaComplaint(_) => EcdsaMessageType::Complaint,
             EcdsaMessage::EcdsaOpening(_) => EcdsaMessageType::Opening,
         }
@@ -1293,7 +1335,8 @@ impl From<&EcdsaArtifactId> for EcdsaMessageType {
         match id {
             EcdsaArtifactId::Dealing(..) => EcdsaMessageType::Dealing,
             EcdsaArtifactId::DealingSupport(..) => EcdsaMessageType::DealingSupport,
-            EcdsaArtifactId::SigShare(..) => EcdsaMessageType::SigShare,
+            EcdsaArtifactId::EcdsaSigShare(..) => EcdsaMessageType::EcdsaSigShare,
+            EcdsaArtifactId::SchnorrSigShare(..) => EcdsaMessageType::SchnorrSigShare,
             EcdsaArtifactId::Complaint(..) => EcdsaMessageType::Complaint,
             EcdsaArtifactId::Opening(..) => EcdsaMessageType::Opening,
         }
@@ -1305,7 +1348,8 @@ impl EcdsaMessageType {
         match self {
             Self::Dealing => "signed_dealing",
             Self::DealingSupport => "dealing_support",
-            Self::SigShare => "sig_share",
+            Self::EcdsaSigShare => "ecdsa_sig_share",
+            Self::SchnorrSigShare => "schnorr_sig_share",
             Self::Complaint => "complaint",
             Self::Opening => "opening",
         }
@@ -1355,7 +1399,56 @@ impl Display for EcdsaSigShare {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "SigShare[request_id = {:?}, signer_id = {:?}]",
+            "EcdsaSigShare[request_id = {:?}, signer_id = {:?}]",
+            self.request_id, self.signer_id,
+        )
+    }
+}
+
+/// The Schnorr signature share
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct SchnorrSigShare {
+    /// The node that signed the share
+    pub signer_id: NodeId,
+
+    /// The request this signature share belongs to
+    pub request_id: RequestId,
+
+    /// The signature share
+    pub share: ThresholdSchnorrSigShare,
+}
+
+impl From<&SchnorrSigShare> for pb::SchnorrSigShare {
+    fn from(value: &SchnorrSigShare) -> Self {
+        Self {
+            signer_id: Some(node_id_into_protobuf(value.signer_id)),
+            request_id: Some(pb::RequestId::from(value.request_id.clone())),
+            sig_share_raw: value.share.sig_share_raw.clone(),
+        }
+    }
+}
+
+impl TryFrom<&pb::SchnorrSigShare> for SchnorrSigShare {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::SchnorrSigShare) -> Result<Self, Self::Error> {
+        Ok(Self {
+            signer_id: node_id_try_from_option(value.signer_id.clone())?,
+            request_id: try_from_option_field(
+                value.request_id.as_ref(),
+                "SchnorrSigShare::request_id",
+            )?,
+            share: ThresholdSchnorrSigShare {
+                sig_share_raw: value.sig_share_raw.clone(),
+            },
+        })
+    }
+}
+
+impl Display for SchnorrSigShare {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "SchnorrSigShare[request_id = {:?}, signer_id = {:?}]",
             self.request_id, self.signer_id,
         )
     }
@@ -1523,6 +1616,7 @@ pub enum EcdsaMessageAttribute {
     EcdsaSignedDealing(IDkgTranscriptId),
     EcdsaDealingSupport(IDkgTranscriptId),
     EcdsaSigShare(RequestId),
+    SchnorrSigShare(RequestId),
     EcdsaComplaint(IDkgTranscriptId),
     EcdsaOpening(IDkgTranscriptId),
 }
@@ -1533,7 +1627,8 @@ impl From<EcdsaMessageAttribute> for pb::EcdsaMessageAttribute {
         let kind = match value {
             EcdsaMessageAttribute::EcdsaSignedDealing(id) => Kind::SignedDealing((&id).into()),
             EcdsaMessageAttribute::EcdsaDealingSupport(id) => Kind::DealingSupport((&id).into()),
-            EcdsaMessageAttribute::EcdsaSigShare(id) => Kind::SigShare(id.into()),
+            EcdsaMessageAttribute::EcdsaSigShare(id) => Kind::EcdsaSigShare(id.into()),
+            EcdsaMessageAttribute::SchnorrSigShare(id) => Kind::SchnorrSigShare(id.into()),
             EcdsaMessageAttribute::EcdsaComplaint(id) => Kind::Complaint((&id).into()),
             EcdsaMessageAttribute::EcdsaOpening(id) => Kind::Opening((&id).into()),
         };
@@ -1553,7 +1648,8 @@ impl TryFrom<pb::EcdsaMessageAttribute> for EcdsaMessageAttribute {
         Ok(match &kind {
             Kind::SignedDealing(id) => EcdsaMessageAttribute::EcdsaSignedDealing(id.try_into()?),
             Kind::DealingSupport(id) => EcdsaMessageAttribute::EcdsaDealingSupport(id.try_into()?),
-            Kind::SigShare(id) => EcdsaMessageAttribute::EcdsaSigShare(id.try_into()?),
+            Kind::EcdsaSigShare(id) => EcdsaMessageAttribute::EcdsaSigShare(id.try_into()?),
+            Kind::SchnorrSigShare(id) => EcdsaMessageAttribute::SchnorrSigShare(id.try_into()?),
             Kind::Complaint(id) => EcdsaMessageAttribute::EcdsaComplaint(id.try_into()?),
             Kind::Opening(id) => EcdsaMessageAttribute::EcdsaOpening(id.try_into()?),
         })
@@ -1572,6 +1668,9 @@ impl From<&EcdsaMessage> for EcdsaMessageAttribute {
             EcdsaMessage::EcdsaSigShare(share) => {
                 EcdsaMessageAttribute::EcdsaSigShare(share.request_id.clone())
             }
+            EcdsaMessage::SchnorrSigShare(share) => {
+                EcdsaMessageAttribute::SchnorrSigShare(share.request_id.clone())
+            }
             EcdsaMessage::EcdsaComplaint(complaint) => EcdsaMessageAttribute::EcdsaComplaint(
                 complaint.content.idkg_complaint.transcript_id,
             ),
@@ -1587,7 +1686,8 @@ impl EcdsaMessageAttribute {
         match self {
             Self::EcdsaSignedDealing(_) => "signed_dealing",
             Self::EcdsaDealingSupport(_) => "dealing_support",
-            Self::EcdsaSigShare(_) => "sig_share",
+            Self::EcdsaSigShare(_) => "ecdsa_sig_share",
+            Self::SchnorrSigShare(_) => "schnorr_sig_share",
             Self::EcdsaComplaint(_) => "complaint",
             Self::EcdsaOpening(_) => "opening",
         }
@@ -1619,6 +1719,16 @@ impl TryFrom<EcdsaMessage> for EcdsaSigShare {
     fn try_from(msg: EcdsaMessage) -> Result<Self, Self::Error> {
         match msg {
             EcdsaMessage::EcdsaSigShare(x) => Ok(x),
+            _ => Err(msg),
+        }
+    }
+}
+
+impl TryFrom<EcdsaMessage> for SchnorrSigShare {
+    type Error = EcdsaMessage;
+    fn try_from(msg: EcdsaMessage) -> Result<Self, Self::Error> {
+        match msg {
+            EcdsaMessage::SchnorrSigShare(x) => Ok(x),
             _ => Err(msg),
         }
     }
@@ -2068,11 +2178,21 @@ impl EcdsaObject for IDkgDealingSupport {
 
 impl EcdsaObject for EcdsaSigShare {
     fn message_prefix(&self) -> EcdsaPrefixOf<Self> {
-        sig_share_prefix(&self.request_id, &self.signer_id)
+        ecdsa_sig_share_prefix(&self.request_id, &self.signer_id)
     }
 
     fn message_id(&self) -> EcdsaArtifactId {
-        EcdsaArtifactId::SigShare(self.message_prefix(), crypto_hash(self))
+        EcdsaArtifactId::EcdsaSigShare(self.message_prefix(), crypto_hash(self))
+    }
+}
+
+impl EcdsaObject for SchnorrSigShare {
+    fn message_prefix(&self) -> EcdsaPrefixOf<Self> {
+        schnorr_sig_share_prefix(&self.request_id, &self.signer_id)
+    }
+
+    fn message_id(&self) -> EcdsaArtifactId {
+        EcdsaArtifactId::SchnorrSigShare(self.message_prefix(), crypto_hash(self))
     }
 }
 
@@ -2110,6 +2230,7 @@ impl From<&EcdsaMessage> for EcdsaArtifactId {
             EcdsaMessage::EcdsaSignedDealing(object) => object.message_id(),
             EcdsaMessage::EcdsaDealingSupport(object) => object.message_id(),
             EcdsaMessage::EcdsaSigShare(object) => object.message_id(),
+            EcdsaMessage::SchnorrSigShare(object) => object.message_id(),
             EcdsaMessage::EcdsaComplaint(object) => object.message_id(),
             EcdsaMessage::EcdsaOpening(object) => object.message_id(),
         }

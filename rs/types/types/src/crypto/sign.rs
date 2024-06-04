@@ -5,7 +5,7 @@ use crate::canister_http::CanisterHttpResponseMetadata;
 use crate::consensus::{
     certification::CertificationContent,
     dkg::DealingContent,
-    idkg::{EcdsaComplaintContent, EcdsaOpeningContent, EcdsaSigShare},
+    idkg::{EcdsaComplaintContent, EcdsaOpeningContent},
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
     NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
@@ -61,7 +61,6 @@ mod private {
     impl SignatureDomainSeal for FinalizationContent {}
     impl SignatureDomainSeal for IDkgDealing {}
     impl SignatureDomainSeal for SignedIDkgDealing {}
-    impl SignatureDomainSeal for EcdsaSigShare {}
     impl SignatureDomainSeal for EcdsaComplaintContent {}
     impl SignatureDomainSeal for EcdsaOpeningContent {}
     impl SignatureDomainSeal for WebAuthnEnvelope {}
@@ -118,13 +117,6 @@ impl SignatureDomain for IDkgDealing {
 impl SignatureDomain for SignedIDkgDealing {
     fn domain(&self) -> Vec<u8> {
         domain_with_prepended_length(DomainSeparator::SignedIdkgDealing.as_str())
-    }
-}
-
-impl SignatureDomain for EcdsaSigShare {
-    // ECDSA is an external standard, hence no domain is used.
-    fn domain(&self) -> Vec<u8> {
-        vec![]
     }
 }
 

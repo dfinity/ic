@@ -17,7 +17,7 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEc
 use ic_replicated_state::ReplicatedState;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::idkg::{
-    ecdsa::ThresholdEcdsaSigInputsRef, sig_share_prefix, EcdsaBlockReader, EcdsaMessage,
+    ecdsa::ThresholdEcdsaSigInputsRef, ecdsa_sig_share_prefix, EcdsaBlockReader, EcdsaMessage,
     EcdsaSigShare, EcdsaStats, RequestId,
 };
 use ic_types::crypto::canister_threshold_sig::{
@@ -123,7 +123,7 @@ impl EcdsaSignerImpl {
         let mut validated_sig_shares = BTreeSet::new();
 
         let mut ret = Vec::new();
-        for (id, share) in ecdsa_pool.unvalidated().signature_shares() {
+        for (id, share) in ecdsa_pool.unvalidated().ecdsa_signature_shares() {
             // Remove the duplicate entries
             let key = (share.request_id.clone(), share.signer_id);
             if validated_sig_shares.contains(&key) {
@@ -209,7 +209,7 @@ impl EcdsaSignerImpl {
         // Unvalidated signature shares.
         let mut action = ecdsa_pool
             .unvalidated()
-            .signature_shares()
+            .ecdsa_signature_shares()
             .filter(|(_, share)| self.should_purge(share, current_height, &in_progress))
             .map(|(id, _)| EcdsaChangeAction::RemoveUnvalidated(id))
             .collect();
@@ -218,7 +218,7 @@ impl EcdsaSignerImpl {
         // Validated signature shares.
         let mut action = ecdsa_pool
             .validated()
-            .signature_shares()
+            .ecdsa_signature_shares()
             .filter(|(_, share)| self.should_purge(share, current_height, &in_progress))
             .map(|(id, _)| EcdsaChangeAction::RemoveValidated(id))
             .collect();
@@ -336,10 +336,10 @@ impl EcdsaSignerImpl {
         signer_id: &NodeId,
         request_id: &RequestId,
     ) -> bool {
-        let prefix = sig_share_prefix(request_id, signer_id);
+        let prefix = ecdsa_sig_share_prefix(request_id, signer_id);
         ecdsa_pool
             .validated()
-            .signature_shares_by_prefix(prefix)
+            .ecdsa_signature_shares_by_prefix(prefix)
             .any(|(_, share)| share.request_id == *request_id && share.signer_id == *signer_id)
     }
 
@@ -547,7 +547,7 @@ impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
 
         // Collect the signature shares for the request.
         let mut sig_shares = BTreeMap::new();
-        for (_, share) in self.ecdsa_pool.validated().signature_shares() {
+        for (_, share) in self.ecdsa_pool.validated().ecdsa_signature_shares() {
             if share.request_id == request_id {
                 sig_shares.insert(share.signer_id, share.share.clone());
             }
