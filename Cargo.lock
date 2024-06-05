@@ -18956,7 +18956,7 @@ dependencies = [
  "rcgen",
  "regex",
  "registry-canister",
- "reqwest 0.11.22",
+ "reqwest 0.12.4",
  "ring 0.17.8",
  "rosetta-core",
  "rsa",
