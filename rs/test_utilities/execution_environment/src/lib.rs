@@ -1992,6 +1992,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_ic00_schnorr_public_key(mut self, status: FlagStatus) -> Self {
+        self.execution_config.ic00_schnorr_public_key = status;
+        self
+    }
+
     pub fn with_ic00_sign_with_schnorr(mut self, status: FlagStatus) -> Self {
         self.execution_config.ic00_sign_with_schnorr = status;
         self
