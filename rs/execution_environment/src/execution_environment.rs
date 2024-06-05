@@ -386,6 +386,7 @@ impl ExecutionEnvironment {
             own_subnet_type,
             config.max_controllers,
             compute_capacity,
+            config.max_canister_memory_size,
             config.rate_limiting_of_instructions,
             config.allocatable_compute_capacity_in_percent,
             config.wasm_chunk_store,
@@ -537,7 +538,7 @@ impl ExecutionEnvironment {
             }
         }
 
-        let result = match method {
+        let result: ExecuteSubnetMessageResult = match method {
             Ok(Ic00Method::InstallCode) => {
                 // Tail call is needed for deterministic time slicing here to
                 // properly handle the case of a paused execution.
@@ -1395,19 +1396,30 @@ impl ExecutionEnvironment {
             },
 
             Ok(Ic00Method::LoadCanisterSnapshot) => match self.config.canister_snapshots {
-                FlagStatus::Enabled => {
-                    let res = LoadCanisterSnapshotArgs::decode(payload).and_then(|_| {
-                        // TODO(EXC-1530): Implement load_canister_snapshot.
-                        Err(UserError::new(
-                            ErrorCode::CanisterContractViolation,
-                            "This API is not enabled on this subnet".to_string(),
-                        ))
-                    });
-                    ExecuteSubnetMessageResult::Finished {
-                        response: res,
+                FlagStatus::Enabled => match LoadCanisterSnapshotArgs::decode(payload) {
+                    Err(err) => ExecuteSubnetMessageResult::Finished {
+                        response: Err(err),
                         refund: msg.take_cycles(),
+                    },
+                    Ok(args) => {
+                        let origin = msg.canister_change_origin(args.get_sender_canister_version());
+                        let (result, instruction_used) = self.load_canister_snapshot(
+                            *msg.sender(),
+                            &mut state,
+                            args,
+                            round_limits,
+                            origin,
+                        );
+                        let msg_result = ExecuteSubnetMessageResult::Finished {
+                            response: result,
+                            refund: msg.take_cycles(),
+                        };
+
+                        let state =
+                            self.finish_subnet_message_execution(state, msg, msg_result, since);
+                        return (state, Some(instruction_used));
                     }
-                }
+                },
                 FlagStatus::Disabled => {
                     let err = Err(UserError::new(
                         ErrorCode::CanisterContractViolation,
@@ -2056,6 +2068,56 @@ impl ExecutionEnvironment {
         // Put canister back.
         state.put_canister_state(canister);
         result
+    }
+
+    /// Loads a canister snapshot onto an existing canister.
+    fn load_canister_snapshot(
+        &self,
+        sender: PrincipalId,
+        state: &mut ReplicatedState,
+        args: LoadCanisterSnapshotArgs,
+        round_limits: &mut RoundLimits,
+        origin: CanisterChangeOrigin,
+    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
+        let canister_id = args.get_canister_id();
+        // Take canister out.
+        let old_canister = match state.take_canister_state(&canister_id) {
+            None => {
+                return (
+                    Err(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} not found.", &canister_id),
+                    )),
+                    NumInstructions::new(0),
+                )
+            }
+            Some(canister) => canister,
+        };
+
+        let snapshot_id = args.snapshot_id();
+        let (instructions_used, result) = self.canister_manager.load_canister_snapshot(
+            sender,
+            &old_canister,
+            snapshot_id,
+            state,
+            round_limits,
+            origin,
+            &self.metrics.long_execution_already_in_progress,
+        );
+
+        let result = match result {
+            Ok(new_canister) => {
+                state.put_canister_state(new_canister);
+                Ok(EmptyBlob.encode())
+            }
+            Err(err) => {
+                // Could not load the canister snapshot, thus put back old state.
+                state.put_canister_state(old_canister);
+                Err(err.into())
+            }
+        };
+
+        (result, instructions_used)
     }
 
     /// Lists the snapshots belonging to the specified canister.

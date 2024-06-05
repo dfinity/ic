@@ -261,6 +261,11 @@ message CanisterControllersChange {
   repeated types.v1.PrincipalId controllers = 1;
 }
 
+message CanisterLoadSnapshot {
+  uint64 canister_version = 1;
+  uint64 taken_at_timestamp = 2;
+}
+
 message CanisterChange {
   uint64 timestamp_nanos = 1;
   uint64 canister_version = 2;
@@ -273,6 +278,7 @@ message CanisterChange {
     CanisterCodeUninstall canister_code_uninstall = 6;
     CanisterCodeDeployment canister_code_deployment = 7;
     CanisterControllersChange canister_controllers_change = 8;
+    CanisterLoadSnapshot canister_load_snapshot = 9;
   }
 }
 

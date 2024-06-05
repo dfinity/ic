@@ -10,8 +10,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::{
-    CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
+    CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, LoadCanisterSnapshotArgs,
+    Method as Ic00Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -227,6 +228,8 @@ impl SystemStateChanges {
                 ProvisionalCreateCanisterWithCyclesArgs::decode(payload)
                     .map(|record| record.get_sender_canister_version())
             }
+            Ok(Ic00Method::LoadCanisterSnapshot) => LoadCanisterSnapshotArgs::decode(payload)
+                .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::CanisterStatus)
             | Ok(Ic00Method::CanisterInfo)
@@ -257,8 +260,7 @@ impl SystemStateChanges {
             | Ok(Ic00Method::ClearChunkStore)
             | Ok(Ic00Method::TakeCanisterSnapshot)
             | Ok(Ic00Method::ListCanisterSnapshots)
-            | Ok(Ic00Method::DeleteCanisterSnapshot)
-            | Ok(Ic00Method::LoadCanisterSnapshot) => Ok(None),
+            | Ok(Ic00Method::DeleteCanisterSnapshot) => Ok(None),
             Err(_) => Err(UserError::new(
                 ErrorCode::CanisterMethodNotFound,
                 format!("Management canister has no method '{}'", msg.method_name),

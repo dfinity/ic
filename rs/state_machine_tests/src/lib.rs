@@ -624,6 +624,7 @@ pub struct StateMachineBuilder {
     subnet_id: Option<SubnetId>,
     routing_table: RoutingTable,
     use_cost_scaling_flag: bool,
+    enable_canister_snapshots: bool,
     ecdsa_keys: Vec<EcdsaKeyId>,
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
@@ -644,6 +645,7 @@ impl StateMachineBuilder {
             config: None,
             checkpoints_enabled: false,
             subnet_type: SubnetType::System,
+            enable_canister_snapshots: false,
             use_cost_scaling_flag: false,
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             nns_subnet_id: None,
@@ -755,6 +757,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_canister_snapshots(self, enable_canister_snapshots: bool) -> Self {
+        Self {
+            enable_canister_snapshots,
+            ..self
+        }
+    }
+
     pub fn with_ecdsa_key(self, key: EcdsaKeyId) -> Self {
         let mut ecdsa_keys = self.ecdsa_keys;
         ecdsa_keys.push(key);
@@ -819,6 +828,7 @@ impl StateMachineBuilder {
             self.subnet_size,
             self.subnet_id,
             self.use_cost_scaling_flag,
+            self.enable_canister_snapshots,
             self.ecdsa_keys,
             self.features,
             self.runtime.unwrap_or_else(|| {
@@ -1047,6 +1057,7 @@ impl StateMachine {
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
         use_cost_scaling_flag: bool,
+        enable_canister_snapshots: bool,
         ecdsa_keys: Vec<EcdsaKeyId>,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
@@ -1095,6 +1106,10 @@ impl StateMachine {
         if !dts {
             hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;
             hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;
+        }
+
+        if enable_canister_snapshots {
+            hypervisor_config.canister_snapshots = FlagStatus::Enabled;
         }
 
         // We are not interested in ingress signature validation.
