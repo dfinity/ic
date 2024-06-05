@@ -2,6 +2,7 @@ use candid::{candid_method, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_icrc1::{blocks::encoded_block_to_generic_block, Block};
+use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
@@ -366,6 +367,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "archive_stable_memory_bytes",
         ic_cdk::api::stable::stable64_size() as f64 * 65536f64,
         "Size of the stable memory allocated by this canister.",
+    )?;
+    w.encode_gauge(
+        "archive_total_memory_bytes",
+        total_memory_size_bytes() as f64,
+        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
     )?;
 
     let cycle_balance = ic_cdk::api::canister_balance128() as f64;
