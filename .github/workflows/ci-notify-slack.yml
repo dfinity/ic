@@ -17,13 +17,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const { owner, repo, number: issue_number } = context.issue;
-            if("requested_team" in context.payload) {
-              const team_reviewers = context.payload.requested_team.name;
-              return team_reviewers;
-            } else {
-              return "";
-            }
+            return "requested_team" in context.payload ? context.payload.requested_team.name : ""
       - name: Lookup Slack channel
         id: lookup
         if: steps.get-reviewers.outputs.result != ""
