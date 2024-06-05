@@ -20,7 +20,7 @@ jobs:
             return "requested_team" in context.payload ? context.payload.requested_team.name : ""
       - name: Lookup Slack channel
         id: lookup
-        if: steps.get-reviewers.outputs.result != ""
+        if: steps.get-reviewers.outputs.result != ''
         run: |
           TEAM=${{ steps.get-reviewers.outputs.result }}
           CHANNEL=$(jq -r ".$TEAM" .github/workflows/team-channels.json)
@@ -29,7 +29,7 @@ jobs:
         env:
           MESSAGE: ":github: <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>"
       - name: Post to a Slack channel
-        if: steps.get-reviewers.outputs.result != ""
+        if: steps.get-reviewers.outputs.result != ''
         id: slack
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         with:
