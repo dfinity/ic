@@ -74,15 +74,15 @@ impl CatchUpPackageProvider {
         crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
         logger: ReplicaLogger,
         node_id: NodeId,
-    ) -> Option<Self> {
-        Some(Self {
+    ) -> Self {
+        Self {
             node_id,
             registry,
             cup_dir,
             crypto,
             crypto_tls_config,
             logger,
-        })
+        }
     }
 
     // Randomly selects a peer from the subnet and pulls its CUP. If this CUP is
@@ -233,7 +233,7 @@ impl CatchUpPackageProvider {
 
         let client_config = self
             .crypto_tls_config
-            .client_config(node_id.clone(), self.registry.get_latest_version())
+            .client_config(*node_id, self.registry.get_latest_version())
             .ok()?;
 
         let https = hyper_rustls::HttpsConnectorBuilder::new()

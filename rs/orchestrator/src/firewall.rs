@@ -885,8 +885,7 @@ mod tests {
             temp_crypto_config_provider(),
             no_op_logger(),
             node,
-        )
-        .unwrap();
+        );
 
         Firewall::new(
             node,
