@@ -9,7 +9,7 @@ import "types/v1/signature.proto";
 import "types/v1/types.proto";
 
 message EcdsaPayload {
-  reserved 2, 3, 4;
+  reserved 2, 3, 4, 9, 11, 12;
   repeated CompletedSignature signature_agreements = 1;
   registry.subnet.v1.IDkgTranscriptId next_unused_transcript_id = 5;
   repeated registry.subnet.v1.IDkgTranscript idkg_transcripts = 6;
@@ -19,10 +19,6 @@ message EcdsaPayload {
   repeated EcdsaKeyTranscript key_transcripts = 13;
   repeated AvailablePreSignature available_pre_signatures = 14;
   repeated PreSignatureInProgress pre_signatures_in_creation = 15;
-  // TODO: retire these fields, once we start using `key_transcripts`.
-  UnmaskedTranscriptWithAttributes current_key_transcript = 9;
-  KeyTranscriptCreation next_key_in_creation = 11;
-  registry.crypto.v1.EcdsaKeyId key_id = 12;
   // TODO: retire these fields, once we start using `pre_signatures`.
   bool generalized_pre_signatures = 16;
 }
