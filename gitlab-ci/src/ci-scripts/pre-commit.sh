@@ -10,6 +10,9 @@ pip3 install pre-commit
 # Make sure CI can pull from the private repo.
 if ! SKIP=bazel_rust_format_check,bazel_smoke pre-commit run -a --hook-stage=manual; then
     echo "Pre-commit checks failed. Here is the diff of the changes:"
+    pwd
+    cat /github/home/.cache/pre-commit/pre-commit.log
+    which git || true
     git diff
     echo
     echo "You can fix the code locally by following these instructions in the same branch."
