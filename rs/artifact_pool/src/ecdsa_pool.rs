@@ -26,7 +26,7 @@ use ic_types::artifact_kind::EcdsaArtifact;
 use ic_types::consensus::{
     idkg::{
         EcdsaArtifactId, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening,
-        EcdsaPrefixOf, EcdsaSigShare, EcdsaStats,
+        EcdsaPrefixOf, EcdsaSigShare, EcdsaStats, SchnorrSigShare,
     },
     CatchUpPackage,
 };
@@ -219,16 +219,33 @@ impl EcdsaPoolSection for InMemoryEcdsaPoolSection {
         object_pool.iter_by_prefix(prefix)
     }
 
-    fn signature_shares(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_> {
-        let object_pool = self.get_pool(EcdsaMessageType::SigShare);
+    fn ecdsa_signature_shares(
+        &self,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_> {
+        let object_pool = self.get_pool(EcdsaMessageType::EcdsaSigShare);
         object_pool.iter()
     }
 
-    fn signature_shares_by_prefix(
+    fn ecdsa_signature_shares_by_prefix(
         &self,
         prefix: EcdsaPrefixOf<EcdsaSigShare>,
     ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_> {
-        let object_pool = self.get_pool(EcdsaMessageType::SigShare);
+        let object_pool = self.get_pool(EcdsaMessageType::EcdsaSigShare);
+        object_pool.iter_by_prefix(prefix)
+    }
+
+    fn schnorr_signature_shares(
+        &self,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_> {
+        let object_pool = self.get_pool(EcdsaMessageType::SchnorrSigShare);
+        object_pool.iter()
+    }
+
+    fn schnorr_signature_shares_by_prefix(
+        &self,
+        prefix: EcdsaPrefixOf<SchnorrSigShare>,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_> {
+        let object_pool = self.get_pool(EcdsaMessageType::SchnorrSigShare);
         object_pool.iter_by_prefix(prefix)
     }
 
@@ -412,6 +429,7 @@ impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
                     match &message {
                         EcdsaMessage::EcdsaDealingSupport(_)
                         | EcdsaMessage::EcdsaSigShare(_)
+                        | EcdsaMessage::SchnorrSigShare(_)
                         | EcdsaMessage::EcdsaSignedDealing(_) => (),
                         _ => artifacts_with_opt.push(ArtifactWithOpt {
                             advert: EcdsaArtifact::message_to_advert(&message),

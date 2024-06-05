@@ -3,12 +3,6 @@ Enumerate every component file dependency for GuestOS
 """
 
 component_files = {
-    # unconsolidated files:
-    Label("guestos/etc/crypttab"): "/etc/crypttab",
-    Label("guestos/etc/sysctl.d/dfn-max-map-count.conf"): "/etc/sysctl.d/dfn-max-map-count.conf",
-    Label("guestos/etc/sysctl.d/privileged-ports.conf"): "/etc/sysctl.d/privileged-ports.conf",
-    Label("guestos/etc/sysfs.d/hugepage.conf"): "/etc/sysfs.d/hugepage.conf",
-
     # early-boot
     Label("early-boot/relabel-machine-id/guestos/relabel-machine-id.sh"): "/opt/ic/bin/relabel-machine-id.sh",
     Label("early-boot/relabel-machine-id/relabel-machine-id.service"): "/etc/systemd/system/relabel-machine-id.service",
@@ -59,6 +53,10 @@ component_files = {
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
     Label("misc/guestos/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("misc/guestos/sudoers"): "/etc/sudoers",
+    Label("misc/guestos/crypttab"): "/etc/crypttab",
+    Label("misc/guestos/sysctl.d/dfn-max-map-count.conf"): "/etc/sysctl.d/dfn-max-map-count.conf",
+    Label("misc/guestos/sysctl.d/privileged-ports.conf"): "/etc/sysctl.d/privileged-ports.conf",
+    Label("misc/guestos/sysfs.d/hugepage.conf"): "/etc/sysfs.d/hugepage.conf",
 
     # monitoring
     Label("monitoring/filebeat/setup-filebeat-permissions.sh"): "/opt/ic/bin/setup-filebeat-permissions.sh",

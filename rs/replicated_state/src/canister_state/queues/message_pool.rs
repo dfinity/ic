@@ -120,6 +120,26 @@ impl Id {
     }
 }
 
+impl From<&Id> for pb_queues::canister_queue::QueueItem {
+    fn from(item: &Id) -> Self {
+        use pb_queues::canister_queue::queue_item::R;
+
+        pb_queues::canister_queue::QueueItem {
+            r: Some(R::Reference(item.0)),
+        }
+    }
+}
+
+impl TryFrom<pb_queues::canister_queue::QueueItem> for Id {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_queues::canister_queue::QueueItem) -> Result<Self, Self::Error> {
+        match item.r {
+            Some(pb_queues::canister_queue::queue_item::R::Reference(id)) => Ok(Self(id)),
+            None => Err(ProxyDecodeError::MissingField("QueueItem::r")),
+        }
+    }
+}
+
 /// A placeholder for a potential late inbound best-effort response.
 ///
 /// Does not implement `Clone` or `Copy` to ensure that it can only be used
@@ -335,24 +355,6 @@ impl MessagePool {
         let id = Id::new(kind, context, class, self.message_id_generator);
         self.message_id_generator += 1;
         id
-    }
-
-    /// Retrieves the request with the given `Id`.
-    ///
-    /// Panics if the provided ID was generated for a `Response`.
-    pub(super) fn get_request(&self, id: Id) -> Option<&RequestOrResponse> {
-        assert_eq!(Kind::Request, id.kind());
-
-        self.messages.get(&id)
-    }
-
-    /// Retrieves the response with the given `Id`.
-    ///
-    /// Panics if the provided ID was generated for a `Request`.
-    pub(super) fn get_response(&self, id: Id) -> Option<&RequestOrResponse> {
-        assert_eq!(Kind::Response, id.kind());
-
-        self.messages.get(&id)
     }
 
     /// Retrieves the message with the given `Id`.

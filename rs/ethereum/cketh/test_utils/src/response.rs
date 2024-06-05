@@ -46,6 +46,7 @@ impl From<EthLogEntry> for ethers_core::types::Log {
     }
 }
 
+#[derive(Clone)]
 pub struct Erc20LogEntry {
     pub encoded_principal: String,
     pub amount: u64,
@@ -89,13 +90,13 @@ pub fn empty_logs() -> Vec<ethers_core::types::Log> {
     vec![]
 }
 
-pub fn multi_logs_for_single_transaction(
-    log_entry: EthLogEntry,
+pub fn multi_logs_for_single_transaction<Entry: Clone + Into<ethers_core::types::Log>>(
+    log_entry: Entry,
     num_logs: usize,
 ) -> Vec<ethers_core::types::Log> {
     let mut logs = Vec::with_capacity(num_logs);
     for log_index in 0..num_logs {
-        let mut log = ethers_core::types::Log::from(log_entry.clone());
+        let mut log = log_entry.clone().into();
         log.log_index = Some(log_index.into());
         logs.push(log);
     }

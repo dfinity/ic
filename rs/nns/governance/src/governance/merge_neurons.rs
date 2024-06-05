@@ -1,9 +1,6 @@
 use crate::{
-    governance::{
-        combine_aged_stakes,
-        ledger_helper::{BurnNeuronFeesOperation, NeuronStakeTransferOperation},
-    },
-    neuron::{DissolveStateAndAge, Neuron},
+    governance::ledger_helper::{BurnNeuronFeesOperation, NeuronStakeTransferOperation},
+    neuron::{combine_aged_stakes, DissolveStateAndAge, Neuron},
     neuron_store::NeuronStore,
     pb::v1::{
         governance_error::ErrorType, manage_neuron::Merge, manage_neuron::NeuronIdOrSubaccount,

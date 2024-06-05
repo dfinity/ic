@@ -8,9 +8,7 @@ pub use crate::consensus::idkg::common::{
     TranscriptLookupError, TranscriptParamsError, TranscriptRef, UnmaskedTimesMaskedParams,
     UnmaskedTranscript,
 };
-use crate::consensus::idkg::ecdsa::{
-    PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsRef,
-};
+use crate::consensus::idkg::ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation};
 use crate::{
     consensus::BasicSignature,
     crypto::{
@@ -20,7 +18,7 @@ use crate::{
                 IDkgComplaint, IDkgDealingSupport, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
                 IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
             },
-            ThresholdEcdsaSigShare,
+            ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
         },
         crypto_hash, AlgorithmId, CryptoHash, CryptoHashOf, CryptoHashable, Signed,
         SignedBytesWithoutDomainSeparator,
@@ -90,9 +88,6 @@ pub struct EcdsaPayload {
     /// Collection of completed signatures.
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
 
-    /// DEPRECATED: The `RequestIds` for which we are currently generating signatures.
-    pub(crate) deprecated_ongoing_signatures: BTreeMap<RequestId, ThresholdEcdsaSigInputsRef>,
-
     /// IDKG transcript Pre-Signatures that we can use to create threshold signatures.
     pub available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
 
@@ -117,47 +112,13 @@ pub struct EcdsaPayload {
     /// Temporary field.
     /// Once all ecdsa payload have been using the new proto style, this field should be dropped.
     pub(crate) layout: EcdsaPayloadLayout,
-
-    /// Temporary field.
-    /// Once all payloads are using generalized pre-signatures, this field should be dropped.
-    pub(crate) generalized_pre_signatures: bool,
 }
 
 impl Hash for EcdsaPayload {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.signature_agreements.hash(state);
-        if !self.generalized_pre_signatures {
-            self.deprecated_ongoing_signatures.hash(state);
-
-            let available_quadruples = self
-                .available_pre_signatures
-                .iter()
-                .filter_map(|(id, pre_sig)| {
-                    if let PreSignatureRef::Ecdsa(quadruple) = pre_sig {
-                        Some((id, quadruple))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<BTreeMap<_, _>>();
-            available_quadruples.hash(state);
-
-            let quadruples_in_creation = self
-                .pre_signatures_in_creation
-                .iter()
-                .filter_map(|(id, pre_sig)| {
-                    if let PreSignatureInCreation::Ecdsa(quadruple) = pre_sig {
-                        Some((id, quadruple))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<BTreeMap<_, _>>();
-            quadruples_in_creation.hash(state);
-        } else {
-            self.available_pre_signatures.hash(state);
-            self.pre_signatures_in_creation.hash(state);
-        }
+        self.available_pre_signatures.hash(state);
+        self.pre_signatures_in_creation.hash(state);
         self.uid_generator.hash(state);
         self.idkg_transcripts.hash(state);
         self.ongoing_xnet_reshares.hash(state);
@@ -172,7 +133,6 @@ impl Hash for EcdsaPayload {
             }
         }
         // ignoring the [`EcdsaPayload::layout`] field on purpose
-        // ignoring the [`EcdsaPayload::generalized_pre_signatures`] field on purpose
     }
 }
 
@@ -190,14 +150,12 @@ impl EcdsaPayload {
                 .collect(),
             uid_generator: EcdsaUIDGenerator::new(subnet_id, height),
             signature_agreements: BTreeMap::new(),
-            deprecated_ongoing_signatures: BTreeMap::new(),
             available_pre_signatures: BTreeMap::new(),
             pre_signatures_in_creation: BTreeMap::new(),
             idkg_transcripts: BTreeMap::new(),
             ongoing_xnet_reshares: BTreeMap::new(),
             xnet_reshare_agreements: BTreeMap::new(),
             layout: EcdsaPayloadLayout::MultipleKeyTranscripts,
-            generalized_pre_signatures: true,
         }
     }
 
@@ -208,15 +166,6 @@ impl EcdsaPayload {
 
     pub fn use_multiple_keys_layout(&mut self) {
         self.layout = EcdsaPayloadLayout::MultipleKeyTranscripts;
-    }
-
-    /// Return true if this payload uses the new layout supporting generalized pre-signatures
-    pub fn is_generalized_pre_signatures_layout(&self) -> bool {
-        self.generalized_pre_signatures
-    }
-
-    pub fn use_generalized_pre_signatures_layout(&mut self) {
-        self.generalized_pre_signatures = true;
     }
 
     /// Returns the reference to the current key transcript of the given [`MasterPublicKeyId`].
@@ -907,6 +856,7 @@ pub enum EcdsaMessage {
     EcdsaSignedDealing(SignedIDkgDealing),
     EcdsaDealingSupport(IDkgDealingSupport),
     EcdsaSigShare(EcdsaSigShare),
+    SchnorrSigShare(SchnorrSigShare),
     EcdsaComplaint(EcdsaComplaint),
     EcdsaOpening(EcdsaOpening),
 }
@@ -917,7 +867,8 @@ impl From<EcdsaMessage> for pb::EcdsaMessage {
         let msg = match &value {
             EcdsaMessage::EcdsaSignedDealing(x) => Msg::SignedDealing(x.into()),
             EcdsaMessage::EcdsaDealingSupport(x) => Msg::DealingSupport(x.into()),
-            EcdsaMessage::EcdsaSigShare(x) => Msg::SigShare(x.into()),
+            EcdsaMessage::EcdsaSigShare(x) => Msg::EcdsaSigShare(x.into()),
+            EcdsaMessage::SchnorrSigShare(x) => Msg::SchnorrSigShare(x.into()),
             EcdsaMessage::EcdsaComplaint(x) => Msg::Complaint(x.into()),
             EcdsaMessage::EcdsaOpening(x) => Msg::Opening(x.into()),
         };
@@ -936,7 +887,8 @@ impl TryFrom<pb::EcdsaMessage> for EcdsaMessage {
         Ok(match &msg {
             Msg::SignedDealing(x) => EcdsaMessage::EcdsaSignedDealing(x.try_into()?),
             Msg::DealingSupport(x) => EcdsaMessage::EcdsaDealingSupport(x.try_into()?),
-            Msg::SigShare(x) => EcdsaMessage::EcdsaSigShare(x.try_into()?),
+            Msg::EcdsaSigShare(x) => EcdsaMessage::EcdsaSigShare(x.try_into()?),
+            Msg::SchnorrSigShare(x) => EcdsaMessage::SchnorrSigShare(x.try_into()?),
             Msg::Complaint(x) => EcdsaMessage::EcdsaComplaint(x.try_into()?),
             Msg::Opening(x) => EcdsaMessage::EcdsaOpening(x.try_into()?),
         })
@@ -1068,11 +1020,26 @@ pub fn dealing_support_prefix(
     ))
 }
 
-pub fn sig_share_prefix(
+pub fn ecdsa_sig_share_prefix(
     request_id: &RequestId,
     sig_share_node_id: &NodeId,
 ) -> EcdsaPrefixOf<EcdsaSigShare> {
     // Group_tag: quadruple Id, Meta info: <sig share sender>
+    let mut hasher = Sha256::new();
+    sig_share_node_id.hash(&mut hasher);
+
+    EcdsaPrefixOf::new(EcdsaPrefix::new(
+        request_id.pre_signature_id.id(),
+        hasher.finish(),
+        request_id.height,
+    ))
+}
+
+pub fn schnorr_sig_share_prefix(
+    request_id: &RequestId,
+    sig_share_node_id: &NodeId,
+) -> EcdsaPrefixOf<SchnorrSigShare> {
+    // Group_tag: pre-signature Id, Meta info: <sig share sender>
     let mut hasher = Sha256::new();
     sig_share_node_id.hash(&mut hasher);
 
@@ -1128,7 +1095,11 @@ pub enum EcdsaArtifactId {
         EcdsaPrefixOf<IDkgDealingSupport>,
         CryptoHashOf<IDkgDealingSupport>,
     ),
-    SigShare(EcdsaPrefixOf<EcdsaSigShare>, CryptoHashOf<EcdsaSigShare>),
+    EcdsaSigShare(EcdsaPrefixOf<EcdsaSigShare>, CryptoHashOf<EcdsaSigShare>),
+    SchnorrSigShare(
+        EcdsaPrefixOf<SchnorrSigShare>,
+        CryptoHashOf<SchnorrSigShare>,
+    ),
     Complaint(EcdsaPrefixOf<EcdsaComplaint>, CryptoHashOf<EcdsaComplaint>),
     Opening(EcdsaPrefixOf<EcdsaOpening>, CryptoHashOf<EcdsaOpening>),
 }
@@ -1138,7 +1109,8 @@ impl EcdsaArtifactId {
         match self {
             EcdsaArtifactId::Dealing(prefix, _) => prefix.as_ref().clone(),
             EcdsaArtifactId::DealingSupport(prefix, _) => prefix.as_ref().clone(),
-            EcdsaArtifactId::SigShare(prefix, _) => prefix.as_ref().clone(),
+            EcdsaArtifactId::EcdsaSigShare(prefix, _) => prefix.as_ref().clone(),
+            EcdsaArtifactId::SchnorrSigShare(prefix, _) => prefix.as_ref().clone(),
             EcdsaArtifactId::Complaint(prefix, _) => prefix.as_ref().clone(),
             EcdsaArtifactId::Opening(prefix, _) => prefix.as_ref().clone(),
         }
@@ -1148,7 +1120,8 @@ impl EcdsaArtifactId {
         match self {
             EcdsaArtifactId::Dealing(_, hash) => hash.as_ref().clone(),
             EcdsaArtifactId::DealingSupport(_, hash) => hash.as_ref().clone(),
-            EcdsaArtifactId::SigShare(_, hash) => hash.as_ref().clone(),
+            EcdsaArtifactId::EcdsaSigShare(_, hash) => hash.as_ref().clone(),
+            EcdsaArtifactId::SchnorrSigShare(_, hash) => hash.as_ref().clone(),
             EcdsaArtifactId::Complaint(_, hash) => hash.as_ref().clone(),
             EcdsaArtifactId::Opening(_, hash) => hash.as_ref().clone(),
         }
@@ -1178,7 +1151,11 @@ impl From<(EcdsaMessageType, EcdsaPrefix, CryptoHash)> for EcdsaArtifactId {
                 EcdsaPrefixOf::new(prefix),
                 CryptoHashOf::new(crypto_hash),
             ),
-            EcdsaMessageType::SigShare => EcdsaArtifactId::SigShare(
+            EcdsaMessageType::EcdsaSigShare => EcdsaArtifactId::EcdsaSigShare(
+                EcdsaPrefixOf::new(prefix),
+                CryptoHashOf::new(crypto_hash),
+            ),
+            EcdsaMessageType::SchnorrSigShare => EcdsaArtifactId::SchnorrSigShare(
                 EcdsaPrefixOf::new(prefix),
                 CryptoHashOf::new(crypto_hash),
             ),
@@ -1205,7 +1182,11 @@ impl From<EcdsaArtifactId> for pb::EcdsaArtifactId {
                 prefix: Some((&p.get()).into()),
                 hash: h.get().0,
             }),
-            EcdsaArtifactId::SigShare(p, h) => Kind::SigShare(pb::PrefixHashPair {
+            EcdsaArtifactId::EcdsaSigShare(p, h) => Kind::EcdsaSigShare(pb::PrefixHashPair {
+                prefix: Some((&p.get()).into()),
+                hash: h.get().0,
+            }),
+            EcdsaArtifactId::SchnorrSigShare(p, h) => Kind::SchnorrSigShare(pb::PrefixHashPair {
                 prefix: Some((&p.get()).into()),
                 hash: h.get().0,
             }),
@@ -1243,10 +1224,17 @@ impl TryFrom<pb::EcdsaArtifactId> for EcdsaArtifactId {
                 )?),
                 CryptoHashOf::new(CryptoHash(p.hash)),
             ),
-            Kind::SigShare(p) => Self::SigShare(
+            Kind::EcdsaSigShare(p) => Self::EcdsaSigShare(
                 EcdsaPrefixOf::new(try_from_option_field(
                     p.prefix.as_ref(),
-                    "SigShare::prefix",
+                    "EcdsaSigShare::prefix",
+                )?),
+                CryptoHashOf::new(CryptoHash(p.hash)),
+            ),
+            Kind::SchnorrSigShare(p) => Self::SchnorrSigShare(
+                EcdsaPrefixOf::new(try_from_option_field(
+                    p.prefix.as_ref(),
+                    "SchnorrSigShare::prefix",
                 )?),
                 CryptoHashOf::new(CryptoHash(p.hash)),
             ),
@@ -1271,7 +1259,8 @@ impl TryFrom<pb::EcdsaArtifactId> for EcdsaArtifactId {
 pub enum EcdsaMessageType {
     Dealing,
     DealingSupport,
-    SigShare,
+    EcdsaSigShare,
+    SchnorrSigShare,
     Complaint,
     Opening,
 }
@@ -1281,7 +1270,8 @@ impl From<&EcdsaMessage> for EcdsaMessageType {
         match msg {
             EcdsaMessage::EcdsaSignedDealing(_) => EcdsaMessageType::Dealing,
             EcdsaMessage::EcdsaDealingSupport(_) => EcdsaMessageType::DealingSupport,
-            EcdsaMessage::EcdsaSigShare(_) => EcdsaMessageType::SigShare,
+            EcdsaMessage::EcdsaSigShare(_) => EcdsaMessageType::EcdsaSigShare,
+            EcdsaMessage::SchnorrSigShare(_) => EcdsaMessageType::SchnorrSigShare,
             EcdsaMessage::EcdsaComplaint(_) => EcdsaMessageType::Complaint,
             EcdsaMessage::EcdsaOpening(_) => EcdsaMessageType::Opening,
         }
@@ -1293,7 +1283,8 @@ impl From<&EcdsaArtifactId> for EcdsaMessageType {
         match id {
             EcdsaArtifactId::Dealing(..) => EcdsaMessageType::Dealing,
             EcdsaArtifactId::DealingSupport(..) => EcdsaMessageType::DealingSupport,
-            EcdsaArtifactId::SigShare(..) => EcdsaMessageType::SigShare,
+            EcdsaArtifactId::EcdsaSigShare(..) => EcdsaMessageType::EcdsaSigShare,
+            EcdsaArtifactId::SchnorrSigShare(..) => EcdsaMessageType::SchnorrSigShare,
             EcdsaArtifactId::Complaint(..) => EcdsaMessageType::Complaint,
             EcdsaArtifactId::Opening(..) => EcdsaMessageType::Opening,
         }
@@ -1305,7 +1296,8 @@ impl EcdsaMessageType {
         match self {
             Self::Dealing => "signed_dealing",
             Self::DealingSupport => "dealing_support",
-            Self::SigShare => "sig_share",
+            Self::EcdsaSigShare => "ecdsa_sig_share",
+            Self::SchnorrSigShare => "schnorr_sig_share",
             Self::Complaint => "complaint",
             Self::Opening => "opening",
         }
@@ -1355,7 +1347,56 @@ impl Display for EcdsaSigShare {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "SigShare[request_id = {:?}, signer_id = {:?}]",
+            "EcdsaSigShare[request_id = {:?}, signer_id = {:?}]",
+            self.request_id, self.signer_id,
+        )
+    }
+}
+
+/// The Schnorr signature share
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct SchnorrSigShare {
+    /// The node that signed the share
+    pub signer_id: NodeId,
+
+    /// The request this signature share belongs to
+    pub request_id: RequestId,
+
+    /// The signature share
+    pub share: ThresholdSchnorrSigShare,
+}
+
+impl From<&SchnorrSigShare> for pb::SchnorrSigShare {
+    fn from(value: &SchnorrSigShare) -> Self {
+        Self {
+            signer_id: Some(node_id_into_protobuf(value.signer_id)),
+            request_id: Some(pb::RequestId::from(value.request_id.clone())),
+            sig_share_raw: value.share.sig_share_raw.clone(),
+        }
+    }
+}
+
+impl TryFrom<&pb::SchnorrSigShare> for SchnorrSigShare {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::SchnorrSigShare) -> Result<Self, Self::Error> {
+        Ok(Self {
+            signer_id: node_id_try_from_option(value.signer_id.clone())?,
+            request_id: try_from_option_field(
+                value.request_id.as_ref(),
+                "SchnorrSigShare::request_id",
+            )?,
+            share: ThresholdSchnorrSigShare {
+                sig_share_raw: value.sig_share_raw.clone(),
+            },
+        })
+    }
+}
+
+impl Display for SchnorrSigShare {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "SchnorrSigShare[request_id = {:?}, signer_id = {:?}]",
             self.request_id, self.signer_id,
         )
     }
@@ -1523,6 +1564,7 @@ pub enum EcdsaMessageAttribute {
     EcdsaSignedDealing(IDkgTranscriptId),
     EcdsaDealingSupport(IDkgTranscriptId),
     EcdsaSigShare(RequestId),
+    SchnorrSigShare(RequestId),
     EcdsaComplaint(IDkgTranscriptId),
     EcdsaOpening(IDkgTranscriptId),
 }
@@ -1533,7 +1575,8 @@ impl From<EcdsaMessageAttribute> for pb::EcdsaMessageAttribute {
         let kind = match value {
             EcdsaMessageAttribute::EcdsaSignedDealing(id) => Kind::SignedDealing((&id).into()),
             EcdsaMessageAttribute::EcdsaDealingSupport(id) => Kind::DealingSupport((&id).into()),
-            EcdsaMessageAttribute::EcdsaSigShare(id) => Kind::SigShare(id.into()),
+            EcdsaMessageAttribute::EcdsaSigShare(id) => Kind::EcdsaSigShare(id.into()),
+            EcdsaMessageAttribute::SchnorrSigShare(id) => Kind::SchnorrSigShare(id.into()),
             EcdsaMessageAttribute::EcdsaComplaint(id) => Kind::Complaint((&id).into()),
             EcdsaMessageAttribute::EcdsaOpening(id) => Kind::Opening((&id).into()),
         };
@@ -1553,7 +1596,8 @@ impl TryFrom<pb::EcdsaMessageAttribute> for EcdsaMessageAttribute {
         Ok(match &kind {
             Kind::SignedDealing(id) => EcdsaMessageAttribute::EcdsaSignedDealing(id.try_into()?),
             Kind::DealingSupport(id) => EcdsaMessageAttribute::EcdsaDealingSupport(id.try_into()?),
-            Kind::SigShare(id) => EcdsaMessageAttribute::EcdsaSigShare(id.try_into()?),
+            Kind::EcdsaSigShare(id) => EcdsaMessageAttribute::EcdsaSigShare(id.try_into()?),
+            Kind::SchnorrSigShare(id) => EcdsaMessageAttribute::SchnorrSigShare(id.try_into()?),
             Kind::Complaint(id) => EcdsaMessageAttribute::EcdsaComplaint(id.try_into()?),
             Kind::Opening(id) => EcdsaMessageAttribute::EcdsaOpening(id.try_into()?),
         })
@@ -1572,6 +1616,9 @@ impl From<&EcdsaMessage> for EcdsaMessageAttribute {
             EcdsaMessage::EcdsaSigShare(share) => {
                 EcdsaMessageAttribute::EcdsaSigShare(share.request_id.clone())
             }
+            EcdsaMessage::SchnorrSigShare(share) => {
+                EcdsaMessageAttribute::SchnorrSigShare(share.request_id.clone())
+            }
             EcdsaMessage::EcdsaComplaint(complaint) => EcdsaMessageAttribute::EcdsaComplaint(
                 complaint.content.idkg_complaint.transcript_id,
             ),
@@ -1587,7 +1634,8 @@ impl EcdsaMessageAttribute {
         match self {
             Self::EcdsaSignedDealing(_) => "signed_dealing",
             Self::EcdsaDealingSupport(_) => "dealing_support",
-            Self::EcdsaSigShare(_) => "sig_share",
+            Self::EcdsaSigShare(_) => "ecdsa_sig_share",
+            Self::SchnorrSigShare(_) => "schnorr_sig_share",
             Self::EcdsaComplaint(_) => "complaint",
             Self::EcdsaOpening(_) => "opening",
         }
@@ -1619,6 +1667,16 @@ impl TryFrom<EcdsaMessage> for EcdsaSigShare {
     fn try_from(msg: EcdsaMessage) -> Result<Self, Self::Error> {
         match msg {
             EcdsaMessage::EcdsaSigShare(x) => Ok(x),
+            _ => Err(msg),
+        }
+    }
+}
+
+impl TryFrom<EcdsaMessage> for SchnorrSigShare {
+    type Error = EcdsaMessage;
+    fn try_from(msg: EcdsaMessage) -> Result<Self, Self::Error> {
+        match msg {
+            EcdsaMessage::SchnorrSigShare(x) => Ok(x),
             _ => Err(msg),
         }
     }
@@ -1663,56 +1721,20 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
             });
         }
 
-        // ongoing_signatures
-        let mut ongoing_signatures = Vec::new();
-        for (request_id, ongoing) in &payload.deprecated_ongoing_signatures {
-            ongoing_signatures.push(pb::OngoingSignature {
-                request_id: Some(request_id.clone().into()),
-                sig_inputs: Some(ongoing.into()),
-            })
+        let mut available_pre_signatures = Vec::new();
+        for (pre_sig_id, pre_sig) in &payload.available_pre_signatures {
+            available_pre_signatures.push(pb::AvailablePreSignature {
+                pre_signature_id: pre_sig_id.id(),
+                pre_signature: Some(pre_sig.into()),
+            });
         }
 
-        let mut available_pre_signatures = Vec::new();
         let mut pre_signatures_in_creation = Vec::new();
-        let mut available_quadruples = Vec::new();
-        let mut quadruples_in_creation = Vec::new();
-
-        if payload.generalized_pre_signatures {
-            // available_pre_signatures
-            for (pre_sig_id, pre_sig) in &payload.available_pre_signatures {
-                available_pre_signatures.push(pb::AvailablePreSignature {
-                    pre_signature_id: pre_sig_id.id(),
-                    pre_signature: Some(pre_sig.into()),
-                });
-            }
-            // pre_signatures_in_creation
-            for (pre_sig_id, pre_sig) in &payload.pre_signatures_in_creation {
-                pre_signatures_in_creation.push(pb::PreSignatureInProgress {
-                    pre_signature_id: pre_sig_id.id(),
-                    pre_signature: Some(pre_sig.into()),
-                });
-            }
-        } else {
-            // available_quadruples
-            for (pre_sig_id, pre_sig) in &payload.available_pre_signatures {
-                let PreSignatureRef::Ecdsa(quadruple) = pre_sig else {
-                    continue;
-                };
-                available_quadruples.push(pb::AvailableQuadruple {
-                    pre_signature_id: pre_sig_id.id(),
-                    quadruple: Some(quadruple.into()),
-                });
-            }
-            // quadruples_in_creation
-            for (pre_sig_id, pre_sig) in &payload.pre_signatures_in_creation {
-                let PreSignatureInCreation::Ecdsa(quadruple) = pre_sig else {
-                    continue;
-                };
-                quadruples_in_creation.push(pb::QuadrupleInProgress {
-                    pre_signature_id: pre_sig_id.id(),
-                    quadruple: Some(quadruple.into()),
-                });
-            }
+        for (pre_sig_id, pre_sig) in &payload.pre_signatures_in_creation {
+            pre_signatures_in_creation.push(pb::PreSignatureInProgress {
+                pre_signature_id: pre_sig_id.id(),
+                pre_signature: Some(pre_sig.into()),
+            });
         }
 
         let next_unused_transcript_id: Option<subnet_pb::IDkgTranscriptId> =
@@ -1780,10 +1802,7 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
 
         Self {
             signature_agreements,
-            ongoing_signatures,
-            available_quadruples,
             available_pre_signatures,
-            quadruples_in_creation,
             pre_signatures_in_creation,
             next_unused_transcript_id,
             next_unused_pre_signature_id: payload.uid_generator.next_unused_pre_signature_id,
@@ -1795,7 +1814,7 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
             current_key_transcript,
             next_key_in_creation,
             key_id,
-            generalized_pre_signatures: payload.generalized_pre_signatures,
+            generalized_pre_signatures: true,
         }
     }
 }
@@ -1861,31 +1880,8 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
             signature_agreements.insert(pseudo_random_id, signature);
         }
 
-        // ongoing_signatures
-        let mut deprecated_ongoing_signatures = BTreeMap::new();
-        for ongoing_signature in &payload.ongoing_signatures {
-            let request_id: RequestId = try_from_option_field(
-                ongoing_signature.request_id.as_ref(),
-                "EcdsaPayload::ongoing_signature::request_id",
-            )?;
-
-            let sig_inputs = try_from_option_field(
-                ongoing_signature.sig_inputs.as_ref(),
-                "EcdsaPayload::ongoing_signature::sig_inputs",
-            )?;
-            deprecated_ongoing_signatures.insert(request_id, sig_inputs);
-        }
-
         // available_pre_signatures
         let mut available_pre_signatures = BTreeMap::new();
-        for available_quadruple in &payload.available_quadruples {
-            let pre_sig_id = PreSigId(available_quadruple.pre_signature_id);
-            let quadruple: PreSignatureQuadrupleRef = try_from_option_field(
-                available_quadruple.quadruple.as_ref(),
-                "EcdsaPayload::available_quadruple::quadruple",
-            )?;
-            available_pre_signatures.insert(pre_sig_id, PreSignatureRef::Ecdsa(quadruple));
-        }
         for available_pre_signature in &payload.available_pre_signatures {
             let pre_signature_id = PreSigId(available_pre_signature.pre_signature_id);
             let pre_signature: PreSignatureRef = try_from_option_field(
@@ -1897,14 +1893,6 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
 
         // pre_signatures_in_creation
         let mut pre_signatures_in_creation = BTreeMap::new();
-        for quadruple_in_creation in &payload.quadruples_in_creation {
-            let pre_sig_id = PreSigId(quadruple_in_creation.pre_signature_id);
-            let quadruple: QuadrupleInCreation = try_from_option_field(
-                quadruple_in_creation.quadruple.as_ref(),
-                "EcdsaPayload::quadruple_in_creation::quadruple",
-            )?;
-            pre_signatures_in_creation.insert(pre_sig_id, PreSignatureInCreation::Ecdsa(quadruple));
-        }
         for pre_signature_in_creation in &payload.pre_signatures_in_creation {
             let pre_signature_id = PreSigId(pre_signature_in_creation.pre_signature_id);
             let pre_signature: PreSignatureInCreation = try_from_option_field(
@@ -1975,7 +1963,6 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
 
         Ok(Self {
             signature_agreements,
-            deprecated_ongoing_signatures,
             available_pre_signatures,
             pre_signatures_in_creation,
             idkg_transcripts,
@@ -1984,7 +1971,6 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
             uid_generator,
             key_transcripts,
             layout,
-            generalized_pre_signatures: payload.generalized_pre_signatures,
         })
     }
 }
@@ -2068,11 +2054,21 @@ impl EcdsaObject for IDkgDealingSupport {
 
 impl EcdsaObject for EcdsaSigShare {
     fn message_prefix(&self) -> EcdsaPrefixOf<Self> {
-        sig_share_prefix(&self.request_id, &self.signer_id)
+        ecdsa_sig_share_prefix(&self.request_id, &self.signer_id)
     }
 
     fn message_id(&self) -> EcdsaArtifactId {
-        EcdsaArtifactId::SigShare(self.message_prefix(), crypto_hash(self))
+        EcdsaArtifactId::EcdsaSigShare(self.message_prefix(), crypto_hash(self))
+    }
+}
+
+impl EcdsaObject for SchnorrSigShare {
+    fn message_prefix(&self) -> EcdsaPrefixOf<Self> {
+        schnorr_sig_share_prefix(&self.request_id, &self.signer_id)
+    }
+
+    fn message_id(&self) -> EcdsaArtifactId {
+        EcdsaArtifactId::SchnorrSigShare(self.message_prefix(), crypto_hash(self))
     }
 }
 
@@ -2110,6 +2106,7 @@ impl From<&EcdsaMessage> for EcdsaArtifactId {
             EcdsaMessage::EcdsaSignedDealing(object) => object.message_id(),
             EcdsaMessage::EcdsaDealingSupport(object) => object.message_id(),
             EcdsaMessage::EcdsaSigShare(object) => object.message_id(),
+            EcdsaMessage::SchnorrSigShare(object) => object.message_id(),
             EcdsaMessage::EcdsaComplaint(object) => object.message_id(),
             EcdsaMessage::EcdsaOpening(object) => object.message_id(),
         }

@@ -2,9 +2,8 @@ workspace(
     name = "ic",
 )
 
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
-load("//third_party/lmdb-0.9.70:repository.bzl", "lmdb_repository")
+load("//third_party/lmdb:repository.bzl", "lmdb_repository")
 load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
 load("mainnet-canisters.bzl", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
 
@@ -316,7 +315,7 @@ container_pull(
 
 # Third party dependencies that require special treatment
 
-lmdb_repository(name = "lmdb")
+lmdb_repository()
 
 lmdb_rkv_repository(name = "lmdb_rkv")
 
@@ -470,16 +469,16 @@ http_jar(
 
 # Official WebAssembly test suite.
 # To be used for testing libraries that handle canister Wasm code.
-
-new_git_repository(
+http_archive(
     name = "wasm_spec_testsuite",
     build_file_content = """filegroup(
-        name = "wast_files",
-        srcs = glob(["**/*.wast"]),
-        visibility = ["//visibility:public"]
-    )""",
-    commit = "4f77306bb63151631d84f58dedf67958eb9911b9",
-    remote = "https://github.com/WebAssembly/testsuite.git",
+         name = "wast_files",
+         srcs = glob(["**/*.wast"]),
+         visibility = ["//visibility:public"]
+     )""",
+    sha256 = "9afc0e7c250b5f0dcf32e9a95860b99a392ab78a653fcf3705778e8a9357f3c4",
+    strip_prefix = "testsuite-4f77306bb63151631d84f58dedf67958eb9911b9",
+    url = "https://github.com/WebAssembly/testsuite/archive/4f77306bb63151631d84f58dedf67958eb9911b9.tar.gz",
 )
 
 mainnet_core_nns_canisters()
@@ -658,18 +657,20 @@ http_file(
 
 http_archive(
     name = "rules_haskell",
-    sha256 = "ebc5309d1617492b7edb63cded5d5cec4c32f146f2dee2935ae133f036e441f4",
-    strip_prefix = "rules_haskell-9d29e14b313123a0735abd0989c620d754500452",
-    url = "https://github.com/tweag/rules_haskell/archive/9d29e14b313123a0735abd0989c620d754500452.tar.gz",
+    sha256 = "cc0c8690cc619121aa247332e700ce60c25cb27924ba06b1845404aae42a6fa1",
+    strip_prefix = "rules_haskell-759e4f5215cf8771e8f738357aefde52a22d0d2d",
+    url = "https://github.com/tweag/rules_haskell/archive/759e4f5215cf8771e8f738357aefde52a22d0d2d.tar.gz",
 )
 
-http_archive(
-    name = "rules_sh",
-    sha256 = "d4ad015a8e72e92a5c171efa760524502e098cd927ae800dfad03b02dad2299a",
-    strip_prefix = "rules_sh-06170f1fbff23f900bc04dfbdb75ed1acf2b8c42",
-    urls = ["https://github.com/tweag/rules_sh/archive/06170f1fbff23f900bc04dfbdb75ed1acf2b8c42.tar.gz"],
+# Load the rules_haskell dependencies necessary for loading the toolchains
+load(
+    "@rules_haskell//haskell:repositories.bzl",
+    "rules_haskell_dependencies",
 )
 
+rules_haskell_dependencies()
+
+# Load the Haskell toolchains
 load(
     "@rules_haskell//haskell:toolchain.bzl",
     "rules_haskell_toolchains",

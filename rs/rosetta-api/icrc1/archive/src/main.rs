@@ -359,12 +359,12 @@ fn __get_candid_interface_tmp_hack() -> &'static str {
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "archive_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::api::stable::stable64_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "archive_stable_memory_bytes",
-        ic_cdk::api::stable::stable_size() as f64 * 65536f64,
+        ic_cdk::api::stable::stable64_size() as f64 * 65536f64,
         "Size of the stable memory allocated by this canister.",
     )?;
 

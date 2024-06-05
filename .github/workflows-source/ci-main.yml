@@ -77,6 +77,8 @@ anchors:
     id: before-script
     shell: bash
     run: |
+      git config --global http.postBuffer 524288000
+      git config --global safe.directory '*'
       if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
   checkout: &checkout
     name: Checkout
@@ -297,7 +299,9 @@ jobs:
 
   build-determinism:
     name: Build Determinism
-    <<: *default-setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ vars.RUN_CI == 'true' }}
     needs: [build-ic, bazel-test-all]
     strategy:
       matrix:
@@ -338,9 +342,8 @@ jobs:
         shell: bash
         run: |
           set -eExuo pipefail
-          git config --global safe.directory '*'
-          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
-              "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-determinism.sh
+          sudo apt update && sudo apt install -y curl
+          "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-determinism.sh
         env:
           TARGET: ${{ matrix.TARGET }}
           PATH0: ${{ matrix.PATH0 }}
