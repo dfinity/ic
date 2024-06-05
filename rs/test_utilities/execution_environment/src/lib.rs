@@ -21,7 +21,7 @@ use ic_interfaces_state_manager::Labeled;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EcdsaKeyId, EmptyBlob,
+    CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
     InstallCodeArgs, InstallCodeArgsV2, LogVisibility, MasterPublicKeyId, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
@@ -1710,18 +1710,6 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_ecdsa_key(mut self, key_id: EcdsaKeyId) -> Self {
-        self.idkg_keys_with_signing_enabled
-            .insert(MasterPublicKeyId::Ecdsa(key_id), true);
-        self
-    }
-
-    pub fn with_disabled_ecdsa_key(mut self, key_id: EcdsaKeyId) -> Self {
-        self.idkg_keys_with_signing_enabled
-            .insert(MasterPublicKeyId::Ecdsa(key_id), false);
-        self
-    }
-
     pub fn with_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
         self.idkg_keys_with_signing_enabled.insert(key_id, true);
         self
@@ -1989,6 +1977,11 @@ impl ExecutionTestBuilder {
 
     pub fn with_ic00_compute_initial_i_dkg_dealings(mut self, status: FlagStatus) -> Self {
         self.execution_config.ic00_compute_initial_i_dkg_dealings = status;
+        self
+    }
+
+    pub fn with_ic00_schnorr_public_key(mut self, status: FlagStatus) -> Self {
+        self.execution_config.ic00_schnorr_public_key = status;
         self
     }
 
