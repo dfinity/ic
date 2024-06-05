@@ -65,7 +65,7 @@ candid = { workspace = true }
 tempfile = { workspace = true }
 url = { version = "2.1.1", features = ["serde"] }
 chrono = { workspace = true }
-indexmap = { workspace = true }
+indexmap = "2.2.6" # TODO: consider using the std's BTreeMap instead
 
 [dev-dependencies]
 assert_matches = { workspace = true }

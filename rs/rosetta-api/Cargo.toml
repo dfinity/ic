@@ -48,7 +48,6 @@ rolling-file = "0.2.0"
 rosetta-core = { path = "rosetta_core" }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
-serde_derive = "1.0"
 serde_json = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }

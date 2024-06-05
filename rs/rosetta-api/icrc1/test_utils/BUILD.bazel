@@ -20,6 +20,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:rand_chacha",
     "@crate_index//:ring",
     "@crate_index//:serde_bytes",
+    "@crate_index//:serde_json",
 ]
 
 rust_library(
