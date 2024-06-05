@@ -44,7 +44,7 @@ use std::io::Write;
 
 /// Determine sha256 hash of the current replica binary
 ///
-/// Returns tuple (path of the replica binary, hex encoded sha256 of binary)
+/// Returns tuple (path of the replica binary, hex encoded sha256 of the binary)
 fn get_replica_binary_hash() -> Result<(PathBuf, String), String> {
     let mut hasher = Sha256::new();
     let replica_binary_path = env::current_exe()
