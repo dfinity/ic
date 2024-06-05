@@ -1,4 +1,6 @@
-set -eEuo pipefail
+set -exEuo pipefail
+
+cd "$CI_PROJECT_DIR"
 
 rustup default stable
 
