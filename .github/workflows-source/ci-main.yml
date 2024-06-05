@@ -39,14 +39,14 @@ anchors:
     image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
   bazel-large-setup: &bazel-large-setup
     runs-on:
-      labels: bazel-runner-small-dind
+      labels: bazel-runner-large
     container:
       <<: *image
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
   bazel-small-setup: &bazel-small-setup
     runs-on:
-      labels: bazel-runner-small
+      labels: bazel-runner-small-dind
     container:
       <<: *image
     timeout-minutes: 45
