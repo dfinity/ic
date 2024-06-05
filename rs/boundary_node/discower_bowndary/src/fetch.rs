@@ -1,14 +1,13 @@
 use async_trait::async_trait;
-use ic_agent::{
-    agent::http_transport::{reqwest_transport::reqwest::Client, ReqwestTransport},
-    export::Principal,
-    Agent, AgentError,
-};
-use std::fmt::Debug;
+use ic_agent::{export::Principal, Agent, AgentError};
+use std::{fmt::Debug, sync::Arc};
 use thiserror::Error;
 use url::Url;
 
-use crate::node::Node;
+use crate::{
+    node::Node,
+    transport::{TransportProvider, TransportProviderError},
+};
 
 #[async_trait]
 pub trait NodesFetcher: Sync + Send + Debug {
@@ -17,21 +16,23 @@ pub trait NodesFetcher: Sync + Send + Debug {
 
 #[derive(Error, Debug)]
 pub enum NodeFetchError {
-    #[error(r#"Failed to create agent: "{0}""#)]
+    #[error("Agent error occurred: {0}")]
     AgentError(#[from] AgentError),
+    #[error("Transport error occurred: {0}")]
+    TransportError(#[from] TransportProviderError),
 }
 
 #[derive(Debug)]
 pub struct NodesFetcherImpl {
-    http_client: Client,
     subnet_id: Principal,
+    transport_provider: Arc<dyn TransportProvider>,
 }
 
 impl NodesFetcherImpl {
-    pub fn new(http_client: Client, subnet_id: Principal) -> Self {
+    pub fn new(transport_provider: Arc<dyn TransportProvider>, subnet_id: Principal) -> Self {
         Self {
-            http_client,
             subnet_id,
+            transport_provider,
         }
     }
 }
@@ -39,7 +40,7 @@ impl NodesFetcherImpl {
 #[async_trait]
 impl NodesFetcher for NodesFetcherImpl {
     async fn fetch(&self, url: Url) -> Result<Vec<Node>, NodeFetchError> {
-        let transport = ReqwestTransport::create_with_client(url, self.http_client.clone())?;
+        let transport = self.transport_provider.get_transport(url)?;
         let agent = Agent::builder().with_transport(transport).build()?;
         agent.fetch_root_key().await?;
         let api_bns = agent

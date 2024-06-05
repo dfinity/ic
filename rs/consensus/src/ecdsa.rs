@@ -565,6 +565,8 @@ fn compute_priority(
                 Priority::Stash
             }
         }
+        // Drop schnorr sig shares for now
+        EcdsaMessageAttribute::SchnorrSigShare(_) => Priority::Drop,
         EcdsaMessageAttribute::EcdsaComplaint(transcript_id)
         | EcdsaMessageAttribute::EcdsaOpening(transcript_id) => {
             let height = transcript_id.source_height();
@@ -765,6 +767,10 @@ mod tests {
             (
                 EcdsaMessageAttribute::EcdsaSigShare(request_id_fetch_1.clone()),
                 Priority::FetchNow,
+            ),
+            (
+                EcdsaMessageAttribute::SchnorrSigShare(request_id_fetch_1.clone()),
+                Priority::Drop,
             ),
             (
                 EcdsaMessageAttribute::EcdsaSigShare(request_id_drop.clone()),
