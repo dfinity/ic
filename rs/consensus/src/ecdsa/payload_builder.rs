@@ -303,8 +303,6 @@ fn create_summary_payload_helper(
     ecdsa_summary.uid_generator.update_height(height)?;
     update_summary_refs(height, &mut ecdsa_summary, block_reader)?;
 
-    ecdsa_summary.use_multiple_keys_layout();
-
     Ok(Some(ecdsa_summary))
 }
 
@@ -569,8 +567,6 @@ pub(crate) fn create_data_payload_helper(
         ecdsa_payload_metrics,
         log,
     )?;
-
-    ecdsa_payload.use_multiple_keys_layout();
 
     Ok(Some(ecdsa_payload))
 }

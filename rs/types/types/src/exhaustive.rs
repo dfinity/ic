@@ -5,8 +5,8 @@ use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::{QuadrupleInCreation, ThresholdEcdsaSigInputsRef};
 use crate::consensus::idkg::{
     CompletedReshareRequest, CompletedSignature, EcdsaKeyTranscript, EcdsaPayload,
-    EcdsaPayloadLayout, EcdsaReshareRequest, EcdsaUIDGenerator, HasMasterPublicKeyId,
-    KeyTranscriptCreation, MaskedTranscript, PreSigId, PseudoRandomId, RandomTranscriptParams,
+    EcdsaReshareRequest, EcdsaUIDGenerator, HasMasterPublicKeyId, KeyTranscriptCreation,
+    MaskedTranscript, PreSigId, PseudoRandomId, RandomTranscriptParams,
     RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
     UnmaskedTimesMaskedParams, UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
 };
@@ -774,7 +774,6 @@ impl ExhaustiveSet for EcdsaPayload {
                 ongoing_xnet_reshares: payload.ongoing_xnet_reshares,
                 xnet_reshare_agreements: payload.xnet_reshare_agreements,
                 key_transcripts: replace_by_singleton_if_empty(payload.key_transcripts, rng),
-                layout: EcdsaPayloadLayout::MultipleKeyTranscripts,
             })
             .collect()
     }
