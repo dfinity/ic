@@ -44,6 +44,9 @@ use std::{
     collections::{BTreeMap, HashMap},
     time::{Duration, SystemTime},
 };
+
+pub mod metrics;
+
 pub const FEE: u64 = 10_000;
 pub const DECIMAL_PLACES: u8 = 8;
 pub const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
