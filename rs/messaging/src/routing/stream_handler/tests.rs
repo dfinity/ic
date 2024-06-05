@@ -145,14 +145,15 @@ fn induct_loopback_stream_empty_loopback_stream() {
 
         let expected_state = initial_state.clone();
 
-        let mut subnet_available_memory = stream_handler.subnet_available_memory(&initial_state);
+        let mut subnet_available_memory =
+            stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
         let inducted_state =
             stream_handler.induct_loopback_stream(initial_state, &mut subnet_available_memory);
 
         assert_eq!(expected_state, inducted_state);
 
         assert_eq!(
-            stream_handler.subnet_available_memory(&inducted_state),
+            stream_handler.subnet_available_guaranteed_response_memory(&inducted_state),
             subnet_available_memory
         );
 
@@ -213,7 +214,7 @@ fn induct_loopback_stream_reject_response() {
         expected_state.with_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream]);
 
         let initial_subnet_available_memory =
-            stream_handler.subnet_available_memory(&initial_state);
+            stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
         let mut subnet_available_memory = initial_subnet_available_memory;
 
         let inducted_state =
@@ -228,7 +229,10 @@ fn induct_loopback_stream_reject_response() {
         );
         // Not equal, because the computed available memory does not account for the
         // reject response (since it's from a nonexistent canister).
-        assert!(stream_handler.subnet_available_memory(&inducted_state) >= subnet_available_memory);
+        assert!(
+            stream_handler.subnet_available_guaranteed_response_memory(&inducted_state)
+                >= subnet_available_memory
+        );
 
         assert_inducted_xnet_messages_eq(
             metric_vec(&[(
@@ -331,7 +335,7 @@ fn induct_loopback_stream_reroute_response() {
         expected_state.with_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream, CANISTER_MIGRATION_SUBNET => expected_outgoing_stream]);
 
         let initial_subnet_available_memory =
-            stream_handler.subnet_available_memory(&initial_state);
+            stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
         let mut subnet_available_memory = initial_subnet_available_memory;
 
         let state_after_induction =
@@ -349,7 +353,7 @@ fn induct_loopback_stream_reroute_response() {
         // Not equal, because the computed available memory does not account for the
         // reject response (since it's from a canister no longer hosted by the subnet).
         assert!(
-            stream_handler.subnet_available_memory(&state_after_induction)
+            stream_handler.subnet_available_guaranteed_response_memory(&state_after_induction)
                 >= subnet_available_memory
         );
 
@@ -428,14 +432,15 @@ fn induct_loopback_stream_success() {
         });
         expected_state.with_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream]);
 
-        let mut subnet_available_memory = stream_handler.subnet_available_memory(&initial_state);
+        let mut subnet_available_memory =
+            stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
         let inducted_state =
             stream_handler.induct_loopback_stream(initial_state, &mut subnet_available_memory);
 
         assert_eq!(expected_state, inducted_state);
 
         assert_eq!(
-            stream_handler.subnet_available_memory(&inducted_state),
+            stream_handler.subnet_available_guaranteed_response_memory(&inducted_state),
             subnet_available_memory
         );
 
@@ -636,13 +641,14 @@ fn induct_loopback_stream_with_memory_limit_impl(
     ));
     expected_state.with_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream]);
 
-    let mut subnet_available_memory = stream_handler.subnet_available_memory(&initial_state);
+    let mut subnet_available_memory =
+        stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
     let inducted_state =
         stream_handler.induct_loopback_stream(initial_state, &mut subnet_available_memory);
 
     assert_eq!(expected_state, inducted_state);
     assert_eq!(
-        stream_handler.subnet_available_memory(&inducted_state),
+        stream_handler.subnet_available_guaranteed_response_memory(&inducted_state),
         subnet_available_memory
     );
     assert_inducted_xnet_messages_eq(
@@ -703,14 +709,15 @@ fn induct_loopback_stream_ignores_memory_limit_impl(
     });
     expected_state.with_streams(btreemap![LOCAL_SUBNET => expected_loopback_stream]);
 
-    let mut subnet_available_memory = stream_handler.subnet_available_memory(&initial_state);
+    let mut subnet_available_memory =
+        stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
     let inducted_state =
         stream_handler.induct_loopback_stream(initial_state, &mut subnet_available_memory);
 
     assert_eq!(expected_state, inducted_state);
 
     assert_eq!(
-        stream_handler.subnet_available_memory(&inducted_state),
+        stream_handler.subnet_available_guaranteed_response_memory(&inducted_state),
         subnet_available_memory
     );
 
@@ -1181,7 +1188,7 @@ fn garbage_collect_local_state_success() {
         expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
         let initial_subnet_available_memory =
-            stream_handler.subnet_available_memory(&initial_state);
+            stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
 
         let pruned_state = stream_handler
             .garbage_collect_local_state(initial_state, &btreemap![REMOTE_SUBNET => stream_slice]);
@@ -1191,7 +1198,7 @@ fn garbage_collect_local_state_success() {
         // `response` was garbage collected.
         assert_eq!(
             initial_subnet_available_memory + response.count_bytes() as i64,
-            stream_handler.subnet_available_memory(&pruned_state)
+            stream_handler.subnet_available_guaranteed_response_memory(&pruned_state)
         );
 
         assert_eq!(
@@ -1537,7 +1544,7 @@ fn induct_stream_slices_partial_success() {
         expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
         let initial_subnet_available_memory =
-            stream_handler.subnet_available_memory(&initial_state);
+            stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
         let mut subnet_available_memory = initial_subnet_available_memory;
 
         // Act
@@ -1570,7 +1577,10 @@ fn induct_stream_slices_partial_success() {
         );
         // Not equal, because the computed available memory does not account for the
         // reject response (since it's from a nonexistent canister).
-        assert!(stream_handler.subnet_available_memory(&inducted_state) >= subnet_available_memory);
+        assert!(
+            stream_handler.subnet_available_guaranteed_response_memory(&inducted_state)
+                >= subnet_available_memory
+        );
 
         assert_inducted_xnet_messages_eq(
             metric_vec(&[
@@ -1659,7 +1669,8 @@ fn induct_stream_slices_response_to_missing_canister() {
         expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_outgoing_stream]);
 
         // Act
-        let mut subnet_available_memory = stream_handler.subnet_available_memory(&initial_state);
+        let mut subnet_available_memory =
+            stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
         let inducted_state = stream_handler.induct_stream_slices(
             initial_state,
             btreemap![REMOTE_SUBNET => stream_slice],
@@ -1674,7 +1685,7 @@ fn induct_stream_slices_response_to_missing_canister() {
         assert_eq!(expected_state, inducted_state);
 
         assert_eq!(
-            stream_handler.subnet_available_memory(&inducted_state),
+            stream_handler.subnet_available_guaranteed_response_memory(&inducted_state),
             subnet_available_memory
         );
 
@@ -1749,7 +1760,8 @@ fn induct_stream_slices_sender_subnet_mismatch() {
         });
         expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_outgoing_stream]);
 
-        let mut subnet_available_memory = stream_handler.subnet_available_memory(&initial_state);
+        let mut subnet_available_memory =
+            stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
         let inducted_state = stream_handler.induct_stream_slices(
             initial_state,
             btreemap![REMOTE_SUBNET => stream_slice],
@@ -1764,7 +1776,7 @@ fn induct_stream_slices_sender_subnet_mismatch() {
         assert_eq!(expected_state, inducted_state);
 
         assert_eq!(
-            stream_handler.subnet_available_memory(&inducted_state),
+            stream_handler.subnet_available_guaranteed_response_memory(&inducted_state),
             subnet_available_memory
         );
 
@@ -1839,7 +1851,8 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
         });
         expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_outgoing_stream]);
 
-        let mut subnet_available_memory = stream_handler.subnet_available_memory(&initial_state);
+        let mut subnet_available_memory =
+            stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
         let inducted_state = stream_handler.induct_stream_slices(
             initial_state,
             btreemap![REMOTE_SUBNET => stream_slice],
@@ -1854,7 +1867,7 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
         assert_eq!(expected_state, inducted_state);
 
         assert_eq!(
-            stream_handler.subnet_available_memory(&inducted_state),
+            stream_handler.subnet_available_guaranteed_response_memory(&inducted_state),
             subnet_available_memory
         );
 
@@ -1960,7 +1973,7 @@ fn induct_stream_slices_with_messages_to_migrating_canister() {
         expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_outgoing_stream]);
 
         let initial_subnet_available_memory =
-            stream_handler.subnet_available_memory(&initial_state);
+            stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
         let mut subnet_available_memory = initial_subnet_available_memory;
 
         // Act
@@ -1985,7 +1998,10 @@ fn induct_stream_slices_with_messages_to_migrating_canister() {
         );
         // Not equal, because the computed available memory does not account for the
         // reject response (since it's from a canister not yet hosted by the subnet).
-        assert!(stream_handler.subnet_available_memory(&inducted_state) >= subnet_available_memory);
+        assert!(
+            stream_handler.subnet_available_guaranteed_response_memory(&inducted_state)
+                >= subnet_available_memory
+        );
 
         assert_inducted_xnet_messages_eq(
             metric_vec(&[
@@ -2092,7 +2108,7 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
         expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_outgoing_stream]);
 
         let initial_subnet_available_memory =
-            stream_handler.subnet_available_memory(&initial_state);
+            stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
         let mut subnet_available_memory = initial_subnet_available_memory;
 
         // Act
@@ -2117,7 +2133,10 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
         );
         // Not equal, because the computed available memory does not account for the
         // reject response (since it's from a canister no longer hosted by the subnet).
-        assert!(stream_handler.subnet_available_memory(&inducted_state) >= subnet_available_memory);
+        assert!(
+            stream_handler.subnet_available_guaranteed_response_memory(&inducted_state)
+                >= subnet_available_memory
+        );
 
         assert_inducted_xnet_messages_eq(
             metric_vec(&[
@@ -2209,7 +2228,8 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
         expected_state
             .with_streams(btreemap![CANISTER_MIGRATION_SUBNET => expected_outgoing_stream]);
 
-        let mut subnet_available_memory = stream_handler.subnet_available_memory(&initial_state);
+        let mut subnet_available_memory =
+            stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
         let inducted_state = stream_handler.induct_stream_slices(
             initial_state,
             btreemap![CANISTER_MIGRATION_SUBNET => stream_slice],
@@ -2225,7 +2245,7 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
         assert_eq!(expected_state, inducted_state);
 
         assert_eq!(
-            stream_handler.subnet_available_memory(&inducted_state),
+            stream_handler.subnet_available_guaranteed_response_memory(&inducted_state),
             subnet_available_memory
         );
 
@@ -2317,7 +2337,8 @@ fn induct_stream_slices_with_messages_from_migrated_canister() {
 
         expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_outgoing_stream]);
 
-        let mut subnet_available_memory = stream_handler.subnet_available_memory(&initial_state);
+        let mut subnet_available_memory =
+            stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
         let inducted_state = stream_handler.induct_stream_slices(
             initial_state,
             btreemap![REMOTE_SUBNET => stream_slice],
@@ -2333,7 +2354,7 @@ fn induct_stream_slices_with_messages_from_migrated_canister() {
         assert_eq!(expected_state, inducted_state);
 
         assert_eq!(
-            stream_handler.subnet_available_memory(&inducted_state),
+            stream_handler.subnet_available_guaranteed_response_memory(&inducted_state),
             subnet_available_memory
         );
 
@@ -2453,7 +2474,8 @@ fn induct_stream_slices_with_memory_limit_impl(
     expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
     // Act
-    let mut subnet_available_memory = stream_handler.subnet_available_memory(&initial_state);
+    let mut subnet_available_memory =
+        stream_handler.subnet_available_guaranteed_response_memory(&initial_state);
     let inducted_state = stream_handler.induct_stream_slices(
         initial_state,
         btreemap![REMOTE_SUBNET => stream_slice],
@@ -2464,7 +2486,7 @@ fn induct_stream_slices_with_memory_limit_impl(
     assert_eq!(expected_state, inducted_state);
 
     assert_eq!(
-        stream_handler.subnet_available_memory(&inducted_state),
+        stream_handler.subnet_available_guaranteed_response_memory(&inducted_state),
         subnet_available_memory
     );
 
