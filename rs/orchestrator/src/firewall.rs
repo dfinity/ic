@@ -12,6 +12,7 @@ use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
 use ic_registry_keys::FirewallRulesScope;
 use ic_sys::fs::write_string_using_tmp_file;
+// use ic_test_utilities::crypto::temp_crypto_config_provider;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::{
     cmp::{max, min},
@@ -632,7 +633,7 @@ mod tests {
         make_api_boundary_node_record_key, make_firewall_rules_record_key, make_node_record_key,
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities::crypto::CryptoReturningOk;
+    use ic_test_utilities::crypto::{temp_crypto_config_provider, CryptoReturningOk};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
@@ -881,6 +882,7 @@ mod tests {
             registry_helper.clone(),
             tmp_dir.join("cups"),
             Arc::new(CryptoReturningOk::default()),
+            temp_crypto_config_provider(),
             no_op_logger(),
             node,
         )

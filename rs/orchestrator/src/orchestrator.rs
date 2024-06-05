@@ -219,7 +219,8 @@ impl Orchestrator {
             CatchUpPackageProvider::new(
                 Arc::clone(&registry),
                 args.cup_dir.clone(),
-                Arc::clone(&crypto) as _,
+                crypto.clone(),
+                crypto.clone(),
                 logger.clone(),
                 node_id,
             )

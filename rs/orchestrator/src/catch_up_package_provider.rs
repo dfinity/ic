@@ -34,6 +34,7 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     registry_helper::RegistryHelper,
 };
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::{registry::node::v1::NodeRecord, types::v1 as pb};
@@ -47,7 +48,6 @@ use ic_types::{
     NodeId, RegistryVersion, SubnetId,
 };
 use prost::Message;
-use reqwest::Client as ReqwestClient;
 use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc};
 use url::Url;
 
@@ -59,8 +59,8 @@ use url::Url;
 pub(crate) struct CatchUpPackageProvider {
     registry: Arc<RegistryHelper>,
     cup_dir: PathBuf,
-    client: ReqwestClient,
     crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
+    crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
     logger: ReplicaLogger,
     node_id: NodeId,
 }
@@ -71,24 +71,16 @@ impl CatchUpPackageProvider {
         registry: Arc<RegistryHelper>,
         cup_dir: PathBuf,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
+        crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
         logger: ReplicaLogger,
         node_id: NodeId,
     ) -> Option<Self> {
-        let client = reqwest::Client::builder()
-            .use_rustls_tls()
-            .https_only(true)
-            .http2_prior_knowledge()
-            .pool_idle_timeout(tokio::time::Duration::from_secs(600))
-            .pool_max_idle_per_host(1)
-            .build()
-            .ok()?;
-
         Some(Self {
             node_id,
             registry,
             cup_dir,
-            client,
             crypto,
+            crypto_tls_config,
             logger,
         })
     }
@@ -148,9 +140,9 @@ impl CatchUpPackageProvider {
             .map(CatchUpPackageParam::try_from)
             .and_then(Result::ok);
 
-        for (_, node_record) in peers.iter() {
+        for (node_id, node_record) in peers.iter() {
             if let Some((proto, cup)) = self
-                .fetch_and_verify_catch_up_package(node_record, param, subnet_id)
+                .fetch_and_verify_catch_up_package(node_id, node_record, param, subnet_id)
                 .await
             {
                 // Note: None is < Some(_)
@@ -171,6 +163,7 @@ impl CatchUpPackageProvider {
     // Also checks the signature of the downloaded catch up package.
     async fn fetch_and_verify_catch_up_package(
         &self,
+        node_id: &NodeId,
         node_record: &NodeRecord,
         param: Option<CatchUpPackageParam>,
         subnet_id: SubnetId,
@@ -192,7 +185,9 @@ impl CatchUpPackageProvider {
             })
             .ok()?;
 
-        let protobuf = self.fetch_catch_up_package(url.clone(), param).await?;
+        let protobuf = self
+            .fetch_catch_up_package(node_id, url.clone(), param)
+            .await?;
         let cup = CatchUpPackage::try_from(&protobuf)
             .map_err(|e| {
                 warn!(
@@ -226,6 +221,7 @@ impl CatchUpPackageProvider {
     // caller.
     async fn fetch_catch_up_package(
         &self,
+        node_id: &NodeId,
         url: Url,
         param: Option<CatchUpPackageParam>,
     ) -> Option<pb::CatchUpPackage> {
@@ -235,15 +231,35 @@ impl CatchUpPackageProvider {
             .and_then(|param| serde_cbor::to_vec(&param).ok())
             .unwrap_or_default();
 
-        let res = self
-            .client
-            .request(reqwest::Method::POST, url)
-            .body(body)
-            .send()
+        let client_config = self
+            .crypto_tls_config
+            .client_config(node_id.clone(), self.registry.get_latest_version())
+            .ok()?;
+
+        let https = hyper_rustls::HttpsConnectorBuilder::new()
+            .with_tls_config(client_config)
+            .https_only()
+            .enable_all_versions()
+            .build();
+
+        let client = hyper::Client::builder()
+            .http2_only(true)
+            .pool_idle_timeout(tokio::time::Duration::from_secs(600))
+            .pool_max_idle_per_host(1)
+            .build(https);
+
+        let res = client
+            .request(
+                hyper::Request::builder()
+                    .method(hyper::Method::POST)
+                    .uri(url.to_string())
+                    .body(hyper::Body::from(body))
+                    .ok()?,
+            )
             .await
             .ok()?;
 
-        let bytes = res.bytes().await.ok()?;
+        let bytes = hyper::body::to_bytes(res.into_body()).await.ok()?;
 
         if bytes.is_empty() {
             None

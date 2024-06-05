@@ -13,6 +13,9 @@ clap = { version = "3.2.25", features = ["derive"] }
 exec = "0.3.1"
 get_if_addrs = "0.5.3"
 hex = { workspace = true }
+hyper = { version = "^0.14.27", features = ["full"] }
+http-body = "^0.4.6"
+hyper-rustls = { workspace = true }
 ic-async-utils = { path = "../async_utils" }
 ic-canister-client = { path = "../canister_client" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
@@ -20,6 +23,7 @@ ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
+ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-dashboard = { path = "./dashboard" }
 ic-http-utils = { path = "../http_utils" }
 ic-management-canister-types = { path = "../types/management_canister_types" }

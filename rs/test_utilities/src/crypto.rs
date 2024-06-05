@@ -3,6 +3,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgDealing;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values;
 use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
     IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
@@ -49,6 +50,14 @@ pub fn temp_crypto_component_with_fake_registry(node_id: NodeId) -> TempCryptoCo
         .with_registry(empty_fake_registry())
         .with_node_id(node_id)
         .build()
+}
+
+pub fn temp_crypto_config_provider() -> Arc<dyn TlsConfig + Send + Sync> {
+    Arc::new(
+        TempCryptoComponent::builder()
+            .with_registry(empty_fake_registry())
+            .build(),
+    )
 }
 
 fn empty_ni_dkg_csp_dealing() -> CspNiDkgDealing {
