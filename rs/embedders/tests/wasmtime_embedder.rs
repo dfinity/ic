@@ -1737,6 +1737,59 @@ fn wasm64_basic_test() {
 }
 
 #[test]
+// Verify that we can create 64 bit memory and write to it
+fn memory_copy_test() {
+    let wat = r#"
+    (module
+        (global $g1 (export "g1") (mut i64) (i64.const 0))
+        (func $test (export "canister_update test")
+            (i64.store (i32.const 20) (i64.const 137))
+            (memory.copy (i32.const 50) (i32.const 20) (i32.const 8))
+            (i64.load (i32.const 50))
+            global.set $g1
+        )
+        (memory (export "memory") 10)
+    )"#;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .build();
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+    assert_eq!(res.exported_globals[0], Global::I64(137));
+}
+
+#[test]
+fn wasm64_memory_copy_test() {
+    let wat = r#"
+    (module
+        (global $g1 (export "g1") (mut i64) (i64.const 0))
+        (func $test (export "canister_update test")
+            (i64.store (i64.const 20) (i64.const 137))
+            (memory.copy (i64.const 50) (i64.const 20) (i64.const 8))
+            (i64.load (i64.const 50))
+            global.set $g1
+        )
+        (memory (export "memory") i64 10)
+    )"#;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .build();
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+    assert_eq!(res.exported_globals[0], Global::I64(137));
+}
+
+#[test]
 // Verify behavior of failed memory grow in wasm64 mode
 fn wasm64_handles_memory_grow_failure_test() {
     let wat = r#"
