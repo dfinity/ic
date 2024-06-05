@@ -601,10 +601,11 @@ impl ExecutionEnvironment {
                             refund: msg.take_cycles(),
                         },
                         Ok(args) => {
+                            let key_id = MasterPublicKeyId::Ecdsa(args.key_id.clone());
                             match get_master_public_key(
                                 idkg_subnet_public_keys,
                                 self.own_subnet_id,
-                                &MasterPublicKeyId::Ecdsa(args.key_id.clone()),
+                                &key_id,
                             ) {
                                 Err(err) => ExecuteSubnetMessageResult::Finished {
                                     response: Err(err),
@@ -620,7 +621,11 @@ impl ExecutionEnvironment {
                                         .map(|x| x.into_vec())
                                         .collect(),
                                     args.key_id,
-                                    registry_settings.max_ecdsa_queue_size,
+                                    registry_settings
+                                        .chain_key_settings
+                                        .get(&key_id)
+                                        .map(|setting| setting.max_queue_size)
+                                        .unwrap_or_default(),
                                     &mut state,
                                     rng,
                                     registry_settings.subnet_size,
@@ -1195,10 +1200,11 @@ impl ExecutionEnvironment {
                                 refund: msg.take_cycles(),
                             },
                             Ok(args) => {
+                                let key_id = MasterPublicKeyId::Schnorr(args.key_id.clone());
                                 match get_master_public_key(
                                     idkg_subnet_public_keys,
                                     self.own_subnet_id,
-                                    &MasterPublicKeyId::Schnorr(args.key_id.clone()),
+                                    &key_id,
                                 ) {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
                                         response: Err(err),
@@ -1214,8 +1220,11 @@ impl ExecutionEnvironment {
                                             .map(|x| x.into_vec())
                                             .collect(),
                                         args.key_id,
-                                        // TODO(EXC-1629): introduce max_schnorr_queue_size.
-                                        registry_settings.max_ecdsa_queue_size,
+                                        registry_settings
+                                            .chain_key_settings
+                                            .get(&key_id)
+                                            .map(|setting| setting.max_queue_size)
+                                            .unwrap_or_default(),
                                         &mut state,
                                         rng,
                                         registry_settings.subnet_size,

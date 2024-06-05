@@ -25,7 +25,8 @@ use super::payload_builder::EcdsaPayloadError;
 use super::pre_signer::EcdsaTranscriptBuilder;
 use super::signer::EcdsaSignatureBuilder;
 use super::utils::{
-    block_chain_cache, get_ecdsa_config_if_enabled, EcdsaBlockReaderImpl, InvalidChainCacheError,
+    block_chain_cache, get_chain_key_config_if_enabled, EcdsaBlockReaderImpl,
+    InvalidChainCacheError,
 };
 use crate::consensus::metrics::timed_call;
 use crate::ecdsa::payload_builder::{create_data_payload_helper, create_summary_payload};
@@ -223,14 +224,14 @@ fn validate_summary_payload(
     let registry_version = pool_reader.registry_version(height).ok_or(
         InvalidEcdsaPayloadReason::ConsensusRegistryVersionNotFound(height),
     )?;
-    let ecdsa_config = get_ecdsa_config_if_enabled(
+    let chain_key_config = get_chain_key_config_if_enabled(
         subnet_id,
         registry_version,
         registry_client,
         &ic_logger::replica_logger::no_op_logger(),
     )
     .map_err(EcdsaPayloadValidationFailure::from)?;
-    if ecdsa_config.is_none() {
+    if chain_key_config.is_none() {
         if summary_payload.is_some() {
             return Err(InvalidEcdsaPayloadReason::EcdsaConfigNotFound.into());
         } else {

@@ -1,7 +1,7 @@
 use ic_crypto_internal_csp::Csp;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_protobuf::registry::crypto::v1::{EcdsaCurve, EcdsaKeyId};
-use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetRecord, SubnetType};
+use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, KeyConfig, SubnetRecord, SubnetType};
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
@@ -1053,19 +1053,26 @@ impl EcdsaSubnetConfig {
                 max_number_of_canisters: 0,
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
-                ecdsa_config: Some(EcdsaConfig {
-                    quadruples_to_create_in_advance: 10,
-                    key_ids: vec![EcdsaKeyId {
-                        curve: EcdsaCurve::Secp256k1.into(),
-                        name: "dummy_ecdsa_key_id".to_string(),
+                ecdsa_config: None,
+                chain_key_config:  Some(ChainKeyConfig {
+                    key_configs: vec![KeyConfig {
+                        key_id: Some(ic_protobuf::registry::crypto::v1::MasterPublicKeyId {
+                            key_id: Some(
+                                ic_protobuf::registry::crypto::v1::master_public_key_id::KeyId::Ecdsa(
+                                    EcdsaKeyId {
+                                        curve: EcdsaCurve::Secp256k1.into(),
+                                        name: "dummy_ecdsa_key_id".to_string(),
+                                    },
+                                ),
+                            ),
+                        }),
+                        pre_signatures_to_create_in_advance: Some(1),
+                        max_queue_size: Some(20),
                     }],
-                    max_queue_size: 20,
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: key_rotation_period
                         .map(|key_rotation_period| key_rotation_period.as_millis() as u64),
                 }),
-                // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
-                chain_key_config: None,
             },
         }
     }
@@ -1084,10 +1091,10 @@ impl EcdsaSubnetConfig {
         let mut subnet_config = Self::new(subnet_id, node_id, key_rotation_period);
         subnet_config
             .subnet_record
-            .ecdsa_config
+            .chain_key_config
             .take()
             .expect("ECDSA config is None")
-            .key_ids = vec![];
+            .key_configs = vec![];
         subnet_config
     }
 }
