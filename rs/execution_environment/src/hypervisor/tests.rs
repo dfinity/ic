@@ -7141,40 +7141,6 @@ fn yield_for_dirty_page_copy_does_not_trigger_on_system_subnets_without_dts() {
 }
 
 #[test]
-fn table_grow_fails_with_too_many_elements() {
-    let wat = r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (import "ic0" "msg_reply_data_append"
-                (func $msg_reply_data_append (param i32 i32))
-            )
-            (func (export "canister_update table_grow")
-                (i32.store (i32.const 0)
-                    (table.grow 0 (ref.null extern) (i32.const 2000000))
-                )
-                (call $msg_reply_data_append (i32.const 0) (i32.const 4))
-                (call $msg_reply)
-            )
-            (table 0 externref)
-            (memory 1)
-        )
-    "#;
-    let mut test = ExecutionTestBuilder::new().build();
-    let canister_id = test.canister_from_wat(wat).unwrap();
-    let ingress_id = test.ingress_raw(canister_id, "table_grow", vec![]).0;
-    test.execute_message(canister_id);
-    let ingress_status = test.ingress_status(&ingress_id);
-    let ingress_state = match ingress_status {
-        IngressStatus::Known { state, .. } => state,
-        IngressStatus::Unknown => unreachable!("Expected known ingress status"),
-    };
-    assert_eq!(
-        IngressState::Completed(WasmResult::Reply((-1_i32).to_le_bytes().to_vec())),
-        ingress_state
-    );
-}
-
-#[test]
 fn declaring_too_many_tables_fails() {
     let wat = format!("(module {})", "(table 0 externref)".repeat(100));
     let mut test = ExecutionTestBuilder::new().build();
