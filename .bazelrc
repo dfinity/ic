@@ -93,7 +93,7 @@ test --test_env=RUST_BACKTRACE=full
 test:precommit --build_tests_only --test_tag_filters="smoke"
 
 build:systest --build_tag_filters= --s3_endpoint=https://s3-upload.idx.dfinity.network
-test:systest --test_output=streamed --test_tag_filters=
+test:systest --remote_upload_local_results=true --test_output=streamed --test_tag_filters=
 
 build:testnet --build_tag_filters= --s3_endpoint=https://s3-upload.idx.dfinity.network --ic_version_rc_only=
 test:testnet --test_output=streamed --test_tag_filters=
