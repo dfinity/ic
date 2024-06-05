@@ -34,13 +34,14 @@ use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType, ClearChunkStoreArgs,
-    ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs,
-    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
-    Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrKeyId,
-    SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    ComputeInitialEcdsaDealingsArgs, ComputeInitialIDkgDealingsArgs, CreateCanisterArgs,
+    DeleteCanisterSnapshotArgs, DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
+    EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    SchnorrKeyId, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
+    SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -49,9 +50,9 @@ use ic_replicated_state::{
     canister_state::system_state::PausedExecutionId,
     canister_state::{system_state::CyclesUseCase, NextExecution},
     metadata_state::subnet_call_context_manager::{
-        EcdsaDealingsContext, InstallCodeCall, InstallCodeCallId, SchnorrArguments,
-        SetupInitialDkgContext, SignWithEcdsaContext, SignWithThresholdContext, StopCanisterCall,
-        SubnetCallContext, ThresholdArguments,
+        EcdsaDealingsContext, IDkgDealingsContext, InstallCodeCall, InstallCodeCallId,
+        SchnorrArguments, SetupInitialDkgContext, SignWithEcdsaContext, SignWithThresholdContext,
+        StopCanisterCall, SubnetCallContext, ThresholdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
     CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
@@ -59,7 +60,7 @@ use ic_replicated_state::{
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
-    crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey},
+    crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey, PublicKey},
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
@@ -386,6 +387,7 @@ impl ExecutionEnvironment {
             own_subnet_type,
             config.max_controllers,
             compute_capacity,
+            config.max_canister_memory_size,
             config.rate_limiting_of_instructions,
             config.allocatable_compute_capacity_in_percent,
             config.wasm_chunk_store,
@@ -537,7 +539,7 @@ impl ExecutionEnvironment {
             }
         }
 
-        let result = match method {
+        let result: ExecuteSubnetMessageResult = match method {
             Ok(Ic00Method::InstallCode) => {
                 // Tail call is needed for deterministic time slicing here to
                 // properly handle the case of a paused execution.
@@ -1010,18 +1012,18 @@ impl ExecutionEnvironment {
                                         Some(id) => id.into(),
                                         None => *msg.sender(),
                                     };
-                                    self.get_ecdsa_public_key(
+                                    self.get_threshold_public_key(
                                         pubkey,
                                         canister_id,
-                                        args.derivation_path
-                                            .get()
-                                            .clone()
-                                            .into_iter()
-                                            .map(|x| x.into_vec())
-                                            .collect(),
-                                        &args.key_id,
+                                        &args.derivation_path,
                                     )
-                                    .map(|res| res.encode())
+                                    .map(|res| {
+                                        ECDSAPublicKeyResponse {
+                                            public_key: res.public_key,
+                                            chain_code: res.chain_key,
+                                        }
+                                        .encode()
+                                    })
                                 }
                             },
                         };
@@ -1073,10 +1075,94 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::ComputeInitialIDkgDealings) => {
-                Self::reject_due_to_api_not_implemented(&mut msg)
+                match self.config.ic00_compute_initial_i_dkg_dealings {
+                    FlagStatus::Disabled => Self::reject_due_to_api_not_implemented(&mut msg),
+                    FlagStatus::Enabled => {
+                        let cycles = msg.take_cycles();
+                        match &msg {
+                            CanisterCall::Request(request) => {
+                                match ComputeInitialIDkgDealingsArgs::decode(
+                                    request.method_payload(),
+                                ) {
+                                    Ok(args) => match get_master_public_key(
+                                        idkg_subnet_public_keys,
+                                        self.own_subnet_id,
+                                        &args.key_id,
+                                    ) {
+                                        Ok(_) => self
+                                            .compute_initial_idkg_dealings(
+                                                &mut state, args, request,
+                                            )
+                                            .map_or_else(
+                                                |err| ExecuteSubnetMessageResult::Finished {
+                                                    response: Err(err),
+                                                    refund: cycles,
+                                                },
+                                                |()| ExecuteSubnetMessageResult::Processing,
+                                            ),
+                                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                                            response: Err(err),
+                                            refund: cycles,
+                                        },
+                                    },
+                                    Err(err) => ExecuteSubnetMessageResult::Finished {
+                                        response: Err(err),
+                                        refund: cycles,
+                                    },
+                                }
+                            }
+                            CanisterCall::Ingress(_) => self
+                                .reject_unexpected_ingress(Ic00Method::ComputeInitialIDkgDealings),
+                        }
+                    }
+                }
             }
 
-            Ok(Ic00Method::SchnorrPublicKey) => Self::reject_due_to_api_not_implemented(&mut msg),
+            Ok(Ic00Method::SchnorrPublicKey) => match self.config.ic00_schnorr_public_key {
+                FlagStatus::Disabled => Self::reject_due_to_api_not_implemented(&mut msg),
+                FlagStatus::Enabled => {
+                    let cycles = msg.take_cycles();
+                    match &msg {
+                        CanisterCall::Request(request) => {
+                            let res = match SchnorrPublicKeyArgs::decode(request.method_payload()) {
+                                Err(err) => Err(err),
+                                Ok(args) => match get_master_public_key(
+                                    idkg_subnet_public_keys,
+                                    self.own_subnet_id,
+                                    &MasterPublicKeyId::Schnorr(args.key_id.clone()),
+                                ) {
+                                    Err(err) => Err(err),
+                                    Ok(pubkey) => {
+                                        let canister_id = match args.canister_id {
+                                            Some(id) => id.into(),
+                                            None => *msg.sender(),
+                                        };
+                                        self.get_threshold_public_key(
+                                            pubkey,
+                                            canister_id,
+                                            &args.derivation_path,
+                                        )
+                                        .map(|res| {
+                                            SchnorrPublicKeyResponse {
+                                                public_key: res.public_key,
+                                                chain_code: res.chain_key,
+                                            }
+                                            .encode()
+                                        })
+                                    }
+                                },
+                            };
+                            ExecuteSubnetMessageResult::Finished {
+                                response: res,
+                                refund: cycles,
+                            }
+                        }
+                        CanisterCall::Ingress(_) => {
+                            self.reject_unexpected_ingress(Ic00Method::SchnorrPublicKey)
+                        }
+                    }
+                }
+            },
 
             Ok(Ic00Method::SignWithSchnorr) => match self.config.ic00_sign_with_schnorr {
                 FlagStatus::Disabled => Self::reject_due_to_api_not_implemented(&mut msg),
@@ -1355,19 +1441,30 @@ impl ExecutionEnvironment {
             },
 
             Ok(Ic00Method::LoadCanisterSnapshot) => match self.config.canister_snapshots {
-                FlagStatus::Enabled => {
-                    let res = LoadCanisterSnapshotArgs::decode(payload).and_then(|_| {
-                        // TODO(EXC-1530): Implement load_canister_snapshot.
-                        Err(UserError::new(
-                            ErrorCode::CanisterContractViolation,
-                            "This API is not enabled on this subnet".to_string(),
-                        ))
-                    });
-                    ExecuteSubnetMessageResult::Finished {
-                        response: res,
+                FlagStatus::Enabled => match LoadCanisterSnapshotArgs::decode(payload) {
+                    Err(err) => ExecuteSubnetMessageResult::Finished {
+                        response: Err(err),
                         refund: msg.take_cycles(),
+                    },
+                    Ok(args) => {
+                        let origin = msg.canister_change_origin(args.get_sender_canister_version());
+                        let (result, instruction_used) = self.load_canister_snapshot(
+                            *msg.sender(),
+                            &mut state,
+                            args,
+                            round_limits,
+                            origin,
+                        );
+                        let msg_result = ExecuteSubnetMessageResult::Finished {
+                            response: result,
+                            refund: msg.take_cycles(),
+                        };
+
+                        let state =
+                            self.finish_subnet_message_execution(state, msg, msg_result, since);
+                        return (state, Some(instruction_used));
                     }
-                }
+                },
                 FlagStatus::Disabled => {
                     let err = Err(UserError::new(
                         ErrorCode::CanisterContractViolation,
@@ -2018,6 +2115,56 @@ impl ExecutionEnvironment {
         result
     }
 
+    /// Loads a canister snapshot onto an existing canister.
+    fn load_canister_snapshot(
+        &self,
+        sender: PrincipalId,
+        state: &mut ReplicatedState,
+        args: LoadCanisterSnapshotArgs,
+        round_limits: &mut RoundLimits,
+        origin: CanisterChangeOrigin,
+    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
+        let canister_id = args.get_canister_id();
+        // Take canister out.
+        let old_canister = match state.take_canister_state(&canister_id) {
+            None => {
+                return (
+                    Err(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} not found.", &canister_id),
+                    )),
+                    NumInstructions::new(0),
+                )
+            }
+            Some(canister) => canister,
+        };
+
+        let snapshot_id = args.snapshot_id();
+        let (instructions_used, result) = self.canister_manager.load_canister_snapshot(
+            sender,
+            &old_canister,
+            snapshot_id,
+            state,
+            round_limits,
+            origin,
+            &self.metrics.long_execution_already_in_progress,
+        );
+
+        let result = match result {
+            Ok(new_canister) => {
+                state.put_canister_state(new_canister);
+                Ok(EmptyBlob.encode())
+            }
+            Err(err) => {
+                // Could not load the canister snapshot, thus put back old state.
+                state.put_canister_state(old_canister);
+                Err(err.into())
+            }
+        };
+
+        (result, instructions_used)
+    }
+
     /// Lists the snapshots belonging to the specified canister.
     fn list_canister_snapshot(
         &self,
@@ -2462,24 +2609,18 @@ impl ExecutionEnvironment {
         }
     }
 
-    fn get_ecdsa_public_key(
+    fn get_threshold_public_key(
         &self,
         subnet_public_key: &MasterPublicKey,
-        principal_id: PrincipalId,
-        derivation_path: Vec<Vec<u8>>,
-        // TODO EXC-1060: get the right public key.
-        _key_id: &EcdsaKeyId,
-    ) -> Result<ECDSAPublicKeyResponse, UserError> {
+        caller: PrincipalId,
+        derivation_path: &DerivationPath,
+    ) -> Result<PublicKey, UserError> {
         let path = ExtendedDerivationPath {
-            caller: principal_id,
-            derivation_path,
+            caller,
+            derivation_path: derivation_path.get().iter().map(|x| x.to_vec()).collect(),
         };
         derive_threshold_public_key(subnet_public_key, &path)
             .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{}", err)))
-            .map(|res| ECDSAPublicKeyResponse {
-                public_key: res.public_key,
-                chain_code: res.chain_key,
-            })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2524,15 +2665,16 @@ impl ExecutionEnvironment {
             }
         }
 
+        let key = MasterPublicKeyId::Ecdsa(key_id.clone());
         if !topology
-            .idkg_signing_subnets(&MasterPublicKeyId::Ecdsa(key_id.clone()))
+            .idkg_signing_subnets(&key)
             .contains(&state.metadata.own_subnet_id)
         {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
                     "{} request could not be handled, invalid or disabled key {}.",
-                    request.method_name, key_id
+                    request.method_name, key
                 ),
             ));
         }
@@ -2617,15 +2759,16 @@ impl ExecutionEnvironment {
             }
         }
 
+        let key = MasterPublicKeyId::Schnorr(key_id.clone());
         if !topology
-            .idkg_signing_subnets(&MasterPublicKeyId::Schnorr(key_id.clone()))
+            .idkg_signing_subnets(&key)
             .contains(&state.metadata.own_subnet_id)
         {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
                     "{} request could not be handled, invalid or disabled key {}.",
-                    request.method_name, key_id
+                    request.method_name, key
                 ),
             ));
         }
@@ -2682,6 +2825,27 @@ impl ExecutionEnvironment {
             .metadata
             .subnet_call_context_manager
             .push_context(SubnetCallContext::EcdsaDealings(EcdsaDealingsContext {
+                request: request.clone(),
+                key_id: args.key_id,
+                nodes,
+                registry_version,
+                time: state.time(),
+            }));
+        Ok(())
+    }
+
+    fn compute_initial_idkg_dealings(
+        &self,
+        state: &mut ReplicatedState,
+        args: ComputeInitialIDkgDealingsArgs,
+        request: &Request,
+    ) -> Result<(), UserError> {
+        let nodes = args.get_set_of_nodes()?;
+        let registry_version = args.get_registry_version();
+        state
+            .metadata
+            .subnet_call_context_manager
+            .push_context(SubnetCallContext::IDkgDealings(IDkgDealingsContext {
                 request: request.clone(),
                 key_id: args.key_id,
                 nodes,

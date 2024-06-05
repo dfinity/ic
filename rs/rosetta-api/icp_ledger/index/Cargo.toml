@@ -21,6 +21,7 @@ ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-icrc1-index-ng = { path = "../../icrc1/index-ng" }
+ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-metrics-encoder = "1.1"
 ic-stable-structures = { workspace = true }
@@ -36,6 +37,6 @@ serde_json = { workspace = true }
 candid_parser = { workspace = true }
 dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 on_wire = { path = "../../../rust_canisters/on_wire" }
-ic-ledger-canister-core = { path = "../../ledger_canister_core" }
+ic-icrc1-ledger-sm-tests = { path = "../../icrc1/ledger/sm-tests" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }

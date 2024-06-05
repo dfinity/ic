@@ -483,9 +483,9 @@ ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
 ic-stable-structures = "0.6.4"
 ic-utils = { version = "0.35.0", features = ["raw"] }
-ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "62a71e47c491fb842ccc257b1c675651501f4b82" }
-ic-btc-validation = { git = "https://github.com/dfinity/bitcoin-canister", rev = "0e996988693f2d55fc9533c44dc20ae5310a1894" }
-ic-btc-test-utils = { git = "https://github.com/dfinity/bitcoin-canister", rev = "62a71e47c491fb842ccc257b1c675651501f4b82" }
+ic-btc-interface = "0.2.0"
+ic-btc-validation = "0.1.0"
+ic-btc-test-utils = "0.1.0"
 indexmap = "2.1.0"
 itertools = "0.12.0"
 k256 = { version = "0.13.3", default_features = false, features = [
@@ -526,6 +526,7 @@ reqwest = { version = "0.12.3", default-features = false, features = [
     "blocking",
     "http2",
     "json",
+    "multipart",
     "rustls-tls",
     "rustls-tls-native-roots",
     "socks",

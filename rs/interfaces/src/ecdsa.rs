@@ -3,6 +3,7 @@
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::idkg::{
     EcdsaComplaint, EcdsaMessage, EcdsaOpening, EcdsaPrefixOf, EcdsaSigShare, EcdsaStats,
+    SchnorrSigShare,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
 
@@ -77,13 +78,28 @@ pub trait EcdsaPoolSection: Send + Sync {
     }
 
     /// Iterator for signature share objects.
-    fn signature_shares(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_>;
+    fn ecdsa_signature_shares(
+        &self,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_>;
 
     /// Iterator for signature share objects matching the prefix.
-    fn signature_shares_by_prefix(
+    fn ecdsa_signature_shares_by_prefix(
         &self,
         _prefix: EcdsaPrefixOf<EcdsaSigShare>,
     ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_> {
+        unimplemented!()
+    }
+
+    /// Iterator for signature share objects.
+    fn schnorr_signature_shares(
+        &self,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_>;
+
+    /// Iterator for signature share objects matching the prefix.
+    fn schnorr_signature_shares_by_prefix(
+        &self,
+        _prefix: EcdsaPrefixOf<SchnorrSigShare>,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_> {
         unimplemented!()
     }
 

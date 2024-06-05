@@ -624,6 +624,7 @@ pub struct StateMachineBuilder {
     subnet_id: Option<SubnetId>,
     routing_table: RoutingTable,
     use_cost_scaling_flag: bool,
+    enable_canister_snapshots: bool,
     ecdsa_keys: Vec<EcdsaKeyId>,
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
@@ -644,6 +645,7 @@ impl StateMachineBuilder {
             config: None,
             checkpoints_enabled: false,
             subnet_type: SubnetType::System,
+            enable_canister_snapshots: false,
             use_cost_scaling_flag: false,
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             nns_subnet_id: None,
@@ -755,6 +757,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_canister_snapshots(self, enable_canister_snapshots: bool) -> Self {
+        Self {
+            enable_canister_snapshots,
+            ..self
+        }
+    }
+
     pub fn with_ecdsa_key(self, key: EcdsaKeyId) -> Self {
         let mut ecdsa_keys = self.ecdsa_keys;
         ecdsa_keys.push(key);
@@ -819,6 +828,7 @@ impl StateMachineBuilder {
             self.subnet_size,
             self.subnet_id,
             self.use_cost_scaling_flag,
+            self.enable_canister_snapshots,
             self.ecdsa_keys,
             self.features,
             self.runtime.unwrap_or_else(|| {
@@ -927,6 +937,9 @@ impl Default for StateMachineBuilder {
 }
 
 impl StateMachine {
+    /// Provides the time increment for a single round of execution.
+    pub const EXECUTE_ROUND_TIME_INCREMENT: Duration = Duration::from_nanos(1);
+
     // TODO: cleanup, replace external calls with `StateMachineBuilder`.
     /// Constructs a new environment that uses a temporary directory for storing
     /// states.
@@ -1044,6 +1057,7 @@ impl StateMachine {
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
         use_cost_scaling_flag: bool,
+        enable_canister_snapshots: bool,
         ecdsa_keys: Vec<EcdsaKeyId>,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
@@ -1092,6 +1106,10 @@ impl StateMachine {
         if !dts {
             hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;
             hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;
+        }
+
+        if enable_canister_snapshots {
+            hypervisor_config.canister_snapshots = FlagStatus::Enabled;
         }
 
         // We are not interested in ingress signature validation.
@@ -1580,7 +1598,7 @@ impl StateMachine {
     /// Advances time by 1ns (to make sure time is strictly monotone)
     /// and triggers a single round of execution with block payload as an input.
     pub fn execute_payload(&self, payload: PayloadBuilder) -> Height {
-        self.advance_time(Duration::from_nanos(1));
+        self.advance_time(Self::EXECUTE_ROUND_TIME_INCREMENT);
 
         let batch_number = self.message_routing.expected_batch_height();
 
@@ -1700,7 +1718,7 @@ impl StateMachine {
 
     /// Returns the state machine time at the beginning of next round.
     pub fn time_of_next_round(&self) -> SystemTime {
-        self.time() + Duration::from_nanos(1)
+        self.time() + Self::EXECUTE_ROUND_TIME_INCREMENT
     }
 
     /// Returns the current state machine time.
@@ -2862,7 +2880,7 @@ impl PayloadBuilder {
         .unwrap();
 
         self.ingress_messages.push(msg);
-        self.expiry_time += Duration::from_nanos(1);
+        self.expiry_time += StateMachine::EXECUTE_ROUND_TIME_INCREMENT;
         self.nonce = self.nonce.map(|n| n + 1);
         self
     }

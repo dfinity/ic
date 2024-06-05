@@ -19,7 +19,7 @@ use ic_cketh_minter::tx::{
     Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest, TransactionPrice,
 };
 use ic_ethereum_types::Address;
-use maplit::btreeset;
+use maplit::{btreemap, btreeset};
 use std::str::FromStr;
 
 #[test]
@@ -72,7 +72,10 @@ fn should_display_block_sync() {
         last_observed_block: Some(BlockNumber::from(4552271_u32)),
         last_eth_synced_block: BlockNumber::from(4552270_u32),
         last_erc20_synced_block: Some(BlockNumber::from(4552269_u32)),
-        skipped_blocks: btreeset! {BlockNumber::from(3552270_u32), BlockNumber::from(2552270_u32)},
+        skipped_blocks: btreemap! {
+            "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string() => btreeset! {BlockNumber::from(3552270_u32), BlockNumber::from(2552270_u32)},
+            "0xE1788E4834c896F1932188645cc36c54d1b80AC1".to_string() => btreeset! {BlockNumber::from(3552370_u32), BlockNumber::from(2552370_u32)},
+        },
         ..initial_dashboard()
     };
     DashboardAssert::assert_that(dashboard)
@@ -81,16 +84,13 @@ fn should_display_block_sync() {
         .has_last_erc20_synced_block_href("https://sepolia.etherscan.io/block/4552269")
         .has_first_synced_block_href("https://sepolia.etherscan.io/block/3956207")
         .has_skipped_blocks(
-            r#"<a href="https://sepolia.etherscan.io/block/2552270"><code>2552270</code></a>, <a href="https://sepolia.etherscan.io/block/3552270"><code>3552270</code></a>"#,
+            "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+            &[2552270, 3552270],
+        )
+        .has_skipped_blocks(
+            "0xE1788E4834c896F1932188645cc36c54d1b80AC1",
+            &[2552370, 3552370],
         );
-
-    let dashboard_with_single_skipped_block = DashboardTemplate {
-        skipped_blocks: btreeset! {BlockNumber::from(3552270_u32)},
-        ..initial_dashboard()
-    };
-    DashboardAssert::assert_that(dashboard_with_single_skipped_block).has_skipped_blocks(
-        r#"<a href="https://sepolia.etherscan.io/block/3552270"><code>3552270</code></a>"#,
-    );
 }
 
 #[test]
@@ -1228,10 +1228,20 @@ mod assertions {
             )
         }
 
-        pub fn has_skipped_blocks(&self, expected_links: &str) -> &Self {
+        pub fn has_skipped_blocks(&self, contract_address: &str, expected_blocks: &[u64]) -> &Self {
+            let expected_links = expected_blocks
+                .iter()
+                .map(|i| {
+                    format!(
+                        "<a href=\"https://sepolia.etherscan.io/block/{}\"><code>{}</code></a>",
+                        i, i
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
             self.has_html_value(
-                "#skipped-blocks > td",
-                expected_links,
+                &format!("#skipped-blocks-{} > td", contract_address),
+                &expected_links,
                 "wrong skipped blocks",
             )
         }

@@ -22,6 +22,13 @@ impl MEGaCiphertextType {
     pub(crate) fn tag(&self) -> &'static str {
         match self {
             Self::Single => "single",
+            Self::Pairs => "pairs",
+        }
+    }
+
+    pub(crate) fn old_tag(&self) -> &'static str {
+        match self {
+            Self::Single => "single",
             Self::Pairs => "pair",
         }
     }
@@ -172,7 +179,7 @@ impl MEGaCiphertext {
     /// recipients.
     pub fn check_validity(
         &self,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         expected_recipients: usize,
         associated_data: &[u8],
         dealer_index: NodeIndex,
@@ -229,6 +236,7 @@ impl MEGaCiphertext {
     /// Decrypt a MEGa ciphertext and return the encrypted commitment opening
     ///
     /// # Arguments:
+    /// * `alg`: the IDKG protocol type being executed
     /// * `commitment`: a commitment to the coefficients of the polynomial being shared.
     /// * `associated_data` context data that identifies the protocol instance.
     /// * `dealer_index`: index of the dealer that encrypted the dealing.
@@ -241,6 +249,7 @@ impl MEGaCiphertext {
     /// * Any other error if the ciphertext could not be decrypted for some reason.
     pub(crate) fn decrypt_and_check(
         &self,
+        alg: IdkgProtocolAlgorithm,
         commitment: &PolynomialCommitment,
         associated_data: &[u8],
         dealer_index: NodeIndex,
@@ -251,6 +260,7 @@ impl MEGaCiphertext {
         let opening = match self {
             MEGaCiphertext::Single(ciphertext) => {
                 let opening = ciphertext.decrypt(
+                    alg,
                     associated_data,
                     dealer_index,
                     receiver_index,
@@ -262,6 +272,7 @@ impl MEGaCiphertext {
 
             MEGaCiphertext::Pairs(ciphertext) => {
                 let opening = ciphertext.decrypt(
+                    alg,
                     associated_data,
                     dealer_index,
                     receiver_index,
@@ -359,6 +370,7 @@ fn check_plaintexts_pair(
 }
 
 fn mega_hash_to_scalars(
+    alg: IdkgProtocolAlgorithm,
     plaintext_curve: EccCurveType,
     ctype: MEGaCiphertextType,
     dealer_index: NodeIndex,
@@ -375,7 +387,7 @@ fn mega_hash_to_scalars(
 
     let mut ro = RandomOracle::new(DomainSep::MegaEncryption(
         ctype,
-        plaintext_curve,
+        alg,
         public_key.curve_type(),
     ));
     ro.add_usize("dealer_index", dealer_index as usize)?;
@@ -393,7 +405,7 @@ fn mega_hash_to_scalars(
 /// for the sender to prove to recipients that it knew the discrete
 /// log of the ephemeral key.
 fn compute_pop_base(
-    alg: CanisterThresholdSignatureAlgorithm,
+    alg: IdkgProtocolAlgorithm,
     ctype: MEGaCiphertextType,
     curve_type: EccCurveType,
     associated_data: &[u8],
@@ -409,7 +421,7 @@ fn compute_pop_base(
 
 /// Verify the Proof Of Possession (PoP)
 fn verify_pop(
-    alg: CanisterThresholdSignatureAlgorithm,
+    alg: IdkgProtocolAlgorithm,
     ctype: MEGaCiphertextType,
     associated_data: &[u8],
     dealer_index: NodeIndex,
@@ -450,7 +462,7 @@ fn verify_pop(
 /// discrete logarithms of `pop_public_key` and `v` are the same value (`beta`)
 /// in the respective bases.
 fn compute_eph_key_and_pop(
-    alg: CanisterThresholdSignatureAlgorithm,
+    alg: IdkgProtocolAlgorithm,
     ctype: MEGaCiphertextType,
     curve_type: EccCurveType,
     seed: Seed,
@@ -478,7 +490,7 @@ fn compute_eph_key_and_pop(
 impl MEGaCiphertextSingle {
     pub fn encrypt(
         seed: Seed,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         plaintexts: &[EccScalar],
         recipients: &[MEGaPublicKey],
         dealer_index: NodeIndex,
@@ -497,6 +509,7 @@ impl MEGaCiphertextSingle {
             let ubeta = pubkey.point.scalar_mul(&beta)?;
 
             let hm = mega_hash_to_scalars(
+                alg,
                 plaintext_curve,
                 ctype,
                 dealer_index,
@@ -522,7 +535,7 @@ impl MEGaCiphertextSingle {
 
     pub fn verify_pop(
         &self,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         associated_data: &[u8],
         dealer_index: NodeIndex,
     ) -> CanisterThresholdResult<()> {
@@ -539,6 +552,7 @@ impl MEGaCiphertextSingle {
 
     pub fn decrypt_from_shared_secret(
         &self,
+        alg: IdkgProtocolAlgorithm,
         associated_data: &[u8],
         dealer_index: NodeIndex,
         recipient_index: NodeIndex,
@@ -554,6 +568,7 @@ impl MEGaCiphertextSingle {
         let plaintext_curve = self.ctexts[recipient_index as usize].curve_type();
 
         let hm = mega_hash_to_scalars(
+            alg,
             plaintext_curve,
             MEGaCiphertextType::Single,
             dealer_index,
@@ -569,6 +584,7 @@ impl MEGaCiphertextSingle {
 
     pub fn decrypt(
         &self,
+        alg: IdkgProtocolAlgorithm,
         associated_data: &[u8],
         dealer_index: NodeIndex,
         recipient_index: NodeIndex,
@@ -583,6 +599,7 @@ impl MEGaCiphertextSingle {
         let ubeta = self.ephemeral_key.scalar_mul(&our_private_key.secret)?;
 
         self.decrypt_from_shared_secret(
+            alg,
             associated_data,
             dealer_index,
             recipient_index,
@@ -595,7 +612,7 @@ impl MEGaCiphertextSingle {
 impl MEGaCiphertextPair {
     pub fn encrypt(
         seed: Seed,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         plaintexts: &[(EccScalar, EccScalar)],
         recipients: &[MEGaPublicKey],
         dealer_index: NodeIndex,
@@ -614,6 +631,7 @@ impl MEGaCiphertextPair {
             let ubeta = pubkey.point.scalar_mul(&beta)?;
 
             let hm = mega_hash_to_scalars(
+                alg,
                 plaintext_curve,
                 ctype,
                 dealer_index,
@@ -640,7 +658,7 @@ impl MEGaCiphertextPair {
 
     pub fn verify_pop(
         &self,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         associated_data: &[u8],
         dealer_index: NodeIndex,
     ) -> CanisterThresholdResult<()> {
@@ -657,6 +675,7 @@ impl MEGaCiphertextPair {
 
     pub fn decrypt_from_shared_secret(
         &self,
+        alg: IdkgProtocolAlgorithm,
         associated_data: &[u8],
         dealer_index: NodeIndex,
         recipient_index: NodeIndex,
@@ -672,6 +691,7 @@ impl MEGaCiphertextPair {
         let plaintext_curve = self.ctexts[recipient_index as usize].0.curve_type();
 
         let hm = mega_hash_to_scalars(
+            alg,
             plaintext_curve,
             MEGaCiphertextType::Pairs,
             dealer_index,
@@ -690,6 +710,7 @@ impl MEGaCiphertextPair {
 
     pub fn decrypt(
         &self,
+        alg: IdkgProtocolAlgorithm,
         associated_data: &[u8],
         dealer_index: NodeIndex,
         recipient_index: NodeIndex,
@@ -704,6 +725,7 @@ impl MEGaCiphertextPair {
         let ubeta = self.ephemeral_key.scalar_mul(&our_private_key.secret)?;
 
         self.decrypt_from_shared_secret(
+            alg,
             associated_data,
             dealer_index,
             recipient_index,

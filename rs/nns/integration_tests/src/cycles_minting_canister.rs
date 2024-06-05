@@ -303,7 +303,7 @@ fn test_cmc_notify_create_with_settings() {
     let icpts = Tokens::new(100, 0).unwrap();
     let neuron = get_neuron_1();
 
-    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_test_neurons()
         .with_ledger_account(account, icpts)
@@ -312,7 +312,7 @@ fn test_cmc_notify_create_with_settings() {
 
     let subnet_id = state_machine.get_subnet_id();
     cmc_set_default_authorized_subnetworks(
-        &mut state_machine,
+        &state_machine,
         vec![subnet_id],
         neuron.principal_id,
         neuron.neuron_id,
@@ -428,7 +428,7 @@ fn test_cmc_cycles_create_with_settings() {
     let icpts = Tokens::new(100, 0).unwrap();
     let neuron = get_neuron_1();
 
-    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_test_neurons()
         .with_ledger_account(account, icpts)
@@ -437,7 +437,7 @@ fn test_cmc_cycles_create_with_settings() {
 
     let subnet_id = state_machine.get_subnet_id();
     cmc_set_default_authorized_subnetworks(
-        &mut state_machine,
+        &state_machine,
         vec![subnet_id],
         neuron.principal_id,
         neuron.neuron_id,

@@ -19,6 +19,8 @@ use std::{
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CanisterSnapshots {
     pub(crate) snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
+    /// Snapshot operations are consumed by the `StateManager` in order to
+    /// correctly represent backups and restores in the next checkpoint.
     pub(crate) unflushed_changes: Vec<SnapshotOperation>,
     /// The set of snapshots ids grouped by canisters.
     pub(crate) snapshot_ids: BTreeMap<CanisterId, BTreeSet<SnapshotId>>,
@@ -117,6 +119,12 @@ impl CanisterSnapshots {
         snapshots
     }
 
+    /// Adds a new restore snapshot operation in the unflushed changes.
+    pub fn add_restore_operation(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
+        self.unflushed_changes
+            .push(SnapshotOperation::Restore(canister_id, snapshot_id))
+    }
+
     /// Returns true if snapshot ID can be found in the collection.
     pub fn contains(&self, snapshot_id: &SnapshotId) -> bool {
         self.snapshots.contains_key(snapshot_id)
@@ -149,6 +157,12 @@ impl From<&Memory> for PageMemory {
             page_map: memory.page_map.clone(),
             size: memory.size,
         }
+    }
+}
+
+impl From<&PageMemory> for Memory {
+    fn from(pg_memory: &PageMemory) -> Self {
+        Memory::new(pg_memory.page_map.clone(), pg_memory.size)
     }
 }
 
@@ -242,6 +256,10 @@ impl CanisterSnapshot {
         self.size
     }
 
+    pub fn execution_snapshot(&self) -> Option<&ExecutionStateSnapshot> {
+        self.execution_snapshot.as_ref()
+    }
+
     pub fn stable_memory(&self) -> Option<&PageMemory> {
         self.execution_snapshot
             .as_ref()
@@ -262,6 +280,10 @@ impl CanisterSnapshot {
 
     pub fn chunk_store(&self) -> &WasmChunkStore {
         &self.chunk_store
+    }
+
+    pub fn certified_data(&self) -> &Vec<u8> {
+        &self.certified_data
     }
 }
 

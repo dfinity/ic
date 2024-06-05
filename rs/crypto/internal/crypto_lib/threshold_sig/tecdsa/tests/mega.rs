@@ -74,7 +74,7 @@ fn mega_key_validity() -> CanisterThresholdResult<()> {
 fn mega_single_smoke_test() -> Result<(), CanisterThresholdError> {
     let rng = &mut reproducible_rng();
 
-    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+    for alg in IdkgProtocolAlgorithm::iter() {
         let curve = alg.curve();
         let a_sk = MEGaPrivateKey::generate(curve, rng);
         let b_sk = MEGaPrivateKey::generate(curve, rng);
@@ -100,14 +100,14 @@ fn mega_single_smoke_test() -> Result<(), CanisterThresholdError> {
             associated_data,
         )?;
 
-        let ptext_a = ctext.decrypt(associated_data, dealer_index, 0, &a_sk, &a_pk)?;
+        let ptext_a = ctext.decrypt(alg, associated_data, dealer_index, 0, &a_sk, &a_pk)?;
 
         assert_eq!(
             hex::encode(ptext_a.serialize()),
             hex::encode(ptext_for_a.serialize())
         );
 
-        let ptext_b = ctext.decrypt(associated_data, dealer_index, 1, &b_sk, &b_pk)?;
+        let ptext_b = ctext.decrypt(alg, associated_data, dealer_index, 1, &b_sk, &b_pk)?;
 
         assert_eq!(
             hex::encode(ptext_b.serialize()),
@@ -122,7 +122,7 @@ fn mega_single_smoke_test() -> Result<(), CanisterThresholdError> {
 fn mega_pair_smoke_test() -> Result<(), CanisterThresholdError> {
     let rng = &mut reproducible_rng();
 
-    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+    for alg in IdkgProtocolAlgorithm::iter() {
         let curve = alg.curve();
         let a_sk = MEGaPrivateKey::generate(curve, rng);
         let b_sk = MEGaPrivateKey::generate(curve, rng);
@@ -148,10 +148,10 @@ fn mega_pair_smoke_test() -> Result<(), CanisterThresholdError> {
             associated_data,
         )?;
 
-        let ptext_a = ctext.decrypt(associated_data, dealer_index, 0, &a_sk, &a_pk)?;
+        let ptext_a = ctext.decrypt(alg, associated_data, dealer_index, 0, &a_sk, &a_pk)?;
         assert_eq!(ptext_a, ptext_for_a);
 
-        let ptext_b = ctext.decrypt(associated_data, dealer_index, 1, &b_sk, &b_pk)?;
+        let ptext_b = ctext.decrypt(alg, associated_data, dealer_index, 1, &b_sk, &b_pk)?;
         assert_eq!(ptext_b, ptext_for_b);
     }
 
@@ -162,7 +162,7 @@ fn mega_pair_smoke_test() -> Result<(), CanisterThresholdError> {
 fn mega_should_reject_invalid_pop() -> Result<(), CanisterThresholdError> {
     let rng = &mut reproducible_rng();
 
-    for alg in CanisterThresholdSignatureAlgorithm::iter() {
+    for alg in IdkgProtocolAlgorithm::iter() {
         let curve = alg.curve();
         let a_sk = MEGaPrivateKey::generate(curve, rng);
         let b_sk = MEGaPrivateKey::generate(curve, rng);
@@ -188,7 +188,9 @@ fn mega_should_reject_invalid_pop() -> Result<(), CanisterThresholdError> {
             ad,
         )?;
 
-        assert!(ctext.decrypt(ad, dealer_index, 1, &b_sk, &b_pk).is_ok());
+        assert!(ctext
+            .decrypt(alg, ad, dealer_index, 1, &b_sk, &b_pk)
+            .is_ok());
         assert_eq!(
             ctext.verify_pop(alg, b"wrong_ad", dealer_index),
             Err(CanisterThresholdError::InvalidProof)
@@ -253,6 +255,7 @@ mod mega_cipher_text {
             let setup = Setup::new(rng, ctext_type);
 
             let ptext_a = decrypt(
+                setup.alg,
                 setup.ctext,
                 setup.associated_data,
                 setup.dealer_index,
@@ -296,6 +299,7 @@ mod mega_cipher_text {
 
             assert_eq!(
                 decrypt(
+                    setup.alg,
                     setup.ctext,
                     setup.associated_data,
                     setup.dealer_index,
@@ -320,6 +324,7 @@ mod mega_cipher_text {
 
             assert_eq!(
                 decrypt(
+                    setup.alg,
                     setup.ctext,
                     setup.associated_data,
                     setup.dealer_index,
@@ -352,6 +357,7 @@ mod mega_cipher_text {
     }
 
     fn decrypt(
+        alg: IdkgProtocolAlgorithm,
         ctext: MEGaCiphertext,
         associated_data: &[u8],
         dealer_index: NodeIndex,
@@ -362,6 +368,7 @@ mod mega_cipher_text {
         match ctext {
             MEGaCiphertext::Single(single) => single
                 .decrypt(
+                    alg,
                     associated_data,
                     dealer_index,
                     recipient_index,
@@ -371,6 +378,7 @@ mod mega_cipher_text {
                 .map(MEGaPlaintext::Single),
             MEGaCiphertext::Pairs(pairs) => pairs
                 .decrypt(
+                    alg,
                     associated_data,
                     dealer_index,
                     recipient_index,
@@ -390,12 +398,12 @@ mod mega_cipher_text {
         ptext: MEGaPlaintext,
         dealer_index: NodeIndex,
         ctext: MEGaCiphertext,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
     }
 
     impl Setup {
         fn new(rng: &mut ReproducibleRng, ctext_type: MEGaCiphertextType) -> Setup {
-            let alg = CanisterThresholdSignatureAlgorithm::EcdsaSecp256k1;
+            let alg = IdkgProtocolAlgorithm::EcdsaSecp256k1;
             let curve = alg.curve();
             let a_sk = MEGaPrivateKey::generate(curve, rng);
             let b_sk = MEGaPrivateKey::generate(curve, rng);

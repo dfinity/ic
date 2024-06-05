@@ -5,11 +5,14 @@ use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types::{
-    self as ic00, CanisterSnapshotResponse, DeleteCanisterSnapshotArgs, ListCanisterSnapshotArgs,
+    self as ic00, CanisterChange, CanisterChangeDetails, CanisterSnapshotResponse,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, ListCanisterSnapshotArgs,
     LoadCanisterSnapshotArgs, Method, Payload as Ic00Payload, TakeCanisterSnapshotArgs,
     UploadChunkArgs,
 };
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
+use ic_replicated_state::{
+    canister_snapshots::SnapshotOperation, canister_state::system_state::CyclesUseCase,
+};
 use ic_test_utilities_execution_environment::{
     get_output_messages, ExecutionTest, ExecutionTestBuilder,
 };
@@ -128,30 +131,22 @@ fn take_snapshot_ingress_rejected_because_feature_is_disabled() {
         .with_snapshots(FlagStatus::Disabled)
         .build();
     let uni = test.universal_canister().unwrap();
+    let canister_id = canister_test_id(4);
+    let method = Method::TakeCanisterSnapshot;
+    let args = TakeCanisterSnapshotArgs::new(canister_id, None);
 
-    let snapshot_methods = [
-        Method::TakeCanisterSnapshot,
-        Method::LoadCanisterSnapshot,
-        Method::DeleteCanisterSnapshot,
-        Method::ListCanisterSnapshots,
-    ];
-    for method in snapshot_methods {
-        let call = wasm()
-            .call_simple(
-                ic00::IC_00,
-                method,
-                call_args()
-                    .other_side(vec![])
-                    .on_reject(wasm().reject_message().reject()),
-            )
-            .build();
-        let result = test.ingress(uni, "update", call).unwrap();
-        let expected_result = WasmResult::Reject(
-            format!("Unable to route management canister request {}: UserError(UserError {{ code: CanisterRejectedMessage, description: {} }})",
-             method,
-            "\"Snapshotting API is not yet implemented\""));
-        assert_eq!(result, expected_result);
-    }
+    let call = wasm()
+        .call_simple(
+            ic00::IC_00,
+            method,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+    let result = test.ingress(uni, "update", call).unwrap();
+    let expected_result = WasmResult::Reject("This API is not enabled on this subnet".to_string());
+    assert_eq!(result, expected_result);
 }
 
 #[test]
@@ -955,6 +950,289 @@ fn load_canister_snapshot_decode_round_trip() {
         args,
         LoadCanisterSnapshotArgs::decode(encoded_args.as_slice()).unwrap()
     );
+}
+
+#[test]
+fn load_canister_snapshot_fails_canister_not_found() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let canister_id = canister_test_id(10);
+    let snapshot_id = SnapshotId::from((canister_id, 6));
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    let error = test
+        .subnet_message("load_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterNotFound);
+    let message = format!("Canister {} not found.", canister_id,).to_string();
+    assert!(error.description().contains(&message));
+}
+
+#[test]
+fn load_canister_snapshot_fails_invalid_controller() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_manual_execution()
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create new canister.
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+    let snapshot_id = SnapshotId::from((canister_id, 6));
+
+    let prev_canister_state = test.state().canister_state(&canister_id).unwrap().clone();
+
+    // Create `LoadCanisterSnapshot` request.
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    test.inject_call_to_ic00(
+        Method::LoadCanisterSnapshot,
+        args.encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    // Reject expected: caller is not a controller of the canister.
+    let (receiver, response) = &get_output_messages(test.state_mut()).pop().unwrap();
+    assert_matches!(response, RequestOrResponse::Response(_));
+    if let RequestOrResponse::Response(res) = response {
+        assert_eq!(res.originator, *receiver);
+        assert_eq!(
+            res.response_payload,
+            Payload::Reject(RejectContext::new(
+                RejectCode::CanisterError,
+                format!(
+                    "Only the controllers of the canister {} can control it.\n\
+                    Canister's controllers: {}\n\
+                    Sender's ID: {}",
+                    canister_id,
+                    test.user_id().get(),
+                    caller_canister.get(),
+                )
+            ))
+        );
+    }
+
+    // Verify the canister exists in the `ReplicatedState` and is unchanged.
+    assert_eq!(
+        *test.state().canister_state(&canister_id).unwrap(),
+        prev_canister_state
+    );
+}
+
+#[test]
+fn load_canister_snapshot_fails_snapshot_not_found() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create canister.
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    // Load canister snapshot fails because snapshot does not exist.
+    let snapshot_id = SnapshotId::from((canister_id, 3));
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    let error = test
+        .subnet_message("load_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
+    let message = format!(
+        "Could not find the snapshot ID {} for canister {}",
+        snapshot_id, canister_id,
+    )
+    .to_string();
+    assert!(error.description().contains(&message));
+    assert!(test.state().canister_state(&canister_id).is_some());
+}
+
+#[test]
+fn load_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create canister.
+    let canister_id_1 = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+    let canister_id_2 = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    // Take a snapshot.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id_1, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    assert!(result.is_ok());
+    let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
+    let snapshot_id = response.snapshot_id();
+    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+
+    let initial_canister_state = test.state().canister_state(&canister_id_2).unwrap().clone();
+
+    // Loading a canister snapshot fails because snapshot does not belong to `canister_id_2`.
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id_2, snapshot_id, None);
+    let error = test
+        .subnet_message("load_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+    let message = format!(
+        "The snapshot {} does not belong to canister {}",
+        snapshot_id, canister_id_2,
+    )
+    .to_string();
+    assert!(error.description().contains(&message));
+    assert!(test.state().canister_state(&canister_id_2).is_some());
+    assert_eq!(
+        initial_canister_state,
+        test.state().canister_state(&canister_id_2).unwrap().clone()
+    );
+}
+
+#[test]
+fn load_canister_snapshot_succeeds() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    // Upload chunk.
+    let chunk = vec![1, 2, 3, 4, 5];
+    let upload_args = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk,
+    };
+    let result = test.subnet_message("upload_chunk", upload_args.encode());
+    assert!(result.is_ok());
+
+    // Take a snapshot.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    assert!(result.is_ok());
+    let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
+    let snapshot_id = response.snapshot_id();
+    let snapshot_taken_at_timestamp = response.taken_at_timestamp();
+    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+
+    let canister_version_before = test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .canister_version;
+    assert_eq!(canister_version_before, 1u64);
+    let canister_history = test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .get_canister_history()
+        .clone();
+    let history_before = canister_history
+        .get_changes(canister_history.get_total_num_changes() as usize)
+        .map(|c| (**c).clone())
+        .collect::<Vec<CanisterChange>>();
+
+    // Clear chunk after taking the snapshot.
+    let clear_args = ClearChunkStoreArgs {
+        canister_id: canister_id.into(),
+    };
+    let result = test.subnet_message("clear_chunk_store", clear_args.encode());
+    assert!(result.is_ok());
+    // Verify chunk store contains no data.
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .wasm_chunk_store
+        .keys()
+        .next()
+        .is_none());
+
+    // Load an existing snapshot.
+    let args: LoadCanisterSnapshotArgs =
+        LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    let result = test.subnet_message("load_canister_snapshot", args.encode());
+    assert!(result.is_ok());
+
+    // Verify chunk store contains data.
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .wasm_chunk_store
+        .keys()
+        .next()
+        .is_some());
+
+    // Checks after state changed through loading.
+    let canister_version_after = test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .canister_version;
+    assert!(canister_version_after > canister_version_before);
+    assert_eq!(canister_version_after, 2u64);
+
+    let canister_history = test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .get_canister_history()
+        .clone();
+    let history_after = canister_history
+        .get_changes(canister_history.get_total_num_changes() as usize)
+        .map(|c| (**c).clone())
+        .collect::<Vec<CanisterChange>>();
+    assert_ne!(history_before, history_after);
+    let last_canister_change: &CanisterChange = history_after.last().unwrap();
+    assert_eq!(
+        *last_canister_change.details(),
+        CanisterChangeDetails::load_snapshot(canister_version_after, snapshot_taken_at_timestamp)
+    );
+    let unflushed_changes = test.state_mut().canister_snapshots.take_unflushed_changes();
+    assert_eq!(unflushed_changes.len(), 2);
+    let expected_unflushed_changes = vec![
+        SnapshotOperation::Backup(canister_id, snapshot_id),
+        SnapshotOperation::Restore(canister_id, snapshot_id),
+    ];
+    assert_eq!(expected_unflushed_changes, unflushed_changes);
 }
 
 #[test]

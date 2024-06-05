@@ -305,19 +305,18 @@ pub(super) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
 
 /// Inspect ecdsa_initializations field in the CUPContent.
 /// Return key_id and dealings.
-pub(crate) fn inspect_ecdsa_initializations(
+pub(crate) fn inspect_chain_key_initializations(
     ecdsa_initializations: &[pb::EcdsaInitialization],
-) -> Result<BTreeMap<EcdsaKeyId, InitialIDkgDealings>, String> {
+    chain_key_initializations: &[pb::ChainKeyInitialization],
+) -> Result<BTreeMap<MasterPublicKeyId, InitialIDkgDealings>, String> {
     let mut initial_dealings_per_key_id = BTreeMap::new();
 
     // TODO(CON-1053): remove this check
-    if ecdsa_initializations.len() > 1 {
-        return Err(
-            "More than one ecdsa_initialization is not supported. Choose the first one."
-                .to_string(),
-        );
+    if ecdsa_initializations.len() + chain_key_initializations.len() > 1 {
+        return Err("More than one chain_key_initialization is not supported".to_string());
     }
 
+    // TODO(CON-1332): Do not panic if fields are missing
     for ecdsa_init in ecdsa_initializations {
         let ecdsa_key_id = ecdsa_init
             .key_id
@@ -343,7 +342,36 @@ pub(crate) fn inspect_ecdsa_initializations(
                 )
             })?;
 
-        initial_dealings_per_key_id.insert(ecdsa_key_id, dealings);
+        initial_dealings_per_key_id.insert(MasterPublicKeyId::Ecdsa(ecdsa_key_id), dealings);
+    }
+
+    // TODO(CON-1332): Do not panic if fields are missing
+    for chain_key_init in chain_key_initializations {
+        let key_id = chain_key_init
+            .key_id
+            .clone()
+            .expect("Error: Failed to find key_id in chain_key_initializations")
+            .try_into()
+            .map_err(|err| {
+                format!(
+                    "Error reading Master public key_id: {:?}. Setting ecdsa_summary to None.",
+                    err
+                )
+            })?;
+
+        let dealings = chain_key_init
+            .dealings
+            .as_ref()
+            .expect("Error: Failed to find dealings in chain_key_initializations")
+            .try_into()
+            .map_err(|err| {
+                format!(
+                    "Error reading initial IDkg dealings: {:?}. Setting ecdsa_summary to None.",
+                    err
+                )
+            })?;
+
+        initial_dealings_per_key_id.insert(key_id, dealings);
     }
 
     Ok(initial_dealings_per_key_id)
@@ -556,49 +584,76 @@ mod tests {
         subnet_id_into_protobuf,
         time::UNIX_EPOCH,
     };
+    use pb::ChainKeyInitialization;
 
     use crate::ecdsa::test_utils::{
-        create_sig_inputs, fake_ecdsa_key_id, set_up_ecdsa_payload, EcdsaPayloadTestHelper,
+        create_sig_inputs, fake_ecdsa_key_id, fake_ecdsa_master_public_key_id,
+        set_up_ecdsa_payload, EcdsaPayloadTestHelper,
     };
 
     use super::*;
 
     #[test]
-    fn test_inspect_ecdsa_initializations_no_keys() {
-        let init =
-            inspect_ecdsa_initializations(&[]).expect("Should successfully get initializations");
+    fn test_inspect_chain_key_initializations_no_keys() {
+        let init = inspect_chain_key_initializations(&[], &[])
+            .expect("Should successfully get initializations");
 
         assert!(init.is_empty());
     }
 
     #[test]
-    fn test_inspect_ecdsa_initializations_one_key() {
+    fn test_inspect_chain_key_initializations_one_ecdsa_key() {
         let mut rng = reproducible_rng();
         let initial_dealings = dummy_initial_idkg_dealing_for_tests(
             ic_types::crypto::AlgorithmId::ThresholdEcdsaSecp256k1,
             &mut rng,
         );
-        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+        let key_id = fake_ecdsa_key_id();
         let ecdsa_init = EcdsaInitialization {
             key_id: Some((&key_id).into()),
             dealings: Some((&initial_dealings).into()),
         };
 
-        let init = inspect_ecdsa_initializations(&[ecdsa_init])
+        let init = inspect_chain_key_initializations(&[ecdsa_init], &[])
+            .expect("Should successfully get initializations");
+
+        assert_eq!(
+            init,
+            BTreeMap::from([(MasterPublicKeyId::Ecdsa(key_id), initial_dealings)])
+        );
+    }
+
+    #[test]
+    fn test_inspect_chain_key_initializations_one_master_public_key() {
+        let mut rng = reproducible_rng();
+        let initial_dealings = dummy_initial_idkg_dealing_for_tests(
+            ic_types::crypto::AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
+        let key_id = fake_ecdsa_master_public_key_id();
+        let chain_key_init = ChainKeyInitialization {
+            key_id: Some((&key_id).into()),
+            dealings: Some((&initial_dealings).into()),
+        };
+
+        let init = inspect_chain_key_initializations(&[], &[chain_key_init])
             .expect("Should successfully get initializations");
 
         assert_eq!(init, BTreeMap::from([(key_id, initial_dealings)]));
     }
 
     #[test]
-    fn test_inspect_ecdsa_initializations_multiple_keys() {
+    fn test_inspect_chain_key_initializations_multiple_keys() {
         let mut rng = reproducible_rng();
         let initial_dealings = dummy_initial_idkg_dealing_for_tests(
             ic_types::crypto::AlgorithmId::ThresholdEcdsaSecp256k1,
             &mut rng,
         );
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+        let master_key_id = MasterPublicKeyId::Ecdsa(key_id.clone());
         let key_id_2 = EcdsaKeyId::from_str("Secp256k1:some_key_2").unwrap();
+        let master_key_id_2 = MasterPublicKeyId::Ecdsa(key_id_2.clone());
+
         let ecdsa_init = EcdsaInitialization {
             key_id: Some((&key_id).into()),
             dealings: Some((&initial_dealings).into()),
@@ -607,8 +662,28 @@ mod tests {
             key_id: Some((&key_id_2).into()),
             dealings: Some((&initial_dealings).into()),
         };
+        let chain_key_init = ChainKeyInitialization {
+            key_id: Some((&master_key_id).into()),
+            dealings: Some((&initial_dealings).into()),
+        };
+        let chain_key_init_2 = ChainKeyInitialization {
+            key_id: Some((&master_key_id_2).into()),
+            dealings: Some((&initial_dealings).into()),
+        };
 
-        inspect_ecdsa_initializations(&[ecdsa_init.clone(), ecdsa_init_2.clone()])
+        inspect_chain_key_initializations(&[ecdsa_init.clone(), ecdsa_init_2.clone()], &[])
+            .expect_err("Should fail because of the multiple keys");
+
+        inspect_chain_key_initializations(&[ecdsa_init.clone(), ecdsa_init.clone()], &[])
+            .expect_err("Should fail because of the multiple keys");
+
+        inspect_chain_key_initializations(&[], &[chain_key_init.clone(), chain_key_init_2.clone()])
+            .expect_err("Should fail because of the multiple keys");
+
+        inspect_chain_key_initializations(&[], &[chain_key_init.clone(), chain_key_init.clone()])
+            .expect_err("Should fail because of the multiple keys");
+
+        inspect_chain_key_initializations(&[ecdsa_init.clone()], &[chain_key_init.clone()])
             .expect_err("Should fail because of the multiple keys");
     }
 

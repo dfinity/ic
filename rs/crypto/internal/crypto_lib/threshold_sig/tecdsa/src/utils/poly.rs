@@ -290,6 +290,7 @@ pub enum CommitmentOpening {
 
 impl CommitmentOpening {
     pub fn open_dealing(
+        alg: IdkgProtocolAlgorithm,
         verified_dealing: &IDkgDealingInternal,
         associated_data: &[u8],
         dealer_index: NodeIndex,
@@ -298,6 +299,7 @@ impl CommitmentOpening {
         opener_public_key: &MEGaPublicKey,
     ) -> CanisterThresholdResult<Self> {
         verified_dealing.ciphertext.decrypt_and_check(
+            alg,
             &verified_dealing.commitment,
             associated_data,
             dealer_index,

@@ -456,6 +456,14 @@ pub struct CanisterControllersChange {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterLoadSnapshot {
+    #[prost(uint64, tag = "1")]
+    pub canister_version: u64,
+    #[prost(uint64, tag = "2")]
+    pub taken_at_timestamp: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterChange {
     #[prost(uint64, tag = "1")]
     pub timestamp_nanos: u64,
@@ -463,7 +471,7 @@ pub struct CanisterChange {
     pub canister_version: u64,
     #[prost(oneof = "canister_change::ChangeOrigin", tags = "3, 4")]
     pub change_origin: ::core::option::Option<canister_change::ChangeOrigin>,
-    #[prost(oneof = "canister_change::ChangeDetails", tags = "5, 6, 7, 8")]
+    #[prost(oneof = "canister_change::ChangeDetails", tags = "5, 6, 7, 8, 9")]
     pub change_details: ::core::option::Option<canister_change::ChangeDetails>,
 }
 /// Nested message and enum types in `CanisterChange`.
@@ -487,6 +495,8 @@ pub mod canister_change {
         CanisterCodeDeployment(super::CanisterCodeDeployment),
         #[prost(message, tag = "8")]
         CanisterControllersChange(super::CanisterControllersChange),
+        #[prost(message, tag = "9")]
+        CanisterLoadSnapshot(super::CanisterLoadSnapshot),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

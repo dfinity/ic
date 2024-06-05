@@ -1,8 +1,8 @@
 """
-Enumerate every rootfs file dependency for Boundary-GuestOS
+Enumerate every component file dependency for Boundary-GuestOS
 """
 
-rootfs_files = {
+component_files = {
     Label("boundary-guestos/etc/certificate-syncer/domain.tmpl"): "/etc/certificate-syncer/domain.tmpl",
     Label("boundary-guestos/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml"): "/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml",
     Label("boundary-guestos/etc/crypttab"): "/etc/crypttab",

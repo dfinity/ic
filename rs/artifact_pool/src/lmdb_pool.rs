@@ -22,7 +22,7 @@ use ic_types::{
         dkg,
         idkg::{
             EcdsaArtifactId, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening,
-            EcdsaPrefix, EcdsaPrefixOf, EcdsaSigShare,
+            EcdsaPrefix, EcdsaPrefixOf, EcdsaSigShare, SchnorrSigShare,
         },
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
         ConsensusMessageHash, ConsensusMessageHashable, Finalization, FinalizationShare, HasHeight,
@@ -163,6 +163,7 @@ pub(crate) enum TypeKey {
     EcdsaDealing,
     EcdsaDealingSupport,
     EcdsaSigShare,
+    SchnorrSigShare,
     EcdsaComplaint,
     EcdsaOpening,
 }
@@ -1872,7 +1873,8 @@ impl PersistentEcdsaPoolSection {
         match message_type {
             EcdsaMessageType::Dealing => TypeKey::EcdsaDealing,
             EcdsaMessageType::DealingSupport => TypeKey::EcdsaDealingSupport,
-            EcdsaMessageType::SigShare => TypeKey::EcdsaSigShare,
+            EcdsaMessageType::EcdsaSigShare => TypeKey::EcdsaSigShare,
+            EcdsaMessageType::SchnorrSigShare => TypeKey::SchnorrSigShare,
             EcdsaMessageType::Complaint => TypeKey::EcdsaComplaint,
             EcdsaMessageType::Opening => TypeKey::EcdsaOpening,
         }
@@ -1921,16 +1923,33 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
         message_db.iter(Some(prefix))
     }
 
-    fn signature_shares(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_> {
-        let message_db = self.get_message_db(EcdsaMessageType::SigShare);
+    fn ecdsa_signature_shares(
+        &self,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_> {
+        let message_db = self.get_message_db(EcdsaMessageType::EcdsaSigShare);
         message_db.iter(None)
     }
 
-    fn signature_shares_by_prefix(
+    fn ecdsa_signature_shares_by_prefix(
         &self,
         prefix: EcdsaPrefixOf<EcdsaSigShare>,
     ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_> {
-        let message_db = self.get_message_db(EcdsaMessageType::SigShare);
+        let message_db = self.get_message_db(EcdsaMessageType::EcdsaSigShare);
+        message_db.iter(Some(prefix))
+    }
+
+    fn schnorr_signature_shares(
+        &self,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_> {
+        let message_db = self.get_message_db(EcdsaMessageType::SchnorrSigShare);
+        message_db.iter(None)
+    }
+
+    fn schnorr_signature_shares_by_prefix(
+        &self,
+        prefix: EcdsaPrefixOf<SchnorrSigShare>,
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_> {
+        let message_db = self.get_message_db(EcdsaMessageType::SchnorrSigShare);
         message_db.iter(Some(prefix))
     }
 

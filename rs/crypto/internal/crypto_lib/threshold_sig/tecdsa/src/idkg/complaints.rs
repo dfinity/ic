@@ -22,7 +22,7 @@ impl IDkgComplaintInternal {
 }
 
 pub fn generate_complaints(
-    alg: CanisterThresholdSignatureAlgorithm,
+    alg: IdkgProtocolAlgorithm,
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     associated_data: &[u8],
     receiver_index: NodeIndex,
@@ -35,6 +35,7 @@ pub fn generate_complaints(
     for (dealer_index, dealing) in verified_dealings {
         // Decrypt each dealing and check consistency with the commitment in the dealing
         let opening = dealing.ciphertext.decrypt_and_check(
+            alg,
             &dealing.commitment,
             associated_data,
             *dealer_index,
@@ -44,10 +45,8 @@ pub fn generate_complaints(
         );
 
         if opening.is_err() {
-            let complaint_seed = seed.derive(&format!(
-                "ic-crypto-tecdsa-complaint-against-{}",
-                dealer_index
-            ));
+            let complaint_seed =
+                seed.derive(&DomainSep::SeedForComplaint(alg, *dealer_index).to_string());
 
             let complaint = IDkgComplaintInternal::new(
                 complaint_seed,
@@ -81,7 +80,7 @@ impl IDkgComplaintInternal {
     /// and does not match the dealing commitment.
     pub fn new(
         seed: Seed,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         dealing: &IDkgDealingInternal,
         dealer_index: NodeIndex,
         receiver_index: NodeIndex,
@@ -128,7 +127,7 @@ impl IDkgComplaintInternal {
     /// making a false complaint.
     pub fn verify(
         &self,
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         dealing: &IDkgDealingInternal,
         dealer_index: NodeIndex,
         complainer_index: NodeIndex,
@@ -157,6 +156,7 @@ impl IDkgComplaintInternal {
         let opening = match (&dealing.ciphertext, &dealing.commitment) {
             (MEGaCiphertext::Single(c), &PolynomialCommitment::Simple(_)) => {
                 let opening = c.decrypt_from_shared_secret(
+                    alg,
                     associated_data,
                     dealer_index,
                     complainer_index,
@@ -168,6 +168,7 @@ impl IDkgComplaintInternal {
             }
             (MEGaCiphertext::Pairs(c), &PolynomialCommitment::Pedersen(_)) => {
                 let opening = c.decrypt_from_shared_secret(
+                    alg,
                     associated_data,
                     dealer_index,
                     complainer_index,
@@ -193,7 +194,7 @@ impl IDkgComplaintInternal {
     }
 
     fn create_proof_assoc_data(
-        alg: CanisterThresholdSignatureAlgorithm,
+        alg: IdkgProtocolAlgorithm,
         associated_data: &[u8],
         receiver_index: NodeIndex,
         dealer_index: NodeIndex,

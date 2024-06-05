@@ -23,7 +23,7 @@ use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EcdsaKeyId, EmptyBlob,
     InstallCodeArgs, InstallCodeArgsV2, LogVisibility, MasterPublicKeyId, Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrKeyId, UpdateSettingsArgs,
+    ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1722,15 +1722,13 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_schnorr_key(mut self, key_id: SchnorrKeyId) -> Self {
-        self.idkg_keys_with_signing_enabled
-            .insert(MasterPublicKeyId::Schnorr(key_id), true);
+    pub fn with_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
+        self.idkg_keys_with_signing_enabled.insert(key_id, true);
         self
     }
 
-    pub fn with_disabled_schnorr_key(mut self, key_id: SchnorrKeyId) -> Self {
-        self.idkg_keys_with_signing_enabled
-            .insert(MasterPublicKeyId::Schnorr(key_id), false);
+    pub fn with_disabled_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
+        self.idkg_keys_with_signing_enabled.insert(key_id, false);
         self
     }
 
@@ -1986,6 +1984,16 @@ impl ExecutionTestBuilder {
             .embedders_config
             .feature_flags
             .best_effort_responses = status;
+        self
+    }
+
+    pub fn with_ic00_compute_initial_i_dkg_dealings(mut self, status: FlagStatus) -> Self {
+        self.execution_config.ic00_compute_initial_i_dkg_dealings = status;
+        self
+    }
+
+    pub fn with_ic00_schnorr_public_key(mut self, status: FlagStatus) -> Self {
+        self.execution_config.ic00_schnorr_public_key = status;
         self
     }
 
