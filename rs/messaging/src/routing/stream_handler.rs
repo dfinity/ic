@@ -182,7 +182,8 @@ pub(crate) trait StreamHandler: Send {
 pub(crate) struct StreamHandlerImpl {
     subnet_id: SubnetId,
 
-    subnet_message_memory_capacity: NumBytes,
+    /// The memory allocated for guaranteed response messages on the subnet.
+    guaranteed_response_message_memory_capacity: NumBytes,
 
     metrics: StreamHandlerMetrics,
     /// Per-destination-subnet histogram of wall time spent by messages in the
@@ -191,6 +192,7 @@ pub(crate) struct StreamHandlerImpl {
     /// Per-source-subnet histogram of wall time between finding out about the
     /// existence of a message from an incoming stream header; and inducting it.
     time_in_backlog_metrics: RefCell<LatencyMetrics>,
+
     log: ReplicaLogger,
 }
 
@@ -204,7 +206,8 @@ impl StreamHandlerImpl {
     ) -> Self {
         Self {
             subnet_id,
-            subnet_message_memory_capacity: hypervisor_config.subnet_message_memory_capacity,
+            guaranteed_response_message_memory_capacity: hypervisor_config
+                .subnet_message_memory_capacity,
             metrics: StreamHandlerMetrics::new(metrics_registry),
             time_in_stream_metrics,
             time_in_backlog_metrics: RefCell::new(LatencyMetrics::new_time_in_backlog(
@@ -818,7 +821,7 @@ impl StreamHandlerImpl {
     /// Computes the subnet's available message memory, as the difference
     /// between the subnet's message memory capacity and its current usage.
     fn subnet_available_memory(&self, state: &ReplicatedState) -> i64 {
-        self.subnet_message_memory_capacity.get() as i64
+        self.guaranteed_response_message_memory_capacity.get() as i64
             - state.guaranteed_response_message_memory_taken().get() as i64
     }
 
