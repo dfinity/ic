@@ -96,6 +96,18 @@ impl StorageClient {
             .collect::<Vec<crate::common::storage::types::IcrcTransaction>>())
     }
 
+    pub fn get_blocks_by_custom_query<P>(
+        &self,
+        sql_query: String,
+        params: P,
+    ) -> anyhow::Result<Vec<RosettaBlock>>
+    where
+        P: rusqlite::Params,
+    {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_blocks_by_custom_query(&open_connection, sql_query, params)
+    }
+
     pub fn get_blocks_by_transaction_hash(
         &self,
         hash: ByteBuf,

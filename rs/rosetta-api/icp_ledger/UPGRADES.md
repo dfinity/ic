@@ -1,6 +1,6 @@
 # ICP ledger upgrade history
 
-The upgrade history for the ICP ledger canister (`ryjl3-tyaaa-aaaaa-aaaba-cai`) and ICP ledger archives (`qjdve-lqaaa-aaaaa-aaaeq-cai`).
+The upgrade history for the ICP ledger canister (`ryjl3-tyaaa-aaaaa-aaaba-cai`), ICP ledger index (`qhbym-qaaaa-aaaaa-aaafq-cai`), and ICP ledger archives (`qjdve-lqaaa-aaaaa-aaaeq-cai`, `qsgjb-riaaa-aaaaa-aaaga-cai`).
 
 | Proposal | Date | Git commit | Wasm |
 |---------:|:----:|:----------:|------|
@@ -19,3 +19,4 @@ The upgrade history for the ICP ledger canister (`ryjl3-tyaaa-aaaaa-aaaba-cai`) 
 | [`123775`](https://dashboard.internetcomputer.org/proposal/123775)| `2023-07-31`| `11584a62947ccebd0db3a51b0b6f8399c235aba6` | [ledger-canister_notify-method.wasm.gz](https://download.dfinity.systems/ic/11584a62947ccebd0db3a51b0b6f8399c235aba6/canisters/ledger-canister_notify-method.wasm.gz) |
 | [`125315`](https://dashboard.internetcomputer.org/proposal/125315)| `2023-10-23`| `98eb213581b239c3829eee7076bea74acad9937b` | [ledger-canister_notify-method.wasm.gz](https://download.dfinity.systems/ic/98eb213581b239c3829eee7076bea74acad9937b/canisters/ledger-canister_notify-method.wasm.gz) |
 | [`128825`](https://dashboard.internetcomputer.org/proposal/128825)| `2023-03-26`| `463296c0bc82ad5999b70245e5f125c14ba7d090` | [ic-icp-index-canister.wasm.gz](https://download.dfinity.systems/ic/463296c0bc82ad5999b70245e5f125c14ba7d090/canisters/ic-icp-index-canister.wasm.gz) |
+| [`130106`](https://dashboard.internetcomputer.org/proposal/130106)| `2024-05-31`| `bb76748d1d225c08d88037e99ca9a066f97de496` | [ledger-canister_notify-method.wasm.gz](https://download.dfinity.systems/ic/bb76748d1d225c08d88037e99ca9a066f97de496/canisters/ledger-canister_notify-method.wasm.gz) |

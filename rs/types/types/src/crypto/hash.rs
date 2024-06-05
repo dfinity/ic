@@ -10,6 +10,7 @@ use crate::consensus::{
     dkg as consensus_dkg,
     idkg::{
         EcdsaComplaintContent, EcdsaMessage, EcdsaOpeningContent, EcdsaSigShare, EcdsaTranscript,
+        SchnorrSigShare,
     },
     Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
     CatchUpShareContent, ConsensusMessage, FinalizationContent, HashedBlock, NotarizationContent,
@@ -119,6 +120,7 @@ mod private {
 
     impl CryptoHashDomainSeal for EcdsaTranscript {}
     impl CryptoHashDomainSeal for EcdsaSigShare {}
+    impl CryptoHashDomainSeal for SchnorrSigShare {}
 
     impl CryptoHashDomainSeal for EcdsaComplaintContent {}
     impl CryptoHashDomainSeal for Signed<EcdsaComplaintContent, BasicSignature<EcdsaComplaintContent>> {}
@@ -366,6 +368,12 @@ impl CryptoHashDomain for EcdsaTranscript {
 impl CryptoHashDomain for EcdsaSigShare {
     fn domain(&self) -> String {
         DomainSeparator::EcdsaSigShare.to_string()
+    }
+}
+
+impl CryptoHashDomain for SchnorrSigShare {
+    fn domain(&self) -> String {
+        DomainSeparator::SchnorrSigShare.to_string()
     }
 }
 

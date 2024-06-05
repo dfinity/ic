@@ -526,6 +526,7 @@ reqwest = { version = "0.12.3", default-features = false, features = [
     "blocking",
     "http2",
     "json",
+    "multipart",
     "rustls-tls",
     "rustls-tls-native-roots",
     "socks",

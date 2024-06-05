@@ -1,5 +1,5 @@
 {
-  "checksum": "e95704795d302ce3aab7cbb6c6c915a0dc2bddea33cfcb70e2e6b1ef58bf87e1",
+  "checksum": "f1cb3ff95dfd41ef6ff9ad39ab1e2bd19335d9929bb7a5710ba8e572ab020d99",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -51245,6 +51245,7 @@
             "h2",
             "http2",
             "json",
+            "multipart",
             "rustls-pki-types",
             "rustls-tls",
             "rustls-tls-native-roots",
@@ -51371,6 +51372,10 @@
             {
               "id": "http 1.1.0",
               "target": "http"
+            },
+            {
+              "id": "mime_guess 2.0.4",
+              "target": "mime_guess"
             },
             {
               "id": "serde 1.0.195",

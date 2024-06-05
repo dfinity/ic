@@ -12,4 +12,5 @@ pub mod snapshot;
 pub mod snapshot_health_based;
 pub mod snapshot_latency_based;
 pub mod test_helpers;
+pub mod transport;
 pub mod types;

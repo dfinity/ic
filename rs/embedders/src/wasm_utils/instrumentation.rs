@@ -977,7 +977,12 @@ pub(super) fn instrument(
 
     // inject instructions counter decrementation
     for func_body in &mut module.code_sections {
-        inject_metering(&mut func_body.instructions, &special_indices, metering_type);
+        inject_metering(
+            &mut func_body.instructions,
+            &special_indices,
+            metering_type,
+            main_memory_type,
+        );
     }
 
     // Collect all the function types of the locally defined functions inside the
@@ -1425,6 +1430,7 @@ fn inject_metering(
     code: &mut Vec<Operator>,
     export_data_module: &SpecialIndices,
     metering_type: MeteringType,
+    mem_type: WasmMemoryType,
 ) {
     let points = match metering_type {
         MeteringType::None => Vec::new(),
@@ -1476,16 +1482,25 @@ fn inject_metering(
                 }
             }
             InjectionPointCostDetail::DynamicCost => {
-                elems.extend_from_slice(&[
-                    I64ExtendI32U,
-                    Call {
-                        function_index: export_data_module.decr_instruction_counter_fn,
-                    },
-                    // decr_instruction_counter returns it's argument unchanged,
-                    // so we can convert back to I32 without worrying about
-                    // overflows.
-                    I32WrapI64,
-                ]);
+                match mem_type {
+                    WasmMemoryType::Wasm32 => {
+                        elems.extend_from_slice(&[
+                            I64ExtendI32U,
+                            Call {
+                                function_index: export_data_module.decr_instruction_counter_fn,
+                            },
+                            // decr_instruction_counter returns it's argument unchanged,
+                            // so we can convert back to I32 without worrying about
+                            // overflows.
+                            I32WrapI64,
+                        ]);
+                    }
+                    WasmMemoryType::Wasm64 => {
+                        elems.extend_from_slice(&[Call {
+                            function_index: export_data_module.decr_instruction_counter_fn,
+                        }]);
+                    }
+                }
             }
         }
         last_injection_position = point.position;

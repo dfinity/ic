@@ -1,8 +1,6 @@
 use crate::common::constants::DEFAULT_BLOCKCHAIN;
 use crate::common::constants::MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST;
 use crate::common::constants::STATUS_COMPLETED;
-use crate::common::storage::types::IcrcOperation;
-use crate::common::storage::types::RosettaBlock;
 use crate::common::types::OperationType;
 use crate::common::{
     constants::{NODE_VERSION, ROSETTA_VERSION},
@@ -317,115 +315,90 @@ pub fn search_transactions(
         })
         .transpose()?;
 
-    // A filter function that makes sure that any option the user provided is checked against
-    fn select_transaction(
-        rosetta_block: &RosettaBlock,
-        offset: u64,
-        max_block: u64,
-        account: Option<Account>,
-        operation_type: Option<OperationType>,
-        transaction_identifier: Option<TransactionIdentifier>,
-    ) -> bool {
-        // The offset is measured from the block with the highest index. Any block that comes after the block with the highest index minus the offset is filtered out.
-        if rosetta_block.index > max_block.saturating_sub(offset) {
-            return false;
-        }
-
-        // If the operation type is set, we only select transactions that match the operation type
-        if let Some(operation_type) = operation_type {
-            if operation_type.to_string().to_uppercase()
-                != match rosetta_block.block.transaction.operation {
-                    IcrcOperation::Transfer { .. } => "TRANSFER",
-                    IcrcOperation::Mint { .. } => "MINT",
-                    IcrcOperation::Burn { .. } => "BURN",
-                    IcrcOperation::Approve { .. } => "APPROVE",
-                }
-            {
-                return false;
-            }
-        }
-
-        // If the account is set and the transaction does not involve the account we filter it out
-        if let Some(account) = account {
-            if !match rosetta_block.block.transaction.operation {
-                IcrcOperation::Transfer {
-                    from, to, spender, ..
-                } => spender.map_or(vec![from, to], |spender| vec![from, to, spender]),
-
-                IcrcOperation::Mint { to, .. } => vec![to],
-
-                IcrcOperation::Burn { from, spender, .. } => {
-                    spender.map_or(vec![from], |spender| vec![from, spender])
-                }
-
-                IcrcOperation::Approve { from, spender, .. } => vec![from, spender],
-            }
-            .contains(&account)
-            {
-                return false;
-            }
-        }
-
-        // If the transaction identifier is set we only select transactions that match the transaction identifier
-        if let Some(transaction_identifier) = transaction_identifier {
-            if transaction_identifier != rosetta_block.clone().get_transaction_identifier() {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    let mut transactions = vec![];
-
-    let mut end = max_block.min(
+    let start_idx = max_block.min(
         rosetta_block_with_highest_block_index
             .index
             .saturating_sub(offset),
     );
 
-    // We only want to iterate over limit number of blocks.
-    let mut start = end.saturating_sub(limit);
-    let mut last_traversed_block_index;
+    if limit == 0 {
+        return Ok(SearchTransactionsResponse {
+            total_count: 0,
+            transactions: vec![],
+            next_offset: Some(offset as i64),
+        });
+    }
 
-    // We iterate over all transactions with a window of size limit at a time
-    // This guarantees that memory usage is kept low
-    'outer_loop: loop {
-        for rosetta_block in storage_client
-            .get_blocks_by_index_range(start, end)
-            .map_err(|err| Error::request_processing_error(&err))?
-            .into_iter()
-            // The transactions are supposed to be returned in reversed order, meaning from highest block index to lowest
-            .rev()
-        {
-            last_traversed_block_index = rosetta_block.index;
-            // If the transaction matches the filter function we add it to the list of transactions
-            if select_transaction(
-                &rosetta_block,
-                offset,
-                max_block,
-                account,
-                operation_type.clone(),
-                request.transaction_identifier.clone(),
-            ) {
-                transactions.push(BlockTransaction {
-                    block_identifier: rosetta_block.clone().get_block_identifier(),
-                    transaction: icrc1_rosetta_block_to_rosetta_core_transaction(
-                        rosetta_block,
-                        currency.clone(),
-                    )
-                    .map_err(|err| Error::parsing_unsuccessful(&err))?,
-                });
-            };
+    // Base query to fetch the blocks
+    let mut command =
+        String::from("SELECT idx,serialized_block FROM blocks WHERE idx <= :max_block_idx ");
+    let mut parameters: Vec<(&str, Box<dyn rusqlite::ToSql>)> = Vec::new();
 
-            // If we have reached the limit or the last traversed block is the genesis block we can stop traversing
-            if transactions.len() == limit as usize || last_traversed_block_index == 0 {
-                break 'outer_loop;
-            }
-        }
+    parameters.push((":max_block_idx", Box::new(start_idx)));
 
-        end = start.saturating_sub(1);
-        start = start.saturating_sub(limit);
+    if let Some(transaction_identifier) = request.transaction_identifier.clone() {
+        command.push_str("AND tx_hash = :tx_hash ");
+        let tx_hash = serde_bytes::ByteBuf::try_from(transaction_identifier)
+            .map_err(|err| {
+                Error::request_processing_error(&format!(
+                    "Transaction identifier hash has to be a valid ByteBuf: {}",
+                    err
+                ))
+            })?
+            .as_slice()
+            .to_vec();
+        parameters.push((":tx_hash", Box::new(tx_hash)));
+    }
+
+    if let Some(operation_type) = operation_type {
+        command.push_str("AND operation_type = :operation_type ");
+        parameters.push((
+            ":operation_type",
+            Box::new(operation_type.to_string().to_lowercase()),
+        ));
+    }
+
+    if let Some(account) = account {
+        command.push_str("AND ((from_principal = :account_principal AND from_subaccount = :account_subaccount) OR (to_principal = :account_principal AND to_subaccount = :account_subaccount) OR (spender_principal = :account_principal AND spender_subaccount = :account_subaccount)) ");
+        parameters.push((
+            ":account_principal",
+            Box::new(account.owner.as_slice().to_vec()),
+        ));
+        parameters.push((
+            ":account_subaccount",
+            Box::new(*account.effective_subaccount()),
+        ));
+    }
+
+    command.push_str("ORDER BY idx DESC ");
+
+    command.push_str("LIMIT :limit ");
+    parameters.push((":limit", Box::new(limit)));
+
+    let mut rosetta_blocks = storage_client
+        .get_blocks_by_custom_query(
+            command,
+            parameters
+                .iter()
+                .map(|(key, param)| {
+                    let param_ref: &dyn rusqlite::ToSql = param.as_ref();
+                    (key.to_owned(), param_ref)
+                })
+                .collect::<Vec<_>>()
+                .as_slice(),
+        )
+        .map_err(|e| Error::unable_to_find_block(&format!("Error fetching blocks: {:?}", e)))?;
+
+    let mut transactions = vec![];
+    for rosetta_block in rosetta_blocks.iter_mut() {
+        transactions.push(BlockTransaction {
+            block_identifier: rosetta_block.clone().get_block_identifier(),
+            transaction: icrc1_rosetta_block_to_rosetta_core_transaction(
+                rosetta_block.clone(),
+                currency.clone(),
+            )
+            .map_err(|err| Error::parsing_unsuccessful(&err))?,
+        })
     }
 
     transactions.iter_mut().for_each(|tx| {
@@ -434,20 +407,39 @@ pub fn search_transactions(
         })
     });
 
+    // Sort the transactions by block index in descending order
+    transactions.sort_by(|a, b| b.block_identifier.index.cmp(&a.block_identifier.index));
+
+    // Is rosetta blocks is empty that means the entire blockchain was traversed but no transactions were found that match the search criteria
+    let last_traversed_block_index = rosetta_blocks
+        .iter()
+        .map(|block| block.index)
+        .min()
+        .unwrap_or(0);
+    let num_fetched_transactions = transactions.len();
+
     Ok(SearchTransactionsResponse {
-        total_count: transactions.len() as i64,
+        total_count: num_fetched_transactions as i64,
         transactions,
         // If the traversion of transactions has reached the genesis block we can stop traversing
         next_offset: if last_traversed_block_index == 0 {
             None
         } else {
-            Some(max_block.saturating_sub(last_traversed_block_index.saturating_sub(1)) as i64)
+            // If the transaction hash was provided it means we only want to fetch that transaction
+            // If the number of transactions that match the transactionidentifier is less than the limit we can stop traversing --> All transactions with that hash have been fetched
+            if request.transaction_identifier.is_some() && num_fetched_transactions < limit as usize
+            {
+                None
+            } else {
+                Some(max_block.saturating_sub(last_traversed_block_index.saturating_sub(1)) as i64)
+            }
         },
     })
 }
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::common::storage::types::IcrcOperation;
     use crate::common::storage::types::RosettaBlock;
     use crate::Metadata;
     use ic_icrc1::blocks::encoded_block_to_generic_block;
@@ -890,7 +882,6 @@ mod test {
 
                         // The expected offset is the index of the highest block fetched minus the limit
                         let expected_offset = 1;
-
                         assert_eq!(
                             result.next_offset,
                             if rosetta_blocks.len() > 1 {
@@ -1079,6 +1070,33 @@ mod test {
                                 .clone()
                                 .unwrap()
                         ));
+
+                        search_transactions_request.account_identifier = Some(
+                            Account {
+                                owner: ic_base_types::PrincipalId::new_anonymous().into(),
+                                subaccount: Some([9; 32]),
+                            }
+                            .into(),
+                        );
+                        let result = traverse_all_transactions(
+                            &storage_client_memory,
+                            search_transactions_request.clone(),
+                        );
+                        // If the account does not exist the service should return an empty list
+                        assert_eq!(result.len(), 0);
+
+                        search_transactions_request = SearchTransactionsRequest {
+                            ..Default::default()
+                        };
+
+                        search_transactions_request.type_ = Some("INVALID_OPS".to_string());
+                        let result = search_transactions(
+                            &storage_client_memory,
+                            search_transactions_request.clone(),
+                            "ICP".to_string(),
+                            8,
+                        );
+                        assert!(result.is_err());
                     }
                     Ok(())
                 },

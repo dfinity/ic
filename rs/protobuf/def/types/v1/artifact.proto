@@ -11,9 +11,10 @@ message EcdsaMessageAttribute {
   oneof kind {
     registry.subnet.v1.IDkgTranscriptId signed_dealing = 1;
     registry.subnet.v1.IDkgTranscriptId dealing_support = 2;
-    types.v1.RequestId sig_share = 3;
+    types.v1.RequestId ecdsa_sig_share = 3;
     registry.subnet.v1.IDkgTranscriptId complaint = 4;
     registry.subnet.v1.IDkgTranscriptId opening = 5;
+    types.v1.RequestId schnorr_sig_share = 6;
   }
 }
 
