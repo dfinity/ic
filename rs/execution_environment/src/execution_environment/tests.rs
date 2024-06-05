@@ -185,7 +185,7 @@ fn compute_initial_threshold_key_dealings_payload(
     }
 }
 
-fn x_public_key_payload(method: Method, key_id: MasterPublicKeyId) -> Vec<u8> {
+fn threshold_public_key_payload(method: Method, key_id: MasterPublicKeyId) -> Vec<u8> {
     match method {
         Method::ECDSAPublicKey => ic00::ECDSAPublicKeyArgs {
             canister_id: None,
@@ -2134,17 +2134,24 @@ fn get_reject_message(response: RequestOrResponse) -> String {
     }
 }
 
-fn make_ecdsa_key(name: &str) -> EcdsaKeyId {
-    EcdsaKeyId {
+fn make_ecdsa_key(name: &str) -> MasterPublicKeyId {
+    MasterPublicKeyId::Ecdsa(EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
         name: name.to_string(),
-    }
+    })
 }
 
-fn make_schnorr_key(name: &str) -> SchnorrKeyId {
-    SchnorrKeyId {
+fn make_schnorr_key(name: &str) -> MasterPublicKeyId {
+    MasterPublicKeyId::Schnorr(SchnorrKeyId {
         algorithm: SchnorrAlgorithm::Ed25519,
         name: name.to_string(),
+    })
+}
+
+fn into_inner_schnorr(key_id: MasterPublicKeyId) -> Option<SchnorrKeyId> {
+    match key_id {
+        MasterPublicKeyId::Schnorr(key) => Some(key),
+        _ => None,
     }
 }
 
@@ -2152,15 +2159,15 @@ fn compute_initial_threshold_key_dealings_test_cases() -> Vec<(Method, MasterPub
     vec![
         (
             Method::ComputeInitialEcdsaDealings,
-            MasterPublicKeyId::Ecdsa(make_ecdsa_key("secp256k1")),
+            make_ecdsa_key("some_key"),
         ),
         (
             Method::ComputeInitialIDkgDealings,
-            MasterPublicKeyId::Ecdsa(make_ecdsa_key("secp256k1")),
+            make_ecdsa_key("some_key"),
         ),
         (
             Method::ComputeInitialIDkgDealings,
-            MasterPublicKeyId::Schnorr(make_schnorr_key("ed25519")),
+            make_schnorr_key("some_key"),
         ),
     ]
 }
@@ -2256,14 +2263,14 @@ fn test_sign_with_threshold_key_fee_charged() {
     let test_cases = vec![
         (
             Method::SignWithECDSA,
-            MasterPublicKeyId::Ecdsa(make_ecdsa_key("secp256k1")),
+            make_ecdsa_key("some_key"),
             1_000_000,
             2_000_000,
             CyclesUseCase::ECDSAOutcalls,
         ),
         (
             Method::SignWithSchnorr,
-            MasterPublicKeyId::Schnorr(make_schnorr_key("ed25519")),
+            make_schnorr_key("some_key"),
             1_000_000,
             2_000_000,
             CyclesUseCase::SchnorrOutcalls,
@@ -2352,14 +2359,10 @@ fn test_sign_with_threshold_key_fee_charged() {
 #[test]
 fn test_sign_with_threshold_key_rejected_without_fee() {
     let test_cases = vec![
-        (
-            Method::SignWithECDSA,
-            MasterPublicKeyId::Ecdsa(make_ecdsa_key("secp256k1")),
-            2_000_000,
-        ),
+        (Method::SignWithECDSA, make_ecdsa_key("some_key"), 2_000_000),
         (
             Method::SignWithSchnorr,
-            MasterPublicKeyId::Schnorr(make_schnorr_key("ed25519")),
+            make_schnorr_key("some_key"),
             2_000_000,
         ),
     ];
@@ -2400,13 +2403,13 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
     let test_cases = vec![
         (
             Method::SignWithECDSA,
-            MasterPublicKeyId::Ecdsa(make_ecdsa_key("correct_key")),
-            MasterPublicKeyId::Ecdsa(make_ecdsa_key("wrong_key")),
+            make_ecdsa_key("correct_key"),
+            make_ecdsa_key("wrong_key"),
         ),
         (
             Method::SignWithSchnorr,
-            MasterPublicKeyId::Schnorr(make_schnorr_key("correct_key")),
-            MasterPublicKeyId::Schnorr(make_schnorr_key("wrong_key")),
+            make_schnorr_key("correct_key"),
+            make_schnorr_key("wrong_key"),
         ),
     ];
     for (method, correct_key, wrong_key) in test_cases {
@@ -2449,14 +2452,14 @@ fn test_threshold_key_signature_request_with_disabled_key_rejected() {
         (
             Method::ECDSAPublicKey,
             Method::SignWithECDSA,
-            MasterPublicKeyId::Ecdsa(make_ecdsa_key("disabled_key")),
-            MasterPublicKeyId::Ecdsa(make_ecdsa_key("wrong_key")),
+            make_ecdsa_key("disabled_key"),
+            make_ecdsa_key("wrong_key"),
         ),
         (
             Method::SchnorrPublicKey,
             Method::SignWithSchnorr,
-            MasterPublicKeyId::Schnorr(make_schnorr_key("disabled_key")),
-            MasterPublicKeyId::Schnorr(make_schnorr_key("wrong_key")),
+            make_schnorr_key("disabled_key"),
+            make_schnorr_key("wrong_key"),
         ),
     ];
     for (public_key_method, sign_with_method, disabled_key, wrong_key) in test_cases {
@@ -2475,7 +2478,7 @@ fn test_threshold_key_signature_request_with_disabled_key_rejected() {
         // Requesting disabled public key (should succeed)
         test.inject_call_to_ic00(
             public_key_method,
-            x_public_key_payload(public_key_method, disabled_key.clone()),
+            threshold_public_key_payload(public_key_method, disabled_key.clone()),
             Cycles::from(100_000_000_000u128),
         );
 
@@ -2520,13 +2523,13 @@ fn test_threshold_key_public_key_req_with_unknown_key_rejected() {
     let test_cases = vec![
         (
             Method::ECDSAPublicKey,
-            MasterPublicKeyId::Ecdsa(make_ecdsa_key("correct_key")),
-            MasterPublicKeyId::Ecdsa(make_ecdsa_key("wrong_key")),
+            make_ecdsa_key("correct_key"),
+            make_ecdsa_key("wrong_key"),
         ),
         (
             Method::SchnorrPublicKey,
-            MasterPublicKeyId::Schnorr(make_schnorr_key("correct_key")),
-            MasterPublicKeyId::Schnorr(make_schnorr_key("wrong_key")),
+            make_schnorr_key("correct_key"),
+            make_schnorr_key("wrong_key"),
         ),
     ];
     for (method, correct_key, wrong_key) in test_cases {
@@ -2543,7 +2546,7 @@ fn test_threshold_key_public_key_req_with_unknown_key_rejected() {
                 ic00::IC_00,
                 method,
                 call_args()
-                    .other_side(x_public_key_payload(method, wrong_key.clone()))
+                    .other_side(threshold_public_key_payload(method, wrong_key.clone()))
                     .on_reject(wasm().reject_message().reject()),
                 Cycles::from(1_000_000_000u128),
             )
@@ -2568,12 +2571,12 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
     let test_cases = vec![
         (
             Method::SignWithECDSA,
-            MasterPublicKeyId::Ecdsa(make_ecdsa_key("secp256k1")),
+            make_ecdsa_key("some_key"),
             CyclesUseCase::ECDSAOutcalls,
         ),
         (
             Method::SignWithSchnorr,
-            MasterPublicKeyId::Schnorr(make_schnorr_key("ed25519")),
+            make_schnorr_key("some_key"),
             CyclesUseCase::SchnorrOutcalls,
         ),
     ];
@@ -2656,14 +2659,8 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
 #[test]
 fn test_sign_with_threshold_key_queue_fills_up() {
     let test_cases = vec![
-        (
-            Method::SignWithECDSA,
-            MasterPublicKeyId::Ecdsa(make_ecdsa_key("secp256k1")),
-        ),
-        (
-            Method::SignWithSchnorr,
-            MasterPublicKeyId::Schnorr(make_schnorr_key("ed25519")),
-        ),
+        (Method::SignWithECDSA, make_ecdsa_key("some_key")),
+        (Method::SignWithSchnorr, make_schnorr_key("some_key")),
     ];
     for (method, key_id) in test_cases {
         let fee = 1_000_000;
@@ -3521,7 +3518,7 @@ fn test_fetch_canister_logs_should_accept_ingress_message_enabled() {
 
 #[test]
 fn test_compute_initial_idkg_dealings_api_by_default_is_disabled() {
-    let key_id = MasterPublicKeyId::Schnorr(make_schnorr_key("correct_key"));
+    let key_id = make_schnorr_key("correct_key");
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
     let nns_canister = canister_test_id(0x10);
@@ -3560,14 +3557,14 @@ fn test_schnorr_public_key_api_by_default_is_disabled() {
         .with_own_subnet_id(own_subnet)
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
-        .with_idkg_key(MasterPublicKeyId::Schnorr(key_id.clone()))
+        .with_idkg_key(key_id.clone())
         .build();
     test.inject_call_to_ic00(
         Method::SchnorrPublicKey,
         ic00::SchnorrPublicKeyArgs {
             canister_id: None,
             derivation_path: DerivationPath::new(vec![]),
-            key_id,
+            key_id: into_inner_schnorr(key_id).unwrap(),
         }
         .encode(),
         Cycles::new(0),
@@ -3590,14 +3587,14 @@ fn test_sign_with_schnorr_api_by_default_is_disabled() {
         .with_own_subnet_id(own_subnet)
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
-        .with_idkg_key(MasterPublicKeyId::Schnorr(key_id.clone()))
+        .with_idkg_key(key_id.clone())
         .build();
     test.inject_call_to_ic00(
         Method::SignWithSchnorr,
         ic00::SignWithSchnorrArgs {
             message: vec![],
             derivation_path: DerivationPath::new(vec![]),
-            key_id,
+            key_id: into_inner_schnorr(key_id).unwrap(),
         }
         .encode(),
         Cycles::new(0),
@@ -3624,7 +3621,7 @@ fn test_sign_with_schnorr_api_is_enabled() {
         .with_own_subnet_id(own_subnet)
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
-        .with_idkg_key(MasterPublicKeyId::Schnorr(key_id.clone()))
+        .with_idkg_key(key_id.clone())
         .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
         .build();
     let canister_id = test.universal_canister().unwrap();
@@ -3647,7 +3644,7 @@ fn test_sign_with_schnorr_api_is_enabled() {
                     ic00::SignWithSchnorrArgs {
                         message: vec![],
                         derivation_path: DerivationPath::new(vec![]),
-                        key_id,
+                        key_id: into_inner_schnorr(key_id).unwrap(),
                     }
                     .encode(),
                 )
