@@ -175,7 +175,7 @@ impl CatchUpPackageProvider {
             );
             None
         })?;
-        let url_str = format!("http://[{}]:{}", http.ip_addr, http.port);
+        let url_str = format!("https://[{}]:{}", http.ip_addr, http.port);
         let url = Url::parse(&url_str)
             .map_err(|err| {
                 warn!(
@@ -252,6 +252,7 @@ impl CatchUpPackageProvider {
             .request(
                 hyper::Request::builder()
                     .method(hyper::Method::POST)
+                    .header("content-type", "application/cbor")
                     .uri(url.to_string())
                     .body(hyper::Body::from(body))
                     .ok()?,
@@ -264,16 +265,14 @@ impl CatchUpPackageProvider {
         if bytes.is_empty() {
             None
         } else {
-            Some(
-                pb::CatchUpPackage::decode(&bytes[..])
-                    .map_err(|e| {
-                        format!(
-                            "Failed to deserialize CUP from protobuf, got: {:?} - error {:?}",
-                            bytes, e
-                        )
-                    })
-                    .ok()?,
-            )
+            pb::CatchUpPackage::decode(&bytes[..])
+                .map_err(|e| {
+                    format!(
+                        "Failed to deserialize CUP from protobuf, got: {:?} - error {:?}",
+                        bytes, e
+                    )
+                })
+                .ok()
         }
     }
 
