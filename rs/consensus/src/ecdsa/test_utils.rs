@@ -358,12 +358,16 @@ impl TestEcdsaBlockReader {
         }
     }
 
-    pub(crate) fn for_complainer_test(height: Height, active_refs: Vec<TranscriptRef>) -> Self {
+    pub(crate) fn for_complainer_test(
+        key_id: &MasterPublicKeyId,
+        height: Height,
+        active_refs: Vec<TranscriptRef>,
+    ) -> Self {
         let mut idkg_transcripts = BTreeMap::new();
         for transcript_ref in active_refs {
             idkg_transcripts.insert(
                 transcript_ref,
-                create_transcript(transcript_ref.transcript_id, &[NODE_2]),
+                create_transcript(key_id, transcript_ref.transcript_id, &[NODE_2]),
             );
         }
 
@@ -834,6 +838,7 @@ pub(crate) fn create_transcript_id_with_height(id: u64, height: Height) -> IDkgT
 
 // Creates a test transcript
 pub(crate) fn create_transcript(
+    key_id: &MasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     receiver_list: &[NodeId],
 ) -> IDkgTranscript {
@@ -847,18 +852,20 @@ pub(crate) fn create_transcript(
         registry_version: RegistryVersion::from(1),
         verified_dealings: BTreeMap::new(),
         transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+        algorithm_id: algorithm_for_key_id(key_id),
         internal_transcript_raw: vec![],
     }
 }
 
 /// Creates a test transcript param with registry version 0
 pub(crate) fn create_transcript_param(
+    key_id: &MasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     dealer_list: &[NodeId],
     receiver_list: &[NodeId],
 ) -> TestTranscriptParams {
     create_transcript_param_with_registry_version(
+        key_id,
         transcript_id,
         dealer_list,
         receiver_list,
@@ -868,6 +875,7 @@ pub(crate) fn create_transcript_param(
 
 /// Creates a test transcript param for a specific registry version
 pub(crate) fn create_transcript_param_with_registry_version(
+    key_id: &MasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     dealer_list: &[NodeId],
     receiver_list: &[NodeId],
@@ -884,16 +892,13 @@ pub(crate) fn create_transcript_param_with_registry_version(
 
     // The random transcript
     let random_transcript_id = create_transcript_id(transcript_id.id() * 214365 + 1);
-    let random_transcript = create_transcript(random_transcript_id, dealer_list);
+    let random_transcript = create_transcript(key_id, random_transcript_id, dealer_list);
     let random_masked = MaskedTranscript::try_from((Height::new(0), &random_transcript)).unwrap();
     let mut idkg_transcripts = BTreeMap::new();
     idkg_transcripts.insert(*random_masked.as_ref(), random_transcript);
 
-    let attrs = IDkgTranscriptAttributes::new(
-        dealers,
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        registry_version,
-    );
+    let attrs =
+        IDkgTranscriptAttributes::new(dealers, algorithm_for_key_id(key_id), registry_version);
 
     // The transcript that points to the random transcript
     let transcript_params_ref = ReshareOfMaskedParams::new(
@@ -1023,6 +1028,7 @@ pub(crate) fn create_dealing(
 
 // Creates a test signed dealing with internal payload
 pub(crate) fn create_dealing_with_payload<R: Rng + CryptoRng>(
+    key_id: &MasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     dealer_id: NodeId,
     rng: &mut R,
@@ -1032,7 +1038,7 @@ pub(crate) fn create_dealing_with_payload<R: Rng + CryptoRng>(
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let params = setup_masked_random_params(
         &env,
-        AlgorithmId::ThresholdEcdsaSecp256k1,
+        algorithm_for_key_id(key_id),
         &dealers,
         &receivers,
         rng,
