@@ -1072,7 +1072,7 @@ impl SystemState {
     ///  * `InvariantBroken` when pushing a `Response` when none is expected.
     ///  * `CanisterOutOfCycles` if the canister does not have enough cycles.
     ///  * `OutOfMemory` if the necessary guaranteed response memory reservation
-    ///    is larger than `subnet_available_memory``.
+    ///    is larger than `subnet_available_memory`.
     ///  * `CanisterStopping` if the canister is stopping and inducting a
     ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.
@@ -1473,15 +1473,15 @@ impl SystemState {
             .map(|ccm| ccm.unresponded_callback_count(self.aborted_or_paused_response()))
             .unwrap_or_default();
 
-        let num_responses = self.queues.input_queues_response_count();
-        let num_reserved_slots = self.queues.input_queues_reserved_slots();
+        let input_queue_responses = self.queues.input_queues_response_count();
+        let input_queue_reserved_slots = self.queues.input_queues_reserved_slots();
 
-        if pending_callbacks != num_reserved_slots + num_responses {
+        if pending_callbacks != input_queue_reserved_slots + input_queue_responses {
             return Err(StateError::InvariantBroken(format!(
-                "Canister {}: Number of callbacks ({}) is different from the accumulated number of reservations and responses ({})",
+                "Canister {}: Number of callbacks ({}) is different from the cumulative number of reservations and responses ({})",
                 self.canister_id(),
                 pending_callbacks,
-                num_reserved_slots + num_responses
+                input_queue_reserved_slots + input_queue_responses
             )));
         }
 
@@ -1492,15 +1492,15 @@ impl SystemState {
             })
             .unwrap_or_default();
 
-        let num_requests = self.queues.input_queues_request_count();
+        let input_queue_requests = self.queues.input_queues_request_count();
         let output_queue_reserved_slots = self.queues.output_queues_reserved_slots();
 
-        if num_requests + unresponded_call_contexts != output_queue_reserved_slots {
+        if input_queue_requests + unresponded_call_contexts != output_queue_reserved_slots {
             return Err(StateError::InvariantBroken(format!(
-                "Canister {}: Number of output queue reserved slots ({}) is different from the number of input requests plus unresponded call contexts ({})",
+                "Canister {}: Number of output queue reserved slots ({}) is different from the cumulative number of input requests and unresponded call contexts ({})",
                 self.canister_id(),
                 output_queue_reserved_slots,
-                num_requests + unresponded_call_contexts
+                input_queue_requests + unresponded_call_contexts
             )));
         }
 

@@ -237,25 +237,39 @@ impl StreamHandler for StreamHandlerImpl {
                 });
         }
 
-        // A lower bound running estimate of the subnet's available message memory. It
-        // accurately reflects all memory allocated by inducted and rejected messages
-        // and released by inducting responses; but not the changes to
-        //`Streams::responses_size_bytes` (the size of responses already routed to
+        // A lower bound running estimate of the subnet's available guaranteed response
+        // message memory. It accurately reflects all memory allocated by inducted and
+        // rejected messages and released by inducting responses; but not the changes to
+        // `Streams::responses_size_bytes` (the size of responses already routed to
         // streams), as some of its entries may refer to deleted or migrated canisters.
-        let mut subnet_available_memory = self.subnet_available_memory(&state);
+        let mut available_guaranteed_response_memory =
+            self.available_guaranteed_response_memory(&state);
 
         // Induct our own loopback stream first, if one exists and has any messages.
-        state = self.induct_loopback_stream(state, &mut subnet_available_memory);
-        debug_assert!(self.subnet_available_memory(&state) >= subnet_available_memory);
+        state = self.induct_loopback_stream(state, &mut available_guaranteed_response_memory);
+        debug_assert!(
+            self.available_guaranteed_response_memory(&state)
+                >= available_guaranteed_response_memory
+        );
 
         // Garbage collect our stream state based on the contents of the slices.
         state = self.garbage_collect_local_state(state, &stream_slices);
-        debug_assert!(self.subnet_available_memory(&state) >= subnet_available_memory);
+        debug_assert!(
+            self.available_guaranteed_response_memory(&state)
+                >= available_guaranteed_response_memory
+        );
         self.observe_backlog_durations(&stream_slices);
 
         // Induct the messages in `stream_slices`, updating signals as appropriate.
-        let state = self.induct_stream_slices(state, stream_slices, &mut subnet_available_memory);
-        debug_assert!(self.subnet_available_memory(&state) >= subnet_available_memory);
+        let state = self.induct_stream_slices(
+            state,
+            stream_slices,
+            &mut available_guaranteed_response_memory,
+        );
+        debug_assert!(
+            self.available_guaranteed_response_memory(&state)
+                >= available_guaranteed_response_memory
+        );
 
         state
     }
@@ -268,8 +282,9 @@ impl StreamHandlerImpl {
     /// responses or rerouted responses and no signals. All initial messages and
     /// corresponding signals will have been garbage collected.
     ///
-    /// Updates `subnet_available_memory` to reflect change in memory usage, in such
-    /// a way that it remains a lower-bound estimate of the actual available memory.
+    /// Updates `available_guaranteed_response_memory` to reflect change in memory
+    /// usage, in such a way that it remains a lower-bound estimate of the actual
+    /// available guaranteed response memory.
     ///
     /// The sequence of steps is as follows:
     ///
@@ -286,7 +301,7 @@ impl StreamHandlerImpl {
     fn induct_loopback_stream(
         &self,
         mut state: ReplicatedState,
-        subnet_available_memory: &mut i64,
+        available_guaranteed_response_memory: &mut i64,
     ) -> ReplicatedState {
         let loopback_stream = state.get_stream(&self.subnet_id);
 
@@ -310,7 +325,8 @@ impl StreamHandlerImpl {
         // 1. Induct all messages. This will add signals to the loopback stream.
         let mut stream_slices = BTreeMap::new();
         stream_slices.insert(self.subnet_id, loopback_stream_slice);
-        state = self.induct_stream_slices(state, stream_slices, subnet_available_memory);
+        state =
+            self.induct_stream_slices(state, stream_slices, available_guaranteed_response_memory);
 
         let mut streams = state.take_streams();
         // We know for sure that the loopback stream exists, so it is safe to unwrap.
@@ -546,13 +562,14 @@ impl StreamHandlerImpl {
     /// See [`Self::induct_message`] for the possible outcomes of inducting a
     /// message.
     ///
-    /// Updates `subnet_available_memory` to reflect change in memory usage, in such
-    /// a way that it remains a lower-bound estimate of the actual available memory.
+    /// Updates `available_guaranteed_response_memory` to reflect change in memory
+    /// usage, in such a way that it remains a lower-bound estimate of the actual
+    /// available guaranteed response memory.
     fn induct_stream_slices(
         &self,
         mut state: ReplicatedState,
         stream_slices: BTreeMap<SubnetId, StreamSlice>,
-        subnet_available_memory: &mut i64,
+        available_guaranteed_response_memory: &mut i64,
     ) -> ReplicatedState {
         let mut streams = state.take_streams();
 
@@ -568,7 +585,7 @@ impl StreamHandlerImpl {
                     stream_index,
                     &mut state,
                     &mut stream,
-                    subnet_available_memory,
+                    available_guaranteed_response_memory,
                 );
             }
         }
@@ -598,7 +615,8 @@ impl StreamHandlerImpl {
     ///     * enqueuing a `Response` failed due to the canister having been
     ///       removed.
     ///
-    /// Updates `subnet_available_memory` to reflect any change in memory usage.
+    /// Updates `available_guaranteed_response_memory` to reflect any change in
+    /// guaranteed response memory usage.
     fn induct_message(
         &self,
         msg: RequestOrResponse,
@@ -606,7 +624,7 @@ impl StreamHandlerImpl {
         stream_index: StreamIndex,
         state: &mut ReplicatedState,
         stream: &mut StreamHandle,
-        subnet_available_memory: &mut i64,
+        available_guaranteed_response_memory: &mut i64,
     ) {
         let msg_type = match msg {
             RequestOrResponse::Request(_) => LABEL_VALUE_TYPE_REQUEST,
@@ -627,7 +645,7 @@ impl StreamHandlerImpl {
             match receiver_host_subnet {
                 // Matching receiver subnet, try inducting message.
                 Some(host_subnet) if host_subnet == self.subnet_id => {
-                    match state.push_input(msg, subnet_available_memory) {
+                    match state.push_input(msg, available_guaranteed_response_memory) {
                         // Message successfully inducted, all done.
                         Ok(()) => {
                             self.observe_inducted_message_status(msg_type, LABEL_VALUE_SUCCESS);
@@ -647,7 +665,7 @@ impl StreamHandlerImpl {
                                     &msg
                                 );
                                     let code = reject_code_for_state_error(&err);
-                                    *subnet_available_memory -= stream
+                                    *available_guaranteed_response_memory -= stream
                                         .push(generate_reject_response(msg, code, err.to_string()))
                                         as i64;
                                 }
@@ -679,11 +697,12 @@ impl StreamHandlerImpl {
                                 host_subnet
                             );
                             debug!(self.log, "Canister {} is being migrated, generating reject response for {:?}", msg.receiver(), msg);
-                            *subnet_available_memory -= stream.push(generate_reject_response(
-                                msg,
-                                RejectCode::SysTransient,
-                                reject_message,
-                            )) as i64;
+                            *available_guaranteed_response_memory -=
+                                stream.push(generate_reject_response(
+                                    msg,
+                                    RejectCode::SysTransient,
+                                    reject_message,
+                                )) as i64;
                         }
 
                         RequestOrResponse::Response(_) => {
@@ -818,9 +837,10 @@ impl StreamHandlerImpl {
             .unwrap_or(false)
     }
 
-    /// Computes the subnet's available message memory, as the difference
-    /// between the subnet's message memory capacity and its current usage.
-    fn subnet_available_memory(&self, state: &ReplicatedState) -> i64 {
+    /// Computes the subnet's available guaranteed response message memory, as the
+    /// difference between the subnet's guaranteed response message memory capacity
+    /// and its current usage.
+    fn available_guaranteed_response_memory(&self, state: &ReplicatedState) -> i64 {
         self.guaranteed_response_message_memory_capacity.get() as i64
             - state.guaranteed_response_message_memory_taken().get() as i64
     }

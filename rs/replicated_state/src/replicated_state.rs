@@ -230,7 +230,7 @@ impl std::iter::Iterator for OutputIterator<'_> {
 }
 
 pub trait PeekableOutputIterator: std::iter::Iterator<Item = (QueueId, RequestOrResponse)> {
-    /// Peeks into the iterator and returns a reference to the item that `next`
+    /// Peeks into the iterator and returns a reference to the item that `next()`
     /// would return.
     fn peek(&mut self) -> Option<(QueueId, &RequestOrResponse)>;
 
@@ -704,7 +704,7 @@ impl ReplicatedState {
         }
     }
 
-    /// Computes the memory taken by messages.
+    /// Computes the memory taken by guaranteed response messages.
     ///
     /// This is a more efficient alternative to `memory_taken()` for cases when only
     /// the message memory usage is necessary.
