@@ -1187,10 +1187,18 @@ mod upgrade_ledger_suite {
 }
 
 mod run_task {
+    use crate::candid::AddCkErc20Token;
     use crate::guard::TimerGuard;
+    use crate::management::{CallError, Reason};
+    use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
     use crate::scheduler::tests::mock::MockCanisterRuntime;
-    use crate::scheduler::tests::{init_state, task_deadline_from_state};
+    use crate::scheduler::tests::{
+        expect_call_canister_add_ckerc20_token, init_state, task_deadline_from_state,
+        task_queue_from_state, LEDGER_PRINCIPAL, MINTER_PRINCIPAL,
+    };
     use crate::scheduler::{run_task, Task, TaskExecution};
+    use crate::state::{mutate_state, Ledger};
+    use candid::Nat;
     use std::time::Duration;
 
     #[tokio::test]
@@ -1216,6 +1224,144 @@ mod run_task {
             task_deadline_from_state(&task),
             Some(Duration::from_secs(3_600).as_nanos() as u64)
         );
+    }
+
+    #[tokio::test]
+    async fn should_reschedule_failed_task_with_recoverable_error() {
+        init_state();
+        record_added_usdc();
+        let task = notify_usdc_added_task();
+        let mut runtime = MockCanisterRuntime::new();
+        runtime.expect_time().return_const(0_u64);
+        runtime.expect_global_timer_set().return_const(());
+        expect_call_canister_add_ckerc20_token(
+            &mut runtime,
+            MINTER_PRINCIPAL,
+            add_ckusdc(),
+            Err(CallError {
+                method: "error".to_string(),
+                reason: Reason::OutOfCycles,
+            }),
+        );
+
+        run_task(task.clone(), runtime).await;
+
+        assert_eq!(
+            task_queue_from_state(),
+            vec![TaskExecution {
+                execute_at_ns: task.execute_at_ns + (Duration::from_secs(5).as_nanos() as u64),
+                ..task
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn should_not_reschedule_failed_task_with_irrecoverable_error() {
+        init_state();
+        record_added_usdc();
+        let mut runtime = MockCanisterRuntime::new();
+        runtime.expect_time().return_const(0_u64);
+        runtime.expect_global_timer_set().return_const(());
+        expect_call_canister_add_ckerc20_token(
+            &mut runtime,
+            MINTER_PRINCIPAL,
+            add_ckusdc(),
+            Err(CallError {
+                method: "error".to_string(),
+                reason: Reason::CanisterError("trap".to_string()),
+            }),
+        );
+
+        run_task(notify_usdc_added_task(), runtime).await;
+
+        assert_eq!(task_queue_from_state(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn should_reschedule_failed_task_in_case_of_unexpected_panic() {
+        use futures::FutureExt;
+
+        init_state();
+        record_added_usdc();
+        let task = notify_usdc_added_task();
+        let mut runtime = MockCanisterRuntime::new();
+        runtime.expect_time().return_const(0_u64);
+        runtime.expect_global_timer_set().return_const(());
+        runtime
+            .expect_call_canister::<AddCkErc20Token, ()>()
+            .times(1)
+            .withf(move |_canister_id, method, _args: &AddCkErc20Token| {
+                method == "add_ckerc20_token"
+            })
+            .return_once(|_, _, _| panic!("unexpected panic"));
+
+        let task_cloned = task.clone();
+        let error = async move {
+            std::panic::AssertUnwindSafe(run_task(task_cloned, runtime))
+                .catch_unwind()
+                .await
+        }
+        .await
+        .unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<&str>(),
+            Some("unexpected panic").as_ref()
+        );
+
+        assert_eq!(
+            task_queue_from_state(),
+            vec![TaskExecution {
+                execute_at_ns: task.execute_at_ns + (Duration::from_secs(5).as_nanos() as u64),
+                ..task
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn should_not_reschedule_successful_task() {
+        init_state();
+        record_added_usdc();
+        let mut runtime = MockCanisterRuntime::new();
+        runtime.expect_time().return_const(0_u64);
+        runtime.expect_global_timer_set().return_const(());
+        expect_call_canister_add_ckerc20_token(
+            &mut runtime,
+            MINTER_PRINCIPAL,
+            add_ckusdc(),
+            Ok(()),
+        );
+
+        run_task(notify_usdc_added_task(), runtime).await;
+
+        assert_eq!(task_queue_from_state(), vec![]);
+    }
+
+    fn record_added_usdc() {
+        let usdc = usdc();
+        let usdc_metadata = usdc_metadata();
+        mutate_state(|s| {
+            s.record_new_erc20_token(usdc.clone(), usdc_metadata.clone());
+            s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
+        });
+    }
+
+    fn notify_usdc_added_task() -> TaskExecution {
+        TaskExecution {
+            task_type: Task::NotifyErc20Added {
+                erc20_token: usdc(),
+                minter_id: MINTER_PRINCIPAL,
+            },
+            execute_at_ns: 0,
+        }
+    }
+
+    fn add_ckusdc() -> AddCkErc20Token {
+        AddCkErc20Token {
+            chain_id: Nat::from(1_u8),
+            address: usdc().address().to_string(),
+            ckerc20_token_symbol: usdc_metadata().ckerc20_token_symbol.clone(),
+            ckerc20_ledger_id: LEDGER_PRINCIPAL,
+        }
     }
 }
 
