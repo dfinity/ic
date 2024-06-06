@@ -316,7 +316,12 @@ fn output_requests_on_system_subnet_ignore_memory_limits() {
     );
     assert_eq!(test.subnet_available_memory().get_message_memory(), 13);
     let system_state = &mut test.canister_state_mut(canister_id).system_state;
-    assert_eq!(1, system_state.queues().reserved_slots());
+    assert_eq!(
+        1,
+        system_state
+            .queues()
+            .guaranteed_response_memory_reservations()
+    );
     assert_correct_request(system_state, canister_id);
 }
 
@@ -370,8 +375,13 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
     let subnet_total_memory = test.subnet_available_memory().get_execution_memory();
     let subnet_message_memory = test.subnet_available_memory().get_message_memory();
     let system_state = &mut test.canister_state_mut(canister_id).system_state;
-    // There should be one reserved slot in the queues.
-    assert_eq!(1, system_state.queues().reserved_slots());
+    // There should be one response memory reservation in the queues.
+    assert_eq!(
+        1,
+        system_state
+            .queues()
+            .guaranteed_response_memory_reservations()
+    );
     // Subnet available memory should have decreased by `MAX_RESPONSE_COUNT_BYTES`.
     assert_eq!(available_memory_after_create, subnet_total_memory);
     assert_eq!(
@@ -3393,8 +3403,13 @@ fn output_requests_on_application_subnets_update_subnet_available_memory_reserve
     test.execute_message(canister_id);
     let subnet_message_memory = test.subnet_available_memory().get_message_memory();
     let system_state = &mut test.canister_state_mut(canister_id).system_state;
-    // There should be one reserved slot in the queues.
-    assert_eq!(1, system_state.queues().reserved_slots());
+    // There should be one response memory reservation in the queues.
+    assert_eq!(
+        1,
+        system_state
+            .queues()
+            .guaranteed_response_memory_reservations()
+    );
     assert_eq!(
         ONE_GIB - MAX_RESPONSE_COUNT_BYTES as i64,
         subnet_message_memory
