@@ -362,7 +362,7 @@ jobs:
 
   cargo-clippy-linux:
     name: Cargo Clippy Linux
-    <<: *dind-large-setup
+    <<: *bazel-small-setup
     steps:
       - <<: *before-script
       - <<: *checkout
