@@ -5,7 +5,7 @@
 
 use super::pre_signer::{EcdsaTranscriptBuilder, EcdsaTranscriptBuilderImpl};
 use super::signer::{EcdsaSignatureBuilder, EcdsaSignatureBuilderImpl};
-use super::utils::{block_chain_reader, get_ecdsa_config_if_enabled, InvalidChainCacheError};
+use super::utils::{block_chain_reader, get_chain_key_config_if_enabled, InvalidChainCacheError};
 use crate::consensus::metrics::{EcdsaPayloadMetrics, CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING};
 pub(super) use errors::EcdsaPayloadError;
 use errors::MembershipError;
@@ -18,7 +18,7 @@ use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
 use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::{
@@ -140,7 +140,7 @@ pub(crate) fn create_summary_payload(
     let next_interval_registry_version = context.registry_version;
 
     // Get ecdsa_config from registry if it exists
-    let Some(ecdsa_config) = get_ecdsa_config_if_enabled(
+    let Some(chain_key_config) = get_chain_key_config_if_enabled(
         subnet_id,
         curr_interval_registry_version,
         registry_client,
@@ -152,6 +152,17 @@ pub(crate) fn create_summary_payload(
 
     // Get ecdsa_payload from parent block if it exists
     let Some(ecdsa_payload) = parent_block.payload.as_ref().as_data().ecdsa.as_ref() else {
+        // Get only the ECDSA keys out of the config
+        // TODO: Make it possible to pass Schnorr Keys into `make_bootstrap_summary`
+        let key_ids = chain_key_config
+            .key_configs
+            .iter()
+            .filter_map(|key_config| match &key_config.key_id {
+                MasterPublicKeyId::Ecdsa(key_id) => Some(key_id.clone()),
+                MasterPublicKeyId::Schnorr(_) => None,
+            })
+            .collect::<Vec<_>>();
+
         // Parent block doesn't have ECDSA payload and feature is enabled.
         // Create the bootstrap summary block, and create a new key for the given key_id.
         //
@@ -163,17 +174,10 @@ pub(crate) fn create_summary_payload(
         // and we won't reach here.
         info!(
             log,
-            "Start to create ECDSA keys {:?} on subnet {} at height {}",
-            ecdsa_config.key_ids,
-            subnet_id,
-            height
+            "Start to create ECDSA keys {:?} on subnet {} at height {}", key_ids, subnet_id, height
         );
 
-        return Ok(make_bootstrap_summary(
-            subnet_id,
-            ecdsa_config.key_ids,
-            height,
-        ));
+        return Ok(make_bootstrap_summary(subnet_id, key_ids, height));
     };
 
     let block_reader = block_chain_reader(
@@ -302,8 +306,6 @@ fn create_summary_payload_helper(
 
     ecdsa_summary.uid_generator.update_height(height)?;
     update_summary_refs(height, &mut ecdsa_summary, block_reader)?;
-
-    ecdsa_summary.use_multiple_keys_layout();
 
     Ok(Some(ecdsa_summary))
 }
@@ -511,7 +513,7 @@ pub(crate) fn create_data_payload_helper(
     // For next interval: context.registry_version from the new summary block
     let next_interval_registry_version = summary_block.context.registry_version;
 
-    let Some(ecdsa_config) = get_ecdsa_config_if_enabled(
+    let Some(chain_key_config) = get_chain_key_config_if_enabled(
         subnet_id,
         curr_interval_registry_version,
         registry_client,
@@ -520,11 +522,11 @@ pub(crate) fn create_data_payload_helper(
     else {
         return Ok(None);
     };
-    let valid_keys: BTreeSet<_> = ecdsa_config
-        .key_ids
+
+    let valid_keys: BTreeSet<_> = chain_key_config
+        .key_configs
         .iter()
-        .cloned()
-        .map(MasterPublicKeyId::Ecdsa)
+        .map(|key_config| key_config.key_id.clone())
         .collect();
 
     let mut ecdsa_payload = if let Some(prev_payload) = parent_block.payload.as_ref().as_ecdsa() {
@@ -556,7 +558,7 @@ pub(crate) fn create_data_payload_helper(
         &mut ecdsa_payload,
         height,
         context.time,
-        &ecdsa_config,
+        &chain_key_config,
         &valid_keys,
         next_interval_registry_version,
         certified_height,
@@ -570,8 +572,6 @@ pub(crate) fn create_data_payload_helper(
         log,
     )?;
 
-    ecdsa_payload.use_multiple_keys_layout();
-
     Ok(Some(ecdsa_payload))
 }
 
@@ -579,7 +579,7 @@ pub(crate) fn create_data_payload_helper_2(
     ecdsa_payload: &mut EcdsaPayload,
     height: Height,
     context_time: Time,
-    ecdsa_config: &EcdsaConfig,
+    chain_key_config: &ChainKeyConfig,
     valid_keys: &BTreeSet<MasterPublicKeyId>,
     next_interval_registry_version: RegistryVersion,
     certified_height: CertifiedHeight,
@@ -602,7 +602,7 @@ pub(crate) fn create_data_payload_helper_2(
 
     ecdsa_payload.uid_generator.update_height(height)?;
 
-    let request_expiry_time = ecdsa_config
+    let request_expiry_time = chain_key_config
         .signature_request_timeout_ns
         .and_then(|timeout| context_time.checked_sub(Duration::from_nanos(timeout)));
 
@@ -636,7 +636,7 @@ pub(crate) fn create_data_payload_helper_2(
     }
 
     pre_signatures::make_new_pre_signatures_if_needed(
-        ecdsa_config,
+        chain_key_config,
         ecdsa_payload,
         &matched_quadruples_per_key_id,
     );
@@ -703,6 +703,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::types::v1 as pb;
+    use ic_registry_subnet_features::KeyConfig;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities_consensus::fake::{Fake, FakeContentSigner};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
@@ -842,6 +843,8 @@ mod tests {
 
     #[test]
     fn test_quadruple_recreation() {
+        const QUADRUPLES_TO_CREATE_IN_ADVANCE: u32 = 5;
+
         let valid_key_id = EcdsaKeyId::from_str("Secp256k1:valid_key").unwrap();
         let disabled_key_id = EcdsaKeyId::from_str("Secp256k1:disabled_key").unwrap();
         let valid_keys = BTreeSet::from([MasterPublicKeyId::Ecdsa(valid_key_id.clone())]);
@@ -883,10 +886,13 @@ mod tests {
             ),
         ]);
 
-        let ecdsa_config = EcdsaConfig {
-            quadruples_to_create_in_advance: 5,
-            key_ids: vec![valid_key_id.clone()],
-            ..EcdsaConfig::default()
+        let chain_key_config = ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: MasterPublicKeyId::Ecdsa(valid_key_id.clone()),
+                pre_signatures_to_create_in_advance: QUADRUPLES_TO_CREATE_IN_ADVANCE,
+                max_queue_size: 1,
+            }],
+            ..ChainKeyConfig::default()
         };
 
         assert_eq!(ecdsa_payload.pre_signatures_in_creation.len(), 0);
@@ -896,7 +902,7 @@ mod tests {
             &mut ecdsa_payload,
             Height::from(5),
             UNIX_EPOCH,
-            &ecdsa_config,
+            &chain_key_config,
             &valid_keys,
             RegistryVersion::from(9),
             CertifiedHeight::ReachedSummaryHeight,
@@ -919,10 +925,7 @@ mod tests {
         // Usually, matched quadruples are replenished, but since one
         // of them was matched to a disabled key id whose request context
         // is rejected, the quadruple is "reused" and not replenished.
-        assert_eq!(
-            num_quadruples_in_creation,
-            ecdsa_config.quadruples_to_create_in_advance
-        );
+        assert_eq!(num_quadruples_in_creation, QUADRUPLES_TO_CREATE_IN_ADVANCE);
     }
 
     #[test]
@@ -1078,7 +1081,7 @@ mod tests {
             &mut ecdsa_payload,
             Height::from(5),
             UNIX_EPOCH,
-            &EcdsaConfig::default(),
+            &ChainKeyConfig::default(),
             &valid_keys,
             RegistryVersion::from(9),
             CertifiedHeight::ReachedSummaryHeight,
@@ -1102,7 +1105,7 @@ mod tests {
             &mut ecdsa_payload,
             Height::from(5),
             UNIX_EPOCH,
-            &EcdsaConfig::default(),
+            &ChainKeyConfig::default(),
             &valid_keys,
             RegistryVersion::from(9),
             CertifiedHeight::ReachedSummaryHeight,
@@ -2029,11 +2032,14 @@ mod tests {
 
             let transcript_builder = TestEcdsaTranscriptBuilder::new();
             let signature_builder = TestEcdsaSignatureBuilder::new();
-            let ecdsa_config = EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![key_id.clone()],
+            let chain_key_config = ChainKeyConfig {
+                key_configs: vec![KeyConfig {
+                    key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
+                    pre_signatures_to_create_in_advance: 1,
+                    max_queue_size: 1,
+                }],
                 signature_request_timeout_ns: Some(100000),
-                ..EcdsaConfig::default()
+                ..ChainKeyConfig::default()
             };
 
             // Create a data payload following the summary making the key change
@@ -2042,7 +2048,7 @@ mod tests {
                 &mut payload_5,
                 Height::from(3),
                 UNIX_EPOCH,
-                &ecdsa_config,
+                &chain_key_config,
                 &valid_keys,
                 next_key_transcript.registry_version(),
                 // Referenced certified height is still below the summary
@@ -2071,7 +2077,7 @@ mod tests {
                 &mut payload_6,
                 Height::from(4),
                 UNIX_EPOCH,
-                &ecdsa_config,
+                &chain_key_config,
                 &valid_keys,
                 next_key_transcript.registry_version(),
                 CertifiedHeight::ReachedSummaryHeight,
@@ -2112,10 +2118,14 @@ mod tests {
             let block_reader = TestEcdsaBlockReader::new();
             let transcript_builder = TestEcdsaTranscriptBuilder::new();
             let signature_builder = TestEcdsaSignatureBuilder::new();
-            let ecdsa_config = EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![key_id.clone()],
-                ..EcdsaConfig::default()
+            let chain_key_config = ChainKeyConfig {
+                key_configs: vec![KeyConfig {
+                    key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
+                    pre_signatures_to_create_in_advance: 1,
+                    max_queue_size: 1,
+                }],
+                signature_request_timeout_ns: Some(100000),
+                ..ChainKeyConfig::default()
             };
 
             // Step 1: initial bootstrap payload should be created successfully
@@ -2149,7 +2159,7 @@ mod tests {
                 &mut payload_2,
                 Height::from(2),
                 UNIX_EPOCH,
-                &ecdsa_config,
+                &chain_key_config,
                 &valid_keys,
                 registry_version,
                 CertifiedHeight::ReachedSummaryHeight,
@@ -2246,11 +2256,14 @@ mod tests {
             let mut block_reader = TestEcdsaBlockReader::new();
             let transcript_builder = TestEcdsaTranscriptBuilder::new();
             let signature_builder = TestEcdsaSignatureBuilder::new();
-            let ecdsa_config = EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![key_id.clone()],
+            let chain_key_config = ChainKeyConfig {
+                key_configs: vec![KeyConfig {
+                    key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
+                    pre_signatures_to_create_in_advance: 1,
+                    max_queue_size: 1,
+                }],
                 signature_request_timeout_ns: Some(100000),
-                ..EcdsaConfig::default()
+                ..ChainKeyConfig::default()
             };
 
             // Generate initial dealings
@@ -2314,7 +2327,7 @@ mod tests {
                 &mut payload_2,
                 Height::from(2),
                 UNIX_EPOCH,
-                &ecdsa_config,
+                &chain_key_config,
                 &valid_keys,
                 registry_version,
                 CertifiedHeight::ReachedSummaryHeight,
@@ -2343,7 +2356,7 @@ mod tests {
                 &mut payload_3,
                 Height::from(3),
                 UNIX_EPOCH,
-                &ecdsa_config,
+                &chain_key_config,
                 &valid_keys,
                 registry_version,
                 CertifiedHeight::ReachedSummaryHeight,
@@ -2370,7 +2383,7 @@ mod tests {
                 &mut payload_4,
                 Height::from(3),
                 UNIX_EPOCH,
-                &ecdsa_config,
+                &chain_key_config,
                 &valid_keys,
                 registry_version,
                 CertifiedHeight::ReachedSummaryHeight,

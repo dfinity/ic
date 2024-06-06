@@ -402,13 +402,6 @@ pub struct EcdsaPayload {
     pub available_pre_signatures: ::prost::alloc::vec::Vec<AvailablePreSignature>,
     #[prost(message, repeated, tag = "15")]
     pub pre_signatures_in_creation: ::prost::alloc::vec::Vec<PreSignatureInProgress>,
-    /// TODO: retire these fields, once we start using `key_transcripts`.
-    #[prost(message, optional, tag = "9")]
-    pub current_key_transcript: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
-    #[prost(message, optional, tag = "11")]
-    pub next_key_in_creation: ::core::option::Option<KeyTranscriptCreation>,
-    #[prost(message, optional, tag = "12")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
     /// TODO: retire these fields, once we start using `pre_signatures`.
     #[prost(bool, tag = "16")]
     pub generalized_pre_signatures: bool,

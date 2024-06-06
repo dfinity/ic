@@ -227,3 +227,7 @@ After having called `withdraw_erc20`, the user does not need to do anything else
 . The user can query the withdrawal status using the identifier from the erc20_withdraw response.
 . Once the transaction gets enough confirmations, the minter considers the transaction finalized.
 . The minter retrieves the receipt of the finalized transaction (as done currently by the ckETH minter) and will reimburse the ckERC20 tokens in case the transaction failed. Overcharged transaction fees are not reimbursed.
+
+== Adding a new ckERC20 token
+
+Any ERC-20 token on Ethereum can be brought to the Internet Computer by adding a new ckERC20 token, which simply requires a single upgrade proposal targeting the ckERC20 ledger suite orchestrator canister `vxkom-oyaaa-aaaar-qafda-cai`. We refer the interested reader to the corresponding xref:../../ledger-suite-orchestrator/README.adoc#add-new-ckerc20[section] in the ledger suite orchestrator documentation.

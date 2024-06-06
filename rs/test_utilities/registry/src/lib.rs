@@ -10,7 +10,8 @@ use ic_registry_keys::{
     make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
+use ic_registry_subnet_features::ChainKeyConfig;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
@@ -302,8 +303,8 @@ impl SubnetRecordBuilder {
         self
     }
 
-    pub fn with_ecdsa_config(mut self, ecdsa_config: EcdsaConfig) -> Self {
-        self.record.ecdsa_config = Some(ecdsa_config.into());
+    pub fn with_chain_key_config(mut self, chain_key_config: ChainKeyConfig) -> Self {
+        self.record.chain_key_config = Some(chain_key_config.into());
         self
     }
 

@@ -20,6 +20,7 @@ use rosetta_core::models::Ed25519KeyPair;
 use rosetta_core::objects::Currency;
 use rosetta_core::objects::ObjectMap;
 use serde_bytes::ByteBuf;
+use serde_json::json;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
@@ -1088,9 +1089,9 @@ pub fn construction_payloads_request_metadata() -> impl Strategy<Value = ObjectM
                 "memo".to_string(),
                 memo.map(|m| m.0.as_slice().to_vec()).into(),
             );
-            map.insert("ingress_start".to_string(), ingress_start.into());
-            map.insert("ingress_end".to_string(), ingress_end.into());
-            map.insert("created_at_time".to_string(), created_at_time.into());
+            map.insert("ingress_start".to_string(), json!(ingress_start));
+            map.insert("ingress_end".to_string(), json!(ingress_end));
+            map.insert("created_at_time".to_string(), json!(created_at_time));
             map
         })
 }

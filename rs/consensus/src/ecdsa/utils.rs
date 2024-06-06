@@ -12,7 +12,7 @@ use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Sc
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::ecdsa_keys::EcdsaKeysRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_types::consensus::idkg::common::PreSignatureRef;
 use ic_types::consensus::idkg::ecdsa::ThresholdEcdsaSigInputsRef;
@@ -389,33 +389,39 @@ pub(crate) fn algorithm_for_key_id(key_id: &MasterPublicKeyId) -> AlgorithmId {
     }
 }
 
-/// Return [`EcdsaConfig`] if it is enabled for the given subnet.
-pub(crate) fn get_ecdsa_config_if_enabled(
+pub(crate) fn get_chain_key_config_if_enabled(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     registry_client: &dyn RegistryClient,
     log: &ReplicaLogger,
-) -> Result<Option<EcdsaConfig>, RegistryClientError> {
-    if let Some(mut ecdsa_config) = registry_client.get_ecdsa_config(subnet_id, registry_version)? {
-        if ecdsa_config.quadruples_to_create_in_advance == 0 {
-            warn!(
-                log,
-                "Wrong ecdsa_config: quadruples_to_create_in_advance is zero"
-            );
-        } else if ecdsa_config.key_ids.is_empty() {
+) -> Result<Option<ChainKeyConfig>, RegistryClientError> {
+    if let Some(mut chain_key_config) =
+        registry_client.get_chain_key_config(subnet_id, registry_version)?
+    {
+        // A key that has `presignatures_to_create_in_advance` set to 0 is not active
+        let num_active_key_ids = chain_key_config
+            .key_configs
+            .iter()
+            .filter(|key_config| key_config.pre_signatures_to_create_in_advance != 0)
+            .count();
+
+        match num_active_key_ids {
             // This means it is not enabled
-        } else if ecdsa_config.key_ids.len() > 1 {
-            warn!(
-                log,
-                "Wrong ecdsa_config: multiple key_ids is not yet supported. Pick the first one."
-            );
-            ecdsa_config.key_ids = vec![ecdsa_config.key_ids[0].clone()];
-            return Ok(Some(ecdsa_config));
-        } else {
-            return Ok(Some(ecdsa_config));
+            0 => Ok(None),
+            1 => Ok(Some(chain_key_config)),
+            _ => {
+                // TODO(CON-1053): remove this check
+                warn!(
+                        log,
+                        "Wrong chain_key_config: multiple key_ids is not yet supported. Pick the first one."
+                    );
+                chain_key_config.key_configs = vec![chain_key_config.key_configs[0].clone()];
+                Ok(Some(chain_key_config))
+            }
         }
+    } else {
+        Ok(None)
     }
-    Ok(None)
 }
 
 /// Return ids of ECDSA keys of the given [EcdsaConfig] for which
@@ -565,12 +571,14 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types::SchnorrKeyId;
     use ic_protobuf::registry::{
         crypto::v1::EcdsaSigningSubnetList, subnet::v1::EcdsaInitialization,
     };
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_ecdsa_signing_subnet_list_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_consensus::fake::Fake;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -687,8 +695,8 @@ mod tests {
             .expect_err("Should fail because of the multiple keys");
     }
 
-    fn set_up_get_ecdsa_config_test(
-        config: &EcdsaConfig,
+    fn set_up_get_chain_key_config_test(
+        config: &ChainKeyConfig,
         pool_config: ArtifactPoolConfig,
     ) -> (SubnetId, Arc<FakeRegistryClient>, RegistryVersion) {
         let Dependencies {
@@ -704,7 +712,7 @@ mod tests {
             registry_version.get(),
             subnet_id,
             SubnetRecordBuilder::from(&[node_test_id(0)])
-                .with_ecdsa_config(config.clone())
+                .with_chain_key_config(config.clone())
                 .build(),
         );
         registry.update_to_latest_version();
@@ -713,88 +721,120 @@ mod tests {
     }
 
     #[test]
-    fn test_get_ecdsa_config_if_enabled_no_keys() {
+    fn test_get_chain_key_config_if_enabled_no_keys() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ecdsa_config_with_no_keys = EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![],
-                max_queue_size: Some(3),
-                ..EcdsaConfig::default()
-            };
+            let chain_key_config_with_no_keys = ChainKeyConfig::default();
             let (subnet_id, registry, version) =
-                set_up_get_ecdsa_config_test(&ecdsa_config_with_no_keys, pool_config);
+                set_up_get_chain_key_config_test(&chain_key_config_with_no_keys, pool_config);
 
-            let config =
-                get_ecdsa_config_if_enabled(subnet_id, version, registry.as_ref(), &no_op_logger())
-                    .expect("Should successfully get the config");
+            let config = get_chain_key_config_if_enabled(
+                subnet_id,
+                version,
+                registry.as_ref(),
+                &no_op_logger(),
+            )
+            .expect("Should successfully get the config");
 
             assert!(config.is_none());
         })
     }
 
     #[test]
-    fn test_get_ecdsa_config_if_enabled_one_key() {
+    fn test_get_chain_key_config_if_enabled_one_key() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let ecdsa_config_with_one_key = EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()],
-                max_queue_size: Some(3),
-                ..EcdsaConfig::default()
+            let chain_key_config_with_one_key = ChainKeyConfig {
+                key_configs: vec![KeyConfig {
+                    key_id: MasterPublicKeyId::Ecdsa(
+                        EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                    ),
+                    pre_signatures_to_create_in_advance: 1,
+                    max_queue_size: 3,
+                }],
+                ..ChainKeyConfig::default()
             };
+
             let (subnet_id, registry, version) =
-                set_up_get_ecdsa_config_test(&ecdsa_config_with_one_key, pool_config);
+                set_up_get_chain_key_config_test(&chain_key_config_with_one_key, pool_config);
 
-            let config =
-                get_ecdsa_config_if_enabled(subnet_id, version, registry.as_ref(), &no_op_logger())
-                    .expect("Should successfully get the config");
+            let config = get_chain_key_config_if_enabled(
+                subnet_id,
+                version,
+                registry.as_ref(),
+                &no_op_logger(),
+            )
+            .expect("Should successfully get the config");
 
-            assert_eq!(config, Some(ecdsa_config_with_one_key));
+            assert_eq!(config, Some(chain_key_config_with_one_key));
         })
     }
 
     #[test]
-    fn test_get_ecdsa_config_if_enabled_multiple_keys() {
+    fn test_get_chain_key_config_if_enabled_multiple_keys() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let key_id = EcdsaKeyId::from_str("Secp256k1:some_key_1").unwrap();
-            let key_id_2 = EcdsaKeyId::from_str("Secp256k1:some_key_2").unwrap();
-            let ecdsa_config_with_two_keys = EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![key_id.clone(), key_id_2.clone()],
-                max_queue_size: Some(3),
-                ..EcdsaConfig::default()
+            let key_config = KeyConfig {
+                key_id: MasterPublicKeyId::Ecdsa(
+                    EcdsaKeyId::from_str("Secp256k1:some_key_1").unwrap(),
+                ),
+                pre_signatures_to_create_in_advance: 1,
+                max_queue_size: 3,
             };
-            let (subnet_id, registry, version) =
-                set_up_get_ecdsa_config_test(&ecdsa_config_with_two_keys, pool_config);
+            let key_config_2 = KeyConfig {
+                key_id: MasterPublicKeyId::Schnorr(
+                    SchnorrKeyId::from_str("Ed25519:some_key_2").unwrap(),
+                ),
+                pre_signatures_to_create_in_advance: 1,
+                max_queue_size: 3,
+            };
 
-            let config =
-                get_ecdsa_config_if_enabled(subnet_id, version, registry.as_ref(), &no_op_logger())
-                    .expect("Should successfully get the config");
+            let chain_key_config_with_two_keys = ChainKeyConfig {
+                key_configs: vec![key_config.clone(), key_config_2],
+                ..ChainKeyConfig::default()
+            };
+
+            let (subnet_id, registry, version) =
+                set_up_get_chain_key_config_test(&chain_key_config_with_two_keys, pool_config);
+
+            let config = get_chain_key_config_if_enabled(
+                subnet_id,
+                version,
+                registry.as_ref(),
+                &no_op_logger(),
+            )
+            .expect("Should successfully get the config");
 
             assert_eq!(
                 config,
-                Some(EcdsaConfig {
-                    key_ids: vec![key_id],
-                    ..ecdsa_config_with_two_keys
+                Some(ChainKeyConfig {
+                    key_configs: vec![key_config],
+                    ..chain_key_config_with_two_keys
                 })
             );
         })
     }
 
     #[test]
-    fn test_get_ecdsa_config_if_enabled_malformed() {
+    fn test_get_chain_key_config_if_enabled_malformed() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let malformed_ecdsa_config = EcdsaConfig {
-                quadruples_to_create_in_advance: 0,
-                key_ids: vec![EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()],
-                max_queue_size: Some(3),
-                ..EcdsaConfig::default()
+            let malformed_chain_key_config = ChainKeyConfig {
+                key_configs: vec![KeyConfig {
+                    key_id: MasterPublicKeyId::Ecdsa(
+                        EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                    ),
+                    pre_signatures_to_create_in_advance: 0,
+                    max_queue_size: 3,
+                }],
+                ..ChainKeyConfig::default()
             };
             let (subnet_id, registry, version) =
-                set_up_get_ecdsa_config_test(&malformed_ecdsa_config, pool_config);
+                set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
 
-            let config =
-                get_ecdsa_config_if_enabled(subnet_id, version, registry.as_ref(), &no_op_logger())
-                    .expect("Should successfully get the config");
+            let config = get_chain_key_config_if_enabled(
+                subnet_id,
+                version,
+                registry.as_ref(),
+                &no_op_logger(),
+            )
+            .expect("Should successfully get the config");
 
             assert!(config.is_none());
         })

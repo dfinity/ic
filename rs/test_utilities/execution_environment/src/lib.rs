@@ -15,13 +15,14 @@ use ic_execution_environment::{
     RoundInstructions, RoundLimits,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
+    ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
+    SubnetAvailableMemory,
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EcdsaKeyId, EmptyBlob,
+    CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
     InstallCodeArgs, InstallCodeArgsV2, LogVisibility, MasterPublicKeyId, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
@@ -133,8 +134,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
     RegistryExecutionSettings {
         max_number_of_canisters: 0x2000,
         provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
-        max_ecdsa_queue_size: 20,
-        quadruples_to_create_in_advance: 5,
+        chain_key_settings: BTreeMap::new(),
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
     }
 }
@@ -1710,20 +1710,9 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_ecdsa_key(mut self, key_id: EcdsaKeyId) -> Self {
-        self.idkg_keys_with_signing_enabled
-            .insert(MasterPublicKeyId::Ecdsa(key_id), true);
-        self
-    }
-
-    pub fn with_disabled_ecdsa_key(mut self, key_id: EcdsaKeyId) -> Self {
-        self.idkg_keys_with_signing_enabled
-            .insert(MasterPublicKeyId::Ecdsa(key_id), false);
-        self
-    }
-
     pub fn with_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
-        self.idkg_keys_with_signing_enabled.insert(key_id, true);
+        self.idkg_keys_with_signing_enabled
+            .insert(key_id.clone(), true);
         self
     }
 
@@ -1992,6 +1981,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_ic00_schnorr_public_key(mut self, status: FlagStatus) -> Self {
+        self.execution_config.ic00_schnorr_public_key = status;
+        self
+    }
+
     pub fn with_ic00_sign_with_schnorr(mut self, status: FlagStatus) -> Self {
         self.execution_config.ic00_sign_with_schnorr = status;
         self
@@ -2038,7 +2032,7 @@ impl ExecutionTestBuilder {
         self.build_common(routing_table)
     }
 
-    fn build_common(self, routing_table: Arc<RoutingTable>) -> ExecutionTest {
+    fn build_common(mut self, routing_table: Arc<RoutingTable>) -> ExecutionTest {
         let mut state = ReplicatedState::new(self.own_subnet_id, self.subnet_type);
 
         let mut subnets = vec![self.own_subnet_id, self.nns_subnet_id];
@@ -2069,6 +2063,15 @@ impl ExecutionTestBuilder {
             config.ecdsa_signature_fee = ecdsa_signature_fee;
         }
         for (key_id, is_signing_enabled) in &self.idkg_keys_with_signing_enabled {
+            // Populate hte chain key settings
+            self.registry_settings.chain_key_settings.insert(
+                key_id.clone(),
+                ChainKeySettings {
+                    max_queue_size: 20,
+                    pre_signatures_to_create_in_advance: 5,
+                },
+            );
+
             if *is_signing_enabled {
                 state
                     .metadata

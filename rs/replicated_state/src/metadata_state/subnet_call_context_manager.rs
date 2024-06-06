@@ -218,7 +218,7 @@ pub struct SubnetCallContextManager {
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
     // TODO(EXC-1621): remove after fully migrating to `sign_with_threshold_contexts`.
     pub sign_with_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
-    sign_with_threshold_contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
+    pub sign_with_threshold_contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
     // TODO(EXC-1621): remove after fully migrating to `idkg_dealings_contexts`.
     pub ecdsa_dealings_contexts: BTreeMap<CallbackId, EcdsaDealingsContext>,

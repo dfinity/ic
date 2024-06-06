@@ -20,8 +20,9 @@ use ic_embedders::{
 };
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{
-    ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter, InstanceStats,
-    RegistryExecutionSettings, Scheduler, SystemApiCallCounters, WasmExecutionOutput,
+    ChainKeySettings, ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter,
+    InstanceStats, RegistryExecutionSettings, Scheduler, SystemApiCallCounters,
+    WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
@@ -713,11 +714,13 @@ impl SchedulerTestBuilder {
 
         let mut state = ReplicatedState::new(self.own_subnet_id, self.subnet_type);
 
+        let mut registry_settings = self.registry_settings;
+
         state.metadata.network_topology.subnets = generate_subnets(
             vec![self.own_subnet_id, self.nns_subnet_id],
             self.own_subnet_id,
             self.subnet_type,
-            self.registry_settings.subnet_size,
+            registry_settings.subnet_size,
         );
         state.metadata.network_topology.routing_table = routing_table;
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
@@ -737,6 +740,14 @@ impl SchedulerTestBuilder {
                 .unwrap()
                 .idkg_keys_held
                 .insert(MasterPublicKeyId::Ecdsa(ecdsa_key.clone()));
+
+            registry_settings.chain_key_settings.insert(
+                MasterPublicKeyId::Ecdsa(ecdsa_key.clone()),
+                ChainKeySettings {
+                    max_queue_size: 20,
+                    pre_signatures_to_create_in_advance: 5,
+                },
+            );
         }
         let idkg_subnet_public_keys: BTreeMap<_, _> = self
             .ecdsa_keys
@@ -784,7 +795,7 @@ impl SchedulerTestBuilder {
         };
         let wasm_executor = Arc::new(TestWasmExecutor::new(
             Arc::clone(&cycles_account_manager),
-            self.registry_settings.subnet_size,
+            registry_settings.subnet_size,
         ));
         let hypervisor = Hypervisor::new_for_testing(
             &self.metrics_registry,
@@ -839,7 +850,7 @@ impl SchedulerTestBuilder {
             xnet_canister_id: canister_test_id(first_xnet_canister),
             scheduler,
             wasm_executor,
-            registry_settings: self.registry_settings,
+            registry_settings,
             metrics_registry: self.metrics_registry,
             idkg_subnet_public_keys,
             idkg_pre_signature_ids: BTreeMap::new(),

@@ -37,6 +37,20 @@ env:
 anchors:
   image: &image
     image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
+  dind-small-setup: &dind-small-setup
+    runs-on:
+      labels: dind-runner-small
+    container:
+      <<: *image
+    timeout-minutes: 30
+    if: ${{ vars.RUN_CI == 'true' }}
+  dind-large-setup: &dind-large-setup
+    runs-on:
+      labels: dind-runner-large
+    container:
+      <<: *image
+    timeout-minutes: 60
+    if: ${{ vars.RUN_CI == 'true' }}
   bazel-large-setup: &bazel-large-setup
     runs-on:
       labels: bazel-runner-large
@@ -79,12 +93,14 @@ anchors:
     run: |
       git config --global http.postBuffer 524288000
       git config --global safe.directory '*'
+      if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
       if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
   cargo-filters: &cargo-filters
     uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+    name: Filter Rust Files [*.{rs,toml,lock}]
     id: filter
     with:
       filters: |
@@ -208,7 +224,7 @@ jobs:
 
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
-    <<: *bazel-small-setup
+    <<: *dind-large-setup
     steps:
       - <<: *before-script
       - <<: *checkout
@@ -224,7 +240,7 @@ jobs:
 
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
-    <<: *bazel-small-setup
+    <<: *dind-large-setup
     steps:
       - <<: *before-script
       - <<: *checkout
@@ -352,7 +368,7 @@ jobs:
 
   cargo-clippy-linux:
     name: Cargo Clippy Linux
-    <<: *bazel-small-setup
+    <<: *dind-large-setup
     steps:
       - <<: *before-script
       - <<: *checkout
@@ -371,7 +387,7 @@ jobs:
 
   cargo-build-release-linux:
     name: Cargo Build Release Linux
-    <<: *bazel-small-setup
+    <<: *dind-large-setup
     timeout-minutes: 60
     steps:
       - <<: *before-script
