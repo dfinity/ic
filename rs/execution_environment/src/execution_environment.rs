@@ -436,7 +436,7 @@ impl ExecutionEnvironment {
                 - self.config.subnet_memory_reservation.get() as i64
                 - memory_taken.execution().get() as i64,
             self.config.subnet_message_memory_capacity.get() as i64
-                - memory_taken.messages().get() as i64,
+                - memory_taken.guaranteed_response_messages().get() as i64,
             self.config
                 .subnet_wasm_custom_sections_memory_capacity
                 .get() as i64
@@ -450,7 +450,7 @@ impl ExecutionEnvironment {
     /// the message memory usage is necessary.
     pub fn subnet_available_message_memory(&self, state: &ReplicatedState) -> i64 {
         self.config.subnet_message_memory_capacity.get() as i64
-            - state.message_memory_taken().get() as i64
+            - state.guaranteed_response_message_memory_taken().get() as i64
     }
 
     /// Executes a replicated message sent to a subnet.
