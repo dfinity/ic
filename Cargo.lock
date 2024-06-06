@@ -8842,6 +8842,7 @@ dependencies = [
  "num-traits",
  "paste 1.0.14",
  "proptest",
+ "scopeguard",
  "scraper",
  "serde",
  "serde_bytes",

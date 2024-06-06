@@ -28,6 +28,7 @@ use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 pub use metrics::encode_orchestrator_metrics;
 use metrics::observe_task_duration;
 use num_traits::ToPrimitive;
+use scopeguard::ScopeGuard;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::cmp::Ordering;
@@ -191,6 +192,9 @@ async fn run_task<R: CanisterRuntime>(task: TaskExecution, runtime: R) {
         Some(guard) => guard,
         None => return,
     };
+    let rerun_task_guard = scopeguard::guard(task.task_type.clone(), |task_type| {
+        schedule_after(RETRY_FREQUENCY, task_type, &runtime);
+    });
     let start = runtime.time();
     let result = task.execute(&runtime).await;
     let end = runtime.time();
@@ -198,13 +202,14 @@ async fn run_task<R: CanisterRuntime>(task: TaskExecution, runtime: R) {
 
     match result {
         Ok(()) => {
+            let _task_type = ScopeGuard::into_inner(rerun_task_guard);
             log!(INFO, "task {:?} accomplished", task.task_type);
         }
         Err(e) => {
             if e.is_recoverable() {
                 log!(INFO, "task {:?} failed: {:?}. Will retry later.", task, e);
-                schedule_after(RETRY_FREQUENCY, task.task_type, &runtime);
             } else {
+                let _task_type = ScopeGuard::into_inner(rerun_task_guard);
                 log!(
                     INFO,
                     "ERROR: task {:?} failed with unrecoverable error: {:?}. Task is discarded.",
