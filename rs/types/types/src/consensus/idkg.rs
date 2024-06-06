@@ -82,10 +82,10 @@ pub struct EcdsaPayload {
     pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
 
     /// Resharing requests in progress.
-    pub ongoing_xnet_reshares: BTreeMap<EcdsaReshareRequest, ReshareOfUnmaskedParams>,
+    pub ongoing_xnet_reshares: BTreeMap<IDkgReshareRequest, ReshareOfUnmaskedParams>,
 
     /// Completed resharing requests.
-    pub xnet_reshare_agreements: BTreeMap<EcdsaReshareRequest, CompletedReshareRequest>,
+    pub xnet_reshare_agreements: BTreeMap<IDkgReshareRequest, CompletedReshareRequest>,
 
     /// State of the key transcripts.
     pub key_transcripts: BTreeMap<MasterPublicKeyId, EcdsaKeyTranscript>,
@@ -684,16 +684,16 @@ impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
 
 /// Internal format of the resharing request from execution.
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EcdsaReshareRequest {
+pub struct IDkgReshareRequest {
     pub key_id: Option<EcdsaKeyId>,
     pub master_key_id: MasterPublicKeyId,
     pub receiving_node_ids: Vec<NodeId>,
     pub registry_version: RegistryVersion,
 }
 
-impl Hash for EcdsaReshareRequest {
+impl Hash for IDkgReshareRequest {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        let EcdsaReshareRequest {
+        let IDkgReshareRequest {
             key_id,
             master_key_id,
             receiving_node_ids,
@@ -708,8 +708,8 @@ impl Hash for EcdsaReshareRequest {
     }
 }
 
-impl From<&EcdsaReshareRequest> for pb::EcdsaReshareRequest {
-    fn from(request: &EcdsaReshareRequest) -> Self {
+impl From<&IDkgReshareRequest> for pb::IDkgReshareRequest {
+    fn from(request: &IDkgReshareRequest) -> Self {
         let mut receiving_node_ids = Vec::new();
         for node in &request.receiving_node_ids {
             receiving_node_ids.push(node_id_into_protobuf(*node));
@@ -723,9 +723,9 @@ impl From<&EcdsaReshareRequest> for pb::EcdsaReshareRequest {
     }
 }
 
-impl TryFrom<&pb::EcdsaReshareRequest> for EcdsaReshareRequest {
+impl TryFrom<&pb::IDkgReshareRequest> for IDkgReshareRequest {
     type Error = ProxyDecodeError;
-    fn try_from(request: &pb::EcdsaReshareRequest) -> Result<Self, Self::Error> {
+    fn try_from(request: &pb::IDkgReshareRequest) -> Result<Self, Self::Error> {
         let receiving_node_ids = request
             .receiving_node_ids
             .iter()
@@ -740,7 +740,7 @@ impl TryFrom<&pb::EcdsaReshareRequest> for EcdsaReshareRequest {
 
         let master_key_id = try_from_option_field(
             request.master_key_id.clone(),
-            "EcdsaReshareRequest::master_key_id",
+            "IDkgReshareRequest::master_key_id",
         )?;
 
         Ok(Self {
@@ -1831,7 +1831,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         // ongoing_xnet_reshares
         let mut ongoing_xnet_reshares = BTreeMap::new();
         for reshare in &payload.ongoing_xnet_reshares {
-            let request: EcdsaReshareRequest =
+            let request: IDkgReshareRequest =
                 try_from_option_field(reshare.request.as_ref(), "EcdsaPayload::reshare::request")?;
 
             let transcript: ReshareOfUnmaskedParams = try_from_option_field(
@@ -1844,7 +1844,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         // xnet_reshare_agreements
         let mut xnet_reshare_agreements = BTreeMap::new();
         for agreement in &payload.xnet_reshare_agreements {
-            let request: EcdsaReshareRequest = try_from_option_field(
+            let request: IDkgReshareRequest = try_from_option_field(
                 agreement.request.as_ref(),
                 "EcdsaPayload::agreement::request",
             )?;
@@ -2056,7 +2056,7 @@ impl HasMasterPublicKeyId for PreSignatureRef {
     }
 }
 
-impl HasMasterPublicKeyId for EcdsaReshareRequest {
+impl HasMasterPublicKeyId for IDkgReshareRequest {
     fn key_id(&self) -> MasterPublicKeyId {
         self.master_key_id.clone()
     }

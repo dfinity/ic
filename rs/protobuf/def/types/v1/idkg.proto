@@ -69,14 +69,14 @@ message PreSignatureInProgress {
 }
 
 message OngoingXnetReshare {
-  EcdsaReshareRequest request = 1;
+  IDkgReshareRequest request = 1;
   ReshareOfUnmaskedParams transcript = 2;
 }
 
 message XnetReshareAgreement {
   reserved 2, 3;
   reserved "response";
-  EcdsaReshareRequest request = 1;
+  IDkgReshareRequest request = 1;
   ConsensusResponse initial_dealings = 4;
 }
 
@@ -215,7 +215,7 @@ message CompletedSignature {
   bytes pseudo_random_id = 4;
 }
 
-message EcdsaReshareRequest {
+message IDkgReshareRequest {
   reserved 1;
   repeated types.v1.NodeId receiving_node_ids = 2;
   uint64 registry_version = 3;
