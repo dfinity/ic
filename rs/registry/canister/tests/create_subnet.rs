@@ -7,7 +7,10 @@ use ic_nns_test_utils::{
     },
     registry::{invariant_compliant_mutation_as_atomic_req, INITIAL_MUTATION_ID},
 };
-use ic_protobuf::registry::crypto::v1::{EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as pbEcdsaKeyId};
+use ic_protobuf::registry::{
+    crypto::v1::{EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as pbEcdsaKeyId},
+    subnet::v1::{ChainKeyConfig, EcdsaConfig, KeyConfig},
+};
 use std::convert::TryFrom;
 
 use assert_matches::assert_matches;
@@ -18,19 +21,19 @@ use ic_interfaces_registry::RegistryClient;
 use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
-use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetListRecord, SubnetRecord};
+use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_types::{NodeId, ReplicaVersion};
-use registry_canister::mutations::{
-    common::decode_registry_value,
-    do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest},
-};
 use registry_canister::{
-    init::RegistryCanisterInitPayloadBuilder, mutations::do_create_subnet::CreateSubnetPayload,
+    init::RegistryCanisterInitPayloadBuilder,
+    mutations::{
+        common::decode_registry_value,
+        do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
+    },
 };
 
 mod common;
@@ -251,10 +254,27 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
                 .unwrap()
                 .unwrap(),
         );
+
+        // TODO(NNS1-3006): Remove this once replica no longer needs it
         subnet_record.ecdsa_config = Some(EcdsaConfig {
             quadruples_to_create_in_advance: 100,
             key_ids: vec![(&key_1).into()],
             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        });
+        subnet_record.chain_key_config = Some(ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: Some(ic_protobuf::registry::crypto::v1::MasterPublicKeyId {
+                    key_id: Some(
+                        ic_protobuf::registry::crypto::v1::master_public_key_id::KeyId::Ecdsa(
+                            (&key_1).into(),
+                        ),
+                    ),
+                }),
+                pre_signatures_to_create_in_advance: Some(100),
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         });

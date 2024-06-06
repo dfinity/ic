@@ -51,4 +51,3 @@ build-info-build = { workspace = true }
 ic-nns-governance = { path = "../../nns/governance" }
 proptest = "1.0"
 serde_bytes = { workspace = true }
-serde_derive = "1.0"

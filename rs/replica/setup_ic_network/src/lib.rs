@@ -428,14 +428,14 @@ fn start_consensus(
 
     {
         let finalized = consensus_pool_cache.finalized_block();
-        let ecdsa_config =
-            registry_client.get_ecdsa_config(subnet_id, registry_client.get_latest_version());
+        let chain_key_config =
+            registry_client.get_chain_key_config(subnet_id, registry_client.get_latest_version());
         info!(
             log,
-            "ECDSA: finalized_height = {:?}, ecdsa_config = {:?}, \
+            "ECDSA: finalized_height = {:?}, chain_key_config = {:?}, \
                  DKG interval start = {:?}, is_summary = {}, has_ecdsa = {}",
             finalized.height(),
-            ecdsa_config,
+            chain_key_config,
             finalized.payload.as_ref().dkg_interval_start_height(),
             finalized.payload.as_ref().is_summary(),
             finalized.payload.as_ref().as_ecdsa().is_some(),
