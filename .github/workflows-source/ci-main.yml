@@ -365,6 +365,9 @@ jobs:
       - name: Filter Rust Files [*.{rs,toml,lock}]
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
+        if : |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'merge_group'
         with:
           filters: |
             cargo:
@@ -392,6 +395,9 @@ jobs:
       - name: Filter Rust Files [*.{rs,toml,lock}]
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
+        if : |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'merge_group'
         with:
           filters: |
             cargo:
