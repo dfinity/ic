@@ -123,12 +123,10 @@ jobs:
     steps:
       - <<: *before-script
       - <<: *checkout
-        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
         if : ${{ github.event_name == 'pull_request' }}
         with:
           fetch-depth: 256
       - <<: *checkout
-        uses: actions/checkout@v3
         if : ${{ github.event_name != 'pull_request' }}
       - <<: *docker-ro-login
       - name: Run Bazel Test All
@@ -160,12 +158,10 @@ jobs:
     steps:
       - <<: *before-script
       - <<: *checkout
-        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
         if : ${{ github.event_name == 'pull_request' }}
         with:
           fetch-depth: 256
       - <<: *checkout
-        uses: actions/checkout@v3
         if : ${{ github.event_name != 'pull_request' }}
       - <<: *docker-ro-login
       - name: Run bazel build --config=check //rs/...
@@ -282,12 +278,10 @@ jobs:
     steps:
       - <<: *before-script
       - <<: *checkout
-        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
         if : ${{ github.event_name == 'pull_request' }}
         with:
           fetch-depth: 256
       - <<: *checkout
-        uses: actions/checkout@v3
         if : ${{ github.event_name != 'pull_request' }}
       - <<: *docker-ro-login
       - name: Run Build IC
@@ -346,11 +340,11 @@ jobs:
       - <<: *before-script
       - <<: *checkout
       - name: Download bazel-targets [bazel-test-all]
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: bazel-targets
       - name: Download build-ic.tar [build-ic]
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: build-ic
       - name: Build Determinism Test
