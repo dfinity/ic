@@ -866,7 +866,7 @@ mod tests {
                 current: unmasked,
                 next_in_creation: idkg::KeyTranscriptCreation::Begin,
                 master_key_id: key_id.clone(),
-                key_id: None,
+                deprecated_key_id: None,
             }],
         );
         ecdsa.idkg_transcripts = idkg_transcripts;

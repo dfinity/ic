@@ -891,7 +891,7 @@ impl EcdsaPayloadMetrics {
             payload
                 .key_transcripts
                 .values()
-                .filter(|k| k.key_id.is_some())
+                .filter(|k| k.deprecated_key_id.is_some())
                 .count(),
         );
     }
