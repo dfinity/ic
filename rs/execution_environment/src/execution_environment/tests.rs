@@ -169,14 +169,13 @@ fn compute_initial_threshold_key_dealings_payload(
     let nodes = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let registry_version = RegistryVersion::from(100);
     match method {
-        Method::ComputeInitialEcdsaDealings => {
-            let key_id = match key_id {
-                MasterPublicKeyId::Ecdsa(key) => key,
-                _ => panic!("unexpected key"),
-            };
-            ic00::ComputeInitialEcdsaDealingsArgs::new(key_id, subnet_id, nodes, registry_version)
-                .encode()
-        }
+        Method::ComputeInitialEcdsaDealings => ic00::ComputeInitialEcdsaDealingsArgs::new(
+            into_inner_ecdsa(key_id),
+            subnet_id,
+            nodes,
+            registry_version,
+        )
+        .encode(),
         Method::ComputeInitialIDkgDealings => {
             ic00::ComputeInitialIDkgDealingsArgs::new(key_id, subnet_id, nodes, registry_version)
                 .encode()
@@ -190,19 +189,13 @@ fn threshold_public_key_payload(method: Method, key_id: MasterPublicKeyId) -> Ve
         Method::ECDSAPublicKey => ic00::ECDSAPublicKeyArgs {
             canister_id: None,
             derivation_path: DerivationPath::new(vec![]),
-            key_id: match key_id {
-                MasterPublicKeyId::Ecdsa(key) => key,
-                _ => panic!("unexpected key"),
-            },
+            key_id: into_inner_ecdsa(key_id),
         }
         .encode(),
         Method::SchnorrPublicKey => ic00::SchnorrPublicKeyArgs {
             canister_id: None,
             derivation_path: DerivationPath::new(vec![]),
-            key_id: match key_id {
-                MasterPublicKeyId::Schnorr(key) => key,
-                _ => panic!("unexpected key"),
-            },
+            key_id: into_inner_schnorr(key_id),
         }
         .encode(),
         _ => panic!("unexpected method"),
@@ -214,19 +207,13 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
         Method::SignWithECDSA => ic00::SignWithECDSAArgs {
             message_hash: [1; 32],
             derivation_path: DerivationPath::new(vec![]),
-            key_id: match key_id {
-                MasterPublicKeyId::Ecdsa(key) => key,
-                _ => panic!("unexpected key"),
-            },
+            key_id: into_inner_ecdsa(key_id),
         }
         .encode(),
         Method::SignWithSchnorr => ic00::SignWithSchnorrArgs {
             message: vec![],
             derivation_path: DerivationPath::new(vec![]),
-            key_id: match key_id {
-                MasterPublicKeyId::Schnorr(key) => key,
-                _ => panic!("unexpected key"),
-            },
+            key_id: into_inner_schnorr(key_id),
         }
         .encode(),
         _ => panic!("unexpected method"),
@@ -2148,10 +2135,17 @@ fn make_schnorr_key(name: &str) -> MasterPublicKeyId {
     })
 }
 
-fn into_inner_schnorr(key_id: MasterPublicKeyId) -> Option<SchnorrKeyId> {
+fn into_inner_ecdsa(key_id: MasterPublicKeyId) -> EcdsaKeyId {
     match key_id {
-        MasterPublicKeyId::Schnorr(key) => Some(key),
-        _ => None,
+        MasterPublicKeyId::Ecdsa(key) => key,
+        _ => panic!("unexpected key_id type"),
+    }
+}
+
+fn into_inner_schnorr(key_id: MasterPublicKeyId) -> SchnorrKeyId {
+    match key_id {
+        MasterPublicKeyId::Schnorr(key) => key,
+        _ => panic!("unexpected key_id type"),
     }
 }
 
@@ -3564,7 +3558,7 @@ fn test_schnorr_public_key_api_by_default_is_disabled() {
         ic00::SchnorrPublicKeyArgs {
             canister_id: None,
             derivation_path: DerivationPath::new(vec![]),
-            key_id: into_inner_schnorr(key_id).unwrap(),
+            key_id: into_inner_schnorr(key_id),
         }
         .encode(),
         Cycles::new(0),
@@ -3594,7 +3588,7 @@ fn test_sign_with_schnorr_api_by_default_is_disabled() {
         ic00::SignWithSchnorrArgs {
             message: vec![],
             derivation_path: DerivationPath::new(vec![]),
-            key_id: into_inner_schnorr(key_id).unwrap(),
+            key_id: into_inner_schnorr(key_id),
         }
         .encode(),
         Cycles::new(0),
@@ -3644,7 +3638,7 @@ fn test_sign_with_schnorr_api_is_enabled() {
                     ic00::SignWithSchnorrArgs {
                         message: vec![],
                         derivation_path: DerivationPath::new(vec![]),
-                        key_id: into_inner_schnorr(key_id).unwrap(),
+                        key_id: into_inner_schnorr(key_id),
                     }
                     .encode(),
                 )
