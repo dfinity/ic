@@ -371,6 +371,7 @@ impl ExecutionEnvironment {
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         heap_delta_rate_limit: NumBytes,
         upload_wasm_chunk_instructions: NumInstructions,
+        canister_snapshot_baseline_instructions: NumInstructions,
     ) -> Self {
         // Assert the flag implication: DTS => sandboxing.
         assert!(
@@ -393,6 +394,7 @@ impl ExecutionEnvironment {
             heap_delta_rate_limit,
             upload_wasm_chunk_instructions,
             config.embedders_config.wasm_max_size,
+            canister_snapshot_baseline_instructions,
         );
         let metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
         let canister_manager = CanisterManager::new(
@@ -1410,6 +1412,7 @@ impl ExecutionEnvironment {
                     Ok(args) => {
                         let origin = msg.canister_change_origin(args.get_sender_canister_version());
                         let (result, instruction_used) = self.load_canister_snapshot(
+                            registry_settings.subnet_size,
                             *msg.sender(),
                             &mut state,
                             args,
@@ -2076,6 +2079,7 @@ impl ExecutionEnvironment {
     /// Loads a canister snapshot onto an existing canister.
     fn load_canister_snapshot(
         &self,
+        subnet_size: usize,
         sender: PrincipalId,
         state: &mut ReplicatedState,
         args: LoadCanisterSnapshotArgs,
@@ -2099,6 +2103,7 @@ impl ExecutionEnvironment {
 
         let snapshot_id = args.snapshot_id();
         let (instructions_used, result) = self.canister_manager.load_canister_snapshot(
+            subnet_size,
             sender,
             &old_canister,
             snapshot_id,

@@ -297,6 +297,7 @@ fn canister_manager_config(
         NumBytes::from(10 * 1024 * 1024),
         SchedulerConfig::application_subnet().upload_wasm_chunk_instructions,
         ic_config::embedders::Config::default().wasm_max_size,
+        SchedulerConfig::application_subnet().canister_snapshot_baseline_instructions,
     )
 }
 
