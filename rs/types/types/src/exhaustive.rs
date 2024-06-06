@@ -793,7 +793,7 @@ impl ExhaustiveSet for EcdsaKeyTranscript {
         DerivedEcdsaKeyTranscript::exhaustive_set(rng)
             .into_iter()
             .map(|r| EcdsaKeyTranscript {
-                key_id: Some(r.key_id),
+                deprecated_key_id: Some(r.key_id),
                 master_key_id: r.master_key_id,
                 current: r.current,
                 next_in_creation: r.next_in_creation,

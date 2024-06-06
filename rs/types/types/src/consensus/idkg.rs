@@ -28,7 +28,7 @@ use crate::{
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::{crypto::v1 as crypto_pb, subnet::v1 as subnet_pb},
@@ -362,8 +362,8 @@ pub struct EcdsaKeyTranscript {
     pub current: Option<UnmaskedTranscriptWithAttributes>,
     /// Progress of creating the next ECDSA key transcript.
     pub next_in_creation: KeyTranscriptCreation,
-    /// Key id.
-    pub key_id: Option<EcdsaKeyId>,
+    /// DEPRECATED: ECDSA Key id.
+    pub deprecated_key_id: Option<EcdsaKeyId>,
     /// Master key Id allowing different signature schemes.
     pub master_key_id: MasterPublicKeyId,
 }
@@ -373,12 +373,12 @@ impl Hash for EcdsaKeyTranscript {
         let EcdsaKeyTranscript {
             current,
             next_in_creation,
-            key_id,
+            deprecated_key_id,
             master_key_id,
         } = self;
         current.hash(state);
         next_in_creation.hash(state);
-        if let Some(key_id) = key_id {
+        if let Some(key_id) = deprecated_key_id {
             key_id.hash(state);
         }
         master_key_id.hash(state);
@@ -386,12 +386,21 @@ impl Hash for EcdsaKeyTranscript {
 }
 
 impl EcdsaKeyTranscript {
-    pub fn new(key_id: EcdsaKeyId, next_in_creation: KeyTranscriptCreation) -> Self {
+    pub fn new(key_id: MasterPublicKeyId, next_in_creation: KeyTranscriptCreation) -> Self {
         Self {
             current: None,
-            master_key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
             next_in_creation,
-            key_id: Some(key_id),
+            deprecated_key_id: if let MasterPublicKeyId::Ecdsa(key_id) = key_id.clone() {
+                Some(key_id)
+            } else {
+                // Schnorr key transcripts still receive a dummy ecdsa key ID
+                // until we can set the field to None on mainnet.
+                Some(EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: String::from("fake_dummy_key"),
+                })
+            },
+            master_key_id: key_id,
         }
     }
 
@@ -403,7 +412,7 @@ impl EcdsaKeyTranscript {
         Self {
             current: current.or_else(|| self.current.clone()),
             next_in_creation,
-            key_id: self.key_id.clone(),
+            deprecated_key_id: self.deprecated_key_id.clone(),
             master_key_id: self.master_key_id.clone(),
         }
     }
@@ -503,7 +512,10 @@ impl From<EcdsaKeyTranscript> for pb::EcdsaKeyTranscript {
             next_in_creation: Some(pb::KeyTranscriptCreation::from(
                 &transcript.next_in_creation,
             )),
-            key_id: transcript.key_id.as_ref().map(|key_id| key_id.into()),
+            deprecated_key_id: transcript
+                .deprecated_key_id
+                .as_ref()
+                .map(|key_id| key_id.into()),
             master_key_id: Some(crypto_pb::MasterPublicKeyId::from(
                 &transcript.master_key_id,
             )),
@@ -521,8 +533,8 @@ impl TryFrom<pb::EcdsaKeyTranscript> for EcdsaKeyTranscript {
     type Error = ProxyDecodeError;
 
     fn try_from(proto: pb::EcdsaKeyTranscript) -> Result<Self, Self::Error> {
-        let key_id = proto
-            .key_id
+        let deprecated_key_id = proto
+            .deprecated_key_id
             .clone()
             .map(|key_id| key_id.try_into())
             .transpose()?;
@@ -542,7 +554,7 @@ impl TryFrom<pb::EcdsaKeyTranscript> for EcdsaKeyTranscript {
             try_from_option_field(proto.master_key_id, "KeyTranscript::master_key_id")?;
 
         Ok(Self {
-            key_id,
+            deprecated_key_id,
             current,
             next_in_creation,
             master_key_id,

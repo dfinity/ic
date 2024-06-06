@@ -429,7 +429,7 @@ pub mod consensus_response {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaKeyTranscript {
     #[prost(message, optional, tag = "1")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+    pub deprecated_key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
     #[prost(message, optional, tag = "2")]
     pub current: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
     #[prost(message, optional, tag = "3")]
