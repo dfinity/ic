@@ -34,6 +34,8 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     registry_helper::RegistryHelper,
 };
+use hyper::{body, Body, Client, Method, Request};
+use hyper_rustls::HttpsConnectorBuilder;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_logger::{info, warn, ReplicaLogger};
@@ -49,7 +51,6 @@ use ic_types::{
 };
 use prost::Message;
 use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc};
-use url::Url;
 
 /// Fetches catch-up packages from peers and local storage.
 ///
@@ -175,24 +176,16 @@ impl CatchUpPackageProvider {
             );
             None
         })?;
-        let url_str = format!("https://[{}]:{}", http.ip_addr, http.port);
-        let url = Url::parse(&url_str)
-            .map_err(|err| {
-                warn!(
-                    self.logger,
-                    "Unable to parse the peer url {}: {:?}", url_str, err
-                );
-            })
-            .ok()?;
+        let uri = format!("https://[{}]:{}", http.ip_addr, http.port);
 
         let protobuf = self
-            .fetch_catch_up_package(node_id, url.clone(), param)
+            .fetch_catch_up_package(node_id, uri.clone(), param)
             .await?;
         let cup = CatchUpPackage::try_from(&protobuf)
             .map_err(|e| {
                 warn!(
                     self.logger,
-                    "Failed to read CUP from peer at url {}: {:?}", url, e
+                    "Failed to read CUP from peer at url {}: {:?}", uri, e
                 )
             })
             .ok()?;
@@ -207,7 +200,7 @@ impl CatchUpPackageProvider {
             .map_err(|e| {
                 warn!(
                     self.logger,
-                    "Failed to verify CUP signature at: {:?} with: {:?}", url, e
+                    "Failed to verify CUP signature at: {:?} with: {:?}", uri, e
                 )
             })
             .ok()?;
@@ -222,10 +215,10 @@ impl CatchUpPackageProvider {
     async fn fetch_catch_up_package(
         &self,
         node_id: &NodeId,
-        url: Url,
+        url: String,
         param: Option<CatchUpPackageParam>,
     ) -> Option<pb::CatchUpPackage> {
-        let url = url.join("/_/catch_up_package").ok()?;
+        let url = url + "/_/catch_up_package";
 
         let body = param
             .and_then(|param| serde_cbor::to_vec(&param).ok())
@@ -236,13 +229,13 @@ impl CatchUpPackageProvider {
             .client_config(*node_id, self.registry.get_latest_version())
             .ok()?;
 
-        let https = hyper_rustls::HttpsConnectorBuilder::new()
+        let https = HttpsConnectorBuilder::new()
             .with_tls_config(client_config)
             .https_only()
             .enable_all_versions()
             .build();
 
-        let client = hyper::Client::builder()
+        let client = Client::builder()
             .http2_only(true)
             .pool_idle_timeout(tokio::time::Duration::from_secs(600))
             .pool_max_idle_per_host(1)
@@ -250,18 +243,18 @@ impl CatchUpPackageProvider {
 
         let res = client
             .request(
-                hyper::Request::builder()
-                    .method(hyper::Method::POST)
+                Request::builder()
+                    .method(Method::POST)
                     .header("content-type", "application/cbor")
-                    .uri(url.to_string())
-                    .body(hyper::Body::from(body))
+                    .uri(url)
+                    .body(Body::from(body))
                     .ok()?,
             )
             .await
             .map_err(|e| warn!(self.logger, "Failed to query CUP endpoint: {:?}", e))
             .ok()?;
 
-        let bytes = hyper::body::to_bytes(res.into_body()).await.ok()?;
+        let bytes = body::to_bytes(res.into_body()).await.ok()?;
 
         if bytes.is_empty() {
             None

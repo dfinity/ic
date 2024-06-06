@@ -12,7 +12,6 @@ use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
 use ic_registry_keys::FirewallRulesScope;
 use ic_sys::fs::write_string_using_tmp_file;
-// use ic_test_utilities::crypto::temp_crypto_config_provider;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::{
     cmp::{max, min},
