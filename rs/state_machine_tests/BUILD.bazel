@@ -96,9 +96,7 @@ DEV_DEPENDENCIES = [
     "//rs/universal_canister/lib",
 ]
 
-MACRO_DEPENDENCIES = [
-    "@crate_index//:serde_derive",
-]
+MACRO_DEPENDENCIES = []
 
 rust_binary(
     name = "ic-test-state-machine",
@@ -131,9 +129,6 @@ rust_ic_test(
     env = {
         "STATE_MACHINE_BIN": "$(rootpath //rs/state_machine_tests:ic-test-state-machine)",
     },
-    proc_macro_deps = [
-        "@crate_index//:serde_derive",
-    ],
     deps = [
         "//rs/crypto/tecdsa",
         "@crate_index//:ciborium",

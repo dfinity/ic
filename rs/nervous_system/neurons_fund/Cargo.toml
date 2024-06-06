@@ -10,8 +10,8 @@ name = "ic_neurons_fund"
 lazy_static = "1.4.0"
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.40"
+serde = { workspace = true }
+serde_json = { workspace = true }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 
 [dev-dependencies]

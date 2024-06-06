@@ -86,6 +86,10 @@ The docker image is then transformed into a bootable "bare-metal" or "virtual-me
 Note that all pre-configuration of the system is performed using docker utilities, and the system is actually also operational as a docker container.
 This means that some development and testing could be done on the docker image itself, but an actual VM image is still required for proper testing.
 
+=== Injection of additional binaries
+
+As a caching optimization, additional IC services, configuration, scripts and binaries are added to the image late in the build process.
+
 == IC-OS Directory Organization
 
 * *components/*: This directory contains scripts and components that are copied to the target IC-OS.

@@ -1166,9 +1166,15 @@ pub enum ExecutionRoundType {
 pub struct RegistryExecutionSettings {
     pub max_number_of_canisters: u64,
     pub provisional_whitelist: ProvisionalWhitelist,
-    pub max_ecdsa_queue_size: u32,
-    pub quadruples_to_create_in_advance: u32,
+    pub chain_key_settings: BTreeMap<MasterPublicKeyId, ChainKeySettings>,
     pub subnet_size: usize,
+}
+
+/// Chain key configuration of execution that comes from the registry.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChainKeySettings {
+    pub max_queue_size: u32,
+    pub pre_signatures_to_create_in_advance: u32,
 }
 
 pub trait Scheduler: Send {

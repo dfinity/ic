@@ -24,7 +24,6 @@ rand = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
-serde_derive = "1.0"
 serde_json = { workspace = true }
 serde_with = { workspace = true }
 
