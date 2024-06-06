@@ -218,7 +218,7 @@ impl std::iter::Iterator for OutputIterator<'_> {
 }
 
 pub trait PeekableOutputIterator: std::iter::Iterator<Item = (QueueId, RequestOrResponse)> {
-    /// Peeks into the iterator and returns a reference to the item that `next`
+    /// Peeks into the iterator and returns a reference to the item that `next()`
     /// would return.
     fn peek(&self) -> Option<(QueueId, &RequestOrResponse)>;
 
