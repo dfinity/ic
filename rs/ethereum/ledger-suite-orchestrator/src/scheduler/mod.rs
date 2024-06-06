@@ -24,7 +24,7 @@ use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
 use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
-use icrc_ledger_types::icrc3::archive::ArchiveInfo;
+use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
 pub use metrics::encode_orchestrator_metrics;
 use metrics::observe_task_duration;
 use num_traits::ToPrimitive;
@@ -32,7 +32,7 @@ use scopeguard::ScopeGuard;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display};
 use std::str::FromStr;
 use std::time::Duration;
@@ -410,7 +410,7 @@ impl UpgradeLedgerSuiteSubtask {
                 log!(
                     INFO,
                     "Upgrading archive canisters {} for {:?} to {}",
-                    display_vec(&archives),
+                    display_iter(&archives),
                     contract,
                     compressed_wasm_hash
                 );
@@ -691,7 +691,7 @@ async fn maybe_top_up<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> 
         "[maybe_top_up]: Managed canisters {}. \
         Cycles management: {cycles_management:?}. \
     Required amount of cycles for orchestrator to be able to top-up: {minimum_orchestrator_cycles}. \
-    Monitored canister minimum target cycles balance {minimum_monitored_canister_cycles}", display_vec(&managed_principals)
+    Monitored canister minimum target cycles balance {minimum_monitored_canister_cycles}", display_iter(&managed_principals)
     );
 
     let mut orchestrator_cycle_balance = match runtime.canister_cycles(runtime.id()).await {
@@ -1106,21 +1106,26 @@ async fn discover_archives<R: CanisterRuntime, F: Fn(&Erc20Token) -> bool>(
         "[discover_archives]: discovering archives for {:?}",
         ledgers
     );
-    let results =
-        future::join_all(ledgers.values().map(|p| call_ledger_archives(*p, runtime))).await;
+    let results = future::join_all(
+        ledgers
+            .values()
+            .map(|p| call_ledger_icrc3_get_archives(*p, runtime)),
+    )
+    .await;
     let mut errors: Vec<(Erc20Token, Principal, DiscoverArchivesError)> = Vec::new();
     for ((token, ledger), result) in ledgers.into_iter().zip(results) {
         match result {
             Ok(archives) => {
-                let archives: Vec<_> = archives.into_iter().map(|a| a.canister_id).collect();
+                //order is not guaranteed by the API of icrc3_get_archives.
+                let archives: BTreeSet<_> = archives.into_iter().map(|a| a.canister_id).collect();
                 log!(
                     DEBUG,
                     "[discover_archives]: archives for ERC-20 token {:?} with ledger {}: {}",
                     token,
                     ledger,
-                    display_vec(&archives)
+                    display_iter(&archives)
                 );
-                mutate_state(|s| s.record_archives(&token, archives));
+                mutate_state(|s| s.record_archives(&token, archives.into_iter().collect()));
             }
             Err(e) => errors.push((token, ledger, e)),
         }
@@ -1138,12 +1143,13 @@ async fn discover_archives<R: CanisterRuntime, F: Fn(&Erc20Token) -> bool>(
     Ok(())
 }
 
-async fn call_ledger_archives<R: CanisterRuntime>(
+async fn call_ledger_icrc3_get_archives<R: CanisterRuntime>(
     ledger_id: Principal,
     runtime: &R,
-) -> Result<Vec<ArchiveInfo>, DiscoverArchivesError> {
+) -> Result<GetArchivesResult, DiscoverArchivesError> {
+    let args = GetArchivesArgs { from: None };
     runtime
-        .call_canister(ledger_id, "archives", ())
+        .call_canister(ledger_id, "icrc3_get_archives", args)
         .await
         .map_err(DiscoverArchivesError::InterCanisterCallError)
 }
@@ -1275,10 +1281,10 @@ impl TryFrom<crate::candid::Erc20Contract> for Erc20Token {
     }
 }
 
-fn display_vec<T: Display>(v: &[T]) -> String {
+fn display_iter<I: Display, T: IntoIterator<Item = I>>(v: T) -> String {
     format!(
         "[{}]",
-        v.iter()
+        v.into_iter()
             .map(|x| format!("{}", x))
             .collect::<Vec<_>>()
             .join(", ")

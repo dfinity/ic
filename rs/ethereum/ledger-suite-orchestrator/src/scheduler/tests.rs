@@ -10,7 +10,7 @@ use crate::state::{
 };
 use crate::storage::{mutate_wasm_store, record_icrc1_ledger_suite_wasms, TASKS};
 use candid::Principal;
-use icrc_ledger_types::icrc3::archive::ArchiveInfo;
+use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
 
 const ORCHESTRATOR_PRINCIPAL: Principal = Principal::from_slice(&[0_u8; 29]);
 const LEDGER_PRINCIPAL: Principal = Principal::from_slice(&[1_u8; 29]);
@@ -568,11 +568,13 @@ mod discover_archives {
         dai, dai_metadata, usdc, usdc_metadata, usdt, usdt_metadata,
     };
     use crate::scheduler::tests::mock::MockCanisterRuntime;
-    use crate::scheduler::tests::{expect_call_canister_archives, init_state, LEDGER_PRINCIPAL};
+    use crate::scheduler::tests::{
+        expect_call_canister_icrc3_get_archives, init_state, LEDGER_PRINCIPAL,
+    };
     use crate::scheduler::{DiscoverArchivesError, Erc20Token, Task, TaskError, TaskExecution};
     use crate::state::{mutate_state, read_state, Ledger};
     use candid::Principal;
-    use icrc_ledger_types::icrc3::archive::ArchiveInfo;
+    use icrc_ledger_types::icrc3::archive::ICRC3ArchiveInfo;
 
     #[tokio::test]
     async fn should_discover_multiple_archives() {
@@ -584,13 +586,13 @@ mod discover_archives {
         });
 
         let first_archive = Principal::from_slice(&[4_u8; 29]);
-        let first_archive_info = ArchiveInfo {
+        let first_archive_info = ICRC3ArchiveInfo {
             canister_id: first_archive,
-            block_range_start: 0_u8.into(),
-            block_range_end: 1_u8.into(),
+            start: 0_u8.into(),
+            end: 1_u8.into(),
         };
         let mut runtime = MockCanisterRuntime::new();
-        expect_call_canister_archives(
+        expect_call_canister_icrc3_get_archives(
             &mut runtime,
             LEDGER_PRINCIPAL,
             Ok(vec![first_archive_info.clone()]),
@@ -606,12 +608,12 @@ mod discover_archives {
         runtime.checkpoint();
 
         let second_archive = Principal::from_slice(&[5_u8; 29]);
-        let second_archive_info = ArchiveInfo {
+        let second_archive_info = ICRC3ArchiveInfo {
             canister_id: second_archive,
-            block_range_start: 2_u8.into(),
-            block_range_end: 3_u8.into(),
+            start: 2_u8.into(),
+            end: 3_u8.into(),
         };
-        expect_call_canister_archives(
+        expect_call_canister_icrc3_get_archives(
             &mut runtime,
             LEDGER_PRINCIPAL,
             Ok(vec![first_archive_info, second_archive_info]),
@@ -646,18 +648,18 @@ mod discover_archives {
             method: "dai error".to_string(),
             reason: Reason::OutOfCycles,
         };
-        expect_call_canister_archives(&mut runtime, dai_ledger, Err(first_error.clone()));
+        expect_call_canister_icrc3_get_archives(&mut runtime, dai_ledger, Err(first_error.clone()));
         let usdc_archive = Principal::from_slice(&[7_u8; 29]);
-        expect_call_canister_archives(
+        expect_call_canister_icrc3_get_archives(
             &mut runtime,
             usdc_ledger,
-            Ok(vec![ArchiveInfo {
+            Ok(vec![ICRC3ArchiveInfo {
                 canister_id: usdc_archive,
-                block_range_start: 0_u8.into(),
-                block_range_end: 1_u8.into(),
+                start: 0_u8.into(),
+                end: 1_u8.into(),
             }]),
         );
-        expect_call_canister_archives(
+        expect_call_canister_icrc3_get_archives(
             &mut runtime,
             usdt_ledger,
             Err(CallError {
@@ -690,9 +692,9 @@ mod upgrade_ledger_suite {
     use crate::management::CallError;
     use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
     use crate::scheduler::tests::{
-        execute_now, expect_call_canister_archives, init_state, mock::MockCanisterRuntime,
-        read_archive_wasm_hash, read_index_wasm_hash, read_ledger_wasm_hash, task_queue_from_state,
-        INDEX_PRINCIPAL, LEDGER_PRINCIPAL,
+        execute_now, expect_call_canister_icrc3_get_archives, init_state,
+        mock::MockCanisterRuntime, read_archive_wasm_hash, read_index_wasm_hash,
+        read_ledger_wasm_hash, task_queue_from_state, INDEX_PRINCIPAL, LEDGER_PRINCIPAL,
     };
     use crate::scheduler::UpgradeLedgerSuiteError::{CanisterNotReady, Erc20TokenNotFound};
     use crate::scheduler::{
@@ -704,7 +706,7 @@ mod upgrade_ledger_suite {
         INDEX_BYTECODE, LEDGER_BYTECODE,
     };
     use candid::Principal;
-    use icrc_ledger_types::icrc3::archive::ArchiveInfo;
+    use icrc_ledger_types::icrc3::archive::ICRC3ArchiveInfo;
     use UpgradeLedgerSuiteSubtask::{
         DiscoverArchives, UpgradeArchives, UpgradeIndex, UpgradeLedger,
     };
@@ -1105,18 +1107,18 @@ mod upgrade_ledger_suite {
         runtime.checkpoint();
 
         let first_archive = Principal::from_slice(&[4_u8; 29]);
-        let first_archive_info = ArchiveInfo {
+        let first_archive_info = ICRC3ArchiveInfo {
             canister_id: first_archive,
-            block_range_start: 0_u8.into(),
-            block_range_end: 1_u8.into(),
+            start: 0_u8.into(),
+            end: 1_u8.into(),
         };
         let second_archive = Principal::from_slice(&[5_u8; 29]);
-        let second_archive_info = ArchiveInfo {
+        let second_archive_info = ICRC3ArchiveInfo {
             canister_id: second_archive,
-            block_range_start: 2_u8.into(),
-            block_range_end: 3_u8.into(),
+            start: 2_u8.into(),
+            end: 3_u8.into(),
         };
-        expect_call_canister_archives(
+        expect_call_canister_icrc3_get_archives(
             &mut runtime,
             LEDGER_PRINCIPAL,
             Ok(vec![first_archive_info, second_archive_info]),
@@ -1472,15 +1474,17 @@ fn expect_call_canister_add_ckerc20_token(
         .return_const(mocked_result);
 }
 
-fn expect_call_canister_archives(
+fn expect_call_canister_icrc3_get_archives(
     runtime: &mut MockCanisterRuntime,
     expected_canister_id: Principal,
-    mocked_result: Result<Vec<ArchiveInfo>, CallError>,
+    mocked_result: Result<GetArchivesResult, CallError>,
 ) {
     runtime
         .expect_call_canister()
-        .withf(move |&canister_id, method, _args: &()| {
-            canister_id == expected_canister_id && method == "archives"
+        .withf(move |&canister_id, method, args: &GetArchivesArgs| {
+            canister_id == expected_canister_id
+                && method == "icrc3_get_archives"
+                && args == &GetArchivesArgs { from: None }
         })
         .times(1)
         .return_const(mocked_result);
