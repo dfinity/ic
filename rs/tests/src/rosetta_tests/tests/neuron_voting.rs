@@ -28,11 +28,11 @@ pub fn test(env: TestEnv) {
     let _logger = env.logger();
 
     let mut ledger_balances = HashMap::new();
-    let one_year_from_now = 60 * 60 * 24 * 365
-        + std::time::SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+    let now = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let one_year_from_now = 60 * 60 * 24 * 365 + now;
 
     //We need to know the identity of the agent before we create the neurons.
     //The controller of the neuron has to be the agent principal otherwise we cannot make proposals and vote on them.
@@ -44,6 +44,7 @@ pub fn test(env: TestEnv) {
     let mut neurons = TestNeurons::new(2000, &mut ledger_balances);
     let neuron_setup = |neuron: &mut Neuron| {
         neuron.dissolve_state = Some(DissolveState::DissolveDelaySeconds(one_year_from_now));
+        neuron.aging_since_timestamp_seconds = now;
         neuron.maturity_e8s_equivalent = 420_000_000;
         neuron.controller = Some(agent_principal.into());
         neuron.account =
@@ -56,6 +57,7 @@ pub fn test(env: TestEnv) {
     //Setup for non proposal making entities
     let neuron_setup = |neuron: &mut Neuron| {
         neuron.dissolve_state = Some(DissolveState::DissolveDelaySeconds(one_year_from_now));
+        neuron.aging_since_timestamp_seconds = now;
         neuron.maturity_e8s_equivalent = 420_000_000;
     };
     let neuron2 = neurons.create(neuron_setup);
