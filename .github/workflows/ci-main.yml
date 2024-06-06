@@ -427,7 +427,6 @@ jobs:
         uses: actions/checkout@v4
       - name: Filter Rust Files [*.{rs,toml,lock}]
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
         id: filter
         with:
           filters: |
@@ -452,8 +451,8 @@ jobs:
       labels: dind-runner-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
-    if: ${{ vars.RUN_CI == 'true' }}
     timeout-minutes: 60
+    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Before script
         if: always()
@@ -468,7 +467,6 @@ jobs:
         uses: actions/checkout@v4
       - name: Filter Rust Files [*.{rs,toml,lock}]
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
         id: filter
         with:
           filters: |
