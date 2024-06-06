@@ -389,7 +389,6 @@ rust_ic_test(
     crate_root = "src/upgrade_canisters_with_golden_nns_state.rs",
     data = DEV_DATA,
     env = DEV_ENV,
-    env_inherit = ["SSH_AUTH_SOCK"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
