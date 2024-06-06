@@ -258,6 +258,7 @@ impl CatchUpPackageProvider {
                     .ok()?,
             )
             .await
+            .map_err(|e| warn!(self.logger, "Failed to query CUP endpoint: {:?}", e))
             .ok()?;
 
         let bytes = hyper::body::to_bytes(res.into_body()).await.ok()?;
@@ -267,9 +268,9 @@ impl CatchUpPackageProvider {
         } else {
             pb::CatchUpPackage::decode(&bytes[..])
                 .map_err(|e| {
-                    format!(
-                        "Failed to deserialize CUP from protobuf, got: {:?} - error {:?}",
-                        bytes, e
+                    warn!(
+                        self.logger,
+                        "Failed to deserialize CUP from protobuf, got: {:?} - error {:?}", bytes, e
                     )
                 })
                 .ok()
