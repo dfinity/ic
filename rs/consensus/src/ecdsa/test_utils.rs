@@ -17,10 +17,12 @@ use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId};
+use ic_management_canister_types::{
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    EcdsaDealingsContext, SignWithEcdsaContext,
+    IDkgDealingsContext, SignWithEcdsaContext,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
@@ -32,15 +34,15 @@ use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::certification::Certification;
 use ic_types::consensus::idkg::common::PreSignatureRef;
-use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::consensus::idkg::{
     self,
     ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
     EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript,
-    EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaReshareRequest,
-    EcdsaSigShare, IDkgTranscriptAttributes, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef,
-    KeyTranscriptCreation, MaskedTranscript, PreSigId, RequestId, ReshareOfMaskedParams,
-    TranscriptAttributes, TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
+    EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaSigShare,
+    HasMasterPublicKeyId, IDkgReshareRequest, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
+    IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript, PreSigId, RequestId,
+    ReshareOfMaskedParams, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
+    UnmaskedTranscript,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin, IDkgOpening,
@@ -66,14 +68,11 @@ use strum::IntoEnumIterator;
 use super::utils::{algorithm_for_key_id, get_context_request_id};
 
 pub(crate) fn dealings_context_from_reshare_request(
-    request: idkg::EcdsaReshareRequest,
-) -> EcdsaDealingsContext {
-    let MasterPublicKeyId::Ecdsa(key_id) = request.key_id() else {
-        panic!("Expected ECDSA key Id");
-    };
-    EcdsaDealingsContext {
+    request: idkg::IDkgReshareRequest,
+) -> IDkgDealingsContext {
+    IDkgDealingsContext {
         request: RequestBuilder::new().build(),
-        key_id,
+        key_id: request.key_id(),
         nodes: request.receiving_node_ids.into_iter().collect(),
         registry_version: request.registry_version,
         time: time::UNIX_EPOCH,
@@ -1531,14 +1530,17 @@ pub(crate) fn create_reshare_request(
     key_id: MasterPublicKeyId,
     num_nodes: u64,
     registry_version: u64,
-) -> EcdsaReshareRequest {
-    EcdsaReshareRequest {
+) -> IDkgReshareRequest {
+    IDkgReshareRequest {
         key_id: if let MasterPublicKeyId::Ecdsa(ecdsa_key_id) = key_id.clone() {
             Some(ecdsa_key_id)
         } else {
             // Schnorr key reshare requests still receive a dummy ecdsa key ID
             // until we can set the field to None on mainnet.
-            Some(fake_ecdsa_key_id())
+            Some(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("fake_dummy_key"),
+            })
         },
         master_key_id: key_id,
         receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),

@@ -5,7 +5,7 @@ use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::{QuadrupleInCreation, ThresholdEcdsaSigInputsRef};
 use crate::consensus::idkg::{
     CompletedReshareRequest, CompletedSignature, EcdsaKeyTranscript, EcdsaPayload,
-    EcdsaReshareRequest, EcdsaUIDGenerator, HasMasterPublicKeyId, KeyTranscriptCreation,
+    EcdsaUIDGenerator, HasMasterPublicKeyId, IDkgReshareRequest, KeyTranscriptCreation,
     MaskedTranscript, PreSigId, PseudoRandomId, RandomTranscriptParams,
     RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
     UnmaskedTimesMaskedParams, UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
@@ -728,17 +728,17 @@ impl ExhaustiveSet for QuadrupleInCreation {
 
 #[derive(Clone)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct DerivedEcdsaReshareRequest {
+pub struct DerivedIDkgReshareRequest {
     pub key_id: EcdsaKeyId,
     pub receiving_node_ids: Vec<NodeId>,
     pub registry_version: RegistryVersion,
 }
 
-impl ExhaustiveSet for EcdsaReshareRequest {
+impl ExhaustiveSet for IDkgReshareRequest {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        DerivedEcdsaReshareRequest::exhaustive_set(rng)
+        DerivedIDkgReshareRequest::exhaustive_set(rng)
             .into_iter()
-            .map(|r| EcdsaReshareRequest {
+            .map(|r| IDkgReshareRequest {
                 key_id: Some(r.key_id.clone()),
                 master_key_id: MasterPublicKeyId::Ecdsa(r.key_id),
                 receiving_node_ids: r.receiving_node_ids,
@@ -756,8 +756,8 @@ pub struct DerivedEcdsaPayload {
     pub pre_signatures_in_creation: BTreeMap<PreSigId, PreSignatureInCreation>,
     pub uid_generator: EcdsaUIDGenerator,
     pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
-    pub ongoing_xnet_reshares: BTreeMap<EcdsaReshareRequest, ReshareOfUnmaskedParams>,
-    pub xnet_reshare_agreements: BTreeMap<EcdsaReshareRequest, CompletedReshareRequest>,
+    pub ongoing_xnet_reshares: BTreeMap<IDkgReshareRequest, ReshareOfUnmaskedParams>,
+    pub xnet_reshare_agreements: BTreeMap<IDkgReshareRequest, CompletedReshareRequest>,
     pub key_transcripts: BTreeMap<MasterPublicKeyId, EcdsaKeyTranscript>,
 }
 
@@ -872,9 +872,9 @@ impl HasId<IDkgTranscriptId> for IDkgTranscript {
         Some(self.transcript_id)
     }
 }
-impl HasId<EcdsaReshareRequest> for ReshareOfUnmaskedParams {}
+impl HasId<IDkgReshareRequest> for ReshareOfUnmaskedParams {}
 impl HasId<PseudoRandomId> for CompletedSignature {}
-impl HasId<EcdsaReshareRequest> for CompletedReshareRequest {}
+impl HasId<IDkgReshareRequest> for CompletedReshareRequest {}
 impl HasId<NodeIndex> for BatchSignedIDkgDealing {}
 impl HasId<SubnetId> for CertifiedStreamSlice {}
 impl HasId<NiDkgTag> for NiDkgTranscript {}

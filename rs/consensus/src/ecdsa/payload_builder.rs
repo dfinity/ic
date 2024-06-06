@@ -537,16 +537,8 @@ pub(crate) fn create_data_payload_helper(
 
     let receivers = get_subnet_nodes(registry_client, next_interval_registry_version, subnet_id)?;
     let state = state_manager.get_state_at(context.certified_height)?;
-    let all_signing_requests = &state
-        .get_ref()
-        .metadata
-        .subnet_call_context_manager
-        .sign_with_ecdsa_contexts;
-    let ecdsa_dealings_contexts = &state
-        .get_ref()
-        .metadata
-        .subnet_call_context_manager
-        .ecdsa_dealings_contexts;
+    let all_signing_requests = state.get_ref().sign_with_ecdsa_contexts();
+    let idkg_dealings_contexts = state.get_ref().idkg_dealings_contexts();
 
     let certified_height = if context.certified_height >= summary_block.height() {
         CertifiedHeight::ReachedSummaryHeight
@@ -564,7 +556,7 @@ pub(crate) fn create_data_payload_helper(
         certified_height,
         &receivers,
         all_signing_requests,
-        ecdsa_dealings_contexts,
+        &idkg_dealings_contexts,
         block_reader,
         transcript_builder,
         signature_builder,
@@ -585,7 +577,7 @@ pub(crate) fn create_data_payload_helper_2(
     certified_height: CertifiedHeight,
     receivers: &[NodeId],
     all_signing_requests: &BTreeMap<CallbackId, SignWithEcdsaContext>,
-    ecdsa_dealings_contexts: &BTreeMap<CallbackId, EcdsaDealingsContext>,
+    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
     block_reader: &dyn EcdsaBlockReader,
     transcript_builder: &dyn EcdsaTranscriptBuilder,
     signature_builder: &dyn EcdsaSignatureBuilder,
@@ -671,14 +663,14 @@ pub(crate) fn create_data_payload_helper_2(
 
     resharing::update_completed_reshare_requests(
         ecdsa_payload,
-        ecdsa_dealings_contexts,
+        idkg_dealings_contexts,
         block_reader,
         transcript_builder,
         log,
     );
     resharing::initiate_reshare_requests(
         ecdsa_payload,
-        resharing::get_reshare_requests(ecdsa_dealings_contexts),
+        resharing::get_reshare_requests(idkg_dealings_contexts),
     );
     Ok(())
 }
