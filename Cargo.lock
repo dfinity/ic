@@ -962,21 +962,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bazelifier"
-version = "0.9.0"
-dependencies = [
- "askama",
- "clap 3.2.25",
- "eyre",
- "lazy_static",
- "maplit",
- "pathdiff",
- "semver",
- "serde",
- "toml",
-]
-
-[[package]]
 name = "bech32"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
