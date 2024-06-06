@@ -98,16 +98,6 @@ anchors:
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
-  cargo-filters: &cargo-filters
-    uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-    name: Filter Rust Files [*.{rs,toml,lock}]
-    id: filter
-    with:
-      filters: |
-        cargo:
-          - "**/*.rs"
-          - "**/*.toml"
-          - "**/*.lock"
   python-setup: &python-setup
     name: Set up Python
     uses: actions/setup-python@v2
@@ -372,7 +362,15 @@ jobs:
     steps:
       - <<: *before-script
       - <<: *checkout
-      - <<: *cargo-filters
+      - name: Filter Rust Files [*.{rs,toml,lock}]
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            cargo:
+              - "**/*.rs"
+              - "**/*.toml"
+              - "**/*.lock"
       - name: Run Cargo Clippy Linux
         id: cargo-clippy-linux
         if: |
@@ -388,11 +386,18 @@ jobs:
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     <<: *dind-large-setup
-    timeout-minutes: 60
     steps:
       - <<: *before-script
       - <<: *checkout
-      - <<: *cargo-filters
+      - name: Filter Rust Files [*.{rs,toml,lock}]
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            cargo:
+              - "**/*.rs"
+              - "**/*.toml"
+              - "**/*.lock"
       - name: Run Cargo Build Release Linux
         id: cargo-build-release-linux
         if: |
