@@ -1830,6 +1830,40 @@ impl CanisterManager {
         }
 
         let new_snapshot_size = canister.snapshot_memory_usage();
+        let current_memory_usage = canister.memory_usage() + new_snapshot_size;
+        let message_memory = canister.message_memory_usage();
+        let compute_allocation = canister.compute_allocation();
+        let reveal_top_up = canister.controllers().contains(&sender);
+        let instructions = NumInstructions::new(0);
+
+        // Charge for the take snapshot of the canister.
+        let prepaid_cycles = self
+            .cycles_account_manager
+            .prepay_execution_cycles(
+                &mut canister.system_state,
+                current_memory_usage,
+                message_memory,
+                compute_allocation,
+                instructions,
+                subnet_size,
+                reveal_top_up,
+            )
+            .map_err(|err| CanisterManagerError::CanisterSnapshotNotEnoughCycles(err))?;
+
+        // To keep the invariant that `prepay_execution_cycles` is always paired
+        // with `refund_unused_execution_cycles` we refund zero immediately.
+        self.cycles_account_manager.refund_unused_execution_cycles(
+            &mut canister.system_state,
+            NumInstructions::from(0),
+            instructions,
+            prepaid_cycles,
+            // This counter is incremented if we refund more
+            // instructions than initially charged, which is impossible
+            // here.
+            &IntCounter::new("no_op", "no_op").unwrap(),
+            subnet_size,
+            &self.log,
+        );
 
         {
             // Run the following checks on memory usage and return an error
@@ -2257,6 +2291,7 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         limit: usize,
     },
+    CanisterSnapshotNotEnoughCycles(CanisterOutOfCyclesError),
     LongExecutionAlreadyInProgress {
         canister_id: CanisterId,
     },
@@ -2305,6 +2340,7 @@ impl AsErrorHelp for CanisterManagerError {
             | CanisterManagerError::CanisterSnapshotInvalidOwnership { .. }
             | CanisterManagerError::CanisterSnapshotExecutionStateNotFound { .. }
             | CanisterManagerError::CanisterSnapshotLimitExceeded { .. }
+            | CanisterManagerError::CanisterSnapshotNotEnoughCycles { .. }
             | CanisterManagerError::LongExecutionAlreadyInProgress { .. }
             | CanisterManagerError::MissingUpgradeOptionError { .. }
             | CanisterManagerError::InvalidUpgradeOptionError { .. } => ErrorHelp::UserError {
@@ -2602,6 +2638,10 @@ impl From<CanisterManagerError> for UserError {
                     format!(
                         "Canister {} has reached the maximum number of snapshots allowed: {}.{additional_help}", canister_id, limit,
                     )
+            CanisterSnapshotNotEnoughCycles(err) => {
+                Self::new(
+                ErrorCode::CanisterOutOfCycles,
+                    format!("Canister snapshotting failed with `{}`{additional_help}", err),
                 )
             }
             LongExecutionAlreadyInProgress { canister_id } => {
