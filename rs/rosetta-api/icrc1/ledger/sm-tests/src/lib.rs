@@ -44,6 +44,9 @@ use std::{
     collections::{BTreeMap, HashMap},
     time::{Duration, SystemTime},
 };
+
+pub mod metrics;
+
 pub const FEE: u64 = 10_000;
 pub const DECIMAL_PLACES: u8 = 8;
 pub const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
@@ -3342,6 +3345,7 @@ where
     fn check_consent_message(
         sender: Option<Account>,
         receiver: Option<Account>,
+        spender: Option<Account>,
         memo: Option<Memo>,
         created_at_time: Option<u64>,
         amount: Option<Nat>,
@@ -3368,6 +3372,13 @@ where
                 message
             );
         }
+        if let Some(spender) = spender {
+            assert!(
+                message.contains(&spender.to_string()),
+                "Message: {}",
+                message
+            );
+        }
         if let Some(receiver) = receiver {
             assert!(
                 message.contains(&receiver.to_string()),
@@ -3377,14 +3388,14 @@ where
         }
         if let Some(memo) = memo {
             assert!(
-                message.contains(&format!("{:?}", Some(memo.clone())).replace(' ', "")),
+                message.contains(&format!("{}", String::from_utf8_lossy(&memo.0))),
                 "Message: {}",
                 message
             );
         }
         if let Some(created_at_time) = created_at_time {
             assert!(
-                message.contains(&format!("{:?}", Some(created_at_time))),
+                message.contains(&format!("{}", created_at_time)),
                 "Message: {} ",
                 message
             );
@@ -3405,7 +3416,7 @@ where
         }
         if let Some(fee_set) = fee_set {
             assert!(
-                message.contains(&format!("{:?}", Some(fee_set))),
+                message.contains(&format!("{}", fee_set)),
                 "Message: {}",
                 message
             );
@@ -3415,7 +3426,7 @@ where
         }
         if let Some(expires_at) = expires_at {
             assert!(
-                message.contains(&format!("{:?}", Some(expires_at))),
+                message.contains(&format!("{}", expires_at)),
                 "Message: {}",
                 message
             );
@@ -3438,6 +3449,10 @@ where
     let sender = Account {
         owner: caller.0,
         subaccount: Some([1; 32]),
+    };
+    let spender = Account {
+        owner: PrincipalId::new_user_test_id(2).0,
+        subaccount: Some([3; 32]),
     };
     let fee = Nat::from(10_000u64);
     let now = system_time_to_nanos(env.time());
@@ -3472,6 +3487,7 @@ where
     check_consent_message(
         Some(sender),
         Some(receiver),
+        None,
         transfer_args.memo.clone(),
         transfer_args.created_at_time,
         Some(transfer_args.amount.clone()),
@@ -3516,6 +3532,7 @@ where
     check_consent_message(
         Some(sender),
         Some(receiver),
+        None,
         transfer_args.memo.clone(),
         None,
         Some(transfer_args.amount.clone()),
@@ -3579,6 +3596,7 @@ where
         Some(receiver),
         None,
         None,
+        None,
         Some(transfer_args.amount),
         Some(Nat::from(FEE)),
         None,
@@ -3589,7 +3607,7 @@ where
     );
 
     let approve_args = ApproveArgs {
-        spender: receiver,
+        spender,
         amount: Nat::from(1_000_000u32),
         expires_at: Some(now + 1),
         from_subaccount: sender.subaccount,
@@ -3611,6 +3629,7 @@ where
     let consent_info = icrc21_consent_message(&env, canister_id, caller.0, args).unwrap();
     check_consent_message(
         Some(sender),
+        None,
         Some(approve_args.spender),
         approve_args.memo.clone(),
         approve_args.created_at_time,
@@ -3639,10 +3658,75 @@ where
     let consent_info = icrc21_consent_message(&env, canister_id, caller.0, args).unwrap();
     check_consent_message(
         Some(sender),
+        None,
         Some(approve_args.spender),
         approve_args.memo,
         None,
         Some(approve_args.amount.clone()),
+        Some(Nat::from(FEE)),
+        None,
+        Some(TOKEN_SYMBOL),
+        consent_info.consent_message,
+        None,
+        None,
+    );
+
+    let transfer_from_args = TransferFromArgs {
+        from: sender,
+        to: receiver,
+        amount: Nat::from(1_000_000u32),
+        spender_subaccount: spender.subaccount,
+        created_at_time: Some(now),
+        fee: Some(Nat::from(10u32)),
+        memo: Some(Memo::from(b"test_bytes".to_vec())),
+    };
+    let args = ConsentMessageRequest {
+        method: "icrc2_transfer_from".to_owned(),
+        arg: Encode!(&transfer_from_args.clone()).unwrap(),
+        user_preferences: ConsentMessageSpec {
+            metadata: ConsentMessageMetadata {
+                language: "en".to_string(),
+            },
+            device_spec: Some(DisplayMessageType::GenericDisplay),
+        },
+    };
+    let consent_info = icrc21_consent_message(&env, canister_id, spender.owner, args).unwrap();
+    check_consent_message(
+        Some(transfer_from_args.from),
+        Some(transfer_from_args.to),
+        Some(spender),
+        transfer_from_args.memo.clone(),
+        transfer_from_args.created_at_time,
+        Some(transfer_from_args.amount.clone()),
+        Some(Nat::from(FEE)),
+        transfer_from_args.fee.clone(),
+        Some(TOKEN_SYMBOL),
+        consent_info.consent_message,
+        None,
+        None,
+    );
+
+    let args = ConsentMessageRequest {
+        method: "icrc2_transfer_from".to_owned(),
+        arg: Encode!(&transfer_from_args).unwrap(),
+        user_preferences: ConsentMessageSpec {
+            metadata: ConsentMessageMetadata {
+                language: "en".to_string(),
+            },
+            device_spec: Some(DisplayMessageType::LineDisplay {
+                characters_per_line: 10,
+                lines_per_page: 3,
+            }),
+        },
+    };
+    let consent_info = icrc21_consent_message(&env, canister_id, spender.owner, args).unwrap();
+    check_consent_message(
+        Some(transfer_from_args.from),
+        Some(transfer_from_args.to),
+        Some(spender),
+        transfer_from_args.memo,
+        None,
+        Some(transfer_from_args.amount.clone()),
         Some(Nat::from(FEE)),
         None,
         Some(TOKEN_SYMBOL),

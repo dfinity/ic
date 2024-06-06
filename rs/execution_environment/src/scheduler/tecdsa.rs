@@ -41,9 +41,14 @@ pub(crate) fn update_sign_with_ecdsa_contexts(
         }
     }
 
-    // Match up to the maximum number of contexts per key ID to delivered quadruples.
-    let max_ongoing_signatures = registry_settings.quadruples_to_create_in_advance as usize;
     for (key_id, pre_sig_ids) in idkg_pre_signature_ids {
+        // Match up to the maximum number of contexts per key ID to delivered quadruples.
+        let max_ongoing_signatures = registry_settings
+            .chain_key_settings
+            .get(&key_id)
+            .map(|setting| setting.pre_signatures_to_create_in_advance)
+            .unwrap_or_default() as usize;
+
         metrics
             .ecdsa_delivered_quadruples
             .with_label_values(&[&key_id.to_string()])

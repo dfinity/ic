@@ -29,9 +29,13 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
-    canister_state::system_state::{
-        wasm_chunk_store::{self, WasmChunkStore},
-        CyclesUseCase,
+    canister_state::{
+        execution_state::Memory,
+        system_state::{
+            wasm_chunk_store::{self, WasmChunkStore},
+            CyclesUseCase,
+        },
+        NextExecution,
     },
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::PageAllocatorFileDescriptor,
@@ -112,6 +116,7 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) own_subnet_id: SubnetId,
     pub(crate) own_subnet_type: SubnetType,
     pub(crate) max_controllers: usize,
+    pub(crate) max_canister_memory_size: NumBytes,
     pub(crate) rate_limiting_of_instructions: FlagStatus,
     pub(crate) wasm_chunk_store: FlagStatus,
     rate_limiting_of_heap_delta: FlagStatus,
@@ -129,6 +134,7 @@ impl CanisterMgrConfig {
         own_subnet_type: SubnetType,
         max_controllers: usize,
         compute_capacity: usize,
+        max_canister_memory_size: NumBytes,
         rate_limiting_of_instructions: FlagStatus,
         allocatable_capacity_in_percent: usize,
         wasm_chunk_store: FlagStatus,
@@ -145,6 +151,7 @@ impl CanisterMgrConfig {
             max_controllers,
             compute_capacity: (compute_capacity * allocatable_capacity_in_percent.min(100) / 100)
                 as u64,
+            max_canister_memory_size,
             rate_limiting_of_instructions,
             wasm_chunk_store,
             rate_limiting_of_heap_delta,
@@ -1821,7 +1828,7 @@ impl CanisterManager {
                     });
                 }
                 Some(snapshot) => {
-                    // Verify the provided replace snapshot belongs to this canister.
+                    // Verify the provided replacement snapshot belongs to this canister.
                     if snapshot.canister_id() != canister.canister_id() {
                         return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
                             canister_id: canister.canister_id(),
@@ -1945,6 +1952,154 @@ impl CanisterManager {
             state.time().as_nanos_since_unix_epoch(),
             new_snapshot_size,
         ))
+    }
+
+    pub(crate) fn load_canister_snapshot(
+        &self,
+        sender: PrincipalId,
+        canister: &CanisterState,
+        snapshot_id: SnapshotId,
+        state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
+        origin: CanisterChangeOrigin,
+        long_execution_already_in_progress: &IntCounter,
+    ) -> (NumInstructions, Result<CanisterState, CanisterManagerError>) {
+        let canister_id = canister.canister_id();
+        // Check sender is a controller.
+        if let Err(err) = validate_controller(canister, &sender) {
+            return (NumInstructions::new(0), Err(err));
+        }
+
+        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
+            && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
+        {
+            return (
+                NumInstructions::new(0),
+                Err(CanisterManagerError::CanisterHeapDeltaRateLimited {
+                    canister_id,
+                    value: canister.scheduler_state.heap_delta_debit,
+                    limit: self.config.heap_delta_rate_limit,
+                }),
+            );
+        }
+
+        // Check that snapshot ID exists.
+        let snapshot: &Arc<CanisterSnapshot> = match state.canister_snapshots.get(snapshot_id) {
+            None => {
+                // If not found, the operation fails due to invalid parameters.
+                return (
+                    NumInstructions::new(0),
+                    Err(CanisterManagerError::CanisterSnapshotNotFound {
+                        canister_id,
+                        snapshot_id,
+                    }),
+                );
+            }
+            Some(snapshot) => {
+                // Verify the provided snapshot id belongs to this canister.
+                if snapshot.canister_id() != canister_id {
+                    return (
+                        NumInstructions::new(0),
+                        Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                            canister_id,
+                            snapshot_id,
+                        }),
+                    );
+                }
+                snapshot
+            }
+        };
+
+        // Check the precondition:
+        // Unable to start executing a `load_canister_snapshot`
+        // if there is already a long-running message in progress for the specified canister.
+        match canister.next_execution() {
+            NextExecution::None | NextExecution::StartNew => {}
+            NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
+                long_execution_already_in_progress.inc();
+                error!(
+                    self.log,
+                    "[EXC-BUG] Attempted to start a new `load_canister_snapshot` execution while the previous execution is still in progress for {}.", canister_id
+                );
+                return (
+                    NumInstructions::new(0),
+                    Err(CanisterManagerError::LongExecutionAlreadyInProgress { canister_id }),
+                );
+            }
+        }
+
+        let (_old_execution_state, mut system_state, scheduler_state) =
+            canister.clone().into_parts();
+
+        let (instructions_used, new_execution_state) = match snapshot.execution_snapshot() {
+            Some(execution_snapshot) => {
+                let new_wasm_hash = WasmHash::from(&execution_snapshot.wasm_binary);
+                let compilation_cost_handling = if state
+                    .metadata
+                    .expected_compiled_wasms
+                    .contains(&new_wasm_hash)
+                {
+                    CompilationCostHandling::CountReducedAmount
+                } else {
+                    CompilationCostHandling::CountFullAmount
+                };
+
+                let (instructions_used, new_execution_state) =
+                    self.hypervisor.create_execution_state(
+                        execution_snapshot.wasm_binary.clone(),
+                        "NOT_USED".into(),
+                        canister_id,
+                        round_limits,
+                        compilation_cost_handling,
+                    );
+
+                let mut new_execution_state = match new_execution_state {
+                    Ok(execution_state) => execution_state,
+                    Err(err) => {
+                        let err = CanisterManagerError::from((canister_id, err));
+                        return (instructions_used, Err(err));
+                    }
+                };
+
+                new_execution_state.stable_memory = Memory::from(&execution_snapshot.stable_memory);
+                new_execution_state.wasm_memory = Memory::from(&execution_snapshot.wasm_memory);
+                (instructions_used, Some(new_execution_state))
+            }
+            None => (NumInstructions::new(0), None),
+        };
+
+        system_state.wasm_chunk_store = snapshot.chunk_store().clone();
+        system_state.certified_data = snapshot.certified_data().clone();
+
+        let mut new_canister =
+            CanisterState::new(system_state, new_execution_state, scheduler_state);
+        let new_memory_usage = new_canister.memory_usage();
+        let memory_allocation_given = canister.memory_limit(self.config.max_canister_memory_size);
+        if new_memory_usage > memory_allocation_given {
+            return (
+                instructions_used,
+                Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
+                    memory_allocation_given: canister.memory_allocation(),
+                    memory_usage_needed: new_memory_usage,
+                }),
+            );
+        }
+
+        // Increment canister version.
+        new_canister.system_state.canister_version += 1;
+        new_canister.system_state.add_canister_change(
+            state.time(),
+            origin,
+            CanisterChangeDetails::load_snapshot(
+                new_canister.system_state.canister_version,
+                snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
+            ),
+        );
+        state
+            .canister_snapshots
+            .add_restore_operation(canister_id, snapshot_id);
+
+        (instructions_used, Ok(new_canister))
     }
 
     /// Returns the canister snapshots list, or
@@ -2104,6 +2259,9 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         snapshot_id: SnapshotId,
     },
+    LongExecutionAlreadyInProgress {
+        canister_id: CanisterId,
+    },
     MissingUpgradeOptionError {
         message: String,
     },
@@ -2146,6 +2304,7 @@ impl AsErrorHelp for CanisterManagerError {
             | CanisterManagerError::CanisterSnapshotNotFound { .. }
             | CanisterManagerError::CanisterHeapDeltaRateLimited { .. }
             | CanisterManagerError::CanisterSnapshotInvalidOwnership { .. }
+            | CanisterManagerError::LongExecutionAlreadyInProgress { .. }
             | CanisterManagerError::MissingUpgradeOptionError { .. }
             | CanisterManagerError::InvalidUpgradeOptionError { .. } => ErrorHelp::UserError {
                 suggestion: "".to_string(),
@@ -2415,6 +2574,14 @@ impl From<CanisterManagerError> for UserError {
                     ErrorCode::CanisterRejectedMessage,
                     format!(
                         "The snapshot {} does not belong to canister {}{additional_help}", snapshot_id, canister_id,
+                    )
+                )
+            }
+            LongExecutionAlreadyInProgress { canister_id } => {
+                Self::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "The canister {} already executes a long-running message.", canister_id, 
                     )
                 )
             }

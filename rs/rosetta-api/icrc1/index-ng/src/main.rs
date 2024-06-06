@@ -14,6 +14,7 @@ use ic_icrc1_index_ng::{
     GetAccountTransactionsResult, GetBlocksMethod, IndexArg, InitArg, ListSubaccountsArgs, Log,
     LogEntry, Status, TransactionWithId, UpgradeArg, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
+use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
@@ -1114,6 +1115,11 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
         "index_stable_memory_bytes",
         (ic_cdk::api::stable::stable64_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister.",
+    )?;
+    w.encode_gauge(
+        "index_total_memory_bytes",
+        total_memory_size_bytes() as f64,
+        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
     )?;
 
     let cycle_balance = ic_cdk::api::canister_balance128() as f64;

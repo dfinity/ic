@@ -17,7 +17,10 @@ use ic_protobuf::registry::{
         ChainKeySigningSubnetList, EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as pbEcdsaKeyId,
         EcdsaSigningSubnetList,
     },
-    subnet::v1::{CatchUpPackageContents, EcdsaConfig, SubnetListRecord, SubnetRecord},
+    subnet::v1::{
+        CatchUpPackageContents, ChainKeyConfig, EcdsaConfig, KeyConfig, SubnetListRecord,
+        SubnetRecord,
+    },
 };
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
@@ -262,10 +265,26 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                 .unwrap()
                 .unwrap(),
         );
+        // TODO(NNS1-3006): Remove this once replica no longer needs it
         subnet_record.ecdsa_config = Some(EcdsaConfig {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![(&key_1).into()],
             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        });
+        subnet_record.chain_key_config = Some(ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: Some(ic_protobuf::registry::crypto::v1::MasterPublicKeyId {
+                    key_id: Some(
+                        ic_protobuf::registry::crypto::v1::master_public_key_id::KeyId::Ecdsa(
+                            (&key_1).into(),
+                        ),
+                    ),
+                }),
+                pre_signatures_to_create_in_advance: Some(100),
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         });

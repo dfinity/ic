@@ -53,9 +53,7 @@ DEV_DEPENDENCIES = [
     ],
 })
 
-MACRO_DEV_DEPENDENCIES = [
-    "@crate_index//:serde_derive",
-]
+MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 

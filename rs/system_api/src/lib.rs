@@ -110,6 +110,9 @@ pub struct InstructionLimits {
     /// more instructions than this limit.
     message: NumInstructions,
 
+    /// The instruction limit to report in case of an error.
+    limit_to_report: NumInstructions,
+
     /// The number of instructions in the largest possible slice. It may
     /// exceed `self.message()` if the latter was reduced or updated by the
     /// previous executions.
@@ -122,6 +125,7 @@ impl InstructionLimits {
     pub fn new(dts: FlagStatus, message: NumInstructions, max_slice: NumInstructions) -> Self {
         Self {
             message,
+            limit_to_report: message,
             max_slice: match dts {
                 FlagStatus::Enabled => max_slice,
                 FlagStatus::Disabled => message,
@@ -132,6 +136,11 @@ impl InstructionLimits {
     /// See the comments of the corresponding field.
     pub fn message(&self) -> NumInstructions {
         self.message
+    }
+
+    /// See the comments of the corresponding field.
+    pub fn limit_to_report(&self) -> NumInstructions {
+        self.limit_to_report
     }
 
     /// Returns the effective slice size, which is the smallest of

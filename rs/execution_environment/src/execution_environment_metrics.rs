@@ -57,6 +57,9 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     /// be removed if the limit for intra-subnet messages and inter-subnet
     /// messages are brought back in sync.
     pub(crate) oversize_intra_subnet_messages: IntCounter,
+    /// Critical error for attempting to execute new message
+    /// while already in progress a long-running message.
+    pub(crate) long_execution_already_in_progress: IntCounter,
 }
 
 impl ExecutionEnvironmentMetrics {
@@ -120,6 +123,7 @@ impl ExecutionEnvironmentMetrics {
                 "execution_environment_oversize_intra_subnet_messages_total",
                 "Total number of intra-subnet messages that exceed the 2 MiB limit for inter-subnet messages."
             ),
+            long_execution_already_in_progress: metrics_registry.error_counter("execution_environment_long_execution_already_in_progress"),
         }
     }
 

@@ -624,7 +624,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.0",
             ),
             "indexmap": crate.spec(
-                version = "^2.1.0",
+                version = "^2.2.6",
             ),
             "indicatif": crate.spec(
                 version = "^0.17.3",
@@ -1121,7 +1121,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "serde": crate.spec(
-                version = "^1.0",
+                version = "^1.0.203",
                 features = [
                     "derive",
                 ],
@@ -1131,13 +1131,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.5",
             ),
             "serde_bytes": crate.spec(
-                version = "^0.11",
+                version = "^0.11.14",
             ),
             "serde_cbor": crate.spec(
                 version = "^0.11.2",
-            ),
-            "serde_derive": crate.spec(
-                version = "^1.0",
             ),
             "serde_json": crate.spec(
                 version = "^1.0.107",
@@ -1146,7 +1143,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.14.0",
             ),
             "serde_yaml": crate.spec(
-                version = "^0.9.29",
+                version = "^0.9.33",
             ),
             "sha2": crate.spec(
                 version = "^0.10.8",

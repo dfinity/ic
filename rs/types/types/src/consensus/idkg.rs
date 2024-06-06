@@ -61,29 +61,10 @@ pub enum CompletedSignature {
     Unreported(crate::batch::ConsensusResponse),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
-/// The original layout of the ecdsa payload.
-/// Since the payload produced by the older replica version might use a single key transcript as a
-/// field, we need this extra bit information in order to know how to serialize it back to the
-/// proto format readable by that replica version.
-pub(crate) enum EcdsaPayloadLayout {
-    /// The obsolete layout of the ecdsa payload:
-    /// 1. The `current_key_transcript`, `next_key_in_creation`, and `key_id` fields in
-    ///    `pb::EcdasPayload` are are set to `Some` values;
-    /// 2. The `Hash` implementation uses the only key transcript in the payload.
-    SingleKeyTranscript,
-    /// The new layout of the ecdsa payload:
-    /// 1. The `current_key_transcript`, `next_key_in_creation`, and `key_id` fields in
-    ///    `pb::EcdasPayload` are are set to `None` values;
-    /// 2. The `Hash` implementation uses the whole collection of the key transcripts.
-    MultipleKeyTranscripts,
-}
-
 /// Common data that is carried in both `EcdsaSummaryPayload` and `EcdsaDataPayload`.
 /// published on every consensus round. It represents the current state of the
 /// protocol since the summary block.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EcdsaPayload {
     /// Collection of completed signatures.
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
@@ -108,32 +89,6 @@ pub struct EcdsaPayload {
 
     /// State of the key transcripts.
     pub key_transcripts: BTreeMap<MasterPublicKeyId, EcdsaKeyTranscript>,
-
-    /// Temporary field.
-    /// Once all ecdsa payload have been using the new proto style, this field should be dropped.
-    pub(crate) layout: EcdsaPayloadLayout,
-}
-
-impl Hash for EcdsaPayload {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.signature_agreements.hash(state);
-        self.available_pre_signatures.hash(state);
-        self.pre_signatures_in_creation.hash(state);
-        self.uid_generator.hash(state);
-        self.idkg_transcripts.hash(state);
-        self.ongoing_xnet_reshares.hash(state);
-        self.xnet_reshare_agreements.hash(state);
-        match self.layout {
-            EcdsaPayloadLayout::SingleKeyTranscript => {
-                // This is safe as there is always at least one key transcript in the payload
-                self.key_transcripts.values().next().unwrap().hash(state);
-            }
-            EcdsaPayloadLayout::MultipleKeyTranscripts => {
-                self.key_transcripts.hash(state);
-            }
-        }
-        // ignoring the [`EcdsaPayload::layout`] field on purpose
-    }
 }
 
 impl EcdsaPayload {
@@ -155,17 +110,7 @@ impl EcdsaPayload {
             idkg_transcripts: BTreeMap::new(),
             ongoing_xnet_reshares: BTreeMap::new(),
             xnet_reshare_agreements: BTreeMap::new(),
-            layout: EcdsaPayloadLayout::MultipleKeyTranscripts,
         }
-    }
-
-    /// Return true if this payload uses the new layout supporting multiple key transcripts
-    pub fn is_multiple_keys_layout(&self) -> bool {
-        matches!(self.layout, EcdsaPayloadLayout::MultipleKeyTranscripts)
-    }
-
-    pub fn use_multiple_keys_layout(&mut self) {
-        self.layout = EcdsaPayloadLayout::MultipleKeyTranscripts;
     }
 
     /// Returns the reference to the current key transcript of the given [`MasterPublicKeyId`].
@@ -1778,28 +1723,6 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
             .map(pb::EcdsaKeyTranscript::from)
             .collect();
 
-        // Populate the deprecated singular fields in the proto if and only if we are using the
-        // [`EcdsaPayloadLayout::SingleKeyTranscript'] layout.
-        let pb::EcdsaKeyTranscript {
-            key_id,
-            current: current_key_transcript,
-            next_in_creation: next_key_in_creation,
-            master_key_id: _,
-        } = match payload.layout {
-            EcdsaPayloadLayout::SingleKeyTranscript => key_transcripts
-                .first()
-                .cloned()
-                .unwrap_or_else(pb::EcdsaKeyTranscript::default),
-            EcdsaPayloadLayout::MultipleKeyTranscripts => pb::EcdsaKeyTranscript::default(),
-        };
-
-        // Populate the new repeated field in the proto if and only if we are using the
-        // [`EcdsaPayloadLayout::MultipleKeyTranscripts'] layout.
-        let key_transcripts = match payload.layout {
-            EcdsaPayloadLayout::SingleKeyTranscript => vec![],
-            EcdsaPayloadLayout::MultipleKeyTranscripts => key_transcripts,
-        };
-
         Self {
             signature_agreements,
             available_pre_signatures,
@@ -1811,9 +1734,6 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
             xnet_reshare_agreements,
             key_transcripts,
             // Kept for backwards compatibility
-            current_key_transcript,
-            next_key_in_creation,
-            key_id,
             generalized_pre_signatures: true,
         }
     }
@@ -1831,26 +1751,9 @@ impl TryFrom<(&pb::EcdsaPayload, Height)> for EcdsaPayload {
 impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
     type Error = ProxyDecodeError;
     fn try_from(payload: &pb::EcdsaPayload) -> Result<Self, Self::Error> {
-        let key_transcripts_protos = if !payload.key_transcripts.is_empty() {
-            payload.key_transcripts.clone()
-        } else {
-            vec![pb::EcdsaKeyTranscript {
-                key_id: payload.key_id.clone(),
-                current: payload.current_key_transcript.clone(),
-                next_in_creation: payload.next_key_in_creation.clone(),
-                master_key_id: None,
-            }]
-        };
-
-        let layout = if payload.key_id.is_some() {
-            EcdsaPayloadLayout::SingleKeyTranscript
-        } else {
-            EcdsaPayloadLayout::MultipleKeyTranscripts
-        };
-
         let mut key_transcripts = BTreeMap::new();
 
-        for key_transcript_proto in key_transcripts_protos {
+        for key_transcript_proto in &payload.key_transcripts {
             let key_transcript = EcdsaKeyTranscript::try_from(key_transcript_proto)?;
 
             key_transcripts.insert(key_transcript.key_id(), key_transcript);
@@ -1970,7 +1873,6 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
             xnet_reshare_agreements,
             uid_generator,
             key_transcripts,
-            layout,
         })
     }
 }
