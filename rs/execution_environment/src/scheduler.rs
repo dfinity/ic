@@ -2131,9 +2131,9 @@ fn observe_replicated_state_metrics(
         ingress_queue_size_bytes += queues.ingress_queue_size_bytes();
         input_queues_message_count += queues.input_queues_message_count();
         input_queues_size_bytes += queues.input_queues_size_bytes();
-        queues_response_bytes += queues.responses_size_bytes();
-        queues_memory_reservations += queues.reserved_slots();
-        queues_oversized_requests_extra_bytes += queues.oversized_requests_extra_bytes();
+        queues_response_bytes += queues.guaranteed_responses_size_bytes();
+        queues_memory_reservations += queues.guaranteed_response_memory_reservations();
+        queues_oversized_requests_extra_bytes += queues.oversized_guaranteed_requests_extra_bytes();
         if !canister_id_ranges.contains(&canister.canister_id()) {
             canisters_not_in_routing_table += 1;
         }

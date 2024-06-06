@@ -77,7 +77,7 @@ impl CanisterQueuesLoopDetector {
 ///
 /// Encapsulates the `InductionPool` component described in the spec. The reason
 /// for bundling together the induction pool and output queues is to reliably
-/// implement backpressure via queue reservations for response messages.
+/// implement backpressure via queue slot reservations for response messages.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CanisterQueues {
     /// Queue of ingress (user) messages.
@@ -557,8 +557,8 @@ impl CanisterQueues {
         None
     }
 
-    /// Pushes a `Request` type message into the relevant output queue. Also
-    /// reserves a slot for the eventual response on the matching input queue.
+    /// Pushes a `Request` into the relevant output queue. Also reserves a slot for
+    /// the eventual response in the matching input queue.
     ///
     /// # Errors
     ///
@@ -652,8 +652,8 @@ impl CanisterQueues {
             .collect()
     }
 
-    /// Pushes a `Response` type message into the relevant output queue. The
-    /// protocol should have already reserved a slot, so this cannot fail.
+    /// Pushes a `Response` into the relevant output queue. The protocol should have
+    /// already reserved a slot, so this cannot fail.
     ///
     /// # Panics
     ///
@@ -728,8 +728,11 @@ impl CanisterQueues {
         self.input_queues_stats.message_count
     }
 
-    /// Returns the number of reservations across all input queues.
-    pub fn input_queues_reservation_count(&self) -> usize {
+    /// Returns the number of reserved slots across all input queues.
+    ///
+    /// Note that this is different from memory reservations for guaranteed
+    /// responses.
+    pub fn input_queues_reserved_slots(&self) -> usize {
         self.input_queues_stats.reserved_slots as usize
     }
 
@@ -767,25 +770,38 @@ impl CanisterQueues {
         &self.input_queues_stats
     }
 
-    /// Returns the memory usage of this `CanisterQueues`.
-    pub fn memory_usage(&self) -> usize {
+    /// Returns the number of reserved slots across all output queues.
+    ///
+    /// Note that this is different from memory reservations for guaranteed
+    /// responses.
+    pub fn output_queues_reserved_slots(&self) -> usize {
+        self.memory_usage_stats.reserved_slots as usize
+            - self.input_queues_stats.reserved_slots as usize
+    }
+
+    /// Returns the memory usage of all guaranteed response messages.
+    pub fn guaranteed_response_memory_usage(&self) -> usize {
         self.memory_usage_stats.memory_usage()
     }
 
-    /// Returns the total byte size of canister responses across input and
+    /// Returns the total byte size of guaranteed responses across input and
     /// output queues.
-    pub fn responses_size_bytes(&self) -> usize {
+    pub fn guaranteed_responses_size_bytes(&self) -> usize {
         self.memory_usage_stats.responses_size_bytes
     }
 
-    /// Returns the total reserved slots across input and output queues.
-    pub fn reserved_slots(&self) -> usize {
+    /// Returns the total memory reservations for guaranteed responses across input
+    /// and output queues.
+    ///
+    /// Note that this is different from slots reserved for responses (whether
+    /// best effort or guaranteed) which are used to implement backpressure.
+    pub fn guaranteed_response_memory_reservations(&self) -> usize {
         self.memory_usage_stats.reserved_slots as usize
     }
 
     /// Returns the sum total of bytes above `MAX_RESPONSE_COUNT_BYTES` per
-    /// oversized request.
-    pub fn oversized_requests_extra_bytes(&self) -> usize {
+    /// oversized guaranteed response call request.
+    pub fn oversized_guaranteed_requests_extra_bytes(&self) -> usize {
         self.memory_usage_stats.oversized_requests_extra_bytes
     }
 

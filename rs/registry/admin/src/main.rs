@@ -4152,7 +4152,7 @@ impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToDeployHostosT
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
 struct ProposeToAddApiBoundaryNodesCmd {
-    #[clap(long, required = true, alias = "node-id")]
+    #[clap(long, required = true, multiple_values(true), alias = "node-ids")]
     /// The nodes to assign as an API Boundary Node
     nodes: Vec<PrincipalId>,
 
