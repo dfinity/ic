@@ -51,12 +51,12 @@ jobs:
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
-        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
+        uses: actions/checkout@v4
         if: ${{ github.event_name == 'pull_request' }}
         with:
           fetch-depth: 256
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: ${{ github.event_name != 'pull_request' }}
       - name: Docker RO SA login
         id: docker-ro-login
@@ -109,12 +109,12 @@ jobs:
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
-        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
+        uses: actions/checkout@v4
         if: ${{ github.event_name == 'pull_request' }}
         with:
           fetch-depth: 256
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: ${{ github.event_name != 'pull_request' }}
       - name: Docker RO SA login
         id: docker-ro-login
@@ -307,12 +307,12 @@ jobs:
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
-        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
+        uses: actions/checkout@v4
         if: ${{ github.event_name == 'pull_request' }}
         with:
           fetch-depth: 256
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: ${{ github.event_name != 'pull_request' }}
       - name: Docker RO SA login
         id: docker-ro-login
@@ -386,11 +386,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Download bazel-targets [bazel-test-all]
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: bazel-targets
       - name: Download build-ic.tar [build-ic]
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: build-ic
       - name: Build Determinism Test
