@@ -5,7 +5,7 @@ use ic_base_types::CanisterId;
 use ic_interfaces_certified_stream_store::EncodeStreamError;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{testing::CanisterQueuesTesting, ReplicatedState};
+use ic_replicated_state::ReplicatedState;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_test_utilities_types::ids::subnet_test_id;
@@ -178,8 +178,8 @@ impl SubnetPairProxy {
     fn local_output_queue_snapshot(&self) -> Option<Vec<Option<RequestOrResponse>>> {
         get_output_queue_iter(
             &self.local_env.get_latest_state(),
-            &self.local_canister_id,
-            &self.remote_canister_id,
+            self.local_canister_id,
+            self.remote_canister_id,
         )
         .map(|iter| iter.cloned().collect::<Vec<_>>())
     }
@@ -189,8 +189,8 @@ impl SubnetPairProxy {
     fn remote_output_queue_snapshot(&self) -> Option<Vec<Option<RequestOrResponse>>> {
         get_output_queue_iter(
             &self.remote_env.get_latest_state(),
-            &self.remote_canister_id,
-            &self.local_canister_id,
+            self.remote_canister_id,
+            self.local_canister_id,
         )
         .map(|iter| iter.cloned().collect::<Vec<_>>())
     }
@@ -272,19 +272,19 @@ impl SubnetPairProxy {
 /// Returns an iterator over the raw contents of a specific local canister's
 /// output queue to a specific remote canister; or `None` if the queue does not
 /// exist.
-fn get_output_queue_iter<'a>(
-    state: &'a ReplicatedState,
-    local_canister_id: &CanisterId,
-    remote_canister_id: &'a CanisterId,
-) -> Option<impl Iterator<Item = &'a Option<RequestOrResponse>>> {
+fn get_output_queue_iter(
+    state: &Arc<ReplicatedState>,
+    local_canister_id: CanisterId,
+    remote_canister_id: CanisterId,
+) -> Option<impl Iterator<Item = &Option<RequestOrResponse>>> {
     state
         .canister_states
-        .get(local_canister_id)
+        .get(&local_canister_id)
         .and_then(|canister_state| {
             canister_state
                 .system_state
                 .queues()
-                .output_queue_iter_for_testing(remote_canister_id)
+                .output_queue_iter_for_testing(&remote_canister_id)
         })
 }
 

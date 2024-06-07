@@ -21,16 +21,20 @@ use ic_types::{
     xnet::{QueueId, SessionId},
     CanisterId, CountBytes, Cycles, Time,
 };
-use message_pool::REQUEST_LIFETIME;
 use queue::{IngressQueue, InputQueue, OutputQueue};
 use std::{
     collections::{BTreeMap, HashSet, VecDeque},
     convert::{From, TryFrom},
     ops::{AddAssign, SubAssign},
     sync::Arc,
+    time::Duration,
 };
 
 pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
+
+/// The default lifetime of a request in OutputQueue from which the deadline
+/// is computed as time + REQUEST_LIFETIME.
+pub const REQUEST_LIFETIME: Duration = Duration::from_secs(300);
 
 /// Encapsulates information about `CanisterQueues`,
 /// used in detecting a loop when consuming the input messages.
@@ -1099,6 +1103,19 @@ impl CanisterQueues {
 
         debug_assert!(self.schedules_ok(own_canister_id, local_canisters))
     }
+
+    /// Returns an iterator over the raw contents of the output to
+    /// `canister_id`; or `None` if no such canister exists.
+    ///
+    /// For testing purposes only.
+    pub fn output_queue_iter_for_testing(
+        &self,
+        canister_id: &CanisterId,
+    ) -> Option<impl Iterator<Item = &Option<RequestOrResponse>>> {
+        self.canister_queues
+            .get(canister_id)
+            .map(|(_, output_queue)| output_queue.iter_for_testing())
+    }
 }
 
 /// Generates a timeout reject response from a request, refunding its payment.
@@ -1527,13 +1544,6 @@ pub mod testing {
 
         /// Publicly exposes the remote subnet input_schedule.
         fn get_remote_subnet_input_schedule(&self) -> &VecDeque<CanisterId>;
-
-        /// Returns an iterator over the raw contents of the output queue to
-        /// `canister_id`; or `None` if no such output queue exists.
-        fn output_queue_iter_for_testing(
-            &self,
-            canister_id: &CanisterId,
-        ) -> Option<impl Iterator<Item = &Option<RequestOrResponse>>>;
     }
 
     impl CanisterQueuesTesting for CanisterQueues {
@@ -1584,15 +1594,6 @@ pub mod testing {
 
         fn get_remote_subnet_input_schedule(&self) -> &VecDeque<CanisterId> {
             &self.remote_subnet_input_schedule
-        }
-
-        fn output_queue_iter_for_testing(
-            &self,
-            canister_id: &CanisterId,
-        ) -> Option<impl Iterator<Item = &Option<RequestOrResponse>>> {
-            self.canister_queues
-                .get(canister_id)
-                .map(|(_, output_queue)| output_queue.iter_for_testing())
         }
     }
 
