@@ -6,8 +6,6 @@ on:
       - ready_for_review
       - edited
   merge_group:
-    types:
-      - checks_requested
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
