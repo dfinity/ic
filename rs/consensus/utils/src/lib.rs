@@ -592,7 +592,7 @@ mod tests {
 
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
-    use ic_management_canister_types::EcdsaKeyId;
+    use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_state::ReplicatedStateBuilder;
@@ -784,7 +784,7 @@ mod tests {
             Height::new(0),
             subnet_test_id(0),
             vec![EcdsaKeyTranscript::new(
-                EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()),
                 KeyTranscriptCreation::Begin,
             )],
         )

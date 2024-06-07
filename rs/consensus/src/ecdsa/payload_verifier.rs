@@ -25,7 +25,8 @@ use super::payload_builder::EcdsaPayloadError;
 use super::pre_signer::EcdsaTranscriptBuilder;
 use super::signer::EcdsaSignatureBuilder;
 use super::utils::{
-    block_chain_cache, get_ecdsa_config_if_enabled, EcdsaBlockReaderImpl, InvalidChainCacheError,
+    block_chain_cache, get_chain_key_config_if_enabled, EcdsaBlockReaderImpl,
+    InvalidChainCacheError,
 };
 use crate::consensus::metrics::timed_call;
 use crate::ecdsa::payload_builder::{create_data_payload_helper, create_summary_payload};
@@ -98,8 +99,8 @@ pub(crate) enum InvalidEcdsaPayloadReason {
     NewSignatureUnexpected(idkg::PseudoRandomId),
     NewSignatureMissingInput(idkg::PseudoRandomId),
     NewSignatureMissingContext(idkg::PseudoRandomId),
-    XNetReshareAgreementWithoutRequest(idkg::EcdsaReshareRequest),
-    XNetReshareRequestDisappeared(idkg::EcdsaReshareRequest),
+    XNetReshareAgreementWithoutRequest(idkg::IDkgReshareRequest),
+    XNetReshareRequestDisappeared(idkg::IDkgReshareRequest),
     DecodingError(String),
 }
 
@@ -223,14 +224,14 @@ fn validate_summary_payload(
     let registry_version = pool_reader.registry_version(height).ok_or(
         InvalidEcdsaPayloadReason::ConsensusRegistryVersionNotFound(height),
     )?;
-    let ecdsa_config = get_ecdsa_config_if_enabled(
+    let chain_key_config = get_chain_key_config_if_enabled(
         subnet_id,
         registry_version,
         registry_client,
         &ic_logger::replica_logger::no_op_logger(),
     )
     .map_err(EcdsaPayloadValidationFailure::from)?;
-    if ecdsa_config.is_none() {
+    if chain_key_config.is_none() {
         if summary_payload.is_some() {
             return Err(InvalidEcdsaPayloadReason::EcdsaConfigNotFound.into());
         } else {
@@ -725,14 +726,20 @@ mod test {
     }
 
     #[test]
-    fn test_validate_reshare_dealings() {
+    fn test_validate_reshare_dealings_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_validate_reshare_dealings(key_id);
+        }
+    }
+
+    fn test_validate_reshare_dealings(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let num_of_nodes = 4;
         let subnet_id = subnet_test_id(1);
         let crypto = &CryptoReturningOk::default();
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
 
-        let key_id = fake_ecdsa_master_public_key_id();
         let mut payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let mut block_reader = TestEcdsaBlockReader::new();
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
@@ -760,6 +767,7 @@ mod test {
 
         // Create completed dealings for request 1.
         let reshare_params = payload.ongoing_xnet_reshares.get(&req_1).unwrap().as_ref();
+        assert_eq!(reshare_params.algorithm_id, algorithm_for_key_id(&key_id));
         let dealings = dummy_dealings(reshare_params.transcript_id, &reshare_params.dealers);
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         update_completed_reshare_requests(
@@ -793,6 +801,7 @@ mod test {
 
         // Create another request and dealings
         let reshare_params = payload.ongoing_xnet_reshares.get(&req_2).unwrap().as_ref();
+        assert_eq!(reshare_params.algorithm_id, algorithm_for_key_id(&key_id));
         let dealings = dummy_dealings(reshare_params.transcript_id, &reshare_params.dealers);
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         let mut prev_payload = payload.clone();

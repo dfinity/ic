@@ -646,6 +646,8 @@ impl ValidatedConfig {
             wasm_chunk_store: FlagStatus::Enabled,
             query_stats_aggregation: FlagStatus::Enabled,
             query_stats_epoch_length: 60,
+            ic00_schnorr_public_key: FlagStatus::Enabled,
+            ic00_sign_with_schnorr: FlagStatus::Enabled,
             ..HypervisorConfig::default()
         };
 

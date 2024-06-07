@@ -3,7 +3,7 @@ use super::EcdsaPayloadError;
 use crate::ecdsa::{pre_signer::EcdsaTranscriptBuilder, utils::algorithm_for_key_id};
 use ic_logger::{debug, error, ReplicaLogger};
 use ic_management_canister_types::MasterPublicKeyId;
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_types::{
     consensus::idkg::{
@@ -311,7 +311,7 @@ pub(super) fn purge_old_key_quadruples(
 /// considering currently available pre-signatures, pre-signatures in creation, and
 /// ecdsa configs.
 pub(super) fn make_new_pre_signatures_if_needed(
-    ecdsa_config: &EcdsaConfig,
+    chain_key_config: &ChainKeyConfig,
     ecdsa_payload: &mut idkg::EcdsaPayload,
     matched_pre_signatures_per_key_id: &BTreeMap<MasterPublicKeyId, usize>,
 ) {
@@ -334,7 +334,7 @@ pub(super) fn make_new_pre_signatures_if_needed(
         let new_pre_signatures = make_new_pre_signatures_if_needed_helper(
             &node_ids,
             key_transcript.registry_version(),
-            ecdsa_config,
+            chain_key_config,
             key_id,
             &mut ecdsa_payload.uid_generator,
             unassigned_pre_signatures,
@@ -349,14 +349,22 @@ pub(super) fn make_new_pre_signatures_if_needed(
 fn make_new_pre_signatures_if_needed_helper(
     subnet_nodes: &[NodeId],
     registry_version: RegistryVersion,
-    ecdsa_config: &EcdsaConfig,
+    chain_key_config: &ChainKeyConfig,
     key_id: &MasterPublicKeyId,
     uid_generator: &mut EcdsaUIDGenerator,
     unassigned_pre_signatures: usize,
 ) -> BTreeMap<PreSigId, PreSignatureInCreation> {
     let mut new_pre_signatures = BTreeMap::new();
-    //TODO(CON-1292): Get correct number for key_id from ChainKeyConfig
-    let pre_signatures_to_create = ecdsa_config.quadruples_to_create_in_advance as usize;
+
+    let Some(pre_signatures_to_create) = chain_key_config
+        .key_configs
+        .iter()
+        .find(|key_config| &key_config.key_id == key_id)
+        .map(|key_config| key_config.pre_signatures_to_create_in_advance as usize)
+    else {
+        return new_pre_signatures;
+    };
+
     if pre_signatures_to_create <= unassigned_pre_signatures {
         return new_pre_signatures;
     }
@@ -579,14 +587,14 @@ pub(super) mod tests {
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types::SchnorrAlgorithm;
+    use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::idkg::{
-            common::PreSignatureRef, EcdsaPayload, IDkgTranscriptOperationRef, UnmaskedTranscript,
-        },
+        consensus::idkg::{common::PreSignatureRef, EcdsaPayload, UnmaskedTranscript},
         crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, AlgorithmId},
         SubnetId,
     };
+    use idkg::IDkgTranscriptOperationRef;
     use strum::IntoEnumIterator;
 
     fn set_up(
@@ -618,17 +626,22 @@ pub(super) mod tests {
         let subnet_id = subnet_test_id(1);
         let height = Height::new(10);
         let mut uid_generator = EcdsaUIDGenerator::new(subnet_id, height);
-        let quadruples_to_create_in_advance = 4;
-        let ecdsa_config = EcdsaConfig {
-            quadruples_to_create_in_advance,
-            ..EcdsaConfig::default()
-        };
+        let pre_signatures_to_create_in_advance = 4;
 
-        let mut create_pre_signatures = |key_id, unassigned| {
+        let mut create_pre_signatures = |key_id: &MasterPublicKeyId, unassigned| {
+            let chain_key_config = ChainKeyConfig {
+                key_configs: vec![KeyConfig {
+                    key_id: key_id.clone(),
+                    pre_signatures_to_create_in_advance,
+                    max_queue_size: 1,
+                }],
+                ..ChainKeyConfig::default()
+            };
+
             make_new_pre_signatures_if_needed_helper(
                 nodes,
                 registry_version,
-                &ecdsa_config,
+                &chain_key_config,
                 key_id,
                 &mut uid_generator,
                 unassigned,
@@ -678,10 +691,14 @@ pub(super) mod tests {
         );
 
         // 4 Quadruples should be created in advance (in creation + unmatched available = 4)
-        let quadruples_to_create_in_advance = 4;
-        let ecdsa_config = EcdsaConfig {
-            quadruples_to_create_in_advance,
-            ..EcdsaConfig::default()
+        let pre_signatures_to_create_in_advance = 4;
+        let chain_key_config = ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
+                pre_signatures_to_create_in_advance,
+                max_queue_size: 1,
+            }],
+            ..ChainKeyConfig::default()
         };
 
         // Add 3 available quadruples
@@ -693,12 +710,12 @@ pub(super) mod tests {
         let quadruples_already_matched = 2;
 
         // We expect 3 quadruples in creation to be added
-        let expected_quadruples_in_creation = quadruples_to_create_in_advance as usize
+        let expected_quadruples_in_creation = pre_signatures_to_create_in_advance as usize
             - (ecdsa_payload.available_pre_signatures.len() - quadruples_already_matched);
         assert_eq!(expected_quadruples_in_creation, 3);
 
         make_new_pre_signatures_if_needed(
-            &ecdsa_config,
+            &chain_key_config,
             &mut ecdsa_payload,
             &BTreeMap::from([(
                 MasterPublicKeyId::Ecdsa(key_id.clone()),
@@ -710,7 +727,7 @@ pub(super) mod tests {
             ecdsa_payload.pre_signatures_in_creation.len()
                 + ecdsa_payload.available_pre_signatures.len()
                 - quadruples_already_matched,
-            quadruples_to_create_in_advance as usize
+            pre_signatures_to_create_in_advance as usize
         );
         // Verify the generated transcript ids.
         let mut transcript_ids = BTreeSet::new();

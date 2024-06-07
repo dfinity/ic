@@ -35,9 +35,14 @@ pub fn test(env: TestEnv) {
 
     // Create neurons.
     let mut neurons = TestNeurons::new(2000, &mut ledger_balances);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
 
     let neuron1 = neurons.create(|neuron| {
         neuron.dissolve_state = Some(DissolveState::DissolveDelaySeconds(2 * 365 * 24 * 60 * 60));
+        neuron.aging_since_timestamp_seconds = now;
         neuron.maturity_e8s_equivalent = 345_000_000;
         neuron.kyc_verified = true;
         neuron.followees = HashMap::from([
@@ -65,6 +70,7 @@ pub fn test(env: TestEnv) {
                 3 * 365 * 24 * 60 * 60,
             ),
         );
+        neuron.aging_since_timestamp_seconds = now;
         neuron.maturity_e8s_equivalent = 678_000_000;
         neuron.kyc_verified = true;
         neuron.followees = HashMap::from([
@@ -92,6 +98,7 @@ pub fn test(env: TestEnv) {
                 3 * 365 * 24 * 60 * 60,
             ),
         );
+        neuron.aging_since_timestamp_seconds = now;
         neuron.maturity_e8s_equivalent = 679_000_000;
         neuron.kyc_verified = true;
         neuron.followees = HashMap::from([

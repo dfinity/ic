@@ -37,7 +37,7 @@ ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 mockall = { workspace = true }
 quinn = { workspace = true }
-serde = "1.0.99"
+serde = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

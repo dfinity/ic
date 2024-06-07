@@ -139,7 +139,7 @@ impl CanisterStateFixture {
         iter.pop()
     }
 
-    fn with_input_reservation(&mut self) {
+    fn with_input_slot_reservation(&mut self) {
         self.canister_state
             .push_output_request(default_output_request(), UNIX_EPOCH)
             .unwrap();
@@ -160,7 +160,7 @@ fn canister_state_push_input_request_success() {
 }
 
 #[test]
-fn canister_state_push_input_response_no_reservation() {
+fn canister_state_push_input_response_no_reserved_slot() {
     let mut fixture = CanisterStateFixture::new();
     let response = default_input_response(fixture.make_callback());
     assert_eq!(
@@ -176,8 +176,8 @@ fn canister_state_push_input_response_no_reservation() {
 #[test]
 fn canister_state_push_input_response_success() {
     let mut fixture = CanisterStateFixture::new();
-    // Make an input queue reservation.
-    fixture.with_input_reservation();
+    // Reserve a slot in the input queue.
+    fixture.with_input_slot_reservation();
     // Pushing input response should succeed.
     let response = default_input_response(fixture.make_callback());
     fixture
@@ -325,7 +325,9 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
     ));
     assert!(canister_state.memory_usage().get() > 0);
     let initial_memory_usage = canister_state.execution_memory_usage()
-        + canister_state.system_state.message_memory_usage();
+        + canister_state
+            .system_state
+            .guaranteed_response_message_memory_usage();
     let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
 
     let request = default_input_request();
@@ -342,7 +344,9 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
     assert_eq!(
         initial_memory_usage + NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
         canister_state.execution_memory_usage()
-            + canister_state.system_state.message_memory_usage(),
+            + canister_state
+                .system_state
+                .guaranteed_response_message_memory_usage(),
     );
     assert_eq!(
         SUBNET_AVAILABLE_MEMORY - MAX_RESPONSE_COUNT_BYTES as i64,
@@ -395,8 +399,8 @@ fn canister_state_push_input_response_memory_limit_test_impl(
 ) {
     let mut fixture = CanisterStateFixture::new();
 
-    // Make an input queue reservation.
-    fixture.with_input_reservation();
+    // Reserve a slot in the input queue.
+    fixture.with_input_slot_reservation();
     let response = default_input_response(fixture.make_callback());
 
     let mut subnet_available_memory = -13;

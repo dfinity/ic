@@ -1,5 +1,6 @@
 use crate::{
     deploy::DirectSnsDeployerForTests, init_config_file::InitConfigFileArgs,
+    neuron_id_to_candid_subaccount::NeuronIdToCandidSubaccountArgs,
     prepare_canisters::PrepareCanistersArgs, propose::ProposeArgs,
 };
 use anyhow::{anyhow, Context};
@@ -34,6 +35,7 @@ use tempfile::NamedTempFile;
 
 pub mod deploy;
 pub mod init_config_file;
+pub mod neuron_id_to_candid_subaccount;
 pub mod prepare_canisters;
 pub mod propose;
 pub mod unit_helpers;
@@ -72,6 +74,8 @@ pub enum SubCommand {
     PrepareCanisters(PrepareCanistersArgs),
     /// Submit an NNS proposal to create new SNS.
     Propose(ProposeArgs),
+    /// Converts a Neuron ID to a blob for use in ManageNeuron.
+    NeuronIdToCandidSubaccount(NeuronIdToCandidSubaccountArgs),
 }
 
 /// The arguments used to configure a SNS testflight deployment

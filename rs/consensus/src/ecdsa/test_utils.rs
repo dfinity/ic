@@ -17,10 +17,12 @@ use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId};
+use ic_management_canister_types::{
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    EcdsaDealingsContext, SignWithEcdsaContext,
+    IDkgDealingsContext, SignWithEcdsaContext,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
@@ -32,15 +34,15 @@ use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::certification::Certification;
 use ic_types::consensus::idkg::common::PreSignatureRef;
-use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::consensus::idkg::{
     self,
     ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
     EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript,
-    EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaReshareRequest,
-    EcdsaSigShare, IDkgTranscriptAttributes, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef,
-    KeyTranscriptCreation, MaskedTranscript, PreSigId, RequestId, ReshareOfMaskedParams,
-    TranscriptAttributes, TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
+    EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaSigShare,
+    HasMasterPublicKeyId, IDkgReshareRequest, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
+    IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript, PreSigId, RequestId,
+    ReshareOfMaskedParams, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
+    UnmaskedTranscript,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin, IDkgOpening,
@@ -66,14 +68,11 @@ use strum::IntoEnumIterator;
 use super::utils::{algorithm_for_key_id, get_context_request_id};
 
 pub(crate) fn dealings_context_from_reshare_request(
-    request: idkg::EcdsaReshareRequest,
-) -> EcdsaDealingsContext {
-    let MasterPublicKeyId::Ecdsa(key_id) = request.key_id() else {
-        panic!("Expected ECDSA key Id");
-    };
-    EcdsaDealingsContext {
+    request: idkg::IDkgReshareRequest,
+) -> IDkgDealingsContext {
+    IDkgDealingsContext {
         request: RequestBuilder::new().build(),
-        key_id,
+        key_id: request.key_id(),
         nodes: request.receiving_node_ids.into_iter().collect(),
         registry_version: request.registry_version,
         time: time::UNIX_EPOCH,
@@ -358,12 +357,16 @@ impl TestEcdsaBlockReader {
         }
     }
 
-    pub(crate) fn for_complainer_test(height: Height, active_refs: Vec<TranscriptRef>) -> Self {
+    pub(crate) fn for_complainer_test(
+        key_id: &MasterPublicKeyId,
+        height: Height,
+        active_refs: Vec<TranscriptRef>,
+    ) -> Self {
         let mut idkg_transcripts = BTreeMap::new();
         for transcript_ref in active_refs {
             idkg_transcripts.insert(
                 transcript_ref,
-                create_transcript(transcript_ref.transcript_id, &[NODE_2]),
+                create_transcript(key_id, transcript_ref.transcript_id, &[NODE_2]),
             );
         }
 
@@ -834,6 +837,7 @@ pub(crate) fn create_transcript_id_with_height(id: u64, height: Height) -> IDkgT
 
 // Creates a test transcript
 pub(crate) fn create_transcript(
+    key_id: &MasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     receiver_list: &[NodeId],
 ) -> IDkgTranscript {
@@ -847,18 +851,20 @@ pub(crate) fn create_transcript(
         registry_version: RegistryVersion::from(1),
         verified_dealings: BTreeMap::new(),
         transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+        algorithm_id: algorithm_for_key_id(key_id),
         internal_transcript_raw: vec![],
     }
 }
 
 /// Creates a test transcript param with registry version 0
 pub(crate) fn create_transcript_param(
+    key_id: &MasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     dealer_list: &[NodeId],
     receiver_list: &[NodeId],
 ) -> TestTranscriptParams {
     create_transcript_param_with_registry_version(
+        key_id,
         transcript_id,
         dealer_list,
         receiver_list,
@@ -868,6 +874,7 @@ pub(crate) fn create_transcript_param(
 
 /// Creates a test transcript param for a specific registry version
 pub(crate) fn create_transcript_param_with_registry_version(
+    key_id: &MasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     dealer_list: &[NodeId],
     receiver_list: &[NodeId],
@@ -884,16 +891,13 @@ pub(crate) fn create_transcript_param_with_registry_version(
 
     // The random transcript
     let random_transcript_id = create_transcript_id(transcript_id.id() * 214365 + 1);
-    let random_transcript = create_transcript(random_transcript_id, dealer_list);
+    let random_transcript = create_transcript(key_id, random_transcript_id, dealer_list);
     let random_masked = MaskedTranscript::try_from((Height::new(0), &random_transcript)).unwrap();
     let mut idkg_transcripts = BTreeMap::new();
     idkg_transcripts.insert(*random_masked.as_ref(), random_transcript);
 
-    let attrs = IDkgTranscriptAttributes::new(
-        dealers,
-        AlgorithmId::ThresholdEcdsaSecp256k1,
-        registry_version,
-    );
+    let attrs =
+        IDkgTranscriptAttributes::new(dealers, algorithm_for_key_id(key_id), registry_version);
 
     // The transcript that points to the random transcript
     let transcript_params_ref = ReshareOfMaskedParams::new(
@@ -1023,6 +1027,7 @@ pub(crate) fn create_dealing(
 
 // Creates a test signed dealing with internal payload
 pub(crate) fn create_dealing_with_payload<R: Rng + CryptoRng>(
+    key_id: &MasterPublicKeyId,
     transcript_id: IDkgTranscriptId,
     dealer_id: NodeId,
     rng: &mut R,
@@ -1032,7 +1037,7 @@ pub(crate) fn create_dealing_with_payload<R: Rng + CryptoRng>(
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let params = setup_masked_random_params(
         &env,
-        AlgorithmId::ThresholdEcdsaSecp256k1,
+        algorithm_for_key_id(key_id),
         &dealers,
         &receivers,
         rng,
@@ -1475,7 +1480,7 @@ pub(crate) fn empty_ecdsa_payload_with_key_ids(
                 current: None,
                 next_in_creation: KeyTranscriptCreation::Begin,
                 master_key_id: key_id.clone(),
-                key_id: if let MasterPublicKeyId::Ecdsa(ecdsa_key_id) = key_id {
+                deprecated_key_id: if let MasterPublicKeyId::Ecdsa(ecdsa_key_id) = key_id {
                     Some(ecdsa_key_id)
                 } else {
                     // Schnorr key transcripts still need a dummy ECDSA key Id,
@@ -1525,14 +1530,17 @@ pub(crate) fn create_reshare_request(
     key_id: MasterPublicKeyId,
     num_nodes: u64,
     registry_version: u64,
-) -> EcdsaReshareRequest {
-    EcdsaReshareRequest {
+) -> IDkgReshareRequest {
+    IDkgReshareRequest {
         key_id: if let MasterPublicKeyId::Ecdsa(ecdsa_key_id) = key_id.clone() {
             Some(ecdsa_key_id)
         } else {
             // Schnorr key reshare requests still receive a dummy ecdsa key ID
             // until we can set the field to None on mainnet.
-            Some(fake_ecdsa_key_id())
+            Some(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("fake_dummy_key"),
+            })
         },
         master_key_id: key_id,
         receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),

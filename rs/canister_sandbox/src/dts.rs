@@ -30,6 +30,9 @@ enum ExecutionStatus {
 struct State {
     execution_status: ExecutionStatus,
 
+    /// The instruction limit to report in case of an error.
+    instruction_limit_to_report: i64,
+
     // The instruction limit for all slices combined.
     total_instruction_limit: i64,
 
@@ -55,7 +58,11 @@ struct State {
 }
 
 impl State {
-    fn new(total_instruction_limit: i64, max_slice_instruction_limit: i64) -> Self {
+    fn new(
+        instruction_limit_to_report: i64,
+        total_instruction_limit: i64,
+        max_slice_instruction_limit: i64,
+    ) -> Self {
         let max_slice_instruction_limit = max_slice_instruction_limit.min(total_instruction_limit);
 
         let max_num_slices =
@@ -68,6 +75,7 @@ impl State {
 
         let result = Self {
             execution_status: ExecutionStatus::Running,
+            instruction_limit_to_report,
             total_instruction_limit,
             max_slice_instruction_limit,
             slice_instruction_limit: max_slice_instruction_limit,
@@ -154,8 +162,16 @@ struct DeterministicTimeSlicing {
 }
 
 impl DeterministicTimeSlicing {
-    fn new(total_instruction_limit: i64, slice_instruction_limit: i64) -> Self {
-        let state = State::new(total_instruction_limit, slice_instruction_limit);
+    fn new(
+        instruction_limit_to_report: i64,
+        total_instruction_limit: i64,
+        slice_instruction_limit: i64,
+    ) -> Self {
+        let state = State::new(
+            instruction_limit_to_report,
+            total_instruction_limit,
+            slice_instruction_limit,
+        );
         Self {
             state: Arc::new(Mutex::new(state)),
             resumed_or_aborted: Arc::new(Condvar::new()),
@@ -189,7 +205,7 @@ impl DeterministicTimeSlicing {
         assert_eq!(state.execution_status, ExecutionStatus::Running);
         if state.is_last_slice() {
             return Err(HypervisorError::InstructionLimitExceeded(
-                NumInstructions::from(state.total_instruction_limit as u64),
+                NumInstructions::from(state.instruction_limit_to_report as u64),
             ));
         }
 
@@ -294,6 +310,7 @@ pub struct DeterministicTimeSlicingHandler {
 
 impl DeterministicTimeSlicingHandler {
     pub fn new<F>(
+        total_instruction_limit_to_report: i64,
         total_instruction_limit: i64,
         slice_instruction_limit: i64,
         pause_callback: F,
@@ -302,7 +319,11 @@ impl DeterministicTimeSlicingHandler {
         F: Fn(SliceExecutionOutput, PausedExecution) + 'static,
     {
         Self {
-            dts: DeterministicTimeSlicing::new(total_instruction_limit, slice_instruction_limit),
+            dts: DeterministicTimeSlicing::new(
+                total_instruction_limit_to_report,
+                total_instruction_limit,
+                slice_instruction_limit,
+            ),
             pause_callback: Box::new(pause_callback),
         }
     }

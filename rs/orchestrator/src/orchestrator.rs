@@ -357,7 +357,7 @@ impl Orchestrator {
     /// 3. Third task starts listening for incoming requests to the orchestrator
     /// dashboard.
     ///
-    /// 4. Fourth task checks if this node is part of an tECDSA subnet. If so,
+    /// 4. Fourth task checks if this node is part of a threshold signing subnet. If so,
     /// and it is also time to rotate the iDKG encryption key, instruct crypto
     /// to do the rotation and attempt to register the rotated key.
     pub fn spawn_tasks(&mut self) {
@@ -428,7 +428,7 @@ impl Orchestrator {
             info!(log, "Shut down the boundary node management loop");
         }
 
-        async fn tecdsa_key_rotation_check(
+        async fn key_rotation_check(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             registration: NodeRegistration,
             mut exit_signal: Receiver<bool>,
@@ -446,7 +446,7 @@ impl Orchestrator {
                     _ = exit_signal.changed() => {}
                 }
             }
-            info!(log, "Shut down the tECDSA key rotation loop");
+            info!(log, "Shut down the key rotation loop");
         }
 
         async fn ssh_key_and_firewall_rules_and_ipv4_config_checks(
@@ -543,14 +543,13 @@ impl Orchestrator {
             )));
         }
         if let Some(registration) = self.registration.take() {
-            info!(self.logger, "Spawning the tECDSA key rotation loop");
-            self.task_handles
-                .push(tokio::spawn(tecdsa_key_rotation_check(
-                    Arc::clone(&self.subnet_id),
-                    registration,
-                    self.exit_signal.clone(),
-                    self.logger.clone(),
-                )));
+            info!(self.logger, "Spawning the key rotation loop");
+            self.task_handles.push(tokio::spawn(key_rotation_check(
+                Arc::clone(&self.subnet_id),
+                registration,
+                self.exit_signal.clone(),
+                self.logger.clone(),
+            )));
         }
     }
 

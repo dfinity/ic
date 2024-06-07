@@ -180,8 +180,8 @@ fn can_push_input_response_after_output_request() {
     queues.push_input_response().unwrap();
 }
 
-/// Check `available_output_request_slots` doesn't count input requests and
-/// output reservations and responses.
+/// Check that `available_output_request_slots` doesn't count input requests and
+/// output reserved slots and responses.
 #[test]
 fn test_available_output_request_slots_dont_counts() {
     let mut queues = CanisterQueuesFixture::new();
@@ -199,27 +199,27 @@ fn test_available_output_request_slots_dont_counts() {
     );
 }
 
-/// Check `available_output_request_slots` counts output requests and input
-/// reservations and responses.
+/// Check that `available_output_request_slots` counts output requests and input
+/// reserved slots and responses.
 #[test]
 fn test_available_output_request_slots_counts() {
     let mut queues = CanisterQueuesFixture::new();
 
-    // Check output request counts.
+    // Check that output request counts.
     queues.push_output_request().unwrap();
     assert_eq!(
         DEFAULT_QUEUE_CAPACITY - 1,
         queues.available_output_request_slots()
     );
 
-    // Check input reservation counts.
+    // Check that input reserved slot counts.
     queues.pop_output().unwrap();
     assert_eq!(
         DEFAULT_QUEUE_CAPACITY - 1,
         queues.available_output_request_slots()
     );
 
-    // Check input response counts.
+    // Check that input response counts.
     queues.push_input_response().unwrap();
     assert_eq!(
         DEFAULT_QUEUE_CAPACITY - 1,
@@ -434,7 +434,7 @@ fn test_message_picking_round_robin() {
     }
 
     // Local response from `other_2`.
-    // First push then pop a request to `other_2`, in order to get a reservation.
+    // First push then pop a request to `other_2`, in order to get a reserved slot.
     queues.push_output_request(other_2).unwrap();
     queues.pop_output(other_2).unwrap();
     queues.push_input_response(other_2, LocalSubnet).unwrap();
@@ -1381,7 +1381,7 @@ fn test_garbage_collect() {
     queues.output_into_iter(this).next();
     // No-op.
     queues.garbage_collect();
-    // No messages, but the queue pair is not GC-ed (due to the reservation).
+    // No messages, but the queue pair is not GC-ed (due to the reserved slot).
     assert!(!queues.has_output());
     assert_eq!(1, queues.canister_queues.len());
 
@@ -1463,7 +1463,7 @@ fn test_reject_subnet_output_request() {
         queues.pop_input().unwrap()
     );
 
-    // And after popping it, there are no messages or reservations left.
+    // And after popping it, there are no messages or reserved slots left.
     queues.garbage_collect();
     assert!(queues.canister_queues.is_empty());
 }
