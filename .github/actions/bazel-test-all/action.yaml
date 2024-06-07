@@ -39,6 +39,9 @@ runs:
           if [ -n "$SSH_PRIVATE_KEY" ]; then
             # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
             test -z "${SSH_AUTH_SOCK:-}" && { eval "$(ssh-agent -s)"; ssh-add - <<< "${SSH_PRIVATE_KEY}"; }
+            mkdir -p ~/.ssh
+            chmod 0700 ~/.ssh
+            echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
           fi
 
           # Todo: remove once fully migtrated to github
