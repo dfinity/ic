@@ -8,7 +8,7 @@
     "ic-support": "ic-support-notifications",
     "ic-interface-owners": "interface-owners",
     "ic-message-routing-owners": "eng-message-routing-mr",
-    "ic-owner-owners": "owners-owners",
+    "ic-owners-owners": "owners-owners",
     "ic-testing-verification": "eng-testing",
     "idx": "eng-idx-bots",
     "networking": "eng-networking",
