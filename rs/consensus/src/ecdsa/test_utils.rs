@@ -33,10 +33,11 @@ use ic_test_utilities_types::ids::{node_test_id, NODE_1, NODE_2};
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::certification::Certification;
-use ic_types::consensus::idkg::common::PreSignatureRef;
 use ic_types::consensus::idkg::{
     self,
+    common::PreSignatureRef,
     ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
+    schnorr::{PreSignatureTranscriptRef, ThresholdSchnorrSigInputsRef},
     EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript,
     EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaSigShare,
     HasMasterPublicKeyId, IDkgReshareRequest, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
@@ -51,7 +52,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 };
 use ic_types::crypto::canister_threshold_sig::{
     ExtendedDerivationPath, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-    ThresholdEcdsaSigShare,
+    ThresholdEcdsaSigShare, ThresholdSchnorrSigInputs,
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::messages::CallbackId;
@@ -188,12 +189,10 @@ pub fn insert_test_sig_inputs<T>(
             .for_each(|(transcript_ref, transcript)| {
                 block_reader.add_transcript(*transcript_ref, transcript.clone())
             });
-        ecdsa_payload.available_pre_signatures.insert(
-            pre_sig_id,
-            PreSignatureRef::Ecdsa(inputs.sig_inputs_ref.presig_quadruple_ref.clone()),
-        );
-        block_reader
-            .add_available_quadruple(pre_sig_id, inputs.sig_inputs_ref.presig_quadruple_ref);
+        ecdsa_payload
+            .available_pre_signatures
+            .insert(pre_sig_id, inputs.sig_inputs_ref.pre_signature());
+        block_reader.add_available_pre_signature(pre_sig_id, inputs.sig_inputs_ref.pre_signature());
     }
 }
 
@@ -242,9 +241,36 @@ impl From<&IDkgTranscriptParams> for TestTranscriptParams {
 }
 
 #[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum ThresholdSigInputsRef {
+    Ecdsa(ThresholdEcdsaSigInputsRef),
+    Schnorr(ThresholdSchnorrSigInputsRef),
+}
+
+impl ThresholdSigInputsRef {
+    pub(crate) fn pre_signature(&self) -> PreSignatureRef {
+        match self {
+            ThresholdSigInputsRef::Ecdsa(inputs) => {
+                PreSignatureRef::Ecdsa(inputs.presig_quadruple_ref.clone())
+            }
+            ThresholdSigInputsRef::Schnorr(inputs) => {
+                PreSignatureRef::Schnorr(inputs.presig_transcript_ref.clone())
+            }
+        }
+    }
+
+    pub(crate) fn into_ecdsa(self) -> ThresholdEcdsaSigInputsRef {
+        match self {
+            ThresholdSigInputsRef::Ecdsa(inputs) => inputs,
+            _ => panic!("Expected ECDSA sig inputs"),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub(crate) struct TestSigInputs {
     pub(crate) idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
-    pub(crate) sig_inputs_ref: ThresholdEcdsaSigInputsRef,
+    pub(crate) sig_inputs_ref: ThresholdSigInputsRef,
 }
 
 impl From<&ThresholdEcdsaSigInputs> for TestSigInputs {
@@ -286,7 +312,39 @@ impl From<&ThresholdEcdsaSigInputs> for TestSigInputs {
         };
         TestSigInputs {
             idkg_transcripts,
-            sig_inputs_ref,
+            sig_inputs_ref: ThresholdSigInputsRef::Ecdsa(sig_inputs_ref),
+        }
+    }
+}
+
+impl From<&ThresholdSchnorrSigInputs> for TestSigInputs {
+    fn from(inputs: &ThresholdSchnorrSigInputs) -> TestSigInputs {
+        let height = Height::from(0);
+        let pre_signature = inputs.presig_transcript();
+        let key = inputs.key_transcript();
+        let algorithm = schnorr_algorithm(key.algorithm_id);
+        let transcripts = vec![pre_signature.blinder_unmasked().clone(), key.clone()];
+        let mut idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript> = Default::default();
+        for t in transcripts {
+            idkg_transcripts.insert(TranscriptRef::new(height, t.transcript_id), t);
+        }
+        let sig_inputs_ref = ThresholdSchnorrSigInputsRef {
+            derivation_path: inputs.derivation_path().clone(),
+            message: inputs.message().into(),
+            nonce: *inputs.nonce(),
+            presig_transcript_ref: PreSignatureTranscriptRef {
+                key_id: fake_schnorr_key_id(algorithm),
+                blinder_unmasked_ref: UnmaskedTranscript::try_from((
+                    height,
+                    pre_signature.blinder_unmasked(),
+                ))
+                .unwrap(),
+                key_unmasked_ref: UnmaskedTranscript::try_from((height, key)).unwrap(),
+            },
+        };
+        TestSigInputs {
+            idkg_transcripts,
+            sig_inputs_ref: ThresholdSigInputsRef::Schnorr(sig_inputs_ref),
         }
     }
 }
@@ -298,7 +356,7 @@ pub(crate) struct TestEcdsaBlockReader {
     requested_transcripts: Vec<IDkgTranscriptParamsRef>,
     source_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     target_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
-    requested_signatures: Vec<(RequestId, ThresholdEcdsaSigInputsRef)>,
+    requested_signatures: Vec<(RequestId, ThresholdSigInputsRef)>,
     available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
     idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
     fail_to_resolve: bool,
@@ -343,7 +401,7 @@ impl TestEcdsaBlockReader {
             }
             available_pre_signatures.insert(
                 request_id.pre_signature_id,
-                PreSignatureRef::Ecdsa(sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone()),
+                sig_inputs.sig_inputs_ref.pre_signature(),
             );
             requested_signatures.push((request_id, sig_inputs.sig_inputs_ref));
         }
@@ -406,18 +464,18 @@ impl TestEcdsaBlockReader {
         self.idkg_transcripts.insert(transcript_ref, transcript);
     }
 
-    pub(crate) fn add_available_quadruple(
+    pub(crate) fn add_available_pre_signature(
         &mut self,
         pre_signature_id: PreSigId,
-        quadruple: PreSignatureQuadrupleRef,
+        pre_signature: PreSignatureRef,
     ) {
         self.available_pre_signatures
-            .insert(pre_signature_id, PreSignatureRef::Ecdsa(quadruple));
+            .insert(pre_signature_id, pre_signature);
     }
 
     pub(crate) fn requested_signatures(
         &self,
-    ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_> {
+    ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdSigInputsRef)> + '_> {
         Box::new(
             // False positive `map_identity` warning.
             // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
@@ -1072,7 +1130,11 @@ pub(crate) fn create_support(
 }
 
 // Creates a test signature input
-pub(crate) fn create_sig_inputs_with_height(caller: u8, height: Height) -> TestSigInputs {
+pub(crate) fn create_sig_inputs_with_height(
+    caller: u8,
+    height: Height,
+    key_id: MasterPublicKeyId,
+) -> TestSigInputs {
     let transcript_id = |offset| {
         let val = caller as u64;
         create_transcript_id(val * 214365 + offset)
@@ -1088,25 +1150,41 @@ pub(crate) fn create_sig_inputs_with_height(caller: u8, height: Height) -> TestS
         transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
             key_masked_id,
         )),
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+        algorithm_id: algorithm_for_key_id(&key_id),
         internal_transcript_raw: vec![],
     };
-    create_sig_inputs_with_args(caller, &receivers, key_unmasked, height)
+    match key_id {
+        MasterPublicKeyId::Ecdsa(key_id) => {
+            create_ecdsa_sig_inputs_with_args(caller, &receivers, key_unmasked, height, key_id)
+        }
+        MasterPublicKeyId::Schnorr(key_id) => {
+            create_schnorr_sig_inputs_with_args(caller, &receivers, key_unmasked, height, key_id)
+        }
+    }
 }
 
 // Creates a test signature input
-pub(crate) fn create_sig_inputs_with_args(
+pub(crate) fn create_ecdsa_sig_inputs_with_args(
     caller: u8,
     receivers: &BTreeSet<NodeId>,
     key_unmasked: IDkgTranscript,
     height: Height,
+    key_id: EcdsaKeyId,
 ) -> TestSigInputs {
     let transcript_id = |offset| {
         let val = caller as u64;
         create_transcript_id(val * 214365 + offset)
     };
 
-    let kappa_masked_id = transcript_id(10);
+    let algorithm_id = key_unmasked.algorithm_id;
+    assert!(
+        algorithm_id.is_threshold_ecdsa(),
+        "Expected tECDSA algorithm"
+    );
+    assert_eq!(
+        algorithm_id,
+        algorithm_for_key_id(&MasterPublicKeyId::Ecdsa(key_id.clone()))
+    );
     let kappa_unmasked_id = transcript_id(20);
     let lambda_masked_id = transcript_id(30);
     let key_unmasked_id = key_unmasked.transcript_id;
@@ -1114,27 +1192,13 @@ pub(crate) fn create_sig_inputs_with_args(
     let key_unmasked_times_lambda_masked_id = transcript_id(70);
     let mut idkg_transcripts = BTreeMap::new();
 
-    let kappa_masked = IDkgTranscript {
-        transcript_id: kappa_masked_id,
-        receivers: IDkgReceivers::new(receivers.clone()).unwrap(),
-        registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
-        transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-        internal_transcript_raw: vec![],
-    };
-    let kappa_masked_ref = MaskedTranscript::try_from((height, &kappa_masked)).unwrap();
-    idkg_transcripts.insert(*kappa_masked_ref.as_ref(), kappa_masked);
-
     let kappa_unmasked = IDkgTranscript {
         transcript_id: kappa_unmasked_id,
         receivers: IDkgReceivers::new(receivers.clone()).unwrap(),
         registry_version: RegistryVersion::from(1),
         verified_dealings: BTreeMap::new(),
-        transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
-            kappa_masked_id,
-        )),
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+        transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
+        algorithm_id,
         internal_transcript_raw: vec![],
     };
     let kappa_unmasked_ref = UnmaskedTranscript::try_from((height, &kappa_unmasked)).unwrap();
@@ -1146,7 +1210,7 @@ pub(crate) fn create_sig_inputs_with_args(
         registry_version: RegistryVersion::from(1),
         verified_dealings: BTreeMap::new(),
         transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+        algorithm_id,
         internal_transcript_raw: vec![],
     };
     let lambda_masked_ref = MaskedTranscript::try_from((height, &lambda_masked)).unwrap();
@@ -1163,7 +1227,7 @@ pub(crate) fn create_sig_inputs_with_args(
         transcript_type: IDkgTranscriptType::Masked(
             IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(kappa_unmasked_id, lambda_masked_id),
         ),
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+        algorithm_id,
         internal_transcript_raw: vec![],
     };
     let kappa_unmasked_times_lambda_masked_ref =
@@ -1181,7 +1245,7 @@ pub(crate) fn create_sig_inputs_with_args(
         transcript_type: IDkgTranscriptType::Masked(
             IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(key_unmasked_id, lambda_masked_id),
         ),
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+        algorithm_id,
         internal_transcript_raw: vec![],
     };
     let key_unmasked_times_lambda_masked_ref =
@@ -1192,7 +1256,7 @@ pub(crate) fn create_sig_inputs_with_args(
     );
 
     let presig_quadruple_ref = PreSignatureQuadrupleRef::new(
-        fake_ecdsa_key_id(),
+        key_id,
         kappa_unmasked_ref,
         lambda_masked_ref,
         kappa_unmasked_times_lambda_masked_ref,
@@ -1212,13 +1276,71 @@ pub(crate) fn create_sig_inputs_with_args(
 
     TestSigInputs {
         idkg_transcripts,
-        sig_inputs_ref,
+        sig_inputs_ref: ThresholdSigInputsRef::Ecdsa(sig_inputs_ref),
     }
 }
 
 // Creates a test signature input
-pub(crate) fn create_sig_inputs(caller: u8) -> TestSigInputs {
-    create_sig_inputs_with_height(caller, Height::new(0))
+pub(crate) fn create_schnorr_sig_inputs_with_args(
+    caller: u8,
+    receivers: &BTreeSet<NodeId>,
+    key_unmasked: IDkgTranscript,
+    height: Height,
+    key_id: SchnorrKeyId,
+) -> TestSigInputs {
+    let transcript_id = |offset| {
+        let val = caller as u64;
+        create_transcript_id(val * 214365 + offset)
+    };
+
+    let algorithm_id = key_unmasked.algorithm_id;
+    assert!(
+        algorithm_id.is_threshold_schnorr(),
+        "Expected tSchnorr algorithm"
+    );
+    assert_eq!(
+        algorithm_id,
+        algorithm_for_key_id(&MasterPublicKeyId::Schnorr(key_id.clone()))
+    );
+    let blinder_unmasked_id = transcript_id(10);
+    let mut idkg_transcripts = BTreeMap::new();
+
+    let blinder_unmasked = IDkgTranscript {
+        transcript_id: blinder_unmasked_id,
+        receivers: IDkgReceivers::new(receivers.clone()).unwrap(),
+        registry_version: RegistryVersion::from(1),
+        verified_dealings: BTreeMap::new(),
+        transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
+        algorithm_id,
+        internal_transcript_raw: vec![],
+    };
+    let blinder_unmasked_ref = UnmaskedTranscript::try_from((height, &blinder_unmasked)).unwrap();
+    idkg_transcripts.insert(*blinder_unmasked_ref.as_ref(), blinder_unmasked);
+
+    let key_unmasked_ref = UnmaskedTranscript::try_from((height, &key_unmasked)).unwrap();
+    idkg_transcripts.insert(*key_unmasked_ref.as_ref(), key_unmasked);
+
+    let presig_transcript_ref =
+        PreSignatureTranscriptRef::new(key_id, blinder_unmasked_ref, key_unmasked_ref);
+    let sig_inputs_ref = ThresholdSchnorrSigInputsRef::new(
+        ExtendedDerivationPath {
+            caller: PrincipalId::try_from(&vec![caller]).unwrap(),
+            derivation_path: vec![],
+        },
+        vec![0; 128],
+        Randomness::from([0_u8; 32]),
+        presig_transcript_ref,
+    );
+
+    TestSigInputs {
+        idkg_transcripts,
+        sig_inputs_ref: ThresholdSigInputsRef::Schnorr(sig_inputs_ref),
+    }
+}
+
+// Creates a test signature input
+pub(crate) fn create_sig_inputs(caller: u8, key_id: &MasterPublicKeyId) -> TestSigInputs {
+    create_sig_inputs_with_height(caller, Height::new(0), key_id.clone())
 }
 
 // Creates a test signature share
@@ -1511,6 +1633,14 @@ pub(crate) fn fake_schnorr_master_public_key_id(algorithm: SchnorrAlgorithm) -> 
     MasterPublicKeyId::Schnorr(fake_schnorr_key_id(algorithm))
 }
 
+pub(crate) fn schnorr_algorithm(algorithm: AlgorithmId) -> SchnorrAlgorithm {
+    match algorithm {
+        AlgorithmId::ThresholdSchnorrBip340 => SchnorrAlgorithm::Bip340Secp256k1,
+        AlgorithmId::ThresholdEd25519 => SchnorrAlgorithm::Ed25519,
+        other => panic!("Unexpected algorithm: {other:?}"),
+    }
+}
+
 pub(crate) fn fake_master_public_key_ids_for_all_algorithms() -> Vec<MasterPublicKeyId> {
     AlgorithmId::iter()
         .flat_map(|alg| match alg {
@@ -1557,18 +1687,64 @@ pub(crate) fn add_available_quadruple_to_payload(
     pre_signature_id: PreSigId,
     registry_version: RegistryVersion,
 ) {
-    let sig_inputs = create_sig_inputs(pre_signature_id.id() as u8);
-    let quadruple_ref = sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone();
-    ecdsa_payload.available_pre_signatures.insert(
-        pre_signature_id,
-        PreSignatureRef::Ecdsa(quadruple_ref.clone()),
+    let sig_inputs = create_sig_inputs(
+        pre_signature_id.id() as u8,
+        &fake_ecdsa_master_public_key_id(),
     );
+    ecdsa_payload
+        .available_pre_signatures
+        .insert(pre_signature_id, sig_inputs.sig_inputs_ref.pre_signature());
     for (t_ref, mut transcript) in sig_inputs.idkg_transcripts {
         transcript.registry_version = registry_version;
         ecdsa_payload
             .idkg_transcripts
             .insert(t_ref.transcript_id, transcript);
     }
+}
+
+pub fn create_available_pre_signature(
+    ecdsa_payload: &mut EcdsaPayload,
+    key_id: MasterPublicKeyId,
+    caller: u8,
+) -> PreSigId {
+    create_available_pre_signature_with_key_transcript(
+        ecdsa_payload,
+        caller,
+        key_id,
+        /*key_transcript=*/ None,
+    )
+}
+
+pub fn create_available_pre_signature_with_key_transcript(
+    ecdsa_payload: &mut EcdsaPayload,
+    caller: u8,
+    key_id: MasterPublicKeyId,
+    key_transcript: Option<UnmaskedTranscript>,
+) -> PreSigId {
+    let sig_inputs = create_sig_inputs(caller, &key_id);
+    let pre_sig_id = ecdsa_payload.uid_generator.next_pre_signature_id();
+    let mut pre_signature_ref = sig_inputs.sig_inputs_ref.pre_signature();
+    if let Some(transcript) = key_transcript {
+        match pre_signature_ref {
+            PreSignatureRef::Ecdsa(ref mut pre_sig) => {
+                pre_sig.key_unmasked_ref = transcript;
+            }
+            PreSignatureRef::Schnorr(ref mut pre_sig) => {
+                pre_sig.key_unmasked_ref = transcript;
+            }
+        }
+    }
+    ecdsa_payload
+        .available_pre_signatures
+        .insert(pre_sig_id, pre_signature_ref);
+
+    for (t_ref, transcript) in sig_inputs.idkg_transcripts {
+        ecdsa_payload
+            .idkg_transcripts
+            .insert(t_ref.transcript_id, transcript);
+    }
+
+    pre_sig_id
 }
 
 pub(crate) fn set_up_ecdsa_payload(

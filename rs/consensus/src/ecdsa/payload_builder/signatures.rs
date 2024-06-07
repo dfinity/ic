@@ -162,14 +162,11 @@ mod tests {
         Height,
     };
 
-    use crate::ecdsa::{
-        payload_builder::pre_signatures::test_utils::create_available_quadruple,
-        test_utils::{
-            empty_ecdsa_payload_with_key_ids, empty_response,
-            fake_completed_sign_with_ecdsa_context, fake_ecdsa_key_id,
-            fake_sign_with_ecdsa_context, fake_sign_with_ecdsa_context_with_quadruple,
-            set_up_ecdsa_payload, TestEcdsaSignatureBuilder,
-        },
+    use crate::ecdsa::test_utils::{
+        create_available_pre_signature, empty_ecdsa_payload_with_key_ids, empty_response,
+        fake_completed_sign_with_ecdsa_context, fake_ecdsa_key_id, fake_sign_with_ecdsa_context,
+        fake_sign_with_ecdsa_context_with_quadruple, set_up_ecdsa_payload,
+        TestEcdsaSignatureBuilder,
     };
 
     use super::*;
@@ -254,7 +251,13 @@ mod tests {
         );
         let valid_keys = BTreeSet::from_iter([MasterPublicKeyId::Ecdsa(key_id.clone())]);
         let pre_sig_ids = (0..4)
-            .map(|i| create_available_quadruple(&mut ecdsa_payload, key_id.clone(), i as u8))
+            .map(|i| {
+                create_available_pre_signature(
+                    &mut ecdsa_payload,
+                    MasterPublicKeyId::Ecdsa(key_id.clone()),
+                    i as u8,
+                )
+            })
             .collect::<Vec<_>>();
         let missing_quadruple = ecdsa_payload.uid_generator.next_pre_signature_id();
 

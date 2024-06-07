@@ -600,6 +600,7 @@ mod tests {
 
     use super::test_utils::fake_ecdsa_key_id;
     use super::*;
+    use ic_management_canister_types::MasterPublicKeyId;
     use ic_test_utilities::state_manager::RefMockStateManager;
     use ic_types::consensus::idkg::{EcdsaUIDGenerator, PreSigId};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
@@ -634,7 +635,10 @@ mod tests {
 
         let block_reader = TestEcdsaBlockReader::for_signer_test(
             height,
-            vec![(expected_request_id.clone(), create_sig_inputs(0))],
+            vec![(
+                expected_request_id.clone(),
+                create_sig_inputs(0, &MasterPublicKeyId::Ecdsa(key_id.clone())),
+            )],
         );
 
         // Only the context with matched quadruple should be in "requested"

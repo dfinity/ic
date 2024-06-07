@@ -595,8 +595,8 @@ mod tests {
     use pb::ChainKeyInitialization;
 
     use crate::ecdsa::test_utils::{
-        create_sig_inputs, fake_ecdsa_key_id, fake_ecdsa_master_public_key_id,
-        set_up_ecdsa_payload, EcdsaPayloadTestHelper,
+        create_available_pre_signature_with_key_transcript, fake_ecdsa_key_id,
+        fake_ecdsa_master_public_key_id, set_up_ecdsa_payload, EcdsaPayloadTestHelper,
     };
 
     use super::*;
@@ -896,18 +896,17 @@ mod tests {
     fn add_available_quadruples_with_key_transcript(
         ecdsa_payload: &mut EcdsaPayload,
         key_transcript: UnmaskedTranscript,
-        _key_id: &EcdsaKeyId,
+        key_id: &EcdsaKeyId,
     ) -> Vec<PreSigId> {
         let mut pre_sig_ids = vec![];
         for i in 0..10 {
-            let sig_inputs = create_sig_inputs(i);
-            let pre_sig_id = ecdsa_payload.uid_generator.next_pre_signature_id();
-            pre_sig_ids.push(pre_sig_id);
-            let mut quadruple_ref = sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone();
-            quadruple_ref.key_unmasked_ref = key_transcript;
-            ecdsa_payload
-                .available_pre_signatures
-                .insert(pre_sig_id, PreSignatureRef::Ecdsa(quadruple_ref.clone()));
+            let id = create_available_pre_signature_with_key_transcript(
+                ecdsa_payload,
+                i,
+                MasterPublicKeyId::Ecdsa(key_id.clone()),
+                Some(key_transcript),
+            );
+            pre_sig_ids.push(id);
         }
         pre_sig_ids
     }
