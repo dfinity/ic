@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use super::super::message_pool::tests::*;
 use super::super::message_pool::Class;
 use super::*;
@@ -11,6 +9,7 @@ use ic_types::messages::{CallbackId, RequestOrResponse};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::Time;
 use proptest::prelude::*;
+use std::time::Duration;
 
 #[test]
 fn canister_queue_constructor_test() {
