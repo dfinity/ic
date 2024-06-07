@@ -969,6 +969,15 @@ pub struct SignWithThresholdContext {
     pub nonce: Option<[u8; NONCE_SIZE]>,
 }
 
+impl SignWithThresholdContext {
+    pub fn key_id(&self) -> MasterPublicKeyId {
+        match &self.args {
+            ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
+            ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
+        }
+    }
+}
+
 impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
     fn from(context: &SignWithThresholdContext) -> Self {
         Self {

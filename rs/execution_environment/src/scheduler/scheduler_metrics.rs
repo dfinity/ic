@@ -73,7 +73,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_subnet_queue: ScopedMetrics,
     pub(super) round_advance_long_install_code: ScopedMetrics,
     pub(super) round_scheduling_duration: Histogram,
-    pub(super) round_update_sign_with_ecdsa_contexts_duration: Histogram,
+    pub(super) round_update_signature_request_contexts_duration: Histogram,
     pub(super) round_inner: ScopedMetrics,
     pub(super) round_inner_heartbeat_overhead_duration: Histogram,
     pub(super) round_inner_iteration: ScopedMetrics,
@@ -107,8 +107,8 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_aborted_install_code: Histogram,
     pub(super) inducted_messages: IntCounterVec,
     pub(super) ecdsa_signature_agreements: IntGauge,
-    pub(super) ecdsa_delivered_quadruples: HistogramVec,
-    pub(super) ecdsa_completed_contexts: IntCounterVec,
+    pub(super) delivered_pre_signatures: HistogramVec,
+    pub(super) completed_signature_request_contexts: IntCounterVec,
     // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
     pub(super) stop_canister_calls_without_call_id: IntGauge,
 }
@@ -228,13 +228,13 @@ impl SchedulerMetrics {
                 "replicated_state_ecdsa_signature_agreements_total",
                 "Total number of ECDSA signature agreements created",
             ),
-            ecdsa_delivered_quadruples: metrics_registry.histogram_vec(
+            delivered_pre_signatures: metrics_registry.histogram_vec(
                 "execution_ecdsa_delivered_quadruples",
                 "Number of ECDSA quadruples delivered to execution by key ID",
                 vec![0.0, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0],
                 &["key_id"],
             ),
-            ecdsa_completed_contexts: metrics_registry.int_counter_vec(
+            completed_signature_request_contexts: metrics_registry.int_counter_vec(
                 "execution_completed_sign_with_ecdsa_contexts_total",
                 "Total number of completed sign with ECDSA contexts by key ID",
                 &["key_id"],
@@ -442,7 +442,7 @@ impl SchedulerMetrics {
                 "The duration of execution round scheduling in seconds.",
                 metrics_registry,
             ),
-            round_update_sign_with_ecdsa_contexts_duration: duration_histogram(
+            round_update_signature_request_contexts_duration: duration_histogram(
                 "execution_round_update_sign_with_ecdsa_contexts_duration_seconds",
                 "The duration of updating sign with ecdsa contexts in seconds.",
                 metrics_registry,
