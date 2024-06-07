@@ -89,7 +89,6 @@ go_deps.bzl               @dfinity/idx
 /rs/artifact_pool/                                      @dfinity/consensus
 /rs/async_utils/                                        @dfinity/networking
 /rs/backup/                                             @dfinity/consensus
-/rs/bazelifier/                                         @dfinity/idx
 /rs/bitcoin/adapter/                                    @dfinity/networking
 /rs/bitcoin/ckbtc/                                      @dfinity/cross-chain-team
 /rs/bitcoin/mock/                                       @dfinity/finint
