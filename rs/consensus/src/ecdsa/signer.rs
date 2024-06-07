@@ -13,9 +13,10 @@ use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
 use ic_replicated_state::ReplicatedState;
 use ic_types::artifact::EcdsaMessageId;
+use ic_types::consensus::idkg::common::{CombinedSignature, ThresholdSigInputsRef};
 use ic_types::consensus::idkg::{
     ecdsa::ThresholdEcdsaSigInputsRef, ecdsa_sig_share_prefix, EcdsaBlockReader, EcdsaMessage,
     EcdsaSigShare, EcdsaStats, RequestId,
@@ -84,13 +85,17 @@ impl EcdsaSignerImpl {
     ) -> EcdsaChangeSet {
         state_snapshot
             .get_state()
-            .sign_with_ecdsa_contexts()
+            .signature_request_contexts()
             .values()
             .flat_map(|context| build_signature_inputs(context, block_reader))
             .filter(|(request_id, _)| {
                 !self.signer_has_issued_signature_share(ecdsa_pool, &self.node_id, request_id)
             })
             .flat_map(|(request_id, sig_inputs_ref)| {
+                // TODO(CON-1262): Create schnorr signature shares
+                let ThresholdSigInputsRef::Ecdsa(sig_inputs_ref) = sig_inputs_ref else {
+                    return vec![];
+                };
                 self.resolve_ref(&sig_inputs_ref, block_reader, "send_signature_shares")
                     .map(|sig_inputs| {
                         self.crypto_create_signature_share(
@@ -114,7 +119,7 @@ impl EcdsaSignerImpl {
     ) -> EcdsaChangeSet {
         let sig_inputs_map = state_snapshot
             .get_state()
-            .sign_with_ecdsa_contexts()
+            .signature_request_contexts()
             .values()
             .map(|c| (c.pseudo_random_id, build_signature_inputs(c, block_reader)))
             .collect::<BTreeMap<_, _>>();
@@ -142,6 +147,16 @@ impl EcdsaSignerImpl {
                 state_snapshot.get_height(),
             ) {
                 Action::Process(sig_inputs_ref) => {
+                    // TODO(CON-1262): Verify schnorr signature shares
+                    let ThresholdSigInputsRef::Ecdsa(sig_inputs_ref) = sig_inputs_ref else {
+                        self.metrics
+                            .sign_errors_inc("ecdsa_share_for_schnorr_inputs");
+                        ret.push(EcdsaChangeAction::HandleInvalid(
+                            id,
+                            format!("Schnorr signature shares are unsupported: {}", share),
+                        ));
+                        continue;
+                    };
                     if self.signer_has_issued_signature_share(
                         ecdsa_pool,
                         &share.signer_id,
@@ -198,7 +213,7 @@ impl EcdsaSignerImpl {
     ) -> EcdsaChangeSet {
         let in_progress = state_snapshot
             .get_state()
-            .sign_with_ecdsa_contexts()
+            .signature_request_contexts()
             .values()
             .map(|context| context.pseudo_random_id)
             .collect::<BTreeSet<_>>();
@@ -403,7 +418,7 @@ impl EcdsaSigner for EcdsaSignerImpl {
 
         let active_requests = snapshot
             .get_state()
-            .sign_with_ecdsa_contexts()
+            .signature_request_contexts()
             .values()
             .flat_map(get_context_request_id)
             .collect();
@@ -455,8 +470,8 @@ pub(crate) trait EcdsaSignatureBuilder {
     /// built from the current sig shares in the ECDSA pool
     fn get_completed_signature(
         &self,
-        context: &SignWithEcdsaContext,
-    ) -> Option<ThresholdEcdsaCombinedSignature>;
+        context: &SignWithThresholdContext,
+    ) -> Option<CombinedSignature>;
 }
 
 pub(crate) struct EcdsaSignatureBuilderImpl<'a> {
@@ -526,10 +541,15 @@ impl<'a> EcdsaSignatureBuilderImpl<'a> {
 impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
     fn get_completed_signature(
         &self,
-        context: &SignWithEcdsaContext,
-    ) -> Option<ThresholdEcdsaCombinedSignature> {
+        context: &SignWithThresholdContext,
+    ) -> Option<CombinedSignature> {
         // Find the sig inputs for the request and translate the refs.
         let (request_id, sig_inputs_ref) = build_signature_inputs(context, self.block_reader)?;
+
+        // TODO(CON-1262): Combine schnorr signature shares
+        let ThresholdSigInputsRef::Ecdsa(sig_inputs_ref) = sig_inputs_ref else {
+            return None;
+        };
 
         let sig_inputs = match sig_inputs_ref.translate(self.block_reader) {
             Ok(sig_inputs) => sig_inputs,
@@ -560,6 +580,7 @@ impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
             &sig_shares,
             self.ecdsa_pool.stats(),
         )
+        .map(CombinedSignature::Ecdsa)
     }
 }
 
@@ -569,7 +590,7 @@ enum Action<'a> {
     /// The message is relevant to our current state, process it
     /// immediately. The transcript params for this transcript
     /// (as specified by the finalized block) is the argument
-    Process(&'a ThresholdEcdsaSigInputsRef),
+    Process(&'a ThresholdSigInputsRef),
 
     /// Keep it to be processed later (e.g) this is from a node
     /// ahead of us
@@ -582,10 +603,7 @@ enum Action<'a> {
 impl<'a> Action<'a> {
     /// Decides the action to take on a received message with the given height/RequestId
     fn new(
-        requested_signatures: &'a BTreeMap<
-            [u8; 32],
-            Option<(RequestId, ThresholdEcdsaSigInputsRef)>,
-        >,
+        requested_signatures: &'a BTreeMap<[u8; 32], Option<(RequestId, ThresholdSigInputsRef)>>,
         request_id: &RequestId,
         certified_height: Height,
     ) -> Action<'a> {
@@ -622,11 +640,7 @@ impl<'a> Debug for Action<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self {
             Self::Process(sig_inputs) => {
-                write!(
-                    f,
-                    "Action::Process(): caller = {:?}",
-                    sig_inputs.derivation_path.caller
-                )
+                write!(f, "Action::Process(): caller = {:?}", sig_inputs.caller())
             }
             Self::Defer => write!(f, "Action::Defer"),
             Self::Drop => write!(f, "Action::Drop"),
@@ -645,6 +659,9 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
+    use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+        EcdsaArguments, ThresholdArguments,
+    };
     use ic_test_utilities_consensus::EcdsaStatsNoOp;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{
@@ -684,24 +701,15 @@ mod tests {
         let requested = BTreeMap::from([
             (
                 id_1.pseudo_random_id,
-                Some((
-                    id_1.clone(),
-                    create_sig_inputs(1, &key_id).sig_inputs_ref.into_ecdsa(),
-                )),
+                Some((id_1.clone(), create_sig_inputs(1, &key_id).sig_inputs_ref)),
             ),
             (
                 id_2.pseudo_random_id,
-                Some((
-                    id_2.clone(),
-                    create_sig_inputs(2, &key_id).sig_inputs_ref.into_ecdsa(),
-                )),
+                Some((id_2.clone(), create_sig_inputs(2, &key_id).sig_inputs_ref)),
             ),
             (
                 id_3.pseudo_random_id,
-                Some((
-                    id_3.clone(),
-                    create_sig_inputs(3, &key_id).sig_inputs_ref.into_ecdsa(),
-                )),
+                Some((id_3.clone(), create_sig_inputs(3, &key_id).sig_inputs_ref)),
             ),
             (id_4.pseudo_random_id, None),
         ]);
@@ -845,11 +853,11 @@ mod tests {
         );
         let transcript_loader: TestEcdsaTranscriptLoader = Default::default();
 
-        let state = fake_state_with_ecdsa_contexts(
+        let state = fake_state_with_signature_requests(
             height,
-            block_reader
-                .requested_signatures()
-                .map(|(request_id, _)| fake_sign_with_ecdsa_context_from_request_id(request_id)),
+            block_reader.requested_signatures().map(|(request_id, _)| {
+                fake_signature_request_context_from_id(key_id.clone(), request_id)
+            }),
         );
 
         // Test using CryptoReturningOK
@@ -938,24 +946,24 @@ mod tests {
         );
         let transcript_loader: TestEcdsaTranscriptLoader = Default::default();
 
-        let key_id = fake_ecdsa_key_id();
-        let state = fake_state_with_ecdsa_contexts(
+        let key_id = fake_ecdsa_master_public_key_id();
+        let state = fake_state_with_signature_requests(
             height,
             [
                 // One context without matched quadruple
-                fake_sign_with_ecdsa_context_with_quadruple(
+                fake_signature_request_context_with_pre_sig(
                     id_1.pre_signature_id.id() as u8,
                     key_id.clone(),
                     None,
                 ),
                 // One context without nonce
-                fake_sign_with_ecdsa_context_with_quadruple(
+                fake_signature_request_context_with_pre_sig(
                     id_2.pre_signature_id.id() as u8,
                     key_id.clone(),
                     Some(id_2.pre_signature_id),
                 ),
                 // One completed context
-                fake_sign_with_ecdsa_context_from_request_id(&id_3),
+                fake_signature_request_context_from_id(key_id.clone(), &id_3),
             ],
         );
 
@@ -1004,10 +1012,10 @@ mod tests {
                         (id_3, create_sig_inputs(3, &key_id)),
                     ],
                 );
-                let state = fake_state_with_ecdsa_contexts(
+                let state = fake_state_with_signature_requests(
                     height,
                     block_reader.requested_signatures().map(|(request_id, _)| {
-                        fake_sign_with_ecdsa_context_from_request_id(request_id)
+                        fake_signature_request_context_from_id(key_id.clone(), request_id)
                     }),
                 );
 
@@ -1065,10 +1073,10 @@ mod tests {
                         (id_3, create_sig_inputs(3, &key_id)),
                     ],
                 );
-                let state = fake_state_with_ecdsa_contexts(
+                let state = fake_state_with_signature_requests(
                     height,
                     block_reader.requested_signatures().map(|(request_id, _)| {
-                        fake_sign_with_ecdsa_context_from_request_id(request_id)
+                        fake_signature_request_context_from_id(key_id.clone(), request_id)
                     }),
                 );
 
@@ -1180,11 +1188,11 @@ mod tests {
                 (id_3.clone(), create_sig_inputs(3, &key_id)),
             ],
         );
-        let state = fake_state_with_ecdsa_contexts(
+        let state = fake_state_with_signature_requests(
             height,
-            block_reader
-                .requested_signatures()
-                .map(|(request_id, _)| fake_sign_with_ecdsa_context_from_request_id(request_id)),
+            block_reader.requested_signatures().map(|(request_id, _)| {
+                fake_signature_request_context_from_id(key_id.clone(), request_id)
+            }),
         );
 
         // Set up the ECDSA pool
@@ -1279,24 +1287,24 @@ mod tests {
                 (id_3.clone(), create_sig_inputs(3, &key_id)),
             ],
         );
-        let key_id = fake_ecdsa_key_id();
-        let state = fake_state_with_ecdsa_contexts(
+        let key_id = fake_ecdsa_master_public_key_id();
+        let state = fake_state_with_signature_requests(
             height,
             [
                 // One context without matched quadruple
-                fake_sign_with_ecdsa_context_with_quadruple(
+                fake_signature_request_context_with_pre_sig(
                     id_1.pre_signature_id.id() as u8,
                     key_id.clone(),
                     None,
                 ),
                 // One context without nonce
-                fake_sign_with_ecdsa_context_with_quadruple(
+                fake_signature_request_context_with_pre_sig(
                     id_2.pre_signature_id.id() as u8,
                     key_id.clone(),
                     Some(id_2.pre_signature_id),
                 ),
                 // One completed context
-                fake_sign_with_ecdsa_context_from_request_id(&id_3),
+                fake_signature_request_context_from_id(key_id.clone(), &id_3),
             ],
         );
 
@@ -1367,10 +1375,10 @@ mod tests {
                     height,
                     vec![(id_2.clone(), create_sig_inputs(2, &key_id))],
                 );
-                let state = fake_state_with_ecdsa_contexts(
+                let state = fake_state_with_signature_requests(
                     height,
                     block_reader.requested_signatures().map(|(request_id, _)| {
-                        fake_sign_with_ecdsa_context_from_request_id(request_id)
+                        fake_signature_request_context_from_id(key_id.clone(), request_id)
                     }),
                 );
 
@@ -1416,10 +1424,10 @@ mod tests {
                     height,
                     vec![(id_1.clone(), create_sig_inputs(2, &key_id))],
                 );
-                let state = fake_state_with_ecdsa_contexts(
+                let state = fake_state_with_signature_requests(
                     height,
                     block_reader.requested_signatures().map(|(request_id, _)| {
-                        fake_sign_with_ecdsa_context_from_request_id(request_id)
+                        fake_signature_request_context_from_id(key_id.clone(), request_id)
                     }),
                 );
 
@@ -1487,10 +1495,10 @@ mod tests {
                         (id_3.clone(), create_sig_inputs(3, &key_id)),
                     ],
                 );
-                let state = fake_state_with_ecdsa_contexts(
+                let state = fake_state_with_signature_requests(
                     height,
                     block_reader.requested_signatures().map(|(request_id, _)| {
-                        fake_sign_with_ecdsa_context_from_request_id(request_id)
+                        fake_signature_request_context_from_id(key_id.clone(), request_id)
                     }),
                 );
 
@@ -1551,10 +1559,10 @@ mod tests {
                         (id_3.clone(), create_sig_inputs(3, &key_id)),
                     ],
                 );
-                let state = fake_state_with_ecdsa_contexts(
+                let state = fake_state_with_signature_requests(
                     height,
                     block_reader.requested_signatures().map(|(request_id, _)| {
-                        fake_sign_with_ecdsa_context_from_request_id(request_id)
+                        fake_signature_request_context_from_id(key_id.clone(), request_id)
                     }),
                 );
 
@@ -1615,14 +1623,17 @@ mod tests {
                     derivation_path: vec![],
                 };
                 let pre_sig_id = req_id.pre_signature_id;
-                let context = SignWithEcdsaContext {
+                let message_hash = [0; 32];
+                let context = SignWithThresholdContext {
                     request: RequestBuilder::new().sender(canister_test_id(1)).build(),
-                    key_id: fake_ecdsa_key_id(),
+                    args: ThresholdArguments::Ecdsa(EcdsaArguments {
+                        key_id: fake_ecdsa_key_id(),
+                        message_hash,
+                    }),
                     pseudo_random_id: req_id.pseudo_random_id,
-                    message_hash: [0; 32],
                     derivation_path: vec![],
                     batch_time: UNIX_EPOCH,
-                    matched_quadruple: Some((pre_sig_id, req_id.height)),
+                    matched_pre_signature: Some((pre_sig_id, req_id.height)),
                     nonce: Some([2; 32]),
                 };
                 let sig_inputs = generate_tecdsa_protocol_inputs(
@@ -1630,7 +1641,7 @@ mod tests {
                     &dealers,
                     &receivers,
                     &key_transcript,
-                    &context.message_hash,
+                    &message_hash,
                     Randomness::from(context.nonce.unwrap()),
                     &derivation_path,
                     AlgorithmId::ThresholdEcdsaSecp256k1,
@@ -1698,7 +1709,7 @@ mod tests {
                 // Signature completion should succeed now.
                 let r1 = sig_builder.get_completed_signature(&context);
                 // Compare to combined signature returned by crypto environment
-                let r2 = run_tecdsa_protocol(&env, &sig_inputs, &mut rng);
+                let r2 = CombinedSignature::Ecdsa(run_tecdsa_protocol(&env, &sig_inputs, &mut rng));
                 assert_matches!(r1, Some(ref s) if s == &r2);
 
                 // If the context's nonce hasn't been set yet, no signature should be completed

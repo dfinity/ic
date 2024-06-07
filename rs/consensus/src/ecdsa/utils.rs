@@ -12,9 +12,12 @@ use ic_management_canister_types::{EcdsaCurve, MasterPublicKeyId, SchnorrAlgorit
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
-use ic_types::consensus::idkg::common::PreSignatureRef;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+    SignWithThresholdContext, ThresholdArguments,
+};
+use ic_types::consensus::idkg::common::{PreSignatureRef, ThresholdSigInputsRef};
 use ic_types::consensus::idkg::ecdsa::ThresholdEcdsaSigInputsRef;
+use ic_types::consensus::idkg::schnorr::ThresholdSchnorrSigInputsRef;
 use ic_types::consensus::idkg::HasMasterPublicKeyId;
 use ic_types::consensus::Block;
 use ic_types::consensus::{
@@ -216,9 +219,9 @@ pub(super) fn block_chain_cache(
 }
 
 /// Helper to build the [`RequestId`] if the context is already completed
-pub(super) fn get_context_request_id(context: &SignWithEcdsaContext) -> Option<RequestId> {
+pub(super) fn get_context_request_id(context: &SignWithThresholdContext) -> Option<RequestId> {
     context
-        .matched_quadruple
+        .matched_pre_signature
         .map(|(pre_signature_id, height)| RequestId {
             pre_signature_id,
             pseudo_random_id: context.pseudo_random_id,
@@ -227,30 +230,42 @@ pub(super) fn get_context_request_id(context: &SignWithEcdsaContext) -> Option<R
 }
 
 /// Helper to build threshold signature inputs from the context and
-/// the pre-signature quadruple
+/// the pre-signature
 pub(super) fn build_signature_inputs(
-    context: &SignWithEcdsaContext,
+    context: &SignWithThresholdContext,
     block_reader: &dyn EcdsaBlockReader,
-) -> Option<(RequestId, ThresholdEcdsaSigInputsRef)> {
+) -> Option<(RequestId, ThresholdSigInputsRef)> {
     let request_id = get_context_request_id(context)?;
     let extended_derivation_path = ExtendedDerivationPath {
         caller: context.request.sender.into(),
         derivation_path: context.derivation_path.clone(),
     };
-    let PreSignatureRef::Ecdsa(quadruple) = block_reader
+    let pre_signature = block_reader
         .available_pre_signature(&request_id.pre_signature_id)?
-        .clone()
-    else {
-        return None;
+        .clone();
+    let nonce = Id::from(context.nonce?);
+    let inputs = match (pre_signature, &context.args) {
+        (PreSignatureRef::Ecdsa(pre_sig), ThresholdArguments::Ecdsa(args)) => {
+            let key_transcript_ref = pre_sig.key_unmasked_ref;
+            ThresholdSigInputsRef::Ecdsa(ThresholdEcdsaSigInputsRef::new(
+                extended_derivation_path,
+                args.message_hash,
+                nonce,
+                pre_sig,
+                key_transcript_ref,
+            ))
+        }
+        (PreSignatureRef::Schnorr(pre_sig), ThresholdArguments::Schnorr(args)) => {
+            ThresholdSigInputsRef::Schnorr(ThresholdSchnorrSigInputsRef::new(
+                extended_derivation_path,
+                args.message.clone(),
+                nonce,
+                pre_sig,
+            ))
+        }
+        _ => return None,
     };
-    let key_transcript_ref = quadruple.key_unmasked_ref;
-    let inputs = ThresholdEcdsaSigInputsRef::new(
-        extended_derivation_path,
-        context.message_hash,
-        Id::from(context.nonce?),
-        quadruple,
-        key_transcript_ref,
-    );
+
     Some((request_id, inputs))
 }
 

@@ -993,6 +993,23 @@ impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
     }
 }
 
+impl From<&SignWithEcdsaContext> for SignWithThresholdContext {
+    fn from(context: &SignWithEcdsaContext) -> Self {
+        SignWithThresholdContext {
+            request: context.request.clone(),
+            args: ThresholdArguments::Ecdsa(EcdsaArguments {
+                key_id: context.key_id.clone(),
+                message_hash: context.message_hash,
+            }),
+            derivation_path: context.derivation_path.clone(),
+            pseudo_random_id: context.pseudo_random_id,
+            batch_time: context.batch_time,
+            matched_pre_signature: context.matched_quadruple,
+            nonce: context.nonce,
+        }
+    }
+}
+
 impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext {
     type Error = ProxyDecodeError;
     fn try_from(context: pb_metadata::SignWithThresholdContext) -> Result<Self, Self::Error> {

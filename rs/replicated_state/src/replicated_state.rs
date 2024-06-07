@@ -9,7 +9,9 @@ use crate::{
         system_state::{push_input, CanisterOutputQueuesIterator},
     },
     metadata_state::{
-        subnet_call_context_manager::{IDkgDealingsContext, SignWithEcdsaContext},
+        subnet_call_context_manager::{
+            IDkgDealingsContext, SignWithEcdsaContext, SignWithThresholdContext,
+        },
         StreamMap,
     },
     CanisterQueues,
@@ -610,6 +612,25 @@ impl ReplicatedState {
     /// Returns all subnets for which a stream is available.
     pub fn subnets_with_available_streams(&self) -> Vec<SubnetId> {
         self.metadata.streams.keys().cloned().collect()
+    }
+
+    /// Returns all signature request contexts
+    pub fn signature_request_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        self.metadata
+            .subnet_call_context_manager
+            .sign_with_threshold_contexts
+            .clone()
+            .into_iter()
+            .chain(
+                self.metadata
+                    .subnet_call_context_manager
+                    .sign_with_ecdsa_contexts
+                    .iter()
+                    .map(|(callback, ecdsa_context)| {
+                        (*callback, SignWithThresholdContext::from(ecdsa_context))
+                    }),
+            )
+            .collect()
     }
 
     /// Returns all sign with ECDSA contexts
