@@ -5,10 +5,11 @@ use assert_matches::assert_matches;
 use ic_test_utilities_types::arbitrary;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
-use ic_types::messages::{CallbackId, RequestOrResponse, NO_DEADLINE};
+use ic_types::messages::{CallbackId, RequestOrResponse};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::Time;
 use proptest::prelude::*;
+use std::time::Duration;
 
 #[test]
 fn canister_queue_constructor_test() {
@@ -271,7 +272,7 @@ proptest! {
                     queue.push_response(*id);
                 }
             }
-            prop_assert!(queue.check_invariants());
+            prop_assert_eq!(Ok(()), queue.check_invariants());
         }
 
         // Check the contents of the queue via `peek` and `pop`.
@@ -307,30 +308,127 @@ proptest! {
                     queue.push_response(*id);
                 }
             }
-            prop_assert!(queue.check_invariants());
+            prop_assert_eq!(Ok(()), queue.check_invariants());
         }
         // And make `reserved_slots` additional reservations.
         for _ in 0..reserved_slots {
             queue.try_reserve_response_slot().unwrap();
         }
-        prop_assert!(queue.check_invariants());
+        prop_assert_eq!(Ok(()), queue.check_invariants());
 
         let encoded: pb_queues::CanisterQueue = (&queue).into();
-        let decoded = encoded.try_into().unwrap();
+        let decoded = (encoded, Context::Inbound).try_into().unwrap();
 
         assert_eq!(queue, decoded);
     }
 }
 
-fn make_request(callback_id: u64, class: Class) -> Request {
+#[test]
+fn decode_inbound_message_in_output_queue_fails() {
+    // Queue with an inbound request.
+    let mut queue = CanisterQueue::new(10);
+    queue.push_request(new_request_message_id(13, Class::BestEffort));
+    let encoded: pb_queues::CanisterQueue = (&queue).into();
+
+    // Cannot be decoded as an output queue.
+    assert_matches!(
+        CanisterQueue::try_from((encoded.clone(), Context::Outbound)),
+        Err(ProxyDecodeError::Other(_))
+    );
+
+    // But can be decoded as an input queue.
+    assert_eq!(queue, (encoded, Context::Inbound).try_into().unwrap());
+}
+
+fn make_request(callback_id: u64, deadline_seconds: u32) -> Request {
     RequestBuilder::default()
         .sender_reply_callback(CallbackId::from(callback_id))
-        .deadline(if class == Class::BestEffort {
-            CoarseTime::from_secs_since_unix_epoch(1)
-        } else {
-            NO_DEADLINE
-        })
+        .deadline(CoarseTime::from_secs_since_unix_epoch(deadline_seconds))
         .build()
+}
+
+#[test]
+fn canister_queue_try_from_input_queue() {
+    let req1 = make_request(1, 0);
+    let req2 = make_request(2, 0);
+    let req3 = make_request(3, 13);
+    let rep = ResponseBuilder::default()
+        .originator_reply_callback(CallbackId::new(4))
+        .build();
+
+    // An input queue with a non-zero `begin`, a couple of requests, a response and
+    // a reserved slot.
+    let mut input_queue = InputQueue::new(10);
+    input_queue.push(req1.clone().into()).unwrap();
+    input_queue.pop().unwrap();
+    input_queue.push(req2.clone().into()).unwrap();
+    input_queue.push(req3.clone().into()).unwrap();
+    input_queue.reserve_slot().unwrap();
+    input_queue.push(rep.clone().into()).unwrap();
+    input_queue.reserve_slot().unwrap();
+
+    // Expected `MessagePool` and `CanisterQueue`.
+    let mut expected_pool = MessagePool::default();
+    let mut expected_queue = CanisterQueue::new(10);
+    expected_queue.push_request(expected_pool.insert_inbound(req2.into()));
+    expected_queue.push_request(expected_pool.insert_inbound(req3.into()));
+    expected_queue.try_reserve_response_slot().unwrap();
+    expected_queue.push_response(expected_pool.insert_inbound(rep.into()));
+    expected_queue.try_reserve_response_slot().unwrap();
+
+    let mut pool = MessagePool::default();
+    let queue: CanisterQueue = (input_queue, &mut pool).try_into().unwrap();
+
+    assert_eq!((expected_pool, expected_queue), (pool, queue));
+}
+
+#[test]
+fn canister_queue_try_from_output_queue() {
+    let t0 = Time::from_secs_since_unix_epoch(10).unwrap();
+    let t3 = t0 + Duration::from_secs(3);
+    let t4 = t0 + Duration::from_secs(4);
+    let d0 = t0 + REQUEST_LIFETIME;
+    let d3 = t3 + REQUEST_LIFETIME;
+    let d4 = t4 + REQUEST_LIFETIME;
+    let req1 = make_request(1, 0);
+    let req2 = make_request(2, 13);
+    let req3 = make_request(3, 0);
+    let req4 = make_request(4, 14);
+    let rep = ResponseBuilder::default()
+        .originator_reply_callback(CallbackId::new(5))
+        .build();
+
+    // An output queue with a non-zero `begin`, a `timed out request (a `None`), a
+    // couple of requests, a response and a reserved slot.
+    let mut output_queue = OutputQueue::new(10);
+    // Advance `begin`.
+    output_queue.push_request(req1.clone().into(), d0).unwrap();
+    output_queue.pop().unwrap();
+    // Enqueue a response to induce head-of-line blocking.
+    output_queue.reserve_slot().unwrap();
+    output_queue.push_response(rep.clone().into());
+    // Enqueue and time out a request.
+    output_queue.push_request(req2.clone().into(), d0).unwrap();
+    output_queue.time_out_requests(d3).next();
+    // Enqueue a couple more requests.
+    output_queue.push_request(req3.clone().into(), d3).unwrap();
+    output_queue.push_request(req4.clone().into(), d4).unwrap();
+    // Make an extra response reservation.
+    output_queue.reserve_slot().unwrap();
+
+    // Expected `MessagePool` and `CanisterQueue`.
+    let mut expected_pool = MessagePool::default();
+    let mut expected_queue = CanisterQueue::new(10);
+    expected_queue.try_reserve_response_slot().unwrap();
+    expected_queue.push_response(expected_pool.insert_outbound_response(rep.into()));
+    expected_queue.push_request(expected_pool.insert_outbound_request(req3.into(), t3));
+    expected_queue.push_request(expected_pool.insert_outbound_request(req4.into(), t4));
+    expected_queue.try_reserve_response_slot().unwrap();
+
+    let mut pool = MessagePool::default();
+    let queue: CanisterQueue = (output_queue, &mut pool).try_into().unwrap();
+
+    assert_eq!((expected_pool, expected_queue), (pool, queue));
 }
 
 #[test]
