@@ -8,11 +8,10 @@ use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm};
+use ic_management_canister_types::{EcdsaCurve, MasterPublicKeyId, SchnorrAlgorithm};
 use ic_protobuf::registry::subnet::v1 as pb;
-use ic_registry_client_helpers::ecdsa_keys::EcdsaKeysRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig};
+use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_types::consensus::idkg::common::PreSignatureRef;
 use ic_types::consensus::idkg::ecdsa::ThresholdEcdsaSigInputsRef;
@@ -424,29 +423,6 @@ pub(crate) fn get_chain_key_config_if_enabled(
     }
 }
 
-/// Return ids of ECDSA keys of the given [EcdsaConfig] for which
-/// signing is enabled on the given subnet.
-#[allow(dead_code)]
-pub(crate) fn get_enabled_signing_keys(
-    subnet_id: SubnetId,
-    registry_version: RegistryVersion,
-    registry_client: &dyn RegistryClient,
-    ecdsa_config: &EcdsaConfig,
-) -> Result<BTreeSet<EcdsaKeyId>, RegistryClientError> {
-    let signing_subnets = registry_client
-        .get_ecdsa_signing_subnets(registry_version)?
-        .unwrap_or_default();
-    Ok(ecdsa_config
-        .key_ids
-        .iter()
-        .filter(|&key_id| match signing_subnets.get(key_id) {
-            Some(subnets) => subnets.contains(&subnet_id),
-            None => false,
-        })
-        .cloned()
-        .collect())
-}
-
 /// Return the set of quadruple IDs to be delivered in the batch of this block.
 /// We deliver IDs of all available quadruples that were created using the current key transcript.
 pub(crate) fn get_pre_signature_ids_to_deliver(
@@ -561,8 +537,11 @@ pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) ->
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
+    use super::*;
+    use crate::ecdsa::test_utils::{
+        create_available_pre_signature_with_key_transcript, fake_ecdsa_key_id,
+        fake_ecdsa_master_public_key_id, set_up_ecdsa_payload, EcdsaPayloadTestHelper,
+    };
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::{
@@ -571,13 +550,9 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::SchnorrKeyId;
-    use ic_protobuf::registry::{
-        crypto::v1::EcdsaSigningSubnetList, subnet::v1::EcdsaInitialization,
-    };
+    use ic_management_canister_types::{EcdsaKeyId, SchnorrKeyId};
+    use ic_protobuf::registry::subnet::v1::EcdsaInitialization;
     use ic_registry_client_fake::FakeRegistryClient;
-    use ic_registry_keys::make_ecdsa_signing_subnet_list_key;
-    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_consensus::fake::Fake;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
@@ -589,17 +564,10 @@ mod tests {
             BlockPayload, Payload, SummaryPayload,
         },
         crypto::{AlgorithmId, CryptoHashOf},
-        subnet_id_into_protobuf,
         time::UNIX_EPOCH,
     };
     use pb::ChainKeyInitialization;
-
-    use crate::ecdsa::test_utils::{
-        create_available_pre_signature_with_key_transcript, fake_ecdsa_key_id,
-        fake_ecdsa_master_public_key_id, set_up_ecdsa_payload, EcdsaPayloadTestHelper,
-    };
-
-    use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn test_inspect_chain_key_initializations_no_keys() {
@@ -838,59 +806,6 @@ mod tests {
 
             assert!(config.is_none());
         })
-    }
-
-    #[test]
-    fn test_get_enabled_signing_keys() {
-        let key_id1 = EcdsaKeyId::from_str("Secp256k1:some_key1").unwrap();
-        let key_id2 = EcdsaKeyId::from_str("Secp256k1:some_key2").unwrap();
-        let key_id3 = EcdsaKeyId::from_str("Secp256k1:some_key3").unwrap();
-        let ecdsa_config = EcdsaConfig {
-            key_ids: vec![key_id1.clone(), key_id2.clone()],
-            ..EcdsaConfig::default()
-        };
-        let registry_data = Arc::new(ProtoRegistryDataProvider::new());
-        let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-        let subnet_id = subnet_test_id(1);
-
-        let add_key = |version, key_id, subnets| {
-            registry_data
-                .add(
-                    &make_ecdsa_signing_subnet_list_key(key_id),
-                    RegistryVersion::from(version),
-                    Some(EcdsaSigningSubnetList { subnets }),
-                )
-                .expect("failed to add subnets to registry");
-        };
-
-        add_key(1, &key_id1, vec![subnet_id_into_protobuf(subnet_id)]);
-        add_key(2, &key_id2, vec![subnet_id_into_protobuf(subnet_id)]);
-        add_key(2, &key_id3, vec![subnet_id_into_protobuf(subnet_id)]);
-        add_key(3, &key_id1, vec![]);
-        registry.update_to_latest_version();
-
-        let test_cases = vec![
-            (0, Ok(BTreeSet::new())),
-            (1, Ok(BTreeSet::from_iter(vec![key_id1.clone()]))),
-            (2, Ok(BTreeSet::from_iter(vec![key_id1, key_id2.clone()]))),
-            (3, Ok(BTreeSet::from_iter(vec![key_id2]))),
-            (
-                4,
-                Err(RegistryClientError::VersionNotAvailable {
-                    version: RegistryVersion::from(4),
-                }),
-            ),
-        ];
-
-        for (version, expected) in test_cases {
-            let result = get_enabled_signing_keys(
-                subnet_id,
-                RegistryVersion::from(version),
-                registry.as_ref(),
-                &ecdsa_config,
-            );
-            assert_eq!(result, expected);
-        }
     }
 
     fn add_available_quadruples_with_key_transcript(
