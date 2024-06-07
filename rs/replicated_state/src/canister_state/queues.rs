@@ -1590,7 +1590,7 @@ pub mod testing {
         /// `canister_id`; or `None` if no such output queue exists.
         fn output_queue_iter_for_testing(
             &self,
-            canister_id: CanisterId,
+            canister_id: &CanisterId,
         ) -> Option<impl Iterator<Item = RequestOrResponse>>;
     }
 
@@ -1645,10 +1645,10 @@ pub mod testing {
 
         fn output_queue_iter_for_testing(
             &self,
-            canister_id: CanisterId,
+            canister_id: &CanisterId,
         ) -> Option<impl Iterator<Item = RequestOrResponse>> {
             self.canister_queues
-                .get(&canister_id)
+                .get(canister_id)
                 .map(|(_, output_queue)| {
                     output_queue
                         .iter()

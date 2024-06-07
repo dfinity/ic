@@ -178,8 +178,8 @@ impl SubnetPairProxy {
     fn local_output_queue_snapshot(&self) -> Option<Vec<RequestOrResponse>> {
         get_output_queue_iter(
             &self.local_env.get_latest_state(),
-            self.local_canister_id,
-            self.remote_canister_id,
+            &self.local_canister_id,
+            &self.remote_canister_id,
         )
         .map(|iter| iter.collect::<Vec<_>>())
     }
@@ -189,8 +189,8 @@ impl SubnetPairProxy {
     fn remote_output_queue_snapshot(&self) -> Option<Vec<RequestOrResponse>> {
         get_output_queue_iter(
             &self.remote_env.get_latest_state(),
-            self.remote_canister_id,
-            self.local_canister_id,
+            &self.remote_canister_id,
+            &self.local_canister_id,
         )
         .map(|iter| iter.collect::<Vec<_>>())
     }
@@ -272,14 +272,14 @@ impl SubnetPairProxy {
 /// Returns an iterator over the raw contents of a specific local canister's
 /// output queue to a specific remote canister; or `None` if the queue does not
 /// exist.
-fn get_output_queue_iter(
-    state: &Arc<ReplicatedState>,
-    local_canister_id: CanisterId,
-    remote_canister_id: CanisterId,
-) -> Option<impl Iterator<Item = RequestOrResponse> + '_> {
+fn get_output_queue_iter<'a>(
+    state: &'a ReplicatedState,
+    local_canister_id: &CanisterId,
+    remote_canister_id: &'a CanisterId,
+) -> Option<impl Iterator<Item = RequestOrResponse> + 'a> {
     state
         .canister_states
-        .get(&local_canister_id)
+        .get(local_canister_id)
         .and_then(move |canister_state| {
             canister_state
                 .system_state
