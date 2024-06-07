@@ -357,7 +357,7 @@ message CanisterStateBits {
   reserved "executed_and_exhausted_its_messages";
   bytes certified_data = 20;
   uint64 interrupted_during_execution = 21;
-  types.v1.NominalCycles consumed_cycles_since_replica_started = 22;
+  types.v1.NominalCycles consumed_cycles = 22;
   uint64 freeze_threshold = 23;
   reserved 24;
   reserved "stable_memory_size";
@@ -383,7 +383,7 @@ message CanisterStateBits {
   // Canister version.
   uint64 canister_version = 34;
   reserved 35;
-  repeated ConsumedCyclesByUseCase consumed_cycles_since_replica_started_by_use_cases = 36;
+  repeated ConsumedCyclesByUseCase consumed_cycles_by_use_cases = 36;
   CanisterHistory canister_history = 37;
   // Resource reservation cycles.
   state.queues.v1.Cycles reserved_balance = 38;

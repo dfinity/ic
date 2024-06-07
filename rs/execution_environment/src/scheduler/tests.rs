@@ -3150,7 +3150,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         &no_op_logger(),
     );
 
-    let consumed_cycles_since_replica_started_before = NominalCycles::from(
+    let consumed_cycles_before = NominalCycles::from(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -3187,7 +3187,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         &test.scheduler().metrics,
         &no_op_logger(),
     );
-    let consumed_cycles_since_replica_started_after = NominalCycles::from(
+    let consumed_cycles_after = NominalCycles::from(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -3196,8 +3196,8 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
     );
 
     assert_eq!(
-        consumed_cycles_since_replica_started_before + NominalCycles::from(fee),
-        consumed_cycles_since_replica_started_after
+        consumed_cycles_before + NominalCycles::from(fee),
+        consumed_cycles_after
     );
 
     assert_eq!(
@@ -3224,7 +3224,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         &no_op_logger(),
     );
 
-    let consumed_cycles_since_replica_started_before = NominalCycles::from(
+    let consumed_cycles_before = NominalCycles::from(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -3288,7 +3288,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         &test.scheduler().metrics,
         &no_op_logger(),
     );
-    let consumed_cycles_since_replica_started_after = NominalCycles::from(
+    let consumed_cycles_after = NominalCycles::from(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -3297,8 +3297,8 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
     );
 
     assert_eq!(
-        consumed_cycles_since_replica_started_before + NominalCycles::from(fee),
-        consumed_cycles_since_replica_started_after
+        consumed_cycles_before + NominalCycles::from(fee),
+        consumed_cycles_after
     );
 
     assert_eq!(
@@ -3311,7 +3311,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
 }
 
 #[test]
-fn consumed_cycles_since_replica_started_are_updated_from_valid_canisters() {
+fn consumed_cycles_are_updated_from_valid_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with(
@@ -3346,7 +3346,7 @@ fn consumed_cycles_since_replica_started_are_updated_from_valid_canisters() {
 }
 
 #[test]
-fn consumed_cycles_since_replica_started_are_updated_from_deleted_canisters() {
+fn consumed_cycles_are_updated_from_deleted_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
     let initial_balance = Cycles::from(5_000_000_000_000u128);
     let canister_id = test.create_canister_with(
