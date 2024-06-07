@@ -1,8 +1,15 @@
-use super::responses::ConsentMessage;
+use super::errors::ErrorInfo;
+use super::requests::ConsentMessageRequest;
+use super::responses::{ConsentInfo, ConsentMessage};
 use super::{requests::DisplayMessageType, responses::LineDisplayPage};
 use crate::icrc1::account::Account;
+use crate::icrc1::transfer::TransferArg;
+use crate::icrc2::approve::ApproveArgs;
+use crate::icrc2::transfer_from::TransferFromArgs;
 use crate::icrc21::errors::Icrc21Error;
-use candid::Nat;
+use crate::icrc21::requests::ConsentMessageMetadata;
+use candid::Decode;
+use candid::{Nat, Principal};
 use itertools::Itertools;
 use serde_bytes::ByteBuf;
 use strum;
@@ -326,4 +333,173 @@ pub fn consent_msg_text_pages(
             lines: page.collect(),
         })
         .collect()
+}
+
+pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
+    consent_msg_request: ConsentMessageRequest,
+    caller_principal: Principal,
+    ledger_fee: Nat,
+    token_symbol: String,
+) -> Result<ConsentInfo, Icrc21Error> {
+    if consent_msg_request.arg.len() > MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize {
+        return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+            description: format!(
+                "The argument size is too large. The maximum allowed size is {} bytes.",
+                MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES
+            ),
+        }));
+    }
+
+    // for now, respond in English regardless of what the client requested
+    let metadata = ConsentMessageMetadata {
+        language: "en".to_string(),
+    };
+
+    let mut display_message_builder = ConsentMessageBuilder::new(&consent_msg_request.method)?
+        .with_ledger_fee(ledger_fee)
+        .with_token_symbol(token_symbol);
+    if let Some(display_type) = consent_msg_request.user_preferences.device_spec {
+        if let DisplayMessageType::LineDisplay {
+            lines_per_page,
+            characters_per_line,
+        } = display_type
+        {
+            if lines_per_page == 0 || characters_per_line == 0 {
+                return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                description: "Invalid display type. Lines per page and characters per line must be greater than 0.".to_string()
+            }));
+            }
+        }
+        display_message_builder = display_message_builder.with_display_type(display_type);
+    }
+
+    let consent_message = match consent_msg_request.method.as_str() {
+        "icrc1_transfer" => {
+            let TransferArg {
+                memo,
+                amount,
+                fee,
+                from_subaccount,
+                to,
+                created_at_time,
+            } = Decode!(&consent_msg_request.arg, TransferArg).map_err(|e| {
+                Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                    description: format!("Failed to decode TransferArg: {}", e),
+                })
+            })?;
+            let sender = Account {
+                owner: caller_principal,
+                subaccount: from_subaccount,
+            };
+            display_message_builder = display_message_builder
+                .with_amount(amount)
+                .with_receiver(to)
+                .with_sender(sender);
+
+            if let Some(memo) = memo {
+                display_message_builder = display_message_builder.with_memo(memo.0);
+            }
+            if let Some(created_at_time) = created_at_time {
+                display_message_builder =
+                    display_message_builder.with_created_at_time(created_at_time);
+            }
+            if let Some(fee) = fee {
+                display_message_builder = display_message_builder.with_fee_set(fee);
+            }
+            display_message_builder.build()
+        }
+        "icrc2_transfer_from" => {
+            let TransferFromArgs {
+                memo,
+                amount,
+                fee,
+                from,
+                to,
+                spender_subaccount,
+                created_at_time,
+            } = Decode!(&consent_msg_request.arg, TransferFromArgs).map_err(|e| {
+                Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                    description: format!("Failed to decode TransferFromArgs: {}", e),
+                })
+            })?;
+            let spender = Account {
+                owner: caller_principal,
+                subaccount: spender_subaccount,
+            };
+            display_message_builder = display_message_builder
+                .with_amount(amount)
+                .with_receiver(to)
+                .with_sender(from)
+                .with_spender(spender);
+
+            if let Some(memo) = memo {
+                display_message_builder = display_message_builder.with_memo(memo.0);
+            }
+            if let Some(created_at_time) = created_at_time {
+                display_message_builder =
+                    display_message_builder.with_created_at_time(created_at_time);
+            }
+            if let Some(fee) = fee {
+                display_message_builder = display_message_builder.with_fee_set(fee);
+            }
+            display_message_builder.build()
+        }
+        "icrc2_approve" => {
+            let ApproveArgs {
+                memo,
+                amount,
+                fee,
+                from_subaccount,
+                spender,
+                created_at_time,
+                expires_at,
+                expected_allowance,
+            } = Decode!(&consent_msg_request.arg, ApproveArgs).map_err(|e| {
+                Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                    description: format!("Failed to decode ApproveArgs: {}", e),
+                })
+            })?;
+            let approver = Account {
+                owner: caller_principal,
+                subaccount: from_subaccount,
+            };
+            let spender = Account {
+                owner: spender.owner,
+                subaccount: spender.subaccount,
+            };
+            display_message_builder = display_message_builder
+                .with_amount(amount)
+                .with_approver(approver)
+                .with_spender(spender);
+
+            if let Some(memo) = memo {
+                display_message_builder = display_message_builder.with_memo(memo.0);
+            }
+            if let Some(created_at_time) = created_at_time {
+                display_message_builder =
+                    display_message_builder.with_created_at_time(created_at_time);
+            }
+            if let Some(expires_at) = expires_at {
+                display_message_builder = display_message_builder.with_expires_at(expires_at);
+            }
+            if let Some(expected_allowance) = expected_allowance {
+                display_message_builder =
+                    display_message_builder.with_expected_allowance(expected_allowance);
+            }
+            if let Some(fee) = fee {
+                display_message_builder = display_message_builder.with_fee_set(fee);
+            }
+            display_message_builder.build()
+        }
+        method => {
+            return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                description: format!("Unsupported method: {}", method),
+            }))
+        }
+    }?;
+
+    Ok(ConsentInfo {
+        metadata,
+        consent_message,
+    })
 }

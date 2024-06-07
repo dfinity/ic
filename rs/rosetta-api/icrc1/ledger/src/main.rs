@@ -17,6 +17,10 @@ use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::{approvals::Approvals, timestamp::TimeStamp};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc21::{
+    errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
+    requests::ConsentMessageRequest, responses::ConsentInfo,
+};
 use icrc_ledger_types::icrc3::blocks::DataCertificate;
 #[cfg(not(feature = "get-blocks-disabled"))]
 use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
@@ -498,6 +502,10 @@ fn supported_standards() -> Vec<StandardRecord> {
             name: "ICRC-3".to_string(),
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3".to_string(),
         },
+        StandardRecord {
+            name: "ICRC-21".to_string(),
+            url: "https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md".to_string(),
+        },
     ];
     standards
 }
@@ -678,6 +686,29 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
 #[candid_method(query)]
 fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
     Access::with_ledger(|ledger| ledger.icrc3_get_blocks(args))
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc10_supported_standards() -> Vec<StandardRecord> {
+    supported_standards()
+}
+
+#[update]
+#[candid_method(update)]
+fn icrc21_canister_call_consent_message(
+    consent_msg_request: ConsentMessageRequest,
+) -> Result<ConsentInfo, Icrc21Error> {
+    let caller_principal = ic_cdk::api::caller();
+    let ledger_fee = icrc1_fee();
+    let token_symbol = icrc1_symbol();
+
+    build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
+        consent_msg_request,
+        caller_principal,
+        ledger_fee,
+        token_symbol,
+    )
 }
 
 candid::export_service!();
