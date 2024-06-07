@@ -16,7 +16,7 @@ use ic_interfaces::ecdsa::EcdsaPool;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
@@ -46,7 +46,7 @@ pub(super) mod signatures;
 /// data blocks to create the initial key transcript.
 pub(crate) fn make_bootstrap_summary(
     subnet_id: SubnetId,
-    key_ids: Vec<EcdsaKeyId>,
+    key_ids: Vec<MasterPublicKeyId>,
     height: Height,
 ) -> idkg::Summary {
     let key_transcripts = key_ids
@@ -69,14 +69,6 @@ pub(crate) fn make_bootstrap_summary_with_initial_dealings(
     let mut key_transcripts = Vec::new();
 
     for (key_id, initial_dealings) in initial_dealings_per_key_id {
-        // TODO(CON-1331): Generalize creation of summary payloads
-        let MasterPublicKeyId::Ecdsa(key_id) = key_id else {
-            warn!(
-                log,
-                "Creating summary blocks with SchnorrKeyId is unsupported"
-            );
-            continue;
-        };
         match idkg::unpack_reshare_of_unmasked_params(height, initial_dealings.params()) {
             Some((params, transcript)) => {
                 idkg_transcripts.insert(transcript.transcript_id, transcript);
@@ -152,16 +144,11 @@ pub(crate) fn create_summary_payload(
 
     // Get ecdsa_payload from parent block if it exists
     let Some(ecdsa_payload) = parent_block.payload.as_ref().as_data().ecdsa.as_ref() else {
-        // Get only the ECDSA keys out of the config
-        // TODO: Make it possible to pass Schnorr Keys into `make_bootstrap_summary`
         let key_ids = chain_key_config
             .key_configs
             .iter()
-            .filter_map(|key_config| match &key_config.key_id {
-                MasterPublicKeyId::Ecdsa(key_id) => Some(key_id.clone()),
-                MasterPublicKeyId::Schnorr(_) => None,
-            })
-            .collect::<Vec<_>>();
+            .map(|key_config| key_config.key_id.clone())
+            .collect();
 
         // Parent block doesn't have ECDSA payload and feature is enabled.
         // Create the bootstrap summary block, and create a new key for the given key_id.
@@ -174,7 +161,7 @@ pub(crate) fn create_summary_payload(
         // and we won't reach here.
         info!(
             log,
-            "Start to create ECDSA keys {:?} on subnet {} at height {}", key_ids, subnet_id, height
+            "Start to create Chain keys {:?} on subnet {} at height {}", key_ids, subnet_id, height
         );
 
         return Ok(make_bootstrap_summary(subnet_id, key_ids, height));
@@ -681,6 +668,7 @@ mod tests {
     use crate::consensus::batch_delivery::generate_responses_to_sign_with_ecdsa_calls;
     use crate::ecdsa::payload_builder::pre_signatures::test_utils::create_available_quadruple;
     use crate::ecdsa::test_utils::*;
+    use crate::ecdsa::utils::algorithm_for_key_id;
     use crate::ecdsa::utils::block_chain_reader;
     use crate::ecdsa::utils::get_context_request_id;
     use assert_matches::assert_matches;
@@ -693,6 +681,7 @@ mod tests {
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_interfaces_registry::RegistryValue;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types::EcdsaKeyId;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::types::v1 as pb;
     use ic_registry_subnet_features::KeyConfig;
@@ -1639,7 +1628,14 @@ mod tests {
     }
 
     #[test]
-    fn test_no_creation_after_successful_creation() {
+    fn test_no_creation_after_successful_creation_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_no_creation_after_successful_creation(key_id);
+        }
+    }
+
+    fn test_no_creation_after_successful_creation(key_id: MasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies {
@@ -1648,18 +1644,16 @@ mod tests {
                 ..
             } = dependencies(pool_config, 1);
             let subnet_id = subnet_test_id(1);
-            let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-            let master_public_key_id = MasterPublicKeyId::Ecdsa(key_id.clone());
             let mut block_reader = TestEcdsaBlockReader::new();
 
             // Create two key transcripts
             let (mut key_transcript, mut key_transcript_ref, mut current_key_transcript) =
-                create_key_transcript_and_refs(&master_public_key_id, &mut rng, Height::from(1));
+                create_key_transcript_and_refs(&key_id, &mut rng, Height::from(1));
             let (
                 mut reshare_key_transcript,
                 mut reshare_key_transcript_ref,
                 mut next_key_transcript,
-            ) = create_key_transcript_and_refs(&master_public_key_id, &mut rng, Height::from(1));
+            ) = create_key_transcript_and_refs(&key_id, &mut rng, Height::from(1));
 
             // Reshared transcript should use higher registry version
             if key_transcript.registry_version() > reshare_key_transcript.registry_version() {
@@ -1699,8 +1693,8 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     current_key_transcript.unmasked_transcript(),
                 ),
-                key_id: Some(key_id.clone()),
-                master_key_id: master_public_key_id.clone(),
+                deprecated_key_id: Some(fake_ecdsa_key_id()),
+                master_key_id: key_id.clone(),
             };
 
             // Initial bootstrap payload should be created successfully
@@ -1736,8 +1730,8 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     next_key_transcript.unmasked_transcript(),
                 ),
-                key_id: Some(key_id.clone()),
-                master_key_id: master_public_key_id.clone(),
+                deprecated_key_id: Some(fake_ecdsa_key_id()),
+                master_key_id: key_id.clone(),
             };
 
             let mut payload_2 = payload_1.clone();
@@ -1752,8 +1746,8 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     next_key_transcript.unmasked_transcript(),
                 ),
-                key_id: Some(key_id.clone()),
-                master_key_id: master_public_key_id,
+                deprecated_key_id: Some(fake_ecdsa_key_id()),
+                master_key_id: key_id,
             };
 
             let payload_3 = create_summary_payload_helper(
@@ -1828,12 +1822,16 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     current_key_transcript.unmasked_transcript(),
                 ),
-                key_id: Some(key_id.clone()),
+                deprecated_key_id: Some(key_id.clone()),
                 master_key_id: master_public_key_id.clone(),
             };
 
-            let mut payload_0 =
-                make_bootstrap_summary(subnet_id, vec![key_id.clone()], Height::from(0)).unwrap();
+            let mut payload_0 = make_bootstrap_summary(
+                subnet_id,
+                vec![master_public_key_id.clone()],
+                Height::from(0),
+            )
+            .unwrap();
             *payload_0.single_key_transcript_mut() = key_transcripts;
 
             // Add some quadruples and xnet reshares
@@ -2089,7 +2087,14 @@ mod tests {
     }
 
     #[test]
-    fn test_if_next_in_creation_continues() {
+    fn test_if_next_in_creation_continues_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_if_next_in_creation_continues(key_id);
+        }
+    }
+
+    fn test_if_next_in_creation_continues(key_id: MasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
                 registry,
@@ -2105,14 +2110,13 @@ mod tests {
             registry.update_to_latest_version();
             let registry_version = registry.get_latest_version();
             let mut valid_keys = BTreeSet::new();
-            let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-            valid_keys.insert(MasterPublicKeyId::Ecdsa(key_id.clone()));
+            valid_keys.insert(key_id.clone());
             let block_reader = TestEcdsaBlockReader::new();
             let transcript_builder = TestEcdsaTranscriptBuilder::new();
             let signature_builder = TestEcdsaSignatureBuilder::new();
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
-                    key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
+                    key_id: key_id.clone(),
                     pre_signatures_to_create_in_advance: 1,
                     max_queue_size: 1,
                 }],
@@ -2121,7 +2125,8 @@ mod tests {
             };
 
             // Step 1: initial bootstrap payload should be created successfully
-            let payload_0 = make_bootstrap_summary(subnet_id, vec![key_id], Height::from(0));
+            let payload_0 =
+                make_bootstrap_summary(subnet_id, vec![key_id.clone()], Height::from(0));
             assert!(payload_0.is_some());
             let payload_0 = payload_0.unwrap();
 
@@ -2229,7 +2234,14 @@ mod tests {
     }
 
     #[test]
-    fn test_next_in_creation_with_initial_dealings() {
+    fn test_next_in_creation_with_initial_dealings_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_next_in_creation_with_initial_dealings(key_id);
+        }
+    }
+
+    fn test_next_in_creation_with_initial_dealings(key_id: MasterPublicKeyId) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
             let Dependencies {
@@ -2243,14 +2255,13 @@ mod tests {
                 .with_dkg_interval_length(9)
                 .build();
             let mut valid_keys = BTreeSet::new();
-            let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-            valid_keys.insert(MasterPublicKeyId::Ecdsa(key_id.clone()));
+            valid_keys.insert(key_id.clone());
             let mut block_reader = TestEcdsaBlockReader::new();
             let transcript_builder = TestEcdsaTranscriptBuilder::new();
             let signature_builder = TestEcdsaSignatureBuilder::new();
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
-                    key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
+                    key_id: key_id.clone(),
                     pre_signatures_to_create_in_advance: 1,
                     max_queue_size: 1,
                 }],
@@ -2259,17 +2270,15 @@ mod tests {
             };
 
             // Generate initial dealings
-            let initial_dealings = dummy_initial_idkg_dealing_for_tests(
-                AlgorithmId::ThresholdEcdsaSecp256k1,
-                &mut rng,
-            );
+            let initial_dealings =
+                dummy_initial_idkg_dealing_for_tests(algorithm_for_key_id(&key_id), &mut rng);
             let init_tid = initial_dealings.params().transcript_id();
 
             // Step 1: initial bootstrap payload should be created successfully
             let payload_0 = make_bootstrap_summary_with_initial_dealings(
                 subnet_id,
                 Height::from(0),
-                BTreeMap::from([(MasterPublicKeyId::Ecdsa(key_id), initial_dealings)]),
+                BTreeMap::from([(key_id, initial_dealings)]),
                 &no_op_logger(),
             );
             assert_matches!(payload_0, Ok(Some(_)));
