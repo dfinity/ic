@@ -2259,6 +2259,13 @@ impl FromStr for MasterPublicKeyId {
 
 pub type DerivationPath = BoundedVec<MAXIMUM_DERIVATION_PATH_LENGTH, UNBOUNDED, UNBOUNDED, ByteBuf>;
 
+impl DerivationPath {
+    /// Converts the `DerivationPath`` from `BoundedVec<ByteBuf>` into a `Vec<Vec<u8>>`.
+    pub fn into_inner(self) -> Vec<Vec<u8>> {
+        self.get().iter().map(|x| x.to_vec()).collect()
+    }
+}
+
 impl Payload<'_> for DerivationPath {}
 
 impl DataSize for ByteBuf {
@@ -3068,14 +3075,14 @@ impl<'a> Payload<'a> for LoadCanisterSnapshotArgs {
 /// `(record {
 ///      id: blob;
 ///      taken_at_timestamp: nat64;
-///      total_size: nat;
+///      total_size: nat64;
 /// })`
 #[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub struct CanisterSnapshotResponse {
     #[serde(with = "serde_bytes")]
     pub id: Vec<u8>,
     pub taken_at_timestamp: u64,
-    pub total_size: candid::Nat,
+    pub total_size: u64,
 }
 
 impl Payload<'_> for CanisterSnapshotResponse {}
@@ -3085,7 +3092,7 @@ impl CanisterSnapshotResponse {
         Self {
             id: snapshot_id.to_vec(),
             taken_at_timestamp,
-            total_size: candid::Nat::from(total_size.get()),
+            total_size: total_size.get(),
         }
     }
 
@@ -3094,7 +3101,7 @@ impl CanisterSnapshotResponse {
     }
 
     pub fn total_size(&self) -> u64 {
-        self.total_size.0.to_u64().unwrap()
+        self.total_size
     }
 
     pub fn taken_at_timestamp(&self) -> u64 {

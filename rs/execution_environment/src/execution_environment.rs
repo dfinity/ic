@@ -35,13 +35,13 @@ use ic_management_canister_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType, ClearChunkStoreArgs,
     ComputeInitialEcdsaDealingsArgs, ComputeInitialIDkgDealingsArgs, CreateCanisterArgs,
-    DeleteCanisterSnapshotArgs, DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
-    EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SchnorrKeyId, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs,
-    SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrKeyId,
+    SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
+    SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -436,7 +436,7 @@ impl ExecutionEnvironment {
                 - self.config.subnet_memory_reservation.get() as i64
                 - memory_taken.execution().get() as i64,
             self.config.subnet_message_memory_capacity.get() as i64
-                - memory_taken.messages().get() as i64,
+                - memory_taken.guaranteed_response_messages().get() as i64,
             self.config
                 .subnet_wasm_custom_sections_memory_capacity
                 .get() as i64
@@ -450,7 +450,7 @@ impl ExecutionEnvironment {
     /// the message memory usage is necessary.
     pub fn subnet_available_message_memory(&self, state: &ReplicatedState) -> i64 {
         self.config.subnet_message_memory_capacity.get() as i64
-            - state.message_memory_taken().get() as i64
+            - state.guaranteed_response_message_memory_taken().get() as i64
     }
 
     /// Executes a replicated message sent to a subnet.
@@ -614,12 +614,7 @@ impl ExecutionEnvironment {
                                 Ok(_) => match self.sign_with_ecdsa(
                                     (**request).clone(),
                                     args.message_hash,
-                                    args.derivation_path
-                                        .get()
-                                        .clone()
-                                        .into_iter()
-                                        .map(|x| x.into_vec())
-                                        .collect(),
+                                    args.derivation_path.into_inner(),
                                     args.key_id,
                                     registry_settings
                                         .chain_key_settings
@@ -1020,7 +1015,7 @@ impl ExecutionEnvironment {
                                     self.get_threshold_public_key(
                                         pubkey,
                                         canister_id,
-                                        &args.derivation_path,
+                                        args.derivation_path.into_inner(),
                                     )
                                     .map(|res| {
                                         ECDSAPublicKeyResponse {
@@ -1145,7 +1140,7 @@ impl ExecutionEnvironment {
                                         self.get_threshold_public_key(
                                             pubkey,
                                             canister_id,
-                                            &args.derivation_path,
+                                            args.derivation_path.into_inner(),
                                         )
                                         .map(|res| {
                                             SchnorrPublicKeyResponse {
@@ -1213,12 +1208,7 @@ impl ExecutionEnvironment {
                                     Ok(_) => match self.sign_with_schnorr(
                                         (**request).clone(),
                                         args.message,
-                                        args.derivation_path
-                                            .get()
-                                            .clone()
-                                            .into_iter()
-                                            .map(|x| x.into_vec())
-                                            .collect(),
+                                        args.derivation_path.into_inner(),
                                         args.key_id,
                                         registry_settings
                                             .chain_key_settings
@@ -2622,14 +2612,16 @@ impl ExecutionEnvironment {
         &self,
         subnet_public_key: &MasterPublicKey,
         caller: PrincipalId,
-        derivation_path: &DerivationPath,
+        derivation_path: Vec<Vec<u8>>,
     ) -> Result<PublicKey, UserError> {
-        let path = ExtendedDerivationPath {
-            caller,
-            derivation_path: derivation_path.get().iter().map(|x| x.to_vec()).collect(),
-        };
-        derive_threshold_public_key(subnet_public_key, &path)
-            .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{}", err)))
+        derive_threshold_public_key(
+            subnet_public_key,
+            &ExtendedDerivationPath {
+                caller,
+                derivation_path,
+            },
+        )
+        .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{}", err)))
     }
 
     #[allow(clippy::too_many_arguments)]

@@ -17,7 +17,6 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -576,11 +575,7 @@ fn bootstrap_ecdsa_summary(
             chain_key_config
                 .key_configs
                 .iter()
-                // TODO(CON-1331): Generalize creation of summary payloads
-                .filter_map(|key_config| match &key_config.key_id {
-                    MasterPublicKeyId::Ecdsa(key_id) => Some(key_id.clone()),
-                    MasterPublicKeyId::Schnorr(_) => None,
-                })
+                .map(|key_config| key_config.key_id.clone())
                 .collect(),
             Height::new(cup_contents.height),
         )),

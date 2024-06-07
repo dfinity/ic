@@ -1071,8 +1071,8 @@ impl SystemState {
     ///    full when pushing a `Request`; or when pushing a `Response` when none
     ///    is expected.
     ///  * `CanisterOutOfCycles` if the canister does not have enough cycles.
-    ///  * `OutOfMemory` if the necessary memory reservation is larger than subnet
-    ///     available memory.
+    ///  * `OutOfMemory` if the necessary guaranteed response memory reservation
+    ///    is larger than `subnet_available_memory`.
     ///  * `CanisterStopping` if the canister is stopping and inducting a
     ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.
@@ -1196,23 +1196,10 @@ impl SystemState {
         self.queues.filter_ingress_messages(filter)
     }
 
-    /// Returns the memory currently in use by the `SystemState`
-    /// for canister messages.
-    ///
-    /// TODO(MR-572): Change this to:
-    ///
-    /// ++ N0: callbacks
-    /// -- N1: responses in input queues
-    /// -- 1:  if first item in task queue is a paused / aborted `Response`
-    /// ++ N2: requests in input queues
-    /// ++ N3: non-responded call contexts
-    /// ++ 1: if first item in task queue is an aborted `Request`
-    ///
-    ///  + S1: size of responses in output queues
-    ///  + S2: size of responses in input queues
-    ///  + S3: oversized requests extra bytes
-    pub fn message_memory_usage(&self) -> NumBytes {
-        (self.queues.memory_usage() as u64).into()
+    /// Returns the memory currently used by or reserved for guaranteed response
+    /// canister messages.
+    pub fn guaranteed_response_message_memory_usage(&self) -> NumBytes {
+        (self.queues.guaranteed_response_memory_usage() as u64).into()
     }
 
     /// Returns the memory currently in use by the `SystemState`
@@ -1247,10 +1234,11 @@ impl SystemState {
 
     /// Inducts messages from the output queue to `self` into the input queue
     /// from `self` while respecting queue capacity and the provided subnet
-    /// available memory.
+    /// available guaranteed response message memory.
     ///
-    /// `subnet_available_memory` is updated to reflect the change in
-    /// `self.queues` memory usage.
+    /// `subnet_available_memory` (the subnet's available guaranteed response
+    /// message memory) is updated to reflect the change in `self.queues` guaranteed
+    /// response message memory usage.
     ///
     /// Available memory is ignored (but updated) for system subnets, since we
     /// don't want to DoS system canisters due to lots of incoming requests.
@@ -1265,7 +1253,7 @@ impl SystemState {
             CanisterStatus::Stopped | CanisterStatus::Stopping { .. } => return,
         }
 
-        let mut memory_usage = self.queues.memory_usage() as i64;
+        let mut memory_usage = self.queues.guaranteed_response_memory_usage() as i64;
 
         while let Some(msg) = self.queues.peek_output(&self.canister_id) {
             // Ensure that enough memory is available for inducting `msg`.
@@ -1288,7 +1276,7 @@ impl SystemState {
             // Adjust `subnet_available_memory` by `memory_usage_before - memory_usage_after`.
             // Defer the accounting to `CanisterQueues`, to avoid duplication or divergence.
             *subnet_available_memory += memory_usage;
-            memory_usage = self.queues.memory_usage() as i64;
+            memory_usage = self.queues.guaranteed_response_memory_usage() as i64;
             *subnet_available_memory -= memory_usage;
         }
     }
@@ -1471,15 +1459,15 @@ impl SystemState {
             .map(|ccm| ccm.unresponded_callback_count(self.aborted_or_paused_response()))
             .unwrap_or_default();
 
-        let num_responses = self.queues.input_queues_response_count();
-        let num_reservations = self.queues.input_queues_reservation_count();
+        let input_queue_responses = self.queues.input_queues_response_count();
+        let input_queue_reserved_slots = self.queues.input_queues_reserved_slots();
 
-        if pending_callbacks != num_reservations + num_responses {
+        if pending_callbacks != input_queue_reserved_slots + input_queue_responses {
             return Err(StateError::InvariantBroken(format!(
-                "Canister {}: Number of callbacks ({}) is different from the accumulated number of reservations and responses ({})",
+                "Canister {}: Number of callbacks ({}) is different from the cumulative number of reservations and responses ({})",
                 self.canister_id(),
                 pending_callbacks,
-                num_reservations + num_responses
+                input_queue_reserved_slots + input_queue_responses
             )));
         }
 
@@ -1490,16 +1478,15 @@ impl SystemState {
             })
             .unwrap_or_default();
 
-        let num_requests = self.queues.input_queues_request_count();
-        let output_queue_reservations =
-            self.queues.reserved_slots() - self.queues.input_queues_reservation_count();
+        let input_queue_requests = self.queues.input_queues_request_count();
+        let output_queue_reserved_slots = self.queues.output_queues_reserved_slots();
 
-        if num_requests + unresponded_call_contexts != output_queue_reservations {
+        if input_queue_requests + unresponded_call_contexts != output_queue_reserved_slots {
             return Err(StateError::InvariantBroken(format!(
-                "Canister {}: Number of output queue reservations ({}) is different from the number of input requests plus unresponded call contexts ({})",
+                "Canister {}: Number of output queue reserved slots ({}) is different from the cumulative number of input requests and unresponded call contexts ({})",
                 self.canister_id(),
-                output_queue_reservations,
-                num_requests + unresponded_call_contexts
+                output_queue_reserved_slots,
+                input_queue_requests + unresponded_call_contexts
             )));
         }
 
@@ -1545,8 +1532,9 @@ impl SystemState {
 /// Returns `StateError::OutOfMemory` if pushing the message would require more
 /// memory than `subnet_available_memory`.
 ///
-/// `subnet_available_memory` is updated to reflect the change in memory usage
-/// after a successful push; and left unmodified if the push failed.
+/// `subnet_available_memory` (the subnet's available guaranteed response
+/// message memory) is updated to reflect the change in memory usage after a
+/// successful push; and left unmodified if the push failed.
 ///
 /// See `CanisterQueues::push_input()` for further details.
 pub(crate) fn push_input(
@@ -1572,9 +1560,9 @@ pub(crate) fn push_input(
     // But always adjust `subnet_available_memory` by `memory_usage_before -
     // memory_usage_after`. Defer the accounting to `CanisterQueues`, to avoid
     // duplication (and the possibility of divergence).
-    *subnet_available_memory += queues.memory_usage() as i64;
+    *subnet_available_memory += queues.guaranteed_response_memory_usage() as i64;
     let res = queues.push_input(msg, input_queue_type);
-    *subnet_available_memory -= queues.memory_usage() as i64;
+    *subnet_available_memory -= queues.guaranteed_response_memory_usage() as i64;
     res
 }
 
