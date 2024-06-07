@@ -213,6 +213,7 @@ go_deps.bzl               @dfinity/idx
 /rs/state_machine_tests/                                @dfinity/ic-message-routing-owners @dfinity/utopia
 /rs/state_manager/                                      @dfinity/ic-message-routing-owners
 /rs/state_tool/                                         @dfinity/ic-message-routing-owners
+/rs/sys/                                                @dfinity/ic-message-routing-owners @dfinity/runtime
 /rs/system_api/                                         @dfinity/execution
 /rs/test_utilities/artifact_pool/                       @dfinity/consensus
 /rs/test_utilities/consensus/                           @dfinity/consensus
