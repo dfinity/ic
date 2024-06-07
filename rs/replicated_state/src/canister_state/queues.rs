@@ -12,7 +12,9 @@ use ic_error_types::RejectCode;
 use ic_management_canister_types::IC_00;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
-use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue as ProtoNextInputQueue;
+use ic_protobuf::state::queues::v1::canister_queues::{
+    CanisterQueuePair, NextInputQueue as ProtoNextInputQueue,
+};
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::messages::{
     CanisterMessage, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
@@ -20,7 +22,7 @@ use ic_types::messages::{
 };
 use ic_types::xnet::{QueueId, SessionId};
 use ic_types::{CanisterId, CountBytes, Time};
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::convert::{From, TryFrom};
 use std::sync::Arc;
 
@@ -439,7 +441,7 @@ impl CanisterQueues {
         Ok(())
     }
 
-    /// Pops the next canister-to-canister message from `input_queues`.
+    /// Pops the next canister input queue message.
     ///
     /// Note: We pop senders from the head of `input_schedule` and insert them
     /// to the back, which allows us to handle messages from different
@@ -481,7 +483,7 @@ impl CanisterQueues {
         None
     }
 
-    /// Peeks the next canister-to-canister message from `input_queues`.
+    /// Peeks the next canister input queue message.
     fn peek_canister_input(&mut self, input_queue: InputQueueType) -> Option<CanisterMessage> {
         let input_schedule = match input_queue {
             InputQueueType::LocalSubnet => &mut self.local_subnet_input_schedule,
@@ -518,7 +520,7 @@ impl CanisterQueues {
         None
     }
 
-    /// Skips the next canister-to-canister message from `input_queues`.
+    /// Skips the next canister input queue message.
     fn skip_canister_input(&mut self, input_queue: InputQueueType) {
         let input_schedule = match input_queue {
             InputQueueType::LocalSubnet => &mut self.local_subnet_input_schedule,
@@ -532,8 +534,8 @@ impl CanisterQueues {
         }
     }
 
-    /// Returns `true` if `ingress_queue` or at least one of the `input_queues`
-    /// is not empty; `false` otherwise.
+    /// Returns `true` if `ingress_queue` or at least one of the canister input
+    /// queues is not empty; `false` otherwise.
     pub fn has_input(&self) -> bool {
         !self.ingress_queue.is_empty() || self.pool.message_stats().inbound_message_count > 0
     }
@@ -995,40 +997,65 @@ impl CanisterQueues {
         true
     }
 
-    /// Helper function to concisely validate `CanisterQueues` schedules in debug builds,
-    /// by writing 'debug_assert!(self.schedules_ok(own_canister_id, local_canisters)'.
+    /// Helper function to concisely validate `CanisterQueues` input schedules
+    /// during deserialization; or in debug builds, by writing
+    /// `debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters)``.
     ///
     /// Checks that all canister IDs of input queues that contain at least one message
     /// are found exactly once in either the input schedule for the local subnet or the
     /// input schedule for remote subnets.
+    ///
+    /// Time complexity: `O(n * log(n))`.
     fn schedules_ok(
         &self,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> bool {
-        let mut local_canister_ids = HashSet::new();
-        let mut remote_canister_ids = HashSet::new();
+    ) -> Result<(), String> {
+        let mut local_schedule: HashSet<_> = self.local_subnet_input_schedule.iter().collect();
+        let mut remote_schedule: HashSet<_> = self.remote_subnet_input_schedule.iter().collect();
+
+        if local_schedule.len() != self.local_subnet_input_schedule.len()
+            || remote_schedule.len() != self.remote_subnet_input_schedule.len()
+            || local_schedule.intersection(&remote_schedule).count() != 0
+        {
+            return Err(format!(
+                "Duplicate entries in local and/or remote input schedules:\n  `local_subnet_input_schedule`: {:?}\n  `remote_subnet_input_schedule`: {:?}",
+                self.local_subnet_input_schedule, self.remote_subnet_input_schedule,
+            ));
+        }
+
         for (canister_id, (input_queue, _)) in self.canister_queues.iter() {
             if input_queue.len() == 0 {
                 continue;
             }
+
             if canister_id == own_canister_id || local_canisters.contains_key(canister_id) {
-                local_canister_ids.insert(canister_id);
+                // Definitely a local canister.
+                if !local_schedule.remove(canister_id) {
+                    return Err(format!(
+                        "Local canister with non-empty input queue ({:?}) absent from `local_subnet_input_schedule`",
+                        canister_id
+                    ));
+                }
             } else {
-                remote_canister_ids.insert(canister_id);
+                // Remote canister or deleted local canister. Check in both schedules.
+                if !remote_schedule.remove(canister_id) && !local_schedule.remove(canister_id) {
+                    return Err(format!(
+                        "Canister with non-empty input queue ({:?}) absent from input schedules",
+                        canister_id
+                    ));
+                }
             }
         }
 
-        for (canister_ids, schedule) in [
-            (local_canister_ids, &self.local_subnet_input_schedule),
-            (remote_canister_ids, &self.remote_subnet_input_schedule),
-        ] {
-            // Ensure that there are no duplicate entries in `schedule`.
-            assert_eq!(canister_ids.len(), schedule.len());
-            assert_eq!(canister_ids, schedule.iter().collect::<HashSet<_>>());
+        if !local_schedule.is_empty() || !remote_schedule.is_empty() {
+            return Err(format!(
+                "Canister(s) with no inputs enqueued in input schedule:\n  local: {:?}\n  remote: {:?}",
+                local_schedule, remote_schedule,
+            ));
         }
 
-        true
+        Ok(())
     }
 
     /// Computes stats for the given canister queues. Used when deserializing and in
@@ -1082,7 +1109,7 @@ impl CanisterQueues {
         }
 
         debug_assert!(self.stats_ok());
-        debug_assert!(self.schedules_ok(own_canister_id, local_canisters));
+        debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters));
 
         expired_messages.len()
     }
@@ -1102,7 +1129,7 @@ impl CanisterQueues {
             self.on_message_dropped(&id, &msg, own_canister_id, local_canisters);
 
             debug_assert!(self.stats_ok());
-            debug_assert!(self.schedules_ok(own_canister_id, local_canisters));
+            debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters));
 
             return true;
         }
@@ -1180,7 +1207,7 @@ impl CanisterQueues {
             }
         }
 
-        debug_assert!(self.schedules_ok(own_canister_id, local_canisters))
+        debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters));
     }
 }
 
@@ -1206,24 +1233,20 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
             ingress_queue: (&item.ingress_queue).into(),
             input_queues: Default::default(),
             output_queues: Default::default(),
-            // input_queues: item
-            //     .canister_queues
-            //     .iter()
-            //     .map(|(canid, (input_queue, _))| pb_queues::QueueEntry {
-            //         canister_id: Some(pb_types::CanisterId::from(*canid)),
-            //         queue: Some(input_queue.into()),
-            //     })
-            //     .collect(),
-            // output_queues: item
-            //     .canister_queues
-            //     .iter()
-            //     .map(|(canid, (_, output_queue))| pb_queues::QueueEntry {
-            //         canister_id: Some(pb_types::CanisterId::from(*canid)),
-            //         queue: Some(output_queue.into()),
-            //     })
-            //     .collect(),
-            // pool: Some((&item.pool).into()),
-            pool: None,
+            canister_queues: item
+                .canister_queues
+                .iter()
+                .map(|(canid, (iq, oq))| CanisterQueuePair {
+                    canister_id: Some(pb_types::CanisterId::from(*canid)),
+                    input_queue: Some(iq.into()),
+                    output_queue: Some(oq.into()),
+                })
+                .collect(),
+            pool: if item.pool.len() > 0 {
+                Some((&item.pool).into())
+            } else {
+                None
+            },
             next_input_queue: ProtoNextInputQueue::from(&item.next_input_queue).into(),
             local_subnet_input_schedule: item
                 .local_subnet_input_schedule
@@ -1246,35 +1269,92 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
 impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_queues::CanisterQueues) -> Result<Self, Self::Error> {
-        if item.input_queues.len() != item.output_queues.len() {
-            return Err(ProxyDecodeError::Other(format!(
-                "CanisterQueues: Mismatched input ({}) and output ({}) queue lengths",
-                item.input_queues.len(),
-                item.output_queues.len()
-            )));
-        }
         let mut canister_queues = BTreeMap::new();
-        for (ie, oe) in item
-            .input_queues
-            .into_iter()
-            .zip(item.output_queues.into_iter())
-        {
-            if ie.canister_id != oe.canister_id {
+        let mut pool = MessagePool::default();
+
+        if !item.input_queues.is_empty() || !item.output_queues.is_empty() {
+            // Forwards compatibility: deserialize from `input_queues` and `output_queues`.
+
+            if item.pool.is_some() || !item.canister_queues.is_empty() {
+                return Err(ProxyDecodeError::Other(
+                    "Both `input_queues`/`output_queues` and `pool`/`canister_queues` are populated"
+                        .to_string(),
+                ));
+            }
+
+            if item.input_queues.len() != item.output_queues.len() {
                 return Err(ProxyDecodeError::Other(format!(
-                    "Mismatched input {:?} and output {:?} queue entries",
-                    ie.canister_id, oe.canister_id
+                    "CanisterQueues: Mismatched input ({}) and output ({}) queue lengths",
+                    item.input_queues.len(),
+                    item.output_queues.len()
                 )));
             }
 
-            let can_id = try_from_option_field(ie.canister_id, "CanisterQueues::input_queues::K")?;
-            // let iq = try_from_option_field(ie.queue, "CanisterQueues::input_queues::V")?;
-            // let oq = try_from_option_field(oe.queue, "CanisterQueues::output_queues::V")?;
-            let iq = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
-            let oq = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
-            canister_queues.insert(can_id, (iq, oq));
+            for (ie, oe) in item
+                .input_queues
+                .into_iter()
+                .zip(item.output_queues.into_iter())
+            {
+                if ie.canister_id != oe.canister_id {
+                    return Err(ProxyDecodeError::Other(format!(
+                        "Mismatched input {:?} and output {:?} queues",
+                        ie.canister_id, oe.canister_id
+                    )));
+                }
+
+                let canister_id = try_from_option_field(ie.canister_id, "QueueEntry::canister_id")?;
+                let original_iq: queue::InputQueue =
+                    try_from_option_field(ie.queue, "QueueEntry::queue")?;
+                let original_oq: queue::OutputQueue =
+                    try_from_option_field(oe.queue, "QueueEntry::queue")?;
+                let iq = (original_iq, &mut pool).try_into()?;
+                let oq = (original_oq, &mut pool).try_into()?;
+                canister_queues.insert(canister_id, (iq, oq));
+            }
+        } else {
+            pool = item.pool.unwrap_or_default().try_into()?;
+
+            let mut enqueued_pool_messages = BTreeSet::new();
+            canister_queues = item
+                .canister_queues
+                .into_iter()
+                .map(|qp| {
+                    let canister_id: CanisterId =
+                        try_from_option_field(qp.canister_id, "CanisterQueuePair::canister_id")?;
+                    let iq: CanisterQueue = try_from_option_field(
+                        qp.input_queue.map(|q| (q, Context::Inbound)),
+                        "CanisterQueuePair::input_queue",
+                    )?;
+                    let oq: CanisterQueue = try_from_option_field(
+                        qp.output_queue.map(|q| (q, Context::Outbound)),
+                        "CanisterQueuePair::output_queue",
+                    )?;
+
+                    iq.iter().chain(oq.iter()).try_for_each(|queue_item| {
+                        if pool.get(queue_item.id()).is_some()
+                            && !enqueued_pool_messages.insert(queue_item.id())
+                        {
+                            return Err(ProxyDecodeError::Other(format!(
+                                "CanisterQueues: Message {:?} enqueued more than once",
+                                queue_item.id()
+                            )));
+                        }
+                        Ok(())
+                    })?;
+
+                    Ok((canister_id, (iq, oq)))
+                })
+                .collect::<Result<_, Self::Error>>()?;
+
+            if enqueued_pool_messages.len() != pool.len() {
+                return Err(ProxyDecodeError::Other(format!(
+                    "CanisterQueues: Pool holds {} messages, but only {} of them are enqueued",
+                    pool.len(),
+                    enqueued_pool_messages.len()
+                )));
+            }
         }
-        // let pool = item.pool.unwrap_or_default().try_into()?;
-        let pool = Default::default();
+
         let queue_stats = Self::calculate_queue_stats(
             &canister_queues,
             item.guaranteed_response_memory_reservations as usize,
@@ -1285,17 +1365,15 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
         );
 
         let mut local_subnet_input_schedule = VecDeque::new();
-        for can_id in item.local_subnet_input_schedule.into_iter() {
-            let c = CanisterId::try_from(can_id)?;
-            local_subnet_input_schedule.push_back(c);
+        for canister_id in item.local_subnet_input_schedule.into_iter() {
+            local_subnet_input_schedule.push_back(canister_id.try_into()?);
         }
         let mut remote_subnet_input_schedule = VecDeque::new();
-        for can_id in item.remote_subnet_input_schedule.into_iter() {
-            let c = CanisterId::try_from(can_id)?;
-            remote_subnet_input_schedule.push_back(c);
+        for canister_id in item.remote_subnet_input_schedule.into_iter() {
+            remote_subnet_input_schedule.push_back(canister_id.try_into()?);
         }
 
-        Ok(Self {
+        let queue = Self {
             ingress_queue: IngressQueue::try_from(item.ingress_queue)?,
             canister_queues,
             pool,
@@ -1303,7 +1381,17 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
             next_input_queue,
             local_subnet_input_schedule,
             remote_subnet_input_schedule,
-        })
+        };
+
+        // Safe to call with invalid `own_canister_id` and empty `local_canisters`, as
+        // the validation logic allows for deleted local canisters.
+        queue
+            .schedules_ok(
+                &CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
+                &BTreeMap::new(),
+            )
+            .map(|()| queue)
+            .map_err(ProxyDecodeError::Other)
     }
 }
 
@@ -1561,7 +1649,11 @@ pub mod testing {
         ) -> Option<impl Iterator<Item = RequestOrResponse>> {
             self.canister_queues
                 .get(&canister_id)
-                .map(|(_, output_queue)| output_queue.iter_for_testing(&self.pool))
+                .map(|(_, output_queue)| {
+                    output_queue
+                        .iter()
+                        .filter_map(|item| self.pool.get(item.id()).cloned())
+                })
         }
     }
 

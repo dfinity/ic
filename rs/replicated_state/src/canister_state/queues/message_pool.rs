@@ -1,6 +1,3 @@
-// TODO(MR-569) Remove when `CanisterQueues` has been updated to use this.
-#![allow(dead_code)]
-
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_types::messages::{
@@ -148,6 +145,7 @@ pub(super) struct ResponsePlaceholder(Id);
 
 impl ResponsePlaceholder {
     /// Returns the message ID within.
+    #[allow(dead_code)]
     pub(super) fn id(&self) -> Id {
         self.0
     }
@@ -310,6 +308,7 @@ impl MessagePool {
     }
 
     /// Prepares a placeholder for a potential late inbound best-effort response.
+    #[allow(dead_code)]
     pub(super) fn insert_inbound_timeout_response(&mut self) -> ResponsePlaceholder {
         ResponsePlaceholder(self.next_message_id(
             Kind::Response,
@@ -319,6 +318,7 @@ impl MessagePool {
     }
 
     /// Inserts a late inbound best-effort response into a response placeholder.
+    #[allow(dead_code)]
     pub(super) fn replace_inbound_timeout_response(
         &mut self,
         placeholder: ResponsePlaceholder,
@@ -587,16 +587,18 @@ impl MessagePool {
             ));
         }
 
-        // Validate `message_id_generator` against the largest seen `Id`.
-        let mut max_message_id = 0;
-        self.messages.keys().for_each(|id| {
-            max_message_id = max_message_id.max(id.0);
-        });
-        if max_message_id >> Id::BITMASK_LEN >= self.message_id_generator {
-            return Err(format!(
-                "Id out of bounds: max Id: {}, message_id_generator: {}",
-                max_message_id, self.message_id_generator
-            ));
+        if !self.messages.is_empty() {
+            // Validate `message_id_generator` against the largest seen `Id`.
+            let mut max_message_id = 0;
+            self.messages.keys().for_each(|id| {
+                max_message_id = max_message_id.max(id.0);
+            });
+            if max_message_id >> Id::BITMASK_LEN >= self.message_id_generator {
+                return Err(format!(
+                    "`Id` out of bounds: max `Id`: {}, message_id_generator: {}",
+                    max_message_id, self.message_id_generator
+                ));
+            }
         }
 
         Ok(())

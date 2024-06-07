@@ -166,10 +166,18 @@ message CanisterQueues {
   reserved "canister_id", "input_schedule";
 
   repeated ingress.v1.Ingress ingress_queue = 2;
+
   repeated QueueEntry input_queues = 3;
   repeated QueueEntry output_queues = 5;
 
-  MessagePool pool = 9;
+  // Input queue from and output queue to `canister_id`.
+  message CanisterQueuePair {
+    types.v1.CanisterId canister_id = 1;
+    CanisterQueue input_queue = 2;
+    CanisterQueue output_queue = 3;
+  }
+  repeated CanisterQueuePair canister_queues = 9;
+  MessagePool pool = 10;
 
   enum NextInputQueue {
     NEXT_INPUT_QUEUE_UNSPECIFIED = 0;
@@ -182,5 +190,5 @@ message CanisterQueues {
   repeated types.v1.CanisterId local_subnet_input_schedule = 7;
   repeated types.v1.CanisterId remote_subnet_input_schedule = 8;
 
-  uint64 guaranteed_response_memory_reservations = 10;
+  uint64 guaranteed_response_memory_reservations = 11;
 }
