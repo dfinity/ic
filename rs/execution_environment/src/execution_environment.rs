@@ -2674,12 +2674,13 @@ impl ExecutionEnvironment {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request could not be handled, invalid or disabled key {}.",
+                    "{} request failed: invalid or disabled key {}.",
                     request.method_name, key
                 ),
             ));
         }
 
+        // TODO(EXC-1645): migrate to using `.sign_with_threshold_contexts`.
         if state
             .metadata
             .subnet_call_context_manager
@@ -2690,7 +2691,7 @@ impl ExecutionEnvironment {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request could not be handled, the ECDSA signature queue is full.",
+                    "{} request failed: the ECDSA signature queue is full.",
                     request.method_name
                 ),
             ));
@@ -2760,16 +2761,16 @@ impl ExecutionEnvironment {
             }
         }
 
-        let key = MasterPublicKeyId::Schnorr(key_id.clone());
+        let threshold_key = MasterPublicKeyId::Schnorr(key_id.clone());
         if !topology
-            .idkg_signing_subnets(&key)
+            .idkg_signing_subnets(&threshold_key)
             .contains(&state.metadata.own_subnet_id)
         {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request could not be handled, invalid or disabled key {}.",
-                    request.method_name, key
+                    "{} request failed: invalid or disabled key {}.",
+                    request.method_name, threshold_key
                 ),
             ));
         }
@@ -2777,14 +2778,14 @@ impl ExecutionEnvironment {
         if state
             .metadata
             .subnet_call_context_manager
-            .sign_with_schnorr_contexts_count()
+            .sign_with_threshold_contexts_count(&threshold_key)
             >= max_queue_size as usize
         {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request could not be handled, the Schnorr signature queue is full.",
-                    request.method_name
+                    "{} request failed: signature queue for key {} is full.",
+                    request.method_name, threshold_key
                 ),
             ));
         }
