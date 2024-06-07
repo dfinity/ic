@@ -214,6 +214,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/state_machine_tests/                                @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/utopia
 /rs/state_manager/                                      @dfinity-lab/teams/message-routing-owners
 /rs/state_tool/                                         @dfinity-lab/teams/message-routing-owners
+/rs/sys/                                                @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/runtime-owners
 /rs/system_api/                                         @dfinity-lab/teams/execution-owners
 /rs/test_utilities/artifact_pool/                       @dfinity-lab/teams/consensus-owners
 /rs/test_utilities/consensus/                           @dfinity-lab/teams/consensus-owners
