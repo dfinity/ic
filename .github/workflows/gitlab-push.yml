@@ -43,7 +43,7 @@ jobs:
           git push \
               -o merge_request.create \
               -o merge_request.draft \
-              -o merge_request.title="chore(github-sync): PR#${PR_NUMBER} / ${PR_TITLE}" \
+              -o merge_request.title="chore(github-sync): (improved) PR#${PR_NUMBER} / ${PR_TITLE}" \
               -o merge_request.description="[GitHub PR ${PR_NUMBER}](${PR_URL}) (branch: ${BRANCH_NAME})" \
               gitlab "$BRANCH"
 
