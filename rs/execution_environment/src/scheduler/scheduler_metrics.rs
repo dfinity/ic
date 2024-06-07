@@ -41,17 +41,17 @@ pub(super) struct SchedulerMetrics {
     pub(super) msg_execution_duration: Histogram,
     pub(super) registered_canisters: IntGaugeVec,
     pub(super) available_canister_ids: IntGauge,
-    /// Metric `consumed_cycles_since_replica_started` is not
-    /// monotonically increasing. Cycles consumed are increasing the
-    /// value of the metric while refunding cycles are decreasing it.
+    /// Metric `consumed_cycles` is not monotonically increasing. Cycles
+    /// consumed are increasing the value of the metric while refunding
+    /// cycles are decreasing it.
     ///
     /// `f64` gauge because cycles values are `u128`: converting them
     /// into `u64` would result in truncation when the value overflows
     /// 64 bits (which would be indistinguishable from a huge refund);
     /// whereas conversion to `f64` merely results in loss of precision
     /// when dealing with values > 2^53.
-    pub(super) consumed_cycles_since_replica_started: Gauge,
-    pub(super) consumed_cycles_since_replica_started_by_use_case: GaugeVec,
+    pub(super) consumed_cycles: Gauge,
+    pub(super) consumed_cycles_by_use_case: GaugeVec,
     pub(super) input_queue_messages: IntGaugeVec,
     pub(super) input_queues_size_bytes: IntGaugeVec,
     pub(super) queues_response_bytes: IntGauge,
@@ -215,13 +215,13 @@ impl SchedulerMetrics {
                 "replicated_state_available_canister_ids",
                 "Number of allocated canister IDs that can still be generated.",
             ),
-            consumed_cycles_since_replica_started: metrics_registry.gauge(
+            consumed_cycles: metrics_registry.gauge(
                 "replicated_state_consumed_cycles_since_replica_started",
-                "Number of cycles consumed since replica started",
+                "Number of cycles consumed",
             ),
-            consumed_cycles_since_replica_started_by_use_case: metrics_registry.gauge_vec(
+            consumed_cycles_by_use_case: metrics_registry.gauge_vec(
                 "replicated_state_consumed_cycles_from_replica_start",
-                "Number of cycles consumed since replica started by use cases.",
+                "Number of cycles consumed by use cases.",
                 &["use_case"],
             ),
             ecdsa_signature_agreements: metrics_registry.int_gauge(
@@ -678,8 +678,7 @@ impl SchedulerMetrics {
     }
 
     pub(super) fn observe_consumed_cycles(&self, consumed_cycles: NominalCycles) {
-        self.consumed_cycles_since_replica_started
-            .set(consumed_cycles.get() as f64);
+        self.consumed_cycles.set(consumed_cycles.get() as f64);
     }
 
     pub(super) fn observe_consumed_cycles_by_use_case(
@@ -687,7 +686,7 @@ impl SchedulerMetrics {
         consumed_cycles_by_use_case: &BTreeMap<CyclesUseCase, NominalCycles>,
     ) {
         for (use_case, cycles) in consumed_cycles_by_use_case.iter() {
-            self.consumed_cycles_since_replica_started_by_use_case
+            self.consumed_cycles_by_use_case
                 .with_label_values(&[use_case.as_str()])
                 .set(cycles.get() as f64);
         }

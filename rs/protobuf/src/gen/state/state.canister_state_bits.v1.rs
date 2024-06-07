@@ -586,8 +586,7 @@ pub struct CanisterStateBits {
     #[prost(uint64, tag = "21")]
     pub interrupted_during_execution: u64,
     #[prost(message, optional, tag = "22")]
-    pub consumed_cycles_since_replica_started:
-        ::core::option::Option<super::super::super::types::v1::NominalCycles>,
+    pub consumed_cycles: ::core::option::Option<super::super::super::types::v1::NominalCycles>,
     #[prost(uint64, tag = "23")]
     pub freeze_threshold: u64,
     #[prost(message, repeated, tag = "25")]
@@ -622,8 +621,7 @@ pub struct CanisterStateBits {
     #[prost(uint64, tag = "34")]
     pub canister_version: u64,
     #[prost(message, repeated, tag = "36")]
-    pub consumed_cycles_since_replica_started_by_use_cases:
-        ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
+    pub consumed_cycles_by_use_cases: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
     #[prost(message, optional, tag = "37")]
     pub canister_history: ::core::option::Option<CanisterHistory>,
     /// Resource reservation cycles.

@@ -3264,14 +3264,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         .canister_state(a_id)
         .system_state
         .canister_metrics
-        .get_consumed_cycles_since_replica_started_by_use_cases()
+        .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
         .unwrap();
     let instruction_consumption_before_response = *test
         .canister_state(a_id)
         .system_state
         .canister_metrics
-        .get_consumed_cycles_since_replica_started_by_use_cases()
+        .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
         .unwrap();
 
@@ -3317,7 +3317,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         test.canister_state(a_id)
             .system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .len(),
         2
     );
@@ -3326,14 +3326,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         .canister_state(a_id)
         .system_state
         .canister_metrics
-        .get_consumed_cycles_since_replica_started_by_use_cases()
+        .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
         .unwrap();
     let instruction_consumption_after_response = *test
         .canister_state(a_id)
         .system_state
         .canister_metrics
-        .get_consumed_cycles_since_replica_started_by_use_cases()
+        .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
         .unwrap();
 
@@ -3364,7 +3364,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         test.canister_state(b_id)
             .system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .len(),
         1
     );
@@ -3374,7 +3374,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(b_id)
             .system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
         NominalCycles::from(test.canister_execution_cost(b_id))

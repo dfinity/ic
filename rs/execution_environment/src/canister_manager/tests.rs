@@ -1349,18 +1349,14 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
         let creation_fee = cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE);
         let canister = state.canister_state(&canister_id).unwrap();
         assert_eq!(
-            canister
-                .system_state
-                .canister_metrics
-                .consumed_cycles_since_replica_started
-                .get(),
+            canister.system_state.canister_metrics.consumed_cycles.get(),
             creation_fee.get()
         );
         assert_eq!(
             canister
                 .system_state
                 .canister_metrics
-                .get_consumed_cycles_since_replica_started_by_use_cases()
+                .get_consumed_cycles_by_use_cases()
                 .get(&CyclesUseCase::CanisterCreation)
                 .unwrap()
                 .get(),
@@ -1399,18 +1395,14 @@ fn provisional_create_canister_has_no_creation_fee() {
 
         let canister = state.canister_state(&canister_id).unwrap();
         assert_eq!(
-            canister
-                .system_state
-                .canister_metrics
-                .consumed_cycles_since_replica_started
-                .get(),
+            canister.system_state.canister_metrics.consumed_cycles.get(),
             NominalCycles::default().get()
         );
         assert_eq!(
             canister
                 .system_state
                 .canister_metrics
-                .get_consumed_cycles_since_replica_started_by_use_cases()
+                .get_consumed_cycles_by_use_cases()
                 .get(&CyclesUseCase::CanisterCreation),
             None
         );

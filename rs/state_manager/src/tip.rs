@@ -838,10 +838,7 @@ fn serialize_canister_to_tip(
                 .canister_metrics
                 .interrupted_during_execution,
             certified_data: canister_state.system_state.certified_data.clone(),
-            consumed_cycles_since_replica_started: canister_state
-                .system_state
-                .canister_metrics
-                .consumed_cycles_since_replica_started,
+            consumed_cycles: canister_state.system_state.canister_metrics.consumed_cycles,
             stable_memory_size: canister_state
                 .execution_state
                 .as_ref()
@@ -864,10 +861,10 @@ fn serialize_canister_to_tip(
                 .global_timer
                 .to_nanos_since_unix_epoch(),
             canister_version: canister_state.system_state.canister_version,
-            consumed_cycles_since_replica_started_by_use_cases: canister_state
+            consumed_cycles_by_use_cases: canister_state
                 .system_state
                 .canister_metrics
-                .get_consumed_cycles_since_replica_started_by_use_cases()
+                .get_consumed_cycles_by_use_cases()
                 .clone(),
             canister_history: canister_state.system_state.get_canister_history().clone(),
             wasm_chunk_store_metadata: canister_state
