@@ -670,6 +670,7 @@ mod tests {
 
     #[test]
     fn test_ecdsa_signer_action() {
+        let key_id = fake_ecdsa_master_public_key_id();
         let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2, id_3, id_4, id_5) = (
@@ -683,15 +684,24 @@ mod tests {
         let requested = BTreeMap::from([
             (
                 id_1.pseudo_random_id,
-                Some((id_1.clone(), create_sig_inputs(1).sig_inputs_ref)),
+                Some((
+                    id_1.clone(),
+                    create_sig_inputs(1, &key_id).sig_inputs_ref.into_ecdsa(),
+                )),
             ),
             (
                 id_2.pseudo_random_id,
-                Some((id_2.clone(), create_sig_inputs(2).sig_inputs_ref)),
+                Some((
+                    id_2.clone(),
+                    create_sig_inputs(2, &key_id).sig_inputs_ref.into_ecdsa(),
+                )),
             ),
             (
                 id_3.pseudo_random_id,
-                Some((id_3.clone(), create_sig_inputs(3).sig_inputs_ref)),
+                Some((
+                    id_3.clone(),
+                    create_sig_inputs(3, &key_id).sig_inputs_ref.into_ecdsa(),
+                )),
             ),
             (id_4.pseudo_random_id, None),
         ]);
@@ -804,6 +814,7 @@ mod tests {
     // in progress are filtered out.
     #[test]
     fn test_ecdsa_send_signature_shares() {
+        let key_id = fake_ecdsa_master_public_key_id();
         let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2, id_3, id_4, id_5) = (
@@ -827,9 +838,9 @@ mod tests {
         let block_reader = TestEcdsaBlockReader::for_signer_test(
             Height::from(100),
             vec![
-                (id_1.clone(), create_sig_inputs(1)),
-                (id_4.clone(), create_sig_inputs(4)),
-                (id_5.clone(), create_sig_inputs(5)),
+                (id_1.clone(), create_sig_inputs(1, &key_id)),
+                (id_4.clone(), create_sig_inputs(4, &key_id)),
+                (id_5.clone(), create_sig_inputs(5, &key_id)),
             ],
         );
         let transcript_loader: TestEcdsaTranscriptLoader = Default::default();
@@ -906,6 +917,7 @@ mod tests {
     // Tests that no signature shares for incomplete contexts are created
     #[test]
     fn test_ecdsa_send_signature_shares_incomplete_contexts() {
+        let key_id = fake_ecdsa_master_public_key_id();
         let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2, id_3) = (
@@ -919,9 +931,9 @@ mod tests {
         let block_reader = TestEcdsaBlockReader::for_signer_test(
             height,
             vec![
-                (id_1.clone(), create_sig_inputs(1)),
-                (id_2.clone(), create_sig_inputs(2)),
-                (id_3.clone(), create_sig_inputs(3)),
+                (id_1.clone(), create_sig_inputs(1, &key_id)),
+                (id_2.clone(), create_sig_inputs(2, &key_id)),
+                (id_3.clone(), create_sig_inputs(3, &key_id)),
             ],
         );
         let transcript_loader: TestEcdsaTranscriptLoader = Default::default();
@@ -974,6 +986,7 @@ mod tests {
     fn test_ecdsa_send_signature_shares_when_failure() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let height = Height::from(100);
                 let (id_1, id_2, id_3) = (
@@ -986,9 +999,9 @@ mod tests {
                 let block_reader = TestEcdsaBlockReader::for_signer_test(
                     height,
                     vec![
-                        (id_1, create_sig_inputs(1)),
-                        (id_2, create_sig_inputs(2)),
-                        (id_3, create_sig_inputs(3)),
+                        (id_1, create_sig_inputs(1, &key_id)),
+                        (id_2, create_sig_inputs(2, &key_id)),
+                        (id_3, create_sig_inputs(3, &key_id)),
                     ],
                 );
                 let state = fake_state_with_ecdsa_contexts(
@@ -1033,6 +1046,7 @@ mod tests {
     fn test_ecdsa_send_signature_shares_with_complaints() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let height = Height::from(100);
                 let (id_1, id_2, id_3) = (
@@ -1046,9 +1060,9 @@ mod tests {
                 let block_reader = TestEcdsaBlockReader::for_signer_test(
                     height,
                     vec![
-                        (id_1, create_sig_inputs(1)),
-                        (id_2, create_sig_inputs(2)),
-                        (id_3, create_sig_inputs(3)),
+                        (id_1, create_sig_inputs(1, &key_id)),
+                        (id_2, create_sig_inputs(2, &key_id)),
+                        (id_3, create_sig_inputs(3, &key_id)),
                     ],
                 );
                 let state = fake_state_with_ecdsa_contexts(
@@ -1147,6 +1161,7 @@ mod tests {
     // requests, and others dealings are either deferred or dropped.
     #[test]
     fn test_ecdsa_validate_signature_shares() {
+        let key_id = fake_ecdsa_master_public_key_id();
         let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2, id_3, id_4) = (
@@ -1161,8 +1176,8 @@ mod tests {
         let block_reader = TestEcdsaBlockReader::for_signer_test(
             height,
             vec![
-                (id_2.clone(), create_sig_inputs(2)),
-                (id_3.clone(), create_sig_inputs(3)),
+                (id_2.clone(), create_sig_inputs(2, &key_id)),
+                (id_3.clone(), create_sig_inputs(3, &key_id)),
             ],
         );
         let state = fake_state_with_ecdsa_contexts(
@@ -1245,6 +1260,7 @@ mod tests {
     // Tests that signature shares for incomplete contexts are not validated
     #[test]
     fn test_ecdsa_validate_signature_shares_incomplete_contexts() {
+        let key_id = fake_ecdsa_master_public_key_id();
         let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2, id_3) = (
@@ -1258,9 +1274,9 @@ mod tests {
         let block_reader = TestEcdsaBlockReader::for_signer_test(
             height,
             vec![
-                (id_1.clone(), create_sig_inputs(1)),
-                (id_2.clone(), create_sig_inputs(2)),
-                (id_3.clone(), create_sig_inputs(3)),
+                (id_1.clone(), create_sig_inputs(1, &key_id)),
+                (id_2.clone(), create_sig_inputs(2, &key_id)),
+                (id_3.clone(), create_sig_inputs(3, &key_id)),
             ],
         );
         let key_id = fake_ecdsa_key_id();
@@ -1342,13 +1358,14 @@ mod tests {
     fn test_ecdsa_duplicate_signature_shares() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let height = Height::from(100);
                 let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let id_2 = create_request_id(&mut uid_generator, Height::from(100));
 
                 let block_reader = TestEcdsaBlockReader::for_signer_test(
                     height,
-                    vec![(id_2.clone(), create_sig_inputs(2))],
+                    vec![(id_2.clone(), create_sig_inputs(2, &key_id))],
                 );
                 let state = fake_state_with_ecdsa_contexts(
                     height,
@@ -1390,13 +1407,14 @@ mod tests {
     fn test_ecdsa_duplicate_signature_shares_in_batch() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let height = Height::from(100);
                 let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let id_1 = create_request_id(&mut uid_generator, Height::from(100));
 
                 let block_reader = TestEcdsaBlockReader::for_signer_test(
                     height,
-                    vec![(id_1.clone(), create_sig_inputs(2))],
+                    vec![(id_1.clone(), create_sig_inputs(2, &key_id))],
                 );
                 let state = fake_state_with_ecdsa_contexts(
                     height,
@@ -1451,6 +1469,7 @@ mod tests {
     fn test_ecdsa_purge_unvalidated_signature_shares() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let height = Height::from(100);
                 let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let (id_1, id_2, id_3) = (
@@ -1464,8 +1483,8 @@ mod tests {
                 let block_reader = TestEcdsaBlockReader::for_signer_test(
                     height,
                     vec![
-                        (id_1.clone(), create_sig_inputs(1)),
-                        (id_3.clone(), create_sig_inputs(3)),
+                        (id_1.clone(), create_sig_inputs(1, &key_id)),
+                        (id_3.clone(), create_sig_inputs(3, &key_id)),
                     ],
                 );
                 let state = fake_state_with_ecdsa_contexts(
@@ -1514,6 +1533,7 @@ mod tests {
     fn test_ecdsa_purge_validated_signature_shares() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let height = Height::from(100);
                 let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let (id_1, id_2, id_3) = (
@@ -1527,8 +1547,8 @@ mod tests {
                 let block_reader = TestEcdsaBlockReader::for_signer_test(
                     height,
                     vec![
-                        (id_1.clone(), create_sig_inputs(1)),
-                        (id_3.clone(), create_sig_inputs(3)),
+                        (id_1.clone(), create_sig_inputs(1, &key_id)),
+                        (id_3.clone(), create_sig_inputs(3, &key_id)),
                     ],
                 );
                 let state = fake_state_with_ecdsa_contexts(

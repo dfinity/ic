@@ -865,18 +865,22 @@ mod test {
             .flat_map(get_context_request_id)
             .collect::<Vec<_>>();
 
-        let (key_transcript, key_transcript_ref) =
-            ecdsa_payload.generate_current_key(&MasterPublicKeyId::Ecdsa(key_id), &env, &mut rng);
+        let (key_transcript, key_transcript_ref) = ecdsa_payload.generate_current_key(
+            &MasterPublicKeyId::Ecdsa(key_id.clone()),
+            &env,
+            &mut rng,
+        );
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
 
         // Add the quadruples and transcripts to block reader and payload
         let sig_inputs = (1..4)
             .map(|i| {
-                create_sig_inputs_with_args(
+                create_ecdsa_sig_inputs_with_args(
                     i,
                     &env.nodes.ids(),
                     key_transcript.clone(),
                     Height::from(44),
+                    key_id.clone(),
                 )
             })
             .collect::<Vec<_>>();

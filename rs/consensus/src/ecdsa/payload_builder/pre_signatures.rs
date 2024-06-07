@@ -449,17 +449,14 @@ pub fn new_random_unmasked_config(
 
 #[cfg(test)]
 pub(super) mod test_utils {
-    use crate::ecdsa::test_utils::{create_sig_inputs, EcdsaPayloadTestHelper};
+    use crate::ecdsa::test_utils::EcdsaPayloadTestHelper;
 
     use super::*;
 
     use std::collections::BTreeMap;
 
-    use ic_management_canister_types::EcdsaKeyId;
     use ic_types::{
-        consensus::idkg::{
-            self, EcdsaPayload, IDkgTranscriptParamsRef, PreSigId, UnmaskedTranscript,
-        },
+        consensus::idkg::{self, IDkgTranscriptParamsRef},
         NodeId, RegistryVersion,
     };
 
@@ -507,44 +504,6 @@ pub(super) mod test_utils {
         configs
     }
 
-    pub fn create_available_quadruple(
-        ecdsa_payload: &mut EcdsaPayload,
-        key_id: EcdsaKeyId,
-        caller: u8,
-    ) -> PreSigId {
-        create_available_quadruple_with_key_transcript(
-            ecdsa_payload,
-            caller,
-            key_id,
-            /*key_transcript=*/ None,
-        )
-    }
-
-    pub fn create_available_quadruple_with_key_transcript(
-        ecdsa_payload: &mut EcdsaPayload,
-        caller: u8,
-        _key_id: EcdsaKeyId,
-        key_transcript: Option<UnmaskedTranscript>,
-    ) -> PreSigId {
-        let sig_inputs = create_sig_inputs(caller);
-        let pre_sig_id = ecdsa_payload.uid_generator.next_pre_signature_id();
-        let mut quadruple_ref = sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone();
-        if let Some(transcript) = key_transcript {
-            quadruple_ref.key_unmasked_ref = transcript;
-        }
-        ecdsa_payload
-            .available_pre_signatures
-            .insert(pre_sig_id, PreSignatureRef::Ecdsa(quadruple_ref));
-
-        for (t_ref, transcript) in sig_inputs.idkg_transcripts {
-            ecdsa_payload
-                .idkg_transcripts
-                .insert(t_ref.transcript_id, transcript);
-        }
-
-        pre_sig_id
-    }
-
     /// Return a sorted list of IDs of all transcripts in creation
     pub fn config_ids(payload: &idkg::EcdsaPayload) -> Vec<u64> {
         let mut arr = payload
@@ -576,11 +535,14 @@ pub(super) mod tests {
     use super::*;
 
     use crate::ecdsa::test_utils::{
-        fake_ecdsa_key_id, fake_ecdsa_master_public_key_id, fake_schnorr_key_id,
+        create_available_pre_signature, create_available_pre_signature_with_key_transcript,
+        fake_ecdsa_key_id, fake_ecdsa_master_public_key_id,
+        fake_master_public_key_ids_for_all_algorithms, fake_schnorr_key_id,
         fake_schnorr_master_public_key_id, fake_sign_with_ecdsa_context_with_quadruple,
         set_up_ecdsa_payload, EcdsaPayloadTestHelper, TestEcdsaBlockReader,
         TestEcdsaTranscriptBuilder,
     };
+    use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
@@ -678,83 +640,81 @@ pub(super) mod tests {
     }
 
     #[test]
-    fn test_ecdsa_make_new_pre_signatures_if_needed() {
+    fn test_make_new_pre_signatures_if_needed_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_make_new_pre_signatures_if_needed(key_id);
+        }
+    }
+
+    fn test_make_new_pre_signatures_if_needed(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
         let height = Height::new(10);
-        let key_id = fake_ecdsa_key_id();
-        let (mut ecdsa_payload, _env, _block_reader) = set_up(
-            &mut rng,
-            subnet_id,
-            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
-            height,
-        );
+        let (mut ecdsa_payload, _env, _block_reader) =
+            set_up(&mut rng, subnet_id, vec![key_id.clone()], height);
 
-        // 4 Quadruples should be created in advance (in creation + unmatched available = 4)
+        // 4 pre-signatures should be created in advance (in creation + unmatched available = 4)
         let pre_signatures_to_create_in_advance = 4;
         let chain_key_config = ChainKeyConfig {
             key_configs: vec![KeyConfig {
-                key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
+                key_id: key_id.clone(),
                 pre_signatures_to_create_in_advance,
                 max_queue_size: 1,
             }],
             ..ChainKeyConfig::default()
         };
 
-        // Add 3 available quadruples
+        // Add 3 available pre-signatures
         for i in 0..3 {
-            create_available_quadruple(&mut ecdsa_payload, key_id.clone(), i);
+            create_available_pre_signature(&mut ecdsa_payload, key_id.clone(), i);
         }
 
-        // 2 available quadruples are already matched
-        let quadruples_already_matched = 2;
+        // 2 available pre-signatures are already matched
+        let pre_signature_already_matched = 2;
 
-        // We expect 3 quadruples in creation to be added
-        let expected_quadruples_in_creation = pre_signatures_to_create_in_advance as usize
-            - (ecdsa_payload.available_pre_signatures.len() - quadruples_already_matched);
-        assert_eq!(expected_quadruples_in_creation, 3);
+        // We expect 3 pre-signatures in creation to be added
+        let expected_pre_signatures_in_creation = pre_signatures_to_create_in_advance as usize
+            - (ecdsa_payload.available_pre_signatures.len() - pre_signature_already_matched);
+        assert_eq!(expected_pre_signatures_in_creation, 3);
 
         make_new_pre_signatures_if_needed(
             &chain_key_config,
             &mut ecdsa_payload,
-            &BTreeMap::from([(
-                MasterPublicKeyId::Ecdsa(key_id.clone()),
-                quadruples_already_matched,
-            )]),
+            &BTreeMap::from([(key_id.clone(), pre_signature_already_matched)]),
         );
 
         assert_eq!(
             ecdsa_payload.pre_signatures_in_creation.len()
                 + ecdsa_payload.available_pre_signatures.len()
-                - quadruples_already_matched,
+                - pre_signature_already_matched,
             pre_signatures_to_create_in_advance as usize
         );
         // Verify the generated transcript ids.
         let mut transcript_ids = BTreeSet::new();
         for pre_signature in ecdsa_payload.pre_signatures_in_creation.values() {
-            let PreSignatureInCreation::Ecdsa(quadruple) = pre_signature else {
-                panic!("Expected ECDSA pre-signature");
-            };
-            let kappa_unmasked_config = quadruple.kappa_unmasked_config.clone();
-            let kappa_transcript_id = kappa_unmasked_config.as_ref().transcript_id;
-            transcript_ids.insert(kappa_transcript_id);
-            transcript_ids.insert(quadruple.lambda_config.as_ref().transcript_id);
+            match pre_signature {
+                PreSignatureInCreation::Ecdsa(pre_sig) => {
+                    assert_matches!(key_id, MasterPublicKeyId::Ecdsa(_));
+                    let kappa_unmasked_config = pre_sig.kappa_unmasked_config.clone();
+                    let kappa_transcript_id = kappa_unmasked_config.as_ref().transcript_id;
+                    transcript_ids.insert(kappa_transcript_id);
+                    transcript_ids.insert(pre_sig.lambda_config.as_ref().transcript_id);
+                }
+                PreSignatureInCreation::Schnorr(pre_sig) => {
+                    assert_matches!(key_id, MasterPublicKeyId::Schnorr(_));
+                    transcript_ids.insert(pre_sig.blinder_unmasked_config.as_ref().transcript_id);
+                }
+            }
         }
-        assert_eq!(transcript_ids.len(), 2 * expected_quadruples_in_creation);
-        assert_eq!(
-            transcript_ids,
-            BTreeSet::from([
-                IDkgTranscriptId::new(subnet_id, /*id=*/ 0, height),
-                IDkgTranscriptId::new(subnet_id, /*id=*/ 1, height),
-                IDkgTranscriptId::new(subnet_id, /*id=*/ 2, height),
-                IDkgTranscriptId::new(subnet_id, /*id=*/ 3, height),
-                IDkgTranscriptId::new(subnet_id, /*id=*/ 4, height),
-                IDkgTranscriptId::new(subnet_id, /*id=*/ 5, height),
-            ])
-        );
+        let expected_transcript_ids = match key_id {
+            MasterPublicKeyId::Ecdsa(_) => 2 * expected_pre_signatures_in_creation,
+            MasterPublicKeyId::Schnorr(_) => expected_pre_signatures_in_creation,
+        };
+        assert_eq!(transcript_ids.len(), expected_transcript_ids);
         assert_eq!(
             ecdsa_payload.peek_next_transcript_id().id() as usize,
-            2 * expected_quadruples_in_creation,
+            expected_transcript_ids,
         );
     }
 
@@ -1116,19 +1076,24 @@ pub(super) mod tests {
 
         // Create three quadruples, with the current, a different, no key transcript.
         let pre_sig_ids = vec![
-            create_available_quadruple_with_key_transcript(
+            create_available_pre_signature_with_key_transcript(
                 &mut payload,
                 1,
-                key_id.clone(),
+                MasterPublicKeyId::Ecdsa(key_id.clone()),
                 Some(key_transcript),
             ),
-            create_available_quadruple_with_key_transcript(
+            create_available_pre_signature_with_key_transcript(
                 &mut payload,
                 2,
-                key_id.clone(),
+                MasterPublicKeyId::Ecdsa(key_id.clone()),
                 Some(key_transcript2),
             ),
-            create_available_quadruple_with_key_transcript(&mut payload, 3, key_id.clone(), None),
+            create_available_pre_signature_with_key_transcript(
+                &mut payload,
+                3,
+                MasterPublicKeyId::Ecdsa(key_id.clone()),
+                None,
+            ),
         ];
 
         // All three quadruples are matched with a context
@@ -1156,10 +1121,10 @@ pub(super) mod tests {
 
         // Create three quadruples of the current key transcript
         for i in 0..3 {
-            create_available_quadruple_with_key_transcript(
+            create_available_pre_signature_with_key_transcript(
                 &mut payload,
                 i,
-                key_id.clone(),
+                MasterPublicKeyId::Ecdsa(key_id.clone()),
                 Some(key_transcript),
             );
         }
@@ -1205,10 +1170,10 @@ pub(super) mod tests {
         // Create two quadruples of the other key transcript
         let pre_sig_ids = (0..2)
             .map(|i| {
-                create_available_quadruple_with_key_transcript(
+                create_available_pre_signature_with_key_transcript(
                     &mut payload,
                     i,
-                    key_id.clone(),
+                    MasterPublicKeyId::Ecdsa(key_id.clone()),
                     Some(other_key_transcript),
                 )
             })
