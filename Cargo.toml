@@ -12,7 +12,6 @@ members = [
     "rs/artifact_pool",
     "rs/async_utils",
     "rs/backup",
-    "rs/bazelifier",
     "rs/bitcoin/adapter",
     "rs/bitcoin/client",
     "rs/bitcoin/service",
