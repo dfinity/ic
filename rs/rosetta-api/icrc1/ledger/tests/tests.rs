@@ -307,6 +307,11 @@ fn test_archive_duplicate_controllers() {
     ic_icrc1_ledger_sm_tests::test_archive_duplicate_controllers(ledger_wasm());
 }
 
+#[test]
+fn test_icrc21_standard() {
+    ic_icrc1_ledger_sm_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
+}
+
 // #[test]
 // fn test_icrc1_test_suite() {
 //     ic_icrc1_ledger_sm_tests::test_icrc1_test_suite(ledger_wasm(), encode_init_args);
