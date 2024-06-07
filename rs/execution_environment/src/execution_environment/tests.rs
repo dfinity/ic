@@ -2683,7 +2683,7 @@ fn test_sign_with_threshold_key_queue_fills_up() {
                 ic00::IC_00,
                 method,
                 call_args()
-                    .other_side(sign_with_threshold_key_payload(method, key_id))
+                    .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
                     .on_reject(wasm().reject_message().reject()),
                 Cycles::from(payment),
             )
@@ -2694,18 +2694,19 @@ fn test_sign_with_threshold_key_queue_fills_up() {
         }
         let result = test.ingress(canister_id, "update", run).unwrap();
 
-        let algorithm = match method {
-            Method::SignWithECDSA => "ECDSA",
-            Method::SignWithSchnorr => "Schnorr",
+        // TODO(EXC-1645): fix error message to follow the same pattern for all `sign_with_*` methods.
+        let message = match method {
+            Method::SignWithECDSA => format!(
+                "{} request failed: the ECDSA signature queue is full.",
+                method,
+            ),
+            Method::SignWithSchnorr => format!(
+                "{} request failed: signature queue for key {} is full.",
+                method, key_id,
+            ),
             _ => panic!("Unexpected method"),
         };
-        assert_eq!(
-            result,
-            WasmResult::Reject(format!(
-                "{} request could not be handled, the {} signature queue is full.",
-                method, algorithm,
-            ))
-        );
+        assert_eq!(result, WasmResult::Reject(message));
     }
 }
 
@@ -3639,24 +3640,18 @@ fn test_sign_with_schnorr_api_is_enabled() {
         test.state()
             .metadata
             .subnet_call_context_manager
-            .sign_with_schnorr_contexts_count(),
+            .sign_with_threshold_contexts_count(&key_id),
         0
     );
 
     // Act.
+    let method = Method::SignWithSchnorr;
     let run = wasm()
         .call_with_cycles(
             ic00::IC_00,
-            Method::SignWithSchnorr,
+            method,
             call_args()
-                .other_side(
-                    ic00::SignWithSchnorrArgs {
-                        message: vec![],
-                        derivation_path: DerivationPath::new(vec![]),
-                        key_id: into_inner_schnorr(key_id),
-                    }
-                    .encode(),
-                )
+                .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
                 .on_reject(wasm().reject_message().reject()),
             Cycles::from(100_000_000_000u128),
         )
@@ -3679,7 +3674,7 @@ fn test_sign_with_schnorr_api_is_enabled() {
         test.state()
             .metadata
             .subnet_call_context_manager
-            .sign_with_schnorr_contexts_count(),
+            .sign_with_threshold_contexts_count(&key_id),
         1
     );
 }

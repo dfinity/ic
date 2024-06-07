@@ -465,11 +465,19 @@ impl SubnetCallContextManager {
         removed
     }
 
-    /// Returns the number of `sign_with_schnorr` contexts.
-    pub fn sign_with_schnorr_contexts_count(&self) -> usize {
+    /// Returns the number of `sign_with_threshold_contexts` per key id.
+    pub fn sign_with_threshold_contexts_count(&self, key_id: &MasterPublicKeyId) -> usize {
         self.sign_with_threshold_contexts
             .iter()
-            .filter(|(_, context)| matches!(context.args, ThresholdArguments::Schnorr(_)))
+            .filter(|(_, context)| match (key_id, &context.args) {
+                (MasterPublicKeyId::Ecdsa(ecdsa_key_id), ThresholdArguments::Ecdsa(args)) => {
+                    args.key_id == *ecdsa_key_id
+                }
+                (MasterPublicKeyId::Schnorr(schnorr_key_id), ThresholdArguments::Schnorr(args)) => {
+                    args.key_id == *schnorr_key_id
+                }
+                _ => false,
+            })
             .count()
     }
 }
