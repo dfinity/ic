@@ -969,6 +969,15 @@ pub struct SignWithThresholdContext {
     pub nonce: Option<[u8; NONCE_SIZE]>,
 }
 
+impl SignWithThresholdContext {
+    pub fn key_id(&self) -> MasterPublicKeyId {
+        match &self.args {
+            ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
+            ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
+        }
+    }
+}
+
 impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
     fn from(context: &SignWithThresholdContext) -> Self {
         Self {
@@ -980,6 +989,23 @@ impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
             pre_signature_id: context.matched_pre_signature.as_ref().map(|q| q.0.id()),
             height: context.matched_pre_signature.as_ref().map(|q| q.1.get()),
             nonce: context.nonce.map(|n| n.to_vec()),
+        }
+    }
+}
+
+impl From<&SignWithEcdsaContext> for SignWithThresholdContext {
+    fn from(context: &SignWithEcdsaContext) -> Self {
+        SignWithThresholdContext {
+            request: context.request.clone(),
+            args: ThresholdArguments::Ecdsa(EcdsaArguments {
+                key_id: context.key_id.clone(),
+                message_hash: context.message_hash,
+            }),
+            derivation_path: context.derivation_path.clone(),
+            pseudo_random_id: context.pseudo_random_id,
+            batch_time: context.batch_time,
+            matched_pre_signature: context.matched_quadruple,
+            nonce: context.nonce,
         }
     }
 }

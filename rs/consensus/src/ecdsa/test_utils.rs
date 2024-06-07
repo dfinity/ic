@@ -22,7 +22,8 @@ use ic_management_canister_types::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    IDkgDealingsContext, SignWithEcdsaContext,
+    EcdsaArguments, IDkgDealingsContext, SchnorrArguments, SignWithThresholdContext,
+    ThresholdArguments,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
@@ -35,7 +36,7 @@ use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::certification::Certification;
 use ic_types::consensus::idkg::{
     self,
-    common::PreSignatureRef,
+    common::{CombinedSignature, PreSignatureRef, ThresholdSigInputsRef},
     ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
     schnorr::{PreSignatureTranscriptRef, ThresholdSchnorrSigInputsRef},
     EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript,
@@ -51,14 +52,14 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    ExtendedDerivationPath, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-    ThresholdEcdsaSigShare, ThresholdSchnorrSigInputs,
+    ExtendedDerivationPath, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
+    ThresholdSchnorrSigInputs,
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::messages::CallbackId;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{signature::*, time};
-use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId, Time};
+use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
@@ -87,87 +88,97 @@ pub(crate) fn empty_response() -> ic_types::batch::ConsensusResponse {
     )
 }
 
-pub fn fake_sign_with_ecdsa_context(
-    key_id: EcdsaKeyId,
-    pseudo_random_id: [u8; 32],
-) -> SignWithEcdsaContext {
-    fake_sign_with_ecdsa_context_with_batch_time(key_id, pseudo_random_id, UNIX_EPOCH)
+fn fake_signature_request_args(key_id: MasterPublicKeyId) -> ThresholdArguments {
+    match key_id {
+        MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
+            key_id,
+            message_hash: [0; 32],
+        }),
+        MasterPublicKeyId::Schnorr(key_id) => ThresholdArguments::Schnorr(SchnorrArguments {
+            key_id,
+            message: vec![1; 48],
+        }),
+    }
 }
 
-pub fn fake_sign_with_ecdsa_context_with_batch_time(
-    key_id: EcdsaKeyId,
+pub fn fake_signature_request_context(
+    key_id: MasterPublicKeyId,
     pseudo_random_id: [u8; 32],
-    batch_time: Time,
-) -> SignWithEcdsaContext {
-    SignWithEcdsaContext {
+) -> SignWithThresholdContext {
+    SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        message_hash: [0; 32],
+        args: fake_signature_request_args(key_id),
         derivation_path: vec![],
-        batch_time,
-        key_id,
+        batch_time: UNIX_EPOCH,
         pseudo_random_id,
-        matched_quadruple: None,
+        matched_pre_signature: None,
         nonce: None,
     }
 }
 
-pub fn fake_sign_with_ecdsa_context_with_quadruple(
+pub fn fake_signature_request_context_with_pre_sig(
     id: u8,
-    key_id: EcdsaKeyId,
-    quadruple: Option<PreSigId>,
-) -> (CallbackId, SignWithEcdsaContext) {
-    let context = SignWithEcdsaContext {
+    key_id: MasterPublicKeyId,
+    pre_signature: Option<PreSigId>,
+) -> (CallbackId, SignWithThresholdContext) {
+    let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        message_hash: [0; 32],
+        args: fake_signature_request_args(key_id),
         derivation_path: vec![],
         batch_time: UNIX_EPOCH,
-        key_id,
         pseudo_random_id: [id; 32],
-        matched_quadruple: quadruple.map(|qid| (qid, Height::from(1))),
+        matched_pre_signature: pre_signature.map(|pid| (pid, Height::from(1))),
         nonce: None,
     };
     (CallbackId::from(id as u64), context)
 }
 
-pub fn fake_completed_sign_with_ecdsa_context(
+pub fn fake_completed_signature_request_context(
     id: u8,
+    key_id: MasterPublicKeyId,
     pre_signature_id: PreSigId,
-) -> (CallbackId, SignWithEcdsaContext) {
-    fake_sign_with_ecdsa_context_from_request_id(&RequestId {
-        pre_signature_id,
-        pseudo_random_id: [id; 32],
-        height: Height::from(1),
-    })
+) -> (CallbackId, SignWithThresholdContext) {
+    fake_signature_request_context_from_id(
+        key_id,
+        &RequestId {
+            pre_signature_id,
+            pseudo_random_id: [id; 32],
+            height: Height::from(1),
+        },
+    )
 }
 
-pub fn fake_sign_with_ecdsa_context_from_request_id(
+pub fn fake_signature_request_context_from_id(
+    key_id: MasterPublicKeyId,
     request_id: &RequestId,
-) -> (CallbackId, SignWithEcdsaContext) {
+) -> (CallbackId, SignWithThresholdContext) {
     let height = request_id.height;
     let pre_sig_id = request_id.pre_signature_id;
     let callback_id = CallbackId::from(pre_sig_id.id());
-    let context = SignWithEcdsaContext {
+    let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
-        message_hash: [0; 32],
+        args: fake_signature_request_args(key_id),
         derivation_path: vec![],
         batch_time: UNIX_EPOCH,
-        key_id: fake_ecdsa_key_id(),
         pseudo_random_id: request_id.pseudo_random_id,
-        matched_quadruple: Some((pre_sig_id, height)),
+        matched_pre_signature: Some((pre_sig_id, height)),
         nonce: Some([0; 32]),
     };
     (callback_id, context)
 }
 
-pub fn fake_state_with_ecdsa_contexts<T>(height: Height, contexts: T) -> FakeCertifiedStateSnapshot
+pub fn fake_state_with_signature_requests<T>(
+    height: Height,
+    contexts: T,
+) -> FakeCertifiedStateSnapshot
 where
-    T: IntoIterator<Item = (CallbackId, SignWithEcdsaContext)>,
+    T: IntoIterator<Item = (CallbackId, SignWithThresholdContext)>,
 {
     let mut state = ReplicatedStateBuilder::default().build();
     state
         .metadata
         .subnet_call_context_manager
-        .sign_with_ecdsa_contexts = BTreeMap::from_iter(contexts);
+        .sign_with_threshold_contexts = BTreeMap::from_iter(contexts);
 
     FakeCertifiedStateSnapshot {
         height,
@@ -236,33 +247,6 @@ impl From<&IDkgTranscriptParams> for TestTranscriptParams {
                     }
                 },
             },
-        }
-    }
-}
-
-#[derive(Clone)]
-#[allow(clippy::large_enum_variant)]
-pub(crate) enum ThresholdSigInputsRef {
-    Ecdsa(ThresholdEcdsaSigInputsRef),
-    Schnorr(ThresholdSchnorrSigInputsRef),
-}
-
-impl ThresholdSigInputsRef {
-    pub(crate) fn pre_signature(&self) -> PreSignatureRef {
-        match self {
-            ThresholdSigInputsRef::Ecdsa(inputs) => {
-                PreSignatureRef::Ecdsa(inputs.presig_quadruple_ref.clone())
-            }
-            ThresholdSigInputsRef::Schnorr(inputs) => {
-                PreSignatureRef::Schnorr(inputs.presig_transcript_ref.clone())
-            }
-        }
-    }
-
-    pub(crate) fn into_ecdsa(self) -> ThresholdEcdsaSigInputsRef {
-        match self {
-            ThresholdSigInputsRef::Ecdsa(inputs) => inputs,
-            _ => panic!("Expected ECDSA sig inputs"),
         }
     }
 }
@@ -649,7 +633,7 @@ impl EcdsaTranscriptBuilder for TestEcdsaTranscriptBuilder {
 }
 
 pub(crate) struct TestEcdsaSignatureBuilder {
-    pub(crate) signatures: BTreeMap<RequestId, ThresholdEcdsaCombinedSignature>,
+    pub(crate) signatures: BTreeMap<RequestId, CombinedSignature>,
 }
 
 impl TestEcdsaSignatureBuilder {
@@ -663,8 +647,8 @@ impl TestEcdsaSignatureBuilder {
 impl EcdsaSignatureBuilder for TestEcdsaSignatureBuilder {
     fn get_completed_signature(
         &self,
-        context: &SignWithEcdsaContext,
-    ) -> Option<ThresholdEcdsaCombinedSignature> {
+        context: &SignWithThresholdContext,
+    ) -> Option<CombinedSignature> {
         let request_id = get_context_request_id(context)?;
         self.signatures.get(&request_id).cloned()
     }
