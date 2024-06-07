@@ -1,7 +1,6 @@
 name: CI PR Only COV
 
 on:
-  merge_group:
   pull_request:
     types:
       - ready_for_review
