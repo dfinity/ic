@@ -622,6 +622,7 @@ mod tests {
     use std::{io::Write, path::Path};
 
     use ic_config::{ConfigOptional, ConfigSource};
+    use ic_crypto_test_utils_tls::temp_crypto_tls_config;
     use ic_logger::replica_logger::no_op_logger;
     use ic_protobuf::registry::{
         api_boundary_node::v1::ApiBoundaryNodeRecord, firewall::v1::FirewallRuleSet,
@@ -632,7 +633,7 @@ mod tests {
         make_api_boundary_node_record_key, make_firewall_rules_record_key, make_node_record_key,
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities::crypto::{temp_crypto_config_provider, CryptoReturningOk};
+    use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
@@ -875,13 +876,13 @@ mod tests {
 
         let registry = set_up_registry(role, node);
 
-        let registry_helper = Arc::new(RegistryHelper::new(node, registry, no_op_logger()));
+        let registry_helper = Arc::new(RegistryHelper::new(node, registry.clone(), no_op_logger()));
 
         let catch_up_package_provider = CatchUpPackageProvider::new(
             registry_helper.clone(),
             tmp_dir.join("cups"),
             Arc::new(CryptoReturningOk::default()),
-            temp_crypto_config_provider(),
+            temp_crypto_tls_config(registry),
             no_op_logger(),
             node,
         );

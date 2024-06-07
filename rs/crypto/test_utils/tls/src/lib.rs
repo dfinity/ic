@@ -1,5 +1,5 @@
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_crypto_tls_interfaces::TlsPublicKeyCert;
+use ic_crypto_tls_interfaces::{TlsConfig, TlsPublicKeyCert};
 use ic_interfaces::crypto::KeyManager;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
@@ -73,4 +73,14 @@ pub fn temp_crypto_component_with_tls_keys(
     let tls_pubkey = TlsPublicKeyCert::new_from_der(tls_certificate.certificate_der)
         .expect("failed to create X509 cert from DER");
     (temp_crypto, tls_pubkey)
+}
+
+pub fn temp_crypto_tls_config(
+    registry: Arc<FakeRegistryClient>,
+) -> Arc<dyn TlsConfig + Send + Sync> {
+    Arc::new(
+        TempCryptoComponent::builder()
+            .with_registry(registry)
+            .build(),
+    )
 }

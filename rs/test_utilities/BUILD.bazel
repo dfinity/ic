@@ -18,7 +18,6 @@ rust_library(
         "//rs/crypto/test_utils",
         "//rs/crypto/test_utils/canister_threshold_sigs",
         "//rs/crypto/test_utils/ni-dkg",
-        "//rs/crypto/tls_interfaces",
         "//rs/crypto/tree_hash",
         "//rs/cycles_account_manager",
         "//rs/interfaces",

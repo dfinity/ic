@@ -227,6 +227,7 @@ impl CatchUpPackageProvider {
         let client_config = self
             .crypto_tls_config
             .client_config(*node_id, self.registry.get_latest_version())
+            .map_err(|e| warn!(self.logger, "Failed to create tls client config: {:?}", e))
             .ok()?;
 
         let https = HttpsConnectorBuilder::new()
@@ -248,13 +249,22 @@ impl CatchUpPackageProvider {
                     .header("content-type", "application/cbor")
                     .uri(url)
                     .body(Body::from(body))
+                    .map_err(|e| warn!(self.logger, "Failed to create request: {:?}", e))
                     .ok()?,
             )
             .await
             .map_err(|e| warn!(self.logger, "Failed to query CUP endpoint: {:?}", e))
             .ok()?;
 
-        let bytes = body::to_bytes(res.into_body()).await.ok()?;
+        let bytes = body::to_bytes(res.into_body())
+            .await
+            .map_err(|e| {
+                warn!(
+                    self.logger,
+                    "Failed to convert the response body to bytes: {:?}", e
+                )
+            })
+            .ok()?;
 
         if bytes.is_empty() {
             None
