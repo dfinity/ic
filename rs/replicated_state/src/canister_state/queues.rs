@@ -18,13 +18,12 @@ use ic_types::messages::{
 };
 use ic_types::xnet::{QueueId, SessionId};
 use ic_types::{CanisterId, CountBytes, Cycles, Time};
-use message_pool::Context;
+use message_pool::{Context, REQUEST_LIFETIME};
 use queue::{IngressQueue, InputQueue, OutputQueue};
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::convert::{From, TryFrom};
 use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
-use std::time::Duration;
 
 pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 
