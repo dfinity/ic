@@ -1085,6 +1085,7 @@ impl SchedulerImpl {
     ) {
         let state_time = state.time();
         let mut all_rejects = Vec::new();
+        let mut uninstalled_canisters = Vec::new();
         for canister in state.canisters_iter_mut() {
             // Postpone charging for resources when a canister has a paused execution
             // to avoid modifying the balance of a canister during an unfinished operation.
@@ -1116,6 +1117,7 @@ impl SchedulerImpl {
                     )
                     .is_err()
                 {
+                    uninstalled_canisters.push(canister.canister_id());
                     all_rejects.push(uninstall_canister(
                         &self.log,
                         canister,
@@ -1137,6 +1139,12 @@ impl SchedulerImpl {
                     self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
                 }
             }
+        }
+
+        // Delete any snapshots associated with the canister
+        // that ran out of cycles.
+        for canister_id in uninstalled_canisters {
+            state.canister_snapshots.delete_snapshots(canister_id);
         }
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
