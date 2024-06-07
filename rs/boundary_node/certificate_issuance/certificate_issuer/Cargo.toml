@@ -50,3 +50,4 @@ tower = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 trust-dns-resolver = "0.22.0"
+zeroize = { workspace = true }

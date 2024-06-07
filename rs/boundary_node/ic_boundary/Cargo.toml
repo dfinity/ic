@@ -106,6 +106,7 @@ tracing-slog = "0.2"
 tracing-subscriber = { workspace = true }
 url = "2.1.1"
 x509-parser = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5.1", features = ["async_tokio"] }
