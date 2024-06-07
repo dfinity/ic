@@ -36,6 +36,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing",
     "@crate_index//:trust-dns-resolver",
+    "@crate_index//:zeroize",
 ]
 
 MACRO_DEPENDENCIES = [
