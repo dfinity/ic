@@ -19,6 +19,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
     CanisterStatusType, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, Method, Payload as _,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -975,6 +976,213 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
             .get(),
         3
     );
+}
+
+#[test]
+fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
+    let mut test = SchedulerTestBuilder::new()
+        .with_canister_snapshots(true)
+        .build();
+
+    let canister_id = test.create_canister_with_controller(
+        Cycles::new(12_700_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        None,
+        Some(initial_time),
+        None,
+        Some(canister_test_id(10).get()),
+    );
+    assert_eq!(test.state().canister_states.len(), 1);
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id)
+            .len(),
+        0
+    );
+
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    test.inject_call_to_ic00(
+        Method::TakeCanisterSnapshot,
+        args.encode(),
+        Cycles::zero(),
+        canister_test_id(10),
+        InputQueueType::LocalSubnet,
+    );
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+
+    // Snapshot was created.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id)
+            .len(),
+        1
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .num_canisters_uninstalled_out_of_cycles
+            .get(),
+        0
+    );
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .execution_state
+        .is_some());
+
+    // Uninstall canister due to `out_of_cycles`.
+    test.set_time(
+        initial_time
+            + 1000
+                * test
+                    .scheduler()
+                    .cycles_account_manager
+                    .duration_between_allocation_charges(),
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .num_canisters_uninstalled_out_of_cycles
+            .get(),
+        1
+    );
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id)
+            .len(),
+        0
+    );
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .execution_state
+        .is_none());
+}
+
+#[test]
+fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
+    let mut test = SchedulerTestBuilder::new()
+        .with_canister_snapshots(true)
+        .build();
+
+    let canister_id = test.create_canister_with_controller(
+        Cycles::new(12_700_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        None,
+        Some(initial_time),
+        None,
+        Some(canister_test_id(10).get()),
+    );
+    assert_eq!(test.state().canister_states.len(), 1);
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id)
+            .len(),
+        0
+    );
+
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .execution_state
+        .is_some());
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    test.inject_call_to_ic00(
+        Method::TakeCanisterSnapshot,
+        args.encode(),
+        Cycles::zero(),
+        canister_test_id(10),
+        InputQueueType::LocalSubnet,
+    );
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+
+    // Snapshot was created.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id)
+            .len(),
+        1
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .num_canisters_uninstalled_out_of_cycles
+            .get(),
+        0
+    );
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .execution_state
+        .is_some());
+
+    // Uninstall canister.
+    let args: UninstallCodeArgs = UninstallCodeArgs::new(canister_id, None);
+    test.inject_call_to_ic00(
+        Method::UninstallCode,
+        args.encode(),
+        Cycles::zero(),
+        canister_test_id(10),
+        InputQueueType::LocalSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .execution_state
+        .is_none());
+
+    // Trigger canister `out_of_cycles`.
+    test.set_time(
+        initial_time
+            + 1000
+                * test
+                    .scheduler()
+                    .cycles_account_manager
+                    .duration_between_allocation_charges(),
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .num_canisters_uninstalled_out_of_cycles
+            .get(),
+        1
+    );
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id)
+            .len(),
+        0
+    );
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .execution_state
+        .is_none());
 }
 
 #[test]
