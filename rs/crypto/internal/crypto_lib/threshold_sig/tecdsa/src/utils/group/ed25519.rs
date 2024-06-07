@@ -268,6 +268,28 @@ impl Scalar {
     }
 }
 
+/// The non-canonical identity elements of Ed25519
+///
+/// Ed25519 has a set of points which are considered valid but are not
+/// the canonical encoding of the point. That is, implementations should
+/// never generate them, but are expected to parse them.
+///
+/// We expect that all peers in the protocol behave correctly and do not
+/// ever produce a non-canonical point encoding. Given this, we reject
+/// such points immediately.
+///
+/// The other non-canonical points are all not within the prime order
+/// subgroup; they are either in the subgroup of size 8, or the
+/// subgroup of size 8*l where l is the size of the Ed25519 prime
+/// order subgroup.  These points are caught by the checks for a
+/// torsion component
+///
+const NON_CANONICAL_IDENTITIES: [[u8; 32]; 3] = [
+    hex!("0100000000000000000000000000000000000000000000000000000000000080"),
+    hex!("eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"),
+    hex!("eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+];
+
 #[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct Point {
     p: curve25519_dalek::EdwardsPoint,
@@ -295,7 +317,14 @@ impl Point {
     /// If the value encoded is not a valid point on the curve, then
     /// None is returned
     pub fn deserialize(bytes: &[u8]) -> Option<Self> {
-        let b = bytes.try_into().ok()?;
+        let b: [u8; Self::BYTES] = bytes.try_into().ok()?;
+
+        for nci in &NON_CANONICAL_IDENTITIES {
+            if bool::from(b.ct_eq(nci)) {
+                return None;
+            }
+        }
+
         let pt = curve25519_dalek::EdwardsPoint::from_bytes(&b);
 
         if bool::from(pt.is_some()) {
