@@ -52,8 +52,8 @@ mod round_schedule;
 use crate::util::debug_assert_or_critical_error;
 pub use round_schedule::RoundSchedule;
 use round_schedule::*;
-mod tecdsa;
-use tecdsa::*;
+mod threshold_signatures;
+use threshold_signatures::*;
 
 /// Only log potentially spammy messages this often (in rounds). With a block
 /// rate around 1.0, this will result in logging about once every 10 minutes.
@@ -1681,18 +1681,33 @@ impl Scheduler for SchedulerImpl {
             &idkg_subnet_public_keys,
         );
 
-        // Update [`SignWithEcdsaContext`]s by assigning randomness and matching quadruples.
-        update_sign_with_ecdsa_contexts(
-            current_round,
-            idkg_pre_signature_ids,
-            &mut state
+        // Update [`SignatureRequestContext`]s by assigning randomness and matching quadruples.
+        {
+            let contexts = state
                 .metadata
                 .subnet_call_context_manager
-                .sign_with_ecdsa_contexts,
-            &mut csprng,
-            registry_settings,
-            self.metrics.as_ref(),
-        );
+                .sign_with_ecdsa_contexts
+                .values_mut()
+                .map(SignatureRequestContext::Ecdsa)
+                .chain(
+                    state
+                        .metadata
+                        .subnet_call_context_manager
+                        .sign_with_threshold_contexts
+                        .values_mut()
+                        .map(SignatureRequestContext::Generic),
+                )
+                .collect();
+
+            update_signature_request_contexts(
+                current_round,
+                idkg_pre_signature_ids,
+                contexts,
+                &mut csprng,
+                registry_settings,
+                self.metrics.as_ref(),
+            );
+        }
 
         // Finalization.
         {
