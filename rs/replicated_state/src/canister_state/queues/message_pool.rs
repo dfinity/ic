@@ -505,7 +505,7 @@ impl MessagePool {
         self.messages.len()
     }
 
-    /// Returns the implicitly assigned deadlines of enwueued outbound guaranteed
+    /// Returns the implicitly assigned deadlines of enqueued outbound guaranteed
     /// response requests.
     pub(super) fn outbound_guaranteed_request_deadlines(&self) -> &BTreeMap<Id, CoarseTime> {
         &self.outbound_guaranteed_request_deadlines
