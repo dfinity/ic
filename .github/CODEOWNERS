@@ -89,7 +89,6 @@ go_deps.bzl               @dfinity/idx
 /rs/artifact_pool/                                      @dfinity/consensus
 /rs/async_utils/                                        @dfinity/networking
 /rs/backup/                                             @dfinity/consensus
-/rs/bazelifier/                                         @dfinity/idx
 /rs/bitcoin/adapter/                                    @dfinity/networking
 /rs/bitcoin/ckbtc/                                      @dfinity/cross-chain-team
 /rs/bitcoin/mock/                                       @dfinity/finint
@@ -214,6 +213,7 @@ go_deps.bzl               @dfinity/idx
 /rs/state_machine_tests/                                @dfinity/ic-message-routing-owners @dfinity/utopia
 /rs/state_manager/                                      @dfinity/ic-message-routing-owners
 /rs/state_tool/                                         @dfinity/ic-message-routing-owners
+/rs/sys/                                                @dfinity/ic-message-routing-owners @dfinity/runtime
 /rs/system_api/                                         @dfinity/execution
 /rs/test_utilities/artifact_pool/                       @dfinity/consensus
 /rs/test_utilities/consensus/                           @dfinity/consensus
@@ -283,10 +283,11 @@ go_deps.bzl               @dfinity/idx
 /rs/xnet/                                               @dfinity/ic-message-routing-owners
 
 # [Scalability]
-/scalability/                                           @dfinity/runtime
+/scalability/                                                       @dfinity/runtime
 
 # [No-Approvals]
-*.lock
-Cargo.toml
-.gitignore
-stackage_snapshot.json
+# Ghost is a group with no direct members. GitLab will bypass codeowners for files that match ghost ownership.
+*.lock                    
+Cargo.toml                
+.gitignore                
+stackage_snapshot.json    

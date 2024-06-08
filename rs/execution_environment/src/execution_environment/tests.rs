@@ -169,14 +169,13 @@ fn compute_initial_threshold_key_dealings_payload(
     let nodes = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let registry_version = RegistryVersion::from(100);
     match method {
-        Method::ComputeInitialEcdsaDealings => {
-            let key_id = match key_id {
-                MasterPublicKeyId::Ecdsa(key) => key,
-                _ => panic!("unexpected key"),
-            };
-            ic00::ComputeInitialEcdsaDealingsArgs::new(key_id, subnet_id, nodes, registry_version)
-                .encode()
-        }
+        Method::ComputeInitialEcdsaDealings => ic00::ComputeInitialEcdsaDealingsArgs::new(
+            into_inner_ecdsa(key_id),
+            subnet_id,
+            nodes,
+            registry_version,
+        )
+        .encode(),
         Method::ComputeInitialIDkgDealings => {
             ic00::ComputeInitialIDkgDealingsArgs::new(key_id, subnet_id, nodes, registry_version)
                 .encode()
@@ -190,19 +189,13 @@ fn threshold_public_key_payload(method: Method, key_id: MasterPublicKeyId) -> Ve
         Method::ECDSAPublicKey => ic00::ECDSAPublicKeyArgs {
             canister_id: None,
             derivation_path: DerivationPath::new(vec![]),
-            key_id: match key_id {
-                MasterPublicKeyId::Ecdsa(key) => key,
-                _ => panic!("unexpected key"),
-            },
+            key_id: into_inner_ecdsa(key_id),
         }
         .encode(),
         Method::SchnorrPublicKey => ic00::SchnorrPublicKeyArgs {
             canister_id: None,
             derivation_path: DerivationPath::new(vec![]),
-            key_id: match key_id {
-                MasterPublicKeyId::Schnorr(key) => key,
-                _ => panic!("unexpected key"),
-            },
+            key_id: into_inner_schnorr(key_id),
         }
         .encode(),
         _ => panic!("unexpected method"),
@@ -214,19 +207,13 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
         Method::SignWithECDSA => ic00::SignWithECDSAArgs {
             message_hash: [1; 32],
             derivation_path: DerivationPath::new(vec![]),
-            key_id: match key_id {
-                MasterPublicKeyId::Ecdsa(key) => key,
-                _ => panic!("unexpected key"),
-            },
+            key_id: into_inner_ecdsa(key_id),
         }
         .encode(),
         Method::SignWithSchnorr => ic00::SignWithSchnorrArgs {
             message: vec![],
             derivation_path: DerivationPath::new(vec![]),
-            key_id: match key_id {
-                MasterPublicKeyId::Schnorr(key) => key,
-                _ => panic!("unexpected key"),
-            },
+            key_id: into_inner_schnorr(key_id),
         }
         .encode(),
         _ => panic!("unexpected method"),
@@ -2158,10 +2145,17 @@ fn make_schnorr_key(name: &str) -> MasterPublicKeyId {
     })
 }
 
-fn into_inner_schnorr(key_id: MasterPublicKeyId) -> Option<SchnorrKeyId> {
+fn into_inner_ecdsa(key_id: MasterPublicKeyId) -> EcdsaKeyId {
     match key_id {
-        MasterPublicKeyId::Schnorr(key) => Some(key),
-        _ => None,
+        MasterPublicKeyId::Ecdsa(key) => key,
+        _ => panic!("unexpected key_id type"),
+    }
+}
+
+fn into_inner_schnorr(key_id: MasterPublicKeyId) -> SchnorrKeyId {
+    match key_id {
+        MasterPublicKeyId::Schnorr(key) => key,
+        _ => panic!("unexpected key_id type"),
     }
 }
 
@@ -2689,7 +2683,7 @@ fn test_sign_with_threshold_key_queue_fills_up() {
                 ic00::IC_00,
                 method,
                 call_args()
-                    .other_side(sign_with_threshold_key_payload(method, key_id))
+                    .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
                     .on_reject(wasm().reject_message().reject()),
                 Cycles::from(payment),
             )
@@ -2700,18 +2694,19 @@ fn test_sign_with_threshold_key_queue_fills_up() {
         }
         let result = test.ingress(canister_id, "update", run).unwrap();
 
-        let algorithm = match method {
-            Method::SignWithECDSA => "ECDSA",
-            Method::SignWithSchnorr => "Schnorr",
+        // TODO(EXC-1645): fix error message to follow the same pattern for all `sign_with_*` methods.
+        let message = match method {
+            Method::SignWithECDSA => format!(
+                "{} request failed: the ECDSA signature queue is full.",
+                method,
+            ),
+            Method::SignWithSchnorr => format!(
+                "{} request failed: signature queue for key {} is full.",
+                method, key_id,
+            ),
             _ => panic!("Unexpected method"),
         };
-        assert_eq!(
-            result,
-            WasmResult::Reject(format!(
-                "{} request could not be handled, the {} signature queue is full.",
-                method, algorithm,
-            ))
-        );
+        assert_eq!(result, WasmResult::Reject(message));
     }
 }
 
@@ -3270,14 +3265,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         .canister_state(a_id)
         .system_state
         .canister_metrics
-        .get_consumed_cycles_since_replica_started_by_use_cases()
+        .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
         .unwrap();
     let instruction_consumption_before_response = *test
         .canister_state(a_id)
         .system_state
         .canister_metrics
-        .get_consumed_cycles_since_replica_started_by_use_cases()
+        .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
         .unwrap();
 
@@ -3323,7 +3318,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         test.canister_state(a_id)
             .system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .len(),
         2
     );
@@ -3332,14 +3327,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         .canister_state(a_id)
         .system_state
         .canister_metrics
-        .get_consumed_cycles_since_replica_started_by_use_cases()
+        .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
         .unwrap();
     let instruction_consumption_after_response = *test
         .canister_state(a_id)
         .system_state
         .canister_metrics
-        .get_consumed_cycles_since_replica_started_by_use_cases()
+        .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
         .unwrap();
 
@@ -3370,7 +3365,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         test.canister_state(b_id)
             .system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .len(),
         1
     );
@@ -3380,7 +3375,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(b_id)
             .system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
         NominalCycles::from(test.canister_execution_cost(b_id))
@@ -3579,7 +3574,7 @@ fn test_schnorr_public_key_api_by_default_is_disabled() {
         ic00::SchnorrPublicKeyArgs {
             canister_id: None,
             derivation_path: DerivationPath::new(vec![]),
-            key_id: into_inner_schnorr(key_id).unwrap(),
+            key_id: into_inner_schnorr(key_id),
         }
         .encode(),
         Cycles::new(0),
@@ -3609,7 +3604,7 @@ fn test_sign_with_schnorr_api_by_default_is_disabled() {
         ic00::SignWithSchnorrArgs {
             message: vec![],
             derivation_path: DerivationPath::new(vec![]),
-            key_id: into_inner_schnorr(key_id).unwrap(),
+            key_id: into_inner_schnorr(key_id),
         }
         .encode(),
         Cycles::new(0),
@@ -3645,24 +3640,18 @@ fn test_sign_with_schnorr_api_is_enabled() {
         test.state()
             .metadata
             .subnet_call_context_manager
-            .sign_with_schnorr_contexts_count(),
+            .sign_with_threshold_contexts_count(&key_id),
         0
     );
 
     // Act.
+    let method = Method::SignWithSchnorr;
     let run = wasm()
         .call_with_cycles(
             ic00::IC_00,
-            Method::SignWithSchnorr,
+            method,
             call_args()
-                .other_side(
-                    ic00::SignWithSchnorrArgs {
-                        message: vec![],
-                        derivation_path: DerivationPath::new(vec![]),
-                        key_id: into_inner_schnorr(key_id).unwrap(),
-                    }
-                    .encode(),
-                )
+                .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
                 .on_reject(wasm().reject_message().reject()),
             Cycles::from(100_000_000_000u128),
         )
@@ -3685,7 +3674,7 @@ fn test_sign_with_schnorr_api_is_enabled() {
         test.state()
             .metadata
             .subnet_call_context_manager
-            .sign_with_schnorr_contexts_count(),
+            .sign_with_threshold_contexts_count(&key_id),
         1
     );
 }

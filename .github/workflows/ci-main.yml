@@ -427,8 +427,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Filter Rust Files [*.{rs,toml,lock}]
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
         id: filter
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'merge_group'
         with:
           filters: |
             cargo:
@@ -437,23 +439,23 @@ jobs:
               - "**/*.lock"
       - name: Run Cargo Clippy Linux
         id: cargo-clippy-linux
-        if: steps.filter.outputs.cargo == 'true'
+        if: |
+          steps.filter.outputs.cargo == 'true' ||
+          github.event_name == 'schedule' ||
+          github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           set -eExuo pipefail
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
               "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/rust-lint.sh
-      - name: No run
-        if: steps.filter.outputs.cargo == 'false'
-        run: echo "No cargo changes, skipping run"
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     runs-on:
       labels: dind-runner-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
-    if: ${{ vars.RUN_CI == 'true' }}
     timeout-minutes: 60
+    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Before script
         if: always()
@@ -468,8 +470,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Filter Rust Files [*.{rs,toml,lock}]
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
         id: filter
+        if: |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'merge_group'
         with:
           filters: |
             cargo:
@@ -478,12 +482,12 @@ jobs:
               - "**/*.lock"
       - name: Run Cargo Build Release Linux
         id: cargo-build-release-linux
-        if: steps.filter.outputs.cargo == 'true'
+        if: |
+          steps.filter.outputs.cargo == 'true' ||
+          github.event_name == 'schedule' ||
+          github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           set -eExuo pipefail
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
               cargo build --release
-      - name: No run
-        if: steps.filter.outputs.cargo == 'false'
-        run: echo "No cargo changes, skipping run"

@@ -380,8 +380,8 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.skipped_round_due_to_no_messages,
         canister_state_bits.executed,
         canister_state_bits.interrupted_during_execution,
-        canister_state_bits.consumed_cycles_since_replica_started,
-        canister_state_bits.consumed_cycles_since_replica_started_by_use_cases,
+        canister_state_bits.consumed_cycles,
+        canister_state_bits.consumed_cycles_by_use_cases,
     );
 
     let starting_time = Instant::now();

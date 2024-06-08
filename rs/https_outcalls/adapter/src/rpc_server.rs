@@ -5,7 +5,7 @@ use crate::metrics::{
 };
 use byte_unit::Byte;
 use core::convert::TryFrom;
-use http::{header::USER_AGENT, uri::Scheme, HeaderValue, Uri};
+use http::{header::USER_AGENT, uri::Scheme, HeaderName, HeaderValue, Uri};
 use hyper::{
     client::HttpConnector,
     header::{HeaderMap, ToStrError},
@@ -20,7 +20,7 @@ use ic_https_outcalls_service::{
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use std::collections::HashMap;
+use std::str::FromStr;
 use tonic::{Request, Response, Status};
 
 /// Hyper only supports a maximum of 32768 headers https://docs.rs/hyper/0.14.23/hyper/header/index.html#limitations-1
@@ -297,18 +297,26 @@ fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
         ));
     }
 
-    let headers: HeaderMap = HeaderMap::try_from(
-        &raw_headers
-            .into_iter()
-            .map(|h| (h.name.to_lowercase(), h.value))
-            .collect::<HashMap<String, String>>(),
-    )
-    .map_err(|err| {
-        Status::new(
-            tonic::Code::InvalidArgument,
-            format!("Failed to parse headers {err}",),
-        )
-    })?;
+    // Parse header name and values
+    let mut parsed_headers: Vec<(HeaderName, HeaderValue)> = Vec::new();
+    for raw_h in raw_headers {
+        parsed_headers.push((
+            HeaderName::from_str(&raw_h.name).map_err(|err| {
+                Status::new(
+                    tonic::Code::InvalidArgument,
+                    format!("Failed to parse header name {err}",),
+                )
+            })?,
+            HeaderValue::from_str(&raw_h.value).map_err(|err| {
+                Status::new(
+                    tonic::Code::InvalidArgument,
+                    format!("Failed to parse header value {err}",),
+                )
+            })?,
+        ));
+    }
+
+    let headers: HeaderMap = HeaderMap::from_iter(parsed_headers);
 
     Ok(headers)
 }
@@ -375,5 +383,47 @@ mod tests {
             });
         }
         validate_headers(header_vec).unwrap_err();
+    }
+
+    #[test]
+    // Verify that multiple headers with same header name are all inserted under same header name.
+    fn test_same_header_append() {
+        let header_vec = vec![
+            HttpHeader {
+                name: "TTT".to_string(),
+                value: "a".to_string(),
+            },
+            HttpHeader {
+                name: "ttt".to_string(),
+                value: "b".to_string(),
+            },
+            HttpHeader {
+                name: "ttt".to_string(),
+                value: "c".to_string(),
+            },
+        ];
+        let headers = validate_headers(header_vec).unwrap();
+        assert_eq!(headers.get_all("ttt").iter().count(), 3);
+    }
+
+    #[test]
+    // Verify that both upper and lower case header names/values are accepted.
+    fn test_upper_case_headers_allowed() {
+        let header_vec = vec![
+            HttpHeader {
+                name: "TTT".to_string(),
+                value: "aaaa".to_string(),
+            },
+            HttpHeader {
+                name: "rr".to_string(),
+                value: "BB".to_string(),
+            },
+            HttpHeader {
+                name: "EEE".to_string(),
+                value: "CCC".to_string(),
+            },
+        ];
+        let headers = validate_headers(header_vec).unwrap();
+        assert_eq!(headers.len(), 3);
     }
 }

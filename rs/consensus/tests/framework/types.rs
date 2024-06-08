@@ -399,6 +399,7 @@ pub struct ConsensusRunnerConfig {
     pub num_rounds: u64,
     pub degree: usize,
     pub use_priority_fn: bool,
+    pub stall_clocks: bool,
     pub execution: Box<dyn ExecutionStrategy>,
     pub delivery: Box<dyn DeliveryStrategy>,
 }

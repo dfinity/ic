@@ -268,8 +268,8 @@ impl CatchUpPackageMaker {
 mod tests {
     //! CatchUpPackageMaker unit tests
     use crate::ecdsa::test_utils::{
-        add_available_quadruple_to_payload, empty_ecdsa_payload, fake_ecdsa_key_id,
-        fake_sign_with_ecdsa_context_with_quadruple, fake_state_with_ecdsa_contexts,
+        add_available_quadruple_to_payload, empty_ecdsa_payload, fake_ecdsa_master_public_key_id,
+        fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
     };
 
     use super::*;
@@ -394,7 +394,7 @@ mod tests {
                 .expect_get_state_hash_at()
                 .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
 
-            let key_id = fake_ecdsa_key_id();
+            let key_id = fake_ecdsa_master_public_key_id();
 
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);
@@ -402,15 +402,15 @@ mod tests {
             let pre_sig_id3 = PreSigId(3);
 
             let contexts = vec![
-                fake_sign_with_ecdsa_context_with_quadruple(1, key_id.clone(), Some(pre_sig_id1)),
-                fake_sign_with_ecdsa_context_with_quadruple(2, key_id.clone(), None),
-                fake_sign_with_ecdsa_context_with_quadruple(3, key_id.clone(), Some(pre_sig_id3)),
+                fake_signature_request_context_with_pre_sig(1, key_id.clone(), Some(pre_sig_id1)),
+                fake_signature_request_context_with_pre_sig(2, key_id.clone(), None),
+                fake_signature_request_context_with_pre_sig(3, key_id.clone(), Some(pre_sig_id3)),
             ];
 
             state_manager
                 .get_mut()
                 .expect_get_state_at()
-                .return_const(Ok(fake_state_with_ecdsa_contexts(
+                .return_const(Ok(fake_state_with_signature_requests(
                     Height::from(0),
                     contexts.clone(),
                 )
