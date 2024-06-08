@@ -340,6 +340,39 @@ fn decode_inbound_message_in_output_queue_fails() {
     assert_eq!(queue, (encoded, Context::Inbound).try_into().unwrap());
 }
 
+#[test]
+fn decode_with_invalid_response_slots_or_capacity_fails() {
+    // Queue with two inbound responses.
+    let mut queue = CanisterQueue::new(10);
+    queue.try_reserve_response_slot().unwrap();
+    queue.push_response(new_response_message_id(13, Class::BestEffort));
+    queue.try_reserve_response_slot().unwrap();
+    queue.push_response(new_response_message_id(14, Class::BestEffort));
+    let encoded: pb_queues::CanisterQueue = (&queue).into();
+
+    // Can be decoded as is.
+    assert_eq!(
+        queue,
+        (encoded.clone(), Context::Inbound).try_into().unwrap()
+    );
+
+    // But fails to decode with a too low `response_slots` value.
+    let mut too_few_response_slots = encoded.clone();
+    too_few_response_slots.response_slots = 1;
+    assert_matches!(
+        CanisterQueue::try_from((too_few_response_slots.clone(), Context::Inbound)),
+        Err(ProxyDecodeError::Other(_))
+    );
+
+    // Or with a too low `capacity` value.
+    let mut too_low_capacity = encoded;
+    too_low_capacity.capacity = 1;
+    assert_matches!(
+        CanisterQueue::try_from((too_low_capacity.clone(), Context::Inbound)),
+        Err(ProxyDecodeError::Other(_))
+    );
+}
+
 fn make_request(callback_id: u64, deadline_seconds: u32) -> Request {
     RequestBuilder::default()
         .sender_reply_callback(CallbackId::from(callback_id))

@@ -324,6 +324,7 @@ impl TryFrom<(pb_queues::CanisterQueue, Context)> for CanisterQueue {
             })
             .collect::<Result<_, ProxyDecodeError>>()?;
         let request_slots = queue.iter().filter(|id| !id.is_response()).count();
+
         let res = Self {
             queue,
             capacity: item.capacity as usize,
@@ -331,7 +332,9 @@ impl TryFrom<(pb_queues::CanisterQueue, Context)> for CanisterQueue {
             response_slots: item.response_slots as usize,
         };
 
-        Ok(res)
+        res.check_invariants()
+            .map(|_| res)
+            .map_err(ProxyDecodeError::Other)
     }
 }
 
