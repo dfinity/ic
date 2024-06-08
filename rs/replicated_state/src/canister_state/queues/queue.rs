@@ -38,7 +38,7 @@ pub(super) enum CanisterQueueItem {
     ///    canister is responsible for generating a timeout response instead.
     ///  * Stale responses in input queues (always best-effort) are responses that
     ///    were shed while enqueued or are `SYS_UNKNOWN` reject responses enqueued
-    ///    as dangling rererences to begin with. They are to be handled as
+    ///    as dangling references to begin with. They are to be handled as
     ///    `SYS_UNKNOWN` reject responses ("timeout" if their deadline expired,
     ///    "drop" otherwise).
     Reference(message_pool::Id),
@@ -303,9 +303,8 @@ impl From<&CanisterQueue> for pb_queues::CanisterQueue {
 
 impl TryFrom<(pb_queues::CanisterQueue, Context)> for CanisterQueue {
     type Error = ProxyDecodeError;
-    fn try_from(item: (pb_queues::CanisterQueue, Context)) -> Result<Self, Self::Error> {
-        let (item, context) = item;
 
+    fn try_from((item, context): (pb_queues::CanisterQueue, Context)) -> Result<Self, Self::Error> {
         let queue: VecDeque<CanisterQueueItem> = item
             .queue
             .into_iter()
@@ -338,9 +337,8 @@ impl TryFrom<(pb_queues::CanisterQueue, Context)> for CanisterQueue {
 
 impl TryFrom<(InputQueue, &mut MessagePool)> for CanisterQueue {
     type Error = ProxyDecodeError;
-    fn try_from(item: (InputQueue, &mut MessagePool)) -> Result<Self, Self::Error> {
-        let (iq, pool) = item;
 
+    fn try_from((iq, pool): (InputQueue, &mut MessagePool)) -> Result<Self, Self::Error> {
         let mut queue = VecDeque::with_capacity(iq.num_messages());
         for msg in iq.queue.queue.into_iter() {
             let id = pool.insert_inbound(msg);
@@ -362,6 +360,7 @@ impl TryFrom<(InputQueue, &mut MessagePool)> for CanisterQueue {
 
 impl TryFrom<(OutputQueue, &mut MessagePool)> for CanisterQueue {
     type Error = ProxyDecodeError;
+
     fn try_from((oq, pool): (OutputQueue, &mut MessagePool)) -> Result<Self, Self::Error> {
         let mut deadline_range_ends = oq.deadline_range_ends.iter();
         let mut deadline_range_end = deadline_range_ends.next();
@@ -410,6 +409,95 @@ impl TryFrom<(OutputQueue, &mut MessagePool)> for CanisterQueue {
             .check_invariants()
             .map(|_| queue)
             .map_err(ProxyDecodeError::Other)
+    }
+}
+
+impl TryFrom<(&CanisterQueue, &MessagePool)> for InputQueue {
+    type Error = ProxyDecodeError;
+
+    fn try_from((q, pool): (&CanisterQueue, &MessagePool)) -> Result<Self, Self::Error> {
+        let mut input_queue = InputQueue::new(q.capacity);
+        for queue_item in q.iter() {
+            let id = queue_item.id();
+            let msg = match pool.get(id) {
+                Some(msg) => msg.clone(),
+
+                // Stale request, skip it.
+                None if id.kind() == Kind::Request => {
+                    continue;
+                }
+
+                None => {
+                    return Err(ProxyDecodeError::Other(format!(
+                        "InputQueue: stale responses not supported ({:?})",
+                        id
+                    )))
+                }
+            };
+            // Safe to unwrap because we cannot exceed the queue capacity.
+            if let RequestOrResponse::Response(_) = msg {
+                input_queue.reserve_slot().unwrap();
+            }
+            input_queue.push(msg).unwrap();
+        }
+        input_queue.queue.num_response_slots = q.response_slots;
+
+        if !input_queue.queue.check_invariants() {
+            return Err(ProxyDecodeError::Other(format!(
+                "Invalid InputQueue: {:?}",
+                input_queue
+            )));
+        }
+
+        Ok(input_queue)
+    }
+}
+
+impl TryFrom<(&CanisterQueue, &MessagePool)> for OutputQueue {
+    type Error = ProxyDecodeError;
+
+    fn try_from((q, pool): (&CanisterQueue, &MessagePool)) -> Result<Self, Self::Error> {
+        let mut output_queue = OutputQueue::new(q.capacity);
+        let mut request_slots = 0;
+        let mut response_slots = 0;
+        for queue_item in q.iter() {
+            let id = queue_item.id();
+            let msg = match pool.get(id) {
+                Some(msg) => msg.clone(),
+                // Stale reference, skip it.
+                None => continue,
+            };
+            match msg {
+                RequestOrResponse::Request(req) => {
+                    let deadline = pool
+                        .outbound_guaranteed_request_deadlines()
+                        .get(&id)
+                        .cloned()
+                        .unwrap_or(req.deadline);
+                    // Safe to unwrap because we cannot exceed the queue capacity.
+                    output_queue.push_request(req, deadline.into()).unwrap();
+                    request_slots += 1;
+                }
+                RequestOrResponse::Response(rep) => {
+                    // Safe to unwrap because we cannot exceed the queue capacity.
+                    output_queue.reserve_slot().unwrap();
+                    output_queue.push_response(rep);
+                    response_slots += 1;
+                }
+            }
+        }
+        output_queue.queue.num_request_slots = request_slots;
+        output_queue.queue.num_response_slots = response_slots + q.reserved_slots();
+        output_queue.num_messages = request_slots + response_slots;
+
+        if !output_queue.queue.check_invariants() {
+            return Err(ProxyDecodeError::Other(format!(
+                "Invalid OutputQueue: {:?}",
+                output_queue.queue
+            )));
+        }
+
+        Ok(output_queue)
     }
 }
 
