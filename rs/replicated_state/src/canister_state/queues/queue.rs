@@ -318,26 +318,17 @@ impl TryFrom<(&CanisterQueue, &MessagePool)> for InputQueue {
         let mut input_queue = InputQueue::new(q.capacity);
         for queue_item in q.iter() {
             let id = queue_item.id();
-            let msg = match pool.get(id) {
-                Some(msg) => msg.clone(),
-
-                // Stale request, skip it.
-                None if id.kind() == Kind::Request => {
-                    continue;
-                }
-
-                None => {
-                    return Err(ProxyDecodeError::Other(format!(
-                        "InputQueue: stale responses not supported ({:?})",
-                        id
-                    )))
-                }
-            };
+            let msg = pool.get(id).ok_or_else(|| {
+                ProxyDecodeError::Other(format!(
+                    "InputQueue: unexpected stale reference ({:?})",
+                    id
+                ))
+            })?;
             // Safe to unwrap because we cannot exceed the queue capacity.
             if let RequestOrResponse::Response(_) = msg {
                 input_queue.reserve_slot().unwrap();
             }
-            input_queue.push(msg).unwrap();
+            input_queue.push(msg.clone()).unwrap();
         }
         input_queue.queue.num_response_slots = q.response_slots;
 
@@ -363,8 +354,18 @@ impl TryFrom<(&CanisterQueue, &MessagePool)> for OutputQueue {
             let id = queue_item.id();
             let msg = match pool.get(id) {
                 Some(msg) => msg.clone(),
-                // Stale reference, skip it.
-                None => continue,
+
+                // Stale request, skip it.
+                None if id.kind() == Kind::Request => {
+                    continue;
+                }
+
+                None => {
+                    return Err(ProxyDecodeError::Other(format!(
+                        "InputQueue: unexpected stale response reference ({:?})",
+                        id
+                    )))
+                }
             };
             match msg {
                 RequestOrResponse::Request(req) => {
