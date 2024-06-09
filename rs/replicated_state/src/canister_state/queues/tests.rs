@@ -1,22 +1,15 @@
-use super::{
-    testing::{new_canister_queues_for_test, CanisterQueuesTesting},
-    InputQueueType::*,
-    DEFAULT_QUEUE_CAPACITY, *,
-};
+use super::testing::{new_canister_queues_for_test, CanisterQueuesTesting};
+use super::InputQueueType::*;
+use super::*;
 use crate::{CanisterState, SchedulerState, SystemState};
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_test_utilities_state::arb_num_receivers;
-use ic_test_utilities_types::{
-    arbitrary,
-    ids::{canister_test_id, message_test_id, user_test_id},
-    messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
-};
-use ic_types::{
-    messages::{CallbackId, CanisterMessage, NO_DEADLINE},
-    time::expiry_time_from_now,
-    time::UNIX_EPOCH,
-};
+use ic_test_utilities_types::arbitrary;
+use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
+use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
+use ic_types::messages::{CallbackId, CanisterMessage, NO_DEADLINE};
+use ic_types::time::{expiry_time_from_now, UNIX_EPOCH};
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::convert::TryInto;
@@ -794,59 +787,6 @@ fn test_output_into_iter() {
     assert_eq!(0, queues.output_message_count());
 }
 
-/// Tests that an encode-decode roundtrip yields a result equal to the
-/// original (and the queue size metrics of an organically constructed
-/// `CanisterQueues` match those of a deserialized one).
-#[test]
-fn encode_roundtrip() {
-    let mut queues = CanisterQueues::default();
-
-    let this = canister_test_id(13);
-    let other = canister_test_id(14);
-    queues
-        .push_input(
-            RequestBuilder::default().sender(this).build().into(),
-            InputQueueType::RemoteSubnet,
-        )
-        .unwrap();
-    queues
-        .push_input(
-            RequestBuilder::default().sender(other).build().into(),
-            InputQueueType::RemoteSubnet,
-        )
-        .unwrap();
-    queues
-        .pop_canister_input(InputQueueType::RemoteSubnet)
-        .unwrap();
-    queues.push_ingress(IngressBuilder::default().receiver(this).build());
-
-    let encoded: pb_queues::CanisterQueues = (&queues).into();
-    let decoded = encoded.try_into().unwrap();
-
-    assert_eq!(queues, decoded);
-}
-
-/// Tests that serializing an empty `CanisterQueues` produces zero bytes.
-#[test]
-fn encode_empty() {
-    use prost::Message;
-
-    let queues = CanisterQueues::default();
-
-    let encoded: pb_queues::CanisterQueues = (&queues).into();
-    let mut serialized: Vec<u8> = Vec::new();
-    encoded.encode(&mut serialized).unwrap();
-
-    let expected: &[u8] = &[];
-    assert_eq!(expected, serialized.as_slice());
-}
-
-fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, requests: &Vec<Request>) {
-    for req in requests {
-        queues.push_input(req.clone().into(), input_type).unwrap()
-    }
-}
-
 #[test]
 fn test_peek_canister_input_does_not_affect_schedule() {
     let mut queues = CanisterQueues::default();
@@ -963,6 +903,176 @@ fn test_skip_canister_input() {
             .num_messages(),
         2
     );
+}
+
+fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, requests: &Vec<Request>) {
+    for req in requests {
+        queues.push_input(req.clone().into(), input_type).unwrap()
+    }
+}
+
+/// Tests that an encode-decode roundtrip yields a result equal to the
+/// original (and the queue size metrics of an organically constructed
+/// `CanisterQueues` match those of a deserialized one).
+#[test]
+fn encode_roundtrip() {
+    let mut queues = CanisterQueues::default();
+
+    let this = canister_test_id(13);
+    let other = canister_test_id(14);
+    queues
+        .push_input(
+            RequestBuilder::default().sender(this).build().into(),
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
+    queues
+        .push_input(
+            RequestBuilder::default().sender(other).build().into(),
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
+    queues
+        .pop_canister_input(InputQueueType::RemoteSubnet)
+        .unwrap();
+    queues.push_ingress(IngressBuilder::default().receiver(this).build());
+
+    let encoded: pb_queues::CanisterQueues = (&queues).into();
+    let decoded = encoded.try_into().unwrap();
+
+    assert_eq!(queues, decoded);
+}
+
+/// Tests that serializing an empty `CanisterQueues` produces zero bytes.
+#[test]
+fn encode_empty() {
+    use prost::Message;
+
+    let queues = CanisterQueues::default();
+
+    let encoded: pb_queues::CanisterQueues = (&queues).into();
+    let mut serialized: Vec<u8> = Vec::new();
+    encoded.encode(&mut serialized).unwrap();
+
+    let expected: &[u8] = &[];
+    assert_eq!(expected, serialized.as_slice());
+}
+
+/// Tests decoding `CanisterQueues`from `canister_queues` + `pool` (instead of
+/// `input_queues` + `output_queues`).
+#[test]
+fn decode_forward_compatibility() {
+    use ic_types::time::CoarseTime;
+    use message_pool::MessagePool;
+    use queue::CanisterQueue;
+
+    let local_canister = canister_test_id(13);
+    let remote_canister = canister_test_id(14);
+
+    let mut queues_proto = pb_queues::CanisterQueues::default();
+    let mut expected_queues = CanisterQueues::default();
+
+    let req = RequestBuilder::default()
+        .sender_reply_callback(CallbackId::from(1))
+        .deadline(CoarseTime::from_secs_since_unix_epoch(313))
+        .build();
+    let rep = ResponseBuilder::default()
+        .originator_reply_callback(CallbackId::new(4))
+        .deadline(CoarseTime::from_secs_since_unix_epoch(314))
+        .build();
+    let mut pool = MessagePool::default();
+    let stale_request_id = pool.insert_outbound_request(req.clone().into(), UNIX_EPOCH);
+    pool.shed_largest_message().unwrap();
+
+    //
+    // `local_canister`'s queues.
+    //
+
+    // A `CanisterQueue` with a request, a response and a reserved slot.
+    let mut iq1 = CanisterQueue::new(10);
+    // Enqueue a request and a response.
+    iq1.push_request(pool.insert_inbound(req.clone().into()));
+    iq1.try_reserve_response_slot().unwrap();
+    iq1.push_response(pool.insert_inbound(rep.clone().into()));
+    // Make an extra response reservation.
+    iq1.try_reserve_response_slot().unwrap();
+
+    // Expected `InputQueue`.
+    let mut expected_iq1 = InputQueue::new(10);
+    expected_iq1.push(req.clone().into()).unwrap();
+    expected_iq1.reserve_slot().unwrap();
+    expected_iq1.push(rep.clone().into()).unwrap();
+    expected_iq1.reserve_slot().unwrap();
+
+    // An output queue with a stale request and a reserved slot.
+    let mut oq1 = CanisterQueue::new(10);
+    oq1.push_request(stale_request_id);
+    oq1.try_reserve_response_slot().unwrap();
+
+    // Expected `OutputQueue`.
+    let mut expected_oq1 = OutputQueue::new(10);
+    expected_oq1.reserve_slot().unwrap();
+
+    queues_proto
+        .canister_queues
+        .push(pb_queues::canister_queues::CanisterQueuePair {
+            canister_id: Some(local_canister.into()),
+            input_queue: Some((&iq1).into()),
+            output_queue: Some((&oq1).into()),
+        });
+    queues_proto
+        .local_subnet_input_schedule
+        .push(local_canister.into());
+    queues_proto.guaranteed_response_memory_reservations += 2;
+    expected_queues
+        .canister_queues
+        .insert(local_canister, (expected_iq1, expected_oq1));
+    expected_queues
+        .local_subnet_input_schedule
+        .push_back(local_canister);
+
+    //
+    // `remote_canister`'s queues.
+    //
+
+    // Input queue with a reserved slot.
+    let mut iq2 = CanisterQueue::new(10);
+    iq2.try_reserve_response_slot().unwrap();
+
+    // Expected `InputQueue`.
+    let mut expected_iq2 = InputQueue::new(10);
+    expected_iq2.reserve_slot().unwrap();
+
+    // Empty output queue.
+    let oq2 = CanisterQueue::new(10);
+
+    queues_proto
+        .canister_queues
+        .push(pb_queues::canister_queues::CanisterQueuePair {
+            canister_id: Some(remote_canister.into()),
+            input_queue: Some((&iq2).into()),
+            output_queue: Some((&oq2).into()),
+        });
+    queues_proto.guaranteed_response_memory_reservations += 1;
+    expected_queues
+        .canister_queues
+        .insert(remote_canister, (expected_iq2, OutputQueue::new(10)));
+
+    //
+    // Persist pool, adjust stats.
+    //
+
+    queues_proto.pool = Some((&pool).into());
+
+    expected_queues.input_queues_stats =
+        CanisterQueues::calculate_input_queues_stats(&expected_queues.canister_queues);
+    expected_queues.output_queues_stats =
+        CanisterQueues::calculate_output_queues_stats(&expected_queues.canister_queues);
+    expected_queues.memory_usage_stats =
+        CanisterQueues::calculate_memory_usage_stats(&expected_queues.canister_queues);
+
+    let queues: CanisterQueues = queues_proto.try_into().unwrap();
+    assert_eq!(expected_queues, queues);
 }
 
 /// Enqueues requests and responses into input and output queues, verifying that
