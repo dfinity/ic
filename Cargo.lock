@@ -12518,6 +12518,8 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-agent",
+ "ic-icrc-rosetta",
+ "ic-icrc-rosetta-client",
  "ic-icrc1",
  "ic-ledger-test-utils",
  "ic-rosetta-api",

@@ -36,7 +36,7 @@ use reqwest::{Client, StatusCode};
 use tracing::{debug, error, warn};
 
 use dfn_candid::CandidOne;
-use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
+use ic_ledger_canister_blocks_synchronizer::blocks::{Blocks, RosettaBlocksMode};
 use ic_ledger_canister_blocks_synchronizer::canister_access::CanisterAccess;
 use ic_ledger_canister_blocks_synchronizer::certification::VerificationInfo;
 use ic_ledger_canister_blocks_synchronizer::ledger_blocks_sync::{
@@ -110,6 +110,7 @@ pub trait LedgerAccess {
     async fn pending_proposals(&self) -> Result<Vec<ProposalInfo>, ApiError>;
     async fn list_known_neurons(&self) -> Result<Vec<KnownNeuron>, ApiError>;
     async fn transfer_fee(&self) -> Result<TransferFee, ApiError>;
+    async fn rosetta_blocks_mode(&self) -> RosettaBlocksMode;
 }
 
 pub struct LedgerClient {
@@ -147,6 +148,7 @@ impl LedgerClient {
         store_max_blocks: Option<u64>,
         offline: bool,
         root_key: Option<ThresholdSigPublicKey>,
+        enable_rosetta_blocks: bool,
     ) -> Result<LedgerClient, ApiError> {
         let canister_access = if offline {
             None
@@ -171,6 +173,7 @@ impl LedgerClient {
             store_max_blocks,
             verification_info,
             Box::new(LedgerBlocksSynchronizerMetricsImpl {}),
+            enable_rosetta_blocks,
         )
         .await?;
 
@@ -481,6 +484,11 @@ impl LedgerAccess for LedgerClient {
                 ApiError::internal_error(format!("Error querying transfer_fee: {}", e))
             }),
         }
+    }
+
+    async fn rosetta_blocks_mode(&self) -> RosettaBlocksMode {
+        let blockchain = self.ledger_blocks_synchronizer.blockchain.read().await;
+        blockchain.rosetta_blocks_mode
     }
 }
 
