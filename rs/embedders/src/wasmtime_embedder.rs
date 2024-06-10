@@ -740,6 +740,7 @@ pub struct WasmtimeInstance {
     modification_tracking: ModificationTracking,
     dirty_page_overhead: NumInstructions,
     #[cfg(debug_assertions)]
+    #[allow(dead_code)]
     stable_memory_dirty_page_limit: ic_types::NumOsPages,
     stable_memory_page_access_limit: ic_types::NumOsPages,
 }
