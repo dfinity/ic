@@ -28,11 +28,11 @@ use ic_agent::{
 };
 use instant_acme::{Account, AccountCredentials, NewAccount};
 use opentelemetry::{
-    metrics::{Counter, Histogram, MeterProvider as _},
-    sdk::metrics::MeterProvider,
+    metrics::{Counter, Histogram, MeterProvider},
     KeyValue,
 };
 use opentelemetry_prometheus::exporter;
+use opentelemetry_sdk::metrics::MeterProviderBuilder;
 use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
 use tokio::{net::TcpListener, sync::Semaphore, task, time::sleep};
 use tower::ServiceBuilder;
@@ -177,7 +177,9 @@ async fn main() -> Result<(), Error> {
     )
     .unwrap();
     let exporter = exporter().with_registry(registry.clone()).build()?;
-    let provider = MeterProvider::builder().with_reader(exporter).build();
+    let provider = MeterProviderBuilder::default()
+        .with_reader(exporter)
+        .build();
     let meter = provider.meter(SERVICE_NAME);
 
     let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));

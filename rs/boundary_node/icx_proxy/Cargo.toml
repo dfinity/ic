@@ -42,8 +42,9 @@ ic-agent = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
 jemallocator = "0.3"
 maxminddb = "0.24"
-opentelemetry = { version = "0.20", features = ["metrics"] }
-opentelemetry-prometheus = "0.13.0"
+opentelemetry = { workspace = true }
+opentelemetry-prometheus = { workspace = true }
+opentelemetry_sdk = { workspace = true }
 prometheus = { workspace = true }
 regex = "1.3.9"
 reqwest = { workspace = true }
