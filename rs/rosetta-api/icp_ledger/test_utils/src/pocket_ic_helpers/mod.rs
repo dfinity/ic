@@ -35,7 +35,7 @@ pub fn install_canister(
     pocket_ic.add_cycles(canister_id, STARTING_CYCLES_PER_CANISTER);
     let subnet_id = pocket_ic.get_subnet(canister_id).unwrap();
     println!(
-        "Installed the {} canister ({}) onto {:?}",
+        "Installed the {} canister ({}) onto {}",
         name, canister_id, subnet_id
     );
 }
