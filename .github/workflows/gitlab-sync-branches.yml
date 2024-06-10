@@ -30,7 +30,7 @@ jobs:
           set -eu
           # fetch the list of workflows running on the 'mirroring' branch
           RESPONSE=$(curl -s -H "Authorization: token $TOKEN" \
-            "https://api.github.com/repos/${REPO}/actions/runs?branch=mirroring&status=in_progress")
+            "https://api.github.com/repos/${REPO}/actions/runs?status=in_progress")
           # extract workflow runs and check if any head_branch starts with "gh-readonly-queue/"
           COUNT=$(echo "$RESPONSE" | jq '[.workflow_runs[] | select(.head_branch | startswith("gh-readonly-queue/"))] | length')
           echo "Number of workflows in merge queue: $COUNT"
