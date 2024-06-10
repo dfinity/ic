@@ -152,7 +152,7 @@ pub struct CanisterStateBits {
     pub executed: u64,
     pub interrupted_during_execution: u64,
     pub certified_data: Vec<u8>,
-    pub consumed_cycles_since_replica_started: NominalCycles,
+    pub consumed_cycles: NominalCycles,
     pub stable_memory_size: NumWasmPages,
     pub heap_delta_debit: NumBytes,
     pub install_code_debit: NumInstructions,
@@ -160,7 +160,7 @@ pub struct CanisterStateBits {
     pub time_of_last_allocation_charge_nanos: u64,
     pub global_timer_nanos: Option<u64>,
     pub canister_version: u64,
-    pub consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+    pub consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     pub canister_history: CanisterHistory,
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     pub total_query_stats: TotalQueryStats,
@@ -1885,9 +1885,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             executed: item.executed,
             interrupted_during_execution: item.interrupted_during_execution,
             certified_data: item.certified_data.clone(),
-            consumed_cycles_since_replica_started: Some(
-                (&item.consumed_cycles_since_replica_started).into(),
-            ),
+            consumed_cycles: Some((&item.consumed_cycles).into()),
             stable_memory_size64: item.stable_memory_size.get() as u64,
             heap_delta_debit: item.heap_delta_debit.get(),
             install_code_debit: item.install_code_debit.get(),
@@ -1895,8 +1893,8 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             task_queue: item.task_queue.iter().map(|v| v.into()).collect(),
             global_timer_nanos: item.global_timer_nanos,
             canister_version: item.canister_version,
-            consumed_cycles_since_replica_started_by_use_cases: item
-                .consumed_cycles_since_replica_started_by_use_cases
+            consumed_cycles_by_use_cases: item
+                .consumed_cycles_by_use_cases
                 .into_iter()
                 .map(
                     |(use_case, cycles)| pb_canister_state_bits::ConsumedCyclesByUseCase {
@@ -1936,9 +1934,9 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .map(|c| c.try_into())
             .transpose()?;
 
-        let consumed_cycles_since_replica_started = match try_from_option_field(
-            value.consumed_cycles_since_replica_started,
-            "CanisterStateBits::consumed_cycles_since_replica_started",
+        let consumed_cycles = match try_from_option_field(
+            value.consumed_cycles,
+            "CanisterStateBits::consumed_cycles",
         ) {
             Ok(consumed_cycles) => consumed_cycles,
             Err(_) => NominalCycles::default(),
@@ -1974,12 +1972,9 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             )));
         }
 
-        let mut consumed_cycles_since_replica_started_by_use_cases = BTreeMap::new();
-        for x in value
-            .consumed_cycles_since_replica_started_by_use_cases
-            .into_iter()
-        {
-            consumed_cycles_since_replica_started_by_use_cases.insert(
+        let mut consumed_cycles_by_use_cases = BTreeMap::new();
+        for x in value.consumed_cycles_by_use_cases.into_iter() {
+            consumed_cycles_by_use_cases.insert(
                 CyclesUseCase::try_from(
                     pb_canister_state_bits::CyclesUseCase::try_from(x.use_case).map_err(|_| {
                         ProxyDecodeError::ValueOutOfRange {
@@ -2023,7 +2018,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             executed: value.executed,
             interrupted_during_execution: value.interrupted_during_execution,
             certified_data: value.certified_data,
-            consumed_cycles_since_replica_started,
+            consumed_cycles,
             stable_memory_size: NumWasmPages::from(value.stable_memory_size64 as usize),
             heap_delta_debit: NumBytes::from(value.heap_delta_debit),
             install_code_debit: NumInstructions::from(value.install_code_debit),
@@ -2034,7 +2029,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             task_queue,
             global_timer_nanos: value.global_timer_nanos,
             canister_version: value.canister_version,
-            consumed_cycles_since_replica_started_by_use_cases,
+            consumed_cycles_by_use_cases,
             // TODO(MR-412): replace `unwrap_or_default` by returning an error on missing canister_history field
             canister_history: try_from_option_field(
                 value.canister_history,

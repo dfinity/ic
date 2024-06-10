@@ -1,10 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ic_error_types::RejectCode;
-use ic_management_canister_types::{MasterPublicKeyId, Payload, SignWithECDSAReply};
-use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
+use ic_management_canister_types::{
+    MasterPublicKeyId, Payload, SignWithECDSAReply, SignWithSchnorrReply,
+};
+use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
 use ic_types::{
-    consensus::idkg,
+    consensus::idkg::{self, common::CombinedSignature},
     messages::{CallbackId, RejectContext},
     Time,
 };
@@ -33,7 +35,7 @@ fn reject_response(
 /// - rejecting signature contexts that are expired or request an invalid key.
 /// - adding new agreements as "Unreported" by combining shares in the ECDSA pool.
 pub(crate) fn update_signature_agreements(
-    all_requests: &BTreeMap<CallbackId, SignWithEcdsaContext>,
+    all_requests: &BTreeMap<CallbackId, SignWithThresholdContext>,
     signature_builder: &dyn EcdsaSignatureBuilder,
     request_expiry_time: Option<Time>,
     payload: &mut idkg::EcdsaPayload,
@@ -64,15 +66,18 @@ pub(crate) fn update_signature_agreements(
         {
             continue;
         }
-        if !valid_keys.contains(&MasterPublicKeyId::Ecdsa(context.key_id.clone())) {
+        if !valid_keys.contains(&context.key_id()) {
             // Reject new requests with unknown key Ids.
-            // Note that no quadruples are consumed at this stage.
+            // Note that no pre-signatures are consumed at this stage.
             payload.signature_agreements.insert(
                 context.pseudo_random_id,
                 idkg::CompletedSignature::Unreported(reject_response(
                     *callback_id,
                     RejectCode::CanisterReject,
-                    format!("Invalid key_id in signature request: {:?}", context.key_id),
+                    format!(
+                        "Invalid key_id in signature request: {:?}",
+                        context.key_id()
+                    ),
                 )),
             );
 
@@ -83,9 +88,9 @@ pub(crate) fn update_signature_agreements(
         }
 
         // We can only remove expired requests once they were matched with a
-        // quadruple. Otherwise the context may be matched with a quadruple
+        // pre-signature. Otherwise the context may be matched with a pre-signature
         // at the next certified state height, which then wouldn't be removed.
-        let Some((pre_sig_id, _)) = context.matched_quadruple.as_ref() else {
+        let Some((pre_sig_id, _)) = context.matched_pre_signature else {
             continue;
         };
 
@@ -98,7 +103,7 @@ pub(crate) fn update_signature_agreements(
                     "Signature request expired",
                 )),
             );
-            payload.available_pre_signatures.remove(pre_sig_id);
+            payload.available_pre_signatures.remove(&pre_sig_id);
 
             if let Some(metrics) = ecdsa_payload_metrics {
                 metrics.payload_errors_inc("expired_requests");
@@ -107,10 +112,10 @@ pub(crate) fn update_signature_agreements(
             continue;
         }
 
-        // In case of subnet recoveries, available quadruples are purged.
+        // In case of subnet recoveries, available pre-signatures are purged.
         // This means that pre-existing requests that were already matched
         // cannot be completed, and we should reject them.
-        if !payload.available_pre_signatures.contains_key(pre_sig_id) {
+        if !payload.available_pre_signatures.contains_key(&pre_sig_id) {
             payload.signature_agreements.insert(
                 context.pseudo_random_id,
                 idkg::CompletedSignature::Unreported(reject_response(
@@ -127,24 +132,27 @@ pub(crate) fn update_signature_agreements(
             continue;
         }
 
-        let Some(signature) = signature_builder.get_completed_signature(context) else {
-            continue;
+        let signature = match signature_builder.get_completed_signature(context) {
+            Some(CombinedSignature::Ecdsa(signature)) => SignWithECDSAReply {
+                signature: signature.signature.clone(),
+            }
+            .encode(),
+            Some(CombinedSignature::Schnorr(signature)) => SignWithSchnorrReply {
+                signature: signature.signature.clone(),
+            }
+            .encode(),
+            None => continue,
         };
 
         let response = ic_types::batch::ConsensusResponse::new(
             *callback_id,
-            ic_types::messages::Payload::Data(
-                SignWithECDSAReply {
-                    signature: signature.signature.clone(),
-                }
-                .encode(),
-            ),
+            ic_types::messages::Payload::Data(signature),
         );
         payload.signature_agreements.insert(
             context.pseudo_random_id,
             idkg::CompletedSignature::Unreported(response),
         );
-        payload.available_pre_signatures.remove(pre_sig_id);
+        payload.available_pre_signatures.remove(&pre_sig_id);
     }
 }
 
@@ -154,7 +162,7 @@ mod tests {
 
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+    use ic_management_canister_types::MasterPublicKeyId;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         consensus::idkg::{EcdsaPayload, RequestId},
@@ -162,14 +170,11 @@ mod tests {
         Height,
     };
 
-    use crate::ecdsa::{
-        payload_builder::pre_signatures::test_utils::create_available_quadruple,
-        test_utils::{
-            empty_ecdsa_payload_with_key_ids, empty_response,
-            fake_completed_sign_with_ecdsa_context, fake_ecdsa_key_id,
-            fake_sign_with_ecdsa_context, fake_sign_with_ecdsa_context_with_quadruple,
-            set_up_ecdsa_payload, TestEcdsaSignatureBuilder,
-        },
+    use crate::ecdsa::test_utils::{
+        create_available_pre_signature, empty_ecdsa_payload_with_key_ids, empty_response,
+        fake_completed_signature_request_context, fake_ecdsa_master_public_key_id,
+        fake_signature_request_context, fake_signature_request_context_with_pre_sig,
+        set_up_ecdsa_payload, TestEcdsaSignatureBuilder,
     };
 
     use super::*;
@@ -177,14 +182,14 @@ mod tests {
     fn set_up(
         should_create_key_transcript: bool,
         pseudo_random_ids: Vec<[u8; 32]>,
-        ecdsa_key_id: EcdsaKeyId,
-    ) -> (EcdsaPayload, BTreeMap<CallbackId, SignWithEcdsaContext>) {
+        key_id: MasterPublicKeyId,
+    ) -> (EcdsaPayload, BTreeMap<CallbackId, SignWithThresholdContext>) {
         let mut rng = reproducible_rng();
         let (ecdsa_payload, _env, _block_reader) = set_up_ecdsa_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 4,
-            vec![MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone())],
+            vec![key_id.clone()],
             should_create_key_transcript,
         );
 
@@ -192,7 +197,7 @@ mod tests {
         for (index, pseudo_random_id) in pseudo_random_ids.into_iter().enumerate() {
             contexts.insert(
                 CallbackId::from(index as u64),
-                fake_sign_with_ecdsa_context(ecdsa_key_id.clone(), pseudo_random_id),
+                fake_signature_request_context(key_id.clone(), pseudo_random_id),
             );
         }
 
@@ -208,7 +213,7 @@ mod tests {
         let delivered_pseudo_random_id = pseudo_random_id(0);
         let old_pseudo_random_id = pseudo_random_id(1);
         let new_pseudo_random_id = pseudo_random_id(2);
-        let key_id = fake_ecdsa_key_id();
+        let key_id = fake_ecdsa_master_public_key_id();
         let (mut ecdsa_payload, contexts) = set_up(
             /*should_create_key_transcript=*/ true,
             vec![old_pseudo_random_id, new_pseudo_random_id],
@@ -230,7 +235,7 @@ mod tests {
             &TestEcdsaSignatureBuilder::new(),
             None,
             &mut ecdsa_payload,
-            &BTreeSet::from([MasterPublicKeyId::Ecdsa(key_id)]),
+            &BTreeSet::from([key_id]),
             None,
         );
 
@@ -247,28 +252,25 @@ mod tests {
     #[test]
     fn test_ecdsa_update_signature_agreements_success() {
         let subnet_id = subnet_test_id(0);
-        let key_id = fake_ecdsa_key_id();
-        let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(
-            subnet_id,
-            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
-        );
-        let valid_keys = BTreeSet::from_iter([MasterPublicKeyId::Ecdsa(key_id.clone())]);
+        let key_id = fake_ecdsa_master_public_key_id();
+        let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
+        let valid_keys = BTreeSet::from_iter([key_id.clone()]);
         let pre_sig_ids = (0..4)
-            .map(|i| create_available_quadruple(&mut ecdsa_payload, key_id.clone(), i as u8))
+            .map(|i| create_available_pre_signature(&mut ecdsa_payload, key_id.clone(), i as u8))
             .collect::<Vec<_>>();
         let missing_quadruple = ecdsa_payload.uid_generator.next_pre_signature_id();
 
         let contexts = BTreeMap::from([
             // insert request without completed signature
-            fake_completed_sign_with_ecdsa_context(0, pre_sig_ids[0]),
+            fake_completed_signature_request_context(0, key_id.clone(), pre_sig_ids[0]),
             // insert request to be completed
-            fake_completed_sign_with_ecdsa_context(1, pre_sig_ids[1]),
+            fake_completed_signature_request_context(1, key_id.clone(), pre_sig_ids[1]),
             // insert request that was already completed
-            fake_completed_sign_with_ecdsa_context(2, pre_sig_ids[2]),
+            fake_completed_signature_request_context(2, key_id.clone(), pre_sig_ids[2]),
             // insert request without a matched quadruple
-            fake_sign_with_ecdsa_context_with_quadruple(3, key_id.clone(), None),
+            fake_signature_request_context_with_pre_sig(3, key_id.clone(), None),
             // insert request matched to a non-existent quadruple
-            fake_sign_with_ecdsa_context_with_quadruple(4, key_id.clone(), Some(missing_quadruple)),
+            fake_signature_request_context_with_pre_sig(4, key_id.clone(), Some(missing_quadruple)),
         ]);
 
         // insert agreement for completed request
@@ -285,9 +287,9 @@ mod tests {
                     pseudo_random_id: [i as u8; 32],
                     height: Height::from(1),
                 },
-                ThresholdEcdsaCombinedSignature {
+                CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
                     signature: vec![i as u8; 32],
-                },
+                }),
             );
         }
 

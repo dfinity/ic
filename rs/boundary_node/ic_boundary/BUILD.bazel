@@ -82,6 +82,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing",
     "@crate_index//:url",
     "@crate_index//:x509-parser",
+    "@crate_index//:zeroize",
 ]
 
 MACRO_DEPENDENCIES = [

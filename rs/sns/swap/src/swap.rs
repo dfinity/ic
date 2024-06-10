@@ -5,8 +5,8 @@ use crate::{
     logs::{ERROR, INFO},
     memory,
     pb::v1::{
-        get_open_ticket_response, new_sale_ticket_response, restore_dapp_controllers_response,
-        set_dapp_controllers_call_result, set_mode_call_result,
+        get_open_ticket_response, new_sale_ticket_response, set_dapp_controllers_call_result,
+        set_mode_call_result,
         set_mode_call_result::SetModeResult,
         settle_neurons_fund_participation_request, settle_neurons_fund_participation_response,
         sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
@@ -21,11 +21,11 @@ use crate::{
         ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
         NeuronBasketConstructionParameters, NeuronId as SaleNeuronId, NewSaleTicketRequest,
         NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest, OpenResponse,
-        Participant, RefreshBuyerTokensResponse, RestoreDappControllersResponse,
-        SetDappControllersCallResult, SetDappControllersRequest, SetDappControllersResponse,
-        SetModeCallResult, SettleNeuronsFundParticipationRequest,
-        SettleNeuronsFundParticipationResponse, SettleNeuronsFundParticipationResult,
-        SnsNeuronRecipe, Swap, SweepResult, Ticket, TransferableAmount,
+        Participant, RefreshBuyerTokensResponse, SetDappControllersCallResult,
+        SetDappControllersRequest, SetDappControllersResponse, SetModeCallResult,
+        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+        SettleNeuronsFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, Ticket,
+        TransferableAmount,
     },
     types::{NeuronsFundNeuron, ScheduledVestingEvent, TransferResult},
 };
@@ -118,20 +118,6 @@ impl From<Result<SetModeResponse, CanisterCallError>> for SetModeCallResult {
 impl From<Result<SetDappControllersResponse, CanisterCallError>> for SetDappControllersCallResult {
     fn from(native_result: Result<SetDappControllersResponse, CanisterCallError>) -> Self {
         use set_dapp_controllers_call_result::Possibility as P;
-        let possibility = Some(match native_result {
-            Ok(response) => P::Ok(response),
-            Err(err) => P::Err(err),
-        });
-
-        Self { possibility }
-    }
-}
-
-impl From<Result<SetDappControllersResponse, CanisterCallError>>
-    for RestoreDappControllersResponse
-{
-    fn from(native_result: Result<SetDappControllersResponse, CanisterCallError>) -> Self {
-        use restore_dapp_controllers_response::Possibility as P;
         let possibility = Some(match native_result {
             Ok(response) => P::Ok(response),
             Err(err) => P::Err(err),
@@ -1294,45 +1280,6 @@ impl Swap {
     Transfers OUT.
 
      */
-
-    /// Restores all dapp(s) canisters to te fallback controllers as specified
-    /// in the SNS initialization process. `restore_dapp_controllers` is only
-    /// callable by NNS Governance.
-    pub async fn restore_dapp_controllers(
-        &mut self,
-        sns_root_client: &mut impl SnsRootClient,
-        caller: PrincipalId,
-    ) -> RestoreDappControllersResponse {
-        // Require authorization.
-        let nns_governance = self.init_or_panic().nns_governance_or_panic();
-        if caller != nns_governance.get() {
-            panic!(
-                "This method can only be called by NNS Governance({}). Current caller is {}",
-                nns_governance, caller,
-            );
-        }
-
-        // With the restoration of the dapp(s) to the fallback controllers, the Sale
-        // is now aborted.
-        self.set_lifecycle(Lifecycle::Aborted);
-
-        let set_dapp_controllers_result = self.set_dapp_controllers(sns_root_client).await;
-        match set_dapp_controllers_result {
-            Ok(set_dapp_controllers_response) => set_dapp_controllers_response.into(),
-            // `restore_dapp_controllers` is called by NNS Governance which expects a
-            // RestoreDappControllersResponse. Since this is after the The error response in that Response
-            // object is a CanisterCallError, so transform the error_message to a
-            // CanisterCallError even though this is not technically a CanisterCallError.
-            //
-            // TODO IC-1448: In the Single Proposal SNS Initialization, a more robust
-            // response object can include errors that are not limited to CanisterCallError.
-            Err(error_message) => Err(CanisterCallError {
-                description: error_message,
-                ..Default::default()
-            })
-            .into(),
-        }
-    }
 
     // Returns the ticket if a ticket was found for the caller and the ticket
     // was removed successfully. Returns None if no ticket was found for the caller.

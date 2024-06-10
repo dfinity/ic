@@ -575,11 +575,11 @@ pub fn get_oldest_ecdsa_state_registry_version(
     state: &ReplicatedState,
 ) -> Option<RegistryVersion> {
     state
-        .sign_with_ecdsa_contexts()
+        .signature_request_contexts()
         .values()
-        .flat_map(|context| context.matched_quadruple.as_ref())
+        .flat_map(|context| context.matched_pre_signature.as_ref())
         .flat_map(|(pre_sig_id, _)| ecdsa.available_pre_signatures.get(pre_sig_id))
-        .flat_map(|quadruple| quadruple.get_refs())
+        .flat_map(|pre_signature| pre_signature.get_refs())
         .flat_map(|transcript_ref| ecdsa.idkg_transcripts.get(&transcript_ref.transcript_id))
         .map(|transcript| transcript.registry_version)
         .min()
@@ -592,7 +592,7 @@ mod tests {
 
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
-    use ic_management_canister_types::EcdsaKeyId;
+    use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_state::ReplicatedStateBuilder;
@@ -784,7 +784,7 @@ mod tests {
             Height::new(0),
             subnet_test_id(0),
             vec![EcdsaKeyTranscript::new(
-                EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()),
                 KeyTranscriptCreation::Begin,
             )],
         )

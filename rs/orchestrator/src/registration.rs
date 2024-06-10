@@ -237,7 +237,7 @@ impl NodeRegistration {
     /// to generate or register keys are retried.
     pub async fn check_all_keys_registered_otherwise_register(&self, subnet_id: SubnetId) {
         let registry_version = self.registry_client.get_latest_version();
-        // If there is no ECDSA config or no key_ids, ECDSA is disabled.
+        // If there is no Chain key config or no key_ids, threshold signing is disabled.
         // Delta is the key rotation period of a single node, if it is None, key rotation is disabled.
         let delta = match self.get_key_rotation_period(registry_version, subnet_id) {
             Some(delta) => delta,

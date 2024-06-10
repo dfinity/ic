@@ -34,7 +34,6 @@ pub fn test(env: TestEnv) {
     // Create neurons.
     let mut neurons = TestNeurons::new(2000, &mut ledger_balances);
     let neuron_setup = |neuron: &mut Neuron| {
-        neuron.dissolve_state = None;
         neuron.maturity_e8s_equivalent = 420_000_000;
     };
     let neuron1 = neurons.create(neuron_setup);
