@@ -2286,6 +2286,7 @@ fn test_sign_with_threshold_key_fee_charged() {
             .with_own_subnet_id(subnet_test_id(1))
             .with_nns_subnet_id(subnet_test_id(2))
             .with_ecdsa_signature_fee(fee)
+            .with_schnorr_signature_fee(fee)
             .with_idkg_key(key_id.clone())
             .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
             .build();
@@ -2376,6 +2377,7 @@ fn test_sign_with_threshold_key_rejected_without_fee() {
             .with_own_subnet_id(subnet_test_id(1))
             .with_nns_subnet_id(subnet_test_id(2))
             .with_ecdsa_signature_fee(fee)
+            .with_schnorr_signature_fee(fee)
             .with_idkg_key(key_id.clone())
             .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
             .build();
@@ -2585,11 +2587,13 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
         ),
     ];
     for (method, key_id, cycles_use_case) in test_cases {
+        let fee = 1_000_000;
         let mut test = ExecutionTestBuilder::new()
             .with_subnet_type(SubnetType::System)
             .with_own_subnet_id(subnet_test_id(1))
             .with_nns_subnet_id(subnet_test_id(1))
-            .with_ecdsa_signature_fee(1_000_000)
+            .with_ecdsa_signature_fee(fee)
+            .with_schnorr_signature_fee(fee)
             .with_idkg_key(key_id.clone())
             .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
             .build();
@@ -2674,6 +2678,7 @@ fn test_sign_with_threshold_key_queue_fills_up() {
             .with_own_subnet_id(subnet_test_id(1))
             .with_nns_subnet_id(subnet_test_id(2))
             .with_ecdsa_signature_fee(fee)
+            .with_schnorr_signature_fee(fee)
             .with_idkg_key(key_id.clone())
             .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
             .build();

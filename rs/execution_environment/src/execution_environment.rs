@@ -2739,8 +2739,9 @@ impl ExecutionEnvironment {
         // If the request isn't from the NNS, then we need to charge for it.
         let source_subnet = topology.routing_table.route(request.sender.get());
         if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
-            // TODO(EXC-1629): implement schnorr fee.
-            let signature_fee = self.cycles_account_manager.ecdsa_signature_fee(subnet_size);
+            let signature_fee = self
+                .cycles_account_manager
+                .schnorr_signature_fee(subnet_size);
             if request.payment < signature_fee {
                 return Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
