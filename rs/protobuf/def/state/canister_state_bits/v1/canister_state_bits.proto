@@ -325,6 +325,12 @@ message SnapshotId {
   bytes content = 1;
 }
 
+enum LongExecutionMode {
+  LONG_EXECUTION_MODE_UNSPECIFIED = 0;
+  LONG_EXECUTION_MODE_OPPORTUNISTIC = 1;
+  LONG_EXECUTION_MODE_PRIORITIZED = 2;
+}
+
 message CanisterStateBits {
   reserved 1;
   reserved "controller";
@@ -407,4 +413,6 @@ message CanisterStateBits {
   // The next local snapshot ID.
   uint64 next_snapshot_id = 46;
   reserved 47;
+  int64 priority_credit = 48;
+  LongExecutionMode long_execution_mode = 49;
 }
