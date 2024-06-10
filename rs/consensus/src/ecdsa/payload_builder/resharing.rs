@@ -1,10 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ic_logger::{warn, ReplicaLogger};
-use ic_management_canister_types::MasterPublicKeyId;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::EcdsaDealingsContext;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgDealingsContext;
 use ic_types::{
-    consensus::idkg::{self, EcdsaBlockReader, EcdsaReshareRequest, HasMasterPublicKeyId},
+    consensus::idkg::{self, EcdsaBlockReader, HasMasterPublicKeyId, IDkgReshareRequest},
     crypto::canister_threshold_sig::{
         error::InitialIDkgDealingsValidationError, idkg::InitialIDkgDealings,
     },
@@ -17,7 +16,7 @@ use crate::ecdsa::pre_signer::EcdsaTranscriptBuilder;
 /// by adding a new [`idkg::ReshareOfUnmaskedParams`] config to ongoing xnet reshares.
 pub(crate) fn initiate_reshare_requests(
     payload: &mut idkg::EcdsaPayload,
-    reshare_requests: BTreeSet<idkg::EcdsaReshareRequest>,
+    reshare_requests: BTreeSet<idkg::IDkgReshareRequest>,
 ) {
     for request in reshare_requests {
         let Some(key_transcript) = payload
@@ -56,18 +55,18 @@ pub(crate) fn initiate_reshare_requests(
 }
 
 fn make_reshare_dealings_response(
-    request: &EcdsaReshareRequest,
+    request: &IDkgReshareRequest,
     initial_dealings: &InitialIDkgDealings,
-    ecdsa_dealings_contexts: &BTreeMap<CallbackId, EcdsaDealingsContext>,
+    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
 ) -> Option<ic_types::batch::ConsensusResponse> {
-    ecdsa_dealings_contexts
+    idkg_dealings_contexts
         .iter()
         .find(|(_, context)| *request == reshare_request_from_dealings_context(context))
         .map(|(callback_id, _)| {
             ic_types::batch::ConsensusResponse::new(
                 *callback_id,
                 ic_types::messages::Payload::Data(
-                    ic_management_canister_types::ComputeInitialEcdsaDealingsResponse {
+                    ic_management_canister_types::ComputeInitialIDkgDealingsResponse {
                         initial_dkg_dealings: initial_dealings.into(),
                     }
                     .encode(),
@@ -83,7 +82,7 @@ fn make_reshare_dealings_response(
 ///   [`idkg::CompletedReshareRequest::Unreported`].
 pub(crate) fn update_completed_reshare_requests(
     payload: &mut idkg::EcdsaPayload,
-    ecdsa_dealings_contexts: &BTreeMap<CallbackId, EcdsaDealingsContext>,
+    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
     resolver: &dyn EcdsaBlockReader,
     transcript_builder: &dyn EcdsaTranscriptBuilder,
     log: &ReplicaLogger,
@@ -123,14 +122,14 @@ pub(crate) fn update_completed_reshare_requests(
     }
 
     // We first clean up the existing xnet_reshare_agreements by keeping those requests
-    // that can still be found in the ecdsa_dealings_contexts for dedup purpose.
+    // that can still be found in the idkg_dealings_contexts for dedup purpose.
     // We only need to keep the "Reported" status because the agreements would have
     // already been reported when the previous block became finalized.
     payload.xnet_reshare_agreements = payload
         .xnet_reshare_agreements
         .keys()
         .filter(|&request| {
-            ecdsa_dealings_contexts
+            idkg_dealings_contexts
                 .values()
                 .any(|context| *request == reshare_request_from_dealings_context(context))
         })
@@ -141,7 +140,7 @@ pub(crate) fn update_completed_reshare_requests(
     // Insert any newly completed reshares
     for (request, initial_dealings) in completed_reshares {
         if let Some(response) =
-            make_reshare_dealings_response(&request, &initial_dealings, ecdsa_dealings_contexts)
+            make_reshare_dealings_response(&request, &initial_dealings, idkg_dealings_contexts)
         {
             payload.ongoing_xnet_reshares.remove(&request);
             payload
@@ -158,20 +157,20 @@ pub(crate) fn update_completed_reshare_requests(
 
 /// Translates the reshare requests in the replicated state to the internal format
 pub(super) fn get_reshare_requests(
-    ecdsa_dealings_contexts: &BTreeMap<CallbackId, EcdsaDealingsContext>,
-) -> BTreeSet<idkg::EcdsaReshareRequest> {
-    ecdsa_dealings_contexts
+    idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
+) -> BTreeSet<idkg::IDkgReshareRequest> {
+    idkg_dealings_contexts
         .values()
         .map(reshare_request_from_dealings_context)
         .collect()
 }
 
 fn reshare_request_from_dealings_context(
-    context: &EcdsaDealingsContext,
-) -> idkg::EcdsaReshareRequest {
-    idkg::EcdsaReshareRequest {
-        key_id: Some(context.key_id.clone()),
-        master_key_id: MasterPublicKeyId::Ecdsa(context.key_id.clone()),
+    context: &IDkgDealingsContext,
+) -> idkg::IDkgReshareRequest {
+    idkg::IDkgReshareRequest {
+        key_id: None,
+        master_key_id: context.key_id.clone(),
         receiving_node_ids: context.nodes.iter().copied().collect(),
         registry_version: context.registry_version,
     }
@@ -179,8 +178,6 @@ fn reshare_request_from_dealings_context(
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use super::*;
 
     use assert_matches::assert_matches;
@@ -189,18 +186,17 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{ComputeInitialEcdsaDealingsResponse, EcdsaKeyId};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::{
-        consensus::idkg::{EcdsaPayload, EcdsaReshareRequest},
-        crypto::AlgorithmId,
-        RegistryVersion,
-    };
+    use ic_management_canister_types::{ComputeInitialIDkgDealingsResponse, MasterPublicKeyId};
+    use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_types::consensus::idkg::EcdsaPayload;
 
-    use crate::ecdsa::test_utils::{
-        create_reshare_request, dealings_context_from_reshare_request,
-        fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
-        set_up_ecdsa_payload, TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
+    use crate::ecdsa::{
+        test_utils::{
+            create_reshare_request, dealings_context_from_reshare_request,
+            fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+            set_up_ecdsa_payload, TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
+        },
+        utils::algorithm_for_key_id,
     };
 
     fn set_up(
@@ -236,49 +232,55 @@ mod tests {
 
     #[test]
     fn test_make_reshare_dealings_response() {
-        let make_key_id =
-            |i: u64| EcdsaKeyId::from_str(&format!("Secp256k1:some_key_{i}")).unwrap();
-        let make_reshare_request = |i| EcdsaReshareRequest {
-            key_id: Some(make_key_id(i)),
-            master_key_id: MasterPublicKeyId::Ecdsa(make_key_id(i)),
-            receiving_node_ids: vec![node_test_id(i)],
-            registry_version: RegistryVersion::from(i),
-        };
-
-        let max = 5;
         let mut contexts = BTreeMap::new();
-        for i in 0..max {
-            let request = make_reshare_request(i);
+        let mut initial_dealings = BTreeMap::new();
+        for (i, key_id) in fake_master_public_key_ids_for_all_algorithms()
+            .iter()
+            .enumerate()
+        {
+            let i = i as u64;
+            let request = create_reshare_request(key_id.clone(), i, i);
             let context = dealings_context_from_reshare_request(request.clone());
             contexts.insert(CallbackId::from(i), context);
+            initial_dealings.insert(
+                i,
+                dummy_initial_idkg_dealing_for_tests(
+                    algorithm_for_key_id(key_id),
+                    &mut reproducible_rng(),
+                ),
+            );
         }
 
-        let initial_dealings = dummy_initial_idkg_dealing_for_tests(
-            AlgorithmId::ThresholdEcdsaSecp256k1,
-            &mut reproducible_rng(),
-        );
-
-        for i in 0..max {
-            let request = make_reshare_request(i);
-            let res = make_reshare_dealings_response(&request, &initial_dealings, &contexts)
-                .expect("Should get a response");
+        for (i, key_id) in fake_master_public_key_ids_for_all_algorithms()
+            .iter()
+            .enumerate()
+        {
+            let i = i as u64;
+            let request = create_reshare_request(key_id.clone(), i, i);
+            let res = make_reshare_dealings_response(
+                &request,
+                initial_dealings.get(&i).unwrap(),
+                &contexts,
+            )
+            .expect("Should get a response");
             assert_eq!(CallbackId::from(i), res.callback);
 
             let ic_types::messages::Payload::Data(data) = res.payload else {
                 panic!("Request should have a data response");
             };
 
-            let response = ComputeInitialEcdsaDealingsResponse::decode(&data)
+            let response = ComputeInitialIDkgDealingsResponse::decode(&data)
                 .expect("Failed to decode response");
             let dealings = InitialIDkgDealings::try_from(&response.initial_dkg_dealings)
                 .expect("Failed to convert dealings");
-            assert_eq!(initial_dealings, dealings);
+            assert_eq!(initial_dealings.get(&i).unwrap(), &dealings);
         }
 
+        let fake_key = fake_ecdsa_master_public_key_id();
         assert_eq!(
             make_reshare_dealings_response(
-                &make_reshare_request(max),
-                &initial_dealings,
+                &create_reshare_request(fake_key, 10, 10),
+                initial_dealings.get(&0).unwrap(),
                 &contexts
             ),
             None
@@ -310,11 +312,16 @@ mod tests {
                 vec![key_id.clone()],
                 /*should_create_key_transcript=*/ true,
             );
-            let request = create_reshare_request(key_id, 1, 1);
+            let request = create_reshare_request(key_id.clone(), 1, 1);
 
             initiate_reshare_requests(&mut payload, BTreeSet::from([request.clone()]));
 
-            assert!(payload.ongoing_xnet_reshares.contains_key(&request));
+            let params = payload
+                .ongoing_xnet_reshares
+                .get(&request)
+                .expect("should exist");
+            assert_eq!(params.as_ref().algorithm_id, algorithm_for_key_id(&key_id));
+
             assert!(payload.xnet_reshare_agreements.is_empty());
         }
     }
@@ -333,8 +340,19 @@ mod tests {
             initiate_reshare_requests(&mut payload, BTreeSet::from([request.clone()]));
             initiate_reshare_requests(&mut payload, BTreeSet::from([request_2.clone()]));
 
-            assert!(payload.ongoing_xnet_reshares.contains_key(&request));
-            assert!(payload.ongoing_xnet_reshares.contains_key(&request_2));
+            let params = payload
+                .ongoing_xnet_reshares
+                .get(&request)
+                .expect("should exist");
+            assert_eq!(params.as_ref().algorithm_id, algorithm_for_key_id(&key_id));
+            let params_2 = payload
+                .ongoing_xnet_reshares
+                .get(&request_2)
+                .expect("should exist");
+            assert_eq!(
+                params_2.as_ref().algorithm_id,
+                algorithm_for_key_id(&key_id)
+            );
             assert!(payload.xnet_reshare_agreements.is_empty());
         }
     }
@@ -361,8 +379,14 @@ mod tests {
     }
 
     #[test]
-    fn test_ecdsa_update_completed_reshare_requests() {
-        let key_id = fake_ecdsa_master_public_key_id();
+    fn test_ecdsa_update_completed_reshare_requests_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_ecdsa_update_completed_reshare_requests(key_id);
+        }
+    }
+
+    fn test_ecdsa_update_completed_reshare_requests(key_id: MasterPublicKeyId) {
         let (mut payload, block_reader) = set_up(
             vec![key_id.clone()],
             /*should_create_key_transcript=*/ true,
@@ -397,6 +421,7 @@ mod tests {
             .unwrap()
             .as_ref()
             .clone();
+        assert_eq!(reshare_params_1.algorithm_id, algorithm_for_key_id(&key_id));
         let dealings_1 = dummy_dealings(reshare_params_1.transcript_id, &reshare_params_1.dealers);
         transcript_builder.add_dealings(reshare_params_1.transcript_id, dealings_1.clone());
         update_completed_reshare_requests(
@@ -430,6 +455,7 @@ mod tests {
             .unwrap()
             .as_ref()
             .clone();
+        assert_eq!(reshare_params_2.algorithm_id, algorithm_for_key_id(&key_id));
         let dealings_2 = dummy_dealings(reshare_params_2.transcript_id, &reshare_params_2.dealers);
         transcript_builder.add_dealings(reshare_params_2.transcript_id, dealings_2.clone());
         update_completed_reshare_requests(

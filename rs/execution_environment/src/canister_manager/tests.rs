@@ -1349,18 +1349,14 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
         let creation_fee = cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE);
         let canister = state.canister_state(&canister_id).unwrap();
         assert_eq!(
-            canister
-                .system_state
-                .canister_metrics
-                .consumed_cycles_since_replica_started
-                .get(),
+            canister.system_state.canister_metrics.consumed_cycles.get(),
             creation_fee.get()
         );
         assert_eq!(
             canister
                 .system_state
                 .canister_metrics
-                .get_consumed_cycles_since_replica_started_by_use_cases()
+                .get_consumed_cycles_by_use_cases()
                 .get(&CyclesUseCase::CanisterCreation)
                 .unwrap()
                 .get(),
@@ -1399,18 +1395,14 @@ fn provisional_create_canister_has_no_creation_fee() {
 
         let canister = state.canister_state(&canister_id).unwrap();
         assert_eq!(
-            canister
-                .system_state
-                .canister_metrics
-                .consumed_cycles_since_replica_started
-                .get(),
+            canister.system_state.canister_metrics.consumed_cycles.get(),
             NominalCycles::default().get()
         );
         assert_eq!(
             canister
                 .system_state
                 .canister_metrics
-                .get_consumed_cycles_since_replica_started_by_use_cases()
+                .get_consumed_cycles_by_use_cases()
                 .get(&CyclesUseCase::CanisterCreation),
             None
         );
@@ -3284,11 +3276,11 @@ fn install_code_respects_instruction_limit() {
     let compilation_cost = wat_compilation_cost(wasm);
     let wasm = wat::parse_str(wasm).unwrap();
 
-    let instructions_limit = NumInstructions::from(1);
+    let instructions_limit = NumInstructions::from(3) + compilation_cost;
 
     // Too few instructions result in failed installation.
     let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(instructions_limit + compilation_cost),
+        instructions: as_round_instructions(instructions_limit),
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         compute_allocation_used: state.total_compute_allocation(),
     };
@@ -3342,7 +3334,7 @@ fn install_code_respects_instruction_limit() {
     assert_eq!(instructions_left, NumInstructions::from(0));
     state.put_canister_state(canister.unwrap());
 
-    let instructions_limit = NumInstructions::from(1);
+    let instructions_limit = NumInstructions::from(5);
 
     // Too few instructions result in failed upgrade.
     let mut round_limits = RoundLimits {

@@ -58,6 +58,7 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tokio-io-timeout",
     "@crate_index//:tokio_rustls_0_24_1",
+    "@crate_index//:tokio-util",
     "@crate_index//:tower",
     "@crate_index//:tower-http",
     "@crate_index//:url",

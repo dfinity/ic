@@ -113,9 +113,14 @@ impl Execution {
 
         let message_instruction_limit =
             exec_input.execution_parameters.instruction_limits.message();
+        let instruction_limit_to_report = exec_input
+            .execution_parameters
+            .instruction_limits
+            .limit_to_report();
         let slice_instruction_limit = exec_input.execution_parameters.instruction_limits.slice();
         let sandbox_manager = Arc::clone(&self.sandbox_manager);
         let out_of_instructions_handler = DeterministicTimeSlicingHandler::new(
+            i64::try_from(instruction_limit_to_report.get()).unwrap_or(i64::MAX),
             i64::try_from(message_instruction_limit.get()).unwrap_or(i64::MAX),
             i64::try_from(slice_instruction_limit.get()).unwrap_or(i64::MAX),
             move |slice, paused_execution| {

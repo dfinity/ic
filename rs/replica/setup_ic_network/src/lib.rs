@@ -65,6 +65,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 use tokio::sync::mpsc::UnboundedSender;
+use tower_http::trace::TraceLayer;
 
 pub const MAX_ADVERT_BUFFER: usize = 100_000;
 
@@ -123,7 +124,7 @@ pub fn setup_consensus_and_p2p(
     let time_source = Arc::new(SysTimeSource::new());
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
 
-    let (ingress_pool, ingress_sender, join_handles, mut new_p2p_consensus) = start_consensus(
+    let (ingress_pool, ingress_sender, join_handles, mut p2p_consensus) = start_consensus(
         log,
         metrics_registry,
         rt_handle,
@@ -150,21 +151,12 @@ pub fn setup_consensus_and_p2p(
         time_source.clone(),
     );
 
-    let mut p2p_router = None;
-
-    p2p_router = Some(
-        new_p2p_consensus
-            .router()
-            .merge(p2p_router.unwrap_or_default()),
-    );
-
     // StateSync
     let (state_sync_router, state_sync_manager_rx) = ic_state_sync_manager::build_axum_router(
         state_sync_client.clone(),
         log.clone(),
         metrics_registry,
     );
-    p2p_router = Some(state_sync_router.merge(p2p_router.unwrap_or_default()));
 
     // Quic transport
     let (_, topology_watcher) = ic_peer_manager::start_peer_manager(
@@ -181,6 +173,9 @@ pub fn setup_consensus_and_p2p(
         transport_config.listening_port,
     )
         .into();
+    let p2p_router = state_sync_router
+        .merge(p2p_consensus.router())
+        .layer(TraceLayer::new_for_http());
     let quic_transport = Arc::new(ic_quic_transport::QuicTransport::start(
         log,
         metrics_registry,
@@ -190,7 +185,7 @@ pub fn setup_consensus_and_p2p(
         node_id,
         topology_watcher.clone(),
         Either::<_, DummyUdpSocket>::Left(transport_addr),
-        p2p_router.unwrap_or_default(),
+        p2p_router,
     ));
 
     let _state_sync_manager = ic_state_sync_manager::start_state_sync_manager(
@@ -202,7 +197,7 @@ pub fn setup_consensus_and_p2p(
         state_sync_manager_rx,
     );
 
-    let _cancellation_token = new_p2p_consensus.run(quic_transport, topology_watcher);
+    let _cancellation_token = p2p_consensus.run(quic_transport, topology_watcher);
 
     (ingress_pool, ingress_sender, join_handles)
 }

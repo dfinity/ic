@@ -1274,7 +1274,7 @@ impl CanisterManager {
             + canister_to_delete
                 .system_state
                 .canister_metrics
-                .consumed_cycles_since_replica_started;
+                .consumed_cycles;
 
         state
             .metadata
@@ -1292,7 +1292,7 @@ impl CanisterManager {
         for (use_case, cycles) in canister_to_delete
             .system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .iter()
         {
             state
@@ -2581,7 +2581,7 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::CanisterRejectedMessage,
                     format!(
-                        "The canister {} already executes a long-running message.", canister_id, 
+                        "The canister {} already executes a long-running message.", canister_id,
                     )
                 )
             }

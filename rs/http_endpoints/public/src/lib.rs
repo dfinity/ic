@@ -18,20 +18,21 @@ mod tracing_flamegraph;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "fuzzing_code")] {
-        pub mod metrics;
         pub mod call;
+        pub mod metrics;
     } else {
         mod metrics;
         mod call;
     }
 }
 
-pub use call::CallServiceBuilder;
+pub use call::{CallServiceV2, IngressValidatorBuilder};
 pub use common::cors_layer;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
 
 use crate::{
+    call::ingress_watcher::IngressWatcher,
     catch_up_package::CatchUpPackageService,
     common::{get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response},
     dashboard::DashboardService,
@@ -91,10 +92,11 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
-        HttpReadStateResponse, HttpRequestEnvelope, QueryResponseHash, ReplicaHealthStatus,
+        HttpReadStateResponse, HttpRequestEnvelope, MessageId, QueryResponseHash,
+        ReplicaHealthStatus,
     },
     time::expiry_time_from_now,
-    NodeId, SubnetId,
+    Height, NodeId, SubnetId,
 };
 use rand::Rng;
 use std::{
@@ -102,7 +104,7 @@ use std::{
     io::Write,
     net::SocketAddr,
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
 use tempfile::NamedTempFile;
@@ -110,11 +112,13 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
     sync::mpsc::UnboundedSender,
+    sync::watch,
     time::{sleep, timeout, Instant},
 };
 use tokio_rustls::TlsConnector;
+use tokio_util::sync::CancellationToken;
 use tower::{limit::GlobalConcurrencyLimitLayer, BoxError, Service, ServiceBuilder};
-use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::{limit::RequestBodyLimitLayer, trace::TraceLayer};
 
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
@@ -140,6 +144,7 @@ pub struct HttpError {
 #[derive(Clone)]
 struct HttpHandler {
     call_router: Router,
+    call_v3_router: Router,
     query_router: Router,
     catchup_router: Router,
     dashboard_router: Router,
@@ -264,6 +269,11 @@ fn create_port_file(path: PathBuf, port: u16) {
 /// to provide a way to "fake" delegations received from the NNS subnet
 /// without having to either mock all the related calls to the registry
 /// or actually make the calls.
+///
+/// The unbounded channel, `terminal_state_ingress_messages`, is used to register the height
+/// of the replicated state when each ingress message reaches a terminal state.
+/// It is fine to use an unbounded channel as the the consumer, [`IngressWatcher`],
+/// will be able to consume the messages at the same rate as they are produced.
 #[allow(clippy::too_many_arguments)]
 pub fn start_server(
     rt_handle: tokio::runtime::Handle,
@@ -288,6 +298,11 @@ pub fn start_server(
     delegation_from_nns: Option<CertificateDelegation>,
     pprof_collector: Arc<dyn PprofCollector>,
     tracing_handle: ReloadHandles,
+    // TODO(NET-1620): Remove optional arguments to enable the sync call endpoint.
+    certified_height_watcher: Option<watch::Receiver<Height>>,
+    terminal_state_ingress_messages: Option<
+        tokio::sync::mpsc::UnboundedReceiver<(MessageId, Height)>,
+    >,
 ) {
     let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
@@ -307,18 +322,46 @@ pub fn start_server(
 
     let delegation_from_nns = Arc::new(RwLock::new(delegation_from_nns));
     let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
-    let call_router = CallServiceBuilder::builder(
+
+    let ingress_filter = Arc::new(Mutex::new(ingress_filter));
+
+    let call_handler = IngressValidatorBuilder::builder(
         node_id,
         subnet_id,
         registry_client.clone(),
         ingress_verifier.clone(),
-        ingress_filter,
-        ingress_throttler,
-        ingress_tx,
+        ingress_filter.clone(),
+        ingress_throttler.clone(),
+        ingress_tx.clone(),
     )
     .with_logger(log.clone())
     .with_malicious_flags(malicious_flags.clone())
-    .build_router();
+    .build();
+
+    let call_router = call::CallServiceV2::new_router(call_handler.clone());
+
+    let call_v3_router = match (certified_height_watcher, terminal_state_ingress_messages) {
+        (Some(certified_height_watcher), Some(terminal_state_ingress_messages)) => {
+            let (ingress_watcher_handle, _) = IngressWatcher::start(
+                rt_handle.clone(),
+                log.clone(),
+                metrics.clone(),
+                certified_height_watcher,
+                terminal_state_ingress_messages,
+                CancellationToken::new(),
+            );
+
+            call::CallServiceV3::new_router(
+                call_handler,
+                ingress_watcher_handle,
+                config.ingress_message_certificate_timeout_seconds,
+                delegation_from_nns.clone(),
+                state_reader.clone(),
+            )
+        }
+        _ => Router::new(),
+    };
+
     let query_router = QueryServiceBuilder::builder(
         node_id,
         query_signer,
@@ -389,6 +432,7 @@ pub fn start_server(
 
     let http_handler = HttpHandler {
         call_router,
+        call_v3_router,
         query_router,
         status_router,
         catchup_router,
@@ -565,6 +609,7 @@ fn make_router(
                     )),
             ),
         )
+        .merge(http_handler.call_v3_router)
         .merge(
             http_handler.query_router.layer(
                 ServiceBuilder::new()
@@ -652,6 +697,7 @@ fn make_router(
 
     final_router.layer(
         ServiceBuilder::new()
+            .layer(TraceLayer::new_for_http())
             .layer(HandleErrorLayer::new(map_box_error_to_response))
             .layer(health_status_refresher.clone())
             .load_shed()
@@ -1054,7 +1100,7 @@ mod tests {
     use std::convert::Infallible;
     use tower::ServiceExt;
 
-    use crate::{call::CallService, common::Cbor, query::QueryService};
+    use crate::{common::Cbor, query::QueryService};
 
     use super::*;
 
@@ -1070,7 +1116,10 @@ mod tests {
             "success".to_string()
         }
         let http_handler = HttpHandler {
-            call_router: Router::new().route(CallService::route(), axum::routing::post(dummy)),
+            call_router: Router::new()
+                .route(call::CallServiceV2::route(), axum::routing::post(dummy)),
+            call_v3_router: Router::new()
+                .route(call::CallServiceV3::route(), axum::routing::post(dummy)),
             query_router: Router::new()
                 .route(QueryService::route(), axum::routing::post(dummy_cbor)),
             catchup_router: Router::new().route(
