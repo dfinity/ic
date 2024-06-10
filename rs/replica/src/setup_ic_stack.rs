@@ -330,6 +330,9 @@ pub fn construct_ic_stack(
         None,
         Arc::new(Pprof),
         tracing_handle,
+        // TODO(NET-1620): Remove optional arguments to enable the sync call endpoint.
+        None,
+        None,
     );
 
     Ok((
