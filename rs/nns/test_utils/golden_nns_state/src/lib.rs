@@ -5,6 +5,7 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConf
 use ic_types::NumInstructions;
 
 use std::{ops::RangeInclusive, path::Path, process::Command, str::FromStr};
+use std::env;
 use tempfile::TempDir;
 
 // TODO: Add support for PocketIc.
@@ -89,6 +90,10 @@ impl ScpLocation {
 fn download_golden_nns_state_or_panic(destination: &Path) {
     let source = NNS_STATE_SOURCE.to_argument();
     println!("Downloading {} to {:?} ...", source, destination,);
+
+    for (key, value) in env::vars() {
+        println!("{key}: {value}");
+    }
 
     // Actually download.
     let scp_out = Command::new("scp")
