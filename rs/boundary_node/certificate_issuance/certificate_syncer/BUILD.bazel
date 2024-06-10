@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "@crate_index//:mockall",
     "@crate_index//:nix",
     "@crate_index//:opentelemetry",
+    "@crate_index//:opentelemetry_sdk",
     "@crate_index//:opentelemetry-prometheus",
     "@crate_index//:prometheus",
     "@crate_index//:reqwest",
