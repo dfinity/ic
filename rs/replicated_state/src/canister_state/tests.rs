@@ -615,6 +615,38 @@ fn canister_state_log_visibility_round_trip() {
 }
 
 #[test]
+fn long_execution_mode_round_trip() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+
+    for initial in LongExecutionMode::iter() {
+        let encoded = pb::LongExecutionMode::from(initial);
+        let round_trip = LongExecutionMode::from(encoded);
+
+        assert_eq!(initial, round_trip);
+    }
+
+    // Backward compatibility check.
+    assert_eq!(
+        LongExecutionMode::from(pb::LongExecutionMode::Unspecified),
+        LongExecutionMode::Opportunistic
+    );
+}
+
+#[test]
+fn long_execution_mode_decoding() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+    fn test(code: i32, decoded: LongExecutionMode) {
+        let encoded = pb::LongExecutionMode::try_from(code).unwrap_or_default();
+        assert_eq!(LongExecutionMode::from(encoded), decoded);
+    }
+    test(-1, LongExecutionMode::Opportunistic);
+    test(0, LongExecutionMode::Opportunistic);
+    test(1, LongExecutionMode::Opportunistic);
+    test(2, LongExecutionMode::Prioritized);
+    test(3, LongExecutionMode::Opportunistic);
+}
+
+#[test]
 fn compatibility_for_log_visibility() {
     // If this fails, you are making a potentially incompatible change to `LogVisibility`.
     // See note [Handling changes to Enums in Replicated State] for how to proceed.

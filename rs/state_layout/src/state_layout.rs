@@ -25,8 +25,8 @@ use ic_replicated_state::{
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
     batch::TotalQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
-    CanisterLog, ComputeAllocation, Cycles, ExecutionRound, Height, MemoryAllocation,
-    NumInstructions, PrincipalId, SnapshotId, Time,
+    CanisterLog, ComputeAllocation, Cycles, ExecutionRound, Height, LongExecutionMode,
+    MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
 };
 use ic_utils::thread::parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
@@ -139,6 +139,8 @@ pub struct CanisterStateBits {
     pub call_context_manager: Option<CallContextManager>,
     pub compute_allocation: ComputeAllocation,
     pub accumulated_priority: AccumulatedPriority,
+    pub priority_credit: AccumulatedPriority,
+    pub long_execution_mode: LongExecutionMode,
     pub execution_state_bits: Option<ExecutionStateBits>,
     pub memory_allocation: MemoryAllocation,
     pub freeze_threshold: NumSeconds,
@@ -1872,6 +1874,11 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             call_context_manager: item.call_context_manager.as_ref().map(|v| v.into()),
             compute_allocation: item.compute_allocation.as_percent(),
             accumulated_priority: item.accumulated_priority.get(),
+            priority_credit: item.priority_credit.get(),
+            long_execution_mode: pb_canister_state_bits::LongExecutionMode::from(
+                item.long_execution_mode,
+            )
+            .into(),
             execution_state_bits: item.execution_state_bits.as_ref().map(|v| v.into()),
             memory_allocation: item.memory_allocation.bytes().get(),
             freeze_threshold: item.freeze_threshold.get(),
@@ -1998,6 +2005,12 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 },
             )?,
             accumulated_priority: value.accumulated_priority.into(),
+            priority_credit: value.priority_credit.into(),
+            long_execution_mode: pb_canister_state_bits::LongExecutionMode::try_from(
+                value.long_execution_mode,
+            )
+            .unwrap_or_default()
+            .into(),
             execution_state_bits,
             memory_allocation: MemoryAllocation::try_from(NumBytes::from(value.memory_allocation))
                 .map_err(|e| ProxyDecodeError::ValueOutOfRange {
