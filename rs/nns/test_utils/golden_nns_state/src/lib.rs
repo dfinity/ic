@@ -95,6 +95,13 @@ fn download_golden_nns_state_or_panic(destination: &Path) {
         println!("{key}: {value}");
     }
 
+    let ssh_add_out = Command::new("ssh-add").arg("-L").output()
+        .unwrap_or_else(|err| {
+            panic!("Could run ssh-add because: {:?}!", err)
+        });
+
+    println!("ssh-add -L: {:#?}", ssh_add_out);
+
     // Actually download.
     let scp_out = Command::new("scp")
         .arg("-oUserKnownHostsFile=/dev/null")
