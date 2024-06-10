@@ -92,6 +92,7 @@ impl CanisterQueuesFixture {
     }
 
     /// Times out all requests in the output queue.
+    // FIXME: This will now time out all messages, not just outbound requests.
     fn time_out_all_output_requests(&mut self) -> usize {
         let local_canisters = maplit::btreemap! {
             self.this => {
@@ -105,7 +106,6 @@ impl CanisterQueuesFixture {
                 CanisterState::new(system_state, None, scheduler_state)
             }
         };
-        // self.queues.time_out_requests(
         self.queues.time_out_messages(
             Time::from_nanos_since_unix_epoch(u64::MAX),
             &self.this,
@@ -229,7 +229,8 @@ fn test_available_output_request_slots_counts() {
     );
 }
 
-/// Check `available_output_request_slots` counts timed out output requests.
+/// Check that `available_output_request_slots` counts timed out output
+/// requests.
 #[test]
 fn test_available_output_request_slots_counts_timed_out_output_requests() {
     let mut queues = CanisterQueuesFixture::new();
@@ -260,21 +261,21 @@ fn test_available_output_request_slots_counts_timed_out_output_requests() {
 }
 
 #[test]
-fn test_back_pressure_with_timed_out_requests() {
+fn test_backpressure_with_timed_out_requests() {
     let mut queues = CanisterQueuesFixture::new();
 
-    // Need output response to pin timed out request behind.
+    // Need output response to pin timed out requests behind.
     queues.push_input_request().unwrap();
     queues.pop_input();
     queues.push_output_response();
 
-    // Push `DEFAULT_QUEUE_CAPACITY` output requests.
+    // Push `DEFAULT_QUEUE_CAPACITY` output requests and time them all out.
     for _ in 0..DEFAULT_QUEUE_CAPACITY {
         queues.push_output_request().unwrap();
     }
-
-    // Time out all requests, then check no new request can be pushed.
     queues.time_out_all_output_requests();
+
+    // Check that no new request can be pushed.
     assert!(queues.push_output_request().is_err());
 }
 
@@ -1160,7 +1161,7 @@ fn test_stats_best_effort() {
         transient_stream_responses_size_bytes: 0,
     };
     assert_eq!(expected_queue_stats, queues.queue_stats);
-    // And all-zero message stats.
+    // And we have all-zero message stats.
     assert_eq!(
         &message_pool::MessageStats::default(),
         queues.pool.message_stats()
@@ -1280,7 +1281,7 @@ fn test_stats_guaranteed_response() {
         transient_stream_responses_size_bytes: 0,
     };
     assert_eq!(expected_queue_stats, queues.queue_stats);
-    // And all-zero message stats.
+    // And we have all-zero message stats.
     assert_eq!(
         &message_pool::MessageStats::default(),
         queues.pool.message_stats()
@@ -1593,29 +1594,21 @@ fn test_stats_induct_message_to_self() {
         .expect("could not push");
 
     // One slot and memory reservation in an input queue.
-    assert_eq!(
-        QueueStats {
-            guaranteed_response_memory_reservations: 1,
-            input_queues_reserved_slots: 1,
-            output_queues_reserved_slots: 0,
-            transient_stream_responses_size_bytes: 0
-        },
-        queues.queue_stats
-    );
+    let mut expected_queue_stats = QueueStats {
+        guaranteed_response_memory_reservations: 1,
+        input_queues_reserved_slots: 1,
+        output_queues_reserved_slots: 0,
+        transient_stream_responses_size_bytes: 0,
+    };
+    assert_eq!(expected_queue_stats, queues.queue_stats);
 
     // Induct request.
     assert!(queues.induct_message_to_self(this).is_ok());
 
     // Additional slot and memory reservation, now in an output queue.
-    assert_eq!(
-        QueueStats {
-            guaranteed_response_memory_reservations: 2,
-            input_queues_reserved_slots: 1,
-            output_queues_reserved_slots: 1,
-            transient_stream_responses_size_bytes: 0
-        },
-        queues.queue_stats
-    );
+    expected_queue_stats.guaranteed_response_memory_reservations += 1;
+    expected_queue_stats.output_queues_reserved_slots += 1;
+    assert_eq!(expected_queue_stats, queues.queue_stats);
     // One inbound guaranteed response request.
     assert_eq!(
         &message_pool::MessageStats {
@@ -1637,15 +1630,7 @@ fn test_stats_induct_message_to_self() {
     queues.pop_input().expect("could not pop request");
 
     // No change in reservations.
-    assert_eq!(
-        QueueStats {
-            guaranteed_response_memory_reservations: 2,
-            input_queues_reserved_slots: 1,
-            output_queues_reserved_slots: 1,
-            transient_stream_responses_size_bytes: 0
-        },
-        queues.queue_stats
-    );
+    assert_eq!(expected_queue_stats, queues.queue_stats);
     // No messages.
     assert_eq!(
         &message_pool::MessageStats::default(),
@@ -1661,15 +1646,9 @@ fn test_stats_induct_message_to_self() {
     queues.push_output_response(response.into());
 
     // Consumed the output queue slot and memory reservation.
-    assert_eq!(
-        QueueStats {
-            guaranteed_response_memory_reservations: 1,
-            input_queues_reserved_slots: 1,
-            output_queues_reserved_slots: 0,
-            transient_stream_responses_size_bytes: 0
-        },
-        queues.queue_stats
-    );
+    expected_queue_stats.guaranteed_response_memory_reservations -= 1;
+    expected_queue_stats.output_queues_reserved_slots -= 1;
+    assert_eq!(expected_queue_stats, queues.queue_stats);
     // One outbound guaranteed response.
     assert_eq!(
         &message_pool::MessageStats {
@@ -1922,7 +1901,7 @@ fn test_output_queues_for_each() {
 }
 
 // Must be duplicated here, because the `ic_test_utilities` one pulls in the
-// `CanisterQueues` defined by a its `ic_replicated_state`, not the ones from
+// `CanisterQueues` defined by its `ic_replicated_state`, not the ones from
 // `crate` and we wouldn't have access to its non-public methods.
 prop_compose! {
     /// Strategy that generates an arbitrary `CanisterQueues` (and a matching
@@ -2149,26 +2128,27 @@ fn has_expired_deadlines_reports_correctly() {
     assert!(canister_queues.has_expired_deadlines(current_time));
 }
 
-/// Tests `time_out_requests` on an instance of `CanisterQueues` that contains exactly 4 output messages.
-/// - An output request addressed to self.
-/// - An output request addressed to a local canister.
+/// Tests `time_out_messages` on an instance of `CanisterQueues` that contains exactly 4 output messages.
+/// - A guaranteed response output request addressed to self.
+/// - A best-effort output request addressed to a local canister.
 /// - Two output requests adressed to a remote canister.
 #[test]
-fn time_out_requests_pushes_correct_reject_responses() {
+fn time_out_messages_pushes_correct_reject_responses() {
     let mut canister_queues = CanisterQueues::default();
 
     let own_canister_id = canister_test_id(67);
     let local_canister_id = canister_test_id(79);
     let remote_canister_id = canister_test_id(97);
 
-    let deadline1 = Time::from_secs_since_unix_epoch(0).unwrap();
-    let deadline2 = Time::from_secs_since_unix_epoch(1).unwrap();
+    let t0 = Time::from_secs_since_unix_epoch(0).unwrap();
+    let t1 = Time::from_secs_since_unix_epoch(1).unwrap();
+    let d1 = CoarseTime::floor(t1);
 
-    for (canister_id, callback_id, deadline) in [
-        (own_canister_id, 0, deadline1),
-        (local_canister_id, 1, deadline1),
-        (remote_canister_id, 2, deadline1),
-        (remote_canister_id, 3, deadline2),
+    for (canister_id, callback_id, time, deadline) in [
+        (own_canister_id, 0, t0, NO_DEADLINE),
+        (local_canister_id, 1, t0, d1),
+        (remote_canister_id, 2, t0, NO_DEADLINE),
+        (remote_canister_id, 3, t1, NO_DEADLINE),
     ] {
         canister_queues
             .push_output_request(
@@ -2176,13 +2156,13 @@ fn time_out_requests_pushes_correct_reject_responses() {
                     receiver: canister_id,
                     sender: own_canister_id,
                     sender_reply_callback: CallbackId::from(callback_id),
-                    payment: Cycles::zero(),
+                    payment: Cycles::from(7_u64),
                     method_name: "No-Op".to_string(),
                     method_payload: vec![],
                     metadata: None,
-                    deadline: NO_DEADLINE,
+                    deadline,
                 }),
-                deadline,
+                time,
             )
             .unwrap();
     }
@@ -2200,10 +2180,9 @@ fn time_out_requests_pushes_correct_reject_responses() {
         }
     };
 
-    let current_time = deadline1 + REQUEST_LIFETIME + Duration::from_secs(1);
+    let current_time = t0 + REQUEST_LIFETIME + Duration::from_secs(1);
     assert_eq!(
         3,
-        // canister_queues.time_out_requests(current_time, &own_canister_id, &local_canisters),
         canister_queues.time_out_messages(current_time, &own_canister_id, &local_canisters),
     );
 
@@ -2212,32 +2191,33 @@ fn time_out_requests_pushes_correct_reject_responses() {
     assert_eq!(1, canister_queues.queue_stats.input_queues_reserved_slots);
     let message_stats = canister_queues.pool.message_stats();
     assert_eq!(3, message_stats.inbound_message_count);
-    assert_eq!(3, message_stats.inbound_guaranteed_response_count);
+    assert_eq!(2, message_stats.inbound_guaranteed_response_count);
     assert_eq!(1, message_stats.outbound_message_count);
 
-    // FIXME
-    // // Explicitly check contents of a reject response.
-    // if let Some(RequestOrResponse::Response(reject_response)) = canister_queues
-    //     .canister_queues
-    //     .get(&remote_canister_id)
-    //     .and_then(|(input_queue, _)| input_queue.peek())
-    // {
-    //     assert_eq!(
-    //         Arc::new(Response {
-    //             originator: own_canister_id,
-    //             respondent: remote_canister_id,
-    //             originator_reply_callback: CallbackId::from(2),
-    //             refund: Cycles::from(7_u64),
-    //             response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
-    //                 RejectCode::SysTransient,
-    //                 "Request timed out.",
-    //                 MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN
-    //             )),
-    //             deadline: NO_DEADLINE,
-    //         }),
-    //         *reject_response,
-    //     );
-    // }
+    // Explicitly check the contents of a reject response.
+    let input_queue_from_remote_canister = &canister_queues
+        .canister_queues
+        .get(&remote_canister_id)
+        .unwrap()
+        .0;
+    assert_eq!(1, input_queue_from_remote_canister.len());
+    let id = input_queue_from_remote_canister.peek().unwrap().id();
+    let reject_response = canister_queues.pool.get(id).unwrap();
+    assert_eq!(
+        RequestOrResponse::from(Response {
+            originator: own_canister_id,
+            respondent: remote_canister_id,
+            originator_reply_callback: CallbackId::from(2),
+            refund: Cycles::from(7_u64),
+            response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
+                RejectCode::SysTransient,
+                "Request timed out.",
+                MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN
+            )),
+            deadline: NO_DEADLINE,
+        }),
+        *reject_response,
+    );
 
     // Check that subnet input schedules contain the relevant canister IDs exactly once.
     assert_eq!(
@@ -2252,10 +2232,9 @@ fn time_out_requests_pushes_correct_reject_responses() {
         VecDeque::from(vec![remote_canister_id]),
     );
 
-    let current_time = deadline2 + REQUEST_LIFETIME + Duration::from_secs(1);
+    let current_time = t1 + REQUEST_LIFETIME + Duration::from_secs(1);
     assert_eq!(
         1,
-        // canister_queues.time_out_requests(current_time, &own_canister_id, &local_canisters),
         canister_queues.time_out_messages(current_time, &own_canister_id, &local_canisters),
     );
 
@@ -2263,7 +2242,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
     assert_eq!(0, canister_queues.queue_stats.input_queues_reserved_slots);
     let message_stats = canister_queues.pool.message_stats();
     assert_eq!(4, message_stats.inbound_message_count);
-    assert_eq!(4, message_stats.inbound_guaranteed_response_count);
+    assert_eq!(3, message_stats.inbound_guaranteed_response_count);
     assert_eq!(0, message_stats.outbound_message_count);
     // Check that timing out twice does not lead to duplicate entries in subnet input schedules.
     assert_eq!(

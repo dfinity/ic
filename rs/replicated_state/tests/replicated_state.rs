@@ -657,7 +657,7 @@ fn insert_bitcoin_send_transaction_reject_response() {
 }
 
 #[test]
-fn time_out_requests_updates_subnet_input_schedules_correctly() {
+fn time_out_messages_updates_subnet_input_schedules_correctly() {
     let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
 
     // Push 3 requests into the canister with id `local_canister_id1`:
@@ -673,7 +673,6 @@ fn time_out_requests_updates_subnet_input_schedules_correctly() {
 
     // Time out everything, then check that subnet input schedules are as expected.
     fixture.state.metadata.batch_time = Time::from_nanos_since_unix_epoch(u64::MAX);
-    // assert_eq!(3, fixture.state.time_out_requests());
     assert_eq!(3, fixture.state.time_out_messages());
 
     assert_eq!(2, fixture.local_subnet_input_schedule(&CANISTER_ID).len());
