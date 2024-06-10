@@ -43,7 +43,7 @@ jobs:
               -o merge_request.draft \
               -o merge_request.title="chore(github-sync-v2): PR#${PR_NUMBER} / ${PR_TITLE}" \
               -o merge_request.description="[GitHub PR ${PR_NUMBER}](${PR_URL}) (branch: ${BRANCH_NAME})" \
-              gitlab "origin/${BRANCH_NAME}:mirroring-v2-${BRANCH_NAME}"
+              gitlab "refs/remotes/origin/${BRANCH_NAME}:refs/heads/mirroring-v2-${BRANCH_NAME}"
 
   push_to_gitlab:
     name: Push To GitLab
