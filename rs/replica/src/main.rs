@@ -256,7 +256,7 @@ fn main() -> io::Result<()> {
                         .with_sampler(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(0.01))
                         .with_resource(Resource::new(vec![KeyValue::new(
                             "service.name",
-                            "Replica Jaeger Service",
+                            "replica",
                         )])),
                 )
                 .with_exporter(span_exporter)

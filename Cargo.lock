@@ -10542,6 +10542,7 @@ dependencies = [
  "ic-types",
  "slog",
  "tokio",
+ "tower-http 0.5.2",
 ]
 
 [[package]]
