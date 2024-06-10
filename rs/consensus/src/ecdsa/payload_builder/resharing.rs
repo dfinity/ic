@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ic_logger::{warn, ReplicaLogger};
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgDealingsContext;
 use ic_types::{
     consensus::idkg::{self, EcdsaBlockReader, HasMasterPublicKeyId, IDkgReshareRequest},
@@ -170,16 +169,7 @@ fn reshare_request_from_dealings_context(
     context: &IDkgDealingsContext,
 ) -> idkg::IDkgReshareRequest {
     idkg::IDkgReshareRequest {
-        key_id: if let MasterPublicKeyId::Ecdsa(key_id) = context.key_id.clone() {
-            Some(key_id)
-        } else {
-            // Schnorr key reshare requests still receive a dummy ecdsa key ID
-            // until we can set the field to None on mainnet.
-            Some(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: String::from("fake_dummy_key"),
-            })
-        },
+        key_id: None,
         master_key_id: context.key_id.clone(),
         receiving_node_ids: context.nodes.iter().copied().collect(),
         registry_version: context.registry_version,
@@ -188,8 +178,6 @@ fn reshare_request_from_dealings_context(
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use super::*;
 
     use assert_matches::assert_matches;
@@ -198,15 +186,15 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{ComputeInitialIDkgDealingsResponse, EcdsaKeyId};
+    use ic_management_canister_types::{ComputeInitialIDkgDealingsResponse, MasterPublicKeyId};
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::consensus::idkg::EcdsaPayload;
 
     use crate::ecdsa::{
         test_utils::{
             create_reshare_request, dealings_context_from_reshare_request,
-            fake_master_public_key_ids_for_all_algorithms, set_up_ecdsa_payload,
-            TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
+            fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+            set_up_ecdsa_payload, TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
         },
         utils::algorithm_for_key_id,
     };
@@ -288,8 +276,7 @@ mod tests {
             assert_eq!(initial_dealings.get(&i).unwrap(), &dealings);
         }
 
-        let fake_key =
-            MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:some_other_key").unwrap());
+        let fake_key = fake_ecdsa_master_public_key_id();
         assert_eq!(
             make_reshare_dealings_response(
                 &create_reshare_request(fake_key, 10, 10),
