@@ -114,7 +114,7 @@ use tokio::{
 };
 use tokio_rustls::TlsConnector;
 use tower::{limit::GlobalConcurrencyLimitLayer, BoxError, Service, ServiceBuilder};
-use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::{limit::RequestBodyLimitLayer, trace::TraceLayer};
 
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
@@ -652,6 +652,7 @@ fn make_router(
 
     final_router.layer(
         ServiceBuilder::new()
+            .layer(TraceLayer::new_for_http())
             .layer(HandleErrorLayer::new(map_box_error_to_response))
             .layer(health_status_refresher.clone())
             .load_shed()

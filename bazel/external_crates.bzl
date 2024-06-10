@@ -1351,6 +1351,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "request-id",
                     "util",
                     "compression-full",
+                    "tracing",
                 ],
             ),
             "tower_governor": crate.spec(
