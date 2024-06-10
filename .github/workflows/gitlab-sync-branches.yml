@@ -35,7 +35,8 @@ jobs:
           COUNT=$(echo "$RESPONSE" | jq '[.workflow_runs[] | select(.head_branch | startswith("gh-readonly-queue/"))] | length')
           echo "Number of workflows in merge queue: $COUNT"
 
-          if [ "$COUNT" -eq 0 ]; then
+          IS_WORKFLOW_DISPATCH=${{ github.event_name == 'workflow_dispatch' }}
+          if [ "$COUNT" -eq 0 ] || [ "$IS_WORKFLOW_DISPATCH" == "true" ]; then
             git fetch origin master mirroring
             git checkout -B mirroring
             git rebase --onto origin/master origin/mirroring
