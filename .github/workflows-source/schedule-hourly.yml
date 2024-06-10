@@ -34,13 +34,6 @@ anchors:
       <<: *image
     timeout-minutes: 120
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
-  dind-large-setup: &dind-large-setup
-    runs-on:
-      labels: dind-runner-large
-    container:
-      <<: *image
-    timeout-minutes: 60
-    if: ${{ vars.RUN_CI == 'true' }}
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -106,8 +99,7 @@ jobs:
 
   bazel-test-coverage:
     name: Bazel Test Coverage
-    <<: *dind-large-setup
-    timeout-minutes: 120
+    <<: *bazel-large-setup
     steps:
       - <<: *before-script
       - <<: *checkout

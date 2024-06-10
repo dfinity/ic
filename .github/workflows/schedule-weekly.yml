@@ -8,7 +8,7 @@ on:
 jobs:
   bazel-build-fuzzers-weekly:
     runs-on:
-      labels: dind-runner-large
+      labels: bazel-runner-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
     timeout-minutes: 60 # 1 hour
