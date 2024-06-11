@@ -847,7 +847,6 @@ impl Blocks {
                 r#"
                 CREATE TABLE IF NOT EXISTS rosetta_blocks (
                     idx INTEGER NOT NULL PRIMARY KEY,
-                    parent_hash BLOB,
                     hash BLOB NOT NULL,
                     timestamp TEXT
                 )
