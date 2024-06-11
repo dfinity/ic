@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 mod database_access {
-    use super::{row_to_block, vec_into_array};
+    use super::{sql_bytes_to_block, vec_into_array};
     use crate::{
         blocks::{BlockStoreError, HashedBlock},
         timestamp_to_iso8601,
@@ -240,7 +240,9 @@ mod database_access {
             .unwrap();
         let mut transactions = stmt
             .query_map(params![block_idx], |row| {
-                row.get(0).and_then(row_to_block).map(|b| b.transaction)
+                row.get(0)
+                    .and_then(sql_bytes_to_block)
+                    .map(|b| b.transaction)
             })
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         match transactions.next() {
@@ -1341,7 +1343,7 @@ impl Blocks {
     }
 }
 
-fn row_to_block(cell: Vec<u8>) -> Result<Block, rusqlite::Error> {
+fn sql_bytes_to_block(cell: Vec<u8>) -> Result<Block, rusqlite::Error> {
     let encoded_block = EncodedBlock::from(cell);
     Block::decode(encoded_block).map_err(|e| {
         rusqlite::Error::FromSqlConversionFailure(
