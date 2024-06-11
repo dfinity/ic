@@ -102,7 +102,7 @@ jobs:
             bazel-targets
       - name: Bazel Clean
         if: always()
-        run: bazel clean --expunge
+        run: bazel clean
   bazel-build-all-config-check:
     runs-on:
       labels: dind-runner-large-p
@@ -161,7 +161,7 @@ jobs:
           RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
       - name: Bazel Clean
         if: always()
-        run: bazel clean --expunge
+        run: bazel clean
   bazel-test-darwin-x86-64:
     name: Bazel Test Darwin x86-64
     timeout-minutes: 120
@@ -277,7 +277,7 @@ jobs:
           BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
       - name: Bazel Clean
         if: always()
-        run: bazel clean --expunge
+        run: bazel clean
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     runs-on:
@@ -322,7 +322,7 @@ jobs:
           BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
       - name: Bazel Clean
         if: always()
-        run: bazel clean --expunge
+        run: bazel clean
   python-ci-tests:
     name: Python CI Tests
     runs-on: ubuntu-latest
