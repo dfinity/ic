@@ -487,8 +487,8 @@ fn validate_reshare_dealings(
     let mut new_reshare_agreement = BTreeMap::new();
     for (request, dealings) in curr_payload.xnet_reshare_agreements.iter() {
         if let idkg::CompletedReshareRequest::Unreported(dealings) = &dealings {
-            if prev_payload.xnet_reshare_agreements.get(request).is_none() {
-                if prev_payload.ongoing_xnet_reshares.get(request).is_none() {
+            if !prev_payload.xnet_reshare_agreements.contains_key(request) {
+                if !prev_payload.ongoing_xnet_reshares.contains_key(request) {
                     return Err(XNetReshareAgreementWithoutRequest(request.clone()).into());
                 }
                 new_reshare_agreement.insert(request.clone(), dealings);
@@ -497,7 +497,7 @@ fn validate_reshare_dealings(
     }
     let mut new_dealings = BTreeMap::new();
     for (request, config) in prev_payload.ongoing_xnet_reshares.iter() {
-        if curr_payload.ongoing_xnet_reshares.get(request).is_none() {
+        if !curr_payload.ongoing_xnet_reshares.contains_key(request) {
             if let Some(response) = new_reshare_agreement.get(request) {
                 use ic_management_canister_types::ComputeInitialEcdsaDealingsResponse;
                 if let ic_types::messages::Payload::Data(data) = &response.payload {
@@ -548,7 +548,7 @@ fn validate_new_signature_agreements(
     for (random_id, completed) in curr_payload.signature_agreements.iter() {
         if let idkg::CompletedSignature::Unreported(response) = completed {
             if let ic_types::messages::Payload::Data(data) = &response.payload {
-                if prev_payload.signature_agreements.get(random_id).is_some() {
+                if prev_payload.signature_agreements.contains_key(random_id) {
                     return Err(
                         InvalidEcdsaPayloadReason::NewSignatureUnexpected(*random_id).into(),
                     );

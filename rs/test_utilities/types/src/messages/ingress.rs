@@ -155,7 +155,7 @@ impl SignedIngressBuilder {
 
     pub fn sign_for_sender(mut self, sender: &Sender) -> Self {
         let pub_key = sender.sender_pubkey_der();
-        self.sender_pubkey = pub_key.clone();
+        self.sender_pubkey.clone_from(&pub_key);
 
         self.update.sender = Blob(
             UserId::from(PrincipalId::new_self_authenticating(&pub_key.unwrap()))

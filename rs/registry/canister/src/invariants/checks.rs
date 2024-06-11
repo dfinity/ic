@@ -958,16 +958,16 @@ mod tests {
             |_, snapshot| {
                 let ck_signing_subnet_list =
                     get_all_chain_key_signing_subnet_list_records(snapshot);
-                assert!(ck_signing_subnet_list.get(&ck_key_id).is_some());
+                assert!(ck_signing_subnet_list.contains_key(&ck_key_id));
             },
         );
 
         let snapshot = registry.take_latest_snapshot();
         let ecdsa_signing_subnet_list = get_all_ecdsa_signing_subnet_list_records(&snapshot);
-        assert!(ecdsa_signing_subnet_list.get(&ecdsa_key_id).is_none());
+        assert!(!ecdsa_signing_subnet_list.contains_key(&ecdsa_key_id));
 
         let ck_signing_subnet_list = get_all_chain_key_signing_subnet_list_records(&snapshot);
-        assert!(ck_signing_subnet_list.get(&ck_key_id).is_none());
+        assert!(!ck_signing_subnet_list.contains_key(&ck_key_id));
     }
 
     /// Check that if an entry is present in the both signing subnet lists, the chain_key one gets overwritten

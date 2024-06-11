@@ -804,11 +804,7 @@ impl WasmtimeInstance {
             (stable_dirty_pages, 0)
         };
 
-        if self
-            .memory_trackers
-            .get(&CanisterMemoryType::Heap)
-            .is_none()
-        {
+        if !self.memory_trackers.contains_key(&CanisterMemoryType::Heap) {
             debug!(
                 self.log,
                 "Memory tracking disabled. Returning empty list of dirty pages"
@@ -866,10 +862,9 @@ impl WasmtimeInstance {
                 .unwrap();
 
             // We don't have a tracker for stable memory.
-            if self
+            if !self
                 .memory_trackers
-                .get(&CanisterMemoryType::Stable)
-                .is_none()
+                .contains_key(&CanisterMemoryType::Stable)
             {
                 return Ok(PageAccessResults {
                     wasm_dirty_pages,

@@ -13,7 +13,6 @@
 //! towards the controller are found in this module.
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -41,14 +40,6 @@ use ic_replicated_state::{EmbedderCache, Global, Memory, PageMap};
 use ic_types::CanisterId;
 
 use crate::dts::{DeterministicTimeSlicingHandler, PausedExecution};
-
-struct ExecutionInstantiateError;
-
-impl Debug for ExecutionInstantiateError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Failed to instantatiate execution.")
-    }
-}
 
 /// A canister execution currently in progress.
 struct Execution {
