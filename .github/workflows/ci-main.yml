@@ -50,15 +50,15 @@ jobs:
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
           if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/cache ]; then
+          if [ -e /__w/cache ] && [ ! -e /cache ]; then
             sudo chown -R 1001:1001 /__w/cache
             sudo ln -s /__w/cache /
           fi
-          if [ -e /__w/var/tmp ]; then
+          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then
             sudo chown -R 1001:1001 /__w/var/tmp
             sudo ln -s /__w/var/tmp /var/tmp
           fi
-          if [ -e /__w/var/sysimage ]; then
+          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then
             sudo chown -R 1001:1001 /__w/var/sysimage
             sudo ln -s /__w/var/sysimage /var/sysimage
           fi
@@ -120,15 +120,15 @@ jobs:
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
           if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/cache ]; then
+          if [ -e /__w/cache ] && [ ! -e /cache ]; then
             sudo chown -R 1001:1001 /__w/cache
             sudo ln -s /__w/cache /
           fi
-          if [ -e /__w/var/tmp ]; then
+          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then
             sudo chown -R 1001:1001 /__w/var/tmp
             sudo ln -s /__w/var/tmp /var/tmp
           fi
-          if [ -e /__w/var/sysimage ]; then
+          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then
             sudo chown -R 1001:1001 /__w/var/sysimage
             sudo ln -s /__w/var/sysimage /var/sysimage
           fi
@@ -176,15 +176,15 @@ jobs:
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
           if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/cache ]; then
+          if [ -e /__w/cache ] && [ ! -e /cache ]; then
             sudo chown -R 1001:1001 /__w/cache
             sudo ln -s /__w/cache /
           fi
-          if [ -e /__w/var/tmp ]; then
+          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then
             sudo chown -R 1001:1001 /__w/var/tmp
             sudo ln -s /__w/var/tmp /var/tmp
           fi
-          if [ -e /__w/var/sysimage ]; then
+          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then
             sudo chown -R 1001:1001 /__w/var/sysimage
             sudo ln -s /__w/var/sysimage /var/sysimage
           fi
@@ -248,15 +248,15 @@ jobs:
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
           if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/cache ]; then
+          if [ -e /__w/cache ] && [ ! -e /cache ]; then
             sudo chown -R 1001:1001 /__w/cache
             sudo ln -s /__w/cache /
           fi
-          if [ -e /__w/var/tmp ]; then
+          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then
             sudo chown -R 1001:1001 /__w/var/tmp
             sudo ln -s /__w/var/tmp /var/tmp
           fi
-          if [ -e /__w/var/sysimage ]; then
+          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then
             sudo chown -R 1001:1001 /__w/var/sysimage
             sudo ln -s /__w/var/sysimage /var/sysimage
           fi
@@ -291,15 +291,15 @@ jobs:
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
           if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/cache ]; then
+          if [ -e /__w/cache ] && [ ! -e /cache ]; then
             sudo chown -R 1001:1001 /__w/cache
             sudo ln -s /__w/cache /
           fi
-          if [ -e /__w/var/tmp ]; then
+          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then
             sudo chown -R 1001:1001 /__w/var/tmp
             sudo ln -s /__w/var/tmp /var/tmp
           fi
-          if [ -e /__w/var/sysimage ]; then
+          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then
             sudo chown -R 1001:1001 /__w/var/sysimage
             sudo ln -s /__w/var/sysimage /var/sysimage
           fi
@@ -331,15 +331,15 @@ jobs:
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
           if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/cache ]; then
+          if [ -e /__w/cache ] && [ ! -e /cache ]; then
             sudo chown -R 1001:1001 /__w/cache
             sudo ln -s /__w/cache /
           fi
-          if [ -e /__w/var/tmp ]; then
+          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then
             sudo chown -R 1001:1001 /__w/var/tmp
             sudo ln -s /__w/var/tmp /var/tmp
           fi
-          if [ -e /__w/var/sysimage ]; then
+          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then
             sudo chown -R 1001:1001 /__w/var/sysimage
             sudo ln -s /__w/var/sysimage /var/sysimage
           fi
@@ -378,15 +378,15 @@ jobs:
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
           if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/cache ]; then
+          if [ -e /__w/cache ] && [ ! -e /cache ]; then
             sudo chown -R 1001:1001 /__w/cache
             sudo ln -s /__w/cache /
           fi
-          if [ -e /__w/var/tmp ]; then
+          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then
             sudo chown -R 1001:1001 /__w/var/tmp
             sudo ln -s /__w/var/tmp /var/tmp
           fi
-          if [ -e /__w/var/sysimage ]; then
+          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then
             sudo chown -R 1001:1001 /__w/var/sysimage
             sudo ln -s /__w/var/sysimage /var/sysimage
           fi
@@ -467,15 +467,15 @@ jobs:
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
           if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/cache ]; then
+          if [ -e /__w/cache ] && [ ! -e /cache ]; then
             sudo chown -R 1001:1001 /__w/cache
             sudo ln -s /__w/cache /
           fi
-          if [ -e /__w/var/tmp ]; then
+          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then
             sudo chown -R 1001:1001 /__w/var/tmp
             sudo ln -s /__w/var/tmp /var/tmp
           fi
-          if [ -e /__w/var/sysimage ]; then
+          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then
             sudo chown -R 1001:1001 /__w/var/sysimage
             sudo ln -s /__w/var/sysimage /var/sysimage
           fi
@@ -519,15 +519,15 @@ jobs:
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
           if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/cache ]; then
+          if [ -e /__w/cache ] && [ ! -e /cache ]; then
             sudo chown -R 1001:1001 /__w/cache
             sudo ln -s /__w/cache /
           fi
-          if [ -e /__w/var/tmp ]; then
+          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then
             sudo chown -R 1001:1001 /__w/var/tmp
             sudo ln -s /__w/var/tmp /var/tmp
           fi
-          if [ -e /__w/var/sysimage ]; then
+          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then
             sudo chown -R 1001:1001 /__w/var/sysimage
             sudo ln -s /__w/var/sysimage /var/sysimage
           fi
@@ -570,15 +570,15 @@ jobs:
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
           if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/cache ]; then
+          if [ -e /__w/cache ] && [ ! -e /cache ]; then
             sudo chown -R 1001:1001 /__w/cache
             sudo ln -s /__w/cache /
           fi
-          if [ -e /__w/var/tmp ]; then
+          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then
             sudo chown -R 1001:1001 /__w/var/tmp
             sudo ln -s /__w/var/tmp /var/tmp
           fi
-          if [ -e /__w/var/sysimage ]; then
+          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then
             sudo chown -R 1001:1001 /__w/var/sysimage
             sudo ln -s /__w/var/sysimage /var/sysimage
           fi
