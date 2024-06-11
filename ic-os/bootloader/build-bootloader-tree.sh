@@ -18,12 +18,14 @@ while getopts "o:t:v:p:x:" OPT; do
     esac
 done
 
-trap 'rm -rf "${TMPDIR}"; sudo podman rm -f "${CONTAINER}"' exit
+trap 'rm -rf "${TMPDIR}"; sudo podman --root /tmp/tmpfs-podman rm -f "${CONTAINER}"' exit
 TMPDIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
+mkdir -p /tmp/tmpfs-podman
+sudo mount -t tmpfs tmpfs-podman "/tmp/tmpfs-podman"
 
 BASE_IMAGE="docker.io/dfinity/ic-build-bazel@sha256:1978886cfda51b09057bffd60f2e5edb588c6c0b74de87696cd4e964335dba87"
 
-sudo podman build --iidfile ${TMPDIR}/iidfile - <<<"
+sudo podman --root /tmp/tmpfs-podman build --iidfile ${TMPDIR}/iidfile - <<<"
     FROM $BASE_IMAGE
     USER root:root
     RUN mkdir -p /build/boot/grub
@@ -41,8 +43,8 @@ sudo podman build --iidfile ${TMPDIR}/iidfile - <<<"
 
 IMAGE=$(cat ${TMPDIR}/iidfile | cut -d':' -f2)
 
-CONTAINER=$(sudo podman run -d "$IMAGE")
+CONTAINER=$(sudo podman --root /tmp/tmpfs-podman run -d "$IMAGE")
 
-sudo podman export "$CONTAINER" | tar -C "$TMPDIR" -x build --strip-components=1
+sudo podman --root /tmp/tmpfs-podman export "$CONTAINER" | tar -C "$TMPDIR" -x build --strip-components=1
 tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMPDIR}" boot
 find "$TMPDIR/boot" -type f -exec sha256sum {} \; | sed "s|$TMPDIR||"
