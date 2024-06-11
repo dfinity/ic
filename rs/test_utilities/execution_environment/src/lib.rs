@@ -15,13 +15,14 @@ use ic_execution_environment::{
     RoundInstructions, RoundLimits,
 };
 use ic_interfaces::execution_environment::{
-    ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
+    ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
+    SubnetAvailableMemory,
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EcdsaKeyId, EmptyBlob,
+    CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
     InstallCodeArgs, InstallCodeArgsV2, LogVisibility, MasterPublicKeyId, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
@@ -133,8 +134,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
     RegistryExecutionSettings {
         max_number_of_canisters: 0x2000,
         provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
-        max_ecdsa_queue_size: 20,
-        quadruples_to_create_in_advance: 5,
+        chain_key_settings: BTreeMap::new(),
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
     }
 }
@@ -1598,6 +1598,7 @@ pub struct ExecutionTestBuilder {
     log: ReplicaLogger,
     caller_canister_id: Option<CanisterId>,
     ecdsa_signature_fee: Option<Cycles>,
+    schnorr_signature_fee: Option<Cycles>,
     idkg_keys_with_signing_enabled: BTreeMap<MasterPublicKeyId, bool>,
     instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
@@ -1634,6 +1635,7 @@ impl Default for ExecutionTestBuilder {
             log: no_op_logger(),
             caller_canister_id: None,
             ecdsa_signature_fee: None,
+            schnorr_signature_fee: None,
             idkg_keys_with_signing_enabled: Default::default(),
             instruction_limit: scheduler_config.max_instructions_per_message,
             slice_instruction_limit: scheduler_config.max_instructions_per_slice,
@@ -1710,20 +1712,16 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_ecdsa_key(mut self, key_id: EcdsaKeyId) -> Self {
-        self.idkg_keys_with_signing_enabled
-            .insert(MasterPublicKeyId::Ecdsa(key_id), true);
-        self
-    }
-
-    pub fn with_disabled_ecdsa_key(mut self, key_id: EcdsaKeyId) -> Self {
-        self.idkg_keys_with_signing_enabled
-            .insert(MasterPublicKeyId::Ecdsa(key_id), false);
-        self
+    pub fn with_schnorr_signature_fee(self, schnorr_signature_fee: u128) -> Self {
+        Self {
+            schnorr_signature_fee: Some(Cycles::new(schnorr_signature_fee)),
+            ..self
+        }
     }
 
     pub fn with_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
-        self.idkg_keys_with_signing_enabled.insert(key_id, true);
+        self.idkg_keys_with_signing_enabled
+            .insert(key_id.clone(), true);
         self
     }
 
@@ -2043,7 +2041,7 @@ impl ExecutionTestBuilder {
         self.build_common(routing_table)
     }
 
-    fn build_common(self, routing_table: Arc<RoutingTable>) -> ExecutionTest {
+    fn build_common(mut self, routing_table: Arc<RoutingTable>) -> ExecutionTest {
         let mut state = ReplicatedState::new(self.own_subnet_id, self.subnet_type);
 
         let mut subnets = vec![self.own_subnet_id, self.nns_subnet_id];
@@ -2073,7 +2071,19 @@ impl ExecutionTestBuilder {
         if let Some(ecdsa_signature_fee) = self.ecdsa_signature_fee {
             config.ecdsa_signature_fee = ecdsa_signature_fee;
         }
+        if let Some(schnorr_signature_fee) = self.schnorr_signature_fee {
+            config.schnorr_signature_fee = schnorr_signature_fee;
+        }
         for (key_id, is_signing_enabled) in &self.idkg_keys_with_signing_enabled {
+            // Populate hte chain key settings
+            self.registry_settings.chain_key_settings.insert(
+                key_id.clone(),
+                ChainKeySettings {
+                    max_queue_size: 20,
+                    pre_signatures_to_create_in_advance: 5,
+                },
+            );
+
             if *is_signing_enabled {
                 state
                     .metadata

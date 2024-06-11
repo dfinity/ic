@@ -221,7 +221,7 @@ impl BlockchainManager {
         locators: Locators,
     ) {
         //If the peer address is not stored in peer_info, then return;
-        if self.peer_info.get(addr).is_none() {
+        if !self.peer_info.contains_key(addr) {
             return;
         }
 

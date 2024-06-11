@@ -108,6 +108,7 @@ def icos_build(
             tags = ["manual"],
         )
 
+    # Extract SElinux file_contexts to use later when building ext4 filesystems
     tar_extract(
         name = "file_contexts",
         src = "rootfs-tree.tar",
@@ -115,31 +116,6 @@ def icos_build(
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual"],
-    )
-
-    # Helpful tool to print a hash of all input component files
-    tree_hash(
-        name = "component-files-hash",
-        src = image_deps["component_files"],
-        tags = ["manual"],
-    )
-
-    native.genrule(
-        name = "echo-component-files-hash",
-        srcs = [
-            ":component-files-hash",
-        ],
-        outs = ["component-files-hash-script"],
-        cmd = """
-        HASH="$(location :component-files-hash)"
-        cat <<EOF > $@
-#!/usr/bin/env bash
-set -euo pipefail
-cat $$HASH
-EOF
-        """,
-        executable = True,
         tags = ["manual"],
     )
 
@@ -293,13 +269,15 @@ EOF
             tags = ["manual"],
         )
 
-    # -------------------- Assemble disk image --------------------
+    # -------------------- Assemble disk partitions ---------------
 
     # Build a list of custom partitions with a function, to allow "injecting" build steps at this point
     if "custom_partitions" not in image_deps:
         custom_partitions = []
     else:
         custom_partitions = image_deps["custom_partitions"]()
+
+    # -------------------- Assemble disk image --------------------
 
     disk_image(
         name = "disk-img.tar",
@@ -505,7 +483,7 @@ EOF
 
     # end if upload_prefix != None
 
-    # -------------------- Vulnerability scanning --------------------
+    # -------------------- Vulnerability Scanning Tool ------------
 
     if vuln_scan:
         native.sh_binary(
@@ -523,6 +501,33 @@ EOF
             },
             tags = ["manual"],
         )
+
+    # -------------------- Tree Hash Tool -------------------------
+
+    # Helpful tool to print a hash of all input component files
+    tree_hash(
+        name = "component-files-hash",
+        src = image_deps["component_files"],
+        tags = ["manual"],
+    )
+
+    native.genrule(
+        name = "echo-component-files-hash",
+        srcs = [
+            ":component-files-hash",
+        ],
+        outs = ["component-files-hash-script"],
+        cmd = """
+        HASH="$(location :component-files-hash)"
+        cat <<EOF > $@
+#!/usr/bin/env bash
+set -euo pipefail
+cat $$HASH
+EOF
+        """,
+        executable = True,
+        tags = ["manual"],
+    )
 
     # -------------------- VM Developer Tools --------------------
 
@@ -551,6 +556,7 @@ EOF
         """,
         executable = True,
         tags = ["manual"],
+        testonly = True,
     )
 
     native.genrule(

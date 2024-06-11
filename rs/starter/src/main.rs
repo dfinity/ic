@@ -604,7 +604,9 @@ impl ValidatedConfig {
         let mut artifact_pool_cfg =
             ArtifactPoolTomlConfig::new(self.artifact_pool_dir.clone(), None);
         // artifact_pool.rs picks "lmdb" if None here
-        artifact_pool_cfg.consensus_pool_backend = self.consensus_pool_backend.clone();
+        artifact_pool_cfg
+            .consensus_pool_backend
+            .clone_from(&self.consensus_pool_backend);
         let artifact_pool = Some(artifact_pool_cfg);
 
         let crypto = Some(CryptoConfig::new(self.crypto_root.clone()));
@@ -646,6 +648,8 @@ impl ValidatedConfig {
             wasm_chunk_store: FlagStatus::Enabled,
             query_stats_aggregation: FlagStatus::Enabled,
             query_stats_epoch_length: 60,
+            ic00_schnorr_public_key: FlagStatus::Enabled,
+            ic00_sign_with_schnorr: FlagStatus::Enabled,
             ..HypervisorConfig::default()
         };
 

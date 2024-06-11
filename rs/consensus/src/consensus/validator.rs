@@ -321,7 +321,6 @@ impl SignatureVerify for CatchUpPackage {
 /// `NotaryIssued` is a trait that exists to deduplicate the validation code of
 /// Notarization, Finalization and the corresponding shares.
 trait NotaryIssued: Sized + HasHeight + std::fmt::Debug {
-    fn block(&self) -> &CryptoHashOf<Block>;
     fn verify_multi_sig_combined(
         crypto: &dyn ConsensusCrypto,
         signed_message: &Signed<Self, MultiSignature<Self>>,
@@ -337,10 +336,6 @@ trait NotaryIssued: Sized + HasHeight + std::fmt::Debug {
 }
 
 impl NotaryIssued for NotarizationContent {
-    fn block(&self) -> &CryptoHashOf<Block> {
-        &self.block
-    }
-
     fn verify_multi_sig_combined(
         crypto: &dyn ConsensusCrypto,
         signed_message: &Signed<Self, MultiSignature<Self>>,
@@ -382,10 +377,6 @@ impl NotaryIssued for NotarizationContent {
 }
 
 impl NotaryIssued for FinalizationContent {
-    fn block(&self) -> &CryptoHashOf<Block> {
-        &self.block
-    }
-
     fn verify_multi_sig_combined(
         crypto: &dyn ConsensusCrypto,
         signed_message: &Signed<Self, MultiSignature<Self>>,
@@ -1654,8 +1645,8 @@ impl Validator {
 #[cfg(test)]
 pub mod test {
     use crate::ecdsa::test_utils::{
-        add_available_quadruple_to_payload, empty_ecdsa_payload, fake_ecdsa_key_id,
-        fake_sign_with_ecdsa_context_with_quadruple, fake_state_with_ecdsa_contexts,
+        add_available_quadruple_to_payload, empty_ecdsa_payload, fake_ecdsa_master_public_key_id,
+        fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
     };
 
     use super::*;
@@ -1900,22 +1891,22 @@ pub mod test {
                 .expect_get_state_hash_at()
                 .return_const(Ok(state_hash.clone()));
 
-            let key_id = fake_ecdsa_key_id();
+            let key_id = fake_ecdsa_master_public_key_id();
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);
             let pre_sig_id2 = PreSigId(2);
             let pre_sig_id3 = PreSigId(3);
 
             let contexts = vec![
-                fake_sign_with_ecdsa_context_with_quadruple(1, key_id.clone(), Some(pre_sig_id1)),
-                fake_sign_with_ecdsa_context_with_quadruple(2, key_id.clone(), None),
-                fake_sign_with_ecdsa_context_with_quadruple(3, key_id.clone(), Some(pre_sig_id3)),
+                fake_signature_request_context_with_pre_sig(1, key_id.clone(), Some(pre_sig_id1)),
+                fake_signature_request_context_with_pre_sig(2, key_id.clone(), None),
+                fake_signature_request_context_with_pre_sig(3, key_id.clone(), Some(pre_sig_id3)),
             ];
 
             state_manager
                 .get_mut()
                 .expect_get_state_at()
-                .return_const(Ok(fake_state_with_ecdsa_contexts(
+                .return_const(Ok(fake_state_with_signature_requests(
                     Height::from(0),
                     contexts.clone(),
                 )

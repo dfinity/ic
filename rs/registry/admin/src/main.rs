@@ -4152,7 +4152,7 @@ impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToDeployHostosT
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
 struct ProposeToAddApiBoundaryNodesCmd {
-    #[clap(long, required = true, alias = "node-id")]
+    #[clap(long, required = true, multiple_values(true), alias = "node-ids")]
     /// The nodes to assign as an API Boundary Node
     nodes: Vec<PrincipalId>,
 
@@ -6294,6 +6294,7 @@ async fn get_node_list_since(
                     *node_map.entry(node_id).or_default() = record;
                 }
                 None => {
+                    #[allow(deprecated)]
                     node_map.remove(&node_id);
                 }
             };
@@ -6306,6 +6307,7 @@ async fn get_node_list_since(
                     *node_operator_map.entry(node_operator_id).or_default() = record;
                 }
                 None => {
+                    #[allow(deprecated)]
                     node_operator_map.remove(&node_operator_id);
                 }
             };

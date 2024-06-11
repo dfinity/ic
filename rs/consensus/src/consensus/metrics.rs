@@ -183,7 +183,7 @@ impl From<&EcdsaPayload> for EcdsaStats {
                     .as_ref()
                     .map(|transcript| &transcript.as_ref().transcript_id);
                 if Some(transcript_id) != current_transcript_id
-                    && payload.idkg_transcripts.get(transcript_id).is_some()
+                    && payload.idkg_transcripts.contains_key(transcript_id)
                 {
                     *key_transcript_created.entry(key_id.clone()).or_default() += 1;
                 }
@@ -891,7 +891,7 @@ impl EcdsaPayloadMetrics {
             payload
                 .key_transcripts
                 .values()
-                .filter(|k| k.key_id.is_some())
+                .filter(|k| k.deprecated_key_id.is_some())
                 .count(),
         );
     }

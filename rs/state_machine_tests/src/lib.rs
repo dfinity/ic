@@ -1,6 +1,5 @@
 use candid::Decode;
 use core::sync::atomic::Ordering;
-use ic00::MasterPublicKeyId;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{
     execution_environment::Config as HypervisorConfig, state_manager::LsmtConfig,
@@ -34,7 +33,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload,
+    self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
 };
 pub use ic_management_canister_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2,
@@ -43,10 +42,9 @@ pub use ic_management_canister_types::{
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_protobuf::registry::crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_protobuf::registry::{
-    crypto::v1::EcdsaSigningSubnetList,
     node::v1::{ConnectionEndpoint, NodeRecord},
     provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
     routing_table::v1::CanisterMigrations as PbCanisterMigrations,
@@ -58,8 +56,8 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::provisional_whitelist::ProvisionalWhitelistRegistry;
 use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_registry_keys::{
-    make_canister_migrations_record_key, make_catch_up_package_contents_key, make_crypto_node_key,
-    make_ecdsa_signing_subnet_list_key, make_node_record_key,
+    make_canister_migrations_record_key, make_catch_up_package_contents_key,
+    make_chain_key_signing_subnet_list_key, make_crypto_node_key, make_node_record_key,
     make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, INITIAL_REGISTRY_VERSION};
@@ -67,7 +65,9 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
     routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, RoutingTable,
 };
-use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{
+    ChainKeyConfig, KeyConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
@@ -236,12 +236,11 @@ fn make_nodes_registry(
         }),
     };
     for key_id in ecdsa_keys {
-        let id = make_ecdsa_signing_subnet_list_key(key_id);
         registry_data_provider
             .add(
-                &id.clone(),
+                &make_chain_key_signing_subnet_list_key(&MasterPublicKeyId::Ecdsa(key_id.clone())),
                 registry_version,
-                Some(EcdsaSigningSubnetList {
+                Some(ChainKeySigningSubnetList {
                     subnets: vec![subnet_id_proto.clone()],
                 }),
             )
@@ -297,10 +296,15 @@ fn make_nodes_registry(
         .with_max_ingress_bytes_per_message(max_ingress_bytes_per_message)
         .with_max_ingress_messages_per_block(max_ingress_messages_per_block)
         .with_max_block_payload_size(max_block_payload_size)
-        .with_ecdsa_config(EcdsaConfig {
-            quadruples_to_create_in_advance: 1,
-            key_ids: ecdsa_keys.to_vec(),
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+        .with_chain_key_config(ChainKeyConfig {
+            key_configs: ecdsa_keys
+                .iter()
+                .map(|ecdsa_key| KeyConfig {
+                    key_id: MasterPublicKeyId::Ecdsa(ecdsa_key.clone()),
+                    pre_signatures_to_create_in_advance: 1,
+                    max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+                })
+                .collect(),
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         })
@@ -624,6 +628,7 @@ pub struct StateMachineBuilder {
     subnet_id: Option<SubnetId>,
     routing_table: RoutingTable,
     use_cost_scaling_flag: bool,
+    enable_canister_snapshots: bool,
     ecdsa_keys: Vec<EcdsaKeyId>,
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
@@ -644,6 +649,7 @@ impl StateMachineBuilder {
             config: None,
             checkpoints_enabled: false,
             subnet_type: SubnetType::System,
+            enable_canister_snapshots: false,
             use_cost_scaling_flag: false,
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             nns_subnet_id: None,
@@ -755,6 +761,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_canister_snapshots(self, enable_canister_snapshots: bool) -> Self {
+        Self {
+            enable_canister_snapshots,
+            ..self
+        }
+    }
+
     pub fn with_ecdsa_key(self, key: EcdsaKeyId) -> Self {
         let mut ecdsa_keys = self.ecdsa_keys;
         ecdsa_keys.push(key);
@@ -819,6 +832,7 @@ impl StateMachineBuilder {
             self.subnet_size,
             self.subnet_id,
             self.use_cost_scaling_flag,
+            self.enable_canister_snapshots,
             self.ecdsa_keys,
             self.features,
             self.runtime.unwrap_or_else(|| {
@@ -1047,6 +1061,7 @@ impl StateMachine {
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
         use_cost_scaling_flag: bool,
+        enable_canister_snapshots: bool,
         ecdsa_keys: Vec<EcdsaKeyId>,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
@@ -1095,6 +1110,10 @@ impl StateMachine {
         if !dts {
             hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;
             hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;
+        }
+
+        if enable_canister_snapshots {
+            hypervisor_config.canister_snapshots = FlagStatus::Enabled;
         }
 
         // We are not interested in ingress signature validation.

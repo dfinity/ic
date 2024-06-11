@@ -27,8 +27,9 @@ idna = "0.3.0"
 instant-acme = "0.3.2"
 leb128 = "0.2.5"
 mockall = { workspace = true }
-opentelemetry = { version = "0.20", features = ["metrics"] }
-opentelemetry-prometheus = "0.13.0"
+opentelemetry = { workspace = true}
+opentelemetry-prometheus = { workspace = true }
+opentelemetry_sdk = { workspace = true}
 pem = "1.1.0"
 prometheus = { workspace = true }
 rcgen = { workspace = true }
@@ -50,3 +51,4 @@ tower = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 trust-dns-resolver = "0.22.0"
+zeroize = { workspace = true }

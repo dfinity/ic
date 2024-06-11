@@ -38,7 +38,7 @@ use tokio::{
     task::JoinSet,
     time::{self, sleep_until, timeout_at, Instant, MissedTickBehavior},
 };
-use tracing::{instrument, span, Instrument, Level};
+use tracing::instrument;
 
 const MIN_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
@@ -303,7 +303,6 @@ where
         if !peer_rx.borrow().is_empty() {
             self.metrics.download_task_restart_after_join_total.inc();
             self.metrics.download_task_started_total.inc();
-            let process_advert_span = span!(Level::INFO, "process_advert");
             self.artifact_processor_tasks.spawn_on(
                 Self::process_advert(
                     self.log.clone(),
@@ -315,8 +314,7 @@ where
                     self.sender.clone(),
                     self.transport.clone(),
                     self.metrics.clone(),
-                )
-                .instrument(process_advert_span),
+                ),
                 &self.rt_handle,
             );
         } else {
@@ -403,7 +401,6 @@ where
                     tx.send_if_modified(|h| h.insert(peer_id));
                     self.active_downloads.insert(id.clone(), tx);
 
-                    let process_advert_span = span!(Level::INFO, "process_advert");
                     self.artifact_processor_tasks.spawn_on(
                         Self::process_advert(
                             self.log.clone(),
@@ -415,8 +412,7 @@ where
                             self.sender.clone(),
                             self.transport.clone(),
                             self.metrics.clone(),
-                        )
-                        .instrument(process_advert_span),
+                        ),
                         &self.rt_handle,
                     );
                 }
@@ -599,6 +595,7 @@ where
     ///
     /// This future waits for all peers that advertise the artifact to delete it.
     /// The artifact is deleted from the unvalidated pool upon completion.
+    #[instrument(skip_all)]
     async fn process_advert(
         log: ReplicaLogger,
         id: Artifact::Id,
@@ -1340,7 +1337,7 @@ mod tests {
         mgr.handle_topology_update();
         assert_eq!(mgr.slot_table.len(), 1);
         assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-        assert!(mgr.slot_table.get(&NODE_2).is_none());
+        assert!(!mgr.slot_table.contains_key(&NODE_2));
         // Remove all nodes.
         pfn_tx
             .send(SubnetTopology::new(
@@ -1351,8 +1348,8 @@ mod tests {
             .unwrap();
         mgr.handle_topology_update();
         assert_eq!(mgr.slot_table.len(), 0);
-        assert!(mgr.slot_table.get(&NODE_1).is_none());
-        assert!(mgr.slot_table.get(&NODE_2).is_none());
+        assert!(!mgr.slot_table.contains_key(&NODE_1));
+        assert!(!mgr.slot_table.contains_key(&NODE_2));
     }
 
     /// Verify that if node leaves subnet all download tasks are informed.

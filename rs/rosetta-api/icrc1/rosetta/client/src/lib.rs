@@ -38,7 +38,7 @@ impl RosettaClient {
         Ok(Self::from_url(url))
     }
 
-    fn url(&self, path: &str) -> Url {
+    pub fn url(&self, path: &str) -> Url {
         self.url
             .join(path)
             .unwrap_or_else(|e| panic!("Failed to join {} with path {}: {}", self.url, path, e))

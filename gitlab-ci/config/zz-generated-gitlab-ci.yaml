@@ -1456,10 +1456,10 @@ build-base-images-ref-update:
           echo "No changes to commit."
           exit 0
       fi
-      git commit -m "Updating container base image refs"
+      git commit -m "Update container base image refs"
       git push \
           -o merge_request.create \
-          -o merge_request.title="Updating container base images refs [$TAG]" \
+          -o merge_request.title="Chore: Update container base images refs [$TAG]" \
           origin "base-image-refs-update-${TAG}" 2>&1 | tee push.info
 build-boundaryos-base:
   artifacts:
@@ -2014,7 +2014,7 @@ default:
     expire_in: 3 days
     when: always
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:550641b3bf3d8b3f6f92860b115b85f922d3e9fe25163fe418780b5e6f609f91
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:6fe77ba609c0810cc5bc1ad06582e8896f6d7e67d6020fa3bbbdf45f0c4b6d68
   interruptible: true
   retry:
     max: 2

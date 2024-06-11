@@ -65,7 +65,7 @@ maplit = "1.0.2"
 mockall = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-serde = "1.0"
+serde = { workspace = true }
 tempfile = { workspace = true }
 
 [features]

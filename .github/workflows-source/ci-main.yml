@@ -37,6 +37,21 @@ env:
 anchors:
   image: &image
     image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
+  dind-small-setup: &dind-small-setup
+    runs-on:
+      labels: dind-runner-small
+    container:
+      <<: *image
+    timeout-minutes: 30
+    if: ${{ vars.RUN_CI == 'true' }}
+  dind-large-setup: &dind-large-setup
+    runs-on:
+      labels: dind-runner-large
+      group: ln1
+    container:
+      <<: *image
+    timeout-minutes: 60
+    if: ${{ vars.RUN_CI == 'true' }}
   bazel-large-setup: &bazel-large-setup
     runs-on:
       labels: dind-runner-large-p
@@ -79,6 +94,7 @@ anchors:
     run: |
       git config --global http.postBuffer 524288000
       git config --global safe.directory '*'
+      if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
       if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
       if [ -e /__w/cache ] && [ ! -e /cache ]; then
@@ -96,15 +112,6 @@ anchors:
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
-  cargo-filters: &cargo-filters
-    uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-    id: filter
-    with:
-      filters: |
-        cargo:
-          - "**/*.rs"
-          - "**/*.toml"
-          - "**/*.lock"
   python-setup: &python-setup
     name: Set up Python
     uses: actions/setup-python@v2
@@ -221,7 +228,7 @@ jobs:
 
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
-    <<: *bazel-small-setup
+    <<: *dind-large-setup
     steps:
       - <<: *before-script
       - <<: *checkout
@@ -237,7 +244,7 @@ jobs:
 
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
-    <<: *bazel-small-setup
+    <<: *dind-large-setup
     steps:
       - <<: *before-script
       - <<: *checkout
@@ -365,39 +372,60 @@ jobs:
 
   cargo-clippy-linux:
     name: Cargo Clippy Linux
-    <<: *bazel-small-setup
+    <<: *dind-large-setup
     steps:
       - <<: *before-script
       - <<: *checkout
-      - <<: *cargo-filters
+      - name: Filter Rust Files [*.{rs,toml,lock}]
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        if : |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'merge_group'
+        with:
+          filters: |
+            cargo:
+              - "**/*.rs"
+              - "**/*.toml"
+              - "**/*.lock"
       - name: Run Cargo Clippy Linux
         id: cargo-clippy-linux
-        if: steps.filter.outputs.cargo == 'true'
+        if: |
+          steps.filter.outputs.cargo == 'true' ||
+          github.event_name == 'schedule' ||
+          github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           set -eExuo pipefail
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
               "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/rust-lint.sh
-      - name: No run
-        if: steps.filter.outputs.cargo == 'false'
-        run: echo "No cargo changes, skipping run"
 
   cargo-build-release-linux:
     name: Cargo Build Release Linux
-    <<: *bazel-small-setup
-    timeout-minutes: 60
+    <<: *dind-large-setup
     steps:
       - <<: *before-script
       - <<: *checkout
-      - <<: *cargo-filters
+      - name: Filter Rust Files [*.{rs,toml,lock}]
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        if : |
+          github.event_name == 'pull_request' ||
+          github.event_name == 'merge_group'
+        with:
+          filters: |
+            cargo:
+              - "**/*.rs"
+              - "**/*.toml"
+              - "**/*.lock"
       - name: Run Cargo Build Release Linux
         id: cargo-build-release-linux
-        if: steps.filter.outputs.cargo == 'true'
+        if: |
+          steps.filter.outputs.cargo == 'true' ||
+          github.event_name == 'schedule' ||
+          github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           set -eExuo pipefail
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
               cargo build --release
-      - name: No run
-        if: steps.filter.outputs.cargo == 'false'
-        run: echo "No cargo changes, skipping run"

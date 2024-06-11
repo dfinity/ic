@@ -215,7 +215,7 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> PoolSection<T>
     for InMemoryPoolSection<T>
 {
     fn contains(&self, msg_id: &ConsensusMessageId) -> bool {
-        self.artifacts.get(msg_id.hash.digest()).is_some()
+        self.artifacts.contains_key(msg_id.hash.digest())
     }
 
     fn get(&self, msg_id: &ConsensusMessageId) -> Option<ConsensusMessage> {

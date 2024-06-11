@@ -16,12 +16,12 @@ pub use types::{
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
 use ic_interfaces_registry::RegistryClient;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, KeyConfig};
 use ic_test_utilities_consensus::make_genesis;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_types::{
@@ -60,14 +60,16 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
         curve: EcdsaCurve::Secp256k1,
         name: "test_key".to_string(),
     };
+
     let subnet_record = SubnetRecordBuilder::from(node_ids)
         .with_dkg_interval_length(19)
-        .with_ecdsa_config(EcdsaConfig {
-            quadruples_to_create_in_advance: 4,
-            key_ids: vec![ecdsa_key_id.clone()],
-            max_queue_size: Some(40),
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
+        .with_chain_key_config(ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone()),
+                pre_signatures_to_create_in_advance: 4,
+                max_queue_size: 40,
+            }],
+            ..ChainKeyConfig::default()
         })
         .build();
     data_provider

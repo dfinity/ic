@@ -456,6 +456,14 @@ pub struct CanisterControllersChange {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterLoadSnapshot {
+    #[prost(uint64, tag = "1")]
+    pub canister_version: u64,
+    #[prost(uint64, tag = "2")]
+    pub taken_at_timestamp: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterChange {
     #[prost(uint64, tag = "1")]
     pub timestamp_nanos: u64,
@@ -463,7 +471,7 @@ pub struct CanisterChange {
     pub canister_version: u64,
     #[prost(oneof = "canister_change::ChangeOrigin", tags = "3, 4")]
     pub change_origin: ::core::option::Option<canister_change::ChangeOrigin>,
-    #[prost(oneof = "canister_change::ChangeDetails", tags = "5, 6, 7, 8")]
+    #[prost(oneof = "canister_change::ChangeDetails", tags = "5, 6, 7, 8, 9")]
     pub change_details: ::core::option::Option<canister_change::ChangeDetails>,
 }
 /// Nested message and enum types in `CanisterChange`.
@@ -487,6 +495,8 @@ pub mod canister_change {
         CanisterCodeDeployment(super::CanisterCodeDeployment),
         #[prost(message, tag = "8")]
         CanisterControllersChange(super::CanisterControllersChange),
+        #[prost(message, tag = "9")]
+        CanisterLoadSnapshot(super::CanisterLoadSnapshot),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -576,8 +586,7 @@ pub struct CanisterStateBits {
     #[prost(uint64, tag = "21")]
     pub interrupted_during_execution: u64,
     #[prost(message, optional, tag = "22")]
-    pub consumed_cycles_since_replica_started:
-        ::core::option::Option<super::super::super::types::v1::NominalCycles>,
+    pub consumed_cycles: ::core::option::Option<super::super::super::types::v1::NominalCycles>,
     #[prost(uint64, tag = "23")]
     pub freeze_threshold: u64,
     #[prost(message, repeated, tag = "25")]
@@ -612,8 +621,7 @@ pub struct CanisterStateBits {
     #[prost(uint64, tag = "34")]
     pub canister_version: u64,
     #[prost(message, repeated, tag = "36")]
-    pub consumed_cycles_since_replica_started_by_use_cases:
-        ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
+    pub consumed_cycles_by_use_cases: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
     #[prost(message, optional, tag = "37")]
     pub canister_history: ::core::option::Option<CanisterHistory>,
     /// Resource reservation cycles.
@@ -646,6 +654,10 @@ pub struct CanisterStateBits {
     /// The next local snapshot ID.
     #[prost(uint64, tag = "46")]
     pub next_snapshot_id: u64,
+    #[prost(int64, tag = "48")]
+    pub priority_credit: i64,
+    #[prost(enumeration = "LongExecutionMode", tag = "49")]
+    pub long_execution_mode: i32,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
@@ -814,6 +826,35 @@ impl LogVisibility {
             "LOG_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
             "LOG_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
             "LOG_VISIBILITY_PUBLIC" => Some(Self::Public),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum LongExecutionMode {
+    Unspecified = 0,
+    Opportunistic = 1,
+    Prioritized = 2,
+}
+impl LongExecutionMode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            LongExecutionMode::Unspecified => "LONG_EXECUTION_MODE_UNSPECIFIED",
+            LongExecutionMode::Opportunistic => "LONG_EXECUTION_MODE_OPPORTUNISTIC",
+            LongExecutionMode::Prioritized => "LONG_EXECUTION_MODE_PRIORITIZED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "LONG_EXECUTION_MODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "LONG_EXECUTION_MODE_OPPORTUNISTIC" => Some(Self::Opportunistic),
+            "LONG_EXECUTION_MODE_PRIORITIZED" => Some(Self::Prioritized),
             _ => None,
         }
     }

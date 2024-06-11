@@ -261,6 +261,11 @@ message CanisterControllersChange {
   repeated types.v1.PrincipalId controllers = 1;
 }
 
+message CanisterLoadSnapshot {
+  uint64 canister_version = 1;
+  uint64 taken_at_timestamp = 2;
+}
+
 message CanisterChange {
   uint64 timestamp_nanos = 1;
   uint64 canister_version = 2;
@@ -273,6 +278,7 @@ message CanisterChange {
     CanisterCodeUninstall canister_code_uninstall = 6;
     CanisterCodeDeployment canister_code_deployment = 7;
     CanisterControllersChange canister_controllers_change = 8;
+    CanisterLoadSnapshot canister_load_snapshot = 9;
   }
 }
 
@@ -319,6 +325,12 @@ message SnapshotId {
   bytes content = 1;
 }
 
+enum LongExecutionMode {
+  LONG_EXECUTION_MODE_UNSPECIFIED = 0;
+  LONG_EXECUTION_MODE_OPPORTUNISTIC = 1;
+  LONG_EXECUTION_MODE_PRIORITIZED = 2;
+}
+
 message CanisterStateBits {
   reserved 1;
   reserved "controller";
@@ -351,7 +363,7 @@ message CanisterStateBits {
   reserved "executed_and_exhausted_its_messages";
   bytes certified_data = 20;
   uint64 interrupted_during_execution = 21;
-  types.v1.NominalCycles consumed_cycles_since_replica_started = 22;
+  types.v1.NominalCycles consumed_cycles = 22;
   uint64 freeze_threshold = 23;
   reserved 24;
   reserved "stable_memory_size";
@@ -377,7 +389,7 @@ message CanisterStateBits {
   // Canister version.
   uint64 canister_version = 34;
   reserved 35;
-  repeated ConsumedCyclesByUseCase consumed_cycles_since_replica_started_by_use_cases = 36;
+  repeated ConsumedCyclesByUseCase consumed_cycles_by_use_cases = 36;
   CanisterHistory canister_history = 37;
   // Resource reservation cycles.
   state.queues.v1.Cycles reserved_balance = 38;
@@ -401,4 +413,6 @@ message CanisterStateBits {
   // The next local snapshot ID.
   uint64 next_snapshot_id = 46;
   reserved 47;
+  int64 priority_credit = 48;
+  LongExecutionMode long_execution_mode = 49;
 }

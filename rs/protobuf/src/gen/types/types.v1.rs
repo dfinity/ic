@@ -429,7 +429,7 @@ pub mod consensus_response {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaKeyTranscript {
     #[prost(message, optional, tag = "1")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+    pub deprecated_key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
     #[prost(message, optional, tag = "2")]
     pub current: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
     #[prost(message, optional, tag = "3")]
@@ -482,7 +482,7 @@ pub struct PreSignatureInProgress {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct OngoingXnetReshare {
     #[prost(message, optional, tag = "1")]
-    pub request: ::core::option::Option<EcdsaReshareRequest>,
+    pub request: ::core::option::Option<IDkgReshareRequest>,
     #[prost(message, optional, tag = "2")]
     pub transcript: ::core::option::Option<ReshareOfUnmaskedParams>,
 }
@@ -490,7 +490,7 @@ pub struct OngoingXnetReshare {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct XnetReshareAgreement {
     #[prost(message, optional, tag = "1")]
-    pub request: ::core::option::Option<EcdsaReshareRequest>,
+    pub request: ::core::option::Option<IDkgReshareRequest>,
     #[prost(message, optional, tag = "4")]
     pub initial_dealings: ::core::option::Option<ConsensusResponse>,
 }
@@ -717,7 +717,7 @@ pub struct CompletedSignature {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaReshareRequest {
+pub struct IDkgReshareRequest {
     #[prost(message, repeated, tag = "2")]
     pub receiving_node_ids: ::prost::alloc::vec::Vec<NodeId>,
     #[prost(uint64, tag = "3")]

@@ -2360,9 +2360,9 @@ impl FarmBaseUrl {
     }
 }
 
-impl ToString for FarmBaseUrl {
-    fn to_string(&self) -> String {
-        self.url.to_string()
+impl std::fmt::Display for FarmBaseUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.url)
     }
 }
 
