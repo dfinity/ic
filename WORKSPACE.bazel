@@ -319,6 +319,7 @@ lmdb_repository()
 
 lmdb_rkv_repository(name = "lmdb_rkv")
 
+# Idea let's vendor this and see if it then still rebuilds.
 http_archive(
     name = "pigz",
     build_file_content = """
