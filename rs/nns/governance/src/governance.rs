@@ -4390,7 +4390,9 @@ impl Governance {
                     self.set_proposal_execution_status(pid, validate_result);
                     return;
                 }
-                self.heap_data.default_followees = proposal.default_followees.clone();
+                self.heap_data
+                    .default_followees
+                    .clone_from(&proposal.default_followees);
                 self.set_proposal_execution_status(pid, Ok(()));
             }
             Action::RewardNodeProviders(proposal) => {
@@ -6932,7 +6934,7 @@ impl Governance {
                     "Error while loading previously computed `initial_neurons_fund_participation` \
                     for proposal {:?}: {}",
                     request.nns_proposal_id,
-                    err.to_string(),
+                    err,
                 ),
                 )
             })?;
@@ -6949,8 +6951,7 @@ impl Governance {
                     format!(
                         "Error while loading previously computed `neurons_fund_refunds` \
                         for proposal {:?}: {}",
-                        request.nns_proposal_id,
-                        err.to_string(),
+                        request.nns_proposal_id, err,
                     ),
                 )
             })?;
@@ -6969,7 +6970,7 @@ impl Governance {
                         "Error while loading previously computed `final_neurons_fund_participation` \
                         for proposal {:?}: {}",
                         request.nns_proposal_id,
-                        err.to_string(),
+                        err,
                     ),
                 )
             })?;

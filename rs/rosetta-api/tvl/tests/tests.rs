@@ -135,10 +135,7 @@ fn test_multiple_currencies() {
             "{}",
             currency.to_string()
         );
-        println!(
-            "Setting exchange rate for currency: {}",
-            currency.to_string()
-        );
+        println!("Setting exchange rate for currency: {}", currency);
 
         let rate: u64 = rng.gen_range(50_000_000_u64..200_000_000_u64);
         tvl.set_exchange_rate(SetExchangeRate {

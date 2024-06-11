@@ -206,7 +206,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub(crate) mod complaints;
-#[cfg(feature = "malicious_code")]
+#[cfg(any(feature = "malicious_code", test))]
 pub mod malicious_pre_signer;
 pub(crate) mod payload_builder;
 pub(crate) mod payload_verifier;

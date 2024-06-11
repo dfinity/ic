@@ -1337,7 +1337,7 @@ mod tests {
         mgr.handle_topology_update();
         assert_eq!(mgr.slot_table.len(), 1);
         assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-        assert!(mgr.slot_table.get(&NODE_2).is_none());
+        assert!(!mgr.slot_table.contains_key(&NODE_2));
         // Remove all nodes.
         pfn_tx
             .send(SubnetTopology::new(
@@ -1348,8 +1348,8 @@ mod tests {
             .unwrap();
         mgr.handle_topology_update();
         assert_eq!(mgr.slot_table.len(), 0);
-        assert!(mgr.slot_table.get(&NODE_1).is_none());
-        assert!(mgr.slot_table.get(&NODE_2).is_none());
+        assert!(!mgr.slot_table.contains_key(&NODE_1));
+        assert!(!mgr.slot_table.contains_key(&NODE_2));
     }
 
     /// Verify that if node leaves subnet all download tasks are informed.

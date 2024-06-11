@@ -291,7 +291,7 @@ fn should_not_create_initial_dealings_with_wrong_dealers() {
     );
 
     // Node 100 is not part of the dealers
-    assert!(dealers.get(&ordered_node_id(100)).is_none());
+    assert!(!dealers.contains(&ordered_node_id(100)));
 
     let sufficient_dealers = set_of_nodes(&[1, 2, 3, 4, 100]);
     let sufficient_len = sufficient_dealers.len();
