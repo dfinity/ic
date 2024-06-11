@@ -9,7 +9,8 @@ use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, EccPoint};
 fuzz_target!(|data: &[u8]| {
     for curve_type in EccCurveType::all() {
         if let Ok(point) = EccPoint::deserialize(curve_type, data) {
-            assert_eq!(point.serialize(), data);
+            let re_ser = point.serialize();
+            assert_eq!(re_ser, data);
         }
     }
 });

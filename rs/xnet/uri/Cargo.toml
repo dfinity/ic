@@ -7,5 +7,5 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-http = "0.2.5"
+http = "0.2.12"
 ic-types = { path = "../../types/types" }

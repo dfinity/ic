@@ -80,8 +80,8 @@ use ic_protobuf::registry::{
 };
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{
-    crypto::CryptoRegistry, deserialize_registry_value, ecdsa_keys::EcdsaKeysRegistry,
-    hostos_version::HostosRegistry, subnet::SubnetRegistry,
+    chain_keys::ChainKeysRegistry, crypto::CryptoRegistry, deserialize_registry_value,
+    ecdsa_keys::EcdsaKeysRegistry, hostos_version::HostosRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
     get_node_operator_id_from_record_key, get_node_record_node_id, is_node_operator_record_key,
@@ -114,7 +114,7 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
-    p2p, CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
+    CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use indexmap::IndexMap;
 use itertools::izip;
@@ -249,7 +249,6 @@ impl ProposeToCreateSubnetCmd {
     fn apply_defaults_for_unset_fields(&mut self) {
         let subnet_config =
             subnet_configuration::get_default_config_params(self.subnet_type, self.node_ids.len());
-        let gossip_config = p2p::build_default_gossip_config();
         // set subnet params
         self.max_ingress_bytes_per_message
             .get_or_insert(subnet_config.max_ingress_bytes_per_message);
@@ -266,22 +265,14 @@ impl ProposeToCreateSubnetCmd {
         self.dkg_interval_length
             .get_or_insert(subnet_config.dkg_interval_length.get());
         // set gossip params
-        self.gossip_max_artifact_streams_per_peer
-            .get_or_insert(gossip_config.max_artifact_streams_per_peer);
-        self.gossip_max_chunk_wait_ms
-            .get_or_insert(gossip_config.max_chunk_wait_ms);
-        self.gossip_max_duplicity
-            .get_or_insert(gossip_config.max_duplicity);
-        self.gossip_max_chunk_size
-            .get_or_insert(gossip_config.max_chunk_size);
-        self.gossip_receive_check_cache_size
-            .get_or_insert(gossip_config.receive_check_cache_size);
-        self.gossip_pfn_evaluation_period_ms
-            .get_or_insert(gossip_config.pfn_evaluation_period_ms);
-        self.gossip_registry_poll_period_ms
-            .get_or_insert(gossip_config.registry_poll_period_ms);
-        self.gossip_retransmission_request_ms
-            .get_or_insert(gossip_config.retransmission_request_ms);
+        self.gossip_max_artifact_streams_per_peer.get_or_insert(0);
+        self.gossip_max_chunk_wait_ms.get_or_insert(0);
+        self.gossip_max_duplicity.get_or_insert(0);
+        self.gossip_max_chunk_size.get_or_insert(0);
+        self.gossip_receive_check_cache_size.get_or_insert(0);
+        self.gossip_pfn_evaluation_period_ms.get_or_insert(0);
+        self.gossip_registry_poll_period_ms.get_or_insert(0);
+        self.gossip_retransmission_request_ms.get_or_insert(0);
     }
 }
 
@@ -444,6 +435,8 @@ enum SubCommand {
     ProposeToInsertSnsWasmUpgradePathEntries(ProposeToInsertSnsWasmUpgradePathEntriesCmd),
     /// Get the ECDSA key ids and their signing subnets
     GetEcdsaSigningSubnets,
+    /// Get the Master public key ids and their signing subnets
+    GetChainKeySigningSubnets,
     /// Propose to update the list of SNS Subnet IDs that SNS-WASM deploys SNS instances to
     ProposeToUpdateSnsSubnetIdsInSnsWasm(ProposeToUpdateSnsSubnetIdsInSnsWasmCmd),
     /// Propose to update the list of Principals that are allowed to deploy SNS instances
@@ -4159,7 +4152,7 @@ impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToDeployHostosT
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
 struct ProposeToAddApiBoundaryNodesCmd {
-    #[clap(long, required = true, alias = "node-id")]
+    #[clap(long, required = true, multiple_values(true), alias = "node-ids")]
     /// The nodes to assign as an API Boundary Node
     nodes: Vec<PrincipalId>,
 
@@ -4509,6 +4502,7 @@ async fn main() {
                 "Subcommand OpenSnsTokenSwap is obsolete; please use \
                 ProposeToCreateServiceNervousSystem instead"
             ),
+            SubCommand::ProposeToRentSubnet(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -4786,6 +4780,26 @@ async fn main() {
 
             let signing_subnets = registry_client
                 .get_ecdsa_signing_subnets(registry_client.get_latest_version())
+                .unwrap()
+                .unwrap();
+            for (key_id, subnets) in signing_subnets.iter() {
+                println!("KeyId {:?}: {:?}", key_id, subnets);
+            }
+        }
+        SubCommand::GetChainKeySigningSubnets => {
+            let registry_client = make_registry_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+            );
+
+            // maximum number of retries, let the user ctrl+c if necessary
+            registry_client
+                .try_polling_latest_version(usize::MAX)
+                .unwrap();
+
+            let signing_subnets = registry_client
+                .get_chain_key_signing_subnets(registry_client.get_latest_version())
                 .unwrap()
                 .unwrap();
             for (key_id, subnets) in signing_subnets.iter() {
@@ -6280,6 +6294,7 @@ async fn get_node_list_since(
                     *node_map.entry(node_id).or_default() = record;
                 }
                 None => {
+                    #[allow(deprecated)]
                     node_map.remove(&node_id);
                 }
             };
@@ -6292,6 +6307,7 @@ async fn get_node_list_since(
                     *node_operator_map.entry(node_operator_id).or_default() = record;
                 }
                 None => {
+                    #[allow(deprecated)]
                     node_operator_map.remove(&node_operator_id);
                 }
             };

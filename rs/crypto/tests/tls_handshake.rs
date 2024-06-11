@@ -3,13 +3,11 @@ use assert_matches::assert_matches;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_test_utils_tls::registry::TlsRegistry;
 use ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys;
-use ic_crypto_test_utils_tls::test_client::{Client, ClientBuilder};
-use ic_crypto_test_utils_tls::test_server::{Server, ServerBuilder};
+use ic_crypto_test_utils_tls::test_client::{Client, ClientBuilder, TlsTestClientRunError};
+use ic_crypto_test_utils_tls::test_server::{Server, ServerBuilder, TlsTestServerRunError};
 use ic_crypto_test_utils_tls::CipherSuite;
 use ic_crypto_test_utils_tls::TlsVersion;
-use ic_crypto_tls_interfaces::{
-    AuthenticatedPeer, TlsClientHandshakeError, TlsServerHandshakeError,
-};
+use ic_crypto_tls_interfaces::AuthenticatedPeer;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -253,7 +251,7 @@ mod server {
         let (_client_result, server_result) = new_tokio_runtime()
             .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
-        assert_malformed_self_cert_server_error_containing(&server_result, "Error parsing DER");
+        assert_handshake_server_error_containing(&server_result, "Error parsing DER");
     }
 
     #[test]
@@ -733,46 +731,6 @@ mod server {
     }
 }
 
-mod server_without_client_auth {
-    use super::*;
-    use crate::{matching_server_and_client, CLIENT_ID_1, SERVER_ID_1};
-    use ic_crypto_test_utils_tls::custom_client::CustomClient;
-
-    #[test]
-    fn should_perform_tls_handshake_without_server_asking_for_cert() {
-        let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
-        registry
-            .add_cert(SERVER_ID_1, server.cert())
-            .add_cert(CLIENT_ID_1, client.cert())
-            .update();
-
-        let (client_result, server_result) = new_tokio_runtime().block_on(async {
-            tokio::join!(client.run(server.port()), server.run_without_client_auth())
-        });
-
-        assert!(client_result.is_ok());
-        assert!(server_result.is_ok());
-    }
-
-    #[test]
-    fn should_perform_tls_handshake_without_client_cert_and_without_server_asking_for_cert() {
-        let registry = TlsRegistry::new();
-        let server = Server::builder(SERVER_ID_1)
-            .add_allowed_client(CLIENT_ID_1)
-            .build(registry.get());
-        let client = CustomClient::builder()
-            .without_client_auth()
-            .build(server.cert());
-        registry.add_cert(SERVER_ID_1, server.cert()).update();
-
-        let (_, server_result) = new_tokio_runtime().block_on(async {
-            tokio::join!(client.run(server.port()), server.run_without_client_auth())
-        });
-
-        assert!(server_result.is_ok());
-    }
-}
-
 mod client {
     use super::*;
     use ic_crypto_test_utils_tls::custom_server::CustomServer;
@@ -791,7 +749,7 @@ mod client {
 
         let result = new_tokio_runtime().block_on(client.run(server.port()));
 
-        assert_malformed_self_cert_client_error_containing(&result, "Error parsing DER");
+        assert_handshake_client_error_containing(&result, "Error parsing DER");
     }
 
     #[test]
@@ -1355,59 +1313,23 @@ fn malformed_cert() -> X509PublicKeyCert {
 }
 
 fn assert_handshake_server_error_containing(
-    server_result: &Result<AuthenticatedPeer, TlsServerHandshakeError>,
+    server_result: &Result<AuthenticatedPeer, TlsTestServerRunError>,
     error_substring: &str,
 ) {
     assert_matches!(
         server_result,
-        Err(TlsServerHandshakeError::HandshakeError { internal_error })
-            if internal_error.contains(error_substring)
+        Err(TlsTestServerRunError(error)) if error.contains(error_substring)
     );
 }
 
-fn assert_malformed_self_cert_client_error_containing(
-    client_result: &Result<(), TlsClientHandshakeError>,
-    error_substring: &str,
-) {
-    let error = client_result.clone().unwrap_err();
-    if let TlsClientHandshakeError::MalformedSelfCertificate { internal_error } = error {
-        assert_string_contains(internal_error, error_substring);
-    } else {
-        panic!("expected MalformedSelfCertificate error, got {}", error)
-    }
-}
-
 fn assert_handshake_client_error_containing(
-    client_result: &Result<(), TlsClientHandshakeError>,
+    client_result: &Result<(), TlsTestClientRunError>,
     error_substring: &str,
 ) {
-    let error = client_result.clone().unwrap_err();
-    if let TlsClientHandshakeError::HandshakeError { internal_error } = error {
-        assert_string_contains(internal_error, error_substring);
-    } else {
-        panic!("expected HandshakeError error, got {}", error)
-    }
-}
-
-fn assert_malformed_self_cert_server_error_containing(
-    server_result: &Result<AuthenticatedPeer, TlsServerHandshakeError>,
-    error_substring: &str,
-) {
-    let error = server_result.clone().unwrap_err();
-    if let TlsServerHandshakeError::MalformedSelfCertificate { internal_error } = error {
-        assert_string_contains(internal_error, error_substring);
-    } else {
-        panic!("expected MalformedSelfCertificate error, got {}", error)
-    }
-}
-
-fn assert_string_contains(internal_error: String, expected_substring: &str) {
-    assert!(
-        internal_error.contains(expected_substring),
-        "expected internal error \"{}\" to contain \"{}\"",
-        internal_error,
-        expected_substring
-    )
+    assert_matches!(
+        client_result,
+        Err(TlsTestClientRunError(error)) if error.contains(error_substring)
+    );
 }
 
 fn assert_peer_node_eq(peer: AuthenticatedPeer, node_id: NodeId) {

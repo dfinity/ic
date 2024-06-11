@@ -19,7 +19,7 @@ use ic_nns_test_utils::{
 
 #[test]
 fn test_reset_root_with_governance_proposal() {
-    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
@@ -27,7 +27,7 @@ fn test_reset_root_with_governance_proposal() {
     let root_version = state_machine.module_hash(ROOT_CANISTER_ID).unwrap();
 
     // Execute proposal
-    let new_root = modify_wasm_bytes(&build_root_wasm().bytes(), "yolo");
+    let new_root = modify_wasm_bytes(&build_root_wasm().bytes(), 42);
 
     let new_root_version = Sha256::hash(&new_root);
 
@@ -49,7 +49,7 @@ fn test_reset_root_with_governance_proposal() {
     );
 
     let response = nns_governance_make_proposal(
-        &mut state_machine,
+        &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         neuron_id,
         &proposal,
@@ -63,7 +63,7 @@ fn test_reset_root_with_governance_proposal() {
         ),
     };
 
-    nns_wait_for_proposal_execution(&mut state_machine, proposal_id.id);
+    nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
 
     // Assert the root canister was upgraded
     assert_eq!(
@@ -82,7 +82,7 @@ fn test_other_controllers_cannot_reset_root() {
     let root_version = state_machine.module_hash(ROOT_CANISTER_ID).unwrap();
 
     // Execute proposal
-    let new_root = modify_wasm_bytes(&build_root_wasm().bytes(), "yolo");
+    let new_root = modify_wasm_bytes(&build_root_wasm().bytes(), 42);
 
     let new_root_version = Sha256::hash(&new_root);
 
@@ -104,6 +104,6 @@ fn test_other_controllers_cannot_reset_root() {
 
     assert!(response.is_err());
     assert!(response.unwrap_err().contains(
-        "Error from Canister rno2w-sqaaa-aaaaa-aaacq-cai: Canister trapped explicitly: assertion failed at lifeline.mo",
+        "Error from Canister rno2w-sqaaa-aaaaa-aaacq-cai: Canister called `ic0.trap` with message: assertion failed at lifeline.mo",
     ));
 }

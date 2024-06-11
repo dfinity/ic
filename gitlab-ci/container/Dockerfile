@@ -3,7 +3,7 @@
 FROM ubuntu@sha256:48c35f3de33487442af224ed4aabac19fd9bfbd91ee90e9471d412706b20ba73
 ENV TZ=UTC
 
-COPY --chown=0700 ./gitlab-ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
+COPY --chmod=0700 ./gitlab-ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
 
 ARG PACKAGE_FILE=gitlab-ci/container/files/packages.common
 COPY ${PACKAGE_FILE} /tmp/
@@ -109,7 +109,7 @@ ENV PYTHONPATH=/ic/gitlab-ci/src:/ic/gitlab-ci/src/dependencies:$PYTHONPATH
 RUN cd /tmp/bazel && bazel version
 
 # Add Rust/Cargo support
-ARG RUST_VERSION=1.77.1
+ARG RUST_VERSION=1.78.0
 RUN curl --fail https://sh.rustup.rs -sSf \
     | sh -s -- -y --default-toolchain ${RUST_VERSION}-x86_64-unknown-linux-gnu --no-modify-path && \
     rustup default ${RUST_VERSION}-x86_64-unknown-linux-gnu && \

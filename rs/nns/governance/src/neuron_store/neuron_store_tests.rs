@@ -9,6 +9,8 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use maplit::{btreemap, hashmap, hashset};
 use num_traits::bounds::LowerBounded;
 
+static CREATED_TIMESTAMP_SECONDS: u64 = 123_456_789;
+
 fn simple_neuron_builder(id: u64) -> NeuronBuilder {
     // Make sure different neurons have different accounts.
     let mut account = vec![0; 32];
@@ -24,7 +26,7 @@ fn simple_neuron_builder(id: u64) -> NeuronBuilder {
             dissolve_delay_seconds: 1,
             aging_since_timestamp_seconds: 0,
         },
-        123_456_789,
+        CREATED_TIMESTAMP_SECONDS,
     )
 }
 

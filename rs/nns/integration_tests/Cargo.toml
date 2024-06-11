@@ -59,7 +59,6 @@ lifeline = { path = "../handlers/lifeline/impl" }
 prometheus-parse = "0.2.4"
 prost = { workspace = true }
 strum = { workspace = true }
-tempfile = "3.1.0"
 
 # Dependencies required to compile the tests.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -95,7 +94,7 @@ ic-xrc-types = "1.0.0"
 maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
 phantom_newtype = { path = "../../phantom_newtype" }
-rand = "0.8"
+rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 rustc-hash = "1.1.0"
 serde = { workspace = true }
@@ -104,3 +103,6 @@ tokio = { workspace = true }
 wat = "1.0.52"
 assert_matches = { workspace = true }
 xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
+
+[dev-dependencies]
+ic-nns-test-utils-golden-nns-state = { path = "../test_utils/golden_nns_state" }

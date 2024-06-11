@@ -21,7 +21,7 @@ hyper = { version = "0.14.18", features = ["client", "tcp", "http1", "http2"] }
 hyper-rustls = { workspace = true }
 itertools = { workspace = true }
 prost = { workspace = true }
-rustls = { workspace = true }
+rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 tokio = { workspace = true }
@@ -37,6 +37,6 @@ ic-crypto-test-utils-tls = { path = "../crypto/test_utils/tls" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-validator = { path = "../validator" }
-rand = "0.8"
-rand_chacha = "0.3"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 tokio-test = "0.4.0"

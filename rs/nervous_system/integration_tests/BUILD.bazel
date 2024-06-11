@@ -162,6 +162,7 @@ DEV_ENV = {
 
 rust_library(
     name = "nervous_system_integration_tests",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_nervous_system_integration_tests",

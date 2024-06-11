@@ -67,6 +67,7 @@ pub mod artifact;
 pub mod artifact_kind;
 pub mod batch;
 pub mod canister_http;
+pub mod canister_log;
 pub mod consensus;
 pub mod crypto;
 pub mod funds;
@@ -77,7 +78,6 @@ pub mod malicious_flags;
 pub mod messages;
 pub mod methods;
 pub mod nominal_cycles;
-pub mod p2p;
 pub mod registry;
 pub mod replica_config;
 pub mod replica_version;
@@ -89,22 +89,25 @@ pub mod xnet;
 #[cfg(test)]
 pub mod exhaustive;
 
+pub use crate::canister_log::{CanisterLog, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE};
 pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
 pub use funds::*;
 pub use ic_base_types::{
     subnet_id_into_protobuf, subnet_id_try_from_protobuf, CanisterId, CanisterIdBlobParseError,
-    NodeId, NodeTag, NumBytes, PrincipalId, PrincipalIdBlobParseError, PrincipalIdParseError,
-    RegistryVersion, SnapshotId, SubnetId,
+    NodeId, NodeTag, NumBytes, NumOsPages, PrincipalId, PrincipalIdBlobParseError,
+    PrincipalIdParseError, RegistryVersion, SnapshotId, SubnetId,
 };
 pub use ic_crypto_internal_types::NodeIndex;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::state::canister_state_bits::v1 as pb_state_bits;
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, Id};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
 use std::sync::Arc;
+use strum::EnumIter;
 
 pub struct UserTag {}
 /// An end-user's [`PrincipalId`].
@@ -197,10 +200,6 @@ pub type CryptoHashOfPartialState = crypto::CryptoHashOf<CanonicalPartialStateTa
 pub enum CanonicalStateTag {}
 /// A cryptographic hash of a full canonical replicated state at some height.
 pub type CryptoHashOfState = crypto::CryptoHashOf<CanonicalStateTag>;
-
-pub enum NumPagesTag {}
-/// A number of OS-sized pages.
-pub type NumPages = AmountOf<NumPagesTag, u64>;
 
 /// `AccumulatedPriority` is a part of the SchedulerState. It is the value by
 /// which we prioritize canisters for execution. It is reset to 0 in the round
@@ -366,13 +365,30 @@ impl CanisterTimer {
     }
 }
 
+impl From<pb_state_bits::LongExecutionMode> for LongExecutionMode {
+    fn from(val: pb_state_bits::LongExecutionMode) -> Self {
+        match val {
+            pb_state_bits::LongExecutionMode::Unspecified
+            | pb_state_bits::LongExecutionMode::Opportunistic => LongExecutionMode::Opportunistic,
+            pb_state_bits::LongExecutionMode::Prioritized => LongExecutionMode::Prioritized,
+        }
+    }
+}
+
+impl From<LongExecutionMode> for pb_state_bits::LongExecutionMode {
+    fn from(val: LongExecutionMode) -> Self {
+        match val {
+            LongExecutionMode::Opportunistic => pb_state_bits::LongExecutionMode::Opportunistic,
+            LongExecutionMode::Prioritized => pb_state_bits::LongExecutionMode::Prioritized,
+        }
+    }
+}
+
 /// Represents scheduling strategy for Canisters with long execution in progress.
 /// All long execution start in the Opportunistic mode, and then the scheduler
 /// prioritizes top `long_execution_cores` some of them. This is to enforce FIFO
 /// behavior, and guarantee the progress for long executions.
-#[derive(
-    Clone, Copy, Debug, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize, Hash, Default,
-)]
+#[derive(Clone, Copy, Debug, EnumIter, Eq, PartialEq, PartialOrd, Ord, Default)]
 pub enum LongExecutionMode {
     /// The long execution might be opportunistically scheduled on the new execution cores,
     /// so its progress depends on the number of new messages to execute.

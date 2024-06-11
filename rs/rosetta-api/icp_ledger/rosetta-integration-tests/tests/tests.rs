@@ -258,7 +258,7 @@ where
         // with an error `Error { code: 700, message: "Internal server error",
         // description: None, retriable: false, details: Some({"error_message":
         // String("Blockchain is empty")}) }` while then fails the test.
-        // The following code waits until network status doesn't return that error anymore.
+        // The following code waits until network status doesn't return that error anymore or a maximum number of retries have been attempted.
         let mut retries = 100;
         while retries > 0 {
             match rosetta_client.network_status(network.clone()).await {
@@ -282,7 +282,7 @@ where
         env.pocket_ic
     });
 
-    pocket_ic.make_deterministic();
+    pocket_ic.stop_live();
 }
 
 #[test]

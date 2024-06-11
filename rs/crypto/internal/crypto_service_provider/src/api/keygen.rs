@@ -1,73 +1,8 @@
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 
-use super::super::types::{CspPop, CspPublicKey};
-use crate::vault::api::{
-    CspBasicSignatureKeygenError, CspMultiSignatureKeygenError, CspPublicKeyStoreError,
-    CspTlsKeygenError, ValidatePksAndSksError,
-};
+use crate::vault::api::{CspPublicKeyStoreError, ValidatePksAndSksError};
 use crate::{ExternalPublicKeys, PksAndSksContainsErrors};
-use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::CurrentNodePublicKeys;
-use ic_types::NodeId;
-
-/// A trait that can be used to generate cryptographic key pairs
-pub trait CspKeyGenerator {
-    /// Generate a node signing public/private key pair.
-    ///
-    /// # Returns
-    /// The public key of the keypair
-    /// # Errors
-    /// * [`CryptoError::InternalError`] if there is an internal
-    ///   error (e.g., the public key in the public key store is already set).
-    /// * [`CryptoError::TransientInternalError`] if there is a transient
-    ///   internal error, e.g., an IO error when writing a key to disk, or an
-    ///   RPC error when calling the CSP vault.
-    /// # Panics
-    /// If there already exists a secret key in the store for the secret key ID
-    /// derived from the public key. This error most likely indicates a bad
-    /// randomness source.
-    fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
-
-    /// Generates a committee signing public/private key pair.
-    ///
-    /// # Returns
-    /// The public key and the proof of possession (PoP) of the keypair
-    ///
-    /// # Errors
-    /// * [`CryptoError::InternalError`] if there is an internal
-    ///   error (e.g., the public key in the public key store is already set).
-    /// * [`CryptoError::TransientInternalError`] if there is a transient
-    ///   internal error, e.g,. an IO error when writing a key to disk, or an
-    ///   RPC error when calling the CSP vault.
-    ///
-    /// # Panics
-    /// If there already exists a secret key in the store for the secret key ID
-    /// derived from the public key. This error most likely indicates a bad
-    /// randomness source.
-    fn gen_committee_signing_key_pair(
-        &self,
-    ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError>;
-
-    /// Generates TLS key material for node with ID `node_id`.
-    ///
-    /// The secret key is stored in the key store and used to create a
-    /// self-signed X.509 public key certificate with
-    /// * a random serial,
-    /// * the common name of both subject and issuer being the `ToString` form
-    ///   of the given `node_id`,
-    /// * validity starting 2 minutes before the time of calling this method, and
-    /// * no well-defined certificate expiration date (a `notAfter` value set to the
-    ///   `GeneralizedTime` value of `99991231235959Z` as specified according to
-    ///   section 4.1.2.5 in RFC 5280).
-    ///
-    /// # Returns
-    /// The public key certificate.
-    ///
-    /// # Errors
-    /// * if a malformed X509 certificate is generated
-    /// * if this function is called more than once
-    fn gen_tls_key_pair(&self, node_id: NodeId) -> Result<TlsPublicKeyCert, CspTlsKeygenError>;
-}
 
 /// A trait that allows simultaneously checking the public and secret key stores for the
 /// availability of a key.

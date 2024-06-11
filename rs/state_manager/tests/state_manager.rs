@@ -2130,7 +2130,7 @@ fn assert_no_remaining_chunks(metrics: &MetricsRegistry) {
 // from a state sync artifact ID and then starts the state sync with the same ID.
 // It should only be called when the state manager does not have the state at the height
 // and there is no ongoing state sync.
-// For more complex testing scenarios, use `fetch_state` and `start_state_sync` separately with proper arguments.
+// For more complex testing scenarios, use `fetch_state` and `maybe_start_state_sync` separately with proper arguments.
 fn set_fetch_state_and_start_start_sync(
     state_manager: &Arc<StateManagerImpl>,
     state_sync: &StateSync,
@@ -2142,7 +2142,7 @@ fn set_fetch_state_and_start_start_sync(
         Height::new(499),
     );
     state_sync
-        .start_state_sync(id)
+        .maybe_start_state_sync(id)
         .expect("failed to start state sync")
 }
 
@@ -2183,7 +2183,9 @@ fn can_do_simple_state_sync_transfer() {
 
             let mut tip = dst_state_manager.take_tip().1;
             // Because `take_tip()` modifies the `prev_state_hash`, we change it back to compare the rest of state.
-            tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
+            tip.metadata
+                .prev_state_hash
+                .clone_from(&state.metadata.prev_state_hash);
             assert_eq!(*state.as_ref(), tip);
             assert_eq!(vec![height(1)], heights_to_certify(&*dst_state_manager));
 
@@ -2232,7 +2234,7 @@ fn test_start_and_cancel_state_sync() {
 
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             // the dst state manager is not requested to download any state.
-            assert!(dst_state_sync.start_state_sync(&id1).is_none());
+            assert!(dst_state_sync.maybe_start_state_sync(&id1).is_none());
 
             // Request fetching of state @1.
             dst_state_manager.fetch_state(height(1), hash1, Height::new(499));
@@ -2244,7 +2246,7 @@ fn test_start_and_cancel_state_sync() {
             wait_for_checkpoint(&*dst_state_manager, height(1));
 
             // the dst state manager won't fetch any state which it has reached.
-            assert!(dst_state_sync.start_state_sync(&id1).is_none());
+            assert!(dst_state_sync.maybe_start_state_sync(&id1).is_none());
 
             // Request fetching of state @2.
             dst_state_manager.fetch_state(height(2), hash2.clone(), Height::new(499));
@@ -2254,39 +2256,43 @@ fn test_start_and_cancel_state_sync() {
                 height: height(2),
                 hash: CryptoHash(vec![0; 32]),
             };
-            assert!(dst_state_sync.start_state_sync(&malicious_id).is_none());
+            assert!(dst_state_sync
+                .maybe_start_state_sync(&malicious_id)
+                .is_none());
 
             // the dst state manager won't fetch the state with a mismatched height.
             let malicious_id = StateSyncArtifactId {
                 height: height(100),
                 hash: hash2.get(),
             };
-            assert!(dst_state_sync.start_state_sync(&malicious_id).is_none());
+            assert!(dst_state_sync
+                .maybe_start_state_sync(&malicious_id)
+                .is_none());
 
             // starting state sync for state @2 should succeed with the correct artifact ID.
             let chunkable = dst_state_sync
-                .start_state_sync(&id2)
+                .maybe_start_state_sync(&id2)
                 .expect("failed to start state sync");
 
             // a new state sync won't be started if there is already an ongoing one no matter whether they are in the same height or not.
-            assert!(dst_state_sync.start_state_sync(&id2).is_none());
+            assert!(dst_state_sync.maybe_start_state_sync(&id2).is_none());
 
             // Request fetching of state @3.
             dst_state_manager.fetch_state(height(3), hash3, Height::new(499));
             // a new state sync won't be started if there is already an ongoing one no matter whether they are in the same height or not.
-            assert!(dst_state_sync.start_state_sync(&id3).is_none());
+            assert!(dst_state_sync.maybe_start_state_sync(&id3).is_none());
 
             // When `EXTRA_CHECKPOINTS_TO_KEEP` is set as 0, we should cancel an ongoing state sync if requested to fetch a newer state.
-            assert!(dst_state_sync.should_cancel(&id2));
+            assert!(dst_state_sync.cancel_if_running(&id2));
             drop(chunkable);
 
             // starting state sync for state @3 should succeed after the old one is cancelled.
             let mut chunkable = dst_state_sync
-                .start_state_sync(&id3)
+                .maybe_start_state_sync(&id3)
                 .expect("failed to start state sync");
             // The dst state manager has not reached the state @3 yet. It is not requested to fetch a newer state either.
             // We should not cancel this ongoing state sync for state @3.
-            assert!(!dst_state_sync.should_cancel(&id3));
+            assert!(!dst_state_sync.cancel_if_running(&id3));
 
             let msg = src_state_sync
                 .get(&id3)
@@ -2297,7 +2303,7 @@ fn test_start_and_cancel_state_sync() {
             let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit, false);
             assert_matches!(completion, Ok(false), "Unexpectedly completed state sync");
             // The state sync is not finished yet. We should not cancel this ongoing state sync for state @3.
-            assert!(!dst_state_sync.should_cancel(&id3));
+            assert!(!dst_state_sync.cancel_if_running(&id3));
 
             pipe_state_sync(msg, chunkable);
             let recovered_state = dst_state_manager
@@ -2310,7 +2316,9 @@ fn test_start_and_cancel_state_sync() {
 
             let mut tip = dst_state_manager.take_tip().1;
             // Because `take_tip()` modifies the `prev_state_hash`, we change it back to compare the rest of state.
-            tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
+            tip.metadata
+                .prev_state_hash
+                .clone_from(&state.metadata.prev_state_hash);
             assert_eq!(*state.as_ref(), tip);
             assert_eq!(
                 vec![height(1), height(3)],
@@ -3071,7 +3079,9 @@ fn can_state_sync_based_on_old_checkpoint() {
             let mut tip = dst_state_manager.take_tip().1;
             let state = expected_state.take();
             // Because `take_tip()` modifies the `prev_state_hash`, we change it back to compare the rest of state.
-            tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
+            tip.metadata
+                .prev_state_hash
+                .clone_from(&state.metadata.prev_state_hash);
             assert_eq!(tip, *state.as_ref());
 
             assert_no_remaining_chunks(dst_metrics);
@@ -3282,7 +3292,9 @@ fn can_recover_from_corruption_on_state_sync() {
             let mut tip = dst_state_manager.take_tip().1;
             let state = expected_state.take();
             // Because `take_tip()` modifies the `prev_state_hash`, we change it back to compare the rest of state.
-            tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
+            tip.metadata
+                .prev_state_hash
+                .clone_from(&state.metadata.prev_state_hash);
             assert_eq!(tip, *state.as_ref());
 
             assert_no_remaining_chunks(dst_metrics);
@@ -3799,7 +3811,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
                 nodes: node_public_keys.keys().cloned().collect(),
                 subnet_type: SubnetType::System,
                 subnet_features: SubnetFeatures::default(),
-                ecdsa_keys_held: BTreeSet::new(),
+                idkg_keys_held: BTreeSet::new(),
             },
         );
 
@@ -4901,6 +4913,7 @@ fn can_reset_stable_memory() {
 #[test]
 fn can_reset_wasm_chunk_store() {
     state_manager_test(|metrics, state_manager| {
+        use ic_replicated_state::canister_state::system_state::wasm_chunk_store::DEFAULT_MAX_SIZE;
         let (_height, mut state) = state_manager.take_tip();
 
         // One canister with some data.
@@ -4935,8 +4948,9 @@ fn can_reset_wasm_chunk_store() {
 
         // Wipe data and write different data.
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
-        // Chunk size does not matter for this test, as we interact with the `PageMap` directly.
-        canister_state.system_state.wasm_chunk_store = WasmChunkStore::new_for_testing(42.into());
+        // Chunk size must be default because we cannot deserialize the value properly.
+        canister_state.system_state.wasm_chunk_store =
+            WasmChunkStore::new_for_testing(DEFAULT_MAX_SIZE);
         canister_state
             .system_state
             .wasm_chunk_store
@@ -4997,7 +5011,8 @@ fn can_reset_wasm_chunk_store() {
         );
 
         // Wipe data completely.
-        canister_state.system_state.wasm_chunk_store = WasmChunkStore::new_for_testing(42.into());
+        canister_state.system_state.wasm_chunk_store =
+            WasmChunkStore::new_for_testing(DEFAULT_MAX_SIZE);
 
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
 
@@ -5261,7 +5276,10 @@ fn can_recover_ingress_history() {
 
         state_manager.commit_and_certify(state.clone(), height(2), CertificationScope::Full);
         let (_height, state2) = state_manager.take_tip();
-        state.metadata.prev_state_hash = state2.metadata.prev_state_hash.clone();
+        state
+            .metadata
+            .prev_state_hash
+            .clone_from(&state2.metadata.prev_state_hash);
         assert_eq!(state2, state);
     });
 }

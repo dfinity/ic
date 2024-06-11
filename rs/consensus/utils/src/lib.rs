@@ -1,7 +1,7 @@
 //! Consensus utility functions
 use crate::{crypto::Aggregate, membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::{
-    consensus::{PayloadTransientError, PayloadValidationError},
+    consensus::{PayloadValidationError, PayloadValidationFailure},
     consensus_pool::ConsensusPoolCache,
     time_source::TimeSource,
     validation::ValidationError,
@@ -555,14 +555,14 @@ pub fn get_subnet_record(
         Ok(Some(record)) => Ok(record),
         Ok(None) => {
             warn!(logger, "Subnet id {:?} not found in registry", subnet_id);
-            Err(ValidationError::Transient(
-                PayloadTransientError::SubnetNotFound(subnet_id),
+            Err(ValidationError::ValidationFailed(
+                PayloadValidationFailure::SubnetNotFound(subnet_id),
             ))
         }
         Err(err) => {
             warn!(logger, "Failed to get subnet record in block_maker");
-            Err(ValidationError::Transient(
-                PayloadTransientError::RegistryUnavailable(err),
+            Err(ValidationError::ValidationFailed(
+                PayloadValidationFailure::RegistryUnavailable(err),
             ))
         }
     }
@@ -575,11 +575,11 @@ pub fn get_oldest_ecdsa_state_registry_version(
     state: &ReplicatedState,
 ) -> Option<RegistryVersion> {
     state
-        .sign_with_ecdsa_contexts()
+        .signature_request_contexts()
         .values()
-        .flat_map(|context| context.matched_quadruple.as_ref())
-        .flat_map(|(quadruple_id, _)| ecdsa.available_pre_signatures.get(quadruple_id))
-        .flat_map(|quadruple| quadruple.get_refs())
+        .flat_map(|context| context.matched_pre_signature.as_ref())
+        .flat_map(|(pre_sig_id, _)| ecdsa.available_pre_signatures.get(pre_sig_id))
+        .flat_map(|pre_signature| pre_signature.get_refs())
         .flat_map(|transcript_ref| ecdsa.idkg_transcripts.get(&transcript_ref.transcript_id))
         .map(|transcript| transcript.registry_version)
         .min()
@@ -592,7 +592,7 @@ mod tests {
 
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
-    use ic_management_canister_types::EcdsaKeyId;
+    use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_state::ReplicatedStateBuilder;
@@ -603,7 +603,7 @@ mod tests {
     use ic_types::{
         consensus::idkg::{
             common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef, EcdsaKeyTranscript,
-            KeyTranscriptCreation, MaskedTranscript, QuadrupleId, UnmaskedTranscript,
+            KeyTranscriptCreation, MaskedTranscript, PreSigId, UnmaskedTranscript,
         },
         crypto::{
             canister_threshold_sig::idkg::{
@@ -784,7 +784,7 @@ mod tests {
             Height::new(0),
             subnet_test_id(0),
             vec![EcdsaKeyTranscript::new(
-                EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()),
                 KeyTranscriptCreation::Begin,
             )],
         )
@@ -834,14 +834,14 @@ mod tests {
         }
     }
 
-    fn fake_context(quadruple_id: Option<QuadrupleId>) -> SignWithEcdsaContext {
+    fn fake_context(pre_signature_id: Option<PreSigId>) -> SignWithEcdsaContext {
         SignWithEcdsaContext {
             request: RequestBuilder::new().build(),
             key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
             message_hash: [0; 32],
             derivation_path: vec![],
             pseudo_random_id: [0; 32],
-            matched_quadruple: quadruple_id.map(|qid| (qid, Height::from(0))),
+            matched_quadruple: pre_signature_id.map(|qid| (qid, Height::from(0))),
             nonce: None,
             batch_time: UNIX_EPOCH,
         }
@@ -878,10 +878,9 @@ mod tests {
                     .idkg_transcripts
                     .insert(r.transcript_id, fake_transcript(r.transcript_id, rv));
             }
-            ecdsa.available_pre_signatures.insert(
-                QuadrupleId::new(i as u64),
-                PreSignatureRef::Ecdsa(quadruple),
-            );
+            ecdsa
+                .available_pre_signatures
+                .insert(PreSigId(i as u64), PreSignatureRef::Ecdsa(quadruple));
         }
         ecdsa
     }
@@ -921,7 +920,7 @@ mod tests {
                 };
                 let t_id = quad.lambda_masked_ref.as_ref().transcript_id;
                 let transcript = ecdsa.idkg_transcripts.get(&t_id).unwrap();
-                (transcript.registry_version.get() >= 3).then_some(id.clone())
+                (transcript.registry_version.get() >= 3).then_some(*id)
             })
             .map(fake_context)
             .collect();

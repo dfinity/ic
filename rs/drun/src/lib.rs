@@ -225,7 +225,7 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
         None,
         ic_types::malicious_flags::MaliciousFlags::default(),
     ));
-    let (_, ingress_history_writer, ingress_hist_reader, query_handler, _, scheduler) =
+    let (_, ingress_history_writer, ingress_hist_reader, query_handler, scheduler) =
         ExecutionServices::setup_execution(
             log.clone().into(),
             &metrics_registry,
@@ -368,8 +368,8 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             ..BatchMessages::default()
         },
         randomness: Randomness::from(get_random_seed()),
-        ecdsa_subnet_public_keys: BTreeMap::new(),
-        ecdsa_quadruple_ids: BTreeMap::new(),
+        idkg_subnet_public_keys: BTreeMap::new(),
+        idkg_pre_signature_ids: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: time::current_time(),
         consensus_responses: vec![],

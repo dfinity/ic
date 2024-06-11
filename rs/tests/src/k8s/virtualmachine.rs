@@ -51,6 +51,10 @@ spec:
           interfaces:
           - name: default
             passt: {}
+            ports:
+            - port: 22
+            - port: 8332
+            - port: 18444
         resources:
           requests:
             memory: {memory}Ki
@@ -147,9 +151,11 @@ spec:
               - port: 4444
               - port: 7070
               - port: 8080
+              - port: 8332
               - port: 9090
               - port: 9091
               - port: 9100
+              - port: 18444
               - port: 19100
               - port: 19531
         resources:
@@ -215,6 +221,8 @@ enum Action {
     #[strum(serialize = "stop")]
     Stop,
     Delete,
+    #[strum(serialize = "stop")]
+    Destroy,
 }
 
 pub async fn start_vm(name: &str) -> Result<String> {
@@ -233,22 +241,36 @@ pub async fn delete_vm(name: &str) -> Result<String> {
     action_vm(name, Action::Delete).await
 }
 
+pub async fn destroy_vm(name: &str) -> Result<String> {
+    action_vm(name, Action::Destroy).await
+}
+
 async fn action_vm(name: &str, action: Action) -> Result<String> {
     let client = Client::try_default().await?;
 
     Ok((|| async {
         client
             .request_text(match action {
-                Action::Start | Action::Stop | Action::Restart => http::Request::builder()
-                    .method("PUT")
-                    .uri(format!(
-                        "/apis/subresources.kubevirt.io/v1/namespaces/{}/virtualmachines/{}/{}",
-                        *TNET_NAMESPACE,
-                        name,
-                        action.as_ref(),
-                    ))
-                    .body("{}".as_bytes().to_vec())
-                    .unwrap(),
+                Action::Start | Action::Stop | Action::Restart | Action::Destroy => {
+                    http::Request::builder()
+                        .method("PUT")
+                        .uri(format!(
+                            "/apis/subresources.kubevirt.io/v1/namespaces/{}/virtualmachines/{}/{}",
+                            *TNET_NAMESPACE,
+                            name,
+                            action.as_ref(),
+                        ))
+                        .body(
+                            (if matches!(action, Action::Destroy) {
+                                "{\"gracePeriod\": 0}"
+                            } else {
+                                "{}"
+                            })
+                            .as_bytes()
+                            .to_vec(),
+                        )
+                        .unwrap()
+                }
                 Action::Delete => http::Request::builder()
                     .method("DELETE")
                     .uri(format!(

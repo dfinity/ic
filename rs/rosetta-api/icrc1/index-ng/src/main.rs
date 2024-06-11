@@ -11,9 +11,10 @@ use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc1::{Block, Operation};
 use ic_icrc1_index_ng::{
     FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
-    GetAccountTransactionsResult, GetBlocksMethod, IndexArg, ListSubaccountsArgs, Log, LogEntry,
-    Status, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    GetAccountTransactionsResult, GetBlocksMethod, IndexArg, InitArg, ListSubaccountsArgs, Log,
+    LogEntry, Status, TransactionWithId, UpgradeArg, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
+use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
@@ -55,7 +56,7 @@ const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(2);
 const ACCOUNT_BLOCK_IDS_MEMORY_ID: MemoryId = MemoryId::new(3);
 const ACCOUNT_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
-const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(1);
+const DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_secs(1);
 
 #[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
@@ -130,6 +131,18 @@ struct State {
 
     /// This fee is used if no fee nor effetive_fee is found in Approve blocks.
     pub last_fee: Option<Tokens>,
+
+    /// The interval for retrieving blocks from the ledger and archive(s) for (re)building the
+    /// index. Lower values will result in a more responsive UI, but higher costs due to increased
+    /// cycle burn for the index, ledger and archive(s).
+    retrieve_blocks_from_ledger_interval: Option<Duration>,
+}
+
+impl State {
+    pub fn retrieve_blocks_from_ledger_interval(&self) -> Duration {
+        self.retrieve_blocks_from_ledger_interval
+            .unwrap_or(DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL)
+    }
 }
 
 // NOTE: the default configuration is dysfunctional, but it's convenient to have
@@ -143,6 +156,7 @@ impl Default for State {
             last_wait_time: Duration::from_secs(0),
             fee_collectors: Default::default(),
             last_fee: None,
+            retrieve_blocks_from_ledger_interval: None,
         }
     }
 }
@@ -284,18 +298,25 @@ fn balance_key(account: Account) -> (AccountDataType, (Blob<29>, [u8; 32])) {
 #[init]
 #[candid_method(init)]
 fn init(index_arg: Option<IndexArg>) {
-    let init_arg = match index_arg {
+    let InitArg {
+        ledger_id,
+        retrieve_blocks_from_ledger_interval_seconds,
+    } = match index_arg {
         Some(IndexArg::Init(arg)) => arg,
         _ => trap("Index initialization must take in input an InitArg argument"),
     };
 
     // stable memory initialization
     mutate_state(|state| {
-        state.ledger_id = init_arg.ledger_id;
+        state.ledger_id = ledger_id;
+        state.retrieve_blocks_from_ledger_interval =
+            retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs);
     });
 
     // set the first build_index to be called after init
-    set_build_index_timer(DEFAULT_MAX_WAIT_TIME);
+    set_build_index_timer(with_state(|state| {
+        state.retrieve_blocks_from_ledger_interval()
+    }));
 }
 
 // The part of the legacy index (//rs/rosetta-api/icrc1/index) state
@@ -328,24 +349,33 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
     }
 
     match index_arg {
-        Some(IndexArg::Upgrade(arg)) => {
-            if let Some(ledger_id) = arg.ledger_id {
-                log!(
-                    P1,
-                    "Found ledger_id in the upgrade arguments. ledger-id: {}",
-                    ledger_id
-                );
-                mutate_state(|state| {
-                    state.ledger_id = ledger_id;
-                });
-            }
+        Some(IndexArg::Upgrade(upgrade)) => {
+            log!(P1, "Possible upgrade configuration changes: {:#?}", upgrade,);
+
+            let UpgradeArg {
+                ledger_id,
+                retrieve_blocks_from_ledger_interval_seconds,
+            } = upgrade;
+
+            mutate_state(|state| {
+                if let Some(new_value) = ledger_id {
+                    state.ledger_id = new_value;
+                }
+
+                if let Some(new_value) = retrieve_blocks_from_ledger_interval_seconds {
+                    state.retrieve_blocks_from_ledger_interval =
+                        Some(Duration::from_secs(new_value));
+                }
+            });
         }
         Some(IndexArg::Init(..)) => trap("Index upgrade argument cannot be of variant Init"),
         _ => (),
     };
 
     // set the first build_index to be called after init
-    set_build_index_timer(DEFAULT_MAX_WAIT_TIME);
+    set_build_index_timer(with_state(|state| {
+        state.retrieve_blocks_from_ledger_interval()
+    }));
 }
 
 async fn get_supported_standards_from_ledger() -> Vec<String> {
@@ -535,11 +565,13 @@ pub async fn build_index() -> Option<()> {
         GetBlocksMethod::GetBlocks => fetch_blocks_via_get_blocks().await?,
         GetBlocksMethod::ICRC3GetBlocks => fetch_blocks_via_icrc3().await?,
     };
+    let retrieve_blocks_from_ledger_interval =
+        with_state(|state| state.retrieve_blocks_from_ledger_interval());
     log!(
         P1,
         "Indexed: {} waiting : {:?}",
         num_indexed,
-        DEFAULT_MAX_WAIT_TIME
+        retrieve_blocks_from_ledger_interval
     );
     Some(())
 }
@@ -1076,13 +1108,18 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "index_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::api::stable::stable64_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "index_stable_memory_bytes",
-        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
+        (ic_cdk::api::stable::stable64_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister.",
+    )?;
+    w.encode_gauge(
+        "index_total_memory_bytes",
+        total_memory_size_bytes() as f64,
+        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
     )?;
 
     let cycle_balance = ic_cdk::api::canister_balance128() as f64;

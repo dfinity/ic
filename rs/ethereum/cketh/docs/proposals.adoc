@@ -7,3 +7,8 @@
 . https://dashboard.internetcomputer.org/proposal/126397[126397]: upgrade ckETH ledger canister
 . https://dashboard.internetcomputer.org/proposal/128083[128083]: upgrade ckETH minter canister
 . https://dashboard.internetcomputer.org/proposal/128365[128365]: upgrade ckETH minter canister
+. https://dashboard.internetcomputer.org/proposal/129688[129688]: install the ckERC20 ledger suite orchestrator
+. https://dashboard.internetcomputer.org/proposal/129689[129689]: upgrade ckETH minter canister to support ckERC20
+. https://dashboard.internetcomputer.org/proposal/129750[129750]: upgrade the ckERC20 ledger suite orchestrator to add ckUSDC
+. https://dashboard.internetcomputer.org/proposal/130341[130341]: upgrade the ckETH minter canister
+. https://dashboard.internetcomputer.org/proposal/130342[130342]: upgrade the ckERC20 ledger suite orchestrator

@@ -24,21 +24,23 @@ pub fn test(env: TestEnv) {
     let mut ledger_balances = HashMap::new();
 
     // Create neurons.
-    let one_year_from_now = 60 * 60 * 24 * 365
-        + std::time::SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+    let now = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let one_year_from_now = 60 * 60 * 24 * 365 + now;
 
     let mut neurons = TestNeurons::new(2000, &mut ledger_balances);
 
     let neuron1 = neurons.create(|neuron| {
-        neuron.dissolve_state = Some(DissolveState::DissolveDelaySeconds(one_year_from_now))
+        neuron.dissolve_state = Some(DissolveState::DissolveDelaySeconds(one_year_from_now));
+        neuron.aging_since_timestamp_seconds = now;
     });
     let neuron2 = neurons.create(|neuron| {
-        neuron.dissolve_state = Some(DissolveState::DissolveDelaySeconds(one_year_from_now))
+        neuron.dissolve_state = Some(DissolveState::DissolveDelaySeconds(one_year_from_now));
+        neuron.aging_since_timestamp_seconds = now;
     });
-    let neuron3 = neurons.create(|neuron| neuron.dissolve_state = None);
+    let neuron3 = neurons.create(|_| {});
 
     // Create Rosetta and ledger clients.
     let neurons = neurons.get_neurons();

@@ -10,7 +10,7 @@ pub fn corrupt_dealing(
     dealing: &IDkgDealingInternal,
     corruption_targets: &[NodeIndex],
     seed: Seed,
-) -> ThresholdEcdsaResult<IDkgDealingInternal> {
+) -> CanisterThresholdResult<IDkgDealingInternal> {
     let curve_type = dealing.commitment.curve_type();
 
     let rng = &mut seed.into_rng();
@@ -76,7 +76,7 @@ impl ComplaintCorrupter {
     pub fn clone_and_corrupt_complaint(
         &self,
         complaint: &IDkgComplaintInternal,
-    ) -> Result<IDkgComplaintInternal, ThresholdEcdsaError> {
+    ) -> Result<IDkgComplaintInternal, CanisterThresholdError> {
         match self {
             Self::CorruptZkProof => Self::corrupt_complaint_zk_proof(complaint),
             Self::CorruptSharedSecret => Self::corrupt_complaint_shared_secret(complaint),
@@ -85,7 +85,7 @@ impl ComplaintCorrupter {
 
     fn corrupt_complaint_zk_proof(
         complaint: &IDkgComplaintInternal,
-    ) -> ThresholdEcdsaResult<IDkgComplaintInternal> {
+    ) -> CanisterThresholdResult<IDkgComplaintInternal> {
         let curve_type = complaint.proof.challenge.curve_type();
 
         // corrupt challenge and response
@@ -107,7 +107,7 @@ impl ComplaintCorrupter {
 
     fn corrupt_complaint_shared_secret(
         complaint: &IDkgComplaintInternal,
-    ) -> ThresholdEcdsaResult<IDkgComplaintInternal> {
+    ) -> CanisterThresholdResult<IDkgComplaintInternal> {
         // double `shared_secret` which likely invalides it
         let corrupted_shared_secret = complaint.shared_secret.mul_by_node_index_vartime(1u32)?;
 
@@ -123,7 +123,7 @@ impl ComplaintCorrupter {
 ///
 /// This is only intended for testing and should not be called in
 /// production code.
-pub fn corrupt_opening(opening: &CommitmentOpening) -> ThresholdEcdsaResult<CommitmentOpening> {
+pub fn corrupt_opening(opening: &CommitmentOpening) -> CanisterThresholdResult<CommitmentOpening> {
     let corrupted_opening: CommitmentOpening = match &opening {
         CommitmentOpening::Simple(x) => {
             let corrupted_x = x.add(&EccScalar::one(x.curve_type()))?;

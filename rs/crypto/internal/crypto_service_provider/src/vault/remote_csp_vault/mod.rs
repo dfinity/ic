@@ -180,6 +180,7 @@ pub trait TarpcCspVault {
 
     // Corresponds to `IDkgProtocolCspVault.idkg_load_transcript`
     async fn idkg_load_transcript(
+        algorithm_id: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         context_data: ByteBuf,
         receiver_index: NodeIndex,
@@ -190,6 +191,7 @@ pub trait TarpcCspVault {
     // Corresponds to `IDkgProtocolCspVault.idkg_load_transcript_with_openings`
     #[allow(clippy::too_many_arguments)]
     async fn idkg_load_transcript_with_openings(
+        alg: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
         context_data: ByteBuf,
@@ -209,6 +211,7 @@ pub trait TarpcCspVault {
 
     // Corresponds to `IDkgProtocolCspVault.idkg_open_dealing`
     async fn idkg_open_dealing(
+        alg: AlgorithmId,
         dealing: BatchSignedIDkgDealing,
         dealer_index: NodeIndex,
         context_data: ByteBuf,

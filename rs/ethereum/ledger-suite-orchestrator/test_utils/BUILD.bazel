@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "test_utils",
+    testonly = True,
     srcs = glob(
         ["src/**/*.rs"],
     ),
@@ -19,7 +20,11 @@ rust_library(
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:assert_matches",
         "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
         "@crate_index//:proptest",
     ],
 )

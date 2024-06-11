@@ -49,6 +49,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:flate2",
     "@crate_index//:futures",
+    "@crate_index//:hex",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:maplit",
     "@crate_index//:num-traits",
@@ -88,6 +89,7 @@ ALIASES = {}
 
 rust_library(
     name = "test_utils",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_nns_test_utils",
@@ -98,6 +100,7 @@ rust_library(
 
 rust_library(
     name = "test_utils--test_feature",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_features = ["test"],

@@ -3,7 +3,7 @@ use canister_test::{Canister, Runtime};
 use ic_base_types::{subnet_id_into_protobuf, NodeId, PrincipalId, SubnetId};
 use ic_config::Config;
 use ic_interfaces_registry::RegistryClient;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::{
     itest_helpers::{
@@ -13,12 +13,18 @@ use ic_nns_test_utils::{
     registry::{get_value_or_panic, prepare_registry},
 };
 use ic_protobuf::registry::{
-    crypto::v1::{EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as pbEcdsaKeyId, EcdsaSigningSubnetList},
-    subnet::v1::{CatchUpPackageContents, EcdsaConfig, SubnetListRecord, SubnetRecord},
+    crypto::v1::{
+        ChainKeySigningSubnetList, EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as pbEcdsaKeyId,
+        EcdsaSigningSubnetList,
+    },
+    subnet::v1::{
+        CatchUpPackageContents, ChainKeyConfig, EcdsaConfig, KeyConfig, SubnetListRecord,
+        SubnetRecord,
+    },
 };
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_ecdsa_signing_subnet_list_key,
-    make_subnet_list_record_key, make_subnet_record_key,
+    make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
+    make_ecdsa_signing_subnet_list_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, upsert};
@@ -259,10 +265,26 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                 .unwrap()
                 .unwrap(),
         );
+        // TODO(NNS1-3006): Remove this once replica no longer needs it
         subnet_record.ecdsa_config = Some(EcdsaConfig {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![(&key_1).into()],
             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        });
+        subnet_record.chain_key_config = Some(ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: Some(ic_protobuf::registry::crypto::v1::MasterPublicKeyId {
+                    key_id: Some(
+                        ic_protobuf::registry::crypto::v1::master_public_key_id::KeyId::Ecdsa(
+                            (&key_1).into(),
+                        ),
+                    ),
+                }),
+                pre_signatures_to_create_in_advance: Some(100),
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         });
@@ -509,12 +531,22 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
         // this subnet is removed from the signing subnet list.
         let ecdsa_signing_subnets_mutate = RegistryAtomicMutateRequest {
             preconditions: vec![],
-            mutations: vec![insert(
-                make_ecdsa_signing_subnet_list_key(&key_1),
-                encode_or_panic(&EcdsaSigningSubnetList {
-                    subnets: vec![subnet_id_into_protobuf(subnet_to_recover_subnet_id)],
-                }),
-            )],
+            mutations: vec![
+                insert(
+                    make_ecdsa_signing_subnet_list_key(&key_1),
+                    encode_or_panic(&EcdsaSigningSubnetList {
+                        subnets: vec![subnet_id_into_protobuf(subnet_to_recover_subnet_id)],
+                    }),
+                ),
+                insert(
+                    make_chain_key_signing_subnet_list_key(&MasterPublicKeyId::Ecdsa(
+                        key_1.clone(),
+                    )),
+                    encode_or_panic(&ChainKeySigningSubnetList {
+                        subnets: vec![subnet_id_into_protobuf(subnet_to_recover_subnet_id)],
+                    }),
+                ),
+            ],
         };
 
         let registry = setup_registry_synced_with_fake_client(

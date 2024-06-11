@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::SystemTime};
 
 use arc_swap::ArcSwapOption;
-use ic_crypto_utils_tls::node_id_from_rustls_certs;
+use ic_crypto_utils_tls::{node_id_from_certificate_der, NodeIdFromCertificateDerError};
 use rustls::{
     client::{ServerCertVerified, ServerCertVerifier},
     Certificate, CertificateError, Error as RustlsError, ServerName,
@@ -53,7 +53,16 @@ impl ServerCertVerifier for TlsVerifier {
 
         // Check if the CommonName in the certificate can be parsed into a Principal
         let node_id =
-            node_id_from_rustls_certs(end_entity).map_err(RustlsError::InvalidCertificate)?;
+            node_id_from_certificate_der(end_entity.as_ref()).map_err(|err| match err {
+                NodeIdFromCertificateDerError::InvalidCertificate(_) => {
+                    RustlsError::InvalidCertificate(CertificateError::BadEncoding)
+                }
+                NodeIdFromCertificateDerError::UnexpectedContent(e) => {
+                    RustlsError::InvalidCertificate(CertificateError::Other(Arc::from(Box::from(
+                        e,
+                    ))))
+                }
+            })?;
         // Load a routing table if we have one
         let rs = self
             .rs

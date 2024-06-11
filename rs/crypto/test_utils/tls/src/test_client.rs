@@ -2,14 +2,15 @@
 use crate::registry::REG_V1;
 use crate::temp_crypto_component_with_tls_keys;
 use ic_crypto_temp_crypto::TempCryptoComponent;
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_crypto_tls_interfaces::{TlsClientHandshakeError, TlsHandshake};
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_types::NodeId;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
+use tokio_rustls::TlsConnector;
 
 pub struct ClientBuilder {
     node_id: NodeId,
@@ -49,6 +50,9 @@ impl ClientBuilder {
     }
 }
 
+#[derive(Debug)]
+pub struct TlsTestClientRunError(pub String);
+
 /// A wrapper around the crypto TLS client implementation under test. Allows for
 /// easy testing.
 pub struct Client {
@@ -71,15 +75,30 @@ impl Client {
         }
     }
 
-    pub async fn run(&self, server_port: u16) -> Result<(), TlsClientHandshakeError> {
+    pub async fn run(&self, server_port: u16) -> Result<(), TlsTestClientRunError> {
         let tcp_stream = TcpStream::connect(("127.0.0.1", server_port))
             .await
             .expect("failed to connect");
 
-        let tls_stream = self
+        let tls_client_config = self
             .crypto
-            .perform_tls_client_handshake(tcp_stream, self.server_node_id, REG_V1)
-            .await?;
+            .client_config(self.server_node_id, REG_V1)
+            .map_err(|e| {
+                TlsTestClientRunError(format!("handshake error when creating config: {e}"))
+            })?;
+
+        let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
+        let irrelevant_domain = "domain.is-irrelevant-as-hostname-verification-is.disabled";
+        let tls_stream = tls_connector
+            .connect(
+                irrelevant_domain
+                    .try_into()
+                    .expect("failed to create domain"),
+                tcp_stream,
+            )
+            .await
+            .map_err(|e| TlsTestClientRunError(format!("handshake error when connecting: {e}")))?;
+
         let (mut rh, mut wh) = tokio::io::split(tls_stream);
 
         self.expect_msg_from_server_if_configured(&mut rh, &mut wh)

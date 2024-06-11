@@ -28,7 +28,7 @@ use ic_logger::debug;
 use ic_types::crypto::error::{KeyNotFoundError, MalformedDataError};
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeId, NodeIndex, NumberOfNodes};
+use ic_types::{NodeIndex, NumberOfNodes};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(test)]
@@ -41,17 +41,6 @@ pub const NIDKG_FS_SCOPE: Scope = Scope::Const(ConstScope::NiDkgFsEncryptionKeys
 ///
 /// Please see the trait definition for full documentation.
 impl NiDkgCspClient for Csp {
-    /// Creates a key pair for encrypting threshold key shares in transmission
-    /// from dealers to receivers.
-    fn gen_dealing_encryption_key_pair(
-        &self,
-        node_id: NodeId,
-    ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>
-    {
-        debug!(self.logger; crypto.method_name => "gen_dealing_encryption_key_pair");
-        self.csp_vault.gen_dealing_encryption_key_pair(node_id)
-    }
-
     /// Erases forward secure secret keys before a given epoch
     fn update_forward_secure_epoch(
         &self,

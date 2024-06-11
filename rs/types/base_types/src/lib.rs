@@ -41,6 +41,10 @@ pub struct NumBytesTag;
 /// and allocation of a Canister.
 pub type NumBytes = AmountOf<NumBytesTag, u64>;
 
+pub enum NumOsPagesTag {}
+/// A number of OS-sized pages.
+pub type NumOsPages = AmountOf<NumOsPagesTag, u64>;
+
 impl DisplayerOf<NumBytes> for NumBytesTag {
     /// Formats the number of bytes using the most appropriate binary power unit
     /// (kiB, MiB, GiB, etc), with up 2 decimals (e.g., 123.45 MiB).

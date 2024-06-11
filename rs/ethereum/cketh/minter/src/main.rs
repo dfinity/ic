@@ -15,6 +15,7 @@ use ic_cketh_minter::endpoints::{
     RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError,
     WithdrawalSearchParameter,
 };
+use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_withdraw_guard;
 use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
@@ -206,6 +207,7 @@ async fn get_minter_info() -> MinterInfo {
             erc20_balances,
             last_eth_scraped_block_number: Some(s.last_scraped_block_number.into()),
             last_erc20_scraped_block_number: Some(s.last_erc20_scraped_block_number.into()),
+            cketh_ledger_id: Some(s.cketh_ledger_id),
         }
     })
 }
@@ -299,9 +301,10 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
                 withdrawal_id: *request.cketh_ledger_burn_index().as_ref(),
                 recipient_address: request.payee().to_string(),
                 token_symbol: match request {
-                    CkEth(_) => "ckETH".to_string(),
+                    CkEth(_) => CkTokenSymbol::cketh_symbol_from_state(s).to_string(),
                     CkErc20(r) => s
-                        .ckerc20_token_symbol(&r.erc20_contract_address)
+                        .ckerc20_tokens
+                        .get_alt(&r.erc20_contract_address)
                         .unwrap()
                         .to_string(),
                 },
@@ -717,7 +720,18 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     reimbursed_amount: reimbursed.reimbursed_amount.into(),
                     transaction_hash: reimbursed.transaction_hash.map(|h| h.to_string()),
                 },
+                #[allow(deprecated)]
                 EventType::SkippedBlock(block_number) => EP::SkippedBlock {
+                    contract_address: read_state(|s| {
+                        s.eth_helper_contract_address.map(|s| s.to_string())
+                    }),
+                    block_number: block_number.into(),
+                },
+                EventType::SkippedBlockForContract {
+                    contract_address,
+                    block_number,
+                } => EP::SkippedBlock {
+                    contract_address: Some(contract_address.to_string()),
                     block_number: block_number.into(),
                 },
                 EventType::AddedCkErc20Token(token) => EP::AddedCkErc20Token {
@@ -812,7 +826,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             read_state(|s| {
                 w.encode_gauge(
                     "cketh_minter_stable_memory_bytes",
-                    ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
+                    ic_cdk::api::stable::stable64_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
                     "Size of the stable memory allocated by this canister.",
                 )?;
 
@@ -833,12 +847,21 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 w.encode_gauge(
                     "cketh_minter_last_processed_block",
                     s.last_scraped_block_number.as_f64(),
-                    "The last Ethereum block the ckETH minter checked for deposits.",
+                    "The last Ethereum block the ckETH minter checked for ckETH deposits.",
+                )?;
+
+                w.encode_gauge(
+                    "ckerc20_minter_last_processed_block",
+                    s.last_erc20_scraped_block_number.as_f64(),
+                    "The last Ethereum block the ckETH minter checked for ckERC20 deposits.",
                 )?;
 
                 w.encode_counter(
                     "cketh_minter_skipped_blocks",
-                    s.skipped_blocks.len() as f64,
+                    s.skipped_blocks
+                        .values()
+                        .flat_map(|blocks| blocks.iter())
+                        .count() as f64,
                     "Total count of Ethereum blocks that were skipped for deposits.",
                 )?;
 

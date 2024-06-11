@@ -15,10 +15,10 @@ DEPENDENCIES = [
     "@crate_index//:mockall",
     "@crate_index//:opentelemetry",
     "@crate_index//:opentelemetry-prometheus",
+    "@crate_index//:opentelemetry_sdk",
     "@crate_index//:prometheus",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
-    "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
@@ -29,7 +29,9 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:indoc",
 ]
 
-DEV_DEPENDENCIES = []
+DEV_DEPENDENCIES = [
+    "@crate_index//:tempfile",
+]
 
 MACRO_DEV_DEPENDENCIES = []
 

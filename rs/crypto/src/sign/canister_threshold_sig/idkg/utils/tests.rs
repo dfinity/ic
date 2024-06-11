@@ -63,7 +63,7 @@ mod index_and_dealing_of_dealer {
         assert_matches!(
             index_and_dealing_of_dealer(dealer_id, &transcript),
             Err(IDkgDealingExtractionError::SerializationError { internal_error })
-            if internal_error.contains("Error deserializing a signed dealing: ThresholdEcdsaSerializationError")
+            if internal_error.contains("Error deserializing a signed dealing: CanisterThresholdSerializationError")
         );
     }
 

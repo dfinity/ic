@@ -237,7 +237,7 @@ impl NodeRegistration {
     /// to generate or register keys are retried.
     pub async fn check_all_keys_registered_otherwise_register(&self, subnet_id: SubnetId) {
         let registry_version = self.registry_client.get_latest_version();
-        // If there is no ECDSA config or no key_ids, ECDSA is disabled.
+        // If there is no Chain key config or no key_ids, threshold signing is disabled.
         // Delta is the key rotation period of a single node, if it is None, key rotation is disabled.
         let delta = match self.get_key_rotation_period(registry_version, subnet_id) {
             Some(delta) => delta,
@@ -319,9 +319,9 @@ impl NodeRegistration {
     ) -> Option<Duration> {
         match self
             .registry_client
-            .get_ecdsa_config(subnet_id, registry_version)
+            .get_chain_key_config(subnet_id, registry_version)
         {
-            Ok(Some(config)) if !config.key_ids.is_empty() => config
+            Ok(Some(config)) if !config.key_configs.is_empty() => config
                 .idkg_key_rotation_period_ms
                 .map(Duration::from_millis),
             _ => None,
@@ -798,12 +798,7 @@ mod tests {
 
     mod idkg_dealing_encryption_key_rotation {
         use super::*;
-        use async_trait::async_trait;
         use ic_crypto_temp_crypto::EcdsaSubnetConfig;
-        use ic_crypto_tls_interfaces::{
-            AuthenticatedPeer, SomeOrAllNodes, TlsClientHandshakeError, TlsHandshake,
-            TlsServerHandshakeError, TlsStream,
-        };
         use ic_interfaces::crypto::{
             BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
             IDkgDealingEncryptionKeyRotationError, KeyManager, KeyRotationOutcome,
@@ -834,7 +829,6 @@ mod tests {
         use slog::Level;
         use std::time::UNIX_EPOCH;
         use tempfile::TempDir;
-        use tokio::net::TcpStream;
 
         const REGISTRY_VERSION_1: RegistryVersion = RegistryVersion::new(1);
 
@@ -874,29 +868,6 @@ mod tests {
                     subnet_id: SubnetId,
                     registry_version: RegistryVersion,
                 ) -> CryptoResult<()>;
-            }
-
-            #[async_trait]
-            impl TlsHandshake for KeyRotationCryptoComponent {
-                async fn perform_tls_server_handshake(
-                    &self,
-                    tcp_stream: TcpStream,
-                    allowed_clients: SomeOrAllNodes,
-                    registry_version: RegistryVersion,
-                ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError>;
-
-                async fn perform_tls_server_handshake_without_client_auth(
-                    &self,
-                    tcp_stream: TcpStream,
-                    registry_version: RegistryVersion,
-                ) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError>;
-
-                async fn perform_tls_client_handshake(
-                    &self,
-                    tcp_stream: TcpStream,
-                    server: NodeId,
-                    registry_version: RegistryVersion,
-                ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError>;
             }
         }
 

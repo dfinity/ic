@@ -19,6 +19,8 @@ use std::{
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CanisterSnapshots {
     pub(crate) snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
+    /// Snapshot operations are consumed by the `StateManager` in order to
+    /// correctly represent backups and restores in the next checkpoint.
     pub(crate) unflushed_changes: Vec<SnapshotOperation>,
     /// The set of snapshots ids grouped by canisters.
     pub(crate) snapshot_ids: BTreeMap<CanisterId, BTreeSet<SnapshotId>>,
@@ -83,6 +85,21 @@ impl CanisterSnapshots {
         }
     }
 
+    /// Remove all snapshots identified by `canister_id` from the collections of snapshots.
+    ///
+    /// Additionally, new items are added to the `unflushed_changes`,
+    /// representing the deleted backups since the last flush to the disk.
+    pub fn delete_snapshots(&mut self, canister_id: CanisterId) {
+        if let Some(snapshot_ids) = self.snapshot_ids.remove(&canister_id) {
+            for snapshot_id in snapshot_ids {
+                debug_assert!(self.snapshots.contains_key(&snapshot_id));
+                self.snapshots.remove(&snapshot_id).unwrap();
+                self.unflushed_changes
+                    .push(SnapshotOperation::Delete(snapshot_id));
+            }
+        }
+    }
+
     /// Selects the snapshots associated with the provided canister ID.
     /// Returns a list of tuples containing the ID and the canister snapshot.
     pub fn list_snapshots(
@@ -100,6 +117,12 @@ impl CanisterSnapshots {
             }
         }
         snapshots
+    }
+
+    /// Adds a new restore snapshot operation in the unflushed changes.
+    pub fn add_restore_operation(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
+        self.unflushed_changes
+            .push(SnapshotOperation::Restore(canister_id, snapshot_id))
     }
 
     /// Returns true if snapshot ID can be found in the collection.
@@ -134,6 +157,12 @@ impl From<&Memory> for PageMemory {
             page_map: memory.page_map.clone(),
             size: memory.size,
         }
+    }
+}
+
+impl From<&PageMemory> for Memory {
+    fn from(pg_memory: &PageMemory) -> Self {
+        Memory::new(pg_memory.page_map.clone(), pg_memory.size)
     }
 }
 
@@ -227,6 +256,10 @@ impl CanisterSnapshot {
         self.size
     }
 
+    pub fn execution_snapshot(&self) -> Option<&ExecutionStateSnapshot> {
+        self.execution_snapshot.as_ref()
+    }
+
     pub fn stable_memory(&self) -> Option<&PageMemory> {
         self.execution_snapshot
             .as_ref()
@@ -247,6 +280,10 @@ impl CanisterSnapshot {
 
     pub fn chunk_store(&self) -> &WasmChunkStore {
         &self.chunk_store
+    }
+
+    pub fn certified_data(&self) -> &Vec<u8> {
+        &self.certified_data
     }
 }
 

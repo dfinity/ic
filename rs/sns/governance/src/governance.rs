@@ -2425,15 +2425,15 @@ impl Governance {
             ));
         }
 
+        let mode = upgrade.mode_or_upgrade() as i32;
+
         self.upgrade_non_root_canister(
             target_canister_id,
             upgrade.new_canister_wasm,
             upgrade
                 .canister_upgrade_arg
                 .unwrap_or_else(|| Encode!().unwrap()),
-            CanisterInstallMode::try_from(CanisterInstallModeProto::try_from(
-                upgrade.mode.unwrap_or(CanisterInstallMode::Upgrade as i32),
-            )?)?,
+            CanisterInstallMode::try_from(CanisterInstallModeProto::try_from(mode)?)?,
         )
         .await
     }
@@ -5141,7 +5141,9 @@ impl Governance {
         // In this case, we do not have a running archive, so we just clone the value so the check
         // does not fail on that account.
         if running_version.archive_wasm_hash.is_empty() {
-            running_version.archive_wasm_hash = target_version.archive_wasm_hash.clone();
+            running_version
+                .archive_wasm_hash
+                .clone_from(&target_version.archive_wasm_hash);
         }
 
         let deployed_version = match self.proto.deployed_version.clone() {
@@ -7070,7 +7072,8 @@ mod tests {
             Ok(Encode!(&GetWasmResponse {
                 wasm: Some(SnsWasm {
                     wasm: vec![9, 8, 7, 6, 5, 4, 3, 2],
-                    canister_type: expected_canister_to_be_upgraded.into() // Governance
+                    canister_type: expected_canister_to_be_upgraded.into(), // Governance
+                    proposal_id: None,
                 })
             })
             .unwrap()),

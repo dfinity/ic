@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+backoff = { workspace = true }
 candid = { workspace = true }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 reqwest = { workspace = true }

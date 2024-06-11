@@ -3,7 +3,10 @@ use crate::wasmtime_embedder::{
     StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
 };
 
-use ic_config::{embedders::FeatureFlags, flag_status::FlagStatus};
+use ic_config::{
+    embedders::{FeatureFlags, StableMemoryDirtyPageLimit},
+    flag_status::FlagStatus,
+};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, PerformanceCounterType, StableGrowOutcome, SystemApi,
     TrapCode,
@@ -11,7 +14,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_types::{Cycles, NumBytes, NumInstructions, NumPages, Time};
+use ic_types::{Cycles, NumBytes, NumInstructions, NumOsPages, Time};
 use ic_wasm_types::WasmEngineError;
 
 use wasmtime::{AsContextMut, Caller, Global, Linker, Val};
@@ -25,7 +28,8 @@ use ic_system_api::SystemApiImpl;
 /// The amount of instructions required to process a single byte in a payload.
 /// This includes the cost of memory as well as time passing the payload
 /// from wasm sandbox to the replica execution environment.
-const BYTE_TRANSMISSION_COST_FACTOR: u32 = 50;
+
+const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
 
 fn unexpected_err(s: String) -> HypervisorError {
     HypervisorError::WasmEngineError(WasmEngineError::Unexpected(s))
@@ -95,10 +99,8 @@ fn mark_writes_on_bytemap(
         _ => {
             return Err(process_err(
                 caller,
-                HypervisorError::ContractViolation {
+                HypervisorError::ToolchainContractViolation {
                     error: "Failed to access heap bitmap".to_string(),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string(),
                 },
             ))
         }
@@ -126,7 +128,7 @@ fn charge_for_cpu(
 fn charge_for_cpu_and_mem(
     caller: &mut Caller<'_, StoreData>,
     overhead: NumInstructions,
-    num_bytes: u64,
+    num_bytes: usize,
 ) -> Result<(), anyhow::Error> {
     charge_for_system_api_call(caller, overhead, num_bytes).map_err(|e| process_err(caller, e))
 }
@@ -139,11 +141,18 @@ fn charge_for_stable_write(
     mut overhead: NumInstructions,
     offset: u64,
     size: u64,
-    stable_memory_dirty_page_limit: NumPages,
+    dirty_page_limit_message: NumOsPages,
+    dirty_page_limit_upgrade: NumOsPages,
 ) -> HypervisorResult<()> {
     let system_api = caller.data().system_api()?;
     let (new_stable_dirty_pages, dirty_page_cost) =
         system_api.dirty_pages_from_stable_write(offset, size)?;
+
+    let dirty_page_limit = if system_api.is_install_or_upgrade_message() {
+        dirty_page_limit_upgrade
+    } else {
+        dirty_page_limit_message
+    };
 
     overhead = overhead
         .get()
@@ -158,32 +167,26 @@ fn charge_for_stable_write(
     #[allow(non_upper_case_globals)]
     const KiB: u64 = 1024;
 
-    match system_api.subnet_type() {
-        // Do not observe stable dirty pages limit on the system subnets.
-        SubnetType::System => {}
-        SubnetType::Application | SubnetType::VerifiedApplication => {
-            let stable_dirty_pages = &mut caller
-                .data_mut()
-                .num_stable_dirty_pages_from_non_native_writes;
-            let total_pages = NumPages::from(
-                stable_dirty_pages
-                    .get()
-                    .saturating_add(new_stable_dirty_pages.get()),
-            );
+    let stable_dirty_pages = &mut caller
+        .data_mut()
+        .num_stable_dirty_pages_from_non_native_writes;
+    let total_pages = NumOsPages::from(
+        stable_dirty_pages
+            .get()
+            .saturating_add(new_stable_dirty_pages.get()),
+    );
 
-            if total_pages > stable_memory_dirty_page_limit {
-                let error = HypervisorError::MemoryAccessLimitExceeded(
+    if total_pages > dirty_page_limit {
+        let error = HypervisorError::MemoryAccessLimitExceeded(
                             format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
-                                stable_memory_dirty_page_limit * (PAGE_SIZE as u64 / KiB),
+                            dirty_page_limit * (PAGE_SIZE as u64 / KiB),
                             ),
                         );
-                return Err(error);
-            }
-            *stable_dirty_pages = total_pages;
-        }
+        return Err(error);
     }
+    *stable_dirty_pages = total_pages;
 
-    charge_for_system_api_call(caller, overhead, size)
+    charge_for_system_api_call(caller, overhead, size as usize)
 }
 
 /// Charges a canister (in instructions) for system API call overhead (exit,
@@ -206,11 +209,12 @@ fn charge_for_stable_write(
 fn charge_for_system_api_call(
     caller: &mut Caller<'_, StoreData>,
     mut overhead: NumInstructions,
-    num_bytes: u64,
+    num_bytes: usize,
 ) -> HypervisorResult<()> {
     let system_api = caller.data_mut().system_api()?;
     if num_bytes > 0 {
-        let bytes_charge = system_api.get_num_instructions_from_bytes(NumBytes::from(num_bytes));
+        let bytes_charge =
+            system_api.get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64));
         overhead = overhead
             .get()
             .checked_add(bytes_charge.get())
@@ -287,7 +291,7 @@ fn ic0_performance_counter_helper(
         1 => caller.data().system_api()?.ic0_performance_counter(
             PerformanceCounterType::CallContextInstructions(instruction_counter),
         ),
-        _ => Err(HypervisorError::ContractViolation {
+        _ => Err(HypervisorError::UserContractViolation {
             error: format!("Error getting performance counter type {}", counter_type),
             suggestion: "".to_string(),
             doc_link: "".to_string(),
@@ -298,8 +302,8 @@ fn ic0_performance_counter_helper(
 pub(crate) fn syscalls(
     linker: &mut Linker<StoreData>,
     feature_flags: FeatureFlags,
-    stable_memory_dirty_page_limit: NumPages,
-    stable_memory_access_page_limit: NumPages,
+    stable_memory_dirty_page_limit: StableMemoryDirtyPageLimit,
+    stable_memory_access_page_limit: NumOsPages,
     main_memory_type: WasmMemoryType,
 ) {
     fn with_system_api<T>(
@@ -326,17 +330,13 @@ pub(crate) fn syscalls(
     ) -> Result<T, anyhow::Error> {
         caller
             .get_export(WASM_HEAP_MEMORY_NAME)
-            .ok_or_else(|| HypervisorError::ContractViolation {
+            .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                 error: "WebAssembly module must define memory".to_string(),
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
             })
             .and_then(|ext| {
                 ext.into_memory()
-                    .ok_or_else(|| HypervisorError::ContractViolation {
+                    .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                         error: "export 'memory' is not a memory".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     })
             })
             .and_then(|mem| {
@@ -385,12 +385,13 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "msg_caller_copy", {
             move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                charge_for_cpu_and_mem(&mut caller, overhead::MSG_CALLER_COPY, size as u64)?;
+                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+                charge_for_cpu_and_mem(&mut caller, overhead::MSG_CALLER_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_caller_copy(dst, offset, size, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
+                    mark_writes_on_bytemap(&mut caller, dst, size)
                 } else {
                     Ok(())
                 }
@@ -427,12 +428,13 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "msg_arg_data_copy", {
             move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                charge_for_cpu_and_mem(&mut caller, overhead::MSG_ARG_DATA_COPY, size as u64)?;
+                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+                charge_for_cpu_and_mem(&mut caller, overhead::MSG_ARG_DATA_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, mem| {
                     system_api.ic0_msg_arg_data_copy(dst, offset, size, mem)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
+                    mark_writes_on_bytemap(&mut caller, dst, size)
                 } else {
                     Ok(())
                 }
@@ -456,12 +458,13 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "msg_method_name_copy", {
             move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                charge_for_cpu_and_mem(&mut caller, overhead::MSG_METHOD_NAME_COPY, size as u64)?;
+                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+                charge_for_cpu_and_mem(&mut caller, overhead::MSG_METHOD_NAME_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_method_name_copy(dst, offset, size, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
+                    mark_writes_on_bytemap(&mut caller, dst, size)
                 } else {
                     Ok(())
                 }
@@ -481,10 +484,11 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "msg_reply_data_append", {
             move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
+                let (src, size) = (src as usize, size as usize);
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead::MSG_REPLY_DATA_APPEND,
-                    (BYTE_TRANSMISSION_COST_FACTOR * size) as u64,
+                    size.saturating_mul(BYTE_TRANSMISSION_COST_FACTOR),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reply_data_append(src, size, memory)
@@ -514,10 +518,11 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "msg_reject", {
             move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
+                let (src, size) = (src as usize, size as usize);
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead::MSG_REJECT,
-                    (BYTE_TRANSMISSION_COST_FACTOR * size) as u64,
+                    size.saturating_mul(BYTE_TRANSMISSION_COST_FACTOR),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject(src, size, memory)
@@ -542,12 +547,13 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "msg_reject_msg_copy", {
             move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                charge_for_cpu_and_mem(&mut caller, overhead::MSG_REJECT_MSG_COPY, size as u64)?;
+                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+                charge_for_cpu_and_mem(&mut caller, overhead::MSG_REJECT_MSG_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject_msg_copy(dst, offset, size, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
+                    mark_writes_on_bytemap(&mut caller, dst, size)
                 } else {
                     Ok(())
                 }
@@ -571,12 +577,13 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "canister_self_copy", {
             move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                charge_for_cpu_and_mem(&mut caller, overhead::CANISTER_SELF_COPY, size as u64)?;
+                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+                charge_for_cpu_and_mem(&mut caller, overhead::CANISTER_SELF_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_canister_self_copy(dst, offset, size, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
+                    mark_writes_on_bytemap(&mut caller, dst, size)
                 } else {
                     Ok(())
                 }
@@ -597,7 +604,8 @@ pub(crate) fn syscalls(
                 if debug_print_is_enabled {
                     num_bytes += length as u64;
                 }
-                charge_for_cpu_and_mem(&mut caller, overhead::DEBUG_PRINT, num_bytes)?;
+                charge_for_cpu_and_mem(&mut caller, overhead::DEBUG_PRINT, num_bytes as usize)?;
+                let (offset, length) = (offset as usize, length as usize);
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.save_log_message(
                         canister_logging_is_enabled,
@@ -618,7 +626,8 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "trap", {
             move |mut caller: Caller<'_, StoreData>, offset: u32, length: u32| -> Result<(), _> {
-                charge_for_cpu_and_mem(&mut caller, overhead::TRAP, length as u64)?;
+                let (offset, length) = (offset as usize, length as usize);
+                charge_for_cpu_and_mem(&mut caller, overhead::TRAP, length)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_trap(offset, length, memory)
                 })
@@ -637,10 +646,12 @@ pub(crate) fn syscalls(
                   reply_env: u32,
                   reject_fun: u32,
                   reject_env: u32| {
+                let (callee_src, callee_size) = (callee_src as usize, callee_size as usize);
+                let (name_src, name_len) = (name_src as usize, name_len as usize);
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead::CALL_NEW,
-                    (callee_size as u64) + (name_len as u64),
+                    callee_size.saturating_add(name_len),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_new(
@@ -662,10 +673,11 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "call_data_append", {
             move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
+                let (src, size) = (src as usize, size as usize);
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead::CALL_DATA_APPEND,
-                    (BYTE_TRANSMISSION_COST_FACTOR * size) as u64,
+                    size.saturating_mul(BYTE_TRANSMISSION_COST_FACTOR),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_data_append(src, size, memory)
@@ -736,7 +748,7 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "stable_read", {
             move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                charge_for_cpu_and_mem(&mut caller, overhead::STABLE_READ, size as u64)?;
+                charge_for_cpu_and_mem(&mut caller, overhead::STABLE_READ, size as usize)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable_read(dst, offset, size, memory)
                 })?;
@@ -757,7 +769,8 @@ pub(crate) fn syscalls(
                     overhead::STABLE_WRITE,
                     offset as u64,
                     size as u64,
-                    stable_memory_dirty_page_limit,
+                    stable_memory_dirty_page_limit.message,
+                    stable_memory_dirty_page_limit.upgrade,
                 )
                 .map_err(|e| process_err(&mut caller, e))?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
@@ -806,7 +819,7 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "stable64_read", {
             move |mut caller: Caller<'_, StoreData>, dst: u64, offset: u64, size: u64| {
-                charge_for_cpu_and_mem(&mut caller, overhead::STABLE64_READ, size)?;
+                charge_for_cpu_and_mem(&mut caller, overhead::STABLE64_READ, size as usize)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable64_read(dst, offset, size, memory)
                 })?;
@@ -827,7 +840,8 @@ pub(crate) fn syscalls(
                     overhead::STABLE64_WRITE,
                     offset,
                     size,
-                    stable_memory_dirty_page_limit,
+                    stable_memory_dirty_page_limit.message,
+                    stable_memory_dirty_page_limit.upgrade,
                 )
                 .map_err(|e| process_err(&mut caller, e))?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
@@ -894,12 +908,13 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "canister_cycle_balance128", {
             move |mut caller: Caller<'_, StoreData>, dst: u32| {
+                let dst = dst as usize;
                 charge_for_cpu(&mut caller, overhead::CANISTER_CYCLE_BALANCE128)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     s.ic0_canister_cycle_balance128(dst, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+                    mark_writes_on_bytemap(&mut caller, dst, 16)
                 } else {
                     Ok(())
                 }
@@ -923,12 +938,13 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "msg_cycles_available128", {
             move |mut caller: Caller<'_, StoreData>, dst: u32| {
+                let dst = dst as usize;
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_AVAILABLE128)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_available128(dst, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+                    mark_writes_on_bytemap(&mut caller, dst, 16)
                 } else {
                     Ok(())
                 }
@@ -952,12 +968,13 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "msg_cycles_refunded128", {
             move |mut caller: Caller<'_, StoreData>, dst: u32| {
+                let dst = dst as usize;
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_REFUNDED128)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_refunded128(dst, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+                    mark_writes_on_bytemap(&mut caller, dst, 16)
                 } else {
                     Ok(())
                 }
@@ -977,6 +994,7 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "msg_cycles_accept128", {
             move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: u32| {
+                let dst = dst as usize;
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_ACCEPT128)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_accept128(
@@ -986,7 +1004,7 @@ pub(crate) fn syscalls(
                     )
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+                    mark_writes_on_bytemap(&mut caller, dst, 16)
                 } else {
                     Ok(())
                 }
@@ -1079,7 +1097,8 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "certified_data_set", {
             move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
-                charge_for_cpu_and_mem(&mut caller, overhead::CERTIFIED_DATA_SET, size as u64)?;
+                let (src, size) = (src as usize, size as usize);
+                charge_for_cpu_and_mem(&mut caller, overhead::CERTIFIED_DATA_SET, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_certified_data_set(src, size, memory)
                 })
@@ -1100,7 +1119,9 @@ pub(crate) fn syscalls(
         .func_wrap("ic0", "data_certificate_size", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::DATA_CERTIFICATE_SIZE)?;
-                with_system_api(&mut caller, |s| s.ic0_data_certificate_size())
+                with_system_api(&mut caller, |s| {
+                    s.ic0_data_certificate_size().map(|x| x as u32)
+                })
             }
         })
         .unwrap();
@@ -1108,7 +1129,8 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "is_controller", {
             move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
-                charge_for_cpu_and_mem(&mut caller, overhead::IS_CONTROLLER, size as u64)?;
+                let (src, size) = (src as usize, size as usize);
+                charge_for_cpu_and_mem(&mut caller, overhead::IS_CONTROLLER, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_is_controller(src, size, memory)
                 })
@@ -1128,12 +1150,13 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "data_certificate_copy", {
             move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                charge_for_cpu_and_mem(&mut caller, overhead::DATA_CERTIFICATE_COPY, size as u64)?;
+                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+                charge_for_cpu_and_mem(&mut caller, overhead::DATA_CERTIFICATE_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_data_certificate_copy(dst, offset, size, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
+                    mark_writes_on_bytemap(&mut caller, dst, size)
                 } else {
                     Ok(())
                 }
@@ -1155,6 +1178,7 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "cycles_burn128", {
             move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: u32| {
+                let dst = dst as usize;
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     s.ic0_cycles_burn128(Cycles::from_parts(amount_high, amount_low), dst, memory)
                 })
@@ -1172,7 +1196,7 @@ pub(crate) fn syscalls(
                         system_api.ic0_call_with_best_effort_response(timeout_seconds)
                     })
                 } else {
-                    let err = HypervisorError::ContractViolation {
+                    let err = HypervisorError::UserContractViolation {
                         error: "ic0::call_with_best_effort_response is not enabled.".to_string(),
                         suggestion: "".to_string(),
                         doc_link: "".to_string(),
@@ -1190,7 +1214,7 @@ pub(crate) fn syscalls(
                 if feature_flags.best_effort_responses == FlagStatus::Enabled {
                     with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
                 } else {
-                    let err = HypervisorError::ContractViolation {
+                    let err = HypervisorError::UserContractViolation {
                         error: "ic0::msg_deadline is not enabled.".to_string(),
                         suggestion: "".to_string(),
                         doc_link: "".to_string(),
@@ -1216,8 +1240,8 @@ pub(crate) fn syscalls(
                     }
                     InternalErrorCode::MemoryWriteLimitExceeded => {
                         HypervisorError::MemoryAccessLimitExceeded(
-                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
-                                    stable_memory_dirty_page_limit * (PAGE_SIZE as u64 / 1024),
+                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
+                            stable_memory_dirty_page_limit.message.get() * (PAGE_SIZE as u64 / 1024), stable_memory_dirty_page_limit.upgrade.get() * (PAGE_SIZE as u64 / 1024),
                             )
                         )
                     }

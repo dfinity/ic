@@ -10,6 +10,7 @@ exports_files([
 
 rust_library(
     name = "canister_http",
+    testonly = True,
     srcs = ["canister_http.rs"],
     crate_name = "canister_http",
     target_compatible_with = ["@platforms//os:linux"],
@@ -29,8 +30,8 @@ uvm_config_image(
     srcs = [
         ":minica_image",
         ":universal_vm_activation.sh",
-        "//ic-os/rootfs/guestos:dev-certs/canister_http_test_ca.cert",
-        "//ic-os/rootfs/guestos:dev-certs/canister_http_test_ca.key",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
+        "//ic-os/components:networking/dev-certs/canister_http_test_ca.key",
         "//rs/tests/httpbin-rs:httpbin_image.tar",
     ],
     remap_paths = {

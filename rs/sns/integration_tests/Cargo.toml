@@ -43,7 +43,7 @@ maplit = "1.0.2"
 pretty-bytes = "0.2.2"
 proptest = "1.0"
 prost = { workspace = true }
-rand = "0.8.4"
+rand = { workspace = true }
 serde_yaml = { workspace = true }
 
 # Dependencies required to compile the tests.

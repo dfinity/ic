@@ -25,10 +25,11 @@ bool_flag(
 
 rust_library(
     name = "tests",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     compile_data = [
-        "//ic-os/rootfs/guestos:opt/ic/share/ic.json5.template",
+        "//ic-os/components:ic/ic.json5.template",
         "src/consensus/cow_safety.wasm",
         "src/message.wasm",
         "src/counter.wat",
@@ -125,6 +126,7 @@ qualifying_sns_canisters(
 
 symlink_dir(
     name = "recovery/binaries",
+    testonly = True,
     targets = {
         "//rs/registry/admin:ic-admin": "ic-admin",
         "//rs/state_tool:state-tool": "state-tool",
@@ -137,6 +139,7 @@ symlink_dir(
 
 symlink_dir(
     name = "backup/binaries",
+    testonly = True,
     targets = {
         "//rs/backup:ic-backup": "ic-backup",
         "//rs/replay:ic-replay": "ic-replay",

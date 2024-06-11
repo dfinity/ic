@@ -9,7 +9,7 @@ use crate::consensus::{
 use ic_consensus_utils::get_subnet_record;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, ProposalContext},
-    consensus::{PayloadBuilder, PayloadPermanentError, PayloadValidationError},
+    consensus::{InvalidPayloadReason, PayloadBuilder, PayloadValidationError},
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
     self_validating_payload::SelfValidatingPayloadBuilder,
@@ -183,8 +183,8 @@ impl PayloadBuilder for PayloadBuilderImpl {
             self.metrics.critical_error_payload_too_large.inc();
         }
         if accumulated_size > max_block_payload_size * 2 {
-            return Err(ValidationError::Permanent(
-                PayloadPermanentError::PayloadTooBig {
+            return Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::PayloadTooBig {
                     expected: max_block_payload_size,
                     received: accumulated_size,
                 },

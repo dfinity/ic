@@ -591,20 +591,24 @@ fn test_minter() {
     assert_ne!(address_1, address_2);
 }
 
-fn mainnet_bitcoin_canister_id() -> CanisterId {
+fn bitcoin_canister_id(btc_network: Network) -> CanisterId {
     CanisterId::try_from(
-        PrincipalId::from_str(ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID)
-            .unwrap(),
+        PrincipalId::from_str(match btc_network {
+            Network::Testnet | Network::Regtest => {
+                ic_config::execution_environment::BITCOIN_TESTNET_CANISTER_ID
+            }
+            Network::Mainnet => ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID,
+        })
+        .unwrap(),
     )
     .unwrap()
 }
 
-fn install_bitcoin_mock_canister(env: &StateMachine) {
-    let args = Network::Mainnet;
-    let cid = mainnet_bitcoin_canister_id();
+fn install_bitcoin_mock_canister(env: &StateMachine, btc_network: Network) {
+    let cid = bitcoin_canister_id(btc_network);
     env.create_canister_with_cycles(Some(cid.into()), Cycles::new(0), None);
 
-    env.install_existing_canister(cid, bitcoin_mock_wasm(), Encode!(&args).unwrap())
+    env.install_existing_canister(cid, bitcoin_mock_wasm(), Encode!(&btc_network).unwrap())
         .unwrap();
 }
 
@@ -620,13 +624,17 @@ struct CkBtcSetup {
 
 impl CkBtcSetup {
     pub fn new() -> Self {
-        let bitcoin_id = mainnet_bitcoin_canister_id();
+        Self::new_with(Network::Mainnet)
+    }
+
+    pub fn new_with(btc_network: Network) -> Self {
+        let bitcoin_id = bitcoin_canister_id(btc_network);
         let env = StateMachineBuilder::new()
             .with_default_canister_range()
             .with_extra_canister_range(bitcoin_id..=bitcoin_id)
             .build();
 
-        install_bitcoin_mock_canister(&env);
+        install_bitcoin_mock_canister(&env, btc_network);
         let ledger_id = env.create_canister(None);
         let minter_id =
             env.create_canister_with_cycles(None, Cycles::new(100_000_000_000_000), None);
@@ -647,13 +655,18 @@ impl CkBtcSetup {
         )
         .expect("failed to install the ledger");
 
+        let retrieve_btc_min_amount = match btc_network {
+            Network::Testnet | Network::Regtest => 10_000,
+            Network::Mainnet => 100_000,
+        };
+
         env.install_existing_canister(
             minter_id,
             minter_wasm(),
             Encode!(&MinterArg::Init(CkbtcMinterInitArgs {
-                btc_network: Network::Mainnet.into(),
+                btc_network: btc_network.into(),
                 ecdsa_key_name: "master_ecdsa_public_key".to_string(),
-                retrieve_btc_min_amount: 100_000,
+                retrieve_btc_min_amount,
                 ledger_id,
                 max_time_in_queue_nanos: 100,
                 min_confirmations: Some(MIN_CONFIRMATIONS),
@@ -1312,7 +1325,7 @@ fn test_transaction_finalization() {
 }
 
 #[test]
-fn test_min_retrieval_amount() {
+fn test_min_retrieval_amount_mainnet() {
     let ckbtc = CkBtcSetup::new();
 
     ckbtc.refresh_fee_percentiles();
@@ -1339,6 +1352,36 @@ fn test_min_retrieval_amount() {
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, 200_000);
+}
+
+#[test]
+fn test_min_retrieval_amount_testnet() {
+    let ckbtc = CkBtcSetup::new_with(Network::Testnet);
+
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 10_000);
+
+    // The numbers used in this test have been re-computed using a python script using integers.
+    ckbtc.set_fee_percentiles(&vec![0; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 10_000);
+
+    ckbtc.set_fee_percentiles(&vec![116_000; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 60_000);
+
+    ckbtc.set_fee_percentiles(&vec![342_000; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 60_000);
+
+    ckbtc.set_fee_percentiles(&vec![343_000; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 110_000);
 }
 
 #[test]

@@ -2,38 +2,57 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
+DEPENDENCIES = [
+    "//rs/artifact_manager",
+    "//rs/artifact_pool",
+    "//rs/config",
+    "//rs/consensus/utils",
+    "//rs/crypto/interfaces/sig_verification",
+    "//rs/crypto/tls_interfaces",
+    "//rs/cycles_account_manager",
+    "//rs/https_outcalls/consensus",
+    "//rs/ingress_manager",
+    "//rs/interfaces",
+    "//rs/interfaces/adapter_client",
+    "//rs/interfaces/registry",
+    "//rs/interfaces/state_manager",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/p2p/consensus_manager",
+    "//rs/p2p/peer_manager",
+    "//rs/p2p/quic_transport",
+    "//rs/p2p/state_sync_manager",
+    "//rs/registry/helpers",
+    "//rs/replicated_state",
+    "//rs/state_manager",
+    "//rs/types/types",
+    "@crate_index//:either",
+    "@crate_index//:slog",
+    "@crate_index//:tower-http",
+    "@crate_index//:tokio",
+]
+
+NONMALICIOUS_DEPENDENCIES = [
+    "//rs/consensus:consensus",
+]
+
+MALICIOUS_DEPENDENCIES = [
+    "//rs/consensus:malicious_consensus",
+]
+
 rust_library(
     name = "setup_ic_network",
     srcs = glob(["src/**"]),
     crate_name = "ic_replica_setup_ic_network",
     version = "0.9.0",
-    deps = [
-        "//rs/artifact_manager",
-        "//rs/artifact_pool",
-        "//rs/config",
-        "//rs/consensus",
-        "//rs/consensus/utils",
-        "//rs/crypto/interfaces/sig_verification",
-        "//rs/crypto/tls_interfaces",
-        "//rs/cycles_account_manager",
-        "//rs/https_outcalls/consensus",
-        "//rs/ingress_manager",
-        "//rs/interfaces",
-        "//rs/interfaces/adapter_client",
-        "//rs/interfaces/registry",
-        "//rs/interfaces/state_manager",
-        "//rs/monitoring/logger",
-        "//rs/monitoring/metrics",
-        "//rs/p2p/consensus_manager",
-        "//rs/p2p/peer_manager",
-        "//rs/p2p/quic_transport",
-        "//rs/p2p/state_sync_manager",
-        "//rs/registry/helpers",
-        "//rs/replicated_state",
-        "//rs/state_manager",
-        "//rs/types/types",
-        "@crate_index//:either",
-        "@crate_index//:slog",
-        "@crate_index//:tokio",
-    ],
+    deps = DEPENDENCIES + NONMALICIOUS_DEPENDENCIES,
+)
+
+rust_library(
+    name = "malicious_setup_ic_network",
+    testonly = True,
+    srcs = glob(["src/**"]),
+    crate_name = "ic_replica_setup_ic_network",
+    version = "0.9.0",
+    deps = DEPENDENCIES + MALICIOUS_DEPENDENCIES,
 )

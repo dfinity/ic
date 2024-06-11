@@ -5,7 +5,7 @@ use ic_config::{
     state_manager::{lsmt_config_default, Config, LsmtConfig},
 };
 use ic_interfaces::{
-    certification::{CertificationPermanentError, Verifier, VerifierError},
+    certification::{InvalidCertificationReason, Verifier, VerifierError},
     p2p::state_sync::{Chunk, ChunkId, Chunkable},
     validation::ValidationResult,
 };
@@ -100,7 +100,7 @@ impl Verifier for RejectingVerifier {
         _certification: &Certification,
         _registry_version: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
-        Err(CertificationPermanentError::RejectedByRejectingVerifier.into())
+        Err(InvalidCertificationReason::RejectedByRejectingVerifier.into())
     }
 }
 
@@ -394,7 +394,7 @@ pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable<StateSy
 }
 
 fn alter_chunk_data(chunk: &mut Chunk) {
-    let mut chunk_data = chunk.clone();
+    let mut chunk_data = chunk.as_bytes().to_vec();
     match chunk_data.last_mut() {
         Some(last) => {
             // Alter the last element of chunk_data.
@@ -405,7 +405,7 @@ fn alter_chunk_data(chunk: &mut Chunk) {
             chunk_data = vec![9; 100];
         }
     }
-    *chunk = chunk_data;
+    *chunk = chunk_data.into();
 }
 
 /// Pipe the meta-manifest (chunk 0) from src to dest.

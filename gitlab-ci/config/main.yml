@@ -184,10 +184,11 @@ bazel-system-tests-k8s:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
       when: manual
       allow_failure: true
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "system-tests-k8s-nightly"
   variables:
     RUST_LOG: info
     KUBECONFIG: "$KUBECONFIG_TNET_CREATOR"
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --jobs=5 --test_tag_filters=k8s,-manual --k8s"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --jobs=7 --test_tag_filters=k8s,-manual --k8s"
   timeout: 150 minutes
 
 bazel-system-test-hourly:
@@ -197,7 +198,6 @@ bazel-system-test-hourly:
   tags:
     - dfinity-ic
     - bazel
-    - zh
   variables:
     BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_hourly"
   timeout: 120 minutes
@@ -429,6 +429,7 @@ benchmarks:
   parallel:
     matrix:
       - TARGETS: "//rs/crypto/..."
+      - TARGETS: "//rs/certification/..."
       - TARGETS: "//rs/state_manager/..."
       - TARGETS: "//rs/boundary_node/ic_boundary/..."
       # IDX-2849
@@ -589,10 +590,11 @@ bazel-test-bare-metal:
   needs: [] # don't wait on other jobs
   script:
     - |
+      set -euo pipefail
       # shellcheck disable=SC2046,SC2086
       bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
         //ic-os/setupos/envs/dev:launch_bare_metal -- \
-          --config_path "$(realpath  ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml)" \
+          --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
           --csv_filename "$(realpath "$ZH2_DLL01_CSV_SECRETS_PATH")" \
           --file_share_ssh_key "$(realpath "$ZH2_FILE_SHARE_KEY_PATH")" \
           --file_share_username ci_interim \

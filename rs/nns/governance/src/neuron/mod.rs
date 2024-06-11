@@ -1,5 +1,4 @@
 use crate::{
-    governance,
     governance::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
@@ -27,41 +26,6 @@ pub use dissolve_state_and_age::*;
 pub mod types;
 pub use types::*;
 
-fn neuron_state(
-    now_seconds: u64,
-    spawn_at_timestamp_seconds: &Option<u64>,
-    dissolve_state: &Option<DissolveState>,
-) -> NeuronState {
-    if spawn_at_timestamp_seconds.is_some() {
-        return NeuronState::Spawning;
-    }
-    match dissolve_state {
-        Some(DissolveState::DissolveDelaySeconds(d)) => {
-            if *d > 0 {
-                NeuronState::NotDissolving
-            } else {
-                NeuronState::Dissolved
-            }
-        }
-        Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) => {
-            if *ts > now_seconds {
-                NeuronState::Dissolving
-            } else {
-                NeuronState::Dissolved
-            }
-        }
-        None => NeuronState::Dissolved,
-    }
-}
-
-fn neuron_dissolve_delay_seconds(now_seconds: u64, dissolve_state: &Option<DissolveState>) -> u64 {
-    match dissolve_state {
-        Some(DissolveState::DissolveDelaySeconds(d)) => *d,
-        Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) => (*ts).saturating_sub(now_seconds),
-        None => 0,
-    }
-}
-
 fn neuron_stake_e8s(
     cached_neuron_stake_e8s: u64,
     neuron_fees_e8s: u64,
@@ -75,15 +39,40 @@ fn neuron_stake_e8s(
 // The following methods are conceptually methods for the API type of the neuron.
 impl NeuronProto {
     pub fn state(&self, now_seconds: u64) -> NeuronState {
-        neuron_state(
-            now_seconds,
-            &self.spawn_at_timestamp_seconds,
-            &self.dissolve_state,
-        )
+        if self.spawn_at_timestamp_seconds.is_some() {
+            return NeuronState::Spawning;
+        }
+        match self.dissolve_state {
+            Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)) => {
+                if dissolve_delay_seconds > 0 {
+                    NeuronState::NotDissolving
+                } else {
+                    NeuronState::Dissolved
+                }
+            }
+            Some(DissolveState::WhenDissolvedTimestampSeconds(
+                when_dissolved_timestamp_seconds,
+            )) => {
+                if when_dissolved_timestamp_seconds > now_seconds {
+                    NeuronState::Dissolving
+                } else {
+                    NeuronState::Dissolved
+                }
+            }
+            None => NeuronState::Dissolved,
+        }
     }
 
     pub fn dissolve_delay_seconds(&self, now_seconds: u64) -> u64 {
-        neuron_dissolve_delay_seconds(now_seconds, &self.dissolve_state)
+        match self.dissolve_state {
+            Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)) => {
+                dissolve_delay_seconds
+            }
+            Some(DissolveState::WhenDissolvedTimestampSeconds(
+                when_dissolved_timestamp_seconds,
+            )) => when_dissolved_timestamp_seconds.saturating_sub(now_seconds),
+            None => 0,
+        }
     }
 
     pub fn stake_e8s(&self) -> u64 {
@@ -366,8 +355,9 @@ impl Neuron {
     fn start_dissolving(&mut self, now_seconds: u64) -> Result<(), GovernanceError> {
         let dissolve_state_and_age = self.dissolve_state_and_age();
         if let DissolveStateAndAge::NotDissolving { .. } = dissolve_state_and_age {
-            let new_disolved_state_and_age = dissolve_state_and_age.start_dissolving(now_seconds);
-            self.set_dissolve_state_and_age(new_disolved_state_and_age);
+            let new_disolved_dissolve_state_and_age =
+                dissolve_state_and_age.start_dissolving(now_seconds);
+            self.set_dissolve_state_and_age(new_disolved_dissolve_state_and_age);
             Ok(())
         } else {
             Err(GovernanceError::new(ErrorType::RequiresNotDissolving))
@@ -379,11 +369,12 @@ impl Neuron {
     /// If the neuron is not dissolving, an error is returned.
     fn stop_dissolving(&mut self, now_seconds: u64) -> Result<(), GovernanceError> {
         let dissolve_state_and_age = self.dissolve_state_and_age();
-        let new_disolved_state_and_age = dissolve_state_and_age.stop_dissolving(now_seconds);
-        if new_disolved_state_and_age == dissolve_state_and_age {
+        let new_disolved_dissolve_state_and_age =
+            dissolve_state_and_age.stop_dissolving(now_seconds);
+        if new_disolved_dissolve_state_and_age == dissolve_state_and_age {
             Err(GovernanceError::new(ErrorType::RequiresDissolving))
         } else {
-            self.set_dissolve_state_and_age(new_disolved_state_and_age);
+            self.set_dissolve_state_and_age(new_disolved_dissolve_state_and_age);
             Ok(())
         }
     }
@@ -665,7 +656,7 @@ impl Neuron {
             // at this point is to increase the stake while keeping the area
             // constant. This means decreasing the age in proportion to the
             // additional stake, which is the purpose of combine_aged_stakes.
-            let (new_stake_e8s, new_age_seconds) = governance::combine_aged_stakes(
+            let (new_stake_e8s, new_age_seconds) = combine_aged_stakes(
                 self.cached_neuron_stake_e8s,
                 self.age_seconds(now),
                 updated_stake_e8s.saturating_sub(self.cached_neuron_stake_e8s),
@@ -679,10 +670,10 @@ impl Neuron {
             self.cached_neuron_stake_e8s = new_stake_e8s;
 
             let new_aging_since_timestamp_seconds = now.saturating_sub(new_age_seconds);
-            let new_disolved_state_and_age = self
+            let new_disolved_dissolve_state_and_age = self
                 .dissolve_state_and_age()
                 .adjust_age(new_aging_since_timestamp_seconds);
-            self.set_dissolve_state_and_age(new_disolved_state_and_age);
+            self.set_dissolve_state_and_age(new_disolved_dissolve_state_and_age);
         }
     }
 
@@ -814,6 +805,31 @@ pub fn neuron_id_range_to_u64_range(range: &impl RangeBounds<NeuronId>) -> impl 
     first..=last
 }
 
+/// Given two quantities of stake with possible associated age, return the
+/// combined stake and the combined age.
+pub fn combine_aged_stakes(
+    x_stake_e8s: u64,
+    x_age_seconds: u64,
+    y_stake_e8s: u64,
+    y_age_seconds: u64,
+) -> (u64, u64) {
+    if x_stake_e8s == 0 && y_stake_e8s == 0 {
+        (0, 0)
+    } else {
+        let total_age_seconds: u128 = (x_stake_e8s as u128 * x_age_seconds as u128
+            + y_stake_e8s as u128 * y_age_seconds as u128)
+            / (x_stake_e8s as u128 + y_stake_e8s as u128);
+
+        // Note that age is adjusted in proportion to the stake, but due to the
+        // discrete nature of u64 numbers, some resolution is lost due to the
+        // division above. Only if x_age * x_stake is a multiple of y_stake does
+        // the age remain constant after this operation. However, in the end, the
+        // most that can be lost due to rounding from the actual age, is always
+        // less than 1 second, so this is not a problem.
+        (x_stake_e8s + y_stake_e8s, total_age_seconds as u64)
+    }
+}
+
 impl NeuronInfo {
     pub fn is_seed_neuron(&self) -> bool {
         self.neuron_type == Some(NeuronType::Seed as i32)
@@ -831,9 +847,8 @@ mod tests {
         neuron::{DissolveStateAndAge, NeuronBuilder},
         pb::v1::manage_neuron::{SetDissolveTimestamp, StartDissolving},
     };
-    use ic_nervous_system_common::ONE_YEAR_SECONDS;
 
-    use ic_nervous_system_common::E8;
+    use ic_nervous_system_common::{E8, ONE_YEAR_SECONDS};
     use icp_ledger::Subaccount;
 
     const NOW: u64 = 123_456_789;
@@ -1268,5 +1283,65 @@ mod tests {
         // Step 8: advance the time by 1 second and see that the neuron is now dissolved.
         let now = now + 1;
         assert_eq!(neuron.state(now), NeuronState::Dissolved);
+    }
+
+    #[test]
+    fn test_combine_aged_stakes() {
+        let cases = [
+            // x_stake_e8s, x_age_seconds, y_stake_e8s, y_age_seconds, expected_stake_e8s, expected_age_seconds
+            (0, ONE_DAY_SECONDS, 0, 2 * ONE_DAY_SECONDS, 0, 0),
+            (
+                E8,
+                ONE_DAY_SECONDS,
+                2 * E8,
+                ONE_DAY_SECONDS,
+                3 * E8,
+                ONE_DAY_SECONDS,
+            ),
+            (
+                E8,
+                ONE_DAY_SECONDS,
+                2 * E8,
+                4 * ONE_DAY_SECONDS,
+                3 * E8,
+                3 * ONE_DAY_SECONDS,
+            ),
+        ];
+        for (
+            x_stake_e8s,
+            x_age_seconds,
+            y_stake_e8s,
+            y_age_seconds,
+            expected_stake_e8s,
+            expected_age_seconds,
+        ) in cases
+        {
+            let (stake_e8s, age_seconds) =
+                combine_aged_stakes(x_stake_e8s, x_age_seconds, y_stake_e8s, y_age_seconds);
+            assert_eq!(stake_e8s, expected_stake_e8s);
+            assert_eq!(age_seconds, expected_age_seconds);
+        }
+    }
+
+    use proptest::prelude::*;
+    use proptest::proptest;
+
+    proptest! {
+        #[test]
+        fn test_combine_aged_stakes_invariant(
+            x_stake_e8s in 0..10_000_000_000 * E8, // Choosing u64::MAX can cause overflow for the combined stake
+            x_age_seconds in 0..u64::MAX,
+            y_stake_e8s in 0..10_000_000_000 * E8,
+            y_age_seconds in 0..u64::MAX,
+        ) {
+            let (stake_e8s, age_seconds) = combine_aged_stakes(x_stake_e8s, x_age_seconds, y_stake_e8s, y_age_seconds);
+            prop_assert_eq!(stake_e8s, x_stake_e8s + y_stake_e8s);
+
+            // The combined age should be between the two input ages.
+            let is_combined_age_between_input_ages = (y_age_seconds <= age_seconds && age_seconds <= x_age_seconds) ||
+               (x_age_seconds <= age_seconds && age_seconds <= y_age_seconds);
+            let are_both_stakes_zero = x_stake_e8s == 0 && y_stake_e8s == 0;
+            prop_assert!(are_both_stakes_zero || is_combined_age_between_input_ages);
+        }
     }
 }

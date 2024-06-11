@@ -11,7 +11,7 @@ use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     methods::{FuncRef, WasmClosure, WasmMethod},
     time::UNIX_EPOCH,
-    NumBytes,
+    NumBytes, NumInstructions,
 };
 
 #[cfg(target_os = "linux")]
@@ -44,10 +44,8 @@ fn cannot_execute_wasm_without_memory() {
         Err(err) => {
             assert_eq!(
                 err,
-                ic_interfaces::execution_environment::HypervisorError::ContractViolation {
+                ic_interfaces::execution_environment::HypervisorError::ToolchainContractViolation {
                     error: "WebAssembly module must define memory".to_string(),
-                    suggestion: "".to_string(),
-                    doc_link: "".to_string()
                 }
             );
         }
@@ -106,6 +104,7 @@ fn correctly_count_instructions() {
 #[test]
 fn instruction_limit_traps() {
     let data_size = 1024;
+    let instruction_limit = NumInstructions::from(1000);
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(
             format!(
@@ -129,7 +128,7 @@ fn instruction_limit_traps() {
             vec![0; 1024],
             user_test_id(24).get(),
         ))
-        .with_num_instructions(1000.into())
+        .with_num_instructions(instruction_limit)
         .build();
 
     let result = instance.run(ic_types::methods::FuncRef::Method(
@@ -138,7 +137,7 @@ fn instruction_limit_traps() {
 
     assert_eq!(
         result.err(),
-        Some(HypervisorError::InstructionLimitExceeded)
+        Some(HypervisorError::InstructionLimitExceeded(instruction_limit))
     );
 }
 
@@ -505,10 +504,8 @@ fn calling_function_with_invalid_signature_fails() {
         .unwrap_err();
     assert_eq!(
         err,
-        HypervisorError::ContractViolation {
+        HypervisorError::ToolchainContractViolation {
             error: "function invocation does not match its signature".to_string(),
-            suggestion: "".to_string(),
-            doc_link: "".to_string()
         }
     );
 }
@@ -582,8 +579,8 @@ fn read_before_write_stats() {
         .run(FuncRef::Method(WasmMethod::Update("write".to_string())))
         .unwrap();
     let stats = instance.get_stats();
-    assert_eq!(stats.direct_write_count, 1);
-    assert_eq!(stats.read_before_write_count, 0);
+    assert_eq!(stats.wasm_direct_write_count, 1);
+    assert_eq!(stats.wasm_read_before_write_count, 0);
 
     // This wasm does a read then write to page 0.
     let read_then_write_wat = r#"
@@ -610,8 +607,8 @@ fn read_before_write_stats() {
         .run(FuncRef::Method(WasmMethod::Update("write".to_string())))
         .unwrap();
     let stats = instance.get_stats();
-    assert_eq!(stats.direct_write_count, 0);
-    assert_eq!(stats.read_before_write_count, 1);
+    assert_eq!(stats.wasm_direct_write_count, 0);
+    assert_eq!(stats.wasm_read_before_write_count, 1);
 }
 
 #[test]
@@ -755,7 +752,7 @@ fn stable_read_accessed_pages_allowance() {
     use HypervisorError::*;
 
     let mut config = Config {
-        stable_memory_accessed_page_limit: ic_types::NumPages::new(3),
+        stable_memory_accessed_page_limit: ic_types::NumOsPages::new(3),
         ..Default::default()
     };
     config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
@@ -846,7 +843,7 @@ fn stable64_read_accessed_pages_allowance() {
     use HypervisorError::*;
 
     let mut config = Config {
-        stable_memory_accessed_page_limit: ic_types::NumPages::new(3),
+        stable_memory_accessed_page_limit: ic_types::NumOsPages::new(3),
         ..Default::default()
     };
     config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
@@ -922,7 +919,7 @@ fn multiple_stable_write() {
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap();
     // one dirty heap page and 13 stable
-    assert_eq!(instance.get_stats().dirty_pages, 1 + 13);
+    assert_eq!(instance.get_stats().dirty_pages(), 1 + 13);
 }
 
 #[test]
@@ -970,7 +967,7 @@ fn multiple_stable64_write() {
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap();
     // one dirty heap page and 13 stable
-    assert_eq!(instance.get_stats().dirty_pages, 1 + 13);
+    assert_eq!(instance.get_stats().dirty_pages(), 1 + 13);
 }
 
 #[test]
@@ -1682,7 +1679,7 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
         .with_subnet_type(SubnetType::Application)
         .with_wat(&create_debug_print_wat(message_len))
         .build();
-    // Call the WASM method multiple times.
+    // Call the Wasm method multiple times.
     for i in 0..10 {
         let before = instance.instruction_counter();
         instance
@@ -1722,6 +1719,59 @@ fn wasm64_basic_test() {
             (i64.store (i64.const 0) (memory.grow (i64.const 1)))
             (i64.store (i64.const 20) (i64.const 137))
             (i64.load (i64.const 20))
+            global.set $g1
+        )
+        (memory (export "memory") i64 10)
+    )"#;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .build();
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+    assert_eq!(res.exported_globals[0], Global::I64(137));
+}
+
+#[test]
+// Verify that we can create 64 bit memory and write to it
+fn memory_copy_test() {
+    let wat = r#"
+    (module
+        (global $g1 (export "g1") (mut i64) (i64.const 0))
+        (func $test (export "canister_update test")
+            (i64.store (i32.const 20) (i64.const 137))
+            (memory.copy (i32.const 50) (i32.const 20) (i32.const 8))
+            (i64.load (i32.const 50))
+            global.set $g1
+        )
+        (memory (export "memory") 10)
+    )"#;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .build();
+    let res = instance
+        .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+        .unwrap();
+    assert_eq!(res.exported_globals[0], Global::I64(137));
+}
+
+#[test]
+fn wasm64_memory_copy_test() {
+    let wat = r#"
+    (module
+        (global $g1 (export "g1") (mut i64) (i64.const 0))
+        (func $test (export "canister_update test")
+            (i64.store (i64.const 20) (i64.const 137))
+            (memory.copy (i64.const 50) (i64.const 20) (i64.const 8))
+            (i64.load (i64.const 50))
             global.set $g1
         )
         (memory (export "memory") i64 10)

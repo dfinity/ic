@@ -45,7 +45,6 @@ use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript};
 use ic_types::{
     crypto::{CurrentNodePublicKeys, KeyPurpose},
-    p2p::build_default_gossip_config,
     NodeId, ReplicaVersion,
 };
 use maplit::btreemap;
@@ -292,7 +291,6 @@ pub fn invariant_compliant_mutation_with_subnet_id(
         subnet_type: i32::from(SubnetType::System),
         replica_version_id: replica_version_id.clone(),
         unit_delay_millis: 600,
-        gossip_config: Some(build_default_gossip_config()),
         ecdsa_config,
         ..Default::default()
     };
@@ -538,7 +536,6 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         subnet_type: i32::from(SubnetType::System),
         replica_version_id: replica_version_id.clone(),
         unit_delay_millis: 600,
-        gossip_config: Some(build_default_gossip_config()),
         ..Default::default()
     };
 
@@ -670,7 +667,6 @@ pub fn prepare_registry_with_two_node_sets(
             .map(|id| id.get().into_vec())
             .collect(),
         unit_delay_millis: 600,
-        gossip_config: Some(build_default_gossip_config()),
         subnet_type: ic_protobuf::registry::subnet::v1::SubnetType::Application as i32,
         ..Default::default()
     };
@@ -701,7 +697,6 @@ pub fn prepare_registry_with_two_node_sets(
                 .map(|id| id.get().into_vec())
                 .collect(),
             unit_delay_millis: 600,
-            gossip_config: Some(build_default_gossip_config()),
             subnet_type: ic_protobuf::registry::subnet::v1::SubnetType::Application as i32,
             ..Default::default()
         };

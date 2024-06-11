@@ -307,6 +307,11 @@ fn test_archive_duplicate_controllers() {
     ic_icrc1_ledger_sm_tests::test_archive_duplicate_controllers(ledger_wasm());
 }
 
+#[test]
+fn test_icrc21_standard() {
+    ic_icrc1_ledger_sm_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
+}
+
 // #[test]
 // fn test_icrc1_test_suite() {
 //     ic_icrc1_ledger_sm_tests::test_icrc1_test_suite(ledger_wasm(), encode_init_args);
@@ -321,6 +326,18 @@ fn test_block_transformation() {
         ledger_wasm(),
         encode_init_args,
     );
+}
+
+mod metrics {
+    use crate::{encode_init_args, ledger_wasm};
+
+    #[test]
+    fn should_export_total_memory_usage_metrics() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_ledger_total_memory_bytes_metric(
+            ledger_wasm(),
+            encode_init_args,
+        );
+    }
 }
 
 // Validate upgrade of the Ledger from previous versions

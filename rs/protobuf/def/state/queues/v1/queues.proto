@@ -64,7 +64,8 @@ message Request {
 }
 
 message RejectContext {
-  uint64 reject_code_old = 1;
+  reserved 1;
+  reserved "reject_code_old";
   types.v1.RejectCode reject_code = 3;
   string reject_message = 2;
 }
@@ -114,13 +115,57 @@ message QueueEntry {
   InputOutputQueue queue = 2;
 }
 
+// A pool holding all of a canister's incoming and outgoing canister messages.
+message MessagePool {
+  // A pool entry: a message keyed by its ID.
+  message Entry {
+    uint64 id = 1;
+    RequestOrResponse message = 2;
+  }
+  // A message deadline.
+  //
+  // Recorded explicitly for outbound guaranteed response requests only.
+  // Best-effort messages have explicit deadlines.
+  message MessageDeadline {
+    uint64 id = 1;
+    uint32 deadline_seconds = 2;
+  }
+
+  // Map of messages by message ID.
+  repeated Entry messages = 1;
+  // The (implicit) deadlines of all outbound guaranteed response requests (only).
+  repeated MessageDeadline outbound_guaranteed_request_deadlines = 2;
+  // Strictly monotonically increasing counter used to generate unique message
+  // IDs.
+  uint64 message_id_generator = 3;
+}
+
+message CanisterQueue {
+  message QueueItem {
+    oneof r {
+      // A reference into the message pool (a pool assigned ID).
+      uint64 reference = 1;
+
+      // A marker for a transient reject response for the given callback ID.
+      // uint64 transient_reject_for_callback_id = 2;
+      // A marker for an unknown reject response for the given callback ID.
+      // uint64 unknown_reject_for_callback_id = 3;
+    }
+  }
+
+  // FIFO queue of references into the pool and reject response markers.
+  repeated QueueItem queue = 1;
+  // Maximum number of requests or responses that can be enqueued at any one time.
+  uint64 capacity = 2;
+  // Number of slots used by or reserved for responses.
+  uint64 response_slots = 3;
+}
+
 message CanisterQueues {
-  reserved 1; // this is from canisterId
-  reserved "canister_id";
+  reserved 1, 4;
+  reserved "canister_id", "input_schedule";
   repeated ingress.v1.Ingress ingress_queue = 2;
   repeated QueueEntry input_queues = 3;
-  // Upgrade: input_schedule is mapped to local_subnet_input_schedule.
-  repeated types.v1.CanisterId input_schedule = 4;
   repeated QueueEntry output_queues = 5;
   enum NextInputQueue {
     NEXT_INPUT_QUEUE_UNSPECIFIED = 0;
@@ -129,8 +174,6 @@ message CanisterQueues {
     NEXT_INPUT_QUEUE_REMOTE_SUBNET = 3;
   }
   NextInputQueue next_input_queue = 6;
-  // Downgrade: both queues are mapped back to input_schedule in the current
-  // release.
   repeated types.v1.CanisterId local_subnet_input_schedule = 7;
   repeated types.v1.CanisterId remote_subnet_input_schedule = 8;
 }

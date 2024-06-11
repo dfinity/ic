@@ -13,7 +13,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_public::{
-    CallServiceBuilder, CanisterReadStateServiceBuilder, QueryServiceBuilder,
+    CallServiceV2, CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
 };
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_management_canister_types::CanisterInstallMode;
@@ -48,7 +48,7 @@ use std::hash::Hash;
 use std::str::FromStr;
 use std::{
     collections::{BTreeMap, HashMap},
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     time::{Duration, SystemTime},
 };
 use tempfile::TempDir;
@@ -952,12 +952,12 @@ impl Operation for CallRequest {
                     mpsc::unbounded_channel::<UnvalidatedArtifactMutation<IngressArtifact>>();
                 let ingress_filter = subnet.ingress_filter.clone();
 
-                let svc = CallServiceBuilder::builder(
+                let ingress_validator = IngressValidatorBuilder::builder(
                     node.node_id,
                     subnet.get_subnet_id(),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    BoxCloneService::new(service_fn(move |arg| {
+                    Arc::new(Mutex::new(BoxCloneService::new(service_fn(move |arg| {
                         let ingress_filter = ingress_filter.clone();
                         async {
                             let r = ingress_filter
@@ -966,11 +966,13 @@ impl Operation for CallRequest {
                                 .expect("Inner service should be alive. I hope.");
                             Ok(r)
                         }
-                    })),
+                    })))),
                     Arc::new(RwLock::new(PocketIngressPoolThrottler)),
                     s,
                 )
-                .build_service();
+                .build();
+
+                let svc = CallServiceV2::new_service(ingress_validator);
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)

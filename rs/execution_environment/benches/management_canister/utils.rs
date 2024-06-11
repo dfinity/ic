@@ -10,7 +10,7 @@ use serde::Deserialize;
 pub const CANISTERS_PER_BATCH: u64 = 490;
 
 thread_local! {
-    // Store test canister WASM in a thread local memory to avoid re-reading the file for each bench.
+    // Store test canister Wasm in a thread local memory to avoid re-reading the file for each bench.
     static TEST_CANISTER_WASM: Vec<u8> = canister_test::Project::cargo_bin_maybe_from_env("test_canister", &[]).bytes();
 }
 

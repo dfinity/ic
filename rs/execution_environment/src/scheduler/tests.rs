@@ -18,7 +18,8 @@ use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
-    CanisterStatusType, DerivationPath, EcdsaCurve, EmptyBlob, Method, Payload as _,
+    CanisterStatusType, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, Method, Payload as _,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -68,7 +69,7 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
             max_instructions_per_message: NumInstructions::from(5),
             max_instructions_per_message_without_dts: NumInstructions::from(5),
             max_instructions_per_slice: NumInstructions::from(5),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -113,7 +114,7 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             subnet_heap_delta_capacity: NumBytes::from(10),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -152,7 +153,7 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             subnet_heap_delta_capacity: NumBytes::from(10),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -202,7 +203,7 @@ fn canister_gets_heap_delta_rate_limited() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             subnet_heap_delta_capacity: NumBytes::from(10),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -250,7 +251,7 @@ fn inner_loop_stops_when_no_instructions_consumed() {
             max_instructions_per_message: NumInstructions::new(50),
             max_instructions_per_message_without_dts: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -296,7 +297,7 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
             max_instructions_per_message: NumInstructions::new(50),
             max_instructions_per_message_without_dts: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -344,7 +345,7 @@ fn basic_induct_messages_on_same_subnet_works() {
             max_instructions_per_message: NumInstructions::new(55),
             max_instructions_per_message_without_dts: NumInstructions::from(55),
             max_instructions_per_slice: NumInstructions::new(50),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -393,7 +394,7 @@ fn induct_messages_on_same_subnet_handles_foreign_subnet() {
             max_instructions_per_message: NumInstructions::new(50),
             max_instructions_per_message_without_dts: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -434,7 +435,7 @@ fn induct_messages_to_self_works() {
             max_instructions_per_message: NumInstructions::new(55),
             max_instructions_per_message_without_dts: NumInstructions::from(55),
             max_instructions_per_slice: NumInstructions::new(50),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -489,7 +490,7 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
                 max_instructions_per_message: NumInstructions::new(1),
                 max_instructions_per_message_without_dts: NumInstructions::from(1),
                 max_instructions_per_slice: NumInstructions::new(1),
-                instruction_overhead_per_message: NumInstructions::from(0),
+                instruction_overhead_per_execution: NumInstructions::from(0),
                 instruction_overhead_per_canister: NumInstructions::from(0),
                 ..SchedulerConfig::application_subnet()
             })
@@ -554,7 +555,7 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
     run_test(SubnetAvailableMemory::new(0, 0, 0), SubnetType::System);
 }
 
-/// Verifies that the [`SchedulerConfig::instruction_overhead_per_message`] puts
+/// Verifies that the [`SchedulerConfig::instruction_overhead_per_execution`] puts
 /// a limit on the number of update messages that will be executed in a single
 /// round.
 #[test]
@@ -567,7 +568,7 @@ fn test_message_limit_from_message_overhead() {
         max_instructions_per_message_without_dts: NumInstructions::from(5_000_000_000),
         max_instructions_per_slice: NumInstructions::from(5_000_000_000),
         max_instructions_per_round: NumInstructions::from(7_000_000_000),
-        instruction_overhead_per_message: NumInstructions::from(2_000_000),
+        instruction_overhead_per_execution: NumInstructions::from(2_000_000),
         instruction_overhead_per_canister: NumInstructions::from(0),
         instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
         ..SchedulerConfig::application_subnet()
@@ -587,7 +588,7 @@ fn test_message_limit_from_message_overhead() {
     // limit, so one additional message will be handled.
     let expected_number_of_messages = (scheduler_config.max_instructions_per_round
         - scheduler_config.max_instructions_per_message)
-        / scheduler_config.instruction_overhead_per_message
+        / scheduler_config.instruction_overhead_per_execution
         + 1;
 
     let mut callee = canister0;
@@ -637,7 +638,7 @@ fn test_multiple_iterations_of_inner_loop() {
             max_instructions_per_message: NumInstructions::new(50),
             max_instructions_per_message_without_dts: NumInstructions::new(50),
             max_instructions_per_slice: NumInstructions::from(50),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -689,7 +690,7 @@ fn canister_can_run_for_multiple_iterations() {
             max_instructions_per_message: NumInstructions::new(50),
             max_instructions_per_message_without_dts: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -736,7 +737,7 @@ fn validate_consumed_instructions_metric() {
             max_instructions_per_message_without_dts: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
             max_instructions_per_round: NumInstructions::from(400),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -832,7 +833,7 @@ fn charging_for_message_memory_works() {
             max_instructions_per_message_without_dts: NumInstructions::from(1),
             max_instructions_per_slice: NumInstructions::new(1),
             max_instructions_per_round: NumInstructions::from(1),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -895,7 +896,7 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
             max_instructions_per_message: instructions_per_message,
             max_instructions_per_message_without_dts: instructions_per_message,
             max_instructions_per_slice: instructions_per_message,
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -978,6 +979,213 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
 }
 
 #[test]
+fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
+    let mut test = SchedulerTestBuilder::new()
+        .with_canister_snapshots(true)
+        .build();
+
+    let canister_id = test.create_canister_with_controller(
+        Cycles::new(12_700_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        None,
+        Some(initial_time),
+        None,
+        Some(canister_test_id(10).get()),
+    );
+    assert_eq!(test.state().canister_states.len(), 1);
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id)
+            .len(),
+        0
+    );
+
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    test.inject_call_to_ic00(
+        Method::TakeCanisterSnapshot,
+        args.encode(),
+        Cycles::zero(),
+        canister_test_id(10),
+        InputQueueType::LocalSubnet,
+    );
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+
+    // Snapshot was created.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id)
+            .len(),
+        1
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .num_canisters_uninstalled_out_of_cycles
+            .get(),
+        0
+    );
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .execution_state
+        .is_some());
+
+    // Uninstall canister due to `out_of_cycles`.
+    test.set_time(
+        initial_time
+            + 1000
+                * test
+                    .scheduler()
+                    .cycles_account_manager
+                    .duration_between_allocation_charges(),
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .num_canisters_uninstalled_out_of_cycles
+            .get(),
+        1
+    );
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id)
+            .len(),
+        0
+    );
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .execution_state
+        .is_none());
+}
+
+#[test]
+fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
+    let mut test = SchedulerTestBuilder::new()
+        .with_canister_snapshots(true)
+        .build();
+
+    let canister_id = test.create_canister_with_controller(
+        Cycles::new(12_700_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        None,
+        Some(initial_time),
+        None,
+        Some(canister_test_id(10).get()),
+    );
+    assert_eq!(test.state().canister_states.len(), 1);
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id)
+            .len(),
+        0
+    );
+
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .execution_state
+        .is_some());
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    test.inject_call_to_ic00(
+        Method::TakeCanisterSnapshot,
+        args.encode(),
+        Cycles::zero(),
+        canister_test_id(10),
+        InputQueueType::LocalSubnet,
+    );
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
+
+    // Snapshot was created.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id)
+            .len(),
+        1
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .num_canisters_uninstalled_out_of_cycles
+            .get(),
+        0
+    );
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .execution_state
+        .is_some());
+
+    // Uninstall canister.
+    let args: UninstallCodeArgs = UninstallCodeArgs::new(canister_id, None);
+    test.inject_call_to_ic00(
+        Method::UninstallCode,
+        args.encode(),
+        Cycles::zero(),
+        canister_test_id(10),
+        InputQueueType::LocalSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .execution_state
+        .is_none());
+
+    // Trigger canister `out_of_cycles`.
+    test.set_time(
+        initial_time
+            + 1000
+                * test
+                    .scheduler()
+                    .cycles_account_manager
+                    .duration_between_allocation_charges(),
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .num_canisters_uninstalled_out_of_cycles
+            .get(),
+        1
+    );
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id)
+            .len(),
+        0
+    );
+    assert!(test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .execution_state
+        .is_none());
+}
+
+#[test]
 fn dont_charge_allocations_for_long_running_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
     let initial_time = UNIX_EPOCH + Duration::from_secs(1);
@@ -1046,7 +1254,7 @@ fn can_execute_messages_with_just_enough_instructions() {
             max_instructions_per_message: NumInstructions::from(50),
             max_instructions_per_message_without_dts: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::from(50),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -1105,7 +1313,7 @@ fn execute_only_canisters_with_messages() {
             max_instructions_per_message: NumInstructions::from(50),
             max_instructions_per_message_without_dts: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::from(50),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -1230,7 +1438,7 @@ fn max_canisters_per_round() {
             max_instructions_per_message: NumInstructions::from(10),
             max_instructions_per_message_without_dts: NumInstructions::from(10),
             max_instructions_per_slice: NumInstructions::from(10),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(10),
             ..SchedulerConfig::application_subnet()
         })
@@ -1268,7 +1476,7 @@ fn can_fully_execute_canisters_deterministically_until_out_of_cycles() {
             max_instructions_per_message: NumInstructions::from(5),
             max_instructions_per_message_without_dts: NumInstructions::from(5),
             max_instructions_per_slice: NumInstructions::from(5),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -1332,7 +1540,7 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
             max_instructions_per_message: NumInstructions::from(5),
             max_instructions_per_message_without_dts: NumInstructions::from(5),
             max_instructions_per_slice: NumInstructions::from(5),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -1398,7 +1606,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
             max_instructions_per_slice: NumInstructions::new(10),
             max_instructions_per_install_code: NumInstructions::new(10),
             max_instructions_per_install_code_slice: NumInstructions::new(10),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -1572,7 +1780,7 @@ fn execute_heartbeat_before_messages() {
             max_instructions_per_message: NumInstructions::new(1),
             max_instructions_per_message_without_dts: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::new(1),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         })
@@ -1604,7 +1812,7 @@ fn execute_global_timer_before_messages() {
             max_instructions_per_message: NumInstructions::new(1),
             max_instructions_per_message_without_dts: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::new(1),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         })
@@ -1639,7 +1847,7 @@ fn test_drain_subnet_messages_with_some_long_running_canisters() {
             max_instructions_per_message: NumInstructions::from(1),
             max_instructions_per_message_without_dts: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         })
@@ -1734,7 +1942,7 @@ fn test_drain_subnet_messages_no_long_running_canisters() {
             max_instructions_per_message: NumInstructions::from(1),
             max_instructions_per_message_without_dts: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         })
@@ -1778,7 +1986,7 @@ fn test_drain_subnet_messages_all_long_running_canisters() {
             max_instructions_per_message: NumInstructions::from(1),
             max_instructions_per_message_without_dts: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         })
@@ -1835,7 +2043,7 @@ fn scheduler_executes_postponed_raw_rand_requests() {
             max_instructions_per_message: NumInstructions::from(1),
             max_instructions_per_message_without_dts: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -1911,7 +2119,7 @@ fn execute_multiple_heartbeats() {
             max_instructions_per_message: NumInstructions::from(100),
             max_instructions_per_message_without_dts: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         })
@@ -1972,7 +2180,7 @@ fn can_record_metrics_single_scheduler_thread() {
             max_instructions_per_message: NumInstructions::from(5),
             max_instructions_per_message_without_dts: NumInstructions::new(5),
             max_instructions_per_slice: NumInstructions::from(5),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -2011,7 +2219,7 @@ fn can_record_metrics_for_a_round() {
             max_instructions_per_message: NumInstructions::from(5),
             max_instructions_per_message_without_dts: NumInstructions::new(5),
             max_instructions_per_slice: NumInstructions::from(5),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2104,7 +2312,7 @@ fn can_record_metrics_for_a_round() {
 fn heap_delta_rate_limiting_metrics_recorded() {
     let scheduler_config = SchedulerConfig {
         scheduler_cores: 2,
-        instruction_overhead_per_message: NumInstructions::from(0),
+        instruction_overhead_per_execution: NumInstructions::from(0),
         instruction_overhead_per_canister: NumInstructions::from(0),
         ..SchedulerConfig::application_subnet()
     };
@@ -2458,7 +2666,7 @@ fn execution_round_metrics_are_recorded() {
             max_instructions_per_message: NumInstructions::from(10),
             max_instructions_per_message_without_dts: NumInstructions::new(10),
             max_instructions_per_slice: NumInstructions::from(10),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2631,7 +2839,7 @@ fn heartbeat_metrics_are_recorded() {
             max_instructions_per_message: NumInstructions::from(100),
             max_instructions_per_message_without_dts: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
         })
@@ -2700,7 +2908,7 @@ fn execution_round_does_not_end_too_early() {
             max_instructions_per_message: NumInstructions::from(100),
             max_instructions_per_message_without_dts: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2946,7 +3154,7 @@ fn scheduler_maintains_canister_order() {
             max_instructions_per_message: NumInstructions::from(1),
             max_instructions_per_message_without_dts: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -3150,7 +3358,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         &no_op_logger(),
     );
 
-    let consumed_cycles_since_replica_started_before = NominalCycles::from(
+    let consumed_cycles_before = NominalCycles::from(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -3187,7 +3395,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         &test.scheduler().metrics,
         &no_op_logger(),
     );
-    let consumed_cycles_since_replica_started_after = NominalCycles::from(
+    let consumed_cycles_after = NominalCycles::from(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -3196,8 +3404,8 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
     );
 
     assert_eq!(
-        consumed_cycles_since_replica_started_before + NominalCycles::from(fee),
-        consumed_cycles_since_replica_started_after
+        consumed_cycles_before + NominalCycles::from(fee),
+        consumed_cycles_after
     );
 
     assert_eq!(
@@ -3224,7 +3432,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         &no_op_logger(),
     );
 
-    let consumed_cycles_since_replica_started_before = NominalCycles::from(
+    let consumed_cycles_before = NominalCycles::from(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -3288,7 +3496,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
         &test.scheduler().metrics,
         &no_op_logger(),
     );
-    let consumed_cycles_since_replica_started_after = NominalCycles::from(
+    let consumed_cycles_after = NominalCycles::from(
         fetch_gauge(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_since_replica_started",
@@ -3297,8 +3505,8 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
     );
 
     assert_eq!(
-        consumed_cycles_since_replica_started_before + NominalCycles::from(fee),
-        consumed_cycles_since_replica_started_after
+        consumed_cycles_before + NominalCycles::from(fee),
+        consumed_cycles_after
     );
 
     assert_eq!(
@@ -3311,7 +3519,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
 }
 
 #[test]
-fn consumed_cycles_since_replica_started_are_updated_from_valid_canisters() {
+fn consumed_cycles_are_updated_from_valid_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with(
@@ -3346,7 +3554,7 @@ fn consumed_cycles_since_replica_started_are_updated_from_valid_canisters() {
 }
 
 #[test]
-fn consumed_cycles_since_replica_started_are_updated_from_deleted_canisters() {
+fn consumed_cycles_are_updated_from_deleted_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
     let initial_balance = Cycles::from(5_000_000_000_000u128);
     let canister_id = test.create_canister_with(
@@ -3500,7 +3708,7 @@ fn construct_scheduler_for_prop_test(
             instructions_per_message as u64,
         ),
         max_instructions_per_slice: NumInstructions::from(instructions_per_message as u64),
-        instruction_overhead_per_message: NumInstructions::from(0),
+        instruction_overhead_per_execution: NumInstructions::from(0),
         instruction_overhead_per_canister: NumInstructions::from(0),
         ..SchedulerConfig::application_subnet()
     };
@@ -3838,7 +4046,7 @@ fn rate_limiting_of_install_code() {
             max_instructions_per_install_code: NumInstructions::from(20 * B as u64),
             max_instructions_per_install_code_slice: NumInstructions::from(5 * B as u64),
             install_code_rate_limit: NumInstructions::from(2 * B as u64),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })
@@ -3916,7 +4124,7 @@ fn dts_long_execution_completes() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
@@ -3951,7 +4159,7 @@ fn cannot_execute_management_message_for_targeted_long_execution_canister() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
@@ -4017,7 +4225,7 @@ fn dts_long_execution_runs_out_of_instructions() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
@@ -4056,7 +4264,7 @@ fn complete_concurrent_long_executions(
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores,
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100 * num_slices),
             max_instructions_per_message: NumInstructions::from(100 * num_slices),
@@ -4097,7 +4305,7 @@ fn respect_max_paused_executions(
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores,
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100 * num_slices),
             max_instructions_per_message: NumInstructions::from(100 * num_slices),
@@ -4256,7 +4464,7 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(160),
             max_instructions_per_message: NumInstructions::from(40),
@@ -4426,7 +4634,7 @@ fn dts_resume_install_code_after_abort() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_install_code: NumInstructions::new(1000),
@@ -4476,7 +4684,7 @@ fn dts_resume_long_execution_after_abort() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
@@ -4524,7 +4732,7 @@ fn dts_update_and_heartbeat() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(300),
             max_instructions_per_message: NumInstructions::from(1000),
@@ -4590,7 +4798,7 @@ fn scheduler_resets_accumulated_priorities() {
             .with_scheduler_config(SchedulerConfig {
                 scheduler_cores,
                 // Increase the overhead to execute just one message per round per core
-                instruction_overhead_per_message: subnet_config
+                instruction_overhead_per_execution: subnet_config
                     .scheduler_config
                     .max_instructions_per_round,
                 // Reset accumulated priority every second round
@@ -4909,11 +5117,14 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     let mut test = SchedulerTestBuilder::new()
         .with_ecdsa_key(key_id.clone())
         .build();
-    let quadruple_id = QuadrupleId::new(0);
-    let quadruple_ids = BTreeSet::from_iter([quadruple_id.clone()]);
+    let pre_sig_id = PreSigId(0);
+    let pre_sig_ids = BTreeSet::from_iter([pre_sig_id]);
 
     inject_ecdsa_signing_request(&mut test, &key_id);
-    test.deliver_quadruple_ids(BTreeMap::from_iter([(key_id, quadruple_ids)]));
+    test.deliver_pre_signature_ids(BTreeMap::from_iter([(
+        MasterPublicKeyId::Ecdsa(key_id),
+        pre_sig_ids,
+    )]));
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let sign_with_ecdsa_context = &test
@@ -4928,7 +5139,7 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     // Check that quadruple was matched
     assert_eq!(
         sign_with_ecdsa_context.matched_quadruple,
-        Some((quadruple_id.clone(), expected_height))
+        Some((pre_sig_id, expected_height))
     );
     // Check that nonce is still none
     assert!(sign_with_ecdsa_context.nonce.is_none());
@@ -4944,7 +5155,7 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     // Check that quadruple is still matched
     assert_eq!(
         sign_with_ecdsa_context.matched_quadruple,
-        Some((quadruple_id, expected_height))
+        Some((pre_sig_id, expected_height))
     );
     // Check that nonce is set
     let nonce = sign_with_ecdsa_context.nonce;
@@ -4971,13 +5182,19 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
         .build();
 
     // Deliver 2 quadruples for the first key, 1 for the second, 0 for the third
-    let quadruple_ids0 = BTreeSet::from_iter([QuadrupleId::new(0), QuadrupleId::new(1)]);
-    let quadruple_ids1 = BTreeSet::from_iter([QuadrupleId::new(2)]);
-    let quadruple_id_map = BTreeMap::from_iter([
-        (key_ids[0].clone(), quadruple_ids0.clone()),
-        (key_ids[1].clone(), quadruple_ids1.clone()),
+    let pre_sig_ids0 = BTreeSet::from_iter([PreSigId(0), PreSigId(1)]);
+    let pre_sig_ids1 = BTreeSet::from_iter([PreSigId(2)]);
+    let pre_sig_id_map = BTreeMap::from_iter([
+        (
+            MasterPublicKeyId::Ecdsa(key_ids[0].clone()),
+            pre_sig_ids0.clone(),
+        ),
+        (
+            MasterPublicKeyId::Ecdsa(key_ids[1].clone()),
+            pre_sig_ids1.clone(),
+        ),
     ]);
-    test.deliver_quadruple_ids(quadruple_id_map);
+    test.deliver_pre_signature_ids(pre_sig_id_map);
 
     // Inject 3 contexts requesting the third, second and first key in order
     for i in (0..3).rev() {
@@ -5002,14 +5219,14 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     assert!(context1.nonce.is_some());
     assert_eq!(
         context1.matched_quadruple,
-        Some((quadruple_ids1.first().unwrap().clone(), expected_height))
+        Some((*pre_sig_ids1.first().unwrap(), expected_height))
     );
 
     let context2 = sign_with_ecdsa_contexts.get(&CallbackId::from(2)).unwrap();
     assert!(context2.nonce.is_some());
     assert_eq!(
         context2.matched_quadruple,
-        Some((quadruple_ids0.first().unwrap().clone(), expected_height))
+        Some((*pre_sig_ids0.first().unwrap(), expected_height))
     );
 }
 
@@ -5024,7 +5241,7 @@ fn clean_in_progress_raw_rand_request_from_subnet_call_context_manager() {
             max_instructions_per_message: NumInstructions::from(1),
             max_instructions_per_message_without_dts: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
         })

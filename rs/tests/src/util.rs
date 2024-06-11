@@ -15,7 +15,10 @@ use futures::FutureExt;
 use ic_agent::export::Principal;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::{
-    agent::{http_transport::reqwest_transport::ReqwestTransport, RejectCode, RejectResponse},
+    agent::{
+        http_transport::reqwest_transport::{reqwest, ReqwestTransport},
+        RejectCode, RejectResponse,
+    },
     Agent, AgentError, Identity, RequestId,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
@@ -72,7 +75,7 @@ pub(crate) const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 pub(crate) const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
 
 pub(crate) const CFG_TEMPLATE_BYTES: &[u8] =
-    include_bytes!("../../../ic-os/rootfs/guestos/opt/ic/share/ic.json5.template");
+    include_bytes!("../../../ic-os/components/ic/ic.json5.template");
 
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
     ic_agent::identity::BasicIdentity::from_pem(IDENTITY_PEM.as_bytes())
@@ -1139,7 +1142,10 @@ pub async fn deposit_cycles(
 pub fn block_on<F: Future>(f: F) -> F::Output {
     // Try to get the current tokio runtime, otherwise create a new one
     match THandle::try_current() {
-        Ok(h) => h.block_on(f),
+        Ok(h) => {
+            let _ = h.enter();
+            futures::executor::block_on(f)
+        }
         Err(_) => {
             let rt = {
                 let cpus = num_cpus::get();

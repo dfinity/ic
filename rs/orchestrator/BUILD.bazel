@@ -23,7 +23,6 @@ rust_library(
         "//rs/consensus",
         "//rs/crypto",
         "//rs/crypto/node_key_generation",
-        "//rs/crypto/tls_interfaces",
         "//rs/http_endpoints/metrics",
         "//rs/http_utils",
         "//rs/interfaces",
@@ -81,7 +80,7 @@ rust_test(
     data = [
         "testdata/nftables_assigned_replica.conf.golden",
         "testdata/nftables_boundary_node.conf.golden",
-        "//ic-os/rootfs/guestos:opt/ic/share/ic.json5.template",
+        "//ic-os/components:ic/ic.json5.template",
     ],
     deps = [
         "//rs/crypto/temp_crypto",

@@ -975,20 +975,24 @@ impl<'a> Action<'a> {
 mod tests {
     use super::*;
     use crate::ecdsa::test_utils::*;
+    use crate::ecdsa::utils::algorithm_for_key_id;
     use assert_matches::assert_matches;
     use ic_consensus_utils::crypto::SignVerify;
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
+    use ic_management_canister_types::MasterPublicKeyId;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_types::consensus::idkg::{EcdsaObject, TranscriptRef};
+    use ic_types::crypto::AlgorithmId;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::Height;
 
     // Tests the Action logic
     #[test]
     fn test_ecdsa_complaint_action() {
+        let key_id = fake_ecdsa_master_public_key_id();
         let (id_1, id_2, id_3, id_4, id_5) = (
             create_transcript_id(1),
             create_transcript_id(2),
@@ -999,8 +1003,11 @@ mod tests {
 
         let ref_1 = TranscriptRef::new(Height::new(10), id_1);
         let ref_2 = TranscriptRef::new(Height::new(20), id_2);
-        let block_reader =
-            TestEcdsaBlockReader::for_complainer_test(Height::new(100), vec![ref_1, ref_2]);
+        let block_reader = TestEcdsaBlockReader::for_complainer_test(
+            &key_id,
+            Height::new(100),
+            vec![ref_1, ref_2],
+        );
         let mut active = BTreeMap::new();
         active.insert(id_1, ref_1);
         active.insert(id_2, ref_2);
@@ -1045,12 +1052,13 @@ mod tests {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
                 let crypto = env.nodes.iter().next().unwrap().crypto();
                 let (_, complaint_handler) =
                     create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
                 let id = create_transcript_id_with_height(2, Height::from(20));
-                let transcript = create_transcript(id, &[NODE_2]);
+                let transcript = create_transcript(&key_id, id, &[NODE_2]);
                 let complaint = create_complaint(id, NODE_2, NODE_3);
                 let changeset: Vec<_> = complaint_handler
                     .crypto_verify_complaint(complaint.message_id(), &transcript, complaint.clone())
@@ -1064,7 +1072,14 @@ mod tests {
 
     // Tests validation of the received complaints
     #[test]
-    fn test_ecdsa_validate_complaints() {
+    fn test_validate_complaints_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_validate_complaints(key_id);
+        }
+    }
+
+    fn test_validate_complaints(key_id: MasterPublicKeyId) {
         let (id_1, id_2, id_3) = (
             create_transcript_id_with_height(1, Height::from(200)),
             create_transcript_id_with_height(2, Height::from(20)),
@@ -1101,6 +1116,7 @@ mod tests {
 
         // Only id_3 is active
         let block_reader = TestEcdsaBlockReader::for_complainer_test(
+            &key_id,
             Height::new(100),
             vec![TranscriptRef::new(Height::new(10), id_3)],
         );
@@ -1161,6 +1177,7 @@ mod tests {
     fn test_ecdsa_duplicate_complaints() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(30));
@@ -1183,6 +1200,7 @@ mod tests {
                 ecdsa_pool.apply_changes(change_set);
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                    &key_id,
                     Height::new(30),
                     vec![TranscriptRef::new(Height::new(30), id_1)],
                 );
@@ -1254,6 +1272,7 @@ mod tests {
     fn test_ecdsa_duplicate_complaints_in_batch() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(30));
@@ -1278,6 +1297,7 @@ mod tests {
                 });
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                    &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(30), id_1)],
                 );
@@ -1293,7 +1313,14 @@ mod tests {
 
     // Tests that openings are sent for eligible complaints
     #[test]
-    fn test_ecdsa_send_openings() {
+    fn test_send_openings_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_send_openings(key_id);
+        }
+    }
+
+    fn test_send_openings(key_id: MasterPublicKeyId) {
         let (id_1, id_2, id_3) = (
             create_transcript_id(1),
             create_transcript_id(2),
@@ -1318,6 +1345,7 @@ mod tests {
         artifacts.push(EcdsaMessage::EcdsaComplaint(complaint));
 
         let block_reader = TestEcdsaBlockReader::for_complainer_test(
+            &key_id,
             Height::new(100),
             vec![
                 TranscriptRef::new(Height::new(10), id_1),
@@ -1375,12 +1403,13 @@ mod tests {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
                 let crypto = env.nodes.iter().next().unwrap().crypto();
                 let (_, complaint_handler) =
                     create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
                 let id = create_transcript_id_with_height(2, Height::from(20));
-                let transcript = create_transcript(id, &[NODE_2]);
+                let transcript = create_transcript(&key_id, id, &[NODE_2]);
                 let complaint = create_complaint(id, NODE_2, NODE_3);
                 let opening = create_opening(id, NODE_2, NODE_3, NODE_4);
                 let changeset: Vec<_> = complaint_handler
@@ -1400,7 +1429,14 @@ mod tests {
 
     // Tests the validation of received openings
     #[test]
-    fn test_ecdsa_validate_openings() {
+    fn test_validate_openings_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_validate_openings(key_id);
+        }
+    }
+
+    fn test_validate_openings(key_id: MasterPublicKeyId) {
         let (id_1, id_2, id_3, id_4) = (
             create_transcript_id_with_height(1, Height::from(400)),
             create_transcript_id_with_height(2, Height::from(20)),
@@ -1448,6 +1484,7 @@ mod tests {
         });
 
         let block_reader = TestEcdsaBlockReader::for_complainer_test(
+            &key_id,
             Height::new(100),
             vec![
                 TranscriptRef::new(Height::new(10), id_3),
@@ -1516,6 +1553,7 @@ mod tests {
     fn test_ecdsa_duplicate_openings() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(20));
@@ -1537,6 +1575,7 @@ mod tests {
                 ecdsa_pool.apply_changes(change_set);
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                    &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
@@ -1553,6 +1592,7 @@ mod tests {
     fn test_ecdsa_duplicate_openings_in_batch() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let id_1 = create_transcript_id_with_height(1, Height::from(20));
@@ -1588,6 +1628,7 @@ mod tests {
                 ecdsa_pool.apply_changes(change_set);
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                    &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
@@ -1606,6 +1647,7 @@ mod tests {
     fn test_ecdsa_purge_unvalidated_complaints() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
@@ -1641,6 +1683,7 @@ mod tests {
 
                 // Only id_1 is active
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                    &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
@@ -1656,6 +1699,7 @@ mod tests {
     fn test_ecdsa_purge_validated_complaints() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
@@ -1688,6 +1732,7 @@ mod tests {
 
                 // Only id_1 is active
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                    &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
@@ -1703,6 +1748,7 @@ mod tests {
     fn test_ecdsa_purge_unvalidated_openings() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
@@ -1738,6 +1784,7 @@ mod tests {
 
                 // Only id_1 is active
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                    &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
@@ -1753,6 +1800,7 @@ mod tests {
     fn test_ecdsa_purge_validated_openings() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
@@ -1785,6 +1833,7 @@ mod tests {
 
                 // Only id_1 is active
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
+                    &key_id,
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
@@ -1795,14 +1844,27 @@ mod tests {
         })
     }
 
-    // Tests loading of a valid transcript without complaints
     #[test]
-    fn test_ecdsa_load_transcript_success() {
+    fn test_load_transcript_success_all_ecdsa_algorithms() {
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            test_load_transcript_success(alg);
+        }
+    }
+
+    #[test]
+    fn test_load_transcript_success_all_schnorr_algorithms() {
+        for alg in AlgorithmId::all_threshold_schnorr_algorithms() {
+            test_load_transcript_success(alg);
+        }
+    }
+
+    // Tests loading of a valid transcript without complaints
+    fn test_load_transcript_success(algorithm: AlgorithmId) {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                let (_, _, idkg_transcript) = create_valid_transcript(&env, &mut rng);
+                let (_, _, idkg_transcript) = create_valid_transcript(&env, &mut rng, algorithm);
 
                 let crypto = env
                     .nodes
@@ -1825,9 +1887,10 @@ mod tests {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
+                let key_id = fake_ecdsa_master_public_key_id();
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
                 let receivers: Vec<_> = env.nodes.ids();
-                let t = create_transcript(create_transcript_id(1), &receivers[..]);
+                let t = create_transcript(&key_id, create_transcript_id(1), &receivers[..]);
 
                 let crypto = env.nodes.iter().next().unwrap().crypto();
                 let (ecdsa_pool, complaint_handler) =
@@ -1841,12 +1904,20 @@ mod tests {
 
     // Tests that crypto failure when creating complaint leads to transcript load failure
     #[test]
-    fn test_ecdsa_load_transcript_failure_to_create_complaint() {
+    fn test_load_transcript_failure_to_create_complaint_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_load_transcript_failure_to_create_complaint(key_id);
+        }
+    }
+
+    fn test_load_transcript_failure_to_create_complaint(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                let (_, _, transcript) = create_corrupted_transcript(&env, &mut rng);
+                let (_, _, transcript) =
+                    create_corrupted_transcript(&env, &mut rng, algorithm_for_key_id(&key_id));
 
                 let crypto = env
                     .nodes
@@ -1865,15 +1936,28 @@ mod tests {
         })
     }
 
+    #[test]
+    fn test_load_transcripts_with_complaints_and_openings_all_ecdsa_algorithms() {
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            test_load_transcripts_with_complaints_and_openings(alg);
+        }
+    }
+
+    #[test]
+    fn test_load_transcripts_with_complaints_and_openings_all_schnorr_algorithms() {
+        for alg in AlgorithmId::all_threshold_schnorr_algorithms() {
+            test_load_transcripts_with_complaints_and_openings(alg);
+        }
+    }
+
     // Tests that attempt of loading a corrupted transcript leads to complaints and
     // loading succeeds after openings are generated.
-    #[test]
-    fn test_ecdsa_load_transcripts_with_complaints_and_openings() {
+    fn test_load_transcripts_with_complaints_and_openings(algorithm: AlgorithmId) {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                let (complainer, _, t) = create_corrupted_transcript(&env, &mut rng);
+                let (complainer, _, t) = create_corrupted_transcript(&env, &mut rng, algorithm);
 
                 let mut components = env.nodes.filter_by_receivers(&t);
 

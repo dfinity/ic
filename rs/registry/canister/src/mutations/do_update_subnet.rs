@@ -10,15 +10,17 @@ use dfn_core::println;
 use serde::Serialize;
 
 use ic_base_types::{subnet_id_into_protobuf, SubnetId};
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_protobuf::registry::subnet::v1::{
     SubnetFeatures as SubnetFeaturesPb, SubnetRecord as SubnetRecordPb,
 };
-use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_key};
+use ic_registry_keys::{
+    make_chain_key_signing_subnet_list_key, make_ecdsa_signing_subnet_list_key,
+    make_subnet_record_key,
+};
 use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
-use ic_types::p2p::build_default_gossip_config;
 
 /// Updates the subnet's configuration in the registry.
 ///
@@ -157,20 +159,31 @@ impl Registry {
         );
     }
 
-    // TODO(NNS1-3037): Replicate changes to chain key signing list
+    // TODO(NNS1-2986): Migrate the function to work over MasterPublicKeyId without replicating to EcdsaKeyId
     fn mutations_to_enable_subnet_signing(
         &self,
         subnet_id: SubnetId,
         ecdsa_key_signing_enable: &Vec<EcdsaKeyId>,
     ) -> Vec<RegistryMutation> {
         let mut mutations = vec![];
-        for key_id in ecdsa_key_signing_enable {
-            let mut signing_list_for_key = self
-                .get_ecdsa_signing_subnet_list(key_id)
+        for ecdsa_key_id in ecdsa_key_signing_enable {
+            let ck_key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
+
+            let mut ecdsa_signing_list_for_key = self
+                .get_ecdsa_signing_subnet_list(ecdsa_key_id)
+                .unwrap_or_default();
+            let mut ck_signing_list_for_key = self
+                .get_chain_key_signing_subnet_list(&ck_key_id)
                 .unwrap_or_default();
 
             // If this subnet already signs for this key, do nothing.
-            if signing_list_for_key
+            if ecdsa_signing_list_for_key
+                .subnets
+                .contains(&subnet_id_into_protobuf(subnet_id))
+            {
+                continue;
+            }
+            if ck_signing_list_for_key
                 .subnets
                 .contains(&subnet_id_into_protobuf(subnet_id))
             {
@@ -178,13 +191,20 @@ impl Registry {
             }
 
             // Preconditions are okay, so we add the subnet to our list of signing subnets.
-            signing_list_for_key
+            ecdsa_signing_list_for_key
+                .subnets
+                .push(subnet_id_into_protobuf(subnet_id));
+            ck_signing_list_for_key
                 .subnets
                 .push(subnet_id_into_protobuf(subnet_id));
 
             mutations.push(upsert(
-                make_ecdsa_signing_subnet_list_key(key_id).into_bytes(),
-                encode_or_panic(&signing_list_for_key),
+                make_ecdsa_signing_subnet_list_key(ecdsa_key_id).into_bytes(),
+                encode_or_panic(&ecdsa_signing_list_for_key),
+            ));
+            mutations.push(upsert(
+                make_chain_key_signing_subnet_list_key(&ck_key_id).into_bytes(),
+                encode_or_panic(&ck_signing_list_for_key),
             ));
         }
         mutations
@@ -272,19 +292,6 @@ macro_rules! maybe_set_option {
     };
 }
 
-// Returns true if any gossip related field is set for an override in the
-// provided payload or false otherwise.
-fn is_any_gossip_field_set(payload: &UpdateSubnetPayload) -> bool {
-    payload.max_artifact_streams_per_peer.is_some()
-        || payload.max_chunk_wait_ms.is_some()
-        || payload.max_duplicity.is_some()
-        || payload.max_chunk_size.is_some()
-        || payload.receive_check_cache_size.is_some()
-        || payload.pfn_evaluation_period_ms.is_some()
-        || payload.registry_poll_period_ms.is_some()
-        || payload.retransmission_request_ms.is_some()
-}
-
 // Merges the changes included in the `UpdateSubnetPayload` to the given
 // `SubnetRecord`. If any value in the provided payload is None, then it is
 // skipped, otherwise it overwrites the corresponding value in the
@@ -294,17 +301,6 @@ fn merge_subnet_record(
     mut subnet_record: SubnetRecordPb,
     payload: UpdateSubnetPayload,
 ) -> SubnetRecordPb {
-    if subnet_record.gossip_config.is_none()
-        && !payload.set_gossip_config_to_default
-        && is_any_gossip_field_set(&payload)
-    {
-        panic!(
-            "Attempt to update gossip config params when the subnet record does not have any gossip \
-            config set and a default one was not requested. Use `set_gossip_config_to_default=true` \
-            and try again."
-        );
-    }
-
     let UpdateSubnetPayload {
         subnet_id: _subnet_id,
         max_ingress_bytes_per_message,
@@ -314,15 +310,6 @@ fn merge_subnet_record(
         initial_notary_delay_millis,
         dkg_interval_length,
         dkg_dealings_per_block,
-        max_artifact_streams_per_peer,
-        max_chunk_wait_ms,
-        max_duplicity,
-        max_chunk_size,
-        receive_check_cache_size,
-        pfn_evaluation_period_ms,
-        registry_poll_period_ms,
-        retransmission_request_ms,
-        set_gossip_config_to_default,
         start_as_nns,
         subnet_type,
         is_halted,
@@ -332,6 +319,15 @@ fn merge_subnet_record(
         max_instructions_per_install_code,
         features,
         ecdsa_config,
+        max_artifact_streams_per_peer: _,
+        max_chunk_wait_ms: _,
+        max_duplicity: _,
+        max_chunk_size: _,
+        receive_check_cache_size: _,
+        pfn_evaluation_period_ms: _,
+        registry_poll_period_ms: _,
+        retransmission_request_ms: _,
+        set_gossip_config_to_default: _,
         ecdsa_key_signing_enable: _,
         ecdsa_key_signing_disable: _,
         max_number_of_canisters,
@@ -348,23 +344,6 @@ fn merge_subnet_record(
     maybe_set!(subnet_record, initial_notary_delay_millis);
     maybe_set!(subnet_record, dkg_interval_length);
     maybe_set!(subnet_record, dkg_dealings_per_block);
-
-    // Set a default gossip config if it was requested...
-    if set_gossip_config_to_default {
-        subnet_record.gossip_config = Some(build_default_gossip_config());
-    }
-
-    // and overwrite fields provided by the user as necessary.
-    let mut gossip_config = subnet_record.gossip_config.take().unwrap();
-    maybe_set!(gossip_config, max_artifact_streams_per_peer);
-    maybe_set!(gossip_config, max_chunk_wait_ms);
-    maybe_set!(gossip_config, max_duplicity);
-    maybe_set!(gossip_config, max_chunk_size);
-    maybe_set!(gossip_config, receive_check_cache_size);
-    maybe_set!(gossip_config, pfn_evaluation_period_ms);
-    maybe_set!(gossip_config, registry_poll_period_ms);
-    maybe_set!(gossip_config, retransmission_request_ms);
-    subnet_record.gossip_config = Some(gossip_config);
 
     maybe_set!(subnet_record, start_as_nns);
 
@@ -409,19 +388,12 @@ mod tests {
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{
         ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb,
-        GossipConfig as GossipConfigPb, SubnetRecord as SubnetRecordPb,
+        SubnetRecord as SubnetRecordPb,
     };
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::{
-        p2p::{
-            MAX_ARTIFACT_STREAMS_PER_PEER, MAX_CHUNK_WAIT_MS, MAX_DUPLICITY,
-            PFN_EVALUATION_PERIOD_MS, RECEIVE_CHECK_PEER_SET_SIZE, REGISTRY_POLL_PERIOD_MS,
-            RETRANSMISSION_REQUEST_MS,
-        },
-        PrincipalId, ReplicaVersion, SubnetId,
-    };
+    use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
     use maplit::btreemap;
     use std::str::FromStr;
 
@@ -429,61 +401,6 @@ mod tests {
         EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: name.to_string(),
-        }
-    }
-
-    fn make_default_update_subnet_payload_for_merge_subnet_tests() -> UpdateSubnetPayload {
-        let legacy_ecdsa_config = EcdsaConfig {
-            quadruples_to_create_in_advance: 10,
-            key_ids: vec![make_ecdsa_key("key_id_1")],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        };
-        UpdateSubnetPayload {
-            subnet_id: SubnetId::from(
-                PrincipalId::from_str(
-                    "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
-                )
-                .unwrap(),
-            ),
-            max_ingress_bytes_per_message: Some(256),
-            max_ingress_messages_per_block: Some(256),
-            max_block_payload_size: Some(200),
-            unit_delay_millis: Some(300),
-            initial_notary_delay_millis: Some(200),
-            dkg_interval_length: Some(8),
-            dkg_dealings_per_block: Some(1),
-            max_artifact_streams_per_peer: Some(0),
-            max_chunk_wait_ms: Some(200),
-            max_duplicity: Some(5),
-            max_chunk_size: Some(1024),
-            receive_check_cache_size: Some(500),
-            pfn_evaluation_period_ms: Some(5000),
-            registry_poll_period_ms: Some(4000),
-            retransmission_request_ms: Some(7000),
-            set_gossip_config_to_default: false,
-            start_as_nns: Some(true),
-            subnet_type: None,
-            is_halted: Some(true),
-            halt_at_cup_height: Some(false),
-            max_instructions_per_message: Some(6_000_000_000),
-            max_instructions_per_round: Some(8_000_000_000),
-            max_instructions_per_install_code: Some(300_000_000_000),
-            features: Some(
-                SubnetFeatures {
-                    canister_sandboxing: false,
-                    http_requests: false,
-                    sev_enabled: false,
-                }
-                .into(),
-            ),
-            ecdsa_config: Some(legacy_ecdsa_config),
-            ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_2")]),
-            ecdsa_key_signing_disable: None,
-            max_number_of_canisters: Some(10),
-            ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
-            ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
         }
     }
 
@@ -535,16 +452,7 @@ mod tests {
             replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
-            gossip_config: Some(GossipConfigPb {
-                max_artifact_streams_per_peer: 10,
-                max_chunk_wait_ms: 100,
-                max_duplicity: 2,
-                max_chunk_size: 10,
-                receive_check_cache_size: 1024,
-                pfn_evaluation_period_ms: 100,
-                registry_poll_period_ms: 100,
-                retransmission_request_ms: 100,
-            }),
+            gossip_config: None,
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
@@ -629,16 +537,7 @@ mod tests {
                 replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 8,
                 dkg_dealings_per_block: 1,
-                gossip_config: Some(GossipConfigPb {
-                    max_artifact_streams_per_peer: 0,
-                    max_chunk_wait_ms: 10,
-                    max_duplicity: 5,
-                    max_chunk_size: 1024,
-                    receive_check_cache_size: 500,
-                    pfn_evaluation_period_ms: 5000,
-                    registry_poll_period_ms: 4000,
-                    retransmission_request_ms: 7000,
-                }),
+                gossip_config: None,
                 start_as_nns: true,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: true,
@@ -675,16 +574,7 @@ mod tests {
             replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
-            gossip_config: Some(GossipConfigPb {
-                max_artifact_streams_per_peer: 10,
-                max_chunk_wait_ms: 100,
-                max_duplicity: 2,
-                max_chunk_size: 10,
-                receive_check_cache_size: 1024,
-                pfn_evaluation_period_ms: 100,
-                registry_poll_period_ms: 100,
-                retransmission_request_ms: 100,
-            }),
+            gossip_config: None,
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
@@ -751,16 +641,7 @@ mod tests {
                 replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 2,
                 dkg_dealings_per_block: 1,
-                gossip_config: Some(GossipConfigPb {
-                    max_artifact_streams_per_peer: 0,
-                    max_chunk_wait_ms: 10,
-                    max_duplicity: 2,
-                    max_chunk_size: 10,
-                    receive_check_cache_size: 200,
-                    pfn_evaluation_period_ms: 100,
-                    registry_poll_period_ms: 100,
-                    retransmission_request_ms: 100,
-                }),
+                gossip_config: None,
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
@@ -770,322 +651,6 @@ mod tests {
                 max_instructions_per_install_code: 200_000_000_000,
                 features: None,
                 max_number_of_canisters: 50,
-                ssh_readonly_access: vec![],
-                ssh_backup_access: vec![],
-                ecdsa_config: None,
-                chain_key_config: None,
-            }
-        );
-    }
-
-    // TODO[NNS1-2988]: Add test `panic_on_removing_chain_key_config`.
-    #[test]
-    #[should_panic]
-    fn panic_on_removing_ecdsa_config() {
-        let subnet_record = SubnetRecordPb {
-            ecdsa_config: Some(
-                EcdsaConfig {
-                    key_ids: vec![make_ecdsa_key("key_id_1")],
-                    ..Default::default()
-                }
-                .into(),
-            ),
-            ..Default::default()
-        };
-
-        let mut payload = make_default_update_subnet_payload_for_merge_subnet_tests();
-        payload.ecdsa_config = None;
-
-        merge_subnet_record(subnet_record, payload);
-    }
-
-    #[test]
-    #[should_panic]
-    // This test confirms that if `set_gossip_config_to_default` = false and the
-    // existing subnet record does not have a gossip config and some gossip related
-    // fields are set to override, `merge_subnet_record` panics as expected.
-    fn can_handle_invalid_combination_of_set_gossip_config_to_default() {
-        let subnet_record = SubnetRecordPb {
-            membership: vec![],
-            max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_ingress_messages_per_block: 1000,
-            max_block_payload_size: 4 * 1024 * 1024,
-            unit_delay_millis: 500,
-            initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
-            dkg_interval_length: 0,
-            dkg_dealings_per_block: 1,
-            gossip_config: None,
-            start_as_nns: false,
-            subnet_type: SubnetType::Application.into(),
-            is_halted: false,
-            halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
-            features: None,
-            max_number_of_canisters: 0,
-            ssh_readonly_access: vec![],
-            ssh_backup_access: vec![],
-            ecdsa_config: None,
-            chain_key_config: None,
-        };
-
-        let payload = UpdateSubnetPayload {
-            subnet_id: SubnetId::from(
-                PrincipalId::from_str(
-                    "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
-                )
-                .unwrap(),
-            ),
-            max_ingress_bytes_per_message: None,
-            max_ingress_messages_per_block: None,
-            max_block_payload_size: None,
-            unit_delay_millis: Some(100),
-            initial_notary_delay_millis: None,
-            dkg_interval_length: Some(2),
-            dkg_dealings_per_block: Some(1),
-            max_artifact_streams_per_peer: Some(0),
-            max_chunk_wait_ms: Some(10),
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: Some(200),
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            set_gossip_config_to_default: false,
-            start_as_nns: None,
-            subnet_type: Some(SubnetType::Application),
-            is_halted: None,
-            halt_at_cup_height: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
-            features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
-            max_number_of_canisters: None,
-            ssh_readonly_access: None,
-            ssh_backup_access: None,
-        };
-
-        merge_subnet_record(subnet_record, payload);
-    }
-
-    #[test]
-    fn can_set_default_gossip_config_and_override_fields() {
-        let subnet_record = SubnetRecordPb {
-            membership: vec![],
-            max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_ingress_messages_per_block: 1000,
-            max_block_payload_size: 4 * 1024 * 1024,
-            unit_delay_millis: 500,
-            initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
-            dkg_interval_length: 0,
-            dkg_dealings_per_block: 1,
-            gossip_config: Some(build_default_gossip_config()),
-            start_as_nns: false,
-            subnet_type: SubnetType::Application.into(),
-            is_halted: false,
-            halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
-            features: None,
-            max_number_of_canisters: 0,
-            ssh_readonly_access: vec![],
-            ssh_backup_access: vec![],
-            ecdsa_config: None,
-            chain_key_config: None,
-        };
-
-        let payload = UpdateSubnetPayload {
-            subnet_id: SubnetId::from(
-                PrincipalId::from_str(
-                    "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
-                )
-                .unwrap(),
-            ),
-            max_ingress_bytes_per_message: None,
-            max_ingress_messages_per_block: None,
-            max_block_payload_size: None,
-            unit_delay_millis: None,
-            initial_notary_delay_millis: None,
-            dkg_interval_length: None,
-            dkg_dealings_per_block: None,
-            max_artifact_streams_per_peer: Some(MAX_ARTIFACT_STREAMS_PER_PEER),
-            max_chunk_wait_ms: Some(MAX_CHUNK_WAIT_MS),
-            max_duplicity: Some(MAX_DUPLICITY),
-            max_chunk_size: Some(10),
-            receive_check_cache_size: Some(RECEIVE_CHECK_PEER_SET_SIZE),
-            pfn_evaluation_period_ms: Some(PFN_EVALUATION_PERIOD_MS),
-            registry_poll_period_ms: Some(REGISTRY_POLL_PERIOD_MS),
-            retransmission_request_ms: Some(RETRANSMISSION_REQUEST_MS),
-            set_gossip_config_to_default: true,
-            start_as_nns: None,
-            subnet_type: None,
-            is_halted: None,
-            halt_at_cup_height: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
-            features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
-            max_number_of_canisters: None,
-            ssh_readonly_access: None,
-            ssh_backup_access: None,
-        };
-
-        assert_eq!(
-            merge_subnet_record(subnet_record, payload),
-            SubnetRecordPb {
-                membership: vec![],
-                max_ingress_bytes_per_message: 60 * 1024 * 1024,
-                max_ingress_messages_per_block: 1000,
-                max_block_payload_size: 4 * 1024 * 1024,
-                unit_delay_millis: 500,
-                initial_notary_delay_millis: 1500,
-                replica_version_id: ReplicaVersion::default().into(),
-                dkg_interval_length: 0,
-                dkg_dealings_per_block: 1,
-                gossip_config: Some(GossipConfigPb {
-                    max_artifact_streams_per_peer: MAX_ARTIFACT_STREAMS_PER_PEER,
-                    max_chunk_wait_ms: MAX_CHUNK_WAIT_MS,
-                    max_duplicity: MAX_DUPLICITY,
-                    max_chunk_size: 10,
-                    receive_check_cache_size: RECEIVE_CHECK_PEER_SET_SIZE,
-                    pfn_evaluation_period_ms: PFN_EVALUATION_PERIOD_MS,
-                    registry_poll_period_ms: REGISTRY_POLL_PERIOD_MS,
-                    retransmission_request_ms: RETRANSMISSION_REQUEST_MS,
-                }),
-                start_as_nns: false,
-                subnet_type: SubnetType::Application.into(),
-                is_halted: false,
-                halt_at_cup_height: false,
-                max_instructions_per_message: 5_000_000_000,
-                max_instructions_per_round: 7_000_000_000,
-                max_instructions_per_install_code: 200_000_000_000,
-                features: None,
-                max_number_of_canisters: 0,
-                ssh_readonly_access: vec![],
-                ssh_backup_access: vec![],
-                ecdsa_config: None,
-                chain_key_config: None,
-            }
-        );
-    }
-
-    #[test]
-    fn update_advert_config() {
-        let subnet_record = SubnetRecordPb {
-            membership: vec![],
-            max_ingress_bytes_per_message: 60 * 1024 * 1024,
-            max_ingress_messages_per_block: 1000,
-            max_block_payload_size: 4 * 1024 * 1024,
-            unit_delay_millis: 500,
-            initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
-            dkg_interval_length: 0,
-            dkg_dealings_per_block: 1,
-            gossip_config: Some(GossipConfigPb {
-                max_artifact_streams_per_peer: 10,
-                max_chunk_wait_ms: 100,
-                max_duplicity: 2,
-                max_chunk_size: 10,
-                receive_check_cache_size: 1024,
-                pfn_evaluation_period_ms: 100,
-                registry_poll_period_ms: 100,
-                retransmission_request_ms: 100,
-            }),
-            start_as_nns: false,
-            subnet_type: SubnetType::Application.into(),
-            is_halted: false,
-            halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
-            features: None,
-            max_number_of_canisters: 10,
-            ssh_readonly_access: vec![],
-            ssh_backup_access: vec![],
-            ecdsa_config: None,
-            chain_key_config: None,
-        };
-
-        let payload = UpdateSubnetPayload {
-            subnet_id: SubnetId::from(
-                PrincipalId::from_str(
-                    "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
-                )
-                .unwrap(),
-            ),
-            max_ingress_bytes_per_message: None,
-            max_ingress_messages_per_block: None,
-            max_block_payload_size: None,
-            unit_delay_millis: Some(100),
-            initial_notary_delay_millis: None,
-            dkg_interval_length: Some(2),
-            dkg_dealings_per_block: Some(1),
-            max_artifact_streams_per_peer: Some(0),
-            max_chunk_wait_ms: Some(10),
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: Some(200),
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            set_gossip_config_to_default: false,
-            start_as_nns: None,
-            subnet_type: None,
-            is_halted: None,
-            halt_at_cup_height: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: Some(8_000_000_000),
-            max_instructions_per_install_code: None,
-            features: None,
-            ecdsa_config: None,
-            ecdsa_key_signing_enable: None,
-            ecdsa_key_signing_disable: None,
-            max_number_of_canisters: None,
-            ssh_readonly_access: None,
-            ssh_backup_access: None,
-        };
-
-        assert_eq!(
-            merge_subnet_record(subnet_record, payload),
-            SubnetRecordPb {
-                membership: vec![],
-                max_ingress_bytes_per_message: 60 * 1024 * 1024,
-                max_ingress_messages_per_block: 1000,
-                max_block_payload_size: 4 * 1024 * 1024,
-                unit_delay_millis: 100,
-                initial_notary_delay_millis: 1500,
-                replica_version_id: ReplicaVersion::default().into(),
-                dkg_interval_length: 2,
-                dkg_dealings_per_block: 1,
-                gossip_config: Some(GossipConfigPb {
-                    max_artifact_streams_per_peer: 0,
-                    max_chunk_wait_ms: 10,
-                    max_duplicity: 2,
-                    max_chunk_size: 10,
-                    receive_check_cache_size: 200,
-                    pfn_evaluation_period_ms: 100,
-                    registry_poll_period_ms: 100,
-                    retransmission_request_ms: 100,
-                }),
-                start_as_nns: false,
-                subnet_type: SubnetType::Application.into(),
-                is_halted: false,
-                halt_at_cup_height: false,
-                max_instructions_per_message: 5_000_000_000,
-                max_instructions_per_round: 8_000_000_000,
-                max_instructions_per_install_code: 200_000_000_000,
-                features: None,
-                max_number_of_canisters: 10,
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
                 ecdsa_config: None,

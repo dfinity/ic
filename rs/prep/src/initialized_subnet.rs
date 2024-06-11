@@ -4,14 +4,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_protobuf::registry::{
-    crypto::v1::{EcdsaSigningSubnetList, PublicKey},
+    crypto::v1::{ChainKeySigningSubnetList, EcdsaSigningSubnetList, PublicKey},
     subnet::v1::{CatchUpPackageContents, SubnetRecord},
 };
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
-    make_ecdsa_signing_subnet_list_key, make_subnet_record_key,
+    make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
+    make_crypto_threshold_signing_pubkey_key, make_ecdsa_signing_subnet_list_key,
+    make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{subnet_id_into_protobuf, RegistryVersion, SubnetId};
@@ -90,6 +91,7 @@ impl InitializedSubnet {
             );
 
             // set subnet ecdsa signing key
+            // TODO[NNS1-2986]: Remove after replica has been migrated to read MasterPublicKeyId
             if let Some(ecdsa_config) = &self.subnet_config.ecdsa_config {
                 for key_id in ecdsa_config.key_ids.iter() {
                     let key_id = EcdsaKeyId::try_from(key_id.clone())
@@ -100,6 +102,26 @@ impl InitializedSubnet {
                         make_ecdsa_signing_subnet_list_key(&key_id).as_ref(),
                         version,
                         EcdsaSigningSubnetList {
+                            subnets: vec![subnet_id_into_protobuf(subnet_id)],
+                        },
+                    );
+                }
+            }
+
+            if let Some(chain_key_config) = &self.subnet_config.chain_key_config {
+                for key_id in chain_key_config
+                    .key_configs
+                    .iter()
+                    .map(|config| config.key_id.clone().unwrap())
+                {
+                    let key_id = MasterPublicKeyId::try_from(key_id)
+                        .unwrap_or_else(|err| panic!("Invalid key_id {}", err));
+                    write_registry_entry(
+                        data_provider,
+                        subnet_path.as_path(),
+                        make_chain_key_signing_subnet_list_key(&key_id).as_ref(),
+                        version,
+                        ChainKeySigningSubnetList {
                             subnets: vec![subnet_id_into_protobuf(subnet_id)],
                         },
                     );

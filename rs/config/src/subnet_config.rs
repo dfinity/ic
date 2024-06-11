@@ -34,7 +34,7 @@ const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2 * B);
 
 // We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes about 1ms
 // to enter and exit the Wasm engine.
-const INSTRUCTION_OVERHEAD_PER_MESSAGE: NumInstructions = NumInstructions::new(2 * M);
+const INSTRUCTION_OVERHEAD_PER_EXECUTION: NumInstructions = NumInstructions::new(2 * M);
 
 // We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes about 4ms
 // to prepare execution of a canister.
@@ -120,6 +120,12 @@ const MAX_PAUSED_EXECUTIONS: usize = 4;
 /// cover the cost of the subnet.
 pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 
+/// 10B cycles corresponds to 1 SDR cent. Assuming we can create 1 signature per
+/// second, that would come to  26k SDR per month if we spent the whole time
+/// creating signatures. At 13 nodes and 2k SDR per node per month this would
+/// cover the cost of the subnet.
+pub const SCHNORR_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
+
 /// Default subnet size which is used to scale cycles cost according to a subnet replication factor.
 ///
 /// All initial costs were calculated with the assumption that a subnet had 13 replicas.
@@ -179,10 +185,10 @@ pub struct SchedulerConfig {
     /// This should not exceed `max_instructions_per_round`.
     pub max_instructions_per_slice: NumInstructions,
 
-    /// The overhead of entering and exiting the Wasm engine to execute a
-    /// message. The overhead is measured in instructions that are counted
+    /// The overhead of entering and exiting the Wasm engine for a single
+    /// execution. The overhead is measured in instructions that are counted
     /// towards the round limit.
-    pub instruction_overhead_per_message: NumInstructions,
+    pub instruction_overhead_per_execution: NumInstructions,
 
     /// The overhead of preparing execution of a canister. The overhead is
     /// measured in instructions that are counted towards the round limit.
@@ -254,7 +260,7 @@ impl SchedulerConfig {
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
             max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
             max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE,
-            instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
+            instruction_overhead_per_execution: INSTRUCTION_OVERHEAD_PER_EXECUTION,
             instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
@@ -285,7 +291,7 @@ impl SchedulerConfig {
             max_instructions_per_message_without_dts,
             // Effectively disable DTS on system subnets.
             max_instructions_per_slice: max_instructions_per_message_without_dts,
-            instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
+            instruction_overhead_per_execution: INSTRUCTION_OVERHEAD_PER_EXECUTION,
             instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
@@ -319,7 +325,7 @@ impl SchedulerConfig {
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
             max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
             max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE,
-            instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
+            instruction_overhead_per_execution: INSTRUCTION_OVERHEAD_PER_EXECUTION,
             instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
@@ -390,6 +396,9 @@ pub struct CyclesAccountManagerConfig {
     /// Amount to charge for an ECDSA signature.
     pub ecdsa_signature_fee: Cycles,
 
+    /// Amount to charge for a Schnorr signature.
+    pub schnorr_signature_fee: Cycles,
+
     /// A linear factor of the baseline cost to be charged for HTTP requests per node.
     /// The cost of an HTTP request is represented by a quadratic function due to the communication complexity of the subnet.
     pub http_request_linear_baseline_fee: Cycles,
@@ -439,6 +448,7 @@ impl CyclesAccountManagerConfig {
             gib_storage_per_second_fee: Cycles::new(127_000),
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
+            schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
             http_request_linear_baseline_fee: Cycles::new(3_000_000),
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),
@@ -464,7 +474,7 @@ impl CyclesAccountManagerConfig {
             ingress_byte_reception_fee: Cycles::new(0),
             gib_storage_per_second_fee: Cycles::new(0),
             duration_between_allocation_charges: Duration::from_secs(10),
-            // The ECDSA signature fee is the fee charged when creating a
+            // ECDSA and Schnorr signature fees are the fees charged when creating a
             // signature on this subnet. The request likely came from a
             // different subnet which is not a system subnet. There is an
             // explicit exception for requests originating from the NNS when the
@@ -473,6 +483,7 @@ impl CyclesAccountManagerConfig {
             // - zero cost if called from NNS subnet
             // - non-zero cost if called from any other subnet which is not NNS subnet
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
+            schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
             http_request_linear_baseline_fee: Cycles::new(0),
             http_request_quadratic_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),

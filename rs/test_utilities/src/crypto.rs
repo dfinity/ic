@@ -1,11 +1,8 @@
-pub mod fake_tls_handshake;
-
 use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgDealing;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values;
 use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
-use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
     IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
@@ -38,14 +35,8 @@ use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::*;
 use ic_types::{NodeId, RegistryVersion};
 use rand::{rngs::StdRng, RngCore, SeedableRng};
-use rustls::{ClientConfig, PrivateKey, RootCertStore, ServerConfig};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
-
-const DUMMY_EDDSA_PRIVATE_KEY: [u8; 48] = [
-    48, 46, 2, 1, 0, 48, 5, 6, 3, 43, 101, 112, 4, 34, 4, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-];
 
 pub fn empty_fake_registry() -> Arc<dyn RegistryClient> {
     Arc::new(FakeRegistryClient::new(Arc::new(
@@ -484,45 +475,6 @@ impl ThresholdEcdsaSigVerifier for CryptoReturningOk {
         _signature: &ThresholdEcdsaCombinedSignature,
     ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
         Ok(())
-    }
-}
-
-impl TlsConfig for CryptoReturningOk {
-    fn server_config(
-        &self,
-        _allowed_clients: SomeOrAllNodes,
-        _registry_version: RegistryVersion,
-    ) -> Result<ServerConfig, TlsConfigError> {
-        Ok(ServerConfig::builder()
-            .with_safe_defaults()
-            .with_no_client_auth()
-            // Random Ed25519 private key since valid format is checked when building the config.
-            .with_single_cert(Vec::new(), PrivateKey(DUMMY_EDDSA_PRIVATE_KEY.to_vec()))
-            .expect("bad certificate/key"))
-    }
-    fn server_config_without_client_auth(
-        &self,
-        _registry_version: RegistryVersion,
-    ) -> Result<ServerConfig, TlsConfigError> {
-        Ok(ServerConfig::builder()
-            .with_safe_defaults()
-            .with_no_client_auth()
-            .with_single_cert(
-                Vec::new(),
-                // Random Ed25519 private key since valid format is checked when building the config.
-                PrivateKey(DUMMY_EDDSA_PRIVATE_KEY.to_vec()),
-            )
-            .expect("bad certificate/key"))
-    }
-    fn client_config(
-        &self,
-        _server: NodeId,
-        _registry_version: RegistryVersion,
-    ) -> Result<ClientConfig, TlsConfigError> {
-        Ok(ClientConfig::builder()
-            .with_safe_defaults()
-            .with_root_certificates(RootCertStore { roots: Vec::new() })
-            .with_no_client_auth())
     }
 }
 

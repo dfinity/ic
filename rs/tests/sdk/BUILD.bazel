@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "sdk-system-tests",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     compile_data = [
         "canisters/counter.mo",
@@ -15,6 +16,7 @@ rust_library(
     deps = [
         "//rs/tests",
         "//rs/types/types",
+        "@crate_index//:backoff",
         "@crate_index//:candid",
         "@crate_index//:reqwest",
         "@crate_index//:serde_json",
@@ -40,7 +42,7 @@ BOUNDARY_NODE_RUNTIME_DEPS = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + NNS_CANISTER_R
 
 system_test(
     name = "dfx_smoke_test",
-    flaky = False,
+    flaky = True,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = RUNTIME_DEPS + BOUNDARY_NODE_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
@@ -48,7 +50,7 @@ system_test(
 
 system_test(
     name = "dfx_check_old_wallet_version_test",
-    flaky = False,
+    flaky = True,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = RUNTIME_DEPS + [
         "@wallet_canister_0.7.2//file",

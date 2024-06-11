@@ -42,3 +42,4 @@ ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 maplit = "1.0.2"
 ic-nns-constants = { path = "../nns/constants" }
+strum = { workspace = true }

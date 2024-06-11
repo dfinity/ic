@@ -9,14 +9,14 @@ pub static TNET_CDN_URL: Lazy<String> =
     Lazy::new(|| var("TNET_CDN_URL").unwrap_or("https://download.dfinity.systems".to_string()));
 
 pub static TNET_CONFIG_URL: Lazy<String> = Lazy::new(|| {
-    var("TNET_CONFIG_URL").unwrap_or("https://objects.sf1-idx1.dfinity.network".to_string())
+    var("TNET_CONFIG_URL").unwrap_or("https://objects.ln1-idx1.dfinity.network".to_string())
 });
 
 pub static TNET_DNS_SUFFIX: Lazy<String> =
-    Lazy::new(|| var("TNET_DNS_SUFFIX").unwrap_or("tnets.sf1-idx1.dfinity.network".to_string()));
+    Lazy::new(|| var("TNET_DNS_SUFFIX").unwrap_or("tnets.ln1-idx1.dfinity.network".to_string()));
 
 pub static TNET_BUCKET: Lazy<String> = Lazy::new(|| {
-    var("TNET_BUCKET").unwrap_or("tnet-config-5f1a0cb6-fdf2-4ca8-b816-9b9c2ffa1669".to_string())
+    var("TNET_BUCKET").unwrap_or("tnet-config-8edb8de3-6057-49e4-9fdb-66a29ee9aeda".to_string())
 });
 
 pub static TNET_STATIC_LABELS: Lazy<BTreeMap<String, String>> =

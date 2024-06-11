@@ -537,6 +537,10 @@ impl FirewallConfigTemplate for BoundaryNodeFirewallConfig {
                     ],
                 ),
             )
+            .replace(
+                "<<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>>",
+                &self.max_simultaneous_connections_per_ip_address.to_string(),
+            )
     }
 }
 
@@ -635,7 +639,7 @@ mod tests {
     use super::*;
 
     const CFG_TEMPLATE_BYTES: &[u8] =
-        include_bytes!("../../../ic-os/rootfs/guestos/opt/ic/share/ic.json5.template");
+        include_bytes!("../../../ic-os/components/ic/ic.json5.template");
     const NFTABLES_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_assigned_replica.conf.golden");
     const NFTABLES_BOUNDARY_NODE_GOLDEN_BYTES: &[u8] =
@@ -791,9 +795,13 @@ mod tests {
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
         let config = get_config();
         let mut replica_firewall_config = config.firewall.unwrap();
-        replica_firewall_config.config_file = nftables_config_path.clone();
+        replica_firewall_config
+            .config_file
+            .clone_from(&nftables_config_path);
         let mut boundary_node_firewall_config = config.boundary_node_firewall.unwrap();
-        boundary_node_firewall_config.config_file = nftables_config_path.clone();
+        boundary_node_firewall_config
+            .config_file
+            .clone_from(&nftables_config_path);
         let mut firewall = set_up_firewall_dependencies(
             replica_firewall_config,
             boundary_node_firewall_config,

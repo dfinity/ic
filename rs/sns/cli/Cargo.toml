@@ -37,7 +37,7 @@ serde_json = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
 json-patch = "0.2.6"
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

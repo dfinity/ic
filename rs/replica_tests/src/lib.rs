@@ -37,7 +37,7 @@ use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CertificateDelegation, SignedIngress, UserQuery},
+    messages::{CertificateDelegation, Query, QuerySource, SignedIngress},
     replica_config::NODE_INDEX_DEFAULT,
     time::expiry_time_from_now,
     CanisterId, Height, NodeId, ReplicaVersion, Time,
@@ -153,7 +153,7 @@ where
 /// function calls instead of http calls.
 pub struct LocalTestRuntime {
     pub query_handler:
-        tower::buffer::Buffer<QueryExecutionService, (UserQuery, Option<CertificateDelegation>)>,
+        tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
     pub ingress_sender: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -237,6 +237,7 @@ pub fn get_ic_config() -> IcConfig {
             Some(Height::from(19)),         // DKG interval length
             None,
             SubnetType::System,
+            None,
             None,
             None,
             None,
@@ -609,15 +610,16 @@ impl LocalTestRuntime {
         method_name: M,
         method_payload: P,
     ) -> Result<WasmResult, UserError> {
-        let query = UserQuery {
+        let query = Query {
+            source: QuerySource::User {
+                user_id: user_anonymous_id(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_id,
-            source: user_anonymous_id(),
             method_name: method_name.into(),
             method_payload: method_payload.into(),
-            ingress_expiry: 0,
-            nonce: None,
         };
-
         let latest = self.state_reader.latest_state_height();
         while self.state_reader.latest_certified_height() < latest {
             thread::sleep(Duration::from_millis(100));

@@ -17,6 +17,9 @@ system_test(
     name = "node_assign_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -26,6 +29,9 @@ system_test(
     name = "node_reassignment_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -59,6 +65,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -73,6 +80,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -89,6 +97,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -105,6 +114,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -119,6 +129,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -136,6 +147,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -153,6 +165,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -167,6 +180,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -184,6 +198,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
         "system_test_hourly",
         "system_test_nightly",
@@ -219,6 +234,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -233,6 +249,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "k8s",
         "subnet_recovery",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -348,6 +365,7 @@ system_test(
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],
@@ -378,6 +396,9 @@ system_test(
     name = "rotate_ecdsa_idkg_key_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],

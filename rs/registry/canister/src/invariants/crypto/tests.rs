@@ -599,13 +599,166 @@ fn run_test_orphaned_crypto_keys(
 
 mod ecdsa_signing_subnet_lists {
     use super::*;
+    use crate::{
+        common::test_helpers::invariant_compliant_registry, mutations::common::encode_or_panic,
+    };
     use ic_base_types::{subnet_id_into_protobuf, SubnetId};
     use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
     use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
-    use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetRecord};
+    use ic_protobuf::registry::crypto::v1::{self as pb, master_public_key_id, MasterPublicKeyId};
+    use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, EcdsaConfig, KeyConfig, SubnetRecord};
     use ic_registry_transport::pb::v1::RegistryMutation;
+    use ic_registry_transport::upsert;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_types::PrincipalId;
     use rand::Rng;
+
+    fn invariant_compliant_chain_key_config() -> ChainKeyConfig {
+        ChainKeyConfig {
+            key_configs: vec![
+                KeyConfig {
+                    key_id: Some(MasterPublicKeyId {
+                        key_id: Some(master_public_key_id::KeyId::Ecdsa(pb::EcdsaKeyId {
+                            curve: 1,
+                            name: "ecdsa_key".to_string(),
+                        })),
+                    }),
+                    pre_signatures_to_create_in_advance: Some(456),
+                    max_queue_size: Some(100),
+                },
+                KeyConfig {
+                    key_id: Some(MasterPublicKeyId {
+                        key_id: Some(master_public_key_id::KeyId::Schnorr(pb::SchnorrKeyId {
+                            algorithm: 1,
+                            name: "schnorr_key".to_string(),
+                        })),
+                    }),
+                    pre_signatures_to_create_in_advance: Some(456),
+                    max_queue_size: Some(100),
+                },
+            ],
+            signature_request_timeout_ns: Some(10_000),
+            idkg_key_rotation_period_ms: Some(20_000),
+        }
+    }
+
+    fn check_chain_key_config_invariant(config: ChainKeyConfig) {
+        let registry = invariant_compliant_registry(0);
+
+        let list = registry.get_subnet_list_record();
+        let nns_id = SubnetId::from(PrincipalId::try_from(list.subnets.first().unwrap()).unwrap());
+        let mut subnet = registry.get_subnet_or_panic(nns_id);
+        subnet.chain_key_config = Some(config);
+
+        let new_subnet = upsert(
+            make_subnet_record_key(nns_id).into_bytes(),
+            encode_or_panic(&subnet),
+        );
+        registry.check_global_state_invariants(&[new_subnet]);
+    }
+
+    #[test]
+    fn should_succeed_with_invariant_compliant_config() {
+        check_chain_key_config_invariant(invariant_compliant_chain_key_config());
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Missing required struct field: KeyConfig::pre_signatures_to_create_in_advance"
+    )]
+    fn should_fail_if_missing_pre_signatures() {
+        let mut config = invariant_compliant_chain_key_config();
+        config.key_configs[1].pre_signatures_to_create_in_advance = None;
+        check_chain_key_config_invariant(config);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "`pre_signatures_to_create_in_advance` of subnet ya35z-hhham-aaaaa-aaaap-yai cannot be zero."
+    )]
+    fn should_fail_if_pre_signatures_is_zero() {
+        let mut config = invariant_compliant_chain_key_config();
+        config.key_configs[0].pre_signatures_to_create_in_advance = Some(0);
+        check_chain_key_config_invariant(config);
+    }
+
+    #[test]
+    #[should_panic(expected = "Missing required struct field: KeyConfig::max_queue_size")]
+    fn should_fail_if_missing_queue_size() {
+        let mut config = invariant_compliant_chain_key_config();
+        config.key_configs[1].max_queue_size = None;
+        check_chain_key_config_invariant(config);
+    }
+
+    #[test]
+    #[should_panic(expected = "Missing required struct field: KeyConfig::key_id")]
+    fn should_fail_if_missing_key_id() {
+        let mut config = invariant_compliant_chain_key_config();
+        config.key_configs[1].key_id = None;
+        check_chain_key_config_invariant(config);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unable to convert 2 to an EcdsaCurve")]
+    fn should_fail_if_unkown_ecdsa_curve() {
+        let mut config = invariant_compliant_chain_key_config();
+        config.key_configs[1].key_id = Some(MasterPublicKeyId {
+            key_id: Some(master_public_key_id::KeyId::Ecdsa(pb::EcdsaKeyId {
+                curve: 2,
+                name: "ecdsa_key".to_string(),
+            })),
+        });
+        check_chain_key_config_invariant(config);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unable to convert 3 to a SchnorrAlgorithm")]
+    fn should_fail_if_unkown_schnorr_algorithm() {
+        let mut config = invariant_compliant_chain_key_config();
+        config.key_configs[1].key_id = Some(MasterPublicKeyId {
+            key_id: Some(master_public_key_id::KeyId::Schnorr(pb::SchnorrKeyId {
+                algorithm: 3,
+                name: "schnorr_key".to_string(),
+            })),
+        });
+        check_chain_key_config_invariant(config);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unable to convert Unspecified to an EcdsaCurve")]
+    fn should_fail_if_unspecified_ecdsa_curve() {
+        let mut config = invariant_compliant_chain_key_config();
+        config.key_configs[1].key_id = Some(MasterPublicKeyId {
+            key_id: Some(master_public_key_id::KeyId::Ecdsa(pb::EcdsaKeyId {
+                curve: 0,
+                name: "ecdsa_key".to_string(),
+            })),
+        });
+        check_chain_key_config_invariant(config);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unable to convert Unspecified to a SchnorrAlgorithm")]
+    fn should_fail_if_unspecified_schnorr_algorithm() {
+        let mut config = invariant_compliant_chain_key_config();
+        config.key_configs[1].key_id = Some(MasterPublicKeyId {
+            key_id: Some(master_public_key_id::KeyId::Schnorr(pb::SchnorrKeyId {
+                algorithm: 0,
+                name: "schnorr_key".to_string(),
+            })),
+        });
+        check_chain_key_config_invariant(config);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "ChainKeyConfig of subnet ya35z-hhham-aaaaa-aaaap-yai contains multiple entries for key ID schnorr:Bip340Secp256k1:schnorr_key."
+    )]
+    fn should_fail_if_duplicate_key_ids() {
+        let mut config = invariant_compliant_chain_key_config();
+        config.key_configs.push(config.key_configs[1].clone());
+        check_chain_key_config_invariant(config);
+    }
 
     #[test]
     fn should_succeed_for_valid_snapshot() {

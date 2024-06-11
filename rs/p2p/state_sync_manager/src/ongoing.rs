@@ -382,7 +382,7 @@ mod tests {
 
     /// Verify that state sync gets aborted if state sync should be cancelled.
     #[test]
-    fn test_should_cancel() {
+    fn test_cancel_if_running() {
         with_test_replica_logger(|log| {
             let mut t = MockTransport::default();
             t.expect_rpc().returning(|_, _| {

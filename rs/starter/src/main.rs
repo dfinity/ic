@@ -44,7 +44,7 @@ use ic_prep_lib::{
     node::{NodeConfiguration, NodeIndex},
     subnet_configuration::{SubnetConfig, SubnetRunningState},
 };
-use ic_protobuf::registry::subnet::v1::EcdsaConfig;
+use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, EcdsaConfig};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -90,7 +90,7 @@ fn main() -> Result<()> {
         subnet_nodes.insert(
             NODE_INDEX,
             NodeConfiguration {
-                xnet_api: SocketAddr::from_str("0.0.0.0:0").unwrap(),
+                xnet_api: SocketAddr::from_str("127.0.0.1:0").unwrap(),
                 public_api: config.http_listen_addr,
                 node_operator_principal_id: None,
                 secret_key_store: None,
@@ -104,6 +104,8 @@ fn main() -> Result<()> {
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         });
+
+        let chain_key_config = ecdsa_config.clone().map(ChainKeyConfig::from);
 
         let mut topology_config = TopologyConfig::default();
         topology_config.insert_subnet(
@@ -125,6 +127,7 @@ fn main() -> Result<()> {
                 None,
                 Some(config.subnet_features),
                 ecdsa_config,
+                chain_key_config,
                 None,
                 vec![],
                 vec![],
@@ -601,7 +604,9 @@ impl ValidatedConfig {
         let mut artifact_pool_cfg =
             ArtifactPoolTomlConfig::new(self.artifact_pool_dir.clone(), None);
         // artifact_pool.rs picks "lmdb" if None here
-        artifact_pool_cfg.consensus_pool_backend = self.consensus_pool_backend.clone();
+        artifact_pool_cfg
+            .consensus_pool_backend
+            .clone_from(&self.consensus_pool_backend);
         let artifact_pool = Some(artifact_pool_cfg);
 
         let crypto = Some(CryptoConfig::new(self.crypto_root.clone()));
@@ -643,6 +648,8 @@ impl ValidatedConfig {
             wasm_chunk_store: FlagStatus::Enabled,
             query_stats_aggregation: FlagStatus::Enabled,
             query_stats_epoch_length: 60,
+            ic00_schnorr_public_key: FlagStatus::Enabled,
+            ic00_sign_with_schnorr: FlagStatus::Enabled,
             ..HypervisorConfig::default()
         };
 

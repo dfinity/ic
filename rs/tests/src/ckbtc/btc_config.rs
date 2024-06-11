@@ -21,10 +21,9 @@ pub fn config(env: TestEnv) {
     let activate_script = r"#!/bin/sh
 cp /config/bitcoin.conf /tmp/bitcoin.conf
 docker run  --name=bitcoind-node -d \
-  -p 8332:8332 \
-  -p 18444:18444 \
+  --net=host \
   -v /tmp:/bitcoin/.bitcoin \
-  registry.gitlab.com/dfinity-lab/open/public-docker-registry/kylemanna/bitcoind
+  registry.gitlab.com/dfinity-lab/open/public-docker-registry/kylemanna/bitcoind -rpcbind=[::]:8332 -rpcallowip=::/0
 ";
     let config_dir = env
         .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
@@ -36,7 +35,7 @@ docker run  --name=bitcoind-node -d \
     # Enable regtest mode. This is required to setup a private bitcoin network.
     regtest=1
     debug=1
-    whitelist=[::]/0
+    whitelist=::/0
     fallbackfee=0.0002
 
     # Dummy credentials that are required by `bitcoin-cli`.

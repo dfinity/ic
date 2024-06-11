@@ -206,6 +206,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub(crate) mod complaints;
+#[cfg(any(feature = "malicious_code", test))]
 pub mod malicious_pre_signer;
 pub(crate) mod payload_builder;
 pub(crate) mod payload_verifier;
@@ -219,7 +220,9 @@ pub(crate) mod utils;
 pub(crate) use payload_builder::{
     create_data_payload, create_summary_payload, make_bootstrap_summary,
 };
-pub(crate) use payload_verifier::{validate_payload, PermanentError, TransientError};
+pub(crate) use payload_verifier::{
+    validate_payload, EcdsaPayloadValidationFailure, InvalidEcdsaPayloadReason,
+};
 pub use stats::EcdsaStatsImpl;
 
 use self::utils::get_context_request_id;
@@ -479,7 +482,7 @@ impl EcdsaPriorityFnArgs {
             .map_or(Default::default(), |snapshot| {
                 let request_contexts = snapshot
                     .get_state()
-                    .sign_with_ecdsa_contexts()
+                    .signature_request_contexts()
                     .values()
                     .flat_map(get_context_request_id)
                     .collect::<BTreeSet<_>>();
@@ -562,6 +565,8 @@ fn compute_priority(
                 Priority::Stash
             }
         }
+        // Drop schnorr sig shares for now
+        EcdsaMessageAttribute::SchnorrSigShare(_) => Priority::Drop,
         EcdsaMessageAttribute::EcdsaComplaint(transcript_id)
         | EcdsaMessageAttribute::EcdsaOpening(transcript_id) => {
             let height = transcript_id.source_height();
@@ -589,30 +594,30 @@ fn compute_priority(
 #[cfg(test)]
 mod tests {
     use self::test_utils::{
-        fake_completed_sign_with_ecdsa_context, fake_sign_with_ecdsa_context_with_quadruple,
-        fake_state_with_ecdsa_contexts, TestEcdsaBlockReader,
+        fake_completed_signature_request_context, fake_signature_request_context_with_pre_sig,
+        fake_state_with_signature_requests, TestEcdsaBlockReader,
     };
 
-    use super::test_utils::fake_ecdsa_key_id;
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_types::consensus::idkg::{EcdsaUIDGenerator, QuadrupleId};
+    use ic_types::consensus::idkg::{EcdsaUIDGenerator, PreSigId};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::{consensus::idkg::RequestId, PrincipalId, SubnetId};
+    use test_utils::fake_ecdsa_master_public_key_id;
     use tests::test_utils::create_sig_inputs;
 
     #[test]
     fn test_ecdsa_priority_fn_args() {
         let state_manager = Arc::new(RefMockStateManager::default());
         let height = Height::from(100);
-        let key_id = fake_ecdsa_key_id();
+        let key_id = fake_ecdsa_master_public_key_id();
         // Add two contexts to state, one with, and one without quadruple
-        let quadruple_id = QuadrupleId::new(0);
+        let pre_sig_id = PreSigId(0);
         let context_with_quadruple =
-            fake_completed_sign_with_ecdsa_context(0, quadruple_id.clone());
+            fake_completed_signature_request_context(0, key_id.clone(), pre_sig_id);
         let context_without_quadruple =
-            fake_sign_with_ecdsa_context_with_quadruple(1, key_id.clone(), None);
-        let snapshot = fake_state_with_ecdsa_contexts(
+            fake_signature_request_context_with_pre_sig(1, key_id.clone(), None);
+        let snapshot = fake_state_with_signature_requests(
             height,
             [
                 context_with_quadruple.clone(),
@@ -626,11 +631,11 @@ mod tests {
 
         let expected_request_id = get_context_request_id(&context_with_quadruple.1).unwrap();
         assert_eq!(expected_request_id.pseudo_random_id, [0; 32]);
-        assert_eq!(expected_request_id.quadruple_id, quadruple_id);
+        assert_eq!(expected_request_id.pre_signature_id, pre_sig_id);
 
         let block_reader = TestEcdsaBlockReader::for_signer_test(
             height,
-            vec![(expected_request_id.clone(), create_sig_inputs(0))],
+            vec![(expected_request_id.clone(), create_sig_inputs(0, &key_id))],
         );
 
         // Only the context with matched quadruple should be in "requested"
@@ -726,22 +731,22 @@ mod tests {
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
         let mut uid_generator = EcdsaUIDGenerator::new(subnet_id, Height::new(0));
         let request_id_fetch_1 = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            pre_signature_id: uid_generator.next_pre_signature_id(),
             pseudo_random_id: [1; 32],
             height: Height::from(80),
         };
         let request_id_drop = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            pre_signature_id: uid_generator.next_pre_signature_id(),
             pseudo_random_id: [2; 32],
             height: Height::from(70),
         };
         let request_id_fetch_2 = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            pre_signature_id: uid_generator.next_pre_signature_id(),
             pseudo_random_id: [3; 32],
             height: Height::from(102),
         };
         let request_id_stash = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(),
+            pre_signature_id: uid_generator.next_pre_signature_id(),
             pseudo_random_id: [4; 32],
             height: Height::from(200),
         };
@@ -763,6 +768,10 @@ mod tests {
             (
                 EcdsaMessageAttribute::EcdsaSigShare(request_id_fetch_1.clone()),
                 Priority::FetchNow,
+            ),
+            (
+                EcdsaMessageAttribute::SchnorrSigShare(request_id_fetch_1.clone()),
+                Priority::Drop,
             ),
             (
                 EcdsaMessageAttribute::EcdsaSigShare(request_id_drop.clone()),

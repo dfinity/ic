@@ -1,11 +1,16 @@
 use ic_context_logger::{ContextLogger, LogMetadata, Logger};
 use ic_protobuf::log::log_entry::v1::LogEntry;
+use ic_utils::str::StrEllipsize;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// A logger that logs `LogEntry`s using a `LogEntryLogger`
 pub type ReplicaLogger = ContextLogger<LogEntry, LogEntryLogger>;
+
+/// The value of this constant is larger than the maximum allowed length of `8 KiB` for `UserError` description
+/// so that we don't get a pair of ellipses (`...`) if the `UserError` description is of the maximum length
+const MAX_LOG_MESSAGE_LEN_BYTES: usize = 16 * 1024;
 
 /// A logger that doesn't log. Used in tests.
 pub fn no_op_logger() -> ReplicaLogger {
@@ -89,11 +94,14 @@ impl Logger<LogEntry> for LogEntryLogger {
         let crate_ = get_crate(metadata.module_path);
         let module = get_module(metadata.module_path);
 
+        // truncates message to be of length at most `MAX_LOG_MESSAGE_LEN_BYTES` bytes
+        let message = message.ellipsize(MAX_LOG_MESSAGE_LEN_BYTES, 50);
+
         log_entry.level = metadata.level.as_str().to_string();
         log_entry.utc_time = get_utc_time();
-        log_entry.crate_ = crate_.clone();
-        log_entry.module = module.clone();
-        log_entry.message = message.clone();
+        log_entry.crate_.clone_from(&crate_);
+        log_entry.module.clone_from(&module);
+        log_entry.message.clone_from(&message);
         log_entry.line = metadata.line;
 
         let net_context = format!("s:{}/n:{}/", log_entry.subnet_id, log_entry.node_id);

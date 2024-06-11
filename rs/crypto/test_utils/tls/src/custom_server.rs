@@ -8,9 +8,9 @@ use crate::TlsVersion;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
 use rand::{CryptoRng, Rng};
+use rustls;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio_rustls::rustls;
 use tokio_rustls::{rustls::ServerConfig, TlsAcceptor};
 
 static DEFAULT_PROTOCOL_VERSIONS: &[TlsVersion] = &[TlsVersion::TLS1_3];

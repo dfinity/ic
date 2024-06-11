@@ -153,6 +153,7 @@ pub fn init_ic(
                 subnet.max_instructions_per_install_code,
                 subnet.features,
                 subnet.ecdsa_config.clone().map(|c| c.into()),
+                subnet.chain_key_config.clone().map(|c| c.into()),
                 subnet.max_number_of_canisters,
                 subnet.ssh_readonly_access.clone(),
                 subnet.ssh_backup_access.clone(),
@@ -409,7 +410,8 @@ fn create_config_disk_image(
     group_name: &str,
 ) -> anyhow::Result<()> {
     let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
-    let script_path = test_env.get_dependency_path("ic-os/scripts/build-bootstrap-config-image.sh");
+    let script_path = test_env
+        .get_dependency_path("ic-os/components/hostos-scripts/build-bootstrap-config-image.sh");
     let mut cmd = Command::new(script_path);
     let local_store_path = test_env
         .prep_dir(ic_name)

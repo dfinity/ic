@@ -1,7 +1,6 @@
 use candid::Nat;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::ONE_DAY_SECONDS;
-use ic_nervous_system_common::{ExplosiveTokens, E8, ONE_TRILLION};
+use ic_nervous_system_common::{ExplosiveTokens, E8, ONE_DAY_SECONDS, ONE_TRILLION};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_proto::pb::v1::{
     Canister, Duration, GlobalTimeOfDay, Image, Percentage, Tokens,
@@ -247,7 +246,7 @@ impl SnsInitializationFlowTestSetup {
         };
 
         let response =
-            nns_governance_make_proposal(&mut self.state_machine, sender, neuron_id, &proposal);
+            nns_governance_make_proposal(&self.state_machine, sender, neuron_id, &proposal);
 
         match response.command {
             Some(manage_neuron_response::Command::MakeProposal(make_proposal_response)) => {
@@ -313,7 +312,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
     let mut sns_initialization_flow_test = SnsInitializationFlowTestSetup::default_setup();
 
     let initial_nns_neurons_maturity_snapshot =
-        get_test_neurons_maturity_snapshot(&mut sns_initialization_flow_test.state_machine);
+        get_test_neurons_maturity_snapshot(&sns_initialization_flow_test.state_machine);
 
     let initial_sns_wasm_cycles_balance = get_canister_status_from_root(
         &sns_initialization_flow_test.state_machine,
@@ -323,7 +322,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
 
     // There should be no SNSes deployed.
     assert_eq!(
-        list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances,
+        list_deployed_snses(&sns_initialization_flow_test.state_machine).instances,
         vec![]
     );
 
@@ -347,15 +346,12 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
     );
 
     // Wait for the proposal to be executed, and therefore the SNS to be deployed
-    nns_wait_for_proposal_execution(
-        &mut sns_initialization_flow_test.state_machine,
-        proposal_id.id,
-    );
+    nns_wait_for_proposal_execution(&sns_initialization_flow_test.state_machine, proposal_id.id);
 
     // Step 2: Inspect the newly created SNS
 
     // Assert the SNS was created and get its info
-    let snses = list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances;
+    let snses = list_deployed_snses(&sns_initialization_flow_test.state_machine).instances;
     assert_eq!(snses.len(), 1);
     let test_sns = snses.first().unwrap();
 
@@ -420,7 +416,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
 
     // Assert the sns governance canister should be in PreInitializationSwap mode
     let sns_governance_mode = sns_governance_get_mode(
-        &mut sns_initialization_flow_test.state_machine,
+        &sns_initialization_flow_test.state_machine,
         canister_id_or_panic(test_sns.governance_canister_id),
     )
     .unwrap();
@@ -429,7 +425,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
     // Assert that the maturity was decremented from the NNS Neurons and properly recorded
     // in the swap canister.
     let current_nns_neurons_maturity_snapshot =
-        get_test_neurons_maturity_snapshot(&mut sns_initialization_flow_test.state_machine);
+        get_test_neurons_maturity_snapshot(&sns_initialization_flow_test.state_machine);
 
     let cf_participants = list_community_fund_participants(
         &sns_initialization_flow_test.state_machine,
@@ -473,7 +469,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
         let participant = sns_initialization_flow_test.funded_principals[i];
 
         let response = participate_in_swap(
-            &mut sns_initialization_flow_test.state_machine,
+            &sns_initialization_flow_test.state_machine,
             canister_id_or_panic(test_sns.swap_canister_id),
             participant,
             ExplosiveTokens::from_e8s(direct_participant_amount_e8s),
@@ -499,7 +495,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
 
     // SNS Governance should now be in normal mode
     let sns_governance_mode = sns_governance_get_mode(
-        &mut sns_initialization_flow_test.state_machine,
+        &sns_initialization_flow_test.state_machine,
         canister_id_or_panic(test_sns.governance_canister_id),
     )
     .unwrap();
@@ -570,7 +566,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
         .map(|cf_participant| cf_participant.hotkey_principal.clone())
         .collect::<Vec<_>>();
     let neurons = sns_governance_list_neurons(
-        &mut sns_initialization_flow_test.state_machine,
+        &sns_initialization_flow_test.state_machine,
         canister_id_or_panic(test_sns.governance_canister_id),
         &ListNeurons::default(),
     )
@@ -598,7 +594,7 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
     let mut sns_initialization_flow_test = SnsInitializationFlowTestSetup::default_setup();
 
     let initial_nns_neurons_maturity_snapshot =
-        get_test_neurons_maturity_snapshot(&mut sns_initialization_flow_test.state_machine);
+        get_test_neurons_maturity_snapshot(&sns_initialization_flow_test.state_machine);
 
     let initial_sns_wasm_cycles_balance = get_canister_status_from_root(
         &sns_initialization_flow_test.state_machine,
@@ -608,7 +604,7 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
 
     // There should be no SNSes deployed.
     assert_eq!(
-        list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances,
+        list_deployed_snses(&sns_initialization_flow_test.state_machine).instances,
         vec![]
     );
 
@@ -648,15 +644,12 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
     );
 
     // Wait for the proposal to be executed, and therefore the SNS to be deployed
-    nns_wait_for_proposal_execution(
-        &mut sns_initialization_flow_test.state_machine,
-        proposal_id.id,
-    );
+    nns_wait_for_proposal_execution(&sns_initialization_flow_test.state_machine, proposal_id.id);
 
     // Step 2: Inspect the newly created SNS
 
     // Assert the SNS was created and get its info
-    let snses = list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances;
+    let snses = list_deployed_snses(&sns_initialization_flow_test.state_machine).instances;
     assert_eq!(snses.len(), 1);
     let test_sns = snses.first().unwrap();
 
@@ -673,7 +666,7 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
 
     // Assert that the cf neurons have not had their maturity decremented.
     let post_execution_nns_neurons_maturity_snapshot =
-        get_test_neurons_maturity_snapshot(&mut sns_initialization_flow_test.state_machine);
+        get_test_neurons_maturity_snapshot(&sns_initialization_flow_test.state_machine);
     assert_eq!(
         initial_nns_neurons_maturity_snapshot,
         post_execution_nns_neurons_maturity_snapshot
@@ -729,7 +722,7 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
 
     // Assert the sns governance canister should be in PreInitializationSwap mode
     let sns_governance_mode = sns_governance_get_mode(
-        &mut sns_initialization_flow_test.state_machine,
+        &sns_initialization_flow_test.state_machine,
         canister_id_or_panic(test_sns.governance_canister_id),
     )
     .unwrap();
@@ -773,7 +766,7 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
         let participant = sns_initialization_flow_test.funded_principals[i];
 
         let response = participate_in_swap(
-            &mut sns_initialization_flow_test.state_machine,
+            &sns_initialization_flow_test.state_machine,
             canister_id_or_panic(test_sns.swap_canister_id),
             participant,
             ExplosiveTokens::from_e8s(direct_participant_amount_e8s),
@@ -799,7 +792,7 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
 
     // SNS Governance should now be in normal mode
     let sns_governance_mode = sns_governance_get_mode(
-        &mut sns_initialization_flow_test.state_machine,
+        &sns_initialization_flow_test.state_machine,
         canister_id_or_panic(test_sns.governance_canister_id),
     )
     .unwrap();
@@ -831,7 +824,7 @@ fn test_one_proposal_sns_initialization_fails_to_initialize_and_returns_dapps_an
     let mut sns_initialization_flow_test = SnsInitializationFlowTestSetup::default_setup();
 
     let initial_nns_neurons_maturity_snapshot =
-        get_test_neurons_maturity_snapshot(&mut sns_initialization_flow_test.state_machine);
+        get_test_neurons_maturity_snapshot(&sns_initialization_flow_test.state_machine);
 
     let initial_sns_wasm_cycles_balance = get_canister_status_from_root(
         &sns_initialization_flow_test.state_machine,
@@ -841,7 +834,7 @@ fn test_one_proposal_sns_initialization_fails_to_initialize_and_returns_dapps_an
 
     // There should be no SNSes deployed.
     assert_eq!(
-        list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances,
+        list_deployed_snses(&sns_initialization_flow_test.state_machine).instances,
         vec![]
     );
 
@@ -886,20 +879,17 @@ fn test_one_proposal_sns_initialization_fails_to_initialize_and_returns_dapps_an
     );
 
     // Wait for the proposal to fail due to SNS deployment failure
-    nns_wait_for_proposal_failure(
-        &mut sns_initialization_flow_test.state_machine,
-        proposal_id.id,
-    );
+    nns_wait_for_proposal_failure(&sns_initialization_flow_test.state_machine, proposal_id.id);
 
     // Step 2: Inspect the system
 
     // Assert that no SNS was created
-    let snses = list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances;
+    let snses = list_deployed_snses(&sns_initialization_flow_test.state_machine).instances;
     assert_eq!(snses.len(), 0);
 
     // Assert that the cf neurons have not had their maturity refunded.
     let post_execution_nns_neurons_maturity_snapshot =
-        get_test_neurons_maturity_snapshot(&mut sns_initialization_flow_test.state_machine);
+        get_test_neurons_maturity_snapshot(&sns_initialization_flow_test.state_machine);
     assert_eq!(
         initial_nns_neurons_maturity_snapshot,
         post_execution_nns_neurons_maturity_snapshot
@@ -940,7 +930,7 @@ fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dap
     let mut sns_initialization_flow_test = SnsInitializationFlowTestSetup::default_setup();
 
     let initial_nns_neurons_maturity_snapshot =
-        get_test_neurons_maturity_snapshot(&mut sns_initialization_flow_test.state_machine);
+        get_test_neurons_maturity_snapshot(&sns_initialization_flow_test.state_machine);
 
     let initial_sns_wasm_cycles_balance = get_canister_status_from_root(
         &sns_initialization_flow_test.state_machine,
@@ -950,7 +940,7 @@ fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dap
 
     // There should be no SNSes deployed.
     assert_eq!(
-        list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances,
+        list_deployed_snses(&sns_initialization_flow_test.state_machine).instances,
         vec![]
     );
 
@@ -974,15 +964,12 @@ fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dap
     );
 
     // Wait for the proposal to be executed, and therefore the SNS to be deployed
-    nns_wait_for_proposal_execution(
-        &mut sns_initialization_flow_test.state_machine,
-        proposal_id.id,
-    );
+    nns_wait_for_proposal_execution(&sns_initialization_flow_test.state_machine, proposal_id.id);
 
     // Step 2: Inspect the newly created SNS
 
     // Assert the SNS was created and get its info
-    let snses = list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances;
+    let snses = list_deployed_snses(&sns_initialization_flow_test.state_machine).instances;
     assert_eq!(snses.len(), 1);
     let test_sns = snses.first().unwrap();
 
@@ -1047,7 +1034,7 @@ fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dap
 
     // Assert the sns governance canister should be in PreInitializationSwap mode
     let sns_governance_mode = sns_governance_get_mode(
-        &mut sns_initialization_flow_test.state_machine,
+        &sns_initialization_flow_test.state_machine,
         canister_id_or_panic(test_sns.governance_canister_id),
     )
     .unwrap();
@@ -1056,7 +1043,7 @@ fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dap
     // Assert that the maturity was decremented from the NNS Neurons and properly recorded
     // in the swap canister.
     let current_nns_neurons_maturity_snapshot =
-        get_test_neurons_maturity_snapshot(&mut sns_initialization_flow_test.state_machine);
+        get_test_neurons_maturity_snapshot(&sns_initialization_flow_test.state_machine);
 
     let cf_participants = list_community_fund_participants(
         &sns_initialization_flow_test.state_machine,
@@ -1105,7 +1092,7 @@ fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dap
         let participant = sns_initialization_flow_test.funded_principals[i];
 
         let response = participate_in_swap(
-            &mut sns_initialization_flow_test.state_machine,
+            &sns_initialization_flow_test.state_machine,
             canister_id_or_panic(test_sns.swap_canister_id),
             participant,
             ExplosiveTokens::from_e8s(direct_participant_amount_e8s),
@@ -1128,7 +1115,7 @@ fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dap
 
     // SNS Governance should now be in normal mode
     let sns_governance_mode = sns_governance_get_mode(
-        &mut sns_initialization_flow_test.state_machine,
+        &sns_initialization_flow_test.state_machine,
         canister_id_or_panic(test_sns.governance_canister_id),
     )
     .unwrap();
@@ -1143,7 +1130,7 @@ fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dap
 
     // Assert that the maturity was refunded to the NNS Neurons.
     let current_nns_neurons_maturity_snapshot =
-        get_test_neurons_maturity_snapshot(&mut sns_initialization_flow_test.state_machine);
+        get_test_neurons_maturity_snapshot(&sns_initialization_flow_test.state_machine);
 
     assert_eq!(
         initial_nns_neurons_maturity_snapshot,
@@ -1173,7 +1160,7 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
 
     // There should be no SNSes deployed.
     assert_eq!(
-        list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances,
+        list_deployed_snses(&sns_initialization_flow_test.state_machine).instances,
         vec![]
     );
 
@@ -1188,15 +1175,12 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
     );
 
     // Wait for the proposal to be executed, and therefore the SNS to be deployed
-    nns_wait_for_proposal_execution(
-        &mut sns_initialization_flow_test.state_machine,
-        proposal_id.id,
-    );
+    nns_wait_for_proposal_execution(&sns_initialization_flow_test.state_machine, proposal_id.id);
 
     // Step 2: Inspect the newly created SNS
 
     // Assert the SNS was created and get its info
-    let snses = list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances;
+    let snses = list_deployed_snses(&sns_initialization_flow_test.state_machine).instances;
     assert_eq!(snses.len(), 1);
     let test_sns_1 = snses.first().unwrap();
 
@@ -1230,7 +1214,7 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
     // Assert that you can participate in the first Swap, but do not let it commit
     let participant = sns_initialization_flow_test.funded_principals[0];
     let response = participate_in_swap(
-        &mut sns_initialization_flow_test.state_machine,
+        &sns_initialization_flow_test.state_machine,
         canister_id_or_panic(test_sns_1.swap_canister_id),
         participant,
         ExplosiveTokens::from_e8s(E8),
@@ -1247,15 +1231,12 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
     );
 
     // Wait for the proposal to be executed, and therefore the SNS to be deployed
-    nns_wait_for_proposal_execution(
-        &mut sns_initialization_flow_test.state_machine,
-        proposal_id.id,
-    );
+    nns_wait_for_proposal_execution(&sns_initialization_flow_test.state_machine, proposal_id.id);
 
     // Step 4: Inspect the second SNS
 
     // Assert the SNS was created and get its info
-    let snses = list_deployed_snses(&mut sns_initialization_flow_test.state_machine).instances;
+    let snses = list_deployed_snses(&sns_initialization_flow_test.state_machine).instances;
     assert_eq!(snses.len(), 2);
     let test_sns_2 = snses.last().unwrap();
 
@@ -1289,7 +1270,7 @@ fn test_one_proposal_sns_initialization_supports_multiple_open_swaps() {
     // Assert that you can participate in the second Swap
     let participant = sns_initialization_flow_test.funded_principals[0];
     let response = participate_in_swap(
-        &mut sns_initialization_flow_test.state_machine,
+        &sns_initialization_flow_test.state_machine,
         canister_id_or_panic(test_sns_2.swap_canister_id),
         participant,
         ExplosiveTokens::from_e8s(E8),

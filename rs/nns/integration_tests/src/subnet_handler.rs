@@ -22,14 +22,7 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
-use ic_types::{
-    p2p::{
-        build_default_gossip_config, MAX_ARTIFACT_STREAMS_PER_PEER, MAX_CHUNK_SIZE,
-        MAX_CHUNK_WAIT_MS, MAX_DUPLICITY, PFN_EVALUATION_PERIOD_MS, RECEIVE_CHECK_PEER_SET_SIZE,
-        REGISTRY_POLL_PERIOD_MS, RETRANSMISSION_REQUEST_MS,
-    },
-    ReplicaVersion,
-};
+use ic_types::ReplicaVersion;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use std::str::FromStr;
 
@@ -53,7 +46,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 0,
                 dkg_dealings_per_block: 1,
-                gossip_config: Some(build_default_gossip_config()),
+                gossip_config: None,
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
@@ -97,14 +90,14 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 initial_notary_delay_millis: None,
                 dkg_interval_length: Some(10),
                 dkg_dealings_per_block: Some(1),
-                max_artifact_streams_per_peer: Some(MAX_ARTIFACT_STREAMS_PER_PEER),
-                max_chunk_wait_ms: Some(MAX_CHUNK_WAIT_MS),
-                max_duplicity: Some(MAX_DUPLICITY),
-                max_chunk_size: Some(MAX_CHUNK_SIZE),
-                receive_check_cache_size: Some(RECEIVE_CHECK_PEER_SET_SIZE),
-                pfn_evaluation_period_ms: Some(PFN_EVALUATION_PERIOD_MS),
-                registry_poll_period_ms: Some(REGISTRY_POLL_PERIOD_MS),
-                retransmission_request_ms: Some(RETRANSMISSION_REQUEST_MS),
+                max_artifact_streams_per_peer: None,
+                max_chunk_wait_ms: None,
+                max_duplicity: None,
+                max_chunk_size: None,
+                receive_check_cache_size: None,
+                pfn_evaluation_period_ms: None,
+                registry_poll_period_ms: None,
+                retransmission_request_ms: None,
                 set_gossip_config_to_default: false,
                 start_as_nns: None,
                 subnet_type: None,
@@ -177,7 +170,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     replica_version_id: ReplicaVersion::default().into(),
                     dkg_interval_length: 10,
                     dkg_dealings_per_block: 1,
-                    gossip_config: Some(build_default_gossip_config()),
+                    gossip_config: None,
                     start_as_nns: false,
                     subnet_type: SubnetType::Application.into(),
                     is_halted: true,

@@ -5,7 +5,10 @@ package(default_visibility = ["//visibility:public"])
 [
     rust_library(
         name = "sm-tests" + name_suffix,
-        srcs = ["src/lib.rs"],
+        testonly = True,
+        srcs = glob([
+            "src/**/*.rs",
+        ]),
         crate_features = features,
         crate_name = "ic_icrc1_ledger_sm_tests",
         data = [
@@ -22,6 +25,7 @@ package(default_visibility = ["//visibility:public"])
             "//rs/rosetta-api/icrc1/ledger",
             "//rs/rosetta-api/ledger_canister_core",
             "//rs/rosetta-api/ledger_core",
+            "//rs/rust_canisters/http_types",
             "//rs/state_machine_tests",
             "//rs/types/base_types",
             "//rs/types/error_types",

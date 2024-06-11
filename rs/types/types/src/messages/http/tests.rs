@@ -339,7 +339,9 @@ mod try_from {
         use crate::messages::http::{
             Authentication, HttpQueryContent, HttpRequestError, HttpUserQuery,
         };
-        use crate::messages::{Blob, HttpRequest, HttpRequestEnvelope, UserQuery, UserSignature};
+        use crate::messages::{
+            Blob, HttpRequest, HttpRequestEnvelope, Query, QuerySource, UserSignature,
+        };
         use crate::UserId;
         use assert_matches::assert_matches;
 
@@ -354,14 +356,16 @@ mod try_from {
             }
         }
 
-        pub fn default_user_query_content() -> UserQuery {
-            UserQuery {
-                source: UserId::from(fixed::principal_id()),
+        pub fn default_user_query_content() -> Query {
+            Query {
+                source: QuerySource::User {
+                    user_id: UserId::from(fixed::principal_id()),
+                    ingress_expiry: fixed::ingress_expiry(),
+                    nonce: Some(fixed::nonce()),
+                },
                 receiver: fixed::canister_id(),
                 method_name: fixed::method_name(),
                 method_payload: fixed::arg().0,
-                ingress_expiry: fixed::ingress_expiry(),
-                nonce: Some(fixed::nonce()),
             }
         }
 

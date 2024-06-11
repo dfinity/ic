@@ -6,14 +6,13 @@ use std::{
 
 use arc_swap::ArcSwapOption;
 use candid::Principal;
-use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
 use ic_registry_subnet_type::SubnetType;
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
 use super::*;
 use crate::{
     persist::{Persister, Routes},
-    snapshot::{CanisterRange, Node, RegistrySnapshot, Subnet},
+    snapshot::{node_test_id, subnet_test_id, CanisterRange, Node, RegistrySnapshot, Subnet},
+    test_utils::valid_tls_certificate_and_validation_time,
 };
 
 const NODE_ID_OFFSET: u64 = 1000;

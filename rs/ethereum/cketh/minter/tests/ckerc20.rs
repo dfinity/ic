@@ -13,7 +13,10 @@ use ic_cketh_minter::{MINT_RETRY_DELAY, SCRAPPING_ETH_LOGS_INTERVAL};
 use ic_cketh_test_utils::ckerc20::{CkErc20DepositParams, CkErc20Setup, Erc20Token, ONE_USDC};
 use ic_cketh_test_utils::flow::DepositParams;
 use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
-use ic_cketh_test_utils::response::{block_response, empty_logs, Erc20LogEntry};
+use ic_cketh_test_utils::response::{
+    all_eth_get_logs_response_size_estimates, block_response, empty_logs,
+    multi_logs_for_single_transaction, Erc20LogEntry,
+};
 use ic_cketh_test_utils::{
     format_ethereum_address_to_eip_55, CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
     DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
@@ -1448,6 +1451,7 @@ fn should_retrieve_minter_info() {
             erc20_balances: Some(erc20_balances),
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
+            cketh_ledger_id: Some(ckerc20.cketh_ledger_id()),
         }
     );
 }
@@ -1651,4 +1655,120 @@ fn should_not_scrape_when_no_erc20_token() {
             .last_erc20_scraped_block_number,
         Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into())
     );
+}
+
+#[test]
+fn should_skip_single_block_containing_too_many_events() {
+    let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+    let erc20_topics = ckerc20.supported_erc20_contract_address_topics();
+    let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+    let deposit = CkErc20DepositParams {
+        from_address: "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1"
+            .parse()
+            .unwrap(),
+        ..CkErc20DepositParams::for_token(ONE_USDC, ckusdc)
+    }
+    .erc20_log_entry();
+    // around 680 bytes per log
+    // we need at least 3085 logs to reach the 2MB limit
+    let large_amount_of_logs = multi_logs_for_single_transaction(deposit.clone(), 3_100);
+    assert!(serde_json::to_vec(&large_amount_of_logs).unwrap().len() > 2_000_000);
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3))
+        .build()
+        .expect_rpc_calls(&ckerc20);
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+            "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&ckerc20);
+
+    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+            .with_request_params(json!([{
+                "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+                "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
+                "address": [ERC20_HELPER_CONTRACT_ADDRESS],
+                "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics.clone()]
+            }]))
+            .with_max_response_bytes(max_response_bytes)
+            .respond_for_all_with(large_amount_of_logs.clone())
+            .build()
+            .expect_rpc_calls(&ckerc20);
+    }
+
+    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+            .with_request_params(json!([{
+                "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+                "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 2),
+                "address": [ERC20_HELPER_CONTRACT_ADDRESS],
+                "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics.clone()]
+            }]))
+            .with_max_response_bytes(max_response_bytes)
+            .respond_for_all_with(large_amount_of_logs.clone())
+            .build()
+            .expect_rpc_calls(&ckerc20);
+    }
+
+    for max_response_bytes in all_eth_get_logs_response_size_estimates() {
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+            .with_request_params(json!([{
+                "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+                "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+                "address": [ERC20_HELPER_CONTRACT_ADDRESS],
+                "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics.clone()]
+            }]))
+            .with_max_response_bytes(max_response_bytes)
+            .respond_for_all_with(large_amount_of_logs.clone())
+            .build()
+            .expect_rpc_calls(&ckerc20);
+    }
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 2),
+            "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
+            "address": [ERC20_HELPER_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics.clone()]
+        }]))
+        .with_max_response_bytes(all_eth_get_logs_response_size_estimates()[0])
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&ckerc20.cketh);
+
+    ckerc20
+        .cketh
+        .check_audit_logs_and_upgrade(Default::default())
+        .assert_has_no_event_satisfying(|event| match event {
+            EventPayload::SkippedBlock {
+                contract_address: Some(address),
+                ..
+            } => address.to_lowercase() == ETH_HELPER_CONTRACT_ADDRESS,
+            _ => false,
+        })
+        .assert_has_unique_events_in_order(&vec![
+            EventPayload::SkippedBlock {
+                contract_address: Some(
+                    ERC20_HELPER_CONTRACT_ADDRESS
+                        .parse::<Address>()
+                        .unwrap()
+                        .to_string(),
+                ),
+                block_number: (LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1).into(),
+            },
+            EventPayload::SyncedToBlock {
+                block_number: (LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3).into(),
+            },
+            EventPayload::SyncedErc20ToBlock {
+                block_number: (LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3).into(),
+            },
+        ]);
 }

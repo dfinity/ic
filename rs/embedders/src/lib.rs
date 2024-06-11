@@ -39,7 +39,7 @@ pub struct WasmExecutionInput {
 
 #[derive(Debug, Clone)]
 pub struct InstanceRunResult {
-    pub dirty_pages: Vec<PageIndex>,
+    pub wasm_dirty_pages: Vec<PageIndex>,
     pub stable_memory_dirty_pages: Vec<PageIndex>,
     pub exported_globals: Vec<Global>,
 }

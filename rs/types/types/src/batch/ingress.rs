@@ -72,7 +72,7 @@ type IngressIndex = usize;
 /// Position of serialized ingress message in the payload buffer.
 type BufferPosition = u64;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 /// Possible errors when accessing messages in an [`IngressPayload`].
 pub enum IngressPayloadError {
     IndexOutOfBound(IngressIndex),

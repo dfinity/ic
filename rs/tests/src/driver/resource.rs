@@ -347,8 +347,8 @@ pub fn allocate_resources(
                                     ImageType::IcOsImage => {
                                         format!("{}-image-guestos", tnet.owner.name_any())
                                     }
-                                    ImageType::PrometheusImage => "image-prometheus-vm".into(),
-                                    ImageType::UniversalImage => "image-universal-vm".into(),
+                                    ImageType::PrometheusImage => "img-prometheus-vm".into(),
+                                    ImageType::UniversalImage => "img-universal-vm".into(),
                                 },
                             },
                             ..create_vm_request

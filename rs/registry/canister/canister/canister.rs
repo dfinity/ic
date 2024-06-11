@@ -1,8 +1,8 @@
 use candid::{candid_method, Decode};
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
-    api::{arg_data, data_certificate, reply},
-    over, over_async, over_may_reject, stable,
+    api::{arg_data, data_certificate, reply, trap_with},
+    over, over_async, stable,
 };
 use ic_base_types::NodeId;
 use ic_certified_map::{AsHashTree, HashTree};
@@ -37,7 +37,6 @@ use registry_canister::{
         do_bless_replica_version::BlessReplicaVersionPayload,
         do_change_subnet_membership::ChangeSubnetMembershipPayload,
         do_create_subnet::CreateSubnetPayload,
-        do_delete_subnet::DeleteSubnetPayload,
         do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
         do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
         do_recover_subnet::RecoverSubnetPayload,
@@ -68,8 +67,8 @@ use registry_canister::{
         reroute_canister_ranges::RerouteCanisterRangesPayload,
     },
     pb::v1::{
-        GetSubnetForCanisterRequest, GetSubnetForCanisterResponse, NodeProvidersMonthlyXdrRewards,
-        RegistryCanisterStableStorage,
+        GetSubnetForCanisterRequest, NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage,
+        SubnetForCanister,
     },
     proto_on_wire::protobuf,
     registry::{EncodedVersion, Registry, MAX_REGISTRY_DELTAS_SIZE},
@@ -505,20 +504,6 @@ fn add_nodes_to_subnet_(payload: AddNodesToSubnetPayload) {
     recertify_registry();
 }
 
-#[export_name = "canister_update delete_subnet"]
-fn delete_subnet() {
-    check_caller_is_governance_and_log("delete_subnet");
-    over_async(candid_one, |payload: DeleteSubnetPayload| async move {
-        delete_subnet_(payload).await
-    });
-}
-
-#[candid_method(update, rename = "delete_subnet")]
-async fn delete_subnet_(payload: DeleteSubnetPayload) {
-    registry_mut().do_delete_subnet(payload).await;
-    recertify_registry();
-}
-
 #[export_name = "canister_update recover_subnet"]
 fn recover_subnet() {
     check_caller_is_governance_and_log("recover_subnet");
@@ -824,55 +809,58 @@ fn update_ssh_readonly_access_for_all_unassigned_nodes_(
 #[export_name = "canister_update prepare_canister_migration"]
 fn prepare_canister_migration() {
     check_caller_is_governance_and_log("prepare_canister_migration");
-    over_may_reject(candid_one, |payload: PrepareCanisterMigrationPayload| {
-        prepare_canister_migration_(payload)
-    });
+    over(candid_one, prepare_canister_migration_);
 }
 
 #[candid_method(update, rename = "prepare_canister_migration")]
-fn prepare_canister_migration_(payload: PrepareCanisterMigrationPayload) -> Result<(), String> {
-    if let Err(msg) = registry_mut().prepare_canister_migration(payload) {
-        println!("{} Reject: {}", LOG_PREFIX, msg);
-        return Err(msg.to_string());
-    }
+fn prepare_canister_migration_(payload: PrepareCanisterMigrationPayload) {
+    registry_mut()
+        .prepare_canister_migration(payload)
+        .unwrap_or_else(|error_message| {
+            trap_with(&format!(
+                "{} Prepare canister migration failed: {}",
+                LOG_PREFIX, error_message
+            ))
+        });
     recertify_registry();
-    Ok(())
 }
 
 #[export_name = "canister_update reroute_canister_ranges"]
 fn reroute_canister_ranges() {
     check_caller_is_governance_and_log("reroute_canister_ranges");
-    over_may_reject(candid_one, |payload: RerouteCanisterRangesPayload| {
-        reroute_canister_ranges_(payload)
-    });
+    over(candid_one, reroute_canister_ranges_);
 }
 
 #[candid_method(update, rename = "reroute_canister_ranges")]
-fn reroute_canister_ranges_(payload: RerouteCanisterRangesPayload) -> Result<(), String> {
-    if let Err(msg) = registry_mut().reroute_canister_ranges(payload) {
-        println!("{} Reject: {}", LOG_PREFIX, msg);
-        return Err(msg);
-    }
+fn reroute_canister_ranges_(payload: RerouteCanisterRangesPayload) {
+    registry_mut()
+        .reroute_canister_ranges(payload)
+        .unwrap_or_else(|error_message| {
+            trap_with(&format!(
+                "{} Reroute canister ranges failed: {}",
+                LOG_PREFIX, error_message
+            ))
+        });
     recertify_registry();
-    Ok(())
 }
 
 #[export_name = "canister_update complete_canister_migration"]
 fn complete_canister_migration() {
     check_caller_is_governance_and_log("complete_canister_migration");
-    over_may_reject(candid_one, |payload: CompleteCanisterMigrationPayload| {
-        complete_canister_migration_(payload)
-    });
+    over(candid_one, complete_canister_migration_);
 }
 
 #[candid_method(update, rename = "complete_canister_migration")]
-fn complete_canister_migration_(payload: CompleteCanisterMigrationPayload) -> Result<(), String> {
-    if let Err(msg) = registry_mut().complete_canister_migration(payload) {
-        println!("{} Reject: {}", LOG_PREFIX, msg);
-        return Err(msg);
-    }
+fn complete_canister_migration_(payload: CompleteCanisterMigrationPayload) {
+    registry_mut()
+        .complete_canister_migration(payload)
+        .unwrap_or_else(|error_message| {
+            trap_with(&format!(
+                "{} Complete canister migration failed: {}",
+                LOG_PREFIX, error_message
+            ))
+        });
     recertify_registry();
-    Ok(())
 }
 
 #[export_name = "canister_query get_node_providers_monthly_xdr_rewards"]
@@ -910,18 +898,11 @@ fn get_node_operators_and_dcs_of_node_provider_(
 
 #[export_name = "canister_query get_subnet_for_canister"]
 fn get_subnet_for_canister() {
-    over(
-        candid_one,
-        |arg: GetSubnetForCanisterRequest| -> Result<GetSubnetForCanisterResponse, String> {
-            get_subnet_for_canister_(arg)
-        },
-    )
+    over(candid_one, get_subnet_for_canister_)
 }
 
 #[candid_method(query, rename = "get_subnet_for_canister")]
-fn get_subnet_for_canister_(
-    arg: GetSubnetForCanisterRequest,
-) -> Result<GetSubnetForCanisterResponse, String> {
+fn get_subnet_for_canister_(arg: GetSubnetForCanisterRequest) -> Result<SubnetForCanister, String> {
     let Some(principal) = arg.principal else {
         return Err("No principal supplied".to_string());
     };
@@ -941,14 +922,22 @@ fn add_node() {
         LOG_PREFIX,
         dfn_core::api::caller()
     );
-    over_may_reject(candid_one, add_node_);
+    over(candid_one, add_node_);
 }
 
 #[candid_method(update, rename = "add_node")]
-fn add_node_(payload: AddNodePayload) -> Result<NodeId, String> {
-    let result = registry_mut().do_add_node(payload);
+fn add_node_(payload: AddNodePayload) -> NodeId {
+    let node_id = registry_mut()
+        .do_add_node(payload)
+        .unwrap_or_else(|error_message| {
+            trap_with(&format!(
+                "{} Add node failed: {}",
+                LOG_PREFIX, error_message
+            ))
+        });
+
     recertify_registry();
-    result
+    node_id
 }
 
 #[export_name = "canister_update update_node_directly"]
@@ -959,14 +948,20 @@ fn update_node_directly() {
         LOG_PREFIX,
         dfn_core::api::caller()
     );
-    over_may_reject(candid_one, update_node_directly_);
+    over(candid_one, update_node_directly_);
 }
 
 #[candid_method(update, rename = "update_node_directly")]
-fn update_node_directly_(payload: UpdateNodeDirectlyPayload) -> Result<(), String> {
-    let result = registry_mut().do_update_node_directly(payload);
+fn update_node_directly_(payload: UpdateNodeDirectlyPayload) {
+    registry_mut()
+        .do_update_node_directly(payload)
+        .unwrap_or_else(|error_message| {
+            trap_with(&format!(
+                "{} Update node directly failed: {}",
+                LOG_PREFIX, error_message
+            ))
+        });
     recertify_registry();
-    result
 }
 
 #[candid_method(update, rename = "update_node_domain_directly")]
@@ -1073,42 +1068,11 @@ fn expose_candid() {
     over(candid, |_: ()| include_str!("registry.did").to_string())
 }
 
-// When run on native this prints the candid service definition of this
-// canister, from the methods annotated with `candid_method` above.
-//
-// Note that `cargo test` calls `main`, and `export_service` (which defines
-// `__export_service` in the current scope) needs to be called exactly once. So
-// in addition to `not(target_arch = "wasm32")` we have a `not(test)` guard here
-// to avoid calling `export_service`, which we need to call in the test below.
-#[cfg(not(any(target_arch = "wasm32", test)))]
-fn main() {
-    // The line below generates did types and service definition from the
-    // methods annotated with `candid_method` above. The definition is then
-    // obtained with `__export_service()`.
-    candid::export_service!();
-    std::print!("{}", __export_service());
-}
-
-#[cfg(any(target_arch = "wasm32", test))]
+/// Currently (May, 2024), unlike our other canisters, registry.did is NOT
+/// automatically generated by main. Instead, it is hand-crafted. We might later
+/// change our other canisters to do the same thing. registry is a trial balloon
+/// of sorts in this regard.
 fn main() {}
 
-#[test]
-fn check_did_file() {
-    let did_file_loc = format!(
-        "{}/canister/registry.did",
-        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set")
-    );
-    let did = String::from_utf8(std::fs::read(did_file_loc).unwrap()).unwrap();
-
-    // See comments in main above
-    candid::export_service!();
-    let expected = __export_service();
-
-    if did != expected {
-        panic!(
-            "Generated candid definition does not match canister/registry.did \
-            Run `bazel run //rs/registry/canister:_wasm_registry-canister >canister/registry.did` in \
-            rs/registry/canister to update canister/registry.did"
-        )
-    }
-}
+#[cfg(test)]
+mod tests;

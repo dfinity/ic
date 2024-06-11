@@ -13,7 +13,7 @@ DEPENDENCIES = [
     "@crate_index//:byte-unit",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:futures",
-    "@crate_index//:http",
+    "@crate_index//:http_0_2_12",
     "@crate_index//:hyper_0_14_27",
     "@crate_index//:hyper-socks2",
     "@crate_index//:hyper-rustls",

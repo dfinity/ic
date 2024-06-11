@@ -176,6 +176,34 @@ type UpdateCyclesManagement = record {
    cycles_top_up_increment: opt nat;
 };
 
+type CanisterStatusResponse = record {
+  query_stats : QueryStats;
+  status : CanisterStatusType;
+  memory_size : nat;
+  cycles : nat;
+  settings : DefiniteCanisterSettings;
+  idle_cycles_burned_per_day : nat;
+  module_hash : opt vec nat8;
+  reserved_cycles : nat;
+};
+
+type CanisterStatusType = variant { stopped; stopping; running };
+
+type DefiniteCanisterSettings = record {
+  freezing_threshold : nat;
+  controllers : vec principal;
+  memory_allocation : nat;
+  compute_allocation : nat;
+  reserved_cycles_limit : nat;
+};
+
+type QueryStats = record {
+  response_payload_bytes_total : nat;
+  num_instructions_total : nat;
+  num_calls_total : nat;
+  request_payload_bytes_total : nat;
+};
+
 service : (OrchestratorArg) -> {
 
    // Managed canister IDs for a given ERC20 contract
@@ -183,5 +211,8 @@ service : (OrchestratorArg) -> {
 
    // Return internal orchestrator parameters
    get_orchestrator_info : () -> (OrchestratorInfo) query;
+
+   // Retrieve the status of the minter canister.
+   get_canister_status : () -> (CanisterStatusResponse);
 
 }

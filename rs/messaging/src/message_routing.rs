@@ -5,7 +5,7 @@ use crate::{
 use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::crypto::ErrorReproducibility;
+use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKeySettings};
 use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, RegistryExecutionSettings, Scheduler},
     messaging::{MessageRouting, MessageRoutingError},
@@ -14,22 +14,21 @@ use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManagerError};
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
-use ic_management_canister_types::EcdsaKeyId;
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_query_stats::QueryStatsAggregatorMetrics;
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry,
+    chain_keys::ChainKeysRegistry,
     crypto::CryptoRegistry,
-    ecdsa_keys::EcdsaKeysRegistry,
     node::NodeRegistry,
     provisional_whitelist::ProvisionalWhitelistRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{get_node_ids_from_subnet_record, SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     metadata_state::ApiBoundaryNodeEntry, NetworkTopology, ReplicatedState, SubnetTopology,
@@ -736,10 +735,32 @@ impl BatchProcessorImpl {
 
         let subnet_features = subnet_record.features.unwrap_or_default().into();
         let max_number_of_canisters = subnet_record.max_number_of_canisters;
-        let (max_ecdsa_queue_size, quadruples_to_create_in_advance) = subnet_record
-            .ecdsa_config
-            .map(|c| (c.max_queue_size, c.quadruples_to_create_in_advance))
-            .unwrap_or_default();
+
+        let chain_key_settings = if let Some(chain_key_config) = subnet_record.chain_key_config {
+            let chain_key_config = ChainKeyConfig::try_from(chain_key_config).map_err(|err| {
+                ReadRegistryError::Persistent(format!(
+                    "'failed to read chain key config', err: {:?}",
+                    err
+                ))
+            })?;
+
+            chain_key_config
+                .key_configs
+                .iter()
+                .map(|key_config| {
+                    (
+                        key_config.key_id.clone(),
+                        ChainKeySettings {
+                            max_queue_size: key_config.max_queue_size,
+                            pre_signatures_to_create_in_advance: key_config
+                                .pre_signatures_to_create_in_advance,
+                        },
+                    )
+                })
+                .collect::<BTreeMap<_, _>>()
+        } else {
+            BTreeMap::new()
+        };
 
         let subnet_size = if subnet_record.membership.is_empty() {
             self.metrics.critical_error_missing_subnet_size.inc();
@@ -763,8 +784,7 @@ impl BatchProcessorImpl {
             RegistryExecutionSettings {
                 max_number_of_canisters,
                 provisional_whitelist,
-                max_ecdsa_queue_size,
-                quadruples_to_create_in_advance,
+                chain_key_settings,
                 subnet_size,
             },
             node_public_keys,
@@ -843,19 +863,21 @@ impl BatchProcessorImpl {
                         ))
                     })?;
             let subnet_features: SubnetFeatures = subnet_record.features.unwrap_or_default().into();
-            let ecdsa_keys_held = subnet_record
-                .ecdsa_config
-                .map(|ecdsa_config| {
-                    ecdsa_config
-                        .key_ids
+            let idkg_keys_held = subnet_record
+                .chain_key_config
+                .map(|chain_key_config| {
+                    chain_key_config
+                        .key_configs
                         .into_iter()
-                        .map(|k| {
-                            EcdsaKeyId::try_from(k).map_err(|err: ProxyDecodeError| {
-                                Persistent(format!(
-                                    "'ECDSA key ID from subnet record for subnet {}', err: {}",
-                                    *subnet_id, err,
-                                ))
-                            })
+                        .map(|chain_key_config| {
+                            try_from_option_field(chain_key_config.key_id, "key_id").map_err(
+                                |err: ProxyDecodeError| {
+                                    Persistent(format!(
+                                        "'Chain key ID from subnet record for subnet {}', err: {}",
+                                        *subnet_id, err,
+                                    ))
+                                },
+                            )
                         })
                         .collect::<Result<BTreeSet<_>, _>>()
                 })
@@ -869,7 +891,7 @@ impl BatchProcessorImpl {
                     nodes,
                     subnet_type,
                     subnet_features,
-                    ecdsa_keys_held,
+                    idkg_keys_held,
                 },
             );
         }
@@ -890,10 +912,11 @@ impl BatchProcessorImpl {
             .get_root_subnet_id(registry_version)
             .map_err(|err| registry_error("NNS subnet ID", None, err))?
             .ok_or_else(|| not_found_error("NNS subnet ID", None))?;
-        let ecdsa_signing_subnets = self
+
+        let idkg_signing_subnets = self
             .registry
-            .get_ecdsa_signing_subnets(registry_version)
-            .map_err(|err| registry_error("ECDSA signing subnets", None, err))?
+            .get_chain_key_signing_subnets(registry_version)
+            .map_err(|err| registry_error("chain key signing subnets", None, err))?
             .unwrap_or_default();
 
         Ok(NetworkTopology {
@@ -901,7 +924,7 @@ impl BatchProcessorImpl {
             routing_table: Arc::new(routing_table),
             nns_subnet_id,
             canister_migrations: Arc::new(canister_migrations),
-            ecdsa_signing_subnets,
+            idkg_signing_subnets,
             bitcoin_testnet_canister_id: self.bitcoin_config.testnet_canister_id,
             bitcoin_mainnet_canister_id: self.bitcoin_config.mainnet_canister_id,
         })

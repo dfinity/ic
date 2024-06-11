@@ -48,23 +48,23 @@ jemallocator = "0.3.2"
 libc = "0.2.91"
 nix = { workspace = true }
 num_cpus = "1.13.1"
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
 pprof = { version = "0.13", default-features = false, features = [
     "flamegraph",
     "prost-codec",
 ], optional = true }
 prometheus = { workspace = true }
-rand = "0.8"
+rand = { workspace = true }
 regex = "1.3.9"
 slog = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-flame = "0.2.0"
 tracing-subscriber = { workspace = true }
-opentelemetry = { version = "^0.21.0", features = ["trace"] }
-opentelemetry-otlp = { version = "^0.14.0", features = ["grpc-tonic"] }
-opentelemetry_sdk = { version = "^0.21.2", features = ["trace"] }
-tracing-opentelemetry = "^0.22.0"
+tracing-opentelemetry = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # this library uses libunwind, which is only applicable to Linux

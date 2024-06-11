@@ -498,10 +498,10 @@ impl CertifierImpl {
             registry_version,
         ) {
             Ok(()) => Some(ChangeAction::MoveToValidated(msg)),
-            Err(ValidationError::Permanent(err)) => {
+            Err(ValidationError::InvalidArtifact(err)) => {
                 Some(ChangeAction::HandleInvalid(msg, format!("{:?}", err)))
             }
-            Err(ValidationError::Transient(err)) => {
+            Err(ValidationError::ValidationFailed(err)) => {
                 debug!(
                     self.log,
                     "Couldn't verify certification signature: {:?}", err
@@ -574,10 +574,10 @@ impl CertifierImpl {
                         .map_err(VerifierError::from)
                     {
                         Ok(()) => ChangeAction::MoveToValidated(msg),
-                        Err(ValidationError::Permanent(err)) => {
+                        Err(ValidationError::InvalidArtifact(err)) => {
                             ChangeAction::HandleInvalid(msg, format!("{:?}", err))
                         }
-                        Err(ValidationError::Transient(err)) => {
+                        Err(ValidationError::ValidationFailed(err)) => {
                             debug!(self.log, "Couldn't verify share signature: {:?}", err);
                             return None;
                         }

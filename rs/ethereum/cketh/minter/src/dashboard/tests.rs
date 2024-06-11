@@ -19,7 +19,7 @@ use ic_cketh_minter::tx::{
     Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest, TransactionPrice,
 };
 use ic_ethereum_types::Address;
-use maplit::btreeset;
+use maplit::{btreemap, btreeset};
 use std::str::FromStr;
 
 #[test]
@@ -27,7 +27,7 @@ fn should_display_metadata() {
     let mut dashboard = DashboardTemplate {
         minter_address: "0x1789F79e95324A47c5Fd6693071188e82E9a3558".to_string(),
         eth_helper_contract_address: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
-        ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
+        cketh_ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
             .expect("BUG: invalid principal"),
         ecdsa_key_name: "key_1".to_string(),
         next_transaction_nonce: TransactionNonce::from(42_u8),
@@ -40,7 +40,7 @@ fn should_display_metadata() {
         .has_minter_address("0x1789F79e95324A47c5Fd6693071188e82E9a3558")
         .has_eth_helper_contract_address("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34")
         .has_erc20_helper_contract_address("N/A")
-        .has_ledger_canister_id("apia6-jaaaa-aaaar-qabma-cai")
+        .has_cketh_ledger_canister_id("apia6-jaaaa-aaaar-qabma-cai")
         .has_tecdsa_key_name("key_1")
         .has_next_transaction_nonce("42")
         .has_minimum_withdrawal_amount("10_000_000_000_000_000")
@@ -72,7 +72,10 @@ fn should_display_block_sync() {
         last_observed_block: Some(BlockNumber::from(4552271_u32)),
         last_eth_synced_block: BlockNumber::from(4552270_u32),
         last_erc20_synced_block: Some(BlockNumber::from(4552269_u32)),
-        skipped_blocks: btreeset! {BlockNumber::from(3552270_u32), BlockNumber::from(2552270_u32)},
+        skipped_blocks: btreemap! {
+            "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string() => btreeset! {BlockNumber::from(3552270_u32), BlockNumber::from(2552270_u32)},
+            "0xE1788E4834c896F1932188645cc36c54d1b80AC1".to_string() => btreeset! {BlockNumber::from(3552370_u32), BlockNumber::from(2552370_u32)},
+        },
         ..initial_dashboard()
     };
     DashboardAssert::assert_that(dashboard)
@@ -81,16 +84,13 @@ fn should_display_block_sync() {
         .has_last_erc20_synced_block_href("https://sepolia.etherscan.io/block/4552269")
         .has_first_synced_block_href("https://sepolia.etherscan.io/block/3956207")
         .has_skipped_blocks(
-            r#"<a href="https://sepolia.etherscan.io/block/2552270"><code>2552270</code></a>, <a href="https://sepolia.etherscan.io/block/3552270"><code>3552270</code></a>"#,
+            "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+            &[2552270, 3552270],
+        )
+        .has_skipped_blocks(
+            "0xE1788E4834c896F1932188645cc36c54d1b80AC1",
+            &[2552370, 3552370],
         );
-
-    let dashboard_with_single_skipped_block = DashboardTemplate {
-        skipped_blocks: btreeset! {BlockNumber::from(3552270_u32)},
-        ..initial_dashboard()
-    };
-    DashboardAssert::assert_that(dashboard_with_single_skipped_block).has_skipped_blocks(
-        r#"<a href="https://sepolia.etherscan.io/block/3552270"><code>3552270</code></a>"#,
-    );
 }
 
 #[test]
@@ -1228,10 +1228,20 @@ mod assertions {
             )
         }
 
-        pub fn has_skipped_blocks(&self, expected_links: &str) -> &Self {
+        pub fn has_skipped_blocks(&self, contract_address: &str, expected_blocks: &[u64]) -> &Self {
+            let expected_links = expected_blocks
+                .iter()
+                .map(|i| {
+                    format!(
+                        "<a href=\"https://sepolia.etherscan.io/block/{}\"><code>{}</code></a>",
+                        i, i
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
             self.has_html_value(
-                "#skipped-blocks > td",
-                expected_links,
+                &format!("#skipped-blocks-{} > td", contract_address),
+                &expected_links,
                 "wrong skipped blocks",
             )
         }
@@ -1287,9 +1297,9 @@ mod assertions {
             )
         }
 
-        pub fn has_ledger_canister_id(&self, expected_id: &str) -> &Self {
+        pub fn has_cketh_ledger_canister_id(&self, expected_id: &str) -> &Self {
             self.has_string_value(
-                "#ledger-canister-id > td",
+                "#cketh-ledger-canister-id > td",
                 expected_id,
                 "wrong ledger canister ID",
             )

@@ -1,4 +1,3 @@
-use crate::messages::Blob;
 use crate::{
     messages::{
         http::{representation_independent_hash_call_or_query, CallOrQuery},
@@ -6,46 +5,84 @@ use crate::{
     },
     CanisterId, PrincipalId, UserId,
 };
-use ic_error_types::RejectCode;
-use serde::{Deserialize, Serialize};
+use ic_management_canister_types::IC_00;
 use std::convert::TryFrom;
+
+/// Represents the source of a query that is sent to a canister.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum QuerySource {
+    /// A query sent by the IC to itself.
+    Anonymous,
+    /// A query sent by an end user.
+    User {
+        user_id: UserId,
+        ingress_expiry: u64,
+        nonce: Option<Vec<u8>>,
+    },
+}
 
 /// Represents a Query that is sent by an end user to a canister.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct UserQuery {
-    pub source: UserId,
+pub struct Query {
+    pub source: QuerySource,
     pub receiver: CanisterId,
     pub method_name: String,
     pub method_payload: Vec<u8>,
-    pub ingress_expiry: u64,
-    pub nonce: Option<Vec<u8>>,
 }
 
-impl UserQuery {
+impl Query {
+    pub fn source(&self) -> PrincipalId {
+        match &self.source {
+            QuerySource::User { user_id, .. } => user_id.get(),
+            QuerySource::Anonymous => IC_00.get(),
+        }
+    }
+
     pub fn id(&self) -> MessageId {
-        MessageId::from(representation_independent_hash_call_or_query(
-            CallOrQuery::Query,
-            self.receiver.get().into_vec(),
-            &self.method_name,
-            self.method_payload.clone(),
-            self.ingress_expiry,
-            self.source.get().into_vec(),
-            self.nonce.as_deref(),
-        ))
+        match &self.source {
+            QuerySource::User {
+                user_id,
+                ingress_expiry,
+                nonce,
+            } => MessageId::from(representation_independent_hash_call_or_query(
+                CallOrQuery::Query,
+                self.receiver.get().into_vec(),
+                &self.method_name,
+                self.method_payload.clone(),
+                *ingress_expiry,
+                user_id.get().into_vec(),
+                nonce.as_deref(),
+            )),
+            QuerySource::Anonymous => {
+                MessageId::from(representation_independent_hash_call_or_query(
+                    CallOrQuery::Query,
+                    self.receiver.get().into_vec(),
+                    &self.method_name,
+                    self.method_payload.clone(),
+                    0,
+                    IC_00.get().into_vec(),
+                    None,
+                ))
+            }
+        }
     }
 }
 
-impl TryFrom<HttpUserQuery> for UserQuery {
+impl TryFrom<HttpUserQuery> for Query {
     type Error = HttpRequestError;
 
     fn try_from(query: HttpUserQuery) -> Result<Self, Self::Error> {
         Ok(Self {
-            source: UserId::from(PrincipalId::try_from(query.sender.0).map_err(|err| {
-                HttpRequestError::InvalidPrincipalId(format!(
-                    "Converting sender to PrincipalId failed with {}",
-                    err
-                ))
-            })?),
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::try_from(query.sender.0).map_err(|err| {
+                    HttpRequestError::InvalidPrincipalId(format!(
+                        "Converting sender to PrincipalId failed with {}",
+                        err
+                    ))
+                })?),
+                ingress_expiry: query.ingress_expiry,
+                nonce: query.nonce.map(|n| n.0),
+            },
             receiver: CanisterId::try_from(query.canister_id.0).map_err(|err| {
                 HttpRequestError::InvalidPrincipalId(format!(
                     "Converting canister_id to PrincipalId failed with {:?}",
@@ -54,43 +91,14 @@ impl TryFrom<HttpUserQuery> for UserQuery {
             })?,
             method_name: query.method_name,
             method_payload: query.arg.0,
-            ingress_expiry: query.ingress_expiry,
-            nonce: query.nonce.map(|n| n.0),
         })
     }
 }
 
-impl HasCanisterId for UserQuery {
+impl HasCanisterId for Query {
     fn canister_id(&self) -> CanisterId {
         self.receiver
     }
-}
-
-/// Represents a Query that is sent by the IC.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct AnonymousQuery {
-    pub receiver: CanisterId,
-    pub method_name: String,
-    pub method_payload: Vec<u8>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "status")]
-pub enum AnonymousQueryResponse {
-    Replied {
-        reply: AnonymousQueryResponseReply,
-    },
-    Rejected {
-        reject_code: RejectCode,
-        reject_message: String,
-    },
-}
-
-/// The body of the `AnonymousQueryResponse`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AnonymousQueryResponseReply {
-    pub arg: Blob,
 }
 
 #[cfg(test)]

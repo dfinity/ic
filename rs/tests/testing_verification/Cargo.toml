@@ -29,9 +29,5 @@ name = "ic-systest-spec-compliance-group-01-system-subnet"
 path = "spec_compliance_group_01_system_subnet_test.rs"
 
 [[bin]]
-name = "ic-systest-spec-compliance-group-02-application-subnet"
-path = "spec_compliance_group_02_application_subnet_test.rs"
-
-[[bin]]
 name = "ic-systest-spec-compliance-group-02-system-subnet"
 path = "spec_compliance_group_02_system_subnet_test.rs"

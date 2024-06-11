@@ -7,7 +7,7 @@ use crate::{
         metrics::{BatchStats, BlockStats},
         status::{self, Status},
     },
-    ecdsa::utils::{get_ecdsa_subnet_public_key, get_quadruple_ids_to_deliver},
+    ecdsa::utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver},
 };
 use ic_consensus_utils::{
     crypto_hashable_to_seed, get_block_hash_string, membership::Membership, pool_reader::PoolReader,
@@ -132,7 +132,7 @@ pub fn deliver_batches(
 
         let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
 
-        let ecdsa_subnet_public_keys = match get_ecdsa_subnet_public_key(&block, pool, log) {
+        let idkg_subnet_public_keys = match get_idkg_subnet_public_keys(&block, pool, log) {
             Ok(keys) => keys,
             Err(e) => {
                 // Do not deliver batch if we can't find a previous summary block,
@@ -221,8 +221,8 @@ pub fn deliver_batches(
             requires_full_state_hash,
             messages: batch_messages,
             randomness,
-            ecdsa_subnet_public_keys,
-            ecdsa_quadruple_ids: get_quadruple_ids_to_deliver(&block),
+            idkg_subnet_public_keys,
+            idkg_pre_signature_ids: get_pre_signature_ids_to_deliver(&block),
             registry_version: block.context.registry_version,
             time: block.context.time,
             consensus_responses,

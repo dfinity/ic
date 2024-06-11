@@ -771,6 +771,7 @@ pub trait IDkgProtocolCspVault {
     /// if necessary.
     fn idkg_load_transcript(
         &self,
+        algorithm_id: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         context_data: Vec<u8>,
         receiver_index: NodeIndex,
@@ -781,6 +782,7 @@ pub trait IDkgProtocolCspVault {
     /// See [`crate::api::CspIDkgProtocol::idkg_load_transcript_with_openings`].
     fn idkg_load_transcript_with_openings(
         &self,
+        algorithm_id: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
         context_data: Vec<u8>,
@@ -797,6 +799,7 @@ pub trait IDkgProtocolCspVault {
     /// Opens the dealing from dealer specified by `dealer_index`.
     fn idkg_open_dealing(
         &self,
+        algorithm_id: AlgorithmId,
         dealing: BatchSignedIDkgDealing,
         dealer_index: NodeIndex,
         context_data: Vec<u8>,

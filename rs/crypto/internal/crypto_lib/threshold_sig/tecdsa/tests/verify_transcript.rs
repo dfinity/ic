@@ -43,7 +43,7 @@ fn dup_dealing_and_verify(
 }
 
 #[test]
-fn should_verify_transcript_reject_if_dealing_is_removed() -> Result<(), ThresholdEcdsaError> {
+fn should_verify_transcript_reject_if_dealing_is_removed() -> Result<(), CanisterThresholdError> {
     let nodes = 4;
     let threshold = 2;
     let corrupted = 0;
@@ -84,7 +84,7 @@ fn should_verify_transcript_reject_if_dealing_is_removed() -> Result<(), Thresho
 }
 
 #[test]
-fn should_verify_transcript_reject_if_dealing_is_swapped() -> Result<(), ThresholdEcdsaError> {
+fn should_verify_transcript_reject_if_dealing_is_swapped() -> Result<(), CanisterThresholdError> {
     let nodes = 4;
     let threshold = 2;
     let corrupted = 0;
@@ -118,7 +118,8 @@ fn should_verify_transcript_reject_if_dealing_is_swapped() -> Result<(), Thresho
 }
 
 #[test]
-fn should_verify_transcript_reject_if_dealing_is_duplicated() -> Result<(), ThresholdEcdsaError> {
+fn should_verify_transcript_reject_if_dealing_is_duplicated() -> Result<(), CanisterThresholdError>
+{
     let nodes = 4;
     let threshold = 2;
     let corrupted = 0;

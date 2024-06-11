@@ -1,9 +1,6 @@
 use crate::{
     decoder_config,
     governance::{
-        manage_neuron_request::{
-            execute_manage_neuron, simulate_manage_neuron, ManageNeuronRequest,
-        },
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
             validate_merge_neurons_before_commit,
@@ -114,7 +111,6 @@ use std::{
 };
 
 mod ledger_helper;
-mod manage_neuron_request;
 mod merge_neurons;
 mod split_neuron;
 pub mod test_data;
@@ -681,31 +677,6 @@ impl NnsFunction {
             }
         };
         Ok((canister_id, method))
-    }
-}
-
-/// Given two quantities of stake with possible associated age, return the
-/// combined stake and the combined age.
-pub fn combine_aged_stakes(
-    x_stake_e8s: u64,
-    x_age_seconds: u64,
-    y_stake_e8s: u64,
-    y_age_seconds: u64,
-) -> (u64, u64) {
-    if x_stake_e8s == 0 && y_stake_e8s == 0 {
-        (0, 0)
-    } else {
-        let total_age_seconds: u128 = (x_stake_e8s as u128 * x_age_seconds as u128
-            + y_stake_e8s as u128 * y_age_seconds as u128)
-            / (x_stake_e8s as u128 + y_stake_e8s as u128);
-
-        // Note that age is adjusted in proportion to the stake, but due to the
-        // discrete nature of u64 numbers, some resolution is lost due to the
-        // division above. Only if x_age * x_stake is a multiple of y_stake does
-        // the age remain constant after this operation. However, in the end, the
-        // most that can be lost due to rounding from the actual age, is always
-        // less than 1 second, so this is not a problem.
-        (x_stake_e8s + y_stake_e8s, total_age_seconds as u64)
     }
 }
 
@@ -2693,24 +2664,7 @@ impl Governance {
     /// the target neuron is the greater of the dissolve delay of the two,
     /// while the source remains unchanged.
     ///
-    /// Preconditions:
-    /// - Source id and target id cannot be the same
-    /// - Target neuron must be owned by the caller
-    /// - Source neuron must be owned by the caller
-    /// - Source neuron's kyc_verified field must match target
-    /// - Source neuron's not_for_profit field must match target
-    /// - Source neuron and target neuron have the same ManageNeuron following
-    /// - Cannot merge neurons that have been dedicated to the Neurons' Fund
-    /// - Source neuron cannot be dedicated to the Neurons' Fund
-    /// - Target neuron cannot be dedicated to the Neurons' Fund
-    /// - Source neuron cannot be in spawning state
-    /// - Target neuron cannot be in spawning state
-    /// - Subaccount of source neuron to be merged must be present
-    /// - Subaccount of target neuron to be merged must be present
-    /// - Neither neuron can be the proposer of an open proposal
-    /// - Neither neuron can be the subject of a MergeNeuron proposal
-    /// - Source neuron must exist
-    /// - Target neuron must exist
+    /// See `MergeNeuronsError` for possible errors.
     ///
     /// Considerations:
     /// - If the stake of the source neuron is bigger than the transaction fee
@@ -2718,96 +2672,6 @@ impl Governance {
     ///   than the transaction fee, the maturity of the source neuron will
     ///   still be merged into the maturity of the target neuron.
     pub async fn merge_neurons(
-        &mut self,
-        id: &NeuronId,
-        caller: &PrincipalId,
-        merge: &manage_neuron::Merge,
-    ) -> Result<ManageNeuronResponse, GovernanceError> {
-        if crate::should_use_new_merge_neurons_flow() {
-            self.merge_neurons_new(id, caller, merge).await
-        } else {
-            self.merge_neurons_old(id, caller, merge).await
-        }
-    }
-
-    async fn merge_neurons_old(
-        &mut self,
-        id: &NeuronId,
-        caller: &PrincipalId,
-        merge: &manage_neuron::Merge,
-    ) -> Result<ManageNeuronResponse, GovernanceError> {
-        let source_neuron_id = merge.source_neuron_id.as_ref().ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "There was no source neuron id",
-            )
-        })?;
-
-        let now = self.env.now();
-        let in_flight_command = NeuronInFlightCommand {
-            timestamp: now,
-            command: Some(InFlightCommand::Merge(merge.clone())),
-        };
-        // Make sure the source and target neurons are not already
-        // undergoing a ledger update.
-        let _target_lock = self.lock_neuron_for_command(id.id, in_flight_command.clone())?;
-        let _source_lock =
-            self.lock_neuron_for_command(source_neuron_id.id, in_flight_command.clone())?;
-
-        let action = ManageNeuronRequest::new(merge.clone(), *id, *caller);
-        execute_manage_neuron(self, action).await
-    }
-
-    pub async fn simulate_manage_neuron(
-        &self,
-        caller: &PrincipalId,
-        manage_neuron: ManageNeuron,
-    ) -> ManageNeuronResponse {
-        let id = match self.neuron_id_from_manage_neuron(&manage_neuron) {
-            Ok(id) => id,
-            Err(e) => return ManageNeuronResponse::error(e),
-        };
-
-        match manage_neuron.command {
-            Some(Command::Merge(merge)) => self
-                .simulate_merge_neurons(&id, caller, merge)
-                .await
-                .unwrap_or_else(ManageNeuronResponse::error),
-            Some(_) => ManageNeuronResponse::error(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "Simulating manage_neuron is not supported for this request type",
-            )),
-            None => ManageNeuronResponse::error(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "No Command given in simulate_manage_neuron request",
-            )),
-        }
-    }
-
-    async fn simulate_merge_neurons(
-        &self,
-        id: &NeuronId,
-        caller: &PrincipalId,
-        merge: manage_neuron::Merge,
-    ) -> Result<ManageNeuronResponse, GovernanceError> {
-        if crate::should_use_new_merge_neurons_flow() {
-            self.simulate_merge_neurons_new(id, caller, merge)
-        } else {
-            self.simulate_merge_neurons_old(id, caller, merge).await
-        }
-    }
-
-    async fn simulate_merge_neurons_old(
-        &self,
-        id: &NeuronId,
-        caller: &PrincipalId,
-        merge: manage_neuron::Merge,
-    ) -> Result<ManageNeuronResponse, GovernanceError> {
-        let request = ManageNeuronRequest::new(merge, *id, *caller);
-        simulate_manage_neuron(self, request).await
-    }
-
-    async fn merge_neurons_new(
         &mut self,
         id: &NeuronId,
         caller: &PrincipalId,
@@ -2880,7 +2744,32 @@ impl Governance {
         ))
     }
 
-    fn simulate_merge_neurons_new(
+    pub fn simulate_manage_neuron(
+        &self,
+        caller: &PrincipalId,
+        manage_neuron: ManageNeuron,
+    ) -> ManageNeuronResponse {
+        let id = match self.neuron_id_from_manage_neuron(&manage_neuron) {
+            Ok(id) => id,
+            Err(e) => return ManageNeuronResponse::error(e),
+        };
+
+        match manage_neuron.command {
+            Some(Command::Merge(merge)) => self
+                .simulate_merge_neurons(&id, caller, merge)
+                .unwrap_or_else(ManageNeuronResponse::error),
+            Some(_) => ManageNeuronResponse::error(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "Simulating manage_neuron is not supported for this request type",
+            )),
+            None => ManageNeuronResponse::error(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "No Command given in simulate_manage_neuron request",
+            )),
+        }
+    }
+
+    fn simulate_merge_neurons(
         &self,
         id: &NeuronId,
         caller: &PrincipalId,
@@ -4501,7 +4390,9 @@ impl Governance {
                     self.set_proposal_execution_status(pid, validate_result);
                     return;
                 }
-                self.heap_data.default_followees = proposal.default_followees.clone();
+                self.heap_data
+                    .default_followees
+                    .clone_from(&proposal.default_followees);
                 self.set_proposal_execution_status(pid, Ok(()));
             }
             Action::RewardNodeProviders(proposal) => {
@@ -7043,7 +6934,7 @@ impl Governance {
                     "Error while loading previously computed `initial_neurons_fund_participation` \
                     for proposal {:?}: {}",
                     request.nns_proposal_id,
-                    err.to_string(),
+                    err,
                 ),
                 )
             })?;
@@ -7060,8 +6951,7 @@ impl Governance {
                     format!(
                         "Error while loading previously computed `neurons_fund_refunds` \
                         for proposal {:?}: {}",
-                        request.nns_proposal_id,
-                        err.to_string(),
+                        request.nns_proposal_id, err,
                     ),
                 )
             })?;
@@ -7080,7 +6970,7 @@ impl Governance {
                         "Error while loading previously computed `final_neurons_fund_participation` \
                         for proposal {:?}: {}",
                         request.nns_proposal_id,
-                        err.to_string(),
+                        err,
                     ),
                 )
             })?;

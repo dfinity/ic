@@ -27,7 +27,9 @@ message SubnetTopology {
   bytes public_key = 2;
   registry.subnet.v1.SubnetType subnet_type = 3;
   registry.subnet.v1.SubnetFeatures subnet_features = 4;
+  // TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
   repeated registry.crypto.v1.EcdsaKeyId ecdsa_keys_held = 5;
+  repeated registry.crypto.v1.MasterPublicKeyId idkg_keys_held = 6;
 }
 
 message SubnetsEntry {
@@ -35,9 +37,15 @@ message SubnetsEntry {
   SubnetTopology subnet_topology = 2;
 }
 
+// TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
 message EcdsaKeyEntry {
   reserved 1;
   registry.crypto.v1.EcdsaKeyId key_id = 3;
+  repeated types.v1.SubnetId subnet_ids = 2;
+}
+
+message IDkgKeyEntry {
+  registry.crypto.v1.MasterPublicKeyId key_id = 1;
   repeated types.v1.SubnetId subnet_ids = 2;
 }
 
@@ -46,9 +54,11 @@ message NetworkTopology {
   registry.routing_table.v1.RoutingTable routing_table = 2;
   types.v1.SubnetId nns_subnet_id = 3;
   registry.routing_table.v1.CanisterMigrations canister_migrations = 4;
+  // TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
   repeated EcdsaKeyEntry ecdsa_signing_subnets = 5;
   repeated types.v1.CanisterId bitcoin_testnet_canister_ids = 6;
   repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
+  repeated IDkgKeyEntry idkg_signing_subnets = 8;
 }
 
 message SetupInitialDkgContext {
@@ -76,13 +86,46 @@ message SignWithEcdsaContext {
   repeated bytes derivation_path_vec = 6;
   registry.crypto.v1.EcdsaKeyId key_id = 7;
   optional uint64 height = 8;
-  optional uint64 quadruple_id = 9;
+  optional uint64 pre_signature_id = 9;
   optional bytes nonce = 10;
 }
 
 message SignWithEcdsaContextTree {
   uint64 callback_id = 1;
   SignWithEcdsaContext context = 2;
+}
+
+message EcdsaArguments {
+  registry.crypto.v1.EcdsaKeyId key_id = 1;
+  bytes message_hash = 2;
+}
+
+message SchnorrArguments {
+  registry.crypto.v1.SchnorrKeyId key_id = 1;
+  bytes message = 2;
+}
+
+message ThresholdArguments {
+  oneof threshold_scheme {
+    EcdsaArguments ecdsa = 1;
+    SchnorrArguments schnorr = 2;
+  }
+}
+
+message SignWithThresholdContext {
+  state.queues.v1.Request request = 1;
+  ThresholdArguments args = 2;
+  repeated bytes derivation_path_vec = 3;
+  bytes pseudo_random_id = 4;
+  uint64 batch_time = 5;
+  optional uint64 pre_signature_id = 6;
+  optional uint64 height = 7;
+  optional bytes nonce = 8;
+}
+
+message SignWithThresholdContextTree {
+  uint64 callback_id = 1;
+  SignWithThresholdContext context = 2;
 }
 
 enum HttpMethod {
@@ -115,7 +158,7 @@ message CanisterHttpRequestContextTree {
   CanisterHttpRequestContext context = 2;
 }
 
-// TODO(EXC-1599): remove after generalized version `IDkgDealingsContext` is released.
+// TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
 message EcdsaDealingsContext {
   state.queues.v1.Request request = 1;
   reserved 2;
@@ -125,6 +168,7 @@ message EcdsaDealingsContext {
   Time time = 6;
 }
 
+// TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
 message EcdsaDealingsContextTree {
   uint64 callback_id = 1;
   EcdsaDealingsContext context = 2;
@@ -136,6 +180,11 @@ message IDkgDealingsContext {
   repeated types.v1.NodeId nodes = 3;
   uint64 registry_version = 4;
   Time time = 5;
+}
+
+message IDkgDealingsContextTree {
+  uint64 callback_id = 1;
+  IDkgDealingsContext context = 2;
 }
 
 message BitcoinGetSuccessorsContext {
@@ -216,6 +265,7 @@ message SubnetCallContextManager {
   reserved 5;
   reserved "sign_with_mock_ecdsa_contexts";
   repeated CanisterHttpRequestContextTree canister_http_request_contexts = 6;
+  // TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
   repeated EcdsaDealingsContextTree ecdsa_dealings_contexts = 7;
   repeated BitcoinGetSuccessorsContextTree bitcoin_get_successors_contexts = 8;
   repeated BitcoinSendTransactionInternalContextTree bitcoin_send_transaction_internal_contexts = 9;
@@ -228,6 +278,8 @@ message SubnetCallContextManager {
   uint64 next_stop_canister_call_id = 14;
   repeated StopCanisterCallTree stop_canister_calls = 15;
   repeated RawRandContext raw_rand_contexts = 16;
+  repeated IDkgDealingsContextTree idkg_dealings_contexts = 17;
+  repeated SignWithThresholdContextTree sign_with_threshold_contexts = 18;
 }
 
 message SubnetMetrics {

@@ -30,16 +30,15 @@ ethnum = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
-http = "0.2.6"
+http = "0.2.12"
 http-body = "0.4"
 hyper = "0.14.18"
 hyper-rustls = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-btc-interface = { workspace = true }
-ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-config = { path = "../../config" }
+ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
-ic-crypto-test-utils-keys = { path = "../../crypto/test_utils/keys" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
@@ -55,8 +54,6 @@ ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" 
 ic-registry-replicator = { path = "../../orchestrator/registry_replicator" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
-ic-test-utilities-registry = { path = "../../test_utilities/registry" }
-ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 instant-acme = "0.3.2"
@@ -68,8 +65,9 @@ maxminddb = "0.24"
 mockall = { workspace = true }
 moka = { version = "0.12", features = ["sync", "future"] }
 nftables = "0.4"
+nix = { workspace = true }
 prometheus = { workspace = true }
-rand = "0.8.4"
+rand = { workspace = true }
 ratelimit = "0.9.1"
 rcgen = { workspace = true }
 regex = "1.3.9"
@@ -81,19 +79,18 @@ reqwest = { version = "0.11.22", default-features = false, features = [
     "rustls-tls-webpki-roots",
     "stream",
 ] }
-rustls = { workspace = true }
-rustls-pemfile = "^1"
+rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
+rustls-pemfile = "2.1.2"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
-tempfile = "3.6.0"
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
-tokio-rustls = { workspace = true }
+tokio-rustls = { version = "0.24.1", features = ["dangerous_configuration"] }
 tower = { workspace = true }
 tower_governor = "0.1"
 tower-http = { version = "0.4.4", features = [
@@ -109,9 +106,11 @@ tracing-slog = "0.2"
 tracing-subscriber = { workspace = true }
 url = "2.1.1"
 x509-parser = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5.1", features = ["async_tokio"] }
+tempfile = { workspace = true }
 wiremock = "=0.5.19"
 
 [[bench]]

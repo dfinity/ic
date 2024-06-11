@@ -79,7 +79,7 @@ impl DerivationPath {
         curve_type: EccCurveType,
         chain_key: &[u8],
         index: &DerivationIndex,
-    ) -> ThresholdEcdsaResult<(Vec<u8>, EccScalar)> {
+    ) -> CanisterThresholdResult<(Vec<u8>, EccScalar)> {
         let mut hmac = Hmac::<Sha512>::new(chain_key);
 
         hmac.write(key_input);
@@ -116,7 +116,7 @@ impl DerivationPath {
         public_key: &EccPoint,
         chain_key: &[u8],
         index: &DerivationIndex,
-    ) -> ThresholdEcdsaResult<(EccPoint, Vec<u8>, EccScalar)> {
+    ) -> CanisterThresholdResult<(EccPoint, Vec<u8>, EccScalar)> {
         let mut ckd_input = public_key.serialize();
 
         loop {
@@ -140,9 +140,9 @@ impl DerivationPath {
         public_key: &EccPoint,
         chain_key: &[u8],
         index: &DerivationIndex,
-    ) -> ThresholdEcdsaResult<(EccPoint, Vec<u8>, EccScalar)> {
+    ) -> CanisterThresholdResult<(EccPoint, Vec<u8>, EccScalar)> {
         if public_key.curve_type() != EccCurveType::Ed25519 {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         let mut ikm = public_key.serialize();
@@ -170,7 +170,7 @@ impl DerivationPath {
     pub fn derive_tweak(
         &self,
         master_public_key: &EccPoint,
-    ) -> ThresholdEcdsaResult<(EccScalar, Vec<u8>)> {
+    ) -> CanisterThresholdResult<(EccScalar, Vec<u8>)> {
         let zeros = [0u8; 32];
         self.derive_tweak_with_chain_code(master_public_key, &zeros)
     }
@@ -179,16 +179,16 @@ impl DerivationPath {
         &self,
         master_public_key: &EccPoint,
         chain_code: &[u8],
-    ) -> ThresholdEcdsaResult<(EccScalar, Vec<u8>)> {
+    ) -> CanisterThresholdResult<(EccScalar, Vec<u8>)> {
         if chain_code.len() != 32 {
-            return Err(ThresholdEcdsaError::InvalidArguments(format!(
+            return Err(CanisterThresholdError::InvalidArguments(format!(
                 "Invalid chain code length {}",
                 chain_code.len()
             )));
         }
 
         if self.len() > Self::MAXIMUM_DERIVATION_PATH_LENGTH {
-            return Err(ThresholdEcdsaError::InvalidArguments(format!(
+            return Err(CanisterThresholdError::InvalidArguments(format!(
                 "Derivation path len {} larger than allowed maximum of {}",
                 self.len(),
                 Self::MAXIMUM_DERIVATION_PATH_LENGTH

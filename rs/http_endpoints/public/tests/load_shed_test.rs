@@ -2,20 +2,14 @@ pub mod common;
 
 use crate::common::{
     default_certified_state_reader, default_get_latest_state, default_latest_certified_height,
-    default_read_certified_state, get_free_localhost_socket_addr, wait_for_status_healthy,
+    default_read_certified_state, get_free_localhost_socket_addr,
+    test_agent::{self, wait_for_status_healthy, IngressMessage},
     HttpEndpointBuilder,
 };
 use async_trait::async_trait;
 use axum::body::Body;
 use hyper::{Method, Request, StatusCode};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
-use ic_agent::{
-    agent::{http_transport::reqwest_transport::ReqwestTransport, QueryBuilder},
-    agent_error::HttpErrorPayload,
-    export::Principal,
-    hash_tree::Label,
-    Agent, AgentError,
-};
 use ic_config::http_handler::Config;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_pprof::{Error, PprofCollector};
@@ -42,48 +36,28 @@ fn test_load_shedding_query() {
         ..Default::default()
     };
 
-    let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
-
-    let (_, _, mut query_handler) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let query_exec_running = Arc::new(Notify::new());
     let load_shedder_returned = Arc::new(Notify::new());
 
-    let ok_agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .with_verify_query_signatures(false)
-        .build()
-        .unwrap();
-
-    let query = QueryBuilder::new(&ok_agent, canister, "test".to_string())
-        .with_effective_canister_id(canister)
-        .sign()
-        .unwrap();
-
-    let agent_clone = ok_agent.clone();
-    let query_clone = query.clone();
     let load_shedder_returned_clone = load_shedder_returned.clone();
     let query_exec_running_clone = query_exec_running.clone();
 
-    // This agent's request will be load shedded.
-    let load_shedded_agent = rt.spawn(async move {
+    // This request will be load shedded.
+    let load_shedded_request = rt.spawn(async move {
         query_exec_running_clone.notified().await;
 
-        let resp = agent_clone
-            .query_signed(
-                query_clone.effective_canister_id,
-                query_clone.signed_query.clone(),
-            )
-            .await;
+        let response = test_agent::Query::default().query(addr).await;
 
         load_shedder_returned_clone.notify_one();
 
-        resp
+        response
     });
 
     // Mock query exec service
     rt.spawn(async move {
-        let (_, resp) = query_handler.next_request().await.unwrap();
+        let (_, resp) = handlers.query_execution.next_request().await.unwrap();
         query_exec_running.notify_one();
         load_shedder_returned.notified().await;
 
@@ -94,26 +68,24 @@ fn test_load_shedding_query() {
     });
 
     rt.block_on(async {
-        wait_for_status_healthy(&ok_agent).await.unwrap();
+        wait_for_status_healthy(&addr).await.unwrap();
 
-        let resp = ok_agent
-            .query_signed(query.effective_canister_id, query.signed_query.clone())
-            .await;
+        let response = test_agent::Query::default().query(addr).await;
 
-        assert!(resp.is_ok(), "Received unexpected response: {:?}", resp);
+        assert_eq!(
+            StatusCode::OK,
+            response.status(),
+            "Received unexpected response: {:?}",
+            response
+        );
 
-        let resp = load_shedded_agent.await.unwrap();
-        let expected_resp = StatusCode::TOO_MANY_REQUESTS;
+        let response = load_shedded_request.await.unwrap();
 
-        match resp {
-            Err(AgentError::HttpError(HttpErrorPayload { status, .. })) => {
-                assert_eq!(expected_resp, status)
-            }
-            _ => panic!(
-                "Load shedder did not kick in. Received unexpected response: {:?}",
-                resp
-            ),
-        }
+        assert_eq!(
+            StatusCode::TOO_MANY_REQUESTS,
+            response.status(),
+            "Concurrent request was not load shedded.",
+        );
     });
 }
 
@@ -189,50 +161,37 @@ fn test_load_shedding_read_state() {
         .with_state_manager(mock_state_manager)
         .run();
 
-    let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
-
-    let ok_agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .build()
-        .unwrap();
-    let load_shedded_agent = ok_agent.clone();
-
-    let paths: Vec<Vec<Label<Vec<u8>>>> = vec![vec!["time".into()]];
-    let paths_clone = paths.clone();
-
     // This agent's request will be load shedded
-    let load_shedded_agent_resp = rt.spawn(async move {
+    let load_shedded_request = rt.spawn(async move {
         read_state_running.notified().await;
-
-        let response = load_shedded_agent
-            .read_state_raw(paths_clone, canister)
+        let response = test_agent::CanisterReadState::default()
+            .read_state(addr)
             .await;
-
         load_shedder_returned.notify_one();
-
-        response.map(|_| ())
+        response
     });
 
     rt.block_on(async {
-        wait_for_status_healthy(&ok_agent).await.unwrap();
+        wait_for_status_healthy(&addr).await.unwrap();
         service_is_healthy.store(true, Ordering::Relaxed);
 
-        let response = ok_agent.read_state_raw(paths, canister).await;
+        let response = test_agent::CanisterReadState::default()
+            .read_state(addr)
+            .await;
 
-        // first request should not hit load shedder
-        assert!(
-            !(matches!(response, Err(AgentError::HttpError(HttpErrorPayload { status, .. })) if StatusCode::TOO_MANY_REQUESTS == status
-            )),
-            "Load shedder kicked in. Received unexpected response: {:?}", response
+        assert_eq!(
+            StatusCode::OK,
+            response.status(),
+            "Received unexpected response {:?}",
+            response.text().await.unwrap(),
         );
 
-        let response = load_shedded_agent_resp.await.unwrap();
+        let response = load_shedded_request.await.unwrap();
 
-        // second request should hit load shedder
-        assert!(
-            matches!(response, Err(AgentError::HttpError(HttpErrorPayload { status, .. })) if StatusCode::TOO_MANY_REQUESTS == status
-            ),
-            "Load shedder did not kick in. Received unexpected response: {:?}", response
+        assert_eq!(
+            StatusCode::TOO_MANY_REQUESTS,
+            response.status(),
+            "Load shedder did not kick in."
         );
     });
 }
@@ -331,6 +290,8 @@ fn test_load_shedding_pprof() {
     });
 
     rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+
         let requests: Vec<Box<dyn Fn() -> Request<Body>>> = vec![
             Box::new(flame_graph_req),
             Box::new(pprof_base_req),
@@ -356,7 +317,7 @@ fn test_load_shedding_pprof() {
 /// we return 429.
 /// Test scenario:
 /// 1. Set the concurrency limiter for the call service, `max_call_concurrent_requests`, to 1.
-/// 2. Use [`Agent`]  to make an update calls where we wait with responding for the update call
+/// 2. Send an ingress message where we wait with responding for the update call
 /// inside the ingress filter service handle.
 /// 3. Concurrently make another update call, and assert it hits the load shedder.
 #[test]
@@ -370,59 +331,46 @@ fn test_load_shedding_update_call() {
         ..Default::default()
     };
 
-    let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
-
-    let (mut ingress_filter, _ingress_rx, _) =
-        HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let ingress_filter_running = Arc::new(Notify::new());
     let load_shedder_returned = Arc::new(Notify::new());
 
-    let ok_agent = Agent::builder()
-        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
-        .build()
-        .unwrap();
-
-    let load_shedded_agent = ok_agent.clone();
-
     let ingress_filter_running_clone = ingress_filter_running.clone();
     let load_shedder_returned_clone = load_shedder_returned.clone();
 
-    let load_shedded_agent_handle = rt.spawn(async move {
+    let call_agent = test_agent::Call::V2;
+
+    let load_shedded_request_handle = rt.spawn(async move {
         ingress_filter_running_clone.notified().await;
-        let resp = load_shedded_agent
-            .update(&canister, "some method")
-            .call()
-            .await;
+        let response = call_agent.call(addr, IngressMessage::default()).await;
         load_shedder_returned_clone.notify_one();
-        resp
+        response
     });
 
     // Mock ingress filter
     rt.spawn(async move {
-        let (_, resp) = ingress_filter.next_request().await.unwrap();
+        let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
         ingress_filter_running.notify_one();
         load_shedder_returned.notified().await;
         resp.send_response(Ok(()))
     });
 
     rt.block_on(async {
-        wait_for_status_healthy(&ok_agent).await.unwrap();
-        let resp = ok_agent.update(&canister, "some method").call().await;
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = call_agent.call(addr, IngressMessage::default()).await;
+        assert_eq!(
+            response.status(),
+            StatusCode::ACCEPTED,
+            "{:?}",
+            response.text().await.unwrap()
+        );
 
-        assert!(resp.is_ok(), "Received unexpected response: {:?}", resp);
+        let load_shedded_response = load_shedded_request_handle.await.unwrap();
 
-        let resp = load_shedded_agent_handle.await.unwrap();
-        let expected_resp = StatusCode::TOO_MANY_REQUESTS;
-
-        match resp {
-            Err(AgentError::HttpError(HttpErrorPayload { status, .. })) => {
-                assert_eq!(expected_resp, status)
-            }
-            _ => panic!(
-                "Load shedder did not kick in. Received unexpected response: {:?}",
-                resp
-            ),
-        }
-    });
+        assert_eq!(
+            StatusCode::TOO_MANY_REQUESTS,
+            load_shedded_response.status()
+        );
+    })
 }

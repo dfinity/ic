@@ -31,7 +31,7 @@ fn format_bn(bn: &BigUint) -> String {
     hex::encode(vec![0u8; padding_bytes]) + &hex::encode(bn_bytes)
 }
 
-fn scalar_fuzz_run(curve_type: EccCurveType, data: &[u8]) -> Result<(), ThresholdEcdsaError> {
+fn scalar_fuzz_run(curve_type: EccCurveType, data: &[u8]) -> Result<(), CanisterThresholdError> {
     let prime = prime_for(curve_type);
 
     /*

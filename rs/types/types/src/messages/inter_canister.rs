@@ -1,7 +1,7 @@
 use crate::{
     ingress::WasmResult, time::CoarseTime, CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
 };
-use ic_error_types::{RejectCode, TryFromError, UserError};
+use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::{
@@ -14,7 +14,7 @@ use ic_protobuf::{
     state::queues::v1 as pb_queues,
     types::v1 as pb_types,
 };
-use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrEllipsize, str::StrTruncate};
+use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrEllipsize};
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -190,6 +190,8 @@ impl Request {
             | Ok(Method::SignWithECDSA)
             | Ok(Method::ComputeInitialEcdsaDealings)
             | Ok(Method::ComputeInitialIDkgDealings)
+            | Ok(Method::SchnorrPublicKey)
+            | Ok(Method::SignWithSchnorr)
             | Ok(Method::BitcoinGetBalance)
             | Ok(Method::BitcoinGetUtxos)
             | Ok(Method::BitcoinSendTransaction)
@@ -207,30 +209,26 @@ impl Request {
 
 impl std::fmt::Debug for Request {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{ receiver: {:?}, ", self.receiver)?;
-        write!(f, "sender: {:?}, ", self.sender)?;
-        write!(
-            f,
-            "sender_reply_callback: {:?}, ",
-            self.sender_reply_callback
-        )?;
-        write!(f, "payment: {:?}, ", self.payment)?;
-        if self.method_name.len() <= 103 {
-            write!(f, "method_name: {:?}, ", self.method_name)?;
-        } else {
-            write!(
-                f,
-                "method_name: {:?}..., ",
-                self.method_name.safe_truncate(100)
-            )?;
-        }
-        write!(
-            f,
-            "method_payload: [{}], ",
-            truncate_and_format(&self.method_payload, 1024)
-        )?;
-        write!(f, "metadata: {:?} }}", self.metadata)?;
-        Ok(())
+        let Request {
+            receiver,
+            sender,
+            sender_reply_callback,
+            payment,
+            method_name,
+            method_payload,
+            metadata,
+            deadline,
+        } = self;
+        f.debug_struct("Request")
+            .field("receiver", receiver)
+            .field("sender", sender)
+            .field("sender_reply_callback", sender_reply_callback)
+            .field("payment", payment)
+            .field("method_name", &method_name.ellipsize(100, 75))
+            .field("method_payload", &truncate_and_format(method_payload, 1024))
+            .field("metadata", metadata)
+            .field("deadline", deadline)
+            .finish()
     }
 }
 
@@ -335,14 +333,11 @@ impl std::fmt::Debug for Payload {
             }
             Self::Reject(context) => {
                 const KB: usize = 1024;
-                write!(f, "Reject({{ ")?;
-                write!(f, "code: {:?}, ", context.code)?;
-                if context.message.len() <= 8 * KB {
-                    write!(f, "message: {:?} ", context.message)?;
-                } else {
-                    write!(f, "message: {:?} ", context.message.ellipsize(8 * KB, 75))?;
-                }
-                write!(f, "}})")
+                let RejectContext { code, message } = context;
+                f.debug_struct("Reject")
+                    .field("code", code)
+                    .field("message", &message.ellipsize(8 * KB, 75))
+                    .finish()
             }
         }
     }
@@ -609,7 +604,6 @@ impl TryFrom<pb_queues::Request> for Request {
 impl From<&RejectContext> for pb_queues::RejectContext {
     fn from(rc: &RejectContext) -> Self {
         Self {
-            reject_code_old: rc.code as u64,
             reject_message: rc.message.clone(),
             reject_code: pb_types::RejectCode::from(rc.code).into(),
         }
@@ -620,28 +614,13 @@ impl TryFrom<pb_queues::RejectContext> for RejectContext {
     type Error = ProxyDecodeError;
 
     fn try_from(rc: pb_queues::RejectContext) -> Result<Self, Self::Error> {
-        // A value of 0 for `reject_code_old` indicates that the field
-        // was not set, i.e. we are past a replica version that has
-        // populated the new field `reject_code` and we can use that
-        // instead. Otherwise, we should still use the old field
-        // when decoding.
-        let code = if rc.reject_code_old == 0 {
-            RejectCode::try_from(pb_types::RejectCode::try_from(rc.reject_code).map_err(|_| {
-                ProxyDecodeError::ValueOutOfRange {
+        Ok(RejectContext {
+            code: RejectCode::try_from(pb_types::RejectCode::try_from(rc.reject_code).map_err(
+                |_| ProxyDecodeError::ValueOutOfRange {
                     typ: "RejectContext",
                     err: format!("Unexpected value for reject code {}", rc.reject_code),
-                }
-            })?)?
-        } else {
-            rc.reject_code_old.try_into().map_err(|err| match err {
-                TryFromError::ValueOutOfRange(code) => ProxyDecodeError::ValueOutOfRange {
-                    typ: "RejectContext",
-                    err: code.to_string(),
                 },
-            })?
-        };
-        Ok(RejectContext {
-            code,
+            )?)?,
             message: rc.reject_message,
         })
     }

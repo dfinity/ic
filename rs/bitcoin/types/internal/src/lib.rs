@@ -6,7 +6,7 @@
 
 use candid::CandidType;
 use ic_btc_interface::Network;
-use ic_error_types::{RejectCode, TryFromError};
+use ic_error_types::RejectCode;
 use ic_protobuf::{
     bitcoin::v1,
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -436,7 +436,6 @@ impl BitcoinReject {
 impl From<&BitcoinReject> for v1::GetSuccessorsReject {
     fn from(reject: &BitcoinReject) -> Self {
         v1::GetSuccessorsReject {
-            reject_code_old: reject.reject_code as u64,
             message: reject.message.clone(),
             reject_code: pbRejectCode::from(reject.reject_code).into(),
         }
@@ -446,28 +445,15 @@ impl From<&BitcoinReject> for v1::GetSuccessorsReject {
 impl TryFrom<v1::GetSuccessorsReject> for BitcoinReject {
     type Error = ProxyDecodeError;
     fn try_from(reject: v1::GetSuccessorsReject) -> Result<Self, Self::Error> {
-        // A value of 0 for `reject_code_old` indicates that the field
-        // was not set, i.e. we are past a replica version that has
-        // populated the new field `reject_code` and we can use that
-        // instead. Otherwise, we should still use the old field
-        // when decoding.
-        let reject_code = if reject.reject_code_old == 0 {
-            RejectCode::try_from(pbRejectCode::try_from(reject.reject_code).map_err(|_| {
-                ProxyDecodeError::ValueOutOfRange {
-                    typ: "GetSuccessorsReject::reject_code",
-                    err: format!("value out of range: {}", reject.reject_code),
-                }
-            })?)?
-        } else {
-            RejectCode::try_from(reject.reject_code_old).map_err(|err| match err {
-                TryFromError::ValueOutOfRange(range) => ProxyDecodeError::ValueOutOfRange {
-                    typ: "GetSuccessorsReject::reject_code",
-                    err: format!("value out of range: {}", range),
-                },
-            })?
-        };
         Ok(BitcoinReject {
-            reject_code,
+            reject_code: RejectCode::try_from(
+                pbRejectCode::try_from(reject.reject_code).map_err(|_| {
+                    ProxyDecodeError::ValueOutOfRange {
+                        typ: "GetSuccessorsReject::reject_code",
+                        err: format!("value out of range: {}", reject.reject_code),
+                    }
+                })?,
+            )?,
             message: reject.message,
         })
     }
@@ -476,7 +462,6 @@ impl TryFrom<v1::GetSuccessorsReject> for BitcoinReject {
 impl From<&BitcoinReject> for v1::SendTransactionReject {
     fn from(reject: &BitcoinReject) -> Self {
         v1::SendTransactionReject {
-            reject_code_old: reject.reject_code as u64,
             message: reject.message.clone(),
             reject_code: pbRejectCode::from(reject.reject_code).into(),
         }
@@ -486,28 +471,15 @@ impl From<&BitcoinReject> for v1::SendTransactionReject {
 impl TryFrom<v1::SendTransactionReject> for BitcoinReject {
     type Error = ProxyDecodeError;
     fn try_from(reject: v1::SendTransactionReject) -> Result<Self, Self::Error> {
-        // A value of 0 for `reject_code_old` indicates that the field
-        // was not set, i.e. we are past a replica version that has
-        // populated the new field `reject_code` and we can use that
-        // instead. Otherwise, we should still use the old field
-        // when decoding.
-        let reject_code = if reject.reject_code_old == 0 {
-            RejectCode::try_from(pbRejectCode::try_from(reject.reject_code).map_err(|_| {
-                ProxyDecodeError::ValueOutOfRange {
-                    typ: "SendTransactionReject::reject_code",
-                    err: format!("value out of range: {}", reject.reject_code),
-                }
-            })?)?
-        } else {
-            RejectCode::try_from(reject.reject_code_old).map_err(|err| match err {
-                TryFromError::ValueOutOfRange(range) => ProxyDecodeError::ValueOutOfRange {
-                    typ: "SendTransactionReject::reject_code",
-                    err: format!("value out of range: {}", range),
-                },
-            })?
-        };
         Ok(BitcoinReject {
-            reject_code,
+            reject_code: RejectCode::try_from(
+                pbRejectCode::try_from(reject.reject_code).map_err(|_| {
+                    ProxyDecodeError::ValueOutOfRange {
+                        typ: "SendTransactionReject::reject_code",
+                        err: format!("value out of range: {}", reject.reject_code),
+                    }
+                })?,
+            )?,
             message: reject.message,
         })
     }

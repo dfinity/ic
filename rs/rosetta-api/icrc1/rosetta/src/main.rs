@@ -370,7 +370,8 @@ async fn main() -> Result<()> {
         .layer(RequestIdLayer)
         .with_state(shared_state.clone());
 
-    let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", args.get_port())).await?;
+    let rosetta_url = format!("0.0.0.0:{}", args.get_port());
+    let tcp_listener = TcpListener::bind(rosetta_url.clone()).await?;
 
     if let Some(port_file) = args.port_file {
         write_string_using_tmp_file(
@@ -404,6 +405,7 @@ async fn main() -> Result<()> {
     }
 
     info!("Starting Rosetta server");
+    info!("Rosetta server is listening at: {}", rosetta_url);
 
     axum::serve(tcp_listener, app.into_make_service())
         .await

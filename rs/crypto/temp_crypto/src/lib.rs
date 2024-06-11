@@ -1,7 +1,7 @@
 use ic_crypto_internal_csp::Csp;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_protobuf::registry::crypto::v1::{EcdsaCurve, EcdsaKeyId};
-use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetRecord, SubnetType};
+use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, KeyConfig, SubnetRecord, SubnetType};
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
@@ -21,7 +21,6 @@ impl<T: Rng + CryptoRng + 'static + Send + Sync> CryptoComponentRng for T {}
 
 pub mod internal {
     use super::*;
-    use async_trait::async_trait;
     use ic_base_types::PrincipalId;
     use ic_config::crypto::{CryptoConfig, CspVaultType};
     use ic_crypto::{CryptoComponent, CryptoComponentImpl};
@@ -39,10 +38,7 @@ pub mod internal {
     use ic_crypto_temp_crypto_vault::{
         RemoteVaultEnvironment, TempCspVaultServer, TokioRuntimeOrHandle,
     };
-    use ic_crypto_tls_interfaces::{
-        AuthenticatedPeer, SomeOrAllNodes, TlsClientHandshakeError, TlsConfig, TlsConfigError,
-        TlsHandshake, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,
-    };
+    use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError, TlsPublicKeyCert};
     use ic_crypto_utils_basic_sig::conversions::derive_node_id;
     use ic_interfaces::crypto::{
         BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
@@ -103,7 +99,6 @@ pub mod internal {
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use tempfile::TempDir;
-    use tokio::net::TcpStream;
 
     /// This struct combines the following two items:
     /// * a crypto component whose state lives in a temporary directory
@@ -310,7 +305,7 @@ pub mod internal {
                 .unwrap_or_else(NodeKeysToGenerate::none);
             let node_signing_pk = node_keys_to_generate
                 .generate_node_signing_keys
-                .then(|| generate_node_signing_keys(&csp));
+                .then(|| generate_node_signing_keys(local_vault.as_ref()));
             let node_id = self
                 .node_id
                 .unwrap_or_else(|| match node_signing_pk.as_ref() {
@@ -320,20 +315,20 @@ pub mod internal {
                 });
             let committee_signing_pk = node_keys_to_generate
                 .generate_committee_signing_keys
-                .then(|| generate_committee_signing_keys(&csp));
+                .then(|| generate_committee_signing_keys(local_vault.as_ref()));
             let dkg_dealing_encryption_pk = node_keys_to_generate
                 .generate_dkg_dealing_encryption_keys
-                .then(|| generate_dkg_dealing_encryption_keys(&csp, node_id));
+                .then(|| generate_dkg_dealing_encryption_keys(local_vault.as_ref(), node_id));
             let idkg_dealing_encryption_pk = node_keys_to_generate
                 .generate_idkg_dealing_encryption_keys
                 .then(|| {
-                    generate_idkg_dealing_encryption_keys(&csp).unwrap_or_else(|e| {
-                        panic!("Error generating I-DKG dealing encryption keys: {:?}", e)
-                    })
+                    generate_idkg_dealing_encryption_keys(local_vault.as_ref()).unwrap_or_else(
+                        |e| panic!("Error generating I-DKG dealing encryption keys: {:?}", e),
+                    )
                 });
             let tls_certificate = node_keys_to_generate
                 .generate_tls_keys_and_certificate
-                .then(|| generate_tls_keys(&csp, node_id).to_proto());
+                .then(|| generate_tls_keys(local_vault.as_ref(), node_id).to_proto());
 
             let is_registry_data_provided = self.registry_data.is_some();
             let registry_data = self
@@ -740,43 +735,6 @@ pub mod internal {
         }
     }
 
-    #[async_trait]
-    impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng> TlsHandshake
-        for TempCryptoComponentGeneric<C, R>
-    {
-        async fn perform_tls_server_handshake(
-            &self,
-            tcp_stream: TcpStream,
-            allowed_clients: SomeOrAllNodes,
-            registry_version: RegistryVersion,
-        ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError> {
-            self.crypto_component
-                .perform_tls_server_handshake(tcp_stream, allowed_clients, registry_version)
-                .await
-        }
-
-        async fn perform_tls_server_handshake_without_client_auth(
-            &self,
-            tcp_stream: TcpStream,
-            registry_version: RegistryVersion,
-        ) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError> {
-            self.crypto_component
-                .perform_tls_server_handshake_without_client_auth(tcp_stream, registry_version)
-                .await
-        }
-
-        async fn perform_tls_client_handshake(
-            &self,
-            tcp_stream: TcpStream,
-            server: NodeId,
-            registry_version: RegistryVersion,
-        ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError> {
-            self.crypto_component
-                .perform_tls_client_handshake(tcp_stream, server, registry_version)
-                .await
-        }
-    }
-
     impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng> TlsConfig
         for TempCryptoComponentGeneric<C, R>
     {
@@ -1095,19 +1053,26 @@ impl EcdsaSubnetConfig {
                 max_number_of_canisters: 0,
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
-                ecdsa_config: Some(EcdsaConfig {
-                    quadruples_to_create_in_advance: 10,
-                    key_ids: vec![EcdsaKeyId {
-                        curve: EcdsaCurve::Secp256k1.into(),
-                        name: "dummy_ecdsa_key_id".to_string(),
+                ecdsa_config: None,
+                chain_key_config:  Some(ChainKeyConfig {
+                    key_configs: vec![KeyConfig {
+                        key_id: Some(ic_protobuf::registry::crypto::v1::MasterPublicKeyId {
+                            key_id: Some(
+                                ic_protobuf::registry::crypto::v1::master_public_key_id::KeyId::Ecdsa(
+                                    EcdsaKeyId {
+                                        curve: EcdsaCurve::Secp256k1.into(),
+                                        name: "dummy_ecdsa_key_id".to_string(),
+                                    },
+                                ),
+                            ),
+                        }),
+                        pre_signatures_to_create_in_advance: Some(1),
+                        max_queue_size: Some(20),
                     }],
-                    max_queue_size: 20,
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: key_rotation_period
                         .map(|key_rotation_period| key_rotation_period.as_millis() as u64),
                 }),
-                // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
-                chain_key_config: None,
             },
         }
     }
@@ -1126,10 +1091,10 @@ impl EcdsaSubnetConfig {
         let mut subnet_config = Self::new(subnet_id, node_id, key_rotation_period);
         subnet_config
             .subnet_record
-            .ecdsa_config
+            .chain_key_config
             .take()
             .expect("ECDSA config is None")
-            .key_ids = vec![];
+            .key_configs = vec![];
         subnet_config
     }
 }

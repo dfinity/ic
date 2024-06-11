@@ -153,6 +153,7 @@ mock! {
 
         fn idkg_load_transcript(
             &self,
+            algorithm_id: AlgorithmId,
             dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
             context_data: Vec<u8>,
             receiver_index: NodeIndex,
@@ -162,6 +163,7 @@ mock! {
 
         fn idkg_load_transcript_with_openings(
             &self,
+            algorithm_id: AlgorithmId,
             dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
             openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
             context_data: Vec<u8>,
@@ -174,6 +176,7 @@ mock! {
 
         fn idkg_open_dealing(
             &self,
+            algorithm_id: AlgorithmId,
             dealing: BatchSignedIDkgDealing,
             dealer_index: NodeIndex,
             context_data: Vec<u8>,

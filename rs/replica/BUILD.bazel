@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "//rs/bitcoin/client",
     "//rs/bitcoin/consensus",
     "//rs/config",
-    "//rs/consensus",
     "//rs/crypto",
     "//rs/crypto/sha2",
     "//rs/cycles_account_manager",
@@ -31,7 +30,6 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/registry/local_store",
     "//rs/registry/subnet_type",
-    "//rs/replica/setup_ic_network",
     "//rs/replicated_state",
     "//rs/state_manager",
     "//rs/sys",
@@ -56,7 +54,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing-flame",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing-opentelemetry",
-    "@crate_index//:opentelemetry_0_21_0",
+    "@crate_index//:opentelemetry",
     "@crate_index//:opentelemetry-otlp",
     "@crate_index//:opentelemetry_sdk",
 ] + select({
@@ -67,6 +65,16 @@ DEPENDENCIES = [
 })
 
 MACRO_DEPENDENCIES = []
+
+NONMALICIOUS_DEPENDENCIES = [
+    "//rs/consensus:consensus",
+    "//rs/replica/setup_ic_network:setup_ic_network",
+]
+
+MALICIOUS_DEPENDENCIES = [
+    "//rs/consensus:malicious_consensus",
+    "//rs/replica/setup_ic_network:malicious_setup_ic_network",
+]
 
 DEV_DEPENDENCIES = [
     "//rs/interfaces/registry/mocks",
@@ -98,7 +106,18 @@ rust_library(
     crate_name = "ic_replica",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + NONMALICIOUS_DEPENDENCIES,
+)
+
+rust_library(
+    name = "malicious_replica_lib",
+    testonly = True,
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_replica",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + MALICIOUS_DEPENDENCIES,
 )
 
 rust_binary(
@@ -108,12 +127,21 @@ rust_binary(
         "src/main.rs",
     ],
     aliases = ALIASES,
-    crate_features = select({
-        "//bazel:malicious_code_enabled": ["malicious_code"],
-        "//conditions:default": [],
-    }),
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":replica_lib"],
+    deps = DEPENDENCIES + NONMALICIOUS_DEPENDENCIES + [":replica_lib"],
+)
+
+rust_binary(
+    name = "malicious_replica",
+    testonly = True,
+    srcs = [
+        "src/jemalloc_metrics.rs",
+        "src/main.rs",
+    ],
+    aliases = ALIASES,
+    crate_features = ["malicious_code"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + MALICIOUS_DEPENDENCIES + [":malicious_replica_lib"],
 )
 
 rust_test(

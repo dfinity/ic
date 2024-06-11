@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tls_interfaces",
+    "//rs/crypto/utils/tls",
     "//rs/protobuf",
     "//rs/types/types",
     "//rs/registry/fake",
@@ -16,10 +17,11 @@ DEPENDENCIES = [
     "//rs/registry/proto_data_provider",
     "@crate_index//:pkcs8",
     "@crate_index//:rand",
+    "@crate_index//:rustls_0_21_12",
     "@crate_index//:signature",
     "@crate_index//:time",
     "@crate_index//:tokio",
-    "@crate_index//:tokio-rustls",
+    "@crate_index//:tokio_rustls_0_24_1",
     "@crate_index//:x509-cert",
 ]
 

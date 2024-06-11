@@ -62,13 +62,16 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 candid = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 url = { version = "2.1.1", features = ["serde"] }
 chrono = { workspace = true }
-indexmap = { workspace = true }
+indexmap = "2.2.6" # TODO: consider using the std's BTreeMap instead
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+pocket-ic = { path = "../../../packages/pocket-ic" }
+ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
+
 
 [[bin]]
 name = "ic-admin"

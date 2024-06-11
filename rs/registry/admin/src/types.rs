@@ -126,8 +126,10 @@ impl From<&SubnetRecordProto> for SubnetRecord {
                 .ecdsa_config
                 .as_ref()
                 .map(|c| c.clone().try_into().unwrap()),
-            // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
-            chain_key_config: None,
+            chain_key_config: value
+                .chain_key_config
+                .as_ref()
+                .map(|c| c.clone().try_into().unwrap()),
         }
     }
 }

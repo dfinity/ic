@@ -64,7 +64,7 @@ ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test
 ic-sns-swap-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 futures = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-test = "0.4.2"
 

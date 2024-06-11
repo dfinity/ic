@@ -41,9 +41,13 @@ use std::{iter, net::SocketAddrV6, time::Duration};
 use anyhow::{anyhow, bail, Error};
 use futures::stream::FuturesUnordered;
 use ic_agent::{
-    agent::http_transport::reqwest_transport::ReqwestTransport, export::Principal, Agent,
+    agent::http_transport::{
+        hyper_transport::hyper::StatusCode,
+        reqwest_transport::{reqwest, ReqwestTransport},
+    },
+    export::Principal,
+    Agent,
 };
-
 use serde::Deserialize;
 use slog::{error, info, Logger};
 use tokio::runtime::Runtime;
@@ -767,7 +771,7 @@ pub fn http_canister_test(env: TestEnv) {
             || async {
                 let res = client.get(url).send().await?;
 
-                if res.status() != http::StatusCode::BAD_REQUEST {
+                if res.status() != StatusCode::BAD_REQUEST {
                     bail!("expected 400");
                 }
 
@@ -1124,7 +1128,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
             || async {
                 let res = client.get(url).send().await?;
 
-                if res.status() != http::StatusCode::BAD_REQUEST {
+                if res.status() != StatusCode::BAD_REQUEST {
                     bail!("expected 400");
                 }
 

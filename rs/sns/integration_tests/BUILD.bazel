@@ -103,6 +103,7 @@ ALIASES = {}
 
 rust_library(
     name = "lib",
+    testonly = True,
     srcs = glob(
         ["src/**"],
     ),

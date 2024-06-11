@@ -1,6 +1,6 @@
 use crate::{
-    common::LOG_PREFIX, mutations::common::decode_registry_value,
-    pb::v1::GetSubnetForCanisterResponse, registry::Registry,
+    common::LOG_PREFIX, mutations::common::decode_registry_value, pb::v1::SubnetForCanister,
+    registry::Registry,
 };
 
 use std::convert::TryFrom;
@@ -21,12 +21,14 @@ pub enum GetSubnetForCanisterError {
     NoSubnetAssigned,
 }
 
-impl ToString for GetSubnetForCanisterError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for GetSubnetForCanisterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            GetSubnetForCanisterError::InvalidCanisterId => "Invalid canister ID.".to_string(),
+            GetSubnetForCanisterError::InvalidCanisterId => {
+                write!(f, "Invalid canister ID.")
+            }
             GetSubnetForCanisterError::NoSubnetAssigned => {
-                "Canister is not assigned to any subnet.".to_string()
+                write!(f, "Canister is not assigned to any subnet.")
             }
         }
     }
@@ -196,7 +198,7 @@ impl Registry {
     pub fn get_subnet_for_canister(
         &self,
         principal_id: &PrincipalId,
-    ) -> Result<GetSubnetForCanisterResponse, GetSubnetForCanisterError> {
+    ) -> Result<SubnetForCanister, GetSubnetForCanisterError> {
         let latest_version = self.latest_version();
         let routing_table = self.get_routing_table_or_panic(latest_version);
         let canister_id = CanisterId::try_from(*principal_id)
@@ -206,7 +208,7 @@ impl Registry {
             .lookup_entry(canister_id)
             .map(|(_, subnet_id)| subnet_id.get())
         {
-            Some(subnet_id) => Ok(GetSubnetForCanisterResponse {
+            Some(subnet_id) => Ok(SubnetForCanister {
                 subnet_id: Some(subnet_id),
             }),
             None => Err(GetSubnetForCanisterError::NoSubnetAssigned),

@@ -71,12 +71,11 @@ SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
     "//rs/registry/subnet_type",
 ]
 
-MACRO_DEPENDENCIES = [
-    "@crate_index//:serde_derive",
-]
+MACRO_DEPENDENCIES = []
 
 rust_binary(
     name = "pocket-ic-server",
+    testonly = True,
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = LIB_DEPENDENCIES + [":pocket-ic-server-lib"],
@@ -84,6 +83,7 @@ rust_binary(
 
 rust_library(
     name = "pocket-ic-server-lib",
+    testonly = True,
     srcs = [
         "src/lib.rs",
         "src/pocket_ic.rs",

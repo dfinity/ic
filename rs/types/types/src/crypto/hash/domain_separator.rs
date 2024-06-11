@@ -52,6 +52,7 @@ pub enum DomainSeparator {
     IdkgDealingSupport,
     EcdsaTranscript,
     EcdsaSigShare,
+    SchnorrSigShare,
     EcdsaComplaintContent,
     EcdsaComplaint,
     EcdsaOpeningContent,
@@ -109,6 +110,7 @@ impl DomainSeparator {
             DomainSeparator::IdkgDealingSupport => "ic-idkg-dealing-support-domain",
             DomainSeparator::EcdsaTranscript => "ic-idkg-transcript-domain",
             DomainSeparator::EcdsaSigShare => "ic-threshold-ecdsa-sig-share-domain",
+            DomainSeparator::SchnorrSigShare => "ic-threshold-schnorr-sig-share-domain",
             DomainSeparator::EcdsaComplaintContent => "ic-threshold-ecdsa-complaint-content-domain",
             DomainSeparator::EcdsaComplaint => "ic-threshold-ecdsa-complaint-domain",
             DomainSeparator::EcdsaOpeningContent => "ic-threshold-ecdsa-opening-content-domain",
@@ -122,9 +124,9 @@ impl DomainSeparator {
     }
 }
 
-impl std::string::ToString for DomainSeparator {
-    fn to_string(&self) -> String {
-        self.as_str().to_string()
+impl std::fmt::Display for DomainSeparator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 

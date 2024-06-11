@@ -8,7 +8,7 @@ use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{CanisterStatus, ExecutionTask, SystemState};
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
-use ic_management_canister_types::{CanisterLog, CanisterStatusType, LogVisibility};
+use ic_management_canister_types::{CanisterStatusType, LogVisibility};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
@@ -16,8 +16,8 @@ use ic_types::time::UNIX_EPOCH;
 use ic_types::{
     messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response},
     methods::WasmMethod,
-    AccumulatedPriority, CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes,
-    PrincipalId, Time,
+    AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, ExecutionRound,
+    MemoryAllocation, NumBytes, PrincipalId, Time,
 };
 use ic_types::{LongExecutionMode, NumInstructions};
 use phantom_newtype::AmountOf;
@@ -52,7 +52,6 @@ pub struct SchedulerState {
     /// During the long execution, the Canister is temporarily credited with priority
     /// to slightly boost the long execution priority. Only when the long execution
     /// is done, then the `accumulated_priority` is decreased by the `priority_credit`.
-    /// TODO(RUN-305): store priority credit and long execution mode across checkpoints
     pub priority_credit: AccumulatedPriority,
 
     /// Long execution mode: Opportunistic (default) or Prioritized
@@ -325,8 +324,9 @@ impl CanisterState {
     /// pass that to `SystemState::induct_messages_to_self()` (which doesn't
     /// have all the data necessary to compute it itself).
     ///
-    /// `subnet_available_memory` is updated to reflect the change in memory
-    /// usage due to inducting the messages.
+    /// `subnet_available_memory` (the subnet's available guaranteed response
+    /// message memory) is updated to reflect the change in memory usage due to
+    /// inducting the messages.
     pub fn induct_messages_to_self(
         &mut self,
         subnet_available_memory: &mut i64,
@@ -380,9 +380,10 @@ impl CanisterState {
             .map_or(NumBytes::from(0), |es| es.memory_usage())
     }
 
-    /// Returns the amount of canister message memory used by the canister in bytes.
+    /// Returns the amount memory used by or reserved for guaranteed response
+    /// canister messages, in bytes.
     pub fn message_memory_usage(&self) -> NumBytes {
-        self.system_state.message_memory_usage()
+        self.system_state.guaranteed_response_message_memory_usage()
     }
 
     /// Returns the amount of memory used by canisters that have custom Wasm

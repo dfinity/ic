@@ -20,10 +20,12 @@ DEV_DEPENDENCIES = [
     "@crate_index//:rand_chacha",
     "@crate_index//:ring",
     "@crate_index//:serde_bytes",
+    "@crate_index//:serde_json",
 ]
 
 rust_library(
     name = "test_utils",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_icrc1_test_utils",
     version = "0.8.0",

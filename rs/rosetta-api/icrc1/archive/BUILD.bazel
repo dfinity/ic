@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "gzip_compress", "rust_ic_test")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -11,6 +11,7 @@ package(default_visibility = ["//visibility:public"])
         compile_data = [":archive.did"],
         crate_features = features,
         crate_name = "ic_icrc1_archive" + name_suffix,
+        opt = "z",
         proc_macro_deps = [
             "@crate_index//:ic-cdk-macros",
         ],
@@ -22,6 +23,7 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/rosetta-api/icrc1",
+            "//rs/rosetta-api/ledger_canister_core",
             "//rs/rosetta-api/ledger_core",
             "//rs/rust_canisters/http_types",
             "//rs/types/base_types",
@@ -44,17 +46,6 @@ package(default_visibility = ["//visibility:public"])
             ["u256-tokens"],
             ["//rs/rosetta-api/icrc1/tokens_u256"],
         ),
-    ]
-]
-
-[
-    gzip_compress(
-        name = "archive_canister" + name_suffix + ".wasm.gz",
-        srcs = [":archive_canister" + name_suffix],
-    )
-    for name_suffix in [
-        "",
-        "_u256",
     ]
 ]
 

@@ -22,10 +22,11 @@ DEPENDENCIES = [
     "@crate_index//:mockall",
     "@crate_index//:opentelemetry",
     "@crate_index//:opentelemetry-prometheus",
+    "@crate_index//:opentelemetry_sdk",
     "@crate_index//:pem",
     "@crate_index//:prometheus",
     "@crate_index//:rcgen",
-    "@crate_index//:reqwest_0_11_27",
+    "@crate_index//:reqwest",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:sha2",
@@ -36,6 +37,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing",
     "@crate_index//:trust-dns-resolver",
+    "@crate_index//:zeroize",
 ]
 
 MACRO_DEPENDENCIES = [

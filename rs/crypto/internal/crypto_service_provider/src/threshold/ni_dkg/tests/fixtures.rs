@@ -123,6 +123,7 @@ impl MockNetwork {
                 let (id, (pubkey, _pop)) = (
                     *node_id,
                     node.csp
+                        .csp_vault
                         .gen_dealing_encryption_key_pair(*node_id)
                         .unwrap_or_else(|_| {
                             panic!(

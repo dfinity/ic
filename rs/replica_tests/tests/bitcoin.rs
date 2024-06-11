@@ -156,19 +156,16 @@ fn call_send_transaction_internal(
         .unwrap()
 }
 
-fn bitcoin_test<F: 'static>(adapter: MockBitcoinAdapter, test: F)
+fn bitcoin_test<F>(adapter: MockBitcoinAdapter, test: F)
 where
-    F: FnOnce(utils::LocalTestRuntime),
+    F: FnOnce(utils::LocalTestRuntime) + 'static,
 {
     bitcoin_test_with_config(adapter, true, test)
 }
 
-fn bitcoin_test_with_config<F: 'static>(
-    adapter: MockBitcoinAdapter,
-    privileged_access: bool,
-    test: F,
-) where
-    F: FnOnce(utils::LocalTestRuntime),
+fn bitcoin_test_with_config<F>(adapter: MockBitcoinAdapter, privileged_access: bool, test: F)
+where
+    F: FnOnce(utils::LocalTestRuntime) + 'static,
 {
     let (mut config, _tmpdir) = ic_config::Config::temp_config();
     if privileged_access {

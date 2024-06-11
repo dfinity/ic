@@ -16,7 +16,6 @@ use ic_crypto_secrets_containers::SecretBytes;
 use rand::{CryptoRng, Rng};
 use rcgen::{
     Certificate, CertificateParams, DistinguishedName, DnType, DnValue, KeyPair, SerialNumber,
-    PKCS_ED25519,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -135,22 +134,22 @@ fn x509_v3_certificate(
         DnType::CommonName,
         DnValue::Utf8String(common_name.to_string()),
     );
-    let key_pair = rcgen_keypair_from_ed25519_keypair(secret_key, public_key)?;
+    let mut key_pair = rcgen_keypair_from_ed25519_keypair(secret_key, public_key)?;
 
     let mut cert_params = CertificateParams::default();
-    cert_params.alg = &PKCS_ED25519;
     cert_params.not_before = not_before;
     cert_params.not_after = not_after;
     cert_params.serial_number = Some(SerialNumber::from_slice(&serial));
     cert_params.distinguished_name = distinguished_name;
-    cert_params.key_pair = Some(key_pair);
 
-    rcgen::Certificate::from_params(cert_params).map_err(|e| {
+    let cert_result = cert_params.self_signed(&key_pair).map_err(|e| {
         TlsKeyPairAndCertGenerationError::InternalError(format!(
             "failed to create X509 certificate: {}",
             e
         ))
-    })
+    });
+    key_pair.zeroize();
+    cert_result
 }
 
 fn rcgen_keypair_from_ed25519_keypair(
@@ -158,7 +157,7 @@ fn rcgen_keypair_from_ed25519_keypair(
     public_key: &ed25519_types::PublicKeyBytes,
 ) -> Result<KeyPair, TlsKeyPairAndCertGenerationError> {
     let keypair_der = secret_key_to_pkcs8_v2_der(secret_key, public_key);
-    KeyPair::from_der(keypair_der.expose_secret()).map_err(|e| {
+    KeyPair::try_from(keypair_der.expose_secret()).map_err(|e| {
         TlsKeyPairAndCertGenerationError::InternalError(format!(
             "failed to create Ed25519 key pair from raw private key: {}",
             e
@@ -167,19 +166,13 @@ fn rcgen_keypair_from_ed25519_keypair(
 }
 
 fn der_encode_cert_and_secret_key(
-    mut x509_cert: Certificate,
+    x509_cert: Certificate,
     secret_key: &ed25519_types::SecretKeyBytes,
 ) -> Result<
     (TlsEd25519CertificateDerBytes, TlsEd25519SecretKeyDerBytes),
     TlsKeyPairAndCertGenerationError,
 > {
-    let cert_der = x509_cert.serialize_der().map_err(|e| {
-        TlsKeyPairAndCertGenerationError::InternalError(format!(
-            "failed to DER-encode X509 certificate: {}",
-            e
-        ))
-    })?;
-    x509_cert.zeroize();
+    let cert_der = x509_cert.der().as_ref().to_vec();
     let private_key_pkcs8_v1_der = secret_key_to_pkcs8_v1_der(secret_key);
     Ok((
         TlsEd25519CertificateDerBytes { bytes: cert_der },

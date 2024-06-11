@@ -4,12 +4,37 @@ set -xeuo pipefail
 inputFilePath=".gitlab/CODEOWNERS"
 outputFilePath=".github/CODEOWNERS"
 
-# Uncomment once we are ready to use all teams on dfinity org, for now copy code owners for IDX
-# Use sed to replace @dfinity-lab/teams with @dfinity-sandbox
-# sed "s/@dfinity-lab\/teams/@dfinity/g" $inputFilePath > $outputFilePath
+declare -A teamsMap=(
+    ["@dfinity-lab/teams/DRE"]="@dfinity/dre"
+    ["@dfinity-lab/teams/boundarynode-team"]="@dfinity/boundary-node"
+    ["@dfinity-lab/teams/consensus-owners"]="@dfinity/consensus"
+    ["@dfinity-lab/teams/cross-chain-team"]="@dfinity/cross-chain-team"
+    ["@dfinity-lab/teams/crypto-owners"]="@dfinity/dept-crypto-library"
+    ["@dfinity-lab/teams/execution-owners"]="@dfinity/execution"
+    ["@dfinity-lab/teams/execution-team"]="@dfinity/execution"
+    ["@dfinity-lab/teams/financial-integrations"]="@dfinity/finint"
+    ["@dfinity-lab/teams/ic-support"]="@dfinity/ic-support"
+    ["@dfinity-lab/teams/ic-testing-verification"]="@dfinity/ic-testing-verification"
+    ["@dfinity-lab/teams/idx"]="@dfinity/idx"
+    ["@dfinity-lab/teams/interface-owners"]="@dfinity/ic-interface-owners"
+    ["@dfinity-lab/teams/message-routing-owners"]="@dfinity/ic-message-routing-owners"
+    ["@dfinity-lab/teams/networking-team"]="@dfinity/networking"
+    ["@dfinity-lab/teams/nns-team"]="@dfinity/nns-team"
+    ["@dfinity-lab/teams/node-team"]="@dfinity/node"
+    ["@dfinity-lab/teams/owners-owners"]="@dfinity/ic-owners-owners"
+    ["@dfinity-lab/teams/platform-operations"]="@dfinity/platform-operations"
+    ["@dfinity-lab/teams/prodsec"]="@dfinity/product-security"
+    ["@dfinity-lab/teams/runtime-owners"]="@dfinity/runtime"
+    ["@dfinity-lab/teams/sdk-team"]="@dfinity/sdk"
+    ["@dfinity-lab/teams/utopia"]="@dfinity/utopia"
+    ["@dfinity-lab/teams/ghost"]=""
+)
 
-# for now, only include teams we want to test in the sandbox org
-grep -E "^.*\/\s*@dfinity-lab/teams/idx$" $inputFilePath | sed "s/@dfinity-lab\/teams/@dfinity-sandbox/g" >$outputFilePath
+cp $inputFilePath $outputFilePath
+
+for i in "${!teamsMap[@]}"; do
+    sed -i "s#$i#${teamsMap[$i]}#g" $outputFilePath
+done
 
 git add $outputFilePath
 # If there were changes commit them with the IDX GITLAB bot

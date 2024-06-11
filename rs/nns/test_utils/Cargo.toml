@@ -18,6 +18,7 @@ dfn_json = { path = "../../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 flate2 = "1.0.27"
 futures = { workspace = true }
+hex = { workspace = true }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-base-types = { path = "../../types/base_types" }
 ic-btc-interface = { workspace = true }
@@ -63,7 +64,7 @@ num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prometheus-parse = "0.2.4"
 prost = { workspace = true }
-rand = { version = "0.8.4" }
+rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 serde = { workspace = true }
 tokio = { workspace = true }

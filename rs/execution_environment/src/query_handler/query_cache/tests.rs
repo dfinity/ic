@@ -15,7 +15,7 @@ use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
-    messages::{CanisterTask, UserQuery},
+    messages::{CanisterTask, Query, QuerySource},
     time, CountBytes,
 };
 use ic_types_test_utils::ids::subnet_test_id;
@@ -323,13 +323,15 @@ fn query_cache_returns_different_results_for_different_sources() {
     let q = wasm().caller().append_and_reply();
     for_query_and_composite_query(q, |test, a_id, b_id, method, q| {
         let res_1 = test.query(
-            UserQuery {
-                source: user_test_id(1),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(1),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: a_id,
                 method_name: method.into(),
                 method_payload: q.clone(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -345,13 +347,15 @@ fn query_cache_returns_different_results_for_different_sources() {
         assert_eq!(Ok(WasmResult::Reply(caller.into())), res_1);
 
         let res_2 = test.query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: a_id,
                 method_name: method.into(),
                 method_payload: q,
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -1480,6 +1484,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::DataCertificateSize
         | SystemApiCallId::DebugPrint
         | SystemApiCallId::GlobalTimerSet
+        | SystemApiCallId::InReplicatedExecution
         | SystemApiCallId::IsController
         | SystemApiCallId::MintCycles
         | SystemApiCallId::MsgArgDataCopy

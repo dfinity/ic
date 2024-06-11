@@ -31,14 +31,7 @@ pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpC
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::mem::size_of;
-use std::{
-    collections::{BTreeSet, VecDeque},
-    convert::TryFrom,
-    error::Error,
-    fmt,
-    slice::Iter,
-    str::FromStr,
-};
+use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt, slice::Iter, str::FromStr};
 use strum_macros::{Display, EnumIter, EnumString};
 
 /// The id of the management canister.
@@ -86,8 +79,12 @@ pub enum Method {
     StopCanister,
     UninstallCode,
     UpdateSettings,
-    ComputeInitialEcdsaDealings, // TODO(EXC-1599): remove after ComputeInitialIDkgDealings is released.
+    ComputeInitialEcdsaDealings, // TODO(EXC-1630): remove after ComputeInitialIDkgDealings is released.
     ComputeInitialIDkgDealings,
+
+    // Schnorr interface.
+    SchnorrPublicKey,
+    SignWithSchnorr,
 
     // Bitcoin Interface.
     BitcoinGetBalance,
@@ -292,6 +289,36 @@ impl CanisterControllersChangeRecord {
     }
 }
 
+/// `CandidType` for `CanisterLoadSnapshotRecord`
+/// ```text
+/// record {
+///    canister_version : nat64;
+///    taken_at_timestamp : nat64;
+/// }
+/// ```
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CanisterLoadSnapshotRecord {
+    canister_version: u64,
+    taken_at_timestamp: u64,
+}
+
+impl CanisterLoadSnapshotRecord {
+    pub fn new(canister_version: u64, taken_at_timestamp: u64) -> Self {
+        Self {
+            canister_version,
+            taken_at_timestamp,
+        }
+    }
+
+    pub fn canister_version(&self) -> u64 {
+        self.canister_version
+    }
+
+    pub fn taken_at_timestamp(&self) -> u64 {
+        self.taken_at_timestamp
+    }
+}
+
 /// `CandidType` for `CanisterChangeDetails`
 /// ```text
 /// variant {
@@ -306,6 +333,10 @@ impl CanisterControllersChangeRecord {
 ///   controllers_change : record {
 ///     controllers : vec principal;
 ///   };
+///   load_snapshot : record {
+///     canister_version: nat64;
+///     taken_at_timestamp: nat64;
+///   };
 /// }
 /// ```
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -318,6 +349,8 @@ pub enum CanisterChangeDetails {
     CanisterCodeDeployment(CanisterCodeDeploymentRecord),
     #[serde(rename = "controllers_change")]
     CanisterControllersChange(CanisterControllersChangeRecord),
+    #[serde(rename = "load_snapshot")]
+    CanisterLoadSnapshot(CanisterLoadSnapshotRecord),
 }
 
 impl CanisterChangeDetails {
@@ -338,6 +371,13 @@ impl CanisterChangeDetails {
     pub fn controllers_change(controllers: Vec<PrincipalId>) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterControllersChange(CanisterControllersChangeRecord {
             controllers,
+        })
+    }
+
+    pub fn load_snapshot(canister_version: u64, taken_at_timestamp: u64) -> CanisterChangeDetails {
+        CanisterChangeDetails::CanisterLoadSnapshot(CanisterLoadSnapshotRecord {
+            canister_version,
+            taken_at_timestamp,
         })
     }
 }
@@ -403,7 +443,8 @@ impl CanisterChange {
                 std::mem::size_of_val(canister_controllers_change.controllers())
             }
             CanisterChangeDetails::CanisterCodeDeployment(_)
-            | CanisterChangeDetails::CanisterCodeUninstall => 0,
+            | CanisterChangeDetails::CanisterCodeUninstall
+            | CanisterChangeDetails::CanisterLoadSnapshot(_) => 0,
         };
         NumBytes::from((size_of::<CanisterChange>() + controllers_memory_size) as u64)
     }
@@ -583,6 +624,14 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                     },
                 )
             }
+            CanisterChangeDetails::CanisterLoadSnapshot(canister_load_snapshot) => {
+                pb_canister_state_bits::canister_change::ChangeDetails::CanisterLoadSnapshot(
+                    pb_canister_state_bits::CanisterLoadSnapshot {
+                        canister_version: canister_load_snapshot.canister_version,
+                        taken_at_timestamp: canister_load_snapshot.taken_at_timestamp,
+                    },
+                )
+            }
         }
     }
 }
@@ -639,6 +688,12 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                     .into_iter()
                     .map(TryInto::try_into)
                     .collect::<Result<Vec<PrincipalId>, _>>()?,
+            )),
+            pb_canister_state_bits::canister_change::ChangeDetails::CanisterLoadSnapshot(
+                canister_load_snapshot,
+            ) => Ok(CanisterChangeDetails::load_snapshot(
+                canister_load_snapshot.canister_version,
+                canister_load_snapshot.taken_at_timestamp,
             )),
         }
     }
@@ -1804,7 +1859,7 @@ impl SetupInitialDKGArgs {
         for node_id in self.node_ids.iter() {
             if !set.insert(NodeId::new(*node_id)) {
                 return Err(UserError::new(
-                    ErrorCode::CanisterContractViolation,
+                    ErrorCode::InvalidManagementPayload,
                     format!(
                         "Expected a set of NodeIds. The NodeId {} is repeated",
                         node_id
@@ -2204,6 +2259,13 @@ impl FromStr for MasterPublicKeyId {
 
 pub type DerivationPath = BoundedVec<MAXIMUM_DERIVATION_PATH_LENGTH, UNBOUNDED, UNBOUNDED, ByteBuf>;
 
+impl DerivationPath {
+    /// Converts the `DerivationPath`` from `BoundedVec<ByteBuf>` into a `Vec<Vec<u8>>`.
+    pub fn into_inner(self) -> Vec<Vec<u8>> {
+        self.get().iter().map(|x| x.to_vec()).collect()
+    }
+}
+
 impl Payload<'_> for DerivationPath {}
 
 impl DataSize for ByteBuf {
@@ -2272,6 +2334,11 @@ pub struct ECDSAPublicKeyResponse {
 
 impl Payload<'_> for ECDSAPublicKeyResponse {}
 
+/// Maximum number of nodes allowed in a ComputeInitialDealings request.
+const MAX_ALLOWED_NODES_COUNT: usize = 100;
+
+pub type BoundedNodes = BoundedVec<MAX_ALLOWED_NODES_COUNT, UNBOUNDED, UNBOUNDED, PrincipalId>;
+
 /// Argument of the compute_initial_ecdsa_dealings API.
 /// `(record {
 ///     key_id: ecdsa_key_id;
@@ -2283,7 +2350,7 @@ impl Payload<'_> for ECDSAPublicKeyResponse {}
 pub struct ComputeInitialEcdsaDealingsArgs {
     pub key_id: EcdsaKeyId,
     pub subnet_id: SubnetId,
-    nodes: Vec<PrincipalId>,
+    nodes: BoundedNodes,
     registry_version: u64,
 }
 
@@ -2297,17 +2364,17 @@ impl ComputeInitialEcdsaDealingsArgs {
         Self {
             key_id,
             subnet_id,
-            nodes: nodes.iter().map(|id| id.get()).collect(),
+            nodes: BoundedNodes::new(nodes.iter().map(|id| id.get()).collect()),
             registry_version: registry_version.get(),
         }
     }
 
     pub fn get_set_of_nodes(&self) -> Result<BTreeSet<NodeId>, UserError> {
         let mut set = BTreeSet::<NodeId>::new();
-        for node_id in self.nodes.iter() {
+        for node_id in self.nodes.get().iter() {
             if !set.insert(NodeId::new(*node_id)) {
                 return Err(UserError::new(
-                    ErrorCode::CanisterContractViolation,
+                    ErrorCode::InvalidManagementPayload,
                     format!(
                         "Expected a set of NodeIds. The NodeId {} is repeated",
                         node_id
@@ -2368,11 +2435,108 @@ impl ComputeInitialEcdsaDealingsResponse {
 pub struct ComputeInitialIDkgDealingsArgs {
     pub key_id: MasterPublicKeyId,
     pub subnet_id: SubnetId,
-    nodes: Vec<PrincipalId>,
+    nodes: BoundedNodes,
     registry_version: u64,
 }
 
 impl Payload<'_> for ComputeInitialIDkgDealingsArgs {}
+
+impl ComputeInitialIDkgDealingsArgs {
+    pub fn new(
+        key_id: MasterPublicKeyId,
+        subnet_id: SubnetId,
+        nodes: BTreeSet<NodeId>,
+        registry_version: RegistryVersion,
+    ) -> Self {
+        Self {
+            key_id,
+            subnet_id,
+            nodes: BoundedNodes::new(nodes.iter().map(|id| id.get()).collect()),
+            registry_version: registry_version.get(),
+        }
+    }
+
+    pub fn get_set_of_nodes(&self) -> Result<BTreeSet<NodeId>, UserError> {
+        let mut set = BTreeSet::<NodeId>::new();
+        for node_id in self.nodes.get().iter() {
+            if !set.insert(NodeId::new(*node_id)) {
+                return Err(UserError::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!(
+                        "Expected a set of NodeIds. The NodeId {} is repeated",
+                        node_id
+                    ),
+                ));
+            }
+        }
+        Ok(set)
+    }
+
+    pub fn get_registry_version(&self) -> RegistryVersion {
+        RegistryVersion::new(self.registry_version)
+    }
+}
+
+/// Represents the argument of the sign_with_schnorr API.
+/// ```text
+/// (record {
+///   message : blob;
+///   derivation_path : vec blob;
+///   key_id : schnorr_key_id;
+/// })
+/// ```
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub struct SignWithSchnorrArgs {
+    #[serde(with = "serde_bytes")]
+    pub message: Vec<u8>,
+    pub derivation_path: DerivationPath,
+    pub key_id: SchnorrKeyId,
+}
+
+impl Payload<'_> for SignWithSchnorrArgs {}
+
+/// Struct used to return an Schnorr signature.
+#[derive(CandidType, Deserialize, Debug)]
+pub struct SignWithSchnorrReply {
+    #[serde(with = "serde_bytes")]
+    pub signature: Vec<u8>,
+}
+
+impl Payload<'_> for SignWithSchnorrReply {}
+
+/// Represents the argument of the schnorr_public_key API.
+/// ```text
+/// (record {
+///   canister_id : opt canister_id;
+///   derivation_path : vec blob;
+///   key_id : schnorr_key_id;
+/// })
+/// ```
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub struct SchnorrPublicKeyArgs {
+    pub canister_id: Option<CanisterId>,
+    pub derivation_path: DerivationPath,
+    pub key_id: SchnorrKeyId,
+}
+
+impl Payload<'_> for SchnorrPublicKeyArgs {}
+
+/// Represents the response of the schnorr_public_key API.
+/// ```text
+/// (record {
+///   public_key : blob;
+///   chain_code : blob;
+/// })
+/// ```
+#[derive(CandidType, Deserialize, Debug)]
+pub struct SchnorrPublicKeyResponse {
+    #[serde(with = "serde_bytes")]
+    pub public_key: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    pub chain_code: Vec<u8>,
+}
+
+impl Payload<'_> for SchnorrPublicKeyResponse {}
 
 /// Struct used to return the xnet initial dealings.
 #[derive(Debug)]
@@ -2553,115 +2717,6 @@ impl From<pb_canister_state_bits::CanisterLogRecord> for CanisterLogRecord {
             timestamp_nanos: item.timestamp_nanos,
             content: item.content,
         }
-    }
-}
-
-/// The maximum allowed size of a canister log buffer.
-pub const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
-
-// TODO(EXC-1572): needs refactoring to find a proper place to put this.
-/// Holds canister log records and keeps track of the next canister log record index.
-#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CanisterLog {
-    next_idx: u64,
-    records: VecDeque<CanisterLogRecord>,
-}
-
-impl CanisterLog {
-    /// Creates a new `CanisterLog` with the given next index and records.
-    pub fn new(next_idx: u64, records: Vec<CanisterLogRecord>) -> Self {
-        Self {
-            next_idx,
-            records: VecDeque::from(records),
-        }
-    }
-
-    /// Creates a new `CanisterLog` with the given next index and an empty records list.
-    pub fn new_with_next_index(next_idx: u64) -> Self {
-        Self {
-            next_idx,
-            records: Default::default(),
-        }
-    }
-
-    /// Returns the next canister log record index.
-    pub fn next_idx(&self) -> u64 {
-        self.next_idx
-    }
-
-    /// Returns the canister log records.
-    pub fn records(&self) -> &VecDeque<CanisterLogRecord> {
-        &self.records
-    }
-
-    /// Clears the canister log records.
-    pub fn clear(&mut self) {
-        self.records.clear();
-    }
-
-    /// Returns the maximum allowed size of a canister log buffer.
-    pub fn capacity(&self) -> usize {
-        MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE
-    }
-
-    /// Returns the used space in the canister log buffer.
-    pub fn used_space(&self) -> usize {
-        self.records.data_size()
-    }
-
-    /// Returns the remaining space in the canister log buffer.
-    pub fn remaining_space(&self) -> usize {
-        MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE.saturating_sub(self.records.data_size())
-    }
-
-    /// Removes old records to make enough free space for new data within the limit.
-    fn make_free_space_within_limit(&mut self, new_data_size: usize) {
-        let mut total_size = new_data_size + self.records.data_size();
-        while total_size > MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE {
-            if let Some(removed_record) = self.records.pop_front() {
-                total_size -= removed_record.data_size();
-            } else {
-                break; // No more records to pop, limit reached.
-            }
-        }
-    }
-
-    /// Adds a new log record.
-    pub fn add_record(&mut self, is_enabled: bool, timestamp_nanos: u64, content: &[u8]) {
-        if !is_enabled {
-            // If logging is disabled do not add new records,
-            // but still make sure the buffer is within limit.
-            self.make_free_space_within_limit(0);
-            return;
-        }
-
-        // LINT.IfChange
-        // Keep the new log record size within limit,
-        // this must be in sync with `logging_charge_bytes` in `system_api.rs`.
-        let max_content_size =
-            MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE - CanisterLogRecord::default().data_size();
-        let size = content.len().min(max_content_size);
-        let record = CanisterLogRecord {
-            idx: self.next_idx,
-            timestamp_nanos,
-            content: content[..size].to_vec(),
-        };
-        self.make_free_space_within_limit(record.data_size());
-        self.records.push_back(record);
-        // LINT.ThenChange(logging_charge_bytes_rule)
-        // Update the next canister log record index.
-        self.next_idx += 1;
-    }
-
-    /// Moves all the logs from `other` to `self`.
-    pub fn append(&mut self, other: &mut Self) {
-        // Assume records sorted cronologically (with increasing idx) and
-        // update the system state's next index with the last record's index.
-        if let Some(last) = other.records.back() {
-            self.next_idx = last.idx + 1;
-        }
-        self.make_free_space_within_limit(other.records.data_size());
-        self.records.append(&mut other.records);
     }
 }
 
@@ -3002,7 +3057,7 @@ impl LoadCanisterSnapshotArgs {
         SnapshotId::try_from(&self.snapshot_id).unwrap()
     }
 
-    pub fn sender_canister_version(&self) -> Option<u64> {
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
         self.sender_canister_version
     }
 }
@@ -3025,14 +3080,14 @@ impl<'a> Payload<'a> for LoadCanisterSnapshotArgs {
 /// `(record {
 ///      id: blob;
 ///      taken_at_timestamp: nat64;
-///      total_size: nat;
+///      total_size: nat64;
 /// })`
 #[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub struct CanisterSnapshotResponse {
     #[serde(with = "serde_bytes")]
     pub id: Vec<u8>,
     pub taken_at_timestamp: u64,
-    pub total_size: candid::Nat,
+    pub total_size: u64,
 }
 
 impl Payload<'_> for CanisterSnapshotResponse {}
@@ -3042,7 +3097,7 @@ impl CanisterSnapshotResponse {
         Self {
             id: snapshot_id.to_vec(),
             taken_at_timestamp,
-            total_size: candid::Nat::from(total_size.get()),
+            total_size: total_size.get(),
         }
     }
 
@@ -3051,7 +3106,11 @@ impl CanisterSnapshotResponse {
     }
 
     pub fn total_size(&self) -> u64 {
-        self.total_size.0.to_u64().unwrap()
+        self.total_size
+    }
+
+    pub fn taken_at_timestamp(&self) -> u64 {
+        self.taken_at_timestamp
     }
 }
 

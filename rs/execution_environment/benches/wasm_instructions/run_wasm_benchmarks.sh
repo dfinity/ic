@@ -1,6 +1,6 @@
 #!/bin/sh
-# Runs the WASM instructions benchmarks, confirms the results are not optimized
-# by the `wasmtime` compiler, and produces a WASM instructions costs report
+# Runs the Wasm instructions benchmarks, confirms the results are not optimized
+# by the `wasmtime` compiler, and produces a Wasm instructions costs report
 # in Markdown format (see `WASM_BENCHMARKS.md`).
 #
 # Usage: run_wasm_benchmarks.sh [-f]

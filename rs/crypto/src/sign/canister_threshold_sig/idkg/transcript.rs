@@ -167,6 +167,7 @@ pub fn load_transcript(
     )?;
 
     let internal_complaints = vault.idkg_load_transcript(
+        transcript.algorithm_id,
         transcript.verified_dealings.clone(),
         transcript.context_data(),
         self_index,
@@ -231,6 +232,7 @@ pub fn load_transcript_with_openings(
     }
 
     vault.idkg_load_transcript_with_openings(
+        transcript.algorithm_id,
         transcript.verified_dealings.clone(),
         internal_openings,
         transcript.context_data(),
@@ -276,6 +278,7 @@ pub fn open_transcript(
     };
 
     let internal_opening = vault.idkg_open_dealing(
+        transcript.algorithm_id,
         signed_dealing.clone(),
         dealer_index,
         context_data,

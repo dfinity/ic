@@ -17,11 +17,15 @@ pub struct ChallengeResponse {
 
 #[async_trait]
 pub trait Order: Sync + Send {
+    // TODO: Only used in specific configurations.
+    #[allow(dead_code)]
     async fn order(&self, name: &str) -> Result<(OrderHandle, ChallengeResponse), Error>;
 }
 
 #[async_trait]
 pub trait Ready: Sync + Send {
+    // TODO: Only used in specific configurations.
+    #[allow(dead_code)]
     async fn ready(&self, order: &mut OrderHandle) -> Result<(), Error>;
 }
 

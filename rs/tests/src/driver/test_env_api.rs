@@ -140,7 +140,7 @@ use crate::driver::farm::{Farm, GroupSpec};
 use crate::driver::log_events;
 use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
 use crate::k8s::tnet::TNet;
-use crate::k8s::virtualmachine::{delete_vm, restart_vm, start_vm};
+use crate::k8s::virtualmachine::{destroy_vm, restart_vm, start_vm};
 use crate::retry_with_msg;
 use crate::retry_with_msg_async;
 use crate::util::{block_on, create_agent};
@@ -1136,11 +1136,11 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_canister_http_test_ca_cert(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/rootfs/guestos/dev-certs/canister_http_test_ca.cert";
+        let dep_rel_path = "ic-os/components/networking/dev-certs/canister_http_test_ca.cert";
         self.read_dependency_to_string(dep_rel_path)
     }
     fn get_canister_http_test_ca_key(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/rootfs/guestos/dev-certs/canister_http_test_ca.key";
+        let dep_rel_path = "ic-os/components/networking/dev-certs/canister_http_test_ca.key";
         self.read_dependency_to_string(dep_rel_path)
     }
 
@@ -1931,7 +1931,7 @@ pub struct HostedVm {
 impl VmControl for HostedVm {
     fn kill(&self) {
         if self.k8s {
-            block_on(delete_vm(&self.vm_name)).expect("could not kill VM");
+            block_on(destroy_vm(&self.vm_name)).expect("could not kill VM");
         } else {
             self.farm
                 .destroy_vm(&self.group_name, &self.vm_name)
@@ -2360,9 +2360,9 @@ impl FarmBaseUrl {
     }
 }
 
-impl ToString for FarmBaseUrl {
-    fn to_string(&self) -> String {
-        self.url.to_string()
+impl std::fmt::Display for FarmBaseUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.url)
     }
 }
 

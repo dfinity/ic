@@ -8,10 +8,15 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+candid = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 tests = { path = "../.." }
 ic-mainnet-nns-recovery = { path = "../../nns/ic_mainnet_nns_recovery" }
+ic-xrc-types = "1.0.0"
 slog = { workspace = true }
+xrc-mock = { path = "../../../rosetta-api/tvl/xrc_mock" }
 
 [[bin]]
 name = "large"
@@ -44,3 +49,7 @@ path = "small.rs"
 [[bin]]
 name = "sns_testing"
 path = "sns_testing.rs"
+
+[[bin]]
+name = "src_testing"
+path = "src_testing.rs"
