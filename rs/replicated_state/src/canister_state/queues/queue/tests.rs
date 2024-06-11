@@ -351,7 +351,7 @@ fn input_queue_try_from_canister_queue() {
     // Make an extra response reservation.
     queue.try_reserve_response_slot().unwrap();
 
-    // Expected `InputQueue`. The stale request is not preserved.
+    // Expected `InputQueue`.
     let mut expected_input_queue = InputQueue::new(10);
     expected_input_queue.push(req1.into()).unwrap();
     expected_input_queue.push(req2.into()).unwrap();
@@ -381,7 +381,7 @@ fn output_queue_try_from_canister_queue() {
     // and a reserved slot.
     let mut pool = MessagePool::default();
     let mut queue = CanisterQueue::new(10);
-    // Enqueue and then shed a request and a response.
+    // Enqueue and then shed a request.
     queue.push_request(pool.insert_outbound_request(req1.clone().into(), t0));
     pool.shed_largest_message().unwrap();
     assert_eq!(1, queue.len());
