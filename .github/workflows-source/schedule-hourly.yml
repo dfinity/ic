@@ -30,7 +30,7 @@ anchors:
   bazel-large-setup: &bazel-large-setup
     runs-on:
       labels: bazel-runner-large
-      group: ln1
+      group: sf1
     container:
       <<: *image
     timeout-minutes: 120
