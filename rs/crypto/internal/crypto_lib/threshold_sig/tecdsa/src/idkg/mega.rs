@@ -56,8 +56,12 @@ impl MEGaPublicKey {
         curve: EccCurveType,
         value: &[u8],
     ) -> CanisterThresholdSerializationResult<Self> {
-        let point = EccPoint::deserialize(curve, value)
-            .map_err(|e| CanisterThresholdSerializationError(format!("{:?}", e)))?;
+        let point = EccPoint::deserialize(curve, value).map_err(|e| {
+            CanisterThresholdSerializationError(format!(
+                "failed to deserialize MEGaPublicKey: {:?}",
+                e
+            ))
+        })?;
         Ok(Self { point })
     }
 
@@ -93,8 +97,11 @@ impl MEGaPrivateKey {
         curve: EccCurveType,
         value: &[u8],
     ) -> CanisterThresholdSerializationResult<Self> {
-        let secret = EccScalar::deserialize(curve, value)
-            .map_err(|_| CanisterThresholdSerializationError("REDACTED".to_string()))?;
+        let secret = EccScalar::deserialize(curve, value).map_err(|_| {
+            CanisterThresholdSerializationError(
+                "failed to deserialize MEGaPrivateKey: REDACTED".to_string(),
+            )
+        })?;
         Ok(Self { secret })
     }
 

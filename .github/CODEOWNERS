@@ -194,6 +194,8 @@ go_deps.bzl               @dfinity/idx
 /rs/replica/                                            @dfinity/networking
 /rs/replica_tests/                                      @dfinity/execution
 /rs/replicated_state/                                   @dfinity/execution @dfinity/ic-message-routing-owners
+/rs/replicated_state/src/canister_state/queues.rs       @dfinity/ic-message-routing-owners
+/rs/replicated_state/src/canister_state/queues          @dfinity/ic-message-routing-owners
 /rs/replicated_state/src/page_map.rs                    @dfinity/ic-message-routing-owners @dfinity/runtime
 /rs/replicated_state/src/page_map/                      @dfinity/ic-message-routing-owners @dfinity/runtime
 /rs/rosetta-api/                                        @dfinity/finint

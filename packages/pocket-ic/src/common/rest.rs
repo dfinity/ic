@@ -5,7 +5,7 @@
 use crate::UserError;
 use candid::Principal;
 use hex;
-use reqwest::blocking::Response;
+use reqwest::Response;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -157,11 +157,11 @@ pub enum ApiResponse<T> {
     Error { message: String },
 }
 
-impl<T: DeserializeOwned> From<Response> for ApiResponse<T> {
-    fn from(resp: Response) -> Self {
+impl<T: DeserializeOwned> ApiResponse<T> {
+    pub async fn from_response(resp: Response) -> Self {
         match resp.status() {
             reqwest::StatusCode::OK => {
-                let result = resp.json::<T>();
+                let result = resp.json::<T>().await;
                 match result {
                     Ok(t) => ApiResponse::Success(t),
                     Err(e) => ApiResponse::Error {
@@ -170,7 +170,7 @@ impl<T: DeserializeOwned> From<Response> for ApiResponse<T> {
                 }
             }
             reqwest::StatusCode::ACCEPTED => {
-                let result = resp.json::<StartedOrBusyResponse>();
+                let result = resp.json::<StartedOrBusyResponse>().await;
                 match result {
                     Ok(StartedOrBusyResponse { state_label, op_id }) => {
                         ApiResponse::Started { state_label, op_id }
@@ -181,7 +181,7 @@ impl<T: DeserializeOwned> From<Response> for ApiResponse<T> {
                 }
             }
             reqwest::StatusCode::CONFLICT => {
-                let result = resp.json::<StartedOrBusyResponse>();
+                let result = resp.json::<StartedOrBusyResponse>().await;
                 match result {
                     Ok(StartedOrBusyResponse { state_label, op_id }) => {
                         ApiResponse::Busy { state_label, op_id }
@@ -192,7 +192,7 @@ impl<T: DeserializeOwned> From<Response> for ApiResponse<T> {
                 }
             }
             _ => {
-                let result = resp.json::<ApiError>();
+                let result = resp.json::<ApiError>().await;
                 match result {
                     Ok(e) => ApiResponse::Error { message: e.message },
                     Err(e) => ApiResponse::Error {

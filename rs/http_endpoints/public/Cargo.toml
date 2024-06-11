@@ -55,6 +55,7 @@ threadpool = "1.8.1"
 tokio = { workspace = true }
 tokio-io-timeout = "1.2.0"
 tokio-rustls = { version = "0.24.1", features = ["dangerous_configuration"] }
+tokio-util = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
 tracing-flame = "0.2.0"

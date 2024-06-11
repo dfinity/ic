@@ -21,12 +21,14 @@ pub enum GetSubnetForCanisterError {
     NoSubnetAssigned,
 }
 
-impl ToString for GetSubnetForCanisterError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for GetSubnetForCanisterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            GetSubnetForCanisterError::InvalidCanisterId => "Invalid canister ID.".to_string(),
+            GetSubnetForCanisterError::InvalidCanisterId => {
+                write!(f, "Invalid canister ID.")
+            }
             GetSubnetForCanisterError::NoSubnetAssigned => {
-                "Canister is not assigned to any subnet.".to_string()
+                write!(f, "Canister is not assigned to any subnet.")
             }
         }
     }

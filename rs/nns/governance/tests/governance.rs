@@ -7032,7 +7032,9 @@ fn test_default_followees() {
         Topic::Unspecified as i32 => Followees { followees: vec![voter_neuron]},
     ];
 
-    gov.heap_data.default_followees = default_followees.clone();
+    gov.heap_data
+        .default_followees
+        .clone_from(&default_followees);
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     let neuron_stake_e8s = 100 * 100_000_000;
     let nonce = 1234u64;
@@ -8589,10 +8591,10 @@ fn test_proposal_gc() {
     // Check that the proposals with high IDs have been kept and the
     // proposals with low IDs have been purged.
     for i in 1..500 {
-        assert!(gov.heap_data.proposals.get(&i).is_none());
+        assert!(!gov.heap_data.proposals.contains_key(&i));
     }
     for i in 900..1000 {
-        assert!(gov.heap_data.proposals.get(&i).is_some());
+        assert!(gov.heap_data.proposals.contains_key(&i));
     }
     // Running again, nothing should change...
     assert!(!gov.maybe_gc());
@@ -13155,6 +13157,7 @@ fn voting_period_seconds_topic_dependency() {
 
 // TODO - remove after migration of neuron_store.topic_follow_index to being stored on upgrade
 // is rolled out and becomes non-optional
+#[allow(dead_code)]
 struct StubIcpLedger {}
 #[async_trait]
 impl IcpLedger for StubIcpLedger {
@@ -13185,6 +13188,7 @@ impl IcpLedger for StubIcpLedger {
     }
 }
 
+#[allow(dead_code)]
 struct StubCMC {}
 #[async_trait]
 impl CMC for StubCMC {

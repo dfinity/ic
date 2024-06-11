@@ -443,7 +443,7 @@ fn test_min_max_icp_per_buyer() {
             .now_or_never()
             .unwrap();
         assert!(e.is_err());
-        assert!(swap.buyers.get(&TEST_USER1_PRINCIPAL.to_string()).is_none());
+        assert!(!swap.buyers.contains_key(&TEST_USER1_PRINCIPAL.to_string()));
     }
     // Try to deposit 6 ICP.
     {

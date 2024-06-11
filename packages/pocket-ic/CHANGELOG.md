@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- Module `nonblocking` with asynchronous PocketIc library. The asynchronous function `drop` must be called
+  (e.g., `pic.drop().await`) to drop the PocketIc instance. It must be called manually
+  as Rust doesn't support asynchronous drop.
+
+### Removed
+- Public field `instance_id` in the synchronous PocketIc library, use the function `instance_id` instead
+
 ### Changed
 - Deprecated `make_deterministic`, use `stop_live` instead
 

@@ -321,7 +321,6 @@ impl SignatureVerify for CatchUpPackage {
 /// `NotaryIssued` is a trait that exists to deduplicate the validation code of
 /// Notarization, Finalization and the corresponding shares.
 trait NotaryIssued: Sized + HasHeight + std::fmt::Debug {
-    fn block(&self) -> &CryptoHashOf<Block>;
     fn verify_multi_sig_combined(
         crypto: &dyn ConsensusCrypto,
         signed_message: &Signed<Self, MultiSignature<Self>>,
@@ -337,10 +336,6 @@ trait NotaryIssued: Sized + HasHeight + std::fmt::Debug {
 }
 
 impl NotaryIssued for NotarizationContent {
-    fn block(&self) -> &CryptoHashOf<Block> {
-        &self.block
-    }
-
     fn verify_multi_sig_combined(
         crypto: &dyn ConsensusCrypto,
         signed_message: &Signed<Self, MultiSignature<Self>>,
@@ -382,10 +377,6 @@ impl NotaryIssued for NotarizationContent {
 }
 
 impl NotaryIssued for FinalizationContent {
-    fn block(&self) -> &CryptoHashOf<Block> {
-        &self.block
-    }
-
     fn verify_multi_sig_combined(
         crypto: &dyn ConsensusCrypto,
         signed_message: &Signed<Self, MultiSignature<Self>>,

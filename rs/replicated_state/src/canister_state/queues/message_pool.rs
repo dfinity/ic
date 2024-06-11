@@ -587,16 +587,18 @@ impl MessagePool {
             ));
         }
 
-        // Validate `message_id_generator` against the largest seen `Id`.
-        let mut max_message_id = 0;
-        self.messages.keys().for_each(|id| {
-            max_message_id = max_message_id.max(id.0);
-        });
-        if max_message_id >> Id::BITMASK_LEN >= self.message_id_generator {
-            return Err(format!(
-                "Id out of bounds: max Id: {}, message_id_generator: {}",
-                max_message_id, self.message_id_generator
-            ));
+        if !self.messages.is_empty() {
+            // Validate `message_id_generator` against the largest seen `Id`.
+            let mut max_message_id = 0;
+            self.messages.keys().for_each(|id| {
+                max_message_id = max_message_id.max(id.0);
+            });
+            if max_message_id >> Id::BITMASK_LEN >= self.message_id_generator {
+                return Err(format!(
+                    "`Id` out of bounds: max `Id`: {}, message_id_generator: {}",
+                    max_message_id, self.message_id_generator
+                ));
+            }
         }
 
         Ok(())

@@ -729,7 +729,7 @@ impl ExhaustiveSet for QuadrupleInCreation {
 #[derive(Clone)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DerivedIDkgReshareRequest {
-    pub key_id: EcdsaKeyId,
+    pub key_id: MasterPublicKeyId,
     pub receiving_node_ids: Vec<NodeId>,
     pub registry_version: RegistryVersion,
 }
@@ -739,8 +739,8 @@ impl ExhaustiveSet for IDkgReshareRequest {
         DerivedIDkgReshareRequest::exhaustive_set(rng)
             .into_iter()
             .map(|r| IDkgReshareRequest {
-                key_id: Some(r.key_id.clone()),
-                master_key_id: MasterPublicKeyId::Ecdsa(r.key_id),
+                key_id: None,
+                master_key_id: r.key_id,
                 receiving_node_ids: r.receiving_node_ids,
                 registry_version: r.registry_version,
             })

@@ -30,6 +30,7 @@ anchors:
   bazel-large-setup: &bazel-large-setup
     runs-on:
       labels: bazel-runner-large
+      group: ln1
     container:
       <<: *image
     timeout-minutes: 120
@@ -100,7 +101,6 @@ jobs:
   bazel-test-coverage:
     name: Bazel Test Coverage
     <<: *bazel-large-setup
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - <<: *before-script
       - <<: *checkout

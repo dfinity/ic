@@ -3530,7 +3530,10 @@ fn install_code_preserves_system_state_and_scheduler_state() {
 
     // 3. UPGRADE
     // reset certified_data cleared by install and reinstall in the previous steps
-    original_canister.system_state.certified_data = certified_data.clone();
+    original_canister
+        .system_state
+        .certified_data
+        .clone_from(&certified_data);
     state
         .canister_state_mut(&canister_id)
         .unwrap()

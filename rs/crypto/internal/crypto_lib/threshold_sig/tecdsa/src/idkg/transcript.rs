@@ -14,12 +14,21 @@ pub struct IDkgTranscriptInternal {
 
 impl IDkgTranscriptInternal {
     pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
-        serde_cbor::to_vec(self).map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
+        serde_cbor::to_vec(self).map_err(|e| {
+            CanisterThresholdSerializationError(format!(
+                "failed to serialize IDkgTranscriptInternal: {}",
+                e
+            ))
+        })
     }
 
     pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
-        serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
+        serde_cbor::from_slice::<Self>(bytes).map_err(|e| {
+            CanisterThresholdSerializationError(format!(
+                "failed to deserialize IDkgTranscriptInternal: {}",
+                e
+            ))
+        })
     }
 
     pub fn constant_term(&self) -> EccPoint {
@@ -86,12 +95,21 @@ impl CombinedCommitment {
     }
 
     pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
-        serde_cbor::to_vec(self).map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
+        serde_cbor::to_vec(self).map_err(|e| {
+            CanisterThresholdSerializationError(format!(
+                "failed to serialize CombinedCommitment: {}",
+                e
+            ))
+        })
     }
 
     pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
-        serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
+        serde_cbor::from_slice::<Self>(bytes).map_err(|e| {
+            CanisterThresholdSerializationError(format!(
+                "failed to deserialize CombinedCommitment: {}",
+                e
+            ))
+        })
     }
 }
 

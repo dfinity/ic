@@ -17,9 +17,7 @@ use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
-};
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     EcdsaArguments, IDkgDealingsContext, SchnorrArguments, SignWithThresholdContext,
@@ -1646,16 +1644,7 @@ pub(crate) fn create_reshare_request(
     registry_version: u64,
 ) -> IDkgReshareRequest {
     IDkgReshareRequest {
-        key_id: if let MasterPublicKeyId::Ecdsa(ecdsa_key_id) = key_id.clone() {
-            Some(ecdsa_key_id)
-        } else {
-            // Schnorr key reshare requests still receive a dummy ecdsa key ID
-            // until we can set the field to None on mainnet.
-            Some(EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: String::from("fake_dummy_key"),
-            })
-        },
+        key_id: None,
         master_key_id: key_id,
         receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
         registry_version: RegistryVersion::from(registry_version),
@@ -1792,6 +1781,7 @@ pub(crate) fn generate_key_transcript(
 pub(crate) trait EcdsaPayloadTestHelper {
     fn peek_next_transcript_id(&self) -> IDkgTranscriptId;
 
+    #[allow(dead_code)]
     fn peek_next_pre_signature_id(&self) -> PreSigId;
 
     fn generate_current_key(

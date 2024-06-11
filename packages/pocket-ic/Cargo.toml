@@ -33,6 +33,7 @@ tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 schemars = "0.8.16"
+tokio = { workspace = true }
 
 [dev-dependencies]
 flate2 = "1.0.27"

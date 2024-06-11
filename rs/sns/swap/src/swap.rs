@@ -1313,11 +1313,9 @@ impl Swap {
         self.lifecycle() == Lifecycle::Aborted
     }
 
-    /// Calls SNS Root with the Swap canister's configured
-    /// `fallback_controller_principal_ids`. set_dapp_controllers is generic and
-    /// used for the various Swap APIs that need to return control of the dapp(s)
-    /// back to the devs.
-    pub async fn set_dapp_controllers(
+    /// Calls SNS Root's set_dapp_controllers with the Swap canister's configured
+    /// `fallback_controller_principal_ids`.
+    pub async fn restore_dapp_controllers(
         &self,
         sns_root_client: &mut impl SnsRootClient,
     ) -> Result<Result<SetDappControllersResponse, CanisterCallError>, String> {
@@ -1347,12 +1345,12 @@ impl Swap {
             .await)
     }
 
-    /// Calls set_dapp_controllers() and handles errors for finalize
-    async fn set_dapp_controllers_for_finalize(
+    /// Calls restore_dapp_controllers() and handles errors for finalize
+    async fn restore_dapp_controllers_for_finalize(
         &self,
         sns_root_client: &mut impl SnsRootClient,
     ) -> SetDappControllersCallResult {
-        let result = self.set_dapp_controllers(sns_root_client).await;
+        let result = self.restore_dapp_controllers(sns_root_client).await;
 
         match result {
             Ok(result) => result.into(),
@@ -1496,7 +1494,7 @@ impl Swap {
             // Restore controllers of dapp canisters to their original
             // owners (i.e. self.init.fallback_controller_principal_ids).
             finalize_swap_response.set_set_dapp_controllers_result(
-                self.set_dapp_controllers_for_finalize(environment.sns_root_mut())
+                self.restore_dapp_controllers_for_finalize(environment.sns_root_mut())
                     .await,
             );
 

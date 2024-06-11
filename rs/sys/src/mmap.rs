@@ -84,6 +84,11 @@ impl ScopedMmap {
 
     /// Returns a byte slice view of the memory mapping.
     pub fn as_slice(&self) -> &[u8] {
+        // A precondition for `from_raw_parts` is that the pointer must be non-null.
+        // Otherwise a panic will occur.
+        if self.addr().is_null() {
+            return &[];
+        }
         unsafe { std::slice::from_raw_parts(self.addr(), self.len()) }
     }
 }
