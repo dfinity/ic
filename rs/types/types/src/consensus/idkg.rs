@@ -28,7 +28,7 @@ use crate::{
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::{crypto::v1 as crypto_pb, subnet::v1 as subnet_pb},
@@ -82,10 +82,10 @@ pub struct EcdsaPayload {
     pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
 
     /// Resharing requests in progress.
-    pub ongoing_xnet_reshares: BTreeMap<EcdsaReshareRequest, ReshareOfUnmaskedParams>,
+    pub ongoing_xnet_reshares: BTreeMap<IDkgReshareRequest, ReshareOfUnmaskedParams>,
 
     /// Completed resharing requests.
-    pub xnet_reshare_agreements: BTreeMap<EcdsaReshareRequest, CompletedReshareRequest>,
+    pub xnet_reshare_agreements: BTreeMap<IDkgReshareRequest, CompletedReshareRequest>,
 
     /// State of the key transcripts.
     pub key_transcripts: BTreeMap<MasterPublicKeyId, EcdsaKeyTranscript>,
@@ -362,8 +362,8 @@ pub struct EcdsaKeyTranscript {
     pub current: Option<UnmaskedTranscriptWithAttributes>,
     /// Progress of creating the next ECDSA key transcript.
     pub next_in_creation: KeyTranscriptCreation,
-    /// Key id.
-    pub key_id: Option<EcdsaKeyId>,
+    /// DEPRECATED: ECDSA Key id.
+    pub deprecated_key_id: Option<EcdsaKeyId>,
     /// Master key Id allowing different signature schemes.
     pub master_key_id: MasterPublicKeyId,
 }
@@ -373,12 +373,12 @@ impl Hash for EcdsaKeyTranscript {
         let EcdsaKeyTranscript {
             current,
             next_in_creation,
-            key_id,
+            deprecated_key_id,
             master_key_id,
         } = self;
         current.hash(state);
         next_in_creation.hash(state);
-        if let Some(key_id) = key_id {
+        if let Some(key_id) = deprecated_key_id {
             key_id.hash(state);
         }
         master_key_id.hash(state);
@@ -386,12 +386,21 @@ impl Hash for EcdsaKeyTranscript {
 }
 
 impl EcdsaKeyTranscript {
-    pub fn new(key_id: EcdsaKeyId, next_in_creation: KeyTranscriptCreation) -> Self {
+    pub fn new(key_id: MasterPublicKeyId, next_in_creation: KeyTranscriptCreation) -> Self {
         Self {
             current: None,
-            master_key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
             next_in_creation,
-            key_id: Some(key_id),
+            deprecated_key_id: if let MasterPublicKeyId::Ecdsa(key_id) = key_id.clone() {
+                Some(key_id)
+            } else {
+                // Schnorr key transcripts still receive a dummy ecdsa key ID
+                // until we can set the field to None on mainnet.
+                Some(EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: String::from("fake_dummy_key"),
+                })
+            },
+            master_key_id: key_id,
         }
     }
 
@@ -403,7 +412,7 @@ impl EcdsaKeyTranscript {
         Self {
             current: current.or_else(|| self.current.clone()),
             next_in_creation,
-            key_id: self.key_id.clone(),
+            deprecated_key_id: self.deprecated_key_id.clone(),
             master_key_id: self.master_key_id.clone(),
         }
     }
@@ -503,7 +512,10 @@ impl From<EcdsaKeyTranscript> for pb::EcdsaKeyTranscript {
             next_in_creation: Some(pb::KeyTranscriptCreation::from(
                 &transcript.next_in_creation,
             )),
-            key_id: transcript.key_id.as_ref().map(|key_id| key_id.into()),
+            deprecated_key_id: transcript
+                .deprecated_key_id
+                .as_ref()
+                .map(|key_id| key_id.into()),
             master_key_id: Some(crypto_pb::MasterPublicKeyId::from(
                 &transcript.master_key_id,
             )),
@@ -521,8 +533,8 @@ impl TryFrom<pb::EcdsaKeyTranscript> for EcdsaKeyTranscript {
     type Error = ProxyDecodeError;
 
     fn try_from(proto: pb::EcdsaKeyTranscript) -> Result<Self, Self::Error> {
-        let key_id = proto
-            .key_id
+        let deprecated_key_id = proto
+            .deprecated_key_id
             .clone()
             .map(|key_id| key_id.try_into())
             .transpose()?;
@@ -542,7 +554,7 @@ impl TryFrom<pb::EcdsaKeyTranscript> for EcdsaKeyTranscript {
             try_from_option_field(proto.master_key_id, "KeyTranscript::master_key_id")?;
 
         Ok(Self {
-            key_id,
+            deprecated_key_id,
             current,
             next_in_creation,
             master_key_id,
@@ -684,16 +696,16 @@ impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
 
 /// Internal format of the resharing request from execution.
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EcdsaReshareRequest {
+pub struct IDkgReshareRequest {
     pub key_id: Option<EcdsaKeyId>,
     pub master_key_id: MasterPublicKeyId,
     pub receiving_node_ids: Vec<NodeId>,
     pub registry_version: RegistryVersion,
 }
 
-impl Hash for EcdsaReshareRequest {
+impl Hash for IDkgReshareRequest {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        let EcdsaReshareRequest {
+        let IDkgReshareRequest {
             key_id,
             master_key_id,
             receiving_node_ids,
@@ -708,8 +720,8 @@ impl Hash for EcdsaReshareRequest {
     }
 }
 
-impl From<&EcdsaReshareRequest> for pb::EcdsaReshareRequest {
-    fn from(request: &EcdsaReshareRequest) -> Self {
+impl From<&IDkgReshareRequest> for pb::IDkgReshareRequest {
+    fn from(request: &IDkgReshareRequest) -> Self {
         let mut receiving_node_ids = Vec::new();
         for node in &request.receiving_node_ids {
             receiving_node_ids.push(node_id_into_protobuf(*node));
@@ -723,9 +735,9 @@ impl From<&EcdsaReshareRequest> for pb::EcdsaReshareRequest {
     }
 }
 
-impl TryFrom<&pb::EcdsaReshareRequest> for EcdsaReshareRequest {
+impl TryFrom<&pb::IDkgReshareRequest> for IDkgReshareRequest {
     type Error = ProxyDecodeError;
-    fn try_from(request: &pb::EcdsaReshareRequest) -> Result<Self, Self::Error> {
+    fn try_from(request: &pb::IDkgReshareRequest) -> Result<Self, Self::Error> {
         let receiving_node_ids = request
             .receiving_node_ids
             .iter()
@@ -740,7 +752,7 @@ impl TryFrom<&pb::EcdsaReshareRequest> for EcdsaReshareRequest {
 
         let master_key_id = try_from_option_field(
             request.master_key_id.clone(),
-            "EcdsaReshareRequest::master_key_id",
+            "IDkgReshareRequest::master_key_id",
         )?;
 
         Ok(Self {
@@ -1831,7 +1843,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         // ongoing_xnet_reshares
         let mut ongoing_xnet_reshares = BTreeMap::new();
         for reshare in &payload.ongoing_xnet_reshares {
-            let request: EcdsaReshareRequest =
+            let request: IDkgReshareRequest =
                 try_from_option_field(reshare.request.as_ref(), "EcdsaPayload::reshare::request")?;
 
             let transcript: ReshareOfUnmaskedParams = try_from_option_field(
@@ -1844,7 +1856,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         // xnet_reshare_agreements
         let mut xnet_reshare_agreements = BTreeMap::new();
         for agreement in &payload.xnet_reshare_agreements {
-            let request: EcdsaReshareRequest = try_from_option_field(
+            let request: IDkgReshareRequest = try_from_option_field(
                 agreement.request.as_ref(),
                 "EcdsaPayload::agreement::request",
             )?;
@@ -2056,7 +2068,7 @@ impl HasMasterPublicKeyId for PreSignatureRef {
     }
 }
 
-impl HasMasterPublicKeyId for EcdsaReshareRequest {
+impl HasMasterPublicKeyId for IDkgReshareRequest {
     fn key_id(&self) -> MasterPublicKeyId {
         self.master_key_id.clone()
     }

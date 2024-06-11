@@ -16,7 +16,7 @@ env:
   PR_NUMBER: ${{ github.event.pull_request.number }}
 
 jobs:
-  push_to_gitlab:
+  push-to-gitlab:
     name: Push To GitLab
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
@@ -29,19 +29,17 @@ jobs:
         run: |
           set -eu
           URL="https://push-from-github:${{ secrets.PUSH_TO_GITLAB_TOKEN }}@gitlab.com/dfinity-lab/public/ic.git"
-
           if git remote get-url gitlab >/dev/null 2>&1; then
               git remote set-url gitlab "$URL"
           else
               git remote add gitlab "$URL"
           fi
 
-          BRANCH="mirroring-${BRANCH_NAME}"
-          git fetch origin mirroring
-          git checkout mirroring
-          git checkout -b "$BRANCH"
+          git config --global user.name "IDX GitHub Automation"
+          git config --global user.email "idx@dfinity.org"
+          git fetch origin "$BRANCH_NAME"
           git push \
               -o merge_request.create \
-              -o merge_request.title="GitHub Sync PR#${PR_NUMBER} / ${PR_TITLE}" \
+              -o merge_request.title="chore(github-sync): PR#${PR_NUMBER} / ${PR_TITLE}" \
               -o merge_request.description="[GitHub PR ${PR_NUMBER}](${PR_URL}) (branch: ${BRANCH_NAME})" \
-              gitlab "$BRANCH"
+              gitlab "refs/remotes/origin/${BRANCH_NAME}:refs/heads/mirroring-${BRANCH_NAME}"

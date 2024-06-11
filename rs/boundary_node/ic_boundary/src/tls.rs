@@ -20,7 +20,7 @@ use futures_util::future::BoxFuture;
 use instant_acme::{Account, AccountCredentials, LetsEncrypt, NewAccount};
 use mockall::automock;
 use prometheus::Registry;
-use rcgen::{Certificate, CertificateParams, DistinguishedName};
+use rcgen::{CertificateParams, DistinguishedName, KeyPair};
 use regex::Regex;
 use rustls::{
     cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
@@ -34,6 +34,7 @@ use tokio::{
 use tokio_rustls::server::TlsStream;
 use tracing::{debug, warn};
 use x509_parser::prelude::{Pem, Validity};
+use zeroize::Zeroize;
 
 use crate::{
     acme::{Acme, Finalize, Obtain, Order, Ready},
@@ -216,24 +217,21 @@ impl Provision for Provisioner {
             .context("failed to mark ACME order as ready")?;
         debug!("TLS: Order marked as ready");
 
-        // Create a certificate for the ACME provider to sign
-        let cert = Certificate::from_params({
-            let mut params = CertificateParams::new(vec![name.to_string()]);
-            params.distinguished_name = DistinguishedName::new();
-            params
-        })
-        .context("failed to generate certificate")?;
-        debug!("TLS: Certificate generated");
+        let mut key_pair = KeyPair::generate().context("failed to create key pair")?;
 
         // Create a Certificate Signing Request for the ACME provider
-        let csr = cert
-            .serialize_request_der()
-            .context("failed to create certificate signing request")?;
+        let csr = {
+            let mut params = CertificateParams::new(vec![name.to_string()])
+                .context("failed to create certificate params")?;
+            params.distinguished_name = DistinguishedName::new();
+            params.serialize_request(&key_pair)
+        }
+        .context("failed to generate certificate signing request")?;
         debug!("TLS: CSR created");
 
         // Attempt to finalize the order by having the ACME provider sign our certificate
         self.acme_finalize
-            .finalize(&mut order, &csr)
+            .finalize(&mut order, csr.der().as_ref())
             .await
             .context("failed to finalize ACME order")?;
         debug!("TLS: Order finalized");
@@ -249,9 +247,12 @@ impl Provision for Provisioner {
         self.token_owner.set(None).await;
 
         warn!("TLS: Certificate for {name} successfully provisioned");
+
+        let key_pair_pem = key_pair.serialize_pem();
+        key_pair.zeroize();
         Ok(ProvisionResult::Issued(TLSCert(
-            cert_chain_pem,                   // Certificate Chain
-            cert.serialize_private_key_pem(), // Private Key
+            cert_chain_pem, // Certificate Chain
+            key_pair_pem,   // Key pair
         )))
     }
 }

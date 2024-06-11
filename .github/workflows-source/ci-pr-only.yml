@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: true
 env:
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+  CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   ORG: ${{ github.repository_owner }}
 
@@ -120,16 +121,6 @@ jobs:
       - name: No run
         if: steps.filter.outputs.lock-generate == 'false'
         run: echo "No changes in lock-generate, skipping run"
-
-  commit-lint:
-    name: Commit Lint
-    <<: *default-setup
-    steps:
-      - <<: *before-script
-      - <<: *checkout
-      - name: Commit Lint
-        id: commit-lint
-        run: ./gitlab-ci/src/ci-scripts/commit-lint.sh
 
   pre-commit:
     name: Pre Commit Test

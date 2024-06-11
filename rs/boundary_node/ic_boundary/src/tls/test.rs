@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use anyhow::{bail, Error};
 use mockall::predicate;
-use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType, DnValue};
+use rcgen::{CertificateParams, DistinguishedName, DnType, DnValue, KeyPair};
 use tempfile::NamedTempFile;
 
 use crate::tls::{
@@ -23,37 +23,45 @@ fn generate_certificate_chain(
     not_after: (i32, u8, u8),
 ) -> Result<Vec<u8>, Error> {
     // Root
-    let root_cert = Certificate::from_params(CertificateParams::new(vec![
+    let root_key_pair = KeyPair::generate()?;
+    let root_cert = CertificateParams::new(vec![
         "root.example.com".into(), // SAN
-    ]))?;
+    ])?
+    .self_signed(&root_key_pair)?;
 
     // Intermediate
-    let intermediate_cert = Certificate::from_params(CertificateParams::new(vec![
+    let intermediate_key_pair = KeyPair::generate()?;
+    let intermediate_cert = CertificateParams::new(vec![
         "intermediate.example.com".into(), // SAN
-    ]))?;
+    ])?
+    .self_signed(&intermediate_key_pair)?;
 
     // Leaf
-    let leaf_cert = Certificate::from_params({
+    let leaf_key_pair = KeyPair::generate()?;
+    let leaf_cert = {
         let mut params = CertificateParams::new(vec![
             name.into(), // SAN
-        ]);
+        ])?;
 
         // Set common name
         let mut dn = DistinguishedName::new();
-        dn.push(DnType::CommonName, DnValue::PrintableString(name.into()));
+        dn.push(
+            DnType::CommonName,
+            DnValue::PrintableString(name.try_into()?),
+        );
         params.distinguished_name = dn;
 
         // Set validity
         params.not_before = rcgen::date_time_ymd(not_before.0, not_before.1, not_before.2);
         params.not_after = rcgen::date_time_ymd(not_after.0, not_after.1, not_after.2);
 
-        params
-    })?;
+        params.self_signed(&leaf_key_pair)?
+    };
 
     Ok([
-        root_cert.serialize_pem()?.into_bytes(),
-        intermediate_cert.serialize_pem()?.into_bytes(),
-        leaf_cert.serialize_pem()?.into_bytes(),
+        root_cert.pem().into_bytes(),
+        intermediate_cert.pem().into_bytes(),
+        leaf_cert.pem().into_bytes(),
     ]
     .concat())
 }

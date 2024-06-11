@@ -502,15 +502,13 @@ fn canister_state_ingress_induction_cycles_debit() {
     // Check that 'ingress_induction_cycles_debit' is added
     // to consumed cycles.
     assert_eq!(
-        system_state
-            .canister_metrics
-            .consumed_cycles_since_replica_started,
+        system_state.canister_metrics.consumed_cycles,
         ingress_induction_debit.into()
     );
     assert_eq!(
         *system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::IngressInduction)
             .unwrap(),
         ingress_induction_debit.into()
@@ -522,17 +520,13 @@ const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 fn update_balance_and_consumed_cycles_correctly() {
     let mut system_state = CanisterStateFixture::new().canister_state.system_state;
     let initial_consumed_cycles = NominalCycles::from(1000);
-    system_state
-        .canister_metrics
-        .consumed_cycles_since_replica_started = initial_consumed_cycles;
+    system_state.canister_metrics.consumed_cycles = initial_consumed_cycles;
 
     let cycles = Cycles::new(100);
     system_state.add_cycles(cycles, CyclesUseCase::Memory);
     assert_eq!(system_state.balance(), INITIAL_CYCLES + cycles);
     assert_eq!(
-        system_state
-            .canister_metrics
-            .consumed_cycles_since_replica_started,
+        system_state.canister_metrics.consumed_cycles,
         initial_consumed_cycles - NominalCycles::from(cycles)
     );
 }
@@ -552,7 +546,7 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     assert_eq!(
         *system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Memory)
             .unwrap(),
         NominalCycles::from(cycles_to_consume - cycles_to_add)
@@ -618,6 +612,38 @@ fn canister_state_log_visibility_round_trip() {
 
         assert_eq!(initial, round_trip);
     }
+}
+
+#[test]
+fn long_execution_mode_round_trip() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+
+    for initial in LongExecutionMode::iter() {
+        let encoded = pb::LongExecutionMode::from(initial);
+        let round_trip = LongExecutionMode::from(encoded);
+
+        assert_eq!(initial, round_trip);
+    }
+
+    // Backward compatibility check.
+    assert_eq!(
+        LongExecutionMode::from(pb::LongExecutionMode::Unspecified),
+        LongExecutionMode::Opportunistic
+    );
+}
+
+#[test]
+fn long_execution_mode_decoding() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+    fn test(code: i32, decoded: LongExecutionMode) {
+        let encoded = pb::LongExecutionMode::try_from(code).unwrap_or_default();
+        assert_eq!(LongExecutionMode::from(encoded), decoded);
+    }
+    test(-1, LongExecutionMode::Opportunistic);
+    test(0, LongExecutionMode::Opportunistic);
+    test(1, LongExecutionMode::Opportunistic);
+    test(2, LongExecutionMode::Prioritized);
+    test(3, LongExecutionMode::Opportunistic);
 }
 
 #[test]

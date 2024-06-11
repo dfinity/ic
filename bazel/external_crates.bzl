@@ -816,33 +816,27 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "opentelemetry": crate.spec(
-                version = "^0.20.0",
+                version = "^0.23.0",
                 features = [
                     "metrics",
-                ],
-            ),
-            "opentelemetry_0_21_0": crate.spec(
-                package = "opentelemetry",
-                version = "^0.21.0",
-                features = [
                     "trace",
                 ],
             ),
             "opentelemetry-otlp": crate.spec(
-                version = "^0.14.0",
+                version = "^0.16.0",
                 features = [
                     "grpc-tonic",
                 ],
             ),
             "opentelemetry_sdk": crate.spec(
-                version = "^0.21.2",
+                version = "^0.23.0",
                 features = [
                     "trace",
                     "rt-tokio",
                 ],
             ),
             "opentelemetry-prometheus": crate.spec(
-                version = "^0.13.0",
+                version = "^0.16.0",
             ),
             "p256": crate.spec(
                 version = "^0.13.2",
@@ -984,7 +978,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.5.1",
             ),
             "rcgen": crate.spec(
-                version = "^0.12.1",
+                version = "^0.13.1",
                 features = [
                     "zeroize",
                 ],
@@ -1351,6 +1345,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "request-id",
                     "util",
                     "compression-full",
+                    "tracing",
                 ],
             ),
             "tower_governor": crate.spec(
@@ -1375,7 +1370,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.32",
             ),
             "tracing-opentelemetry": crate.spec(
-                version = "^0.22.0",
+                version = "^0.24.0",
             ),
             "tracing-serde": crate.spec(
                 version = "^0.1.3",
@@ -1498,7 +1493,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "zeroize": crate.spec(
-                version = "^1.4.3",
+                version = "^1.8.1",
                 features = [
                     "zeroize_derive",
                 ],

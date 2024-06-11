@@ -8,6 +8,7 @@ use crate::{
     models::{self, Operation},
     transaction_id::TransactionIdentifier,
 };
+pub use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, BlockIndex, Operation as LedgerOperation, Tokens};
 use rosetta_core::convert::principal_id_from_public_key;
@@ -1428,4 +1429,9 @@ impl TransactionBuilder {
 /// Converts an optional PrincipalId to an optional PublicKeyOrPrincipal.
 fn pkp_from_principal(pid: &Option<PrincipalId>) -> Option<PublicKeyOrPrincipal> {
     pid.as_ref().map(|p| PublicKeyOrPrincipal::Principal(*p))
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub struct RosettaStatus {
+    pub rosetta_blocks_mode: RosettaBlocksMode,
 }

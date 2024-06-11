@@ -46,7 +46,6 @@ pub enum SnsRootClientCall {
 #[derive(Debug, PartialEq)]
 pub enum SnsRootClientReply {
     SetDappControllers(SetDappControllersResponse),
-    CanisterCallError(CanisterCallError),
 }
 
 /// SnsRootClient that lets the test spy on the calls made
@@ -66,7 +65,6 @@ impl SnsRootClient for SpySnsRootClient {
             .push(SnsRootClientCall::SetDappControllers(request));
         match self.replies.pop().unwrap() {
             SnsRootClientReply::SetDappControllers(reply) => Ok(reply),
-            SnsRootClientReply::CanisterCallError(error) => Err(error),
         }
     }
 }
@@ -77,16 +75,6 @@ impl SpySnsRootClient {
             observed_calls: vec![],
             replies,
         }
-    }
-
-    pub fn push_reply(&mut self, reply: SnsRootClientReply) {
-        self.replies.push(reply)
-    }
-
-    pub fn pop_observed_call(&mut self) -> SnsRootClientCall {
-        self.observed_calls
-            .pop()
-            .expect("Expected there to be a call on SpySnsRootClient's observed_call stack")
     }
 }
 

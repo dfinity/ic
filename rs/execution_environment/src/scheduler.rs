@@ -52,8 +52,8 @@ mod round_schedule;
 use crate::util::debug_assert_or_critical_error;
 pub use round_schedule::RoundSchedule;
 use round_schedule::*;
-mod tecdsa;
-use tecdsa::*;
+mod threshold_signatures;
+use threshold_signatures::*;
 
 /// Only log potentially spammy messages this often (in rounds). With a block
 /// rate around 1.0, this will result in logging about once every 10 minutes.
@@ -1085,6 +1085,7 @@ impl SchedulerImpl {
     ) {
         let state_time = state.time();
         let mut all_rejects = Vec::new();
+        let mut uninstalled_canisters = Vec::new();
         for canister in state.canisters_iter_mut() {
             // Postpone charging for resources when a canister has a paused execution
             // to avoid modifying the balance of a canister during an unfinished operation.
@@ -1116,6 +1117,7 @@ impl SchedulerImpl {
                     )
                     .is_err()
                 {
+                    uninstalled_canisters.push(canister.canister_id());
                     all_rejects.push(uninstall_canister(
                         &self.log,
                         canister,
@@ -1137,6 +1139,12 @@ impl SchedulerImpl {
                     self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
                 }
             }
+        }
+
+        // Delete any snapshots associated with the canister
+        // that ran out of cycles.
+        for canister_id in uninstalled_canisters {
+            state.canister_snapshots.delete_snapshots(canister_id);
         }
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
@@ -1681,18 +1689,33 @@ impl Scheduler for SchedulerImpl {
             &idkg_subnet_public_keys,
         );
 
-        // Update [`SignWithEcdsaContext`]s by assigning randomness and matching quadruples.
-        update_sign_with_ecdsa_contexts(
-            current_round,
-            idkg_pre_signature_ids,
-            &mut state
+        // Update [`SignatureRequestContext`]s by assigning randomness and matching quadruples.
+        {
+            let contexts = state
                 .metadata
                 .subnet_call_context_manager
-                .sign_with_ecdsa_contexts,
-            &mut csprng,
-            registry_settings,
-            self.metrics.as_ref(),
-        );
+                .sign_with_ecdsa_contexts
+                .values_mut()
+                .map(SignatureRequestContext::Ecdsa)
+                .chain(
+                    state
+                        .metadata
+                        .subnet_call_context_manager
+                        .sign_with_threshold_contexts
+                        .values_mut()
+                        .map(SignatureRequestContext::Generic),
+                )
+                .collect();
+
+            update_signature_request_contexts(
+                current_round,
+                idkg_pre_signature_ids,
+                contexts,
+                &mut csprng,
+                registry_settings,
+                self.metrics.as_ref(),
+            );
+        }
 
         // Finalization.
         {
@@ -2003,7 +2026,7 @@ fn execute_canisters_on_thread(
             total_slices_executed.inc_assign();
             canister = new_canister;
             round_limits.instructions -=
-                as_round_instructions(config.instruction_overhead_per_message);
+                as_round_instructions(config.instruction_overhead_per_execution);
             total_heap_delta += heap_delta;
             if rate_limiting_of_heap_delta == FlagStatus::Enabled {
                 canister.scheduler_state.heap_delta_debit += heap_delta;
@@ -2115,16 +2138,13 @@ fn observe_replicated_state_metrics(
             }
             Some(&ExecutionTask::Heartbeat) | Some(&ExecutionTask::GlobalTimer) | None => {}
         }
-        consumed_cycles_total += canister
-            .system_state
-            .canister_metrics
-            .consumed_cycles_since_replica_started;
+        consumed_cycles_total += canister.system_state.canister_metrics.consumed_cycles;
         join_consumed_cycles_by_use_case(
             &mut consumed_cycles_total_by_use_case,
             canister
                 .system_state
                 .canister_metrics
-                .get_consumed_cycles_since_replica_started_by_use_cases(),
+                .get_consumed_cycles_by_use_cases(),
         );
         let queues = canister.system_state.queues();
         ingress_queue_message_count += queues.ingress_queue_message_count();

@@ -1598,6 +1598,7 @@ pub struct ExecutionTestBuilder {
     log: ReplicaLogger,
     caller_canister_id: Option<CanisterId>,
     ecdsa_signature_fee: Option<Cycles>,
+    schnorr_signature_fee: Option<Cycles>,
     idkg_keys_with_signing_enabled: BTreeMap<MasterPublicKeyId, bool>,
     instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
@@ -1634,6 +1635,7 @@ impl Default for ExecutionTestBuilder {
             log: no_op_logger(),
             caller_canister_id: None,
             ecdsa_signature_fee: None,
+            schnorr_signature_fee: None,
             idkg_keys_with_signing_enabled: Default::default(),
             instruction_limit: scheduler_config.max_instructions_per_message,
             slice_instruction_limit: scheduler_config.max_instructions_per_slice,
@@ -1706,6 +1708,13 @@ impl ExecutionTestBuilder {
     pub fn with_ecdsa_signature_fee(self, ecdsa_signing_fee: u128) -> Self {
         Self {
             ecdsa_signature_fee: Some(Cycles::new(ecdsa_signing_fee)),
+            ..self
+        }
+    }
+
+    pub fn with_schnorr_signature_fee(self, schnorr_signature_fee: u128) -> Self {
+        Self {
+            schnorr_signature_fee: Some(Cycles::new(schnorr_signature_fee)),
             ..self
         }
     }
@@ -2061,6 +2070,9 @@ impl ExecutionTestBuilder {
         let mut config = SubnetConfig::new(self.subnet_type).cycles_account_manager_config;
         if let Some(ecdsa_signature_fee) = self.ecdsa_signature_fee {
             config.ecdsa_signature_fee = ecdsa_signature_fee;
+        }
+        if let Some(schnorr_signature_fee) = self.schnorr_signature_fee {
+            config.schnorr_signature_fee = schnorr_signature_fee;
         }
         for (key_id, is_signing_enabled) in &self.idkg_keys_with_signing_enabled {
             // Populate hte chain key settings

@@ -149,8 +149,8 @@ pub struct CanisterMetrics {
     pub skipped_round_due_to_no_messages: u64,
     pub executed: u64,
     pub interrupted_during_execution: u64,
-    pub consumed_cycles_since_replica_started: NominalCycles,
-    consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+    pub consumed_cycles: NominalCycles,
+    consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
 }
 
 impl CanisterMetrics {
@@ -159,23 +159,21 @@ impl CanisterMetrics {
         skipped_round_due_to_no_messages: u64,
         executed: u64,
         interrupted_during_execution: u64,
-        consumed_cycles_since_replica_started: NominalCycles,
-        consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+        consumed_cycles: NominalCycles,
+        consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     ) -> Self {
         Self {
             scheduled_as_first,
             skipped_round_due_to_no_messages,
             executed,
             interrupted_during_execution,
-            consumed_cycles_since_replica_started,
-            consumed_cycles_since_replica_started_by_use_cases,
+            consumed_cycles,
+            consumed_cycles_by_use_cases,
         }
     }
 
-    pub fn get_consumed_cycles_since_replica_started_by_use_cases(
-        &self,
-    ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
-        &self.consumed_cycles_since_replica_started_by_use_cases
+    pub fn get_consumed_cycles_by_use_cases(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
+        &self.consumed_cycles_by_use_cases
     }
 }
 
@@ -1320,7 +1318,7 @@ impl SystemState {
     }
 
     /// Increments 'cycles_balance' and in case of refund for consumed cycles
-    /// decrements the metric `consumed_cycles_since_replica_started`.
+    /// decrements the metric `consumed_cycles`.
     pub fn add_cycles(&mut self, amount: Cycles, use_case: CyclesUseCase) {
         self.cycles_balance += amount;
         self.observe_consumed_cycles_with_use_case(amount, use_case, ConsumingCycles::No);
@@ -1401,9 +1399,8 @@ impl SystemState {
             return;
         }
 
-        let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> = &mut self
-            .canister_metrics
-            .consumed_cycles_since_replica_started_by_use_cases;
+        let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> =
+            &mut self.canister_metrics.consumed_cycles_by_use_cases;
 
         let use_case_consumption = metric
             .entry(use_case)
@@ -1414,11 +1411,11 @@ impl SystemState {
         match consuming_cycles {
             ConsumingCycles::Yes => {
                 *use_case_consumption += nominal_amount;
-                self.canister_metrics.consumed_cycles_since_replica_started += nominal_amount;
+                self.canister_metrics.consumed_cycles += nominal_amount;
             }
             ConsumingCycles::No => {
                 *use_case_consumption -= nominal_amount;
-                self.canister_metrics.consumed_cycles_since_replica_started -= nominal_amount;
+                self.canister_metrics.consumed_cycles -= nominal_amount;
             }
         }
     }

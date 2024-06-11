@@ -97,9 +97,18 @@ pub fn verify_sig_share(
     share: &ThresholdSchnorrSigShare,
 ) -> Result<(), ThresholdSchnorrVerifySigShareError> {
     let presig = IDkgTranscriptInternal::try_from(inputs.presig_transcript().blinder_unmasked())
-        .map_err(|e| ThresholdSchnorrVerifySigShareError::SerializationError(e.0))?;
-    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript())
-        .map_err(|e| ThresholdSchnorrVerifySigShareError::SerializationError(e.0))?;
+        .map_err(|e| {
+            ThresholdSchnorrVerifySigShareError::SerializationError(format!(
+                "failed to deserialize presignature transcript: {}",
+                e.0
+            ))
+        })?;
+    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript()).map_err(|e| {
+        ThresholdSchnorrVerifySigShareError::SerializationError(format!(
+            "failed to deserialize key transcript: {}",
+            e.0
+        ))
+    })?;
 
     let signer_index = inputs.key_transcript().index_for_signer_id(signer).ok_or(
         ThresholdSchnorrVerifySigShareError::InvalidArgumentMissingSignerInTranscript {
@@ -135,10 +144,15 @@ pub fn verify_sig_share(
             })
         }
         AlgorithmId::ThresholdEd25519 => {
-            let internal_share =
-                ThresholdEd25519SignatureShareInternal::deserialize(&share.sig_share_raw).map_err(
-                    |e| ThresholdSchnorrVerifySigShareError::SerializationError(format!("{e:?}")),
-                )?;
+            let internal_share = ThresholdEd25519SignatureShareInternal::deserialize(
+                &share.sig_share_raw,
+            )
+            .map_err(|e| {
+                ThresholdSchnorrVerifySigShareError::SerializationError(format!(
+                    "failed to deserialize internal ed25519 signature share: {}",
+                    e.0
+                ))
+            })?;
 
             verify_ed25519_signature_share(
                 &internal_share,
@@ -173,9 +187,18 @@ pub fn combine_sig_shares(
     ensure_sufficient_sig_shares_collected(inputs, shares)?;
 
     let presig = IDkgTranscriptInternal::try_from(inputs.presig_transcript().blinder_unmasked())
-        .map_err(|e| ThresholdSchnorrCombineSigSharesError::SerializationError(e.0))?;
-    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript())
-        .map_err(|e| ThresholdSchnorrCombineSigSharesError::SerializationError(e.0))?;
+        .map_err(|e| {
+            ThresholdSchnorrCombineSigSharesError::SerializationError(format!(
+                "failed to deserialize presignature transcript : {}",
+                e.0
+            ))
+        })?;
+    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript()).map_err(|e| {
+        ThresholdSchnorrCombineSigSharesError::SerializationError(format!(
+            "failed to deserialize key transcript: {}",
+            e.0
+        ))
+    })?;
 
     match inputs.algorithm_id() {
         AlgorithmId::ThresholdSchnorrBip340 => {
@@ -208,9 +231,12 @@ pub fn combine_sig_shares(
             })?;
 
             Ok(ThresholdSchnorrCombinedSignature {
-                signature: internal_combined_sig
-                    .serialize()
-                    .map_err(|e| ThresholdSchnorrCombineSigSharesError::SerializationError(e.0))?,
+                signature: internal_combined_sig.serialize().map_err(|e| {
+                    ThresholdSchnorrCombineSigSharesError::SerializationError(format!(
+                        "failed to serialize combined BIP340 signature: {}",
+                        e.0
+                    ))
+                })?,
             })
         }
         AlgorithmId::ThresholdEd25519 => {
@@ -313,7 +339,10 @@ fn internal_ed25519_sig_shares_by_index_from_sig_shares(
                 &share.sig_share_raw,
             )
             .map_err(|e| {
-                ThresholdSchnorrCombineSigSharesError::SerializationError(format!("{:?}", e))
+                ThresholdSchnorrCombineSigSharesError::SerializationError(format!(
+                    "failed to deserialize internal ed25519 share: {}",
+                    e.0
+                ))
             })?;
             Ok((index, internal_share))
         })
@@ -324,17 +353,32 @@ pub fn verify_combined_sig(
     inputs: &ThresholdSchnorrSigInputs,
     signature: &ThresholdSchnorrCombinedSignature,
 ) -> Result<(), ThresholdSchnorrVerifyCombinedSigError> {
-    let blinder_unmasked =
-        IDkgTranscriptInternal::try_from(inputs.presig_transcript().blinder_unmasked())
-            .map_err(|e| ThresholdSchnorrVerifyCombinedSigError::SerializationError(e.0))?;
-    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript())
-        .map_err(|e| ThresholdSchnorrVerifyCombinedSigError::SerializationError(e.0))?;
+    let blinder_unmasked = IDkgTranscriptInternal::try_from(
+        inputs.presig_transcript().blinder_unmasked(),
+    )
+    .map_err(|e| {
+        ThresholdSchnorrVerifyCombinedSigError::SerializationError(format!(
+            "failed to deserialize presignature transcript: {}",
+            e.0
+        ))
+    })?;
+    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript()).map_err(|e| {
+        ThresholdSchnorrVerifyCombinedSigError::SerializationError(format!(
+            "failed to deserialize key transcript : {}",
+            e.0
+        ))
+    })?;
 
     match inputs.algorithm_id() {
         AlgorithmId::ThresholdSchnorrBip340 => {
             let signature =
                 ThresholdBip340CombinedSignatureInternal::deserialize(&signature.signature)
-                    .map_err(|e| ThresholdSchnorrVerifyCombinedSigError::SerializationError(e.0))?;
+                    .map_err(|e| {
+                        ThresholdSchnorrVerifyCombinedSigError::SerializationError(format!(
+                            "failed to deserialize combined BIP340 signature: {}",
+                            e.0
+                        ))
+                    })?;
             verify_threshold_bip340_signature(
                 &signature,
                 &DerivationPath::from(inputs.derivation_path()),
@@ -356,7 +400,12 @@ pub fn verify_combined_sig(
         AlgorithmId::ThresholdEd25519 => {
             let signature =
                 ThresholdEd25519CombinedSignatureInternal::deserialize(&signature.signature)
-                    .map_err(|e| ThresholdSchnorrVerifyCombinedSigError::SerializationError(e.0))?;
+                    .map_err(|e| {
+                        ThresholdSchnorrVerifyCombinedSigError::SerializationError(format!(
+                            "failed to deserialize combined ed25519 signature: {}",
+                            e.0
+                        ))
+                    })?;
             verify_threshold_ed25519_signature(
                 &signature,
                 &DerivationPath::from(inputs.derivation_path()),
