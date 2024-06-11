@@ -193,6 +193,8 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/replica/                                            @dfinity-lab/teams/networking-team
 /rs/replica_tests/                                      @dfinity-lab/teams/execution-owners
 /rs/replicated_state/                                   @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
+/rs/replicated_state/src/canister_state/queues.rs       @dfinity-lab/teams/message-routing-owners
+/rs/replicated_state/src/canister_state/queues          @dfinity-lab/teams/message-routing-owners
 /rs/replicated_state/src/page_map.rs                    @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/runtime-owners
 /rs/replicated_state/src/page_map/                      @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/runtime-owners
 /rs/rosetta-api/                                        @dfinity-lab/teams/financial-integrations
