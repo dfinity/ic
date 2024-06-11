@@ -85,7 +85,7 @@ anchors:
   bazel-clean: &bazel-clean
     name: Bazel Clean
     if: always()
-    run: bazel clean --expunge
+    run: bazel clean
   before-script: &before-script
     name: Before script
     if: always()
