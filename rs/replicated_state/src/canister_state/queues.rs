@@ -1213,7 +1213,7 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
                     output_queue: Some(oq.into()),
                 })
                 .collect(),
-            pool: if item.pool.len() > 0 {
+            pool: if item.pool != MessagePool::default() {
                 Some((&item.pool).into())
             } else {
                 None

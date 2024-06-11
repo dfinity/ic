@@ -897,6 +897,32 @@ fn encode_empty() {
     assert_eq!(expected, serialized.as_slice());
 }
 
+/// Tests that serializing a `CanisterQueues` with an empty but non-default pool
+/// preserves the non-default pool.
+#[test]
+fn encode_non_default_pool() {
+    let mut queues = CanisterQueues::default();
+
+    let this = canister_test_id(13);
+    queues
+        .push_input(
+            RequestBuilder::default().sender(this).build().into(),
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
+    queues
+        .pop_canister_input(InputQueueType::RemoteSubnet)
+        .unwrap();
+    // Sanity check that the pool is empty but not equal to the default.
+    assert_eq!(0, queues.pool.len());
+    assert_ne!(MessagePool::default(), queues.pool);
+
+    // And a roundtrip encode preserves the `CanisterQueues` unaltered.
+    let encoded: pb_queues::CanisterQueues = (&queues).into();
+    let decoded = encoded.try_into().unwrap();
+    assert_eq!(queues, decoded);
+}
+
 fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, requests: &Vec<Request>) {
     for req in requests {
         queues.push_input(req.clone().into(), input_type).unwrap()
