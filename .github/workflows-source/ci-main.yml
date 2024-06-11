@@ -40,6 +40,7 @@ anchors:
   dind-small-setup: &dind-small-setup
     runs-on:
       labels: dind-runner-small
+      group: ln1
     container:
       <<: *image
     timeout-minutes: 30
@@ -47,6 +48,7 @@ anchors:
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-runner-large
+      group: ln1
     container:
       <<: *image
     timeout-minutes: 60
@@ -54,6 +56,7 @@ anchors:
   bazel-large-setup: &bazel-large-setup
     runs-on:
       labels: bazel-runner-large
+      group: ln1
     container:
       <<: *image
     timeout-minutes: 90
@@ -61,6 +64,7 @@ anchors:
   bazel-small-setup: &bazel-small-setup
     runs-on:
       labels: bazel-runner-small
+      group: ln1
     container:
       <<: *image
     timeout-minutes: 45
