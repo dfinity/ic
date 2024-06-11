@@ -81,7 +81,7 @@ fi
 
 echo "ssh-add -L:"
 ssh-add -L
-ssh dev@zh1-pyr07.zh1.dfinity.network echo it works
+ssh -oStrictHostKeyChecking=no dev@zh1-pyr07.zh1.dfinity.network echo it works
 
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
