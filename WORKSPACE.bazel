@@ -928,4 +928,5 @@ http_file(
 )
 
 load("//rs/tests:kubeconfig.bzl", "kubeconfig")
+
 kubeconfig()
