@@ -1,0 +1,8 @@
+[package]
+name = "nft_exporter"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+nftables = "0.4.1"
