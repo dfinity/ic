@@ -49,6 +49,19 @@ jobs:
           git config --global http.postBuffer 524288000
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
+          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
+          if [ -e /__w/cache ]; then
+            sudo chown -R 1001:1001 /__w/cache
+            sudo ln -s /__w/cache /
+          fi
+          if [ -e /__w/var/tmp ]; then
+            sudo chown -R 1001:1001 /__w/var/tmp
+            sudo ln -s /__w/var/tmp /var/tmp
+          fi
+          if [ -e /__w/var/sysimage ]; then
+            sudo chown -R 1001:1001 /__w/var/sysimage
+            sudo ln -s /__w/var/sysimage /var/sysimage
+          fi
       - name: Checkout
         uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
         if: ${{ github.event_name == 'pull_request' }}
@@ -106,6 +119,19 @@ jobs:
           git config --global http.postBuffer 524288000
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
+          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
+          if [ -e /__w/cache ]; then
+            sudo chown -R 1001:1001 /__w/cache
+            sudo ln -s /__w/cache /
+          fi
+          if [ -e /__w/var/tmp ]; then
+            sudo chown -R 1001:1001 /__w/var/tmp
+            sudo ln -s /__w/var/tmp /var/tmp
+          fi
+          if [ -e /__w/var/sysimage ]; then
+            sudo chown -R 1001:1001 /__w/var/sysimage
+            sudo ln -s /__w/var/sysimage /var/sysimage
+          fi
       - name: Checkout
         uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
         if: ${{ github.event_name == 'pull_request' }}
@@ -149,6 +175,19 @@ jobs:
           git config --global http.postBuffer 524288000
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
+          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
+          if [ -e /__w/cache ]; then
+            sudo chown -R 1001:1001 /__w/cache
+            sudo ln -s /__w/cache /
+          fi
+          if [ -e /__w/var/tmp ]; then
+            sudo chown -R 1001:1001 /__w/var/tmp
+            sudo ln -s /__w/var/tmp /var/tmp
+          fi
+          if [ -e /__w/var/sysimage ]; then
+            sudo chown -R 1001:1001 /__w/var/sysimage
+            sudo ln -s /__w/var/sysimage /var/sysimage
+          fi
       - name: Checkout
         uses: actions/checkout@v4
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
@@ -208,6 +247,19 @@ jobs:
           git config --global http.postBuffer 524288000
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
+          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
+          if [ -e /__w/cache ]; then
+            sudo chown -R 1001:1001 /__w/cache
+            sudo ln -s /__w/cache /
+          fi
+          if [ -e /__w/var/tmp ]; then
+            sudo chown -R 1001:1001 /__w/var/tmp
+            sudo ln -s /__w/var/tmp /var/tmp
+          fi
+          if [ -e /__w/var/sysimage ]; then
+            sudo chown -R 1001:1001 /__w/var/sysimage
+            sudo ln -s /__w/var/sysimage /var/sysimage
+          fi
       - name: Checkout
         uses: actions/checkout@v4
       - name: Run Bazel Build Fuzzers
@@ -238,6 +290,19 @@ jobs:
           git config --global http.postBuffer 524288000
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
+          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
+          if [ -e /__w/cache ]; then
+            sudo chown -R 1001:1001 /__w/cache
+            sudo ln -s /__w/cache /
+          fi
+          if [ -e /__w/var/tmp ]; then
+            sudo chown -R 1001:1001 /__w/var/tmp
+            sudo ln -s /__w/var/tmp /var/tmp
+          fi
+          if [ -e /__w/var/sysimage ]; then
+            sudo chown -R 1001:1001 /__w/var/sysimage
+            sudo ln -s /__w/var/sysimage /var/sysimage
+          fi
       - name: Checkout
         uses: actions/checkout@v4
       - name: Run Bazel Build Fuzzers AFL
@@ -265,6 +330,19 @@ jobs:
           git config --global http.postBuffer 524288000
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
+          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
+          if [ -e /__w/cache ]; then
+            sudo chown -R 1001:1001 /__w/cache
+            sudo ln -s /__w/cache /
+          fi
+          if [ -e /__w/var/tmp ]; then
+            sudo chown -R 1001:1001 /__w/var/tmp
+            sudo ln -s /__w/var/tmp /var/tmp
+          fi
+          if [ -e /__w/var/sysimage ]; then
+            sudo chown -R 1001:1001 /__w/var/sysimage
+            sudo ln -s /__w/var/sysimage /var/sysimage
+          fi
       - name: Checkout
         uses: actions/checkout@v4
       - name: Set up Python
@@ -299,6 +377,19 @@ jobs:
           git config --global http.postBuffer 524288000
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
+          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
+          if [ -e /__w/cache ]; then
+            sudo chown -R 1001:1001 /__w/cache
+            sudo ln -s /__w/cache /
+          fi
+          if [ -e /__w/var/tmp ]; then
+            sudo chown -R 1001:1001 /__w/var/tmp
+            sudo ln -s /__w/var/tmp /var/tmp
+          fi
+          if [ -e /__w/var/sysimage ]; then
+            sudo chown -R 1001:1001 /__w/var/sysimage
+            sudo ln -s /__w/var/sysimage /var/sysimage
+          fi
       - name: Checkout
         uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
         if: ${{ github.event_name == 'pull_request' }}
@@ -375,6 +466,19 @@ jobs:
           git config --global http.postBuffer 524288000
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
+          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
+          if [ -e /__w/cache ]; then
+            sudo chown -R 1001:1001 /__w/cache
+            sudo ln -s /__w/cache /
+          fi
+          if [ -e /__w/var/tmp ]; then
+            sudo chown -R 1001:1001 /__w/var/tmp
+            sudo ln -s /__w/var/tmp /var/tmp
+          fi
+          if [ -e /__w/var/sysimage ]; then
+            sudo chown -R 1001:1001 /__w/var/sysimage
+            sudo ln -s /__w/var/sysimage /var/sysimage
+          fi
       - name: Checkout
         uses: actions/checkout@v4
       - name: Download bazel-targets [bazel-test-all]
@@ -414,6 +518,19 @@ jobs:
           git config --global http.postBuffer 524288000
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
+          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
+          if [ -e /__w/cache ]; then
+            sudo chown -R 1001:1001 /__w/cache
+            sudo ln -s /__w/cache /
+          fi
+          if [ -e /__w/var/tmp ]; then
+            sudo chown -R 1001:1001 /__w/var/tmp
+            sudo ln -s /__w/var/tmp /var/tmp
+          fi
+          if [ -e /__w/var/sysimage ]; then
+            sudo chown -R 1001:1001 /__w/var/sysimage
+            sudo ln -s /__w/var/sysimage /var/sysimage
+          fi
       - name: Checkout
         uses: actions/checkout@v4
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
@@ -452,6 +569,19 @@ jobs:
           git config --global http.postBuffer 524288000
           git config --global safe.directory '*'
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
+          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
+          if [ -e /__w/cache ]; then
+            sudo chown -R 1001:1001 /__w/cache
+            sudo ln -s /__w/cache /
+          fi
+          if [ -e /__w/var/tmp ]; then
+            sudo chown -R 1001:1001 /__w/var/tmp
+            sudo ln -s /__w/var/tmp /var/tmp
+          fi
+          if [ -e /__w/var/sysimage ]; then
+            sudo chown -R 1001:1001 /__w/var/sysimage
+            sudo ln -s /__w/var/sysimage /var/sysimage
+          fi
       - name: Checkout
         uses: actions/checkout@v4
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
