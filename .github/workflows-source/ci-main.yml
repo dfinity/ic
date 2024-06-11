@@ -80,6 +80,19 @@ anchors:
       git config --global http.postBuffer 524288000
       git config --global safe.directory '*'
       if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
+      if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
+      if [ -e /__w/cache ]; then
+        sudo chown -R 1001:1001 /__w/cache
+        sudo ln -s /__w/cache /
+      fi
+      if [ -e /__w/var/tmp ]; then
+        sudo chown -R 1001:1001 /__w/var/tmp
+        sudo ln -s /__w/var/tmp /var/tmp
+      fi
+      if [ -e /__w/var/sysimage ]; then
+        sudo chown -R 1001:1001 /__w/var/sysimage
+        sudo ln -s /__w/var/sysimage /var/sysimage
+      fi
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
