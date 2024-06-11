@@ -32,7 +32,7 @@ gzip_compress = rule(
     implementation = _gzip_compress,
     attrs = {
         "srcs": attr.label_list(allow_files = True),
-        "_pigz": attr.label(allow_single_file = True, default = "//vendored/pigz:pigz""),
+        "_pigz": attr.label(allow_single_file = True, default = "//vendored/pigz:pigz"),
     },
 )
 
