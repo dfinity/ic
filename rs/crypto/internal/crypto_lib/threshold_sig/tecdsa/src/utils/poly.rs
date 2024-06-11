@@ -310,12 +310,21 @@ impl CommitmentOpening {
     }
 
     pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
-        serde_cbor::to_vec(self).map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
+        serde_cbor::to_vec(self).map_err(|e| {
+            CanisterThresholdSerializationError(format!(
+                "failed to serialize CommitmentOpening: {}",
+                e
+            ))
+        })
     }
 
     pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
-        serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
+        serde_cbor::from_slice::<Self>(bytes).map_err(|e| {
+            CanisterThresholdSerializationError(format!(
+                "failed to deserialize CommitmentOpening: {}",
+                e
+            ))
+        })
     }
 }
 

@@ -198,7 +198,7 @@ fn scalar_deserializaion_errors_if_byte_length_invalid() {
             assert_eq!(
                 EccScalar::deserialize(curve, &bytes[..]),
                 Err(CanisterThresholdSerializationError(
-                    "Unexpected length".to_string()
+                    "failed to deserialize EccScalar: unexpected length".to_string()
                 ))
             );
         }
@@ -212,7 +212,7 @@ fn scalar_deserializaion_errors_is_over_the_order() {
         assert_eq!(
             EccScalar::deserialize(curve, &bytes[..]),
             Err(CanisterThresholdSerializationError(
-                "Invalid scalar encoding".to_string()
+                "failed to deserialize EccScalar: invalid encoding".to_string()
             ))
         );
     }
