@@ -3443,6 +3443,75 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
 }
 
 #[test]
+fn can_handle_state_sync_and_commit_race_condition() {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+
+        src_state_manager.commit_and_certify(state.clone(), height(1), CertificationScope::Full);
+
+        let (_height, state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+
+        let hash = wait_for_checkpoint(&*src_state_manager, height(2));
+
+        let id = StateSyncArtifactId {
+            height: height(2),
+            hash: hash.get(),
+        };
+
+        let msg = src_state_sync
+            .get(&id)
+            .expect("failed to get state sync messages");
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+            let (tip_height, state) = dst_state_manager.take_tip();
+            assert_eq!(tip_height, height(0));
+            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+
+            // the state sync is started before the state manager has the state at height 2.
+            let mut chunkable =
+                set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
+
+            // Start the state sync when the state manager is below height 2.
+            // Omit one chunk and corrupt some files in the state sync scratchpad before adding the final chunk.
+            let omit: HashSet<ChunkId> =
+                maplit::hashset! {ChunkId::new(FILE_GROUP_CHUNK_ID_OFFSET)};
+            let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit, false);
+            assert_matches!(completion, Ok(false), "Unexpectedly completed state sync");
+
+            let (_height, state) = dst_state_manager.take_tip();
+            dst_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+            dst_state_manager.flush_tip_channel();
+
+            // Continue to perform the state sync after the state manager reaches height 2.
+            // It should be OK to load the checkpoint again from the state sync thread and try to remove the marker twice.
+            pipe_state_sync(msg, chunkable);
+
+
+            assert_eq!(
+                dst_state_manager.checkpoint_heights(),
+                vec![height(1), height(2)]
+            );
+
+            let (_height, state) = dst_state_manager.take_tip();
+            dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+
+            let (tip_height, _state) = dst_state_manager.take_tip();
+            assert_eq!(tip_height, height(3));
+            assert_eq!(dst_state_manager.latest_state_height(), height(3));
+            // state 1 should be removable
+            dst_state_manager.flush_tip_channel();
+            dst_state_manager.remove_states_below(height(3));
+            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
+            assert_error_counters(dst_metrics);
+        })
+    })
+}
+
+#[test]
 fn can_commit_below_state_sync() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
