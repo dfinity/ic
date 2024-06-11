@@ -381,7 +381,8 @@ impl TryFrom<(OutputQueue, &mut MessagePool)> for CanisterQueue {
             let id = match msg {
                 RequestOrResponse::Request(req) => {
                     let enqueuing_time = if req.deadline == NO_DEADLINE {
-                        // Safe to unwrap because of output queue invariants.
+                        // Safe to unwrap because `OutputQueue` ensures that every request is covered by
+                        // a deadline range.
                         while deadline_range_end.unwrap().1 <= i + oq.begin {
                             deadline_range_end = deadline_range_ends.next();
                         }

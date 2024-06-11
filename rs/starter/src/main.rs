@@ -604,7 +604,9 @@ impl ValidatedConfig {
         let mut artifact_pool_cfg =
             ArtifactPoolTomlConfig::new(self.artifact_pool_dir.clone(), None);
         // artifact_pool.rs picks "lmdb" if None here
-        artifact_pool_cfg.consensus_pool_backend = self.consensus_pool_backend.clone();
+        artifact_pool_cfg
+            .consensus_pool_backend
+            .clone_from(&self.consensus_pool_backend);
         let artifact_pool = Some(artifact_pool_cfg);
 
         let crypto = Some(CryptoConfig::new(self.crypto_root.clone()));

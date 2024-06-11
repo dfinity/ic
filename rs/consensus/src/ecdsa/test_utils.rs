@@ -1781,6 +1781,7 @@ pub(crate) fn generate_key_transcript(
 pub(crate) trait EcdsaPayloadTestHelper {
     fn peek_next_transcript_id(&self) -> IDkgTranscriptId;
 
+    #[allow(dead_code)]
     fn peek_next_pre_signature_id(&self) -> PreSigId;
 
     fn generate_current_key(

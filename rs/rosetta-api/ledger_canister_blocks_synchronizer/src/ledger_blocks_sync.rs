@@ -40,14 +40,6 @@ pub trait LedgerBlocksSynchronizerMetrics {
     fn set_verified_height(&self, height: u64);
 }
 
-struct NopMetrics {}
-
-impl LedgerBlocksSynchronizerMetrics for NopMetrics {
-    fn set_target_height(&self, _height: u64) {}
-    fn set_synced_height(&self, _height: u64) {}
-    fn set_verified_height(&self, _height: u64) {}
-}
-
 /// Downloads the blocks of the Ledger to either an in-memory store or to
 /// a local sqlite store
 pub struct LedgerBlocksSynchronizer<B>
@@ -442,7 +434,15 @@ mod test {
     use crate::blocks_access::BlocksAccess;
     use crate::ledger_blocks_sync::LedgerBlocksSynchronizer;
 
-    use super::NopMetrics;
+    use super::LedgerBlocksSynchronizerMetrics;
+
+    struct NopMetrics {}
+
+    impl LedgerBlocksSynchronizerMetrics for NopMetrics {
+        fn set_target_height(&self, _height: u64) {}
+        fn set_synced_height(&self, _height: u64) {}
+        fn set_verified_height(&self, _height: u64) {}
+    }
 
     struct RangeOfBlocks {
         pub blocks: Vec<EncodedBlock>,

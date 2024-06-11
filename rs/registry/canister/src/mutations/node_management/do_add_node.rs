@@ -685,7 +685,7 @@ mod tests {
         // Use payloads with the same IPs
         let (payload_1, _) = prepare_add_node_payload(1);
         let (mut payload_2, _) = prepare_add_node_payload(2);
-        payload_2.http_endpoint = payload_1.http_endpoint.clone();
+        payload_2.http_endpoint.clone_from(&payload_1.http_endpoint);
         assert_eq!(payload_1.http_endpoint, payload_2.http_endpoint);
         // Act: Add two nodes with the same IPs
         let node_id_1: NodeId = registry
@@ -751,7 +751,7 @@ mod tests {
 
         // create two node payloads with the same IPv4 config
         let (mut payload_1, _) = prepare_add_node_payload(1);
-        payload_1.public_ipv4_config = ipv4_config.clone();
+        payload_1.public_ipv4_config.clone_from(&ipv4_config);
 
         let (mut payload_2, _) = prepare_add_node_payload(2);
         payload_2.public_ipv4_config = ipv4_config;

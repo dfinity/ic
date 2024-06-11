@@ -84,9 +84,9 @@ impl FromStr for SignedTransaction {
         .map_err(|err| format!("{:?}", err))
     }
 }
-impl ToString for SignedTransaction {
-    fn to_string(&self) -> String {
-        hex::encode(serde_cbor::to_vec(self).unwrap())
+impl std::fmt::Display for SignedTransaction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(serde_cbor::to_vec(self).unwrap()))
     }
 }
 /// A vector of update/read-state calls for different ingress windows
@@ -290,9 +290,9 @@ pub struct UnsignedTransaction {
     pub ingress_expiries: Vec<u64>,
 }
 
-impl ToString for UnsignedTransaction {
-    fn to_string(&self) -> String {
-        hex::encode(serde_cbor::to_vec(self).unwrap())
+impl std::fmt::Display for UnsignedTransaction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(serde_cbor::to_vec(self).unwrap()))
     }
 }
 

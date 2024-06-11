@@ -449,7 +449,7 @@ fn canister_queue_try_from_output_queue() {
     // Make an extra response reservation.
     output_queue.reserve_slot().unwrap();
 
-    // Expected `MessagePool` and `CanisterQueue`. The timed out request is not preserved.
+    // Expected `MessagePool` and `CanisterQueue`.
     let mut expected_pool = MessagePool::default();
     let mut expected_queue = CanisterQueue::new(10);
     expected_queue.try_reserve_response_slot().unwrap();

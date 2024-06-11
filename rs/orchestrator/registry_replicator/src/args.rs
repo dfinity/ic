@@ -67,7 +67,10 @@ impl RegistryReplicatorArgs {
         config.logger.dc_id = self.dc_id;
         config.registration.nns_pub_key_pem = Some(self.nns_pub_key_pem.clone());
         config.registration.nns_url = Some(self.nns_url.clone());
-        config.registry_client.local_store = self.local_store_path.clone();
+        config
+            .registry_client
+            .local_store
+            .clone_from(&self.local_store_path);
         config.nns_registry_replicator.poll_delay_duration_ms = self.poll_delay_duration_ms;
 
         (config, _dir)

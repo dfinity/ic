@@ -1380,7 +1380,7 @@ impl CanisterManager {
     ) -> Result<CanisterId, CanisterManagerError> {
         let new_canister_id = CanisterId::unchecked_from_principal(specified_id);
 
-        if state.canister_states.get(&new_canister_id).is_some() {
+        if state.canister_states.contains_key(&new_canister_id) {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_canister_id));
         }
 
@@ -2069,7 +2069,9 @@ impl CanisterManager {
         };
 
         system_state.wasm_chunk_store = snapshot.chunk_store().clone();
-        system_state.certified_data = snapshot.certified_data().clone();
+        system_state
+            .certified_data
+            .clone_from(snapshot.certified_data());
 
         let mut new_canister =
             CanisterState::new(system_state, new_execution_state, scheduler_state);
