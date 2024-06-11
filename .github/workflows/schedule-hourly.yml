@@ -25,6 +25,7 @@ jobs:
     name: Bazel Build All No Cache
     runs-on:
       labels: bazel-runner-large
+      group: ln1
     container:
       image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
     timeout-minutes: 120
@@ -62,6 +63,7 @@ jobs:
     name: Bazel System Tests Hourly
     runs-on:
       labels: bazel-runner-large
+      group: ln1
     container:
       image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
     timeout-minutes: 120
@@ -94,6 +96,7 @@ jobs:
     name: Bazel Test Coverage
     runs-on:
       labels: bazel-runner-large
+      group: ln1
     container:
       image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
     timeout-minutes: 120
