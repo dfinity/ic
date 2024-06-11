@@ -36,7 +36,7 @@ use tower_http::cors::{CorsLayer, Vary};
 pub const CONTENT_TYPE_CBOR: &str = "application/cbor";
 pub const CONTENT_TYPE_PROTOBUF: &str = "application/x-protobuf";
 pub const CONTENT_TYPE_SVG: &str = "image/svg+xml";
-pub const CONTENT_TYPE_TEXT: &str = "text/plain";
+pub const CONTENT_TYPE_TEXT: &str = "text/plain; charset=utf-8";
 
 pub(crate) fn get_root_threshold_public_key(
     log: &ReplicaLogger,

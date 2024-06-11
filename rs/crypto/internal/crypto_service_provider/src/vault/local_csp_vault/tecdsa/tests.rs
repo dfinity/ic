@@ -450,7 +450,7 @@ mod ecdsa_sign_share {
             assert_matches!(
                 parameters.ecdsa_sign_share(&vault),
                 Err(ThresholdEcdsaSignShareError::SerializationError { internal_error })
-                if internal_error == "CanisterThresholdSerializationError(\"Invalid scalar encoding\")"
+                if internal_error == "CanisterThresholdSerializationError(\"failed to deserialize EccScalar: invalid encoding\")"
             );
         }
     }

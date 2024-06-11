@@ -15,7 +15,7 @@ use crate::{
         ERROR_TYPE_WRITE, REQUEST_TYPE_PUSH, REQUEST_TYPE_RPC,
     },
     utils::{read_response, write_request},
-    ConnId,
+    ConnId, MessagePriority,
 };
 
 #[derive(Clone, Debug)]
@@ -73,6 +73,13 @@ impl ConnectionHandle {
             err
         })?;
 
+        let priority = request
+            .extensions()
+            .get::<MessagePriority>()
+            .copied()
+            .unwrap_or_default();
+        let _ = send_stream.set_priority(priority.into());
+
         write_request(&mut send_stream, request)
             .await
             .map_err(|err| {
@@ -126,6 +133,13 @@ impl ConnectionHandle {
                 .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_OPEN]);
             err
         })?;
+
+        let priority = request
+            .extensions()
+            .get::<MessagePriority>()
+            .copied()
+            .unwrap_or_default();
+        let _ = send_stream.set_priority(priority.into());
 
         write_request(&mut send_stream, request)
             .await

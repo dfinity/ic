@@ -52,7 +52,6 @@ pub struct SchedulerState {
     /// During the long execution, the Canister is temporarily credited with priority
     /// to slightly boost the long execution priority. Only when the long execution
     /// is done, then the `accumulated_priority` is decreased by the `priority_credit`.
-    /// TODO(RUN-305): store priority credit and long execution mode across checkpoints
     pub priority_credit: AccumulatedPriority,
 
     /// Long execution mode: Opportunistic (default) or Prioritized

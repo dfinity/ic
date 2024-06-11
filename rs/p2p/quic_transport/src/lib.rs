@@ -226,6 +226,22 @@ pub trait Transport: Send + Sync {
 pub struct ConnIdTag {}
 pub type ConnId = AmountOf<ConnIdTag, u64>;
 
+#[derive(Copy, Clone, Default)]
+pub enum MessagePriority {
+    High,
+    #[default]
+    Low,
+}
+
+impl From<MessagePriority> for i32 {
+    fn from(mp: MessagePriority) -> i32 {
+        match mp {
+            MessagePriority::High => 1,
+            MessagePriority::Low => 0,
+        }
+    }
+}
+
 /// This is a workaround for being able to initiate quic transport
 /// with both a real and virtual udp socket. This is needed due
 /// to an inconsistency with the quinn API. This is fixed upstream
