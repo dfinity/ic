@@ -4913,6 +4913,7 @@ fn can_reset_stable_memory() {
 #[test]
 fn can_reset_wasm_chunk_store() {
     state_manager_test(|metrics, state_manager| {
+        use ic_replicated_state::canister_state::system_state::wasm_chunk_store::DEFAULT_MAX_SIZE;
         let (_height, mut state) = state_manager.take_tip();
 
         // One canister with some data.
@@ -4947,8 +4948,9 @@ fn can_reset_wasm_chunk_store() {
 
         // Wipe data and write different data.
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
-        // Chunk size does not matter for this test, as we interact with the `PageMap` directly.
-        canister_state.system_state.wasm_chunk_store = WasmChunkStore::new_for_testing(42.into());
+        // Chunk size must be default because we cannot deserialize the value properly.
+        canister_state.system_state.wasm_chunk_store =
+            WasmChunkStore::new_for_testing(DEFAULT_MAX_SIZE);
         canister_state
             .system_state
             .wasm_chunk_store
@@ -5009,7 +5011,8 @@ fn can_reset_wasm_chunk_store() {
         );
 
         // Wipe data completely.
-        canister_state.system_state.wasm_chunk_store = WasmChunkStore::new_for_testing(42.into());
+        canister_state.system_state.wasm_chunk_store =
+            WasmChunkStore::new_for_testing(DEFAULT_MAX_SIZE);
 
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
 
