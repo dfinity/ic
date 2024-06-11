@@ -20,7 +20,7 @@ use ic_registry_keys::{
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::RoutingTable;
-use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::ReplicaVersion;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -59,16 +59,16 @@ pub fn get_subnet_holding_ecdsa_keys(
         ..Default::default()
     }
     .into();
-    record.ecdsa_config = Some(
-        EcdsaConfig {
-            quadruples_to_create_in_advance: 1,
-            key_ids: ecdsa_key_ids.to_vec(),
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        }
-        .into(),
-    );
+
+    let ecdsa_config = EcdsaConfig {
+        quadruples_to_create_in_advance: 1,
+        key_ids: ecdsa_key_ids.to_vec(),
+        max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+        signature_request_timeout_ns: None,
+        idkg_key_rotation_period_ms: None,
+    };
+    record.chain_key_config = Some(ChainKeyConfig::from(ecdsa_config.clone()).into());
+    record.ecdsa_config = Some(ecdsa_config.into());
 
     record
 }

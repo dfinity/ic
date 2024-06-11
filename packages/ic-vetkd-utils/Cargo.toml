@@ -13,8 +13,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 zeroize = { version = "1", features = ["zeroize_derive"] }
-rand = "0.8"
-rand_chacha = "0.3"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 lazy_static = "1.4"
 ic_bls12_381 = { version = "0.8.0", default-features = false, features = ["pairings", "alloc", "experimental", "zeroize"] }
 sha2 = "0.9"

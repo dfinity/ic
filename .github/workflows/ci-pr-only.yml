@@ -10,26 +10,32 @@ concurrency:
   cancel-in-progress: true
 env:
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
-  ORG: ${{ vars.ORG }}
+  CI_PIPELINE_SOURCE: ${{ github.event_name }}
+  CI_PROJECT_DIR: ${{ github.workspace }}
+  ORG: ${{ github.repository_owner }}
 jobs:
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
     runs-on:
-      labels: bazel-runner-small
+      labels: dind-runner-large
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
-    if: ${{ vars.RUN_CI == 'true' }}
+      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
     timeout-minutes: 60
+    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Before script
         if: always()
         id: before-script
         shell: bash
         run: |
+          git config --global http.postBuffer 524288000
+          git config --global safe.directory '*'
+          if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
         uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        name: Filter Relevant Files
         id: filter
         with:
           filters: |
@@ -54,9 +60,9 @@ jobs:
   lock-generate:
     name: Lock Generate
     runs-on:
-      labels: bazel-runner-small
+      labels: dind-runner-small
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
+      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -65,10 +71,14 @@ jobs:
         id: before-script
         shell: bash
         run: |
+          git config --global http.postBuffer 524288000
+          git config --global safe.directory '*'
+          if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
         uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        name: Filter Relevant Files
         id: filter
         with:
           filters: |
@@ -88,32 +98,12 @@ jobs:
       - name: No run
         if: steps.filter.outputs.lock-generate == 'false'
         run: echo "No changes in lock-generate, skipping run"
-  commit-lint:
-    name: Commit Lint
-    runs-on:
-      labels: default-runner
-    container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
-    timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}
-    steps:
-      - name: Before script
-        if: always()
-        id: before-script
-        shell: bash
-        run: |
-          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Commit Lint
-        id: commit-lint
-        run: ./gitlab-ci/src/ci-scripts/commit-lint.sh
   pre-commit:
     name: Pre Commit Test
     runs-on:
-      labels: bazel-runner-small
+      labels: dind-runner-small
     container:
-      image: ghcr.io/dfinity-sandbox/ic-build@sha256:994f76fcc90400ec9f8be3d540bd529ff1b3768b7f7f6963887022c57ec1ab24
+      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -122,6 +112,9 @@ jobs:
         id: before-script
         shell: bash
         run: |
+          git config --global http.postBuffer 524288000
+          git config --global safe.directory '*'
+          if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
         uses: actions/checkout@v4
@@ -131,3 +124,23 @@ jobs:
         id: pre-commit
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/pre-commit.sh
+  # Todo: remove when migration complete
+  change-base-branch:
+    name: Change Base Branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.10'
+      - name: Run script
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python $CI_PROJECT_DIR/.github/scripts/change-base-branch.py
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.IDX_PUSH_TO_PR }}

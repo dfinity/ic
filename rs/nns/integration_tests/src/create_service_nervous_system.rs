@@ -50,7 +50,7 @@ const ONE_TRILLION: u128 = 1_000_000_000_000;
 fn test_several_proposals() {
     // Step 1: Prepare the world.
 
-    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests().build();
 
     // Step 1.1: Boot up NNS.
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -81,7 +81,7 @@ fn test_several_proposals() {
 
     // Step 2.1: Make a proposal. Leave it open so that the next proposal is
     // foiled.
-    let response_1 = make_proposal(&mut state_machine, /* sns_number = */ 1);
+    let response_1 = make_proposal(&state_machine, /* sns_number = */ 1);
     let response_1 = match response_1.command {
         Some(manage_neuron_response::Command::MakeProposal(response_3)) => response_3,
         _ => panic!("First proposal failed to be submitted: {:#?}", response_1),
@@ -98,7 +98,7 @@ fn test_several_proposals() {
 
     // Step 2.2: Make another proposal. This one should be foiled, because the
     // first proposal is still open.
-    let response_2 = make_proposal(&mut state_machine, 666);
+    let response_2 = make_proposal(&state_machine, 666);
     match response_2.command {
         Some(manage_neuron_response::Command::Error(err)) => {
             assert_eq!(
@@ -113,13 +113,13 @@ fn test_several_proposals() {
     }
 
     // Step 2.3: This unblocks more proposals from being made.
-    execute_proposal(&mut state_machine, ProposalId { id: proposal_id_1 });
+    execute_proposal(&state_machine, ProposalId { id: proposal_id_1 });
 
     // Step 2.4: Wait for proposal_1 to finish executing.
-    nns_wait_for_proposal_execution(&mut state_machine, proposal_id_1);
+    nns_wait_for_proposal_execution(&state_machine, proposal_id_1);
 
     // Step 2.5: Finally, make a third proposal. This should now be allowed.
-    let response_3 = make_proposal(&mut state_machine, 3);
+    let response_3 = make_proposal(&state_machine, 3);
     let response_3 = match response_3.command {
         Some(manage_neuron_response::Command::MakeProposal(response_3)) => response_3,
         _ => panic!("First proposal failed to be submitted: {:#?}", response_3),
@@ -139,7 +139,7 @@ fn test_several_proposals() {
     // Step 3.1: Inspect proposals.
 
     // There should only be two proposals of type CreateServiceNervousSystem.
-    let final_proposals = nns_list_proposals(&mut state_machine)
+    let final_proposals = nns_list_proposals(&state_machine)
         .proposal_info
         .into_iter()
         .filter_map(
@@ -177,12 +177,12 @@ fn test_several_proposals() {
 
     // Step 3.2: Inspect SNS(s).
 
-    let snses = list_deployed_snses(&mut state_machine).instances;
+    let snses = list_deployed_snses(&state_machine).instances;
     assert_eq!(snses.len(), 1, "{:#?}", snses);
 }
 
 /// Makes a CreateServiceNervousSystem proposal using test neuron 2.
-fn make_proposal(state_machine: &mut StateMachine, sns_number: u64) -> ManageNeuronResponse {
+fn make_proposal(state_machine: &StateMachine, sns_number: u64) -> ManageNeuronResponse {
     let neuron_id = nns_common_pb::NeuronId {
         id: TEST_NEURON_2_ID,
     };
@@ -204,7 +204,7 @@ fn make_proposal(state_machine: &mut StateMachine, sns_number: u64) -> ManageNeu
 
 /// Makes test neuron 1 vote for the proposal. This should cause it to be
 /// adopted and executed.
-fn execute_proposal(state_machine: &mut StateMachine, proposal_id: ProposalId) {
+fn execute_proposal(state_machine: &StateMachine, proposal_id: ProposalId) {
     state_machine
         .execute_ingress_as(
             *TEST_NEURON_1_OWNER_PRINCIPAL,

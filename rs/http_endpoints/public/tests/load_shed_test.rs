@@ -3,7 +3,7 @@ pub mod common;
 use crate::common::{
     default_certified_state_reader, default_get_latest_state, default_latest_certified_height,
     default_read_certified_state, get_free_localhost_socket_addr,
-    test_agent::{self, wait_for_status_healthy},
+    test_agent::{self, wait_for_status_healthy, IngressMessage},
     HttpEndpointBuilder,
 };
 use async_trait::async_trait;
@@ -36,7 +36,7 @@ fn test_load_shedding_query() {
         ..Default::default()
     };
 
-    let (_, _, mut query_handler) = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let query_exec_running = Arc::new(Notify::new());
     let load_shedder_returned = Arc::new(Notify::new());
@@ -57,7 +57,7 @@ fn test_load_shedding_query() {
 
     // Mock query exec service
     rt.spawn(async move {
-        let (_, resp) = query_handler.next_request().await.unwrap();
+        let (_, resp) = handlers.query_execution.next_request().await.unwrap();
         query_exec_running.notify_one();
         load_shedder_returned.notified().await;
 
@@ -331,8 +331,7 @@ fn test_load_shedding_update_call() {
         ..Default::default()
     };
 
-    let (mut ingress_filter, _ingress_rx, _) =
-        HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let ingress_filter_running = Arc::new(Notify::new());
     let load_shedder_returned = Arc::new(Notify::new());
@@ -344,14 +343,14 @@ fn test_load_shedding_update_call() {
 
     let load_shedded_request_handle = rt.spawn(async move {
         ingress_filter_running_clone.notified().await;
-        let response = call_agent.call_default_canister(addr).await;
+        let response = call_agent.call(addr, IngressMessage::default()).await;
         load_shedder_returned_clone.notify_one();
         response
     });
 
     // Mock ingress filter
     rt.spawn(async move {
-        let (_, resp) = ingress_filter.next_request().await.unwrap();
+        let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
         ingress_filter_running.notify_one();
         load_shedder_returned.notified().await;
         resp.send_response(Ok(()))
@@ -359,7 +358,7 @@ fn test_load_shedding_update_call() {
 
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
-        let response = call_agent.call_default_canister(addr).await;
+        let response = call_agent.call(addr, IngressMessage::default()).await;
         assert_eq!(
             response.status(),
             StatusCode::ACCEPTED,

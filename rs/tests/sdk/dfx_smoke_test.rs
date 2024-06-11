@@ -89,11 +89,9 @@ fn test(env: TestEnv) {
 
     dfx.ping();
 
-    dfx.new_project("hello", FrontendType::None, BackendType::Motoko);
+    dfx.new_project("hello", FrontendType::SimpleAssets, BackendType::Motoko);
 
     let project_dir = fs::canonicalize(env.base_path()).unwrap().join("hello");
-
-    project::add_frontend_canister(&log, &project_dir, "hello");
 
     let dfx = dfx.with_working_dir(&project_dir);
 

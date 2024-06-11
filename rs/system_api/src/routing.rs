@@ -7,10 +7,12 @@ use ic_error_types::UserError;
 use ic_management_canister_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
     BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs,
-    ComputeInitialEcdsaDealingsArgs, ComputeInitialIDkgDealingsArgs, ECDSAPublicKeyArgs,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, MasterPublicKeyId, Method as Ic00Method,
-    NodeMetricsHistoryArgs, Payload, ProvisionalTopUpCanisterArgs, SignWithECDSAArgs,
-    StoredChunksArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
+    ComputeInitialEcdsaDealingsArgs, ComputeInitialIDkgDealingsArgs, DeleteCanisterSnapshotArgs,
+    ECDSAPublicKeyArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
+    Payload, ProvisionalTopUpCanisterArgs, SchnorrPublicKeyArgs, SignWithECDSAArgs,
+    SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_replicated_state::NetworkTopology;
 
@@ -31,6 +33,19 @@ impl From<UserError> for ResolveDestinationError {
     fn from(err: UserError) -> Self {
         ResolveDestinationError::UserError(err)
     }
+}
+
+/// Finds out the destination subnet based on the canister ID.
+fn route_canister_id(
+    canister_id: CanisterId,
+    method: Ic00Method,
+    network_topology: &NetworkTopology,
+) -> Result<PrincipalId, ResolveDestinationError> {
+    network_topology
+        .routing_table
+        .route(canister_id.get())
+        .map(|subnet_id| subnet_id.get())
+        .ok_or(ResolveDestinationError::SubnetNotFound(canister_id, method))
 }
 
 /// Inspect the method name and payload of a request to ic:00 to figure out to
@@ -62,37 +77,23 @@ pub(super) fn resolve_destination(
             let args = UpdateSettingsArgs::decode(payload)?;
             let canister_id = args.get_canister_id();
 
-            network_topology
-                .routing_table
-                .route(canister_id.get())
-                .map(|subnet_id| subnet_id.get())
-                .ok_or({
-                    ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::UpdateSettings)
-                })
+            route_canister_id(canister_id, Ic00Method::UpdateSettings, network_topology)
         }
         Ok(Ic00Method::InstallCode) => {
             // Find the destination canister from the payload.
             let args = InstallCodeArgsV2::decode(payload)?;
             let canister_id = args.get_canister_id();
-            network_topology
-                .routing_table
-                .route(canister_id.get())
-                .map(|subnet_id| subnet_id.get())
-                .ok_or({
-                    ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::InstallCode)
-                })
+            route_canister_id(canister_id, Ic00Method::InstallCode, network_topology)
         }
         Ok(Ic00Method::InstallChunkedCode) => {
             // Find the destination canister from the payload.
             let args = InstallChunkedCodeArgs::decode(payload)?;
             let canister_id = args.target_canister_id();
-            network_topology
-                .routing_table
-                .route(canister_id.get())
-                .map(|subnet_id| subnet_id.get())
-                .ok_or({
-                    ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::InstallCode)
-                })
+            route_canister_id(
+                canister_id,
+                Ic00Method::InstallChunkedCode,
+                network_topology,
+            )
         }
         Ok(Ic00Method::CanisterStatus)
         | Ok(Ic00Method::StartCanister)
@@ -101,49 +102,26 @@ pub(super) fn resolve_destination(
         | Ok(Ic00Method::DepositCycles) => {
             let args = CanisterIdRecord::decode(payload)?;
             let canister_id = args.get_canister_id();
-            network_topology
-                .routing_table
-                .route(canister_id.get())
-                .map(|subnet_id| subnet_id.get())
-                .ok_or_else(|| {
-                    ResolveDestinationError::SubnetNotFound(canister_id, method.unwrap())
-                })
+            route_canister_id(canister_id, Ic00Method::DepositCycles, network_topology)
         }
         Ok(Ic00Method::CanisterInfo) => {
             let args = CanisterInfoRequest::decode(payload)?;
             let canister_id = args.canister_id();
-            network_topology
-                .routing_table
-                .route(canister_id.get())
-                .map(|subnet_id| subnet_id.get())
-                .ok_or_else(|| {
-                    ResolveDestinationError::SubnetNotFound(canister_id, method.unwrap())
-                })
+            route_canister_id(canister_id, Ic00Method::CanisterInfo, network_topology)
         }
         Ok(Ic00Method::UninstallCode) => {
             let args = UninstallCodeArgs::decode(payload)?;
             let canister_id = args.get_canister_id();
-            network_topology
-                .routing_table
-                .route(canister_id.get())
-                .map(|subnet_id| subnet_id.get())
-                .ok_or_else(|| {
-                    ResolveDestinationError::SubnetNotFound(canister_id, method.unwrap())
-                })
+            route_canister_id(canister_id, Ic00Method::UninstallCode, network_topology)
         }
         Ok(Ic00Method::ProvisionalTopUpCanister) => {
             let args = ProvisionalTopUpCanisterArgs::decode(payload)?;
             let canister_id = args.get_canister_id();
-            network_topology
-                .routing_table
-                .route(canister_id.get())
-                .map(|subnet_id| subnet_id.get())
-                .ok_or({
-                    ResolveDestinationError::SubnetNotFound(
-                        canister_id,
-                        Ic00Method::ProvisionalTopUpCanister,
-                    )
-                })
+            route_canister_id(
+                canister_id,
+                Ic00Method::ProvisionalTopUpCanister,
+                network_topology,
+            )
         }
         Ok(Ic00Method::BitcoinGetBalance) => {
             let args = BitcoinGetBalanceArgs::decode(payload)?;
@@ -226,54 +204,78 @@ pub(super) fn resolve_destination(
                 IDkgSubnetKind::OnlyHoldsKey,
             )
         }
+        Ok(Ic00Method::SchnorrPublicKey) => {
+            let args = SchnorrPublicKeyArgs::decode(payload)?;
+            route_idkg_message(
+                &MasterPublicKeyId::Schnorr(args.key_id),
+                network_topology,
+                &None,
+                IDkgSubnetKind::OnlyHoldsKey,
+            )
+        }
+        Ok(Ic00Method::SignWithSchnorr) => {
+            let args = SignWithSchnorrArgs::decode(payload)?;
+            route_idkg_message(
+                &MasterPublicKeyId::Schnorr(args.key_id),
+                network_topology,
+                &None,
+                IDkgSubnetKind::HoldsAndSignWithKey,
+            )
+        }
         Ok(Ic00Method::UploadChunk) => {
             let args = UploadChunkArgs::decode(payload)?;
             let canister_id = args.get_canister_id();
-            network_topology
-                .routing_table
-                .route(canister_id.get())
-                .map(|subnet_id| subnet_id.get())
-                .ok_or({
-                    ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::UploadChunk)
-                })
+            route_canister_id(canister_id, Ic00Method::UploadChunk, network_topology)
         }
         Ok(Ic00Method::ClearChunkStore) => {
             let args = ClearChunkStoreArgs::decode(payload)?;
             let canister_id = args.get_canister_id();
-            network_topology
-                .routing_table
-                .route(canister_id.get())
-                .map(|subnet_id| subnet_id.get())
-                .ok_or({
-                    ResolveDestinationError::SubnetNotFound(
-                        canister_id,
-                        Ic00Method::ClearChunkStore,
-                    )
-                })
+            route_canister_id(canister_id, Ic00Method::ClearChunkStore, network_topology)
         }
         Ok(Ic00Method::StoredChunks) => {
             let args = StoredChunksArgs::decode(payload)?;
             let canister_id = args.get_canister_id();
-            network_topology
-                .routing_table
-                .route(canister_id.get())
-                .map(|subnet_id| subnet_id.get())
-                .ok_or({
-                    ResolveDestinationError::SubnetNotFound(canister_id, Ic00Method::StoredChunks)
-                })
+            route_canister_id(canister_id, Ic00Method::StoredChunks, network_topology)
         }
         Ok(Ic00Method::DeleteChunks) => Err(ResolveDestinationError::UserError(UserError::new(
             ic_error_types::ErrorCode::CanisterRejectedMessage,
             "Delete chunks API is not yet implemented",
         ))),
-        Ok(Ic00Method::TakeCanisterSnapshot)
-        | Ok(Ic00Method::LoadCanisterSnapshot)
-        | Ok(Ic00Method::ListCanisterSnapshots)
-        | Ok(Ic00Method::DeleteCanisterSnapshot) => {
-            Err(ResolveDestinationError::UserError(UserError::new(
-                ic_error_types::ErrorCode::CanisterRejectedMessage,
-                "Snapshotting API is not yet implemented",
-            )))
+        Ok(Ic00Method::TakeCanisterSnapshot) => {
+            let args = TakeCanisterSnapshotArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            route_canister_id(
+                canister_id,
+                Ic00Method::TakeCanisterSnapshot,
+                network_topology,
+            )
+        }
+        Ok(Ic00Method::LoadCanisterSnapshot) => {
+            let args = LoadCanisterSnapshotArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            route_canister_id(
+                canister_id,
+                Ic00Method::LoadCanisterSnapshot,
+                network_topology,
+            )
+        }
+        Ok(Ic00Method::ListCanisterSnapshots) => {
+            let args = ListCanisterSnapshotArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            route_canister_id(
+                canister_id,
+                Ic00Method::ListCanisterSnapshots,
+                network_topology,
+            )
+        }
+        Ok(Ic00Method::DeleteCanisterSnapshot) => {
+            let args = DeleteCanisterSnapshotArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            route_canister_id(
+                canister_id,
+                Ic00Method::DeleteCanisterSnapshot,
+                network_topology,
+            )
         }
         Err(_) => Err(ResolveDestinationError::MethodNotFound(
             method_name.to_string(),
@@ -525,7 +527,7 @@ mod tests {
         Encode!(&args).unwrap()
     }
 
-    fn public_key_req(key_id: EcdsaKeyId) -> Vec<u8> {
+    fn ecdsa_public_key_req(key_id: EcdsaKeyId) -> Vec<u8> {
         let args = ECDSAPublicKeyArgs {
             canister_id: Some(canister_test_id(1)),
             derivation_path: DerivationPath::new(vec![ByteBuf::from(vec![0; 10])]),
@@ -560,7 +562,11 @@ mod tests {
             .unwrap_err(),
             ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
                 err,
-                format!("Requested unknown iDGK key ecdsa:{} on subnet {}, subnet has keys: []", ecdsa_key_id1(), subnet_test_id(2))
+                format!(
+                    "Requested unknown iDGK key {} on subnet {}, subnet has keys: []",
+                    MasterPublicKeyId::Ecdsa(ecdsa_key_id1()),
+                    subnet_test_id(2),
+                )
             )
         )
     }
@@ -577,7 +583,11 @@ mod tests {
             .unwrap_err(),
             ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
                 err,
-                format!("Requested iDKG key ecdsa:{} from unknown subnet {}", ecdsa_key_id1(), subnet_test_id(3))
+                format!(
+                    "Requested iDKG key {} from unknown subnet {}",
+                    MasterPublicKeyId::Ecdsa(ecdsa_key_id1()),
+                    subnet_test_id(3),
+                )
             )
         )
     }
@@ -595,8 +605,9 @@ mod tests {
                 .unwrap_err(),
                 ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
                     err,
-                    format!("Requested unknown iDGK key ecdsa:{} on subnet {}, subnet has keys: []",
-                        ecdsa_key_id1(),
+                    format!(
+                        "Requested unknown iDGK key {} on subnet {}, subnet has keys: []",
+                        MasterPublicKeyId::Ecdsa(ecdsa_key_id1()),
                         subnet_test_id(2),
                 )
             )
@@ -606,19 +617,20 @@ mod tests {
     #[test]
     fn resolve_compute_initial_ecdsa_dealings_subnet_not_found_error() {
         assert_matches!(
-                resolve_destination(
-                    &network_with_ecdsa_subnets(),
-                    &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
-                    // Subnet 3 doesn't exist
-                    &compute_initial_ecdsa_dealings_req(ecdsa_key_id1(), subnet_test_id(3)),
-                    subnet_test_id(2),
-                )
-                .unwrap_err(),
-                ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
-                    err,
-                    format!("Requested iDKG key ecdsa:{} from unknown subnet {}",
-                        ecdsa_key_id1(),
-                        subnet_test_id(3),
+            resolve_destination(
+                &network_with_ecdsa_subnets(),
+                &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
+                // Subnet 3 doesn't exist
+                &compute_initial_ecdsa_dealings_req(ecdsa_key_id1(), subnet_test_id(3)),
+                subnet_test_id(2),
+            )
+            .unwrap_err(),
+            ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
+                err,
+                format!(
+                    "Requested iDKG key {} from unknown subnet {}",
+                    MasterPublicKeyId::Ecdsa(ecdsa_key_id1()),
+                    subnet_test_id(3),
                 )
             )
         )
@@ -649,7 +661,10 @@ mod tests {
         .unwrap_err(),
         ResolveDestinationError::IDkgKeyError(err) => assert_eq!(
                 err,
-                format!("Requested unknown iDKG key: ecdsa:{}, existing keys with signing enabled: []", ecdsa_key_id1())
+                format!(
+                    "Requested unknown iDKG key: {}, existing keys with signing enabled: []",
+                    MasterPublicKeyId::Ecdsa(ecdsa_key_id1()),
+                )
             )
         )
     }
@@ -660,7 +675,7 @@ mod tests {
             resolve_destination(
                 &network_with_ecdsa_subnets(),
                 &Ic00Method::ECDSAPublicKey.to_string(),
-                &public_key_req(ecdsa_key_id2()),
+                &ecdsa_public_key_req(ecdsa_key_id2()),
                 subnet_test_id(1),
             )
             .unwrap(),

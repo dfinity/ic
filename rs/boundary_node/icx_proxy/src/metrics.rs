@@ -23,11 +23,11 @@ use hyper::{self, StatusCode};
 use ic_agent::Agent;
 use ic_response_verification::types::VerificationInfo;
 use opentelemetry::{
-    metrics::{Counter, Histogram, Meter, MeterProvider as _},
-    sdk::metrics::{new_view, Aggregation, Instrument, MeterProvider, Stream},
+    metrics::{Counter, Histogram, Meter, MeterProvider},
     KeyValue,
 };
 use opentelemetry_prometheus::exporter;
+use opentelemetry_sdk::metrics::{new_view, Aggregation, Instrument, MeterProviderBuilder, Stream};
 
 use prometheus::{Encoder as PrometheusEncoder, Registry, TextEncoder};
 
@@ -162,7 +162,7 @@ pub fn setup(opts: MetricsOpts) -> (Meter, Runner) {
     .unwrap();
 
     let exporter = exporter().with_registry(registry.clone()).build().unwrap();
-    let provider = MeterProvider::builder()
+    let provider = MeterProviderBuilder::default()
         .with_reader(exporter)
         .with_view(view_req_size)
         .with_view(view_resp_size)
@@ -196,10 +196,13 @@ impl Runner {
             }))),
         );
 
-        axum_server::bind(self.metrics_addr.unwrap())
-            .serve(add_trace_layer(metrics_router).into_make_service())
-            .await
-            .context("failed to start metrics server")?;
+        let listener = tokio::net::TcpListener::bind(self.metrics_addr.unwrap()).await?;
+        axum::serve(
+            listener,
+            add_trace_layer(metrics_router).into_make_service(),
+        )
+        .await
+        .context("failed to start metrics server")?;
 
         Ok(())
     }

@@ -1,10 +1,11 @@
 use super::super::message_pool::tests::*;
+use super::super::message_pool::Class;
 use super::*;
 use assert_matches::assert_matches;
 use ic_test_utilities_types::arbitrary;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
-use ic_types::messages::{CallbackId, RequestOrResponse};
+use ic_types::messages::{CallbackId, RequestOrResponse, NO_DEADLINE};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::Time;
 use proptest::prelude::*;
@@ -22,11 +23,7 @@ fn canister_queue_constructor_test() {
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(0, queue.reserved_slots());
     assert_matches!(
-        queue.check_has_reserved_response_slot(Class::BestEffort),
-        Err(StateError::InvariantBroken(_))
-    );
-    assert_matches!(
-        queue.check_has_reserved_response_slot(Class::GuaranteedResponse),
+        queue.check_has_reserved_response_slot(),
         Err(StateError::InvariantBroken(_))
     );
     assert_eq!(queue.peek(), None);
@@ -52,14 +49,13 @@ fn canister_queue_push_request_succeeds() {
     assert_eq!(CAPACITY, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
     assert_matches!(
-        queue.check_has_reserved_response_slot(Class::BestEffort),
+        queue.check_has_reserved_response_slot(),
         Err(StateError::InvariantBroken(_))
     );
-    assert_eq!(0, queue.response_memory_reservations());
 
     // Peek, then pop the request.
-    assert_eq!(Some(&MessageReference::Request(id)), queue.peek());
-    assert_eq!(Some(MessageReference::Request(id)), queue.pop());
+    assert_eq!(Some(&CanisterQueueItem::Reference(id)), queue.peek());
+    assert_eq!(Some(CanisterQueueItem::Reference(id)), queue.pop());
 
     assert_eq!(0, queue.len());
     assert!(!queue.has_used_slots());
@@ -68,10 +64,9 @@ fn canister_queue_push_request_succeeds() {
     assert_eq!(CAPACITY, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
     assert_matches!(
-        queue.check_has_reserved_response_slot(Class::BestEffort),
+        queue.check_has_reserved_response_slot(),
         Err(StateError::InvariantBroken(_))
     );
-    assert_eq!(0, queue.response_memory_reservations());
 }
 
 // Reserving a slot, then pushing a response succeeds if there is space.
@@ -83,9 +78,7 @@ fn canister_queue_push_response_succeeds() {
     let mut queue = CanisterQueue::new(CAPACITY);
 
     // Reserve a slot.
-    queue
-        .try_reserve_response_slot(&make_request(13, GuaranteedResponse))
-        .unwrap();
+    queue.try_reserve_response_slot().unwrap();
 
     assert_eq!(0, queue.len());
     assert!(queue.has_used_slots());
@@ -93,11 +86,7 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(CAPACITY - 1, queue.available_response_slots());
     assert_eq!(1, queue.reserved_slots());
-    assert_eq!(
-        Ok(()),
-        queue.check_has_reserved_response_slot(GuaranteedResponse)
-    );
-    assert_eq!(1, queue.response_memory_reservations());
+    assert_eq!(Ok(()), queue.check_has_reserved_response_slot());
 
     // Push response into reseerved slot.
     let id = new_response_message_id(13, GuaranteedResponse);
@@ -110,14 +99,13 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(CAPACITY - 1, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
     assert_matches!(
-        queue.check_has_reserved_response_slot(BestEffort),
+        queue.check_has_reserved_response_slot(),
         Err(StateError::InvariantBroken(_))
     );
-    assert_eq!(0, queue.response_memory_reservations());
 
     // Peek, then pop the response reference.
-    assert_eq!(Some(&MessageReference::Response(id)), queue.peek());
-    assert_eq!(Some(MessageReference::Response(id)), queue.pop());
+    assert_eq!(Some(&CanisterQueueItem::Reference(id)), queue.peek());
+    assert_eq!(Some(CanisterQueueItem::Reference(id)), queue.pop());
 
     assert_eq!(0, queue.len());
     assert!(!queue.has_used_slots());
@@ -126,10 +114,9 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(CAPACITY, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
     assert_matches!(
-        queue.check_has_reserved_response_slot(BestEffort),
+        queue.check_has_reserved_response_slot(),
         Err(StateError::InvariantBroken(_))
     );
-    assert_eq!(0, queue.response_memory_reservations());
 }
 
 /// Test that overfilling an output queue with requests results in failed
@@ -154,10 +141,9 @@ fn canister_queue_push_request_to_full_queue_fails() {
     assert_eq!(CAPACITY, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
     assert_matches!(
-        queue.check_has_reserved_response_slot(Class::BestEffort),
+        queue.check_has_reserved_response_slot(),
         Err(StateError::InvariantBroken(_))
     );
-    assert_eq!(0, queue.response_memory_reservations());
 
     queue.push_request(new_request_message_id(13, Class::BestEffort));
 }
@@ -173,15 +159,8 @@ fn canister_queue_try_reserve_response_slot_in_full_queue_fails() {
     let mut queue = CanisterQueue::new(CAPACITY);
 
     // Reserve all response slots.
-    for i in 0..CAPACITY {
-        let class = if i % 2 == 0 {
-            BestEffort
-        } else {
-            GuaranteedResponse
-        };
-        queue
-            .try_reserve_response_slot(&make_request(i as u64, class))
-            .unwrap();
+    for _ in 0..CAPACITY {
+        queue.try_reserve_response_slot().unwrap();
     }
 
     assert_eq!(0, queue.len());
@@ -190,13 +169,12 @@ fn canister_queue_try_reserve_response_slot_in_full_queue_fails() {
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(0, queue.available_response_slots());
     assert_eq!(CAPACITY, queue.reserved_slots());
-    assert_eq!(Ok(()), queue.check_has_reserved_response_slot(BestEffort));
-    assert_eq!(CAPACITY / 2, queue.response_memory_reservations());
+    assert_eq!(Ok(()), queue.check_has_reserved_response_slot());
 
     // Trying to reserve a slot fails.
     assert_eq!(
         Err(StateError::QueueFull { capacity: CAPACITY }),
-        queue.try_reserve_response_slot(&make_request(13, BestEffort))
+        queue.try_reserve_response_slot()
     );
 
     // Fill the queue with responses.
@@ -216,15 +194,14 @@ fn canister_queue_try_reserve_response_slot_in_full_queue_fails() {
     assert_eq!(0, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
     assert_matches!(
-        queue.check_has_reserved_response_slot(BestEffort),
+        queue.check_has_reserved_response_slot(),
         Err(StateError::InvariantBroken(_))
     );
-    assert_eq!(0, queue.response_memory_reservations());
 
     // Trying to reserve a slot still fails.
     assert_eq!(
         Err(StateError::QueueFull { capacity: CAPACITY }),
-        queue.try_reserve_response_slot(&make_request(13, BestEffort))
+        queue.try_reserve_response_slot()
     );
 }
 
@@ -237,9 +214,7 @@ fn canister_queue_full_duplex() {
     let mut queue = CanisterQueue::new(CAPACITY);
     for i in 0..CAPACITY as u64 {
         queue.push_request(new_request_message_id(i * 2, Class::BestEffort));
-        queue
-            .try_reserve_response_slot(&make_request(i, Class::BestEffort))
-            .unwrap();
+        queue.try_reserve_response_slot().unwrap();
         queue.push_response(new_response_message_id(i * 2 + 1, Class::BestEffort));
     }
 
@@ -253,7 +228,7 @@ fn canister_queue_full_duplex() {
     assert_eq!(0, queue.available_response_slots());
     assert_eq!(
         Err(StateError::QueueFull { capacity: CAPACITY }),
-        queue.try_reserve_response_slot(&make_request(13, Class::BestEffort)),
+        queue.try_reserve_response_slot(),
     );
 }
 
@@ -264,39 +239,13 @@ fn canister_queue_push_without_reserved_slot_panics() {
     queue.push_response(new_response_message_id(13, Class::BestEffort));
 }
 
-#[test]
-#[should_panic(expected = "InvariantBroken(\"No guaranteed response memory reservation\")")]
-fn canister_queue_push_without_memory_reservation_panics() {
-    let mut queue = CanisterQueue::new(10);
-    // Reserve a best-effort slot.
-    queue
-        .try_reserve_response_slot(&make_request(1, Class::BestEffort))
-        .unwrap();
-    // Push a guaranteed response.
-    queue.push_response(new_response_message_id(13, Class::GuaranteedResponse));
-}
-
-#[test]
-#[should_panic(
-    expected = "assertion failed: self.response_memory_reservations <= self.reserved_slots()"
-)]
-fn canister_queue_push_without_consuming_memory_reservation_panics() {
-    let mut queue = CanisterQueue::new(10);
-    // Reserve a guaranteed response slot.
-    queue
-        .try_reserve_response_slot(&make_request(1, Class::GuaranteedResponse))
-        .unwrap();
-    // Push a best-effort response.
-    queue.push_response(new_response_message_id(13, Class::BestEffort));
-}
-
 /// Generator for an arbitrary `MessageReference`.
-fn arbitrary_message_reference() -> impl Strategy<Value = MessageReference> {
+fn arbitrary_message_reference() -> impl Strategy<Value = CanisterQueueItem> + Clone {
     prop_oneof![
-        1 => any::<u64>().prop_map(|gen| MessageReference::Request(new_request_message_id(gen, Class::GuaranteedResponse))),
-        1 => any::<u64>().prop_map(|gen| MessageReference::Request(new_request_message_id(gen, Class::BestEffort))),
-        1 => any::<u64>().prop_map(|gen| MessageReference::Response(new_response_message_id(gen, Class::GuaranteedResponse))),
-        1 => any::<u64>().prop_map(|gen| MessageReference::Response(new_response_message_id(gen, Class::BestEffort))),
+        1 => any::<u64>().prop_map(|gen| CanisterQueueItem::Reference(new_request_message_id(gen, Class::GuaranteedResponse))),
+        1 => any::<u64>().prop_map(|gen| CanisterQueueItem::Reference(new_request_message_id(gen, Class::BestEffort))),
+        1 => any::<u64>().prop_map(|gen| CanisterQueueItem::Reference(new_response_message_id(gen, Class::GuaranteedResponse))),
+        1 => any::<u64>().prop_map(|gen| CanisterQueueItem::Reference(new_response_message_id(gen, Class::BestEffort))),
     ]
 }
 
@@ -314,11 +263,11 @@ proptest! {
         // Push all references onto the queue.
         for reference in references.iter() {
             match reference {
-                MessageReference::Request(id) => {
+                CanisterQueueItem::Reference(id) if id.kind() == Kind::Request => {
                     queue.push_request(*id);
                 }
-                MessageReference::Response(id) => {
-                    queue.try_reserve_response_slot(&make_request(13, id.class())).unwrap();
+                CanisterQueueItem::Reference(id) => {
+                    queue.try_reserve_response_slot().unwrap();
                     queue.push_response(*id);
                 }
             }
@@ -334,6 +283,42 @@ proptest! {
 
         // All references should have been consumed.
         prop_assert!(references.is_empty());
+    }
+
+    #[test]
+    fn encode_roundtrip(
+        references in proptest::collection::vec_deque(
+            arbitrary_message_reference(),
+            10..20,
+        ),
+        reserved_slots in 0..3
+    ) {
+        // Create a queue with large enough capacity.
+        let mut queue = CanisterQueue::new(23);
+
+        // Push all references onto the queue.
+        for reference in references.iter() {
+            match reference {
+                CanisterQueueItem::Reference(id) if id.kind() == Kind::Request => {
+                    queue.push_request(*id);
+                }
+                CanisterQueueItem::Reference(id) => {
+                    queue.try_reserve_response_slot().unwrap();
+                    queue.push_response(*id);
+                }
+            }
+            prop_assert!(queue.check_invariants());
+        }
+        // And make `reserved_slots` additional reservations.
+        for _ in 0..reserved_slots {
+            queue.try_reserve_response_slot().unwrap();
+        }
+        prop_assert!(queue.check_invariants());
+
+        let encoded: pb_queues::CanisterQueue = (&queue).into();
+        let decoded = encoded.try_into().unwrap();
+
+        assert_eq!(queue, decoded);
     }
 }
 

@@ -84,6 +84,7 @@ const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 const DEFAULT_PROVISIONAL_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 const MEMORY_CAPACITY: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024); // 8GiB
+const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024); // 8GiB
 const MAX_CONTROLLERS: usize = 10;
 const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64KiB
 const MAX_NUMBER_OF_CANISTERS: u64 = 0;
@@ -283,6 +284,7 @@ fn canister_manager_config(
         // Compute capacity for 2-core scheduler is 100%
         // TODO(RUN-319): the capacity should be defined based on actual `scheduler_cores`
         100,
+        MAX_CANISTER_MEMORY_SIZE,
         rate_limiting_of_instructions,
         100,
         FlagStatus::Enabled,
@@ -1347,18 +1349,14 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
         let creation_fee = cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE);
         let canister = state.canister_state(&canister_id).unwrap();
         assert_eq!(
-            canister
-                .system_state
-                .canister_metrics
-                .consumed_cycles_since_replica_started
-                .get(),
+            canister.system_state.canister_metrics.consumed_cycles.get(),
             creation_fee.get()
         );
         assert_eq!(
             canister
                 .system_state
                 .canister_metrics
-                .get_consumed_cycles_since_replica_started_by_use_cases()
+                .get_consumed_cycles_by_use_cases()
                 .get(&CyclesUseCase::CanisterCreation)
                 .unwrap()
                 .get(),
@@ -1397,18 +1395,14 @@ fn provisional_create_canister_has_no_creation_fee() {
 
         let canister = state.canister_state(&canister_id).unwrap();
         assert_eq!(
-            canister
-                .system_state
-                .canister_metrics
-                .consumed_cycles_since_replica_started
-                .get(),
+            canister.system_state.canister_metrics.consumed_cycles.get(),
             NominalCycles::default().get()
         );
         assert_eq!(
             canister
                 .system_state
                 .canister_metrics
-                .get_consumed_cycles_since_replica_started_by_use_cases()
+                .get_consumed_cycles_by_use_cases()
                 .get(&CyclesUseCase::CanisterCreation),
             None
         );
@@ -3282,11 +3276,11 @@ fn install_code_respects_instruction_limit() {
     let compilation_cost = wat_compilation_cost(wasm);
     let wasm = wat::parse_str(wasm).unwrap();
 
-    let instructions_limit = NumInstructions::from(1);
+    let instructions_limit = NumInstructions::from(3) + compilation_cost;
 
     // Too few instructions result in failed installation.
     let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(instructions_limit + compilation_cost),
+        instructions: as_round_instructions(instructions_limit),
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         compute_allocation_used: state.total_compute_allocation(),
     };
@@ -3340,7 +3334,7 @@ fn install_code_respects_instruction_limit() {
     assert_eq!(instructions_left, NumInstructions::from(0));
     state.put_canister_state(canister.unwrap());
 
-    let instructions_limit = NumInstructions::from(1);
+    let instructions_limit = NumInstructions::from(5);
 
     // Too few instructions result in failed upgrade.
     let mut round_limits = RoundLimits {
@@ -4505,6 +4499,43 @@ fn test_upgrade_to_enhanced_orthogonal_persistence() {
         },
     )
     .unwrap();
+}
+
+#[test]
+fn test_invalid_wasm_with_enhanced_orthogonal_persistence() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let valid_version1_wat = r#"
+    (module
+        (memory 1)
+    )
+    "#;
+    let version1_wasm = wat::parse_str(valid_version1_wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    test.install_canister(canister_id, version1_wasm).unwrap();
+
+    let invalid_version2_wat = r#"
+    (module
+        (func $check
+            i32.const 1
+        )
+        (start $check)
+        (memory 1)
+        (@custom "icp:private enhanced-orthogonal-persistence" "")
+    )
+    "#;
+    let version2_wasm = wat::parse_str(invalid_version2_wat).unwrap();
+    let error = test
+        .upgrade_canister_v2(
+            canister_id,
+            version2_wasm,
+            CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+            },
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterInvalidWasm);
 }
 
 fn create_canisters(test: &mut ExecutionTest, canisters: usize) {

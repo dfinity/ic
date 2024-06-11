@@ -51,6 +51,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ic-stable-structures",
             "@crate_index//:ic0",
             "@crate_index//:num-traits",
+            "@crate_index//:scopeguard",
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",
             "@crate_index//:serde_json",
@@ -132,6 +133,7 @@ rust_test(
 
 rust_ic_test(
     name = "integration_tests",
+    timeout = "long",
     testonly = True,
     srcs = ["tests/tests.rs"],
     data = [

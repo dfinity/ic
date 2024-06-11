@@ -76,7 +76,7 @@ impl TryFrom<InitArg> for State {
             erc20_helper_contract_address: None,
             pending_withdrawal_principals: Default::default(),
             eth_transactions: EthTransactions::new(initial_nonce),
-            ledger_id,
+            cketh_ledger_id: ledger_id,
             cketh_minimum_withdrawal_amount: minimum_withdrawal_amount,
             ethereum_block_height: BlockTag::from(ethereum_block_height),
             first_scraped_block_number,

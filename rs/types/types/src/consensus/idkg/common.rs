@@ -1,14 +1,17 @@
 //! Canister threshold transcripts and references related defininitions.
 use crate::crypto::{
-    canister_threshold_sig::error::IDkgParamsValidationError,
-    canister_threshold_sig::idkg::{
-        IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
-        IDkgTranscriptType,
+    canister_threshold_sig::{
+        error::IDkgParamsValidationError,
+        idkg::{
+            IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+            IDkgTranscriptType,
+        },
+        ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
     },
     AlgorithmId,
 };
 use crate::{Height, RegistryVersion};
-use ic_base_types::NodeId;
+use ic_base_types::{NodeId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
@@ -20,8 +23,8 @@ use std::convert::{AsMut, AsRef, TryFrom};
 use std::hash::Hash;
 
 use super::{
-    ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
-    schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
+    ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsRef},
+    schnorr::{PreSignatureTranscriptRef, ThresholdSchnorrSigInputsRef, TranscriptInCreation},
 };
 
 /// PseudoRandomId is defined in execution context as plain 32-byte vector, we give it a synonym here.
@@ -1072,4 +1075,37 @@ impl TryFrom<&pb::PreSignatureRef> for PreSignatureRef {
             Msg::Ecdsa(x) => PreSignatureRef::Ecdsa(x.try_into()?),
         })
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
+pub enum ThresholdSigInputsRef {
+    Ecdsa(ThresholdEcdsaSigInputsRef),
+    Schnorr(ThresholdSchnorrSigInputsRef),
+}
+
+impl ThresholdSigInputsRef {
+    pub fn pre_signature(&self) -> PreSignatureRef {
+        match self {
+            ThresholdSigInputsRef::Ecdsa(inputs) => {
+                PreSignatureRef::Ecdsa(inputs.presig_quadruple_ref.clone())
+            }
+            ThresholdSigInputsRef::Schnorr(inputs) => {
+                PreSignatureRef::Schnorr(inputs.presig_transcript_ref.clone())
+            }
+        }
+    }
+
+    pub fn caller(&self) -> PrincipalId {
+        match self {
+            ThresholdSigInputsRef::Ecdsa(inputs) => inputs.derivation_path.caller,
+            ThresholdSigInputsRef::Schnorr(inputs) => inputs.derivation_path.caller,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum CombinedSignature {
+    Ecdsa(ThresholdEcdsaCombinedSignature),
+    Schnorr(ThresholdSchnorrCombinedSignature),
 }

@@ -4,6 +4,7 @@ use discower_bowndary::{
     node::Node,
     route_provider::HealthCheckRouteProvider,
     snapshot_health_based::HealthBasedSnapshot,
+    transport::{TransportProvider, TransportProviderImpl},
 };
 use ic_base_types::NodeId;
 use k256::SecretKey;
@@ -215,7 +216,9 @@ async fn test(env: TestEnv) {
             .subnet_id
             .get();
         let api_bn_fetch_interval = Duration::from_secs(5);
-        let fetcher = Arc::new(NodesFetcherImpl::new(http_client.clone(), subnet_id.into()));
+        let transport_provider =
+            Arc::new(TransportProviderImpl::new(http_client.clone())) as Arc<dyn TransportProvider>;
+        let fetcher = Arc::new(NodesFetcherImpl::new(transport_provider, subnet_id.into()));
         let health_timeout = Duration::from_secs(5);
         let check_interval = Duration::from_secs(1);
         let checker = Arc::new(HealthCheckImpl::new(http_client.clone(), health_timeout));

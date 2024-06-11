@@ -6,6 +6,7 @@ use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
+use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     wei_from_milli_ether, BlockNumber, CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex,
     LedgerMintIndex, LogIndex, TransactionNonce, Wei, WeiPerGas,
@@ -430,10 +431,13 @@ mod erc20 {
             state.record_add_ckerc20_token(ckerc20.clone());
 
             assert_eq!(
-                state
-                    .ckerc20_tokens
-                    .get_alt(&ckerc20.erc20_contract_address),
-                Some(&ckerc20.ckerc20_ledger_id)
+                state.supported_ck_erc20_tokens().collect::<Vec<_>>(),
+                vec![CkErc20Token {
+                    erc20_ethereum_network: EthereumNetwork::Mainnet,
+                    erc20_contract_address: ckerc20.erc20_contract_address,
+                    ckerc20_token_symbol: ckerc20.ckerc20_token_symbol,
+                    ckerc20_ledger_id: ckerc20.ckerc20_ledger_id,
+                }]
             );
         }
 
@@ -450,7 +454,7 @@ mod erc20 {
             };
             expect_panic_with_message(
                 || state.record_add_ckerc20_token(ckusdt_with_wrong_ledger_id),
-                "ERROR: ledger ID",
+                "same ckERC20 ledger ID",
             );
         }
 
@@ -467,7 +471,7 @@ mod erc20 {
             };
             expect_panic_with_message(
                 || state.record_add_ckerc20_token(ckusdt_with_wrong_address),
-                "address",
+                "ERC-20 address",
             );
         }
 
@@ -977,20 +981,20 @@ fn state_equivalence() {
             }),
         },
     };
-    let mut ckerc20_tokens = MultiKeyMap::default();
+    let mut ckerc20_tokens = DedupMultiKeyMap::default();
     ckerc20_tokens
         .try_insert(
-            "ckUSDC".parse().unwrap(),
+            "mxzaz-hqaaa-aaaar-qaada-cai".parse().unwrap(),
             "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
                 .parse()
                 .unwrap(),
-            "mxzaz-hqaaa-aaaar-qaada-cai".parse().unwrap(),
+            "ckUSDC".parse().unwrap(),
         )
         .unwrap();
     let state = State {
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),
-        ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
+        cketh_ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
         eth_helper_contract_address: Some(
             "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
                 .parse()

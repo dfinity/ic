@@ -2,7 +2,7 @@
 Hold manifest common to all GuestOS variants.
 """
 
-load("//ic-os/rootfs:guestos.bzl", "rootfs_files")
+load("//ic-os/components:guestos.bzl", "component_files")
 
 # Declare the dependencies that we will have for the built filesystem images.
 # This needs to be done separately from the build rules because we want to
@@ -44,8 +44,8 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",
             "//publish/binaries:vsock_guest": "/opt/ic/bin/vsock_guest:0755",
-            "//ic-os/cpp:infogetty": "/opt/ic/bin/infogetty:0755",
-            "//ic-os/cpp:prestorecon": "/opt/ic/bin/prestorecon:0755",
+            "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",
+            "//cpp:prestorecon": "/opt/ic/bin/prestorecon:0755",
 
             # additional libraries to install
             "//publish/binaries:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",
@@ -53,7 +53,7 @@ def image_deps(mode, malicious = False):
 
         # Set various configuration values
         "container_context_files": Label("//ic-os/guestos/context:context-files"),
-        "rootfs_files": rootfs_files,
+        "component_files": component_files,
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
         "rootfs_size": "3G",

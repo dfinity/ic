@@ -59,7 +59,7 @@ pub async fn process_reimbursement() {
             mutate_state(|s| process_event(s, EventType::QuarantinedReimbursement { index }));
         });
         let ledger_canister_id = match index {
-            ReimbursementIndex::CkEth { .. } => read_state(|s| s.ledger_id),
+            ReimbursementIndex::CkEth { .. } => read_state(|s| s.cketh_ledger_id),
             ReimbursementIndex::CkErc20 { ledger_id, .. } => ledger_id,
         };
         let client = ICRC1Client {

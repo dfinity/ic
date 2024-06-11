@@ -438,19 +438,17 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
         }
 
         let mut ecdsa_keys_held = BTreeSet::new();
+
         for key in item.ecdsa_keys_held {
             ecdsa_keys_held.insert(EcdsaKeyId::try_from(key)?);
         }
-        // First try to deserialize `ecdsa_keys_held` and if it is empty then try to deserialize `idkg_keys_held`.
+
         let mut idkg_keys_held = BTreeSet::new();
-        if !ecdsa_keys_held.is_empty() {
-            for key in ecdsa_keys_held {
-                idkg_keys_held.insert(MasterPublicKeyId::Ecdsa(key));
-            }
-        } else {
-            for key in item.idkg_keys_held {
-                idkg_keys_held.insert(MasterPublicKeyId::try_from(key)?);
-            }
+        for key in ecdsa_keys_held {
+            idkg_keys_held.insert(MasterPublicKeyId::Ecdsa(key));
+        }
+        for key in item.idkg_keys_held {
+            idkg_keys_held.insert(MasterPublicKeyId::try_from(key)?);
         }
 
         Ok(Self {
@@ -527,6 +525,7 @@ impl SubnetMetrics {
                 | CyclesUseCase::RequestAndResponseTransmission
                 | CyclesUseCase::Uninstall
                 | CyclesUseCase::CanisterCreation
+                | CyclesUseCase::SchnorrOutcalls
                 | CyclesUseCase::BurnedCycles => total += *cycles,
             }
         }

@@ -4,7 +4,7 @@ mod errors;
 pub use errors::{CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -12,10 +12,7 @@ use ic_types::{
     consensus::idkg::PreSigId,
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressStatus, WasmResult},
-    messages::{
-        AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, MessageId,
-        SignedIngressContent, UserQuery,
-    },
+    messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
     CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
@@ -25,6 +22,7 @@ use std::{
     fmt, ops,
 };
 use strum_macros::EnumIter;
+use thiserror::Error;
 use tower::util::BoxCloneService;
 
 /// Instance execution statistics. The stats are cumulative and
@@ -456,10 +454,6 @@ pub enum ExecutionMode {
 
 pub type HypervisorResult<T> = Result<T, HypervisorError>;
 
-/// Interface for the component to execute internal queries triggered by IC.
-pub type AnonymousQueryService =
-    BoxCloneService<AnonymousQuery, AnonymousQueryResponse, Infallible>;
-
 /// Interface for the component to filter out ingress messages that
 /// the canister is not willing to accept.
 pub type IngressFilterService = BoxCloneService<
@@ -469,7 +463,9 @@ pub type IngressFilterService = BoxCloneService<
 >;
 
 /// Errors that can occur when handling a query execution request.
+#[derive(Debug, Error)]
 pub enum QueryExecutionError {
+    #[error("Certified state is not available yet")]
     CertifiedStateUnavailable,
 }
 
@@ -480,7 +476,7 @@ pub type QueryExecutionResponse =
 
 /// Interface for the component to execute queries.
 pub type QueryExecutionService =
-    BoxCloneService<(UserQuery, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
+    BoxCloneService<(Query, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
 
 /// Errors that can be returned when reading/writing from/to ingress history.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1170,9 +1166,15 @@ pub enum ExecutionRoundType {
 pub struct RegistryExecutionSettings {
     pub max_number_of_canisters: u64,
     pub provisional_whitelist: ProvisionalWhitelist,
-    pub max_ecdsa_queue_size: u32,
-    pub quadruples_to_create_in_advance: u32,
+    pub chain_key_settings: BTreeMap<MasterPublicKeyId, ChainKeySettings>,
     pub subnet_size: usize,
+}
+
+/// Chain key configuration of execution that comes from the registry.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChainKeySettings {
+    pub max_queue_size: u32,
+    pub pre_signatures_to_create_in_advance: u32,
 }
 
 pub trait Scheduler: Send {
@@ -1229,8 +1231,8 @@ pub trait Scheduler: Send {
         &self,
         state: Self::State,
         randomness: Randomness,
-        ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
-        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
+        idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
         current_round: ExecutionRound,
         next_checkpoint_round: Option<ExecutionRound>,
         current_round_type: ExecutionRoundType,

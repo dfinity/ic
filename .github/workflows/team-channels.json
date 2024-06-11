@@ -1,3 +1,21 @@
 {
-    "idx": "eng-idx-bots"
+    "boundary-node": "eng-boundary-nodes",
+    "consensus": "eng-consensus",
+    "dept-crypto-library": "eng-crypto-mr",
+    "dre": "eng-release-bots",
+    "execution": "eng-execution-mrs",
+    "finint": "eng-fi-mrs",
+    "ic-support": "ic-support-notifications",
+    "ic-interface-owners": "interface-owners",
+    "ic-message-routing-owners": "eng-message-routing-mr",
+    "ic-owners-owners": "owners-owners",
+    "ic-testing-verification": "eng-testing",
+    "idx": "eng-idx-bots",
+    "networking": "eng-networking",
+    "nns-team": "eng-nns",
+    "node": "eng-node",
+    "platform-operations": "eng-platform-ops",
+    "product-security": "eng-prodsec",
+    "runtime": "runtime-code-reviews",
+    "utopia": "eng-utopia"
 }

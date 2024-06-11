@@ -949,6 +949,7 @@ mod tests {
             |subnet_id, snapshot| {
                 vec![
                     apply_to_subnet_record(snapshot, subnet_id, |record| {
+                        record.chain_key_config = Some(ChainKeyConfig::from(config.clone()));
                         record.ecdsa_config = Some(config);
                     }),
                     upsert_ck(ck_key_id.clone(), &[subnet_id]),
@@ -988,9 +989,11 @@ mod tests {
             |subnet_id, snapshot| {
                 vec![
                     apply_to_subnet_record(snapshot, subnet_id, |record| {
+                        record.chain_key_config = Some(ChainKeyConfig::from(config.clone()));
                         record.ecdsa_config = Some(config.clone());
                     }),
                     apply_to_subnet_record(snapshot, subnet_test_id(1), |record| {
+                        record.chain_key_config = Some(ChainKeyConfig::from(config.clone()));
                         record.ecdsa_config = Some(config);
                     }),
                     upsert_ecdsa(ecdsa_key_id.clone(), &[subnet_test_id(1)]),

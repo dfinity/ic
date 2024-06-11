@@ -634,6 +634,11 @@ impl CyclesAccountManager {
         self.scale_cost(self.config.ecdsa_signature_fee, subnet_size)
     }
 
+    /// Amount to charge for a Schnorr signature.
+    pub fn schnorr_signature_fee(&self, subnet_size: usize) -> Cycles {
+        self.scale_cost(self.config.schnorr_signature_fee, subnet_size)
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     //
     // Storage
@@ -886,6 +891,7 @@ impl CyclesAccountManager {
             | CyclesUseCase::RequestAndResponseTransmission
             | CyclesUseCase::CanisterCreation
             | CyclesUseCase::ECDSAOutcalls
+            | CyclesUseCase::SchnorrOutcalls
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed

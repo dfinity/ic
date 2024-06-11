@@ -984,6 +984,12 @@ fn should_skip_single_block_containing_too_many_events() {
         .check_audit_logs_and_upgrade(Default::default())
         .assert_has_unique_events_in_order(&vec![
             EventPayload::SkippedBlock {
+                contract_address: Some(
+                    ETH_HELPER_CONTRACT_ADDRESS
+                        .parse::<Address>()
+                        .unwrap()
+                        .to_string(),
+                ),
                 block_number: (LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1).into(),
             },
             EventPayload::SyncedToBlock {
@@ -1021,6 +1027,7 @@ fn should_retrieve_minter_info() {
             erc20_balances: None,
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
+            cketh_ledger_id: Some(cketh.ledger_id.into()),
         }
     );
 

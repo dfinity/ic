@@ -326,10 +326,15 @@ pub fn test(env: TestEnv) {
 
     let checkpoint =
         some_checkpoint_dir(&backup_dir, &subnet_id).expect("Checkpoint doesn't exist");
-    let memory_artifact_path = checkpoint
-        .join("canister_states")
-        .join(canister_id_hex)
-        .join("vmemory_0.bin");
+
+    let canister_dir = checkpoint.join("canister_states").join(canister_id_hex);
+    let memory_artifact_path = fs::read_dir(canister_dir)
+        .expect("Should read canister dir")
+        .flatten()
+        .map(|entry| entry.path())
+        .find(|path| path.display().to_string().contains("vmemory_0"))
+        .expect("Should find file");
+
     assert!(memory_artifact_path.exists());
     info!(log, "Modify memory file: {:?}", memory_artifact_path);
     modify_byte_in_file(memory_artifact_path).expect("Modifying a byte failed");

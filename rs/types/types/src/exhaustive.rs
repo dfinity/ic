@@ -2,12 +2,10 @@
 
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
-use crate::consensus::idkg::ecdsa::{
-    PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsRef,
-};
+use crate::consensus::idkg::ecdsa::{QuadrupleInCreation, ThresholdEcdsaSigInputsRef};
 use crate::consensus::idkg::{
     CompletedReshareRequest, CompletedSignature, EcdsaKeyTranscript, EcdsaPayload,
-    EcdsaPayloadLayout, EcdsaReshareRequest, EcdsaUIDGenerator, KeyTranscriptCreation,
+    EcdsaUIDGenerator, HasMasterPublicKeyId, IDkgReshareRequest, KeyTranscriptCreation,
     MaskedTranscript, PreSigId, PseudoRandomId, RandomTranscriptParams,
     RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
     UnmaskedTimesMaskedParams, UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
@@ -595,7 +593,10 @@ impl ExhaustiveSet for InitialIDkgDealings {
 
 impl ExhaustiveSet for IDkgTranscriptParams {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let all_tecdsa_algs = AlgorithmId::all_threshold_ecdsa_algorithms();
+        let all_threshold_algs = AlgorithmId::all_threshold_ecdsa_algorithms()
+            .into_iter()
+            .chain(AlgorithmId::all_threshold_schnorr_algorithms())
+            .collect::<Vec<_>>();
         <(IDkgTranscriptId, IDkgTranscriptOperation, RegistryVersion)>::exhaustive_set(rng)
             .into_iter()
             .enumerate()
@@ -615,7 +616,7 @@ impl ExhaustiveSet for IDkgTranscriptParams {
                     node_ids.clone(),
                     node_ids.clone(),
                     version,
-                    all_tecdsa_algs[all_tecdsa_algs.len() % i],
+                    all_threshold_algs[all_threshold_algs.len() % i],
                     transcript,
                 )
                 .unwrap()
@@ -727,19 +728,19 @@ impl ExhaustiveSet for QuadrupleInCreation {
 
 #[derive(Clone)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct DerivedEcdsaReshareRequest {
-    pub key_id: EcdsaKeyId,
+pub struct DerivedIDkgReshareRequest {
+    pub key_id: MasterPublicKeyId,
     pub receiving_node_ids: Vec<NodeId>,
     pub registry_version: RegistryVersion,
 }
 
-impl ExhaustiveSet for EcdsaReshareRequest {
+impl ExhaustiveSet for IDkgReshareRequest {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        DerivedEcdsaReshareRequest::exhaustive_set(rng)
+        DerivedIDkgReshareRequest::exhaustive_set(rng)
             .into_iter()
-            .map(|r| EcdsaReshareRequest {
-                key_id: Some(r.key_id.clone()),
-                master_key_id: MasterPublicKeyId::Ecdsa(r.key_id),
+            .map(|r| IDkgReshareRequest {
+                key_id: None,
+                master_key_id: r.key_id,
                 receiving_node_ids: r.receiving_node_ids,
                 registry_version: r.registry_version,
             })
@@ -751,12 +752,12 @@ impl ExhaustiveSet for EcdsaReshareRequest {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DerivedEcdsaPayload {
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
-    pub available_quadruples: BTreeMap<PreSigId, PreSignatureQuadrupleRef>,
-    pub quadruples_in_creation: BTreeMap<PreSigId, QuadrupleInCreation>,
+    pub available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
+    pub pre_signatures_in_creation: BTreeMap<PreSigId, PreSignatureInCreation>,
     pub uid_generator: EcdsaUIDGenerator,
     pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
-    pub ongoing_xnet_reshares: BTreeMap<EcdsaReshareRequest, ReshareOfUnmaskedParams>,
-    pub xnet_reshare_agreements: BTreeMap<EcdsaReshareRequest, CompletedReshareRequest>,
+    pub ongoing_xnet_reshares: BTreeMap<IDkgReshareRequest, ReshareOfUnmaskedParams>,
+    pub xnet_reshare_agreements: BTreeMap<IDkgReshareRequest, CompletedReshareRequest>,
     pub key_transcripts: BTreeMap<MasterPublicKeyId, EcdsaKeyTranscript>,
 }
 
@@ -766,24 +767,13 @@ impl ExhaustiveSet for EcdsaPayload {
             .into_iter()
             .map(|payload| EcdsaPayload {
                 signature_agreements: payload.signature_agreements,
-                deprecated_ongoing_signatures: BTreeMap::default(),
-                available_pre_signatures: payload
-                    .available_quadruples
-                    .into_iter()
-                    .map(|(id, quad)| (id, PreSignatureRef::Ecdsa(quad)))
-                    .collect(),
-                pre_signatures_in_creation: payload
-                    .quadruples_in_creation
-                    .into_iter()
-                    .map(|(id, quad)| (id, PreSignatureInCreation::Ecdsa(quad)))
-                    .collect(),
+                available_pre_signatures: payload.available_pre_signatures,
+                pre_signatures_in_creation: payload.pre_signatures_in_creation,
                 uid_generator: payload.uid_generator,
                 idkg_transcripts: payload.idkg_transcripts,
                 ongoing_xnet_reshares: payload.ongoing_xnet_reshares,
                 xnet_reshare_agreements: payload.xnet_reshare_agreements,
                 key_transcripts: replace_by_singleton_if_empty(payload.key_transcripts, rng),
-                layout: EcdsaPayloadLayout::MultipleKeyTranscripts,
-                generalized_pre_signatures: true,
             })
             .collect()
     }
@@ -794,6 +784,7 @@ impl ExhaustiveSet for EcdsaPayload {
 pub struct DerivedEcdsaKeyTranscript {
     pub current: Option<UnmaskedTranscriptWithAttributes>,
     pub next_in_creation: KeyTranscriptCreation,
+    pub master_key_id: MasterPublicKeyId,
     pub key_id: EcdsaKeyId,
 }
 
@@ -802,8 +793,8 @@ impl ExhaustiveSet for EcdsaKeyTranscript {
         DerivedEcdsaKeyTranscript::exhaustive_set(rng)
             .into_iter()
             .map(|r| EcdsaKeyTranscript {
-                key_id: r.key_id.clone(),
-                master_key_id: Some(MasterPublicKeyId::Ecdsa(r.key_id)),
+                deprecated_key_id: Some(r.key_id),
+                master_key_id: r.master_key_id,
                 current: r.current,
                 next_in_creation: r.next_in_creation,
             })
@@ -881,20 +872,20 @@ impl HasId<IDkgTranscriptId> for IDkgTranscript {
         Some(self.transcript_id)
     }
 }
-impl HasId<EcdsaReshareRequest> for ReshareOfUnmaskedParams {}
+impl HasId<IDkgReshareRequest> for ReshareOfUnmaskedParams {}
 impl HasId<PseudoRandomId> for CompletedSignature {}
-impl HasId<EcdsaReshareRequest> for CompletedReshareRequest {}
+impl HasId<IDkgReshareRequest> for CompletedReshareRequest {}
 impl HasId<NodeIndex> for BatchSignedIDkgDealing {}
 impl HasId<SubnetId> for CertifiedStreamSlice {}
 impl HasId<NiDkgTag> for NiDkgTranscript {}
 impl HasId<NiDkgTargetId> for u32 {}
 impl HasId<RequestId> for ThresholdEcdsaSigInputsRef {}
-impl HasId<PreSigId> for QuadrupleInCreation {}
-impl HasId<PreSigId> for PreSignatureQuadrupleRef {}
+impl HasId<PreSigId> for PreSignatureInCreation {}
+impl HasId<PreSigId> for PreSignatureRef {}
 
 impl HasId<MasterPublicKeyId> for EcdsaKeyTranscript {
     fn get_id(&self) -> Option<MasterPublicKeyId> {
-        Some(self.get_master_public_key_id())
+        Some(self.key_id())
     }
 }
 

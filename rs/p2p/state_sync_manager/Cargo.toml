@@ -24,7 +24,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-metrics = { workspace = true }
 tokio-util = { workspace = true }
-zstd = "0.13.0"
+zstd = { workspace = true }
 
 [dev-dependencies]
 ic-memory-transport = { path = "../memory_transport" }

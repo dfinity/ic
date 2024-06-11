@@ -251,8 +251,8 @@ mod tests {
         let current_key_transcript = idkg::EcdsaKeyTranscript {
             current: None,
             next_in_creation: idkg::KeyTranscriptCreation::Created(key_transcript_ref),
-            key_id: key_id.clone(),
-            master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
+            deprecated_key_id: Some(key_id.clone()),
+            master_key_id: MasterPublicKeyId::Ecdsa(key_id),
         };
 
         let created_key_transcript =
@@ -275,8 +275,8 @@ mod tests {
         let key_transcript = idkg::EcdsaKeyTranscript {
             current: None,
             next_in_creation: idkg::KeyTranscriptCreation::Begin,
-            key_id: key_id.clone(),
-            master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
+            deprecated_key_id: Some(key_id.clone()),
+            master_key_id: MasterPublicKeyId::Ecdsa(key_id),
         };
 
         let created_key_transcript =

@@ -25,7 +25,8 @@ use super::payload_builder::EcdsaPayloadError;
 use super::pre_signer::EcdsaTranscriptBuilder;
 use super::signer::EcdsaSignatureBuilder;
 use super::utils::{
-    block_chain_cache, get_ecdsa_config_if_enabled, EcdsaBlockReaderImpl, InvalidChainCacheError,
+    block_chain_cache, get_chain_key_config_if_enabled, EcdsaBlockReaderImpl,
+    InvalidChainCacheError,
 };
 use crate::consensus::metrics::timed_call;
 use crate::ecdsa::payload_builder::{create_data_payload_helper, create_summary_payload};
@@ -35,8 +36,10 @@ use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::validation::{ValidationError, ValidationResult};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
-use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
+use ic_management_canister_types::{Payload, SignWithECDSAReply};
+use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
 use ic_replicated_state::ReplicatedState;
+use ic_types::consensus::idkg::common::{CombinedSignature, ThresholdSigInputsRef};
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -98,8 +101,8 @@ pub(crate) enum InvalidEcdsaPayloadReason {
     NewSignatureUnexpected(idkg::PseudoRandomId),
     NewSignatureMissingInput(idkg::PseudoRandomId),
     NewSignatureMissingContext(idkg::PseudoRandomId),
-    XNetReshareAgreementWithoutRequest(idkg::EcdsaReshareRequest),
-    XNetReshareRequestDisappeared(idkg::EcdsaReshareRequest),
+    XNetReshareAgreementWithoutRequest(idkg::IDkgReshareRequest),
+    XNetReshareRequestDisappeared(idkg::IDkgReshareRequest),
     DecodingError(String),
 }
 
@@ -223,14 +226,14 @@ fn validate_summary_payload(
     let registry_version = pool_reader.registry_version(height).ok_or(
         InvalidEcdsaPayloadReason::ConsensusRegistryVersionNotFound(height),
     )?;
-    let ecdsa_config = get_ecdsa_config_if_enabled(
+    let chain_key_config = get_chain_key_config_if_enabled(
         subnet_id,
         registry_version,
         registry_client,
         &ic_logger::replica_logger::no_op_logger(),
     )
     .map_err(EcdsaPayloadValidationFailure::from)?;
-    if ecdsa_config.is_none() {
+    if chain_key_config.is_none() {
         if summary_payload.is_some() {
             return Err(InvalidEcdsaPayloadReason::EcdsaConfigNotFound.into());
         } else {
@@ -398,7 +401,7 @@ fn validate_data_payload(
 struct CachedBuilder {
     transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     dealings: BTreeMap<IDkgTranscriptId, Vec<SignedIDkgDealing>>,
-    signatures: BTreeMap<idkg::PseudoRandomId, ThresholdEcdsaCombinedSignature>,
+    signatures: BTreeMap<idkg::PseudoRandomId, CombinedSignature>,
 }
 
 impl EcdsaTranscriptBuilder for CachedBuilder {
@@ -417,8 +420,8 @@ impl EcdsaTranscriptBuilder for CachedBuilder {
 impl EcdsaSignatureBuilder for CachedBuilder {
     fn get_completed_signature(
         &self,
-        context: &SignWithEcdsaContext,
-    ) -> Option<ThresholdEcdsaCombinedSignature> {
+        context: &SignWithThresholdContext,
+    ) -> Option<CombinedSignature> {
         self.signatures.get(&context.pseudo_random_id).cloned()
     }
 }
@@ -533,11 +536,11 @@ fn validate_new_signature_agreements(
     state: &ReplicatedState,
     prev_payload: &idkg::EcdsaPayload,
     curr_payload: &idkg::EcdsaPayload,
-) -> Result<BTreeMap<idkg::PseudoRandomId, ThresholdEcdsaCombinedSignature>, EcdsaValidationError> {
+) -> Result<BTreeMap<idkg::PseudoRandomId, CombinedSignature>, EcdsaValidationError> {
     use InvalidEcdsaPayloadReason::*;
     let mut new_signatures = BTreeMap::new();
-    let context_map = state
-        .sign_with_ecdsa_contexts()
+    let contexts = state.signature_request_contexts();
+    let context_map = contexts
         .values()
         .map(|c| (c.pseudo_random_id, c))
         .collect::<BTreeMap<_, _>>();
@@ -545,32 +548,40 @@ fn validate_new_signature_agreements(
     for (random_id, completed) in curr_payload.signature_agreements.iter() {
         if let idkg::CompletedSignature::Unreported(response) = completed {
             if let ic_types::messages::Payload::Data(data) = &response.payload {
-                use ic_management_canister_types::{Payload, SignWithECDSAReply};
-                let reply = SignWithECDSAReply::decode(data).map_err(|err| {
-                    InvalidEcdsaPayloadReason::DecodingError(format!("{:?}", err))
-                })?;
-                let signature = ThresholdEcdsaCombinedSignature {
-                    signature: reply.signature,
-                };
                 if prev_payload.signature_agreements.get(random_id).is_some() {
                     return Err(
                         InvalidEcdsaPayloadReason::NewSignatureUnexpected(*random_id).into(),
                     );
                 }
-
                 let context = context_map.get(random_id).ok_or(
                     InvalidEcdsaPayloadReason::NewSignatureMissingContext(*random_id),
                 )?;
                 let (_, input_ref) = build_signature_inputs(context, block_reader).ok_or(
                     InvalidEcdsaPayloadReason::NewSignatureMissingInput(*random_id),
                 )?;
-                let input = input_ref
-                    .translate(block_reader)
-                    .map_err(InvalidEcdsaPayloadReason::from)?;
-                crypto
-                    .verify_combined_sig(&input, &signature)
-                    .map_err(ThresholdEcdsaVerifyCombinedSignatureError)?;
-                new_signatures.insert(*random_id, signature.clone());
+                match input_ref {
+                    ThresholdSigInputsRef::Ecdsa(input_ref) => {
+                        let input = input_ref
+                            .translate(block_reader)
+                            .map_err(InvalidEcdsaPayloadReason::from)?;
+                        let reply = SignWithECDSAReply::decode(data).map_err(|err| {
+                            InvalidEcdsaPayloadReason::DecodingError(format!("{:?}", err))
+                        })?;
+                        let signature = ThresholdEcdsaCombinedSignature {
+                            signature: reply.signature,
+                        };
+                        crypto
+                            .verify_combined_sig(&input, &signature)
+                            .map_err(ThresholdEcdsaVerifyCombinedSignatureError)?;
+                        new_signatures.insert(*random_id, CombinedSignature::Ecdsa(signature));
+                    }
+                    ThresholdSigInputsRef::Schnorr(_input_ref) => {
+                        // TODO(CON-1262): Verifiy Schnorr signatures
+                        return Err(
+                            InvalidEcdsaPayloadReason::NewSignatureUnexpected(*random_id).into(),
+                        );
+                    }
+                }
             }
         }
     }
@@ -725,14 +736,20 @@ mod test {
     }
 
     #[test]
-    fn test_validate_reshare_dealings() {
+    fn test_validate_reshare_dealings_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_validate_reshare_dealings(key_id);
+        }
+    }
+
+    fn test_validate_reshare_dealings(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let num_of_nodes = 4;
         let subnet_id = subnet_test_id(1);
         let crypto = &CryptoReturningOk::default();
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
 
-        let key_id = fake_ecdsa_master_public_key_id();
         let mut payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let mut block_reader = TestEcdsaBlockReader::new();
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
@@ -760,6 +777,7 @@ mod test {
 
         // Create completed dealings for request 1.
         let reshare_params = payload.ongoing_xnet_reshares.get(&req_1).unwrap().as_ref();
+        assert_eq!(reshare_params.algorithm_id, algorithm_for_key_id(&key_id));
         let dealings = dummy_dealings(reshare_params.transcript_id, &reshare_params.dealers);
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         update_completed_reshare_requests(
@@ -793,6 +811,7 @@ mod test {
 
         // Create another request and dealings
         let reshare_params = payload.ongoing_xnet_reshares.get(&req_2).unwrap().as_ref();
+        assert_eq!(reshare_params.algorithm_id, algorithm_for_key_id(&key_id));
         let dealings = dummy_dealings(reshare_params.transcript_id, &reshare_params.dealers);
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         let mut prev_payload = payload.clone();
@@ -831,13 +850,11 @@ mod test {
         let mut block_reader = TestEcdsaBlockReader::new();
         let height = Height::from(1);
         let mut valid_keys = BTreeSet::new();
-        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+        let ecdsa_key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+        let key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
         valid_keys.insert(key_id.clone());
 
-        let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(
-            subnet_id,
-            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
-        );
+        let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let pre_sig_id1 = ecdsa_payload.uid_generator.next_pre_signature_id();
         let pre_sig_id2 = ecdsa_payload.uid_generator.next_pre_signature_id();
         let pre_sig_id3 = ecdsa_payload.uid_generator.next_pre_signature_id();
@@ -845,11 +862,11 @@ mod test {
         // There are three requests in state, two are completed, one is still
         // missing its nonce.
         let sign_with_ecdsa_contexts = BTreeMap::from_iter([
-            fake_completed_sign_with_ecdsa_context(1, pre_sig_id1),
-            fake_completed_sign_with_ecdsa_context(2, pre_sig_id2),
-            fake_sign_with_ecdsa_context_with_quadruple(3, key_id.clone(), Some(pre_sig_id3)),
+            fake_completed_signature_request_context(1, key_id.clone(), pre_sig_id1),
+            fake_completed_signature_request_context(2, key_id.clone(), pre_sig_id2),
+            fake_signature_request_context_with_pre_sig(3, key_id.clone(), Some(pre_sig_id3)),
         ]);
-        let snapshot = fake_state_with_ecdsa_contexts(height, sign_with_ecdsa_contexts.clone());
+        let snapshot = fake_state_with_signature_requests(height, sign_with_ecdsa_contexts.clone());
 
         let request_ids = sign_with_ecdsa_contexts
             .values()
@@ -857,17 +874,18 @@ mod test {
             .collect::<Vec<_>>();
 
         let (key_transcript, key_transcript_ref) =
-            ecdsa_payload.generate_current_key(&MasterPublicKeyId::Ecdsa(key_id), &env, &mut rng);
+            ecdsa_payload.generate_current_key(&key_id, &env, &mut rng);
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
 
         // Add the quadruples and transcripts to block reader and payload
         let sig_inputs = (1..4)
             .map(|i| {
-                create_sig_inputs_with_args(
+                create_ecdsa_sig_inputs_with_args(
                     i,
                     &env.nodes.ids(),
                     key_transcript.clone(),
                     Height::from(44),
+                    ecdsa_key_id.clone(),
                 )
             })
             .collect::<Vec<_>>();
@@ -886,9 +904,9 @@ mod test {
         let mut signature_builder = TestEcdsaSignatureBuilder::new();
         signature_builder.signatures.insert(
             request_ids[0].clone(),
-            ThresholdEcdsaCombinedSignature {
+            CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
                 signature: vec![1; 32],
-            },
+            }),
         );
 
         update_signature_agreements(
@@ -913,9 +931,9 @@ mod test {
         // Now the second context has a completed signature as well
         signature_builder.signatures.insert(
             request_ids[1].clone(),
-            ThresholdEcdsaCombinedSignature {
+            CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
                 signature: vec![1; 32],
-            },
+            }),
         );
         update_signature_agreements(
             &sign_with_ecdsa_contexts,
@@ -977,25 +995,20 @@ mod test {
         let subnet_id = subnet_test_id(0);
         let crypto = &CryptoReturningOk::default();
         let block_reader = TestEcdsaBlockReader::new();
-        let mut valid_keys = BTreeSet::new();
-        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        valid_keys.insert(key_id.clone());
+        let key_id = fake_ecdsa_master_public_key_id();
 
-        let mut prev_payload = empty_ecdsa_payload_with_key_ids(
-            subnet_id,
-            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
-        );
+        let mut prev_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let pre_sig_id = prev_payload.uid_generator.next_pre_signature_id();
 
         let sign_with_ecdsa_contexts =
-            BTreeMap::from_iter([fake_sign_with_ecdsa_context_with_quadruple(
+            BTreeMap::from_iter([fake_signature_request_context_with_pre_sig(
                 1,
                 key_id.clone(),
                 Some(pre_sig_id),
             )]);
-        let snapshot = fake_state_with_ecdsa_contexts(height, sign_with_ecdsa_contexts.clone());
+        let snapshot = fake_state_with_signature_requests(height, sign_with_ecdsa_contexts.clone());
 
-        let fake_context = fake_sign_with_ecdsa_context(key_id.clone(), [4; 32]);
+        let fake_context = fake_signature_request_context(key_id.clone(), [4; 32]);
         let fake_response =
             CompletedSignature::Unreported(ic_types::batch::ConsensusResponse::new(
                 CallbackId::from(0),
@@ -1005,10 +1018,8 @@ mod test {
             ));
 
         // Insert agreement for incomplete context
-        let mut ecdsa_payload_incomplete_context = empty_ecdsa_payload_with_key_ids(
-            subnet_id,
-            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
-        );
+        let mut ecdsa_payload_incomplete_context =
+            empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         ecdsa_payload_incomplete_context
             .signature_agreements
             .insert([1; 32], fake_response.clone());
@@ -1027,10 +1038,8 @@ mod test {
         );
 
         // Insert agreement for unknown context
-        let mut ecdsa_payload_missing_context = empty_ecdsa_payload_with_key_ids(
-            subnet_id,
-            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
-        );
+        let mut ecdsa_payload_missing_context =
+            empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         ecdsa_payload_missing_context
             .signature_agreements
             .insert(fake_context.pseudo_random_id, fake_response);

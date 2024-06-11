@@ -6,7 +6,7 @@ use crate::client::CanisterHttpAdapterClientImpl;
 use ic_adapter_metrics::AdapterMetrics;
 use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_config::adapters::AdaptersConfig;
-use ic_interfaces::execution_environment::AnonymousQueryService;
+use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -25,7 +25,7 @@ pub fn setup_canister_http_client(
     rt_handle: tokio::runtime::Handle,
     metrics_registry: &MetricsRegistry,
     adapter_config: AdaptersConfig,
-    anonymous_query_handler: AnonymousQueryService,
+    query_handler: QueryExecutionService,
     log: ReplicaLogger,
     subnet_type: SubnetType,
 ) -> Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send> {
@@ -66,7 +66,7 @@ pub fn setup_canister_http_client(
                     Box::new(CanisterHttpAdapterClientImpl::new(
                         rt_handle,
                         channel,
-                        anonymous_query_handler,
+                        query_handler,
                         CANISTER_HTTP_CLIENT_CHANNEL_CAPACITY,
                         metrics_registry.clone(),
                         subnet_type,

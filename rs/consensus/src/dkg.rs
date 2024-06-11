@@ -3,10 +3,10 @@
 //! crate.
 
 use crate::consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager};
+use crate::ecdsa::utils::get_chain_key_config_if_enabled;
 use crate::ecdsa::{
-    make_bootstrap_summary,
-    payload_builder::make_bootstrap_summary_with_initial_dealings,
-    utils::{get_ecdsa_config_if_enabled, inspect_ecdsa_initializations},
+    make_bootstrap_summary, payload_builder::make_bootstrap_summary_with_initial_dealings,
+    utils::inspect_chain_key_initializations,
 };
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
@@ -537,7 +537,10 @@ fn bootstrap_ecdsa_summary_from_cup_contents(
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
-    let initial_dealings = inspect_ecdsa_initializations(&cup_contents.ecdsa_initializations)?;
+    let initial_dealings = inspect_chain_key_initializations(
+        &cup_contents.ecdsa_initializations,
+        &cup_contents.chain_key_initializations,
+    )?;
     if initial_dealings.is_empty() {
         return Ok(None);
     };
@@ -564,12 +567,16 @@ fn bootstrap_ecdsa_summary(
         return Ok(Some(summary));
     }
 
-    match get_ecdsa_config_if_enabled(subnet_id, registry_version, registry_client, logger)
-        .map_err(|err| format!("Failed getting the ECDSA config: {:?}", err))?
+    match get_chain_key_config_if_enabled(subnet_id, registry_version, registry_client, logger)
+        .map_err(|err| format!("Failed getting the chain key config: {:?}", err))?
     {
-        Some(ecdsa_config) => Ok(make_bootstrap_summary(
+        Some(chain_key_config) => Ok(make_bootstrap_summary(
             subnet_id,
-            ecdsa_config.key_ids,
+            chain_key_config
+                .key_configs
+                .iter()
+                .map(|key_config| key_config.key_id.clone())
+                .collect(),
             Height::new(cup_contents.height),
         )),
         None => Ok(None),
@@ -2116,6 +2123,7 @@ mod tests {
                         state_hash: vec![1, 2, 3, 4, 5],
                         registry_store_uri: None,
                         ecdsa_initializations: vec![],
+                        chain_key_initializations: vec![],
                     };
 
                 // Encode the cup to protobuf

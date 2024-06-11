@@ -158,8 +158,8 @@ build-base-images-ref-update:
          echo "No changes to commit."
          exit 0
      fi
-     git commit -m "Updating container base image refs"
+     git commit -m "Update container base image refs"
      git push \
          -o merge_request.create \
-         -o merge_request.title="Updating container base images refs [$TAG]" \
+         -o merge_request.title="Chore: Update container base images refs [$TAG]" \
          origin "base-image-refs-update-${TAG}" 2>&1 | tee push.info

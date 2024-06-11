@@ -39,7 +39,7 @@ use ic_registry_client_helpers::deserialize_registry_value;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{p2p, CanisterId, PrincipalId, ReplicaVersion, SubnetId};
+use ic_types::{CanisterId, PrincipalId, ReplicaVersion, SubnetId};
 use registry_canister::mutations::do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload;
 use registry_canister::mutations::do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload;
 use registry_canister::mutations::{
@@ -573,7 +573,6 @@ pub async fn submit_create_application_subnet_proposal(
 ) -> ProposalId {
     let config =
         subnet_configuration::get_default_config_params(SubnetType::Application, node_ids.len());
-    let gossip = p2p::build_default_gossip_config();
     let scheduler = SchedulerConfig::application_subnet();
     let payload = CreateSubnetPayload {
         node_ids,
@@ -587,14 +586,14 @@ pub async fn submit_create_application_subnet_proposal(
         initial_notary_delay_millis: duration_to_millis(config.initial_notary_delay),
         dkg_interval_length: config.dkg_interval_length.get(),
         dkg_dealings_per_block: config.dkg_dealings_per_block as u64,
-        gossip_max_artifact_streams_per_peer: gossip.max_artifact_streams_per_peer,
-        gossip_max_chunk_wait_ms: gossip.max_chunk_wait_ms,
-        gossip_max_duplicity: gossip.max_duplicity,
-        gossip_max_chunk_size: gossip.max_chunk_size,
-        gossip_receive_check_cache_size: gossip.receive_check_cache_size,
-        gossip_pfn_evaluation_period_ms: gossip.pfn_evaluation_period_ms,
-        gossip_registry_poll_period_ms: gossip.registry_poll_period_ms,
-        gossip_retransmission_request_ms: gossip.retransmission_request_ms,
+        gossip_max_artifact_streams_per_peer: 0,
+        gossip_max_chunk_wait_ms: 0,
+        gossip_max_duplicity: 0,
+        gossip_max_chunk_size: 0,
+        gossip_receive_check_cache_size: 0,
+        gossip_pfn_evaluation_period_ms: 0,
+        gossip_registry_poll_period_ms: 0,
+        gossip_retransmission_request_ms: 0,
         start_as_nns: false,
         subnet_type: SubnetType::Application,
         is_halted: false,

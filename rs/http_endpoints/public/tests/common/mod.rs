@@ -55,7 +55,7 @@ use ic_types::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
     malicious_flags::MaliciousFlags,
-    messages::{CertificateDelegation, SignedIngressContent, UserQuery},
+    messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
     CryptoHashOfPartialState, Height, RegistryVersion,
@@ -65,7 +65,10 @@ use prost::Message;
 use std::{collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc, sync::RwLock};
 use tokio::{
     net::{TcpSocket, TcpStream},
-    sync::mpsc::UnboundedReceiver,
+    sync::{
+        mpsc::{UnboundedReceiver, UnboundedSender},
+        watch,
+    },
 };
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
@@ -73,16 +76,14 @@ use tower_test::mock::Handle;
 pub type IngressFilterHandle =
     Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
 pub type QueryExecutionHandle =
-    Handle<(UserQuery, Option<CertificateDelegation>), QueryExecutionResponse>;
+    Handle<(Query, Option<CertificateDelegation>), QueryExecutionResponse>;
 
 fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
-    let (service, handle) = tower_test::mock::pair::<
-        (UserQuery, Option<CertificateDelegation>),
-        QueryExecutionResponse,
-    >();
+    let (service, handle) =
+        tower_test::mock::pair::<(Query, Option<CertificateDelegation>), QueryExecutionResponse>();
 
     let infallible_service =
-        tower::service_fn(move |request: (UserQuery, Option<CertificateDelegation>)| {
+        tower::service_fn(move |request: (Query, Option<CertificateDelegation>)| {
             let mut service_clone = service.clone();
             async move {
                 Ok::<QueryExecutionResponse, Infallible>(
@@ -358,6 +359,14 @@ mock! {
     }
 }
 
+pub struct HttpEndpointHandles {
+    pub ingress_filter: IngressFilterHandle,
+    pub ingress_rx: UnboundedReceiver<UnvalidatedArtifactMutation<IngressArtifact>>,
+    pub query_execution: QueryExecutionHandle,
+    pub terminal_state_ingress_messages: UnboundedSender<(MessageId, Height)>,
+    pub certified_height_watcher: watch::Sender<Height>,
+}
+
 pub struct HttpEndpointBuilder {
     rt_handle: tokio::runtime::Handle,
     config: Config,
@@ -367,6 +376,7 @@ pub struct HttpEndpointBuilder {
     delegation_from_nns: Option<CertificateDelegation>,
     pprof_collector: Arc<dyn PprofCollector>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    certified_height: Option<Height>,
 }
 
 impl HttpEndpointBuilder {
@@ -380,6 +390,7 @@ impl HttpEndpointBuilder {
             delegation_from_nns: None,
             pprof_collector: Arc::new(Pprof),
             tls_config: Arc::new(MockTlsConfig::new()),
+            certified_height: None,
         }
     }
 
@@ -388,6 +399,11 @@ impl HttpEndpointBuilder {
         state_manager: impl StateReader<State = ReplicatedState> + 'static,
     ) -> Self {
         self.state_manager = Arc::new(state_manager);
+        self
+    }
+
+    pub fn with_certified_height(mut self, height: Height) -> Self {
+        self.certified_height = Some(height);
         self
     }
 
@@ -419,16 +435,17 @@ impl HttpEndpointBuilder {
         self
     }
 
-    pub fn run(
-        self,
-    ) -> (
-        IngressFilterHandle,
-        UnboundedReceiver<UnvalidatedArtifactMutation<IngressArtifact>>,
-        QueryExecutionHandle,
-    ) {
+    pub fn run(self) -> HttpEndpointHandles {
         let metrics = MetricsRegistry::new();
+
         let (ingress_filter, ingress_filter_handle) = setup_ingress_filter_mock();
         let (query_exe, query_exe_handler) = setup_query_execution_mock();
+        let (certified_height_watcher_tx, certified_height_watcher_rx) =
+            watch::channel(self.certified_height.unwrap_or_default());
+        #[allow(clippy::disallowed_methods)]
+        let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) =
+            tokio::sync::mpsc::unbounded_channel();
+
         // Run test on "nns" to avoid fetching root delegation
         let subnet_id = subnet_test_id(1);
         let nns_subnet_id = subnet_test_id(1);
@@ -437,19 +454,25 @@ impl HttpEndpointBuilder {
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
 
+        // It is fine to use an unbounded channel as the the consumer, [`IngressWatcher`],
+        // will be able to consume the messages at the same rate as they are produced.
         #[allow(clippy::disallowed_methods)]
         let (ingress_tx, ingress_rx) = tokio::sync::mpsc::unbounded_channel();
-        let mut ingress_pool_throtller = MockIngressPoolThrottler::new();
-        ingress_pool_throtller
+
+        let mut ingress_pool_throttler = MockIngressPoolThrottler::new();
+        ingress_pool_throttler
             .expect_exceeds_threshold()
             .returning(|| false);
+
+        let log = no_op_logger();
+
         start_server(
             self.rt_handle,
             &metrics,
             self.config,
             ingress_filter,
             query_exe,
-            Arc::new(RwLock::new(ingress_pool_throtller)),
+            Arc::new(RwLock::new(ingress_pool_throttler)),
             ingress_tx,
             self.state_manager,
             crypto as Arc<_>,
@@ -459,15 +482,24 @@ impl HttpEndpointBuilder {
             node_id,
             subnet_id,
             nns_subnet_id,
-            no_op_logger(),
+            log,
             self.consensus_cache,
             SubnetType::Application,
             MaliciousFlags::default(),
             self.delegation_from_nns,
             self.pprof_collector,
             ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
+            Some(certified_height_watcher_rx),
+            Some(terminal_state_ingress_messages_rx),
         );
-        (ingress_filter_handle, ingress_rx, query_exe_handler)
+
+        HttpEndpointHandles {
+            ingress_filter: ingress_filter_handle,
+            ingress_rx,
+            query_execution: query_exe_handler,
+            terminal_state_ingress_messages: terminal_state_ingress_messages_tx,
+            certified_height_watcher: certified_height_watcher_tx,
+        }
     }
 }
 
@@ -478,7 +510,7 @@ pub mod test_agent {
     use ic_types::{
         messages::{
             Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-            HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery,
+            HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, SignedIngress,
         },
         time::current_time,
         PrincipalId,
@@ -543,44 +575,91 @@ pub mod test_agent {
     #[derive(Debug, Clone, Copy)]
     pub enum Call {
         V2,
+        V3,
     }
 
-    impl Call {
-        pub async fn call_canister_id(
-            &self,
-            addr: SocketAddr,
+    #[derive(Debug, Clone)]
+    pub struct IngressMessage {
+        canister_id: PrincipalId,
+        effective_canister_id: PrincipalId,
+        ingress_expiry: u64,
+        method_name: String,
+    }
+
+    impl Default for IngressMessage {
+        fn default() -> Self {
+            Self {
+                canister_id: PrincipalId::default(),
+                effective_canister_id: PrincipalId::default(),
+                ingress_expiry: (current_time() + INGRESS_EXPIRY_DURATION)
+                    .as_nanos_since_unix_epoch(),
+                method_name: METHOD_NAME.to_string(),
+            }
+        }
+    }
+
+    impl IngressMessage {
+        pub fn with_canister_id(
+            mut self,
             canister_id: PrincipalId,
             effective_canister_id: PrincipalId,
-        ) -> reqwest::Response {
-            let ingress_expiry =
-                (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
+        ) -> Self {
+            self.canister_id = canister_id;
+            self.effective_canister_id = effective_canister_id;
+            self
+        }
+        pub fn with_ingress_expiry(mut self, ingress_expiry: Duration) -> Self {
+            self.ingress_expiry = (current_time() + ingress_expiry).as_nanos_since_unix_epoch();
+            self
+        }
+        pub fn with_method_name(mut self, method_name: String) -> Self {
+            self.method_name = method_name;
+            self
+        }
 
+        fn envelope(&self) -> HttpRequestEnvelope<HttpCallContent> {
             let call_content = HttpCallContent::Call {
                 update: HttpCanisterUpdate {
-                    canister_id: Blob(canister_id.into_vec()),
-                    method_name: METHOD_NAME.to_string(),
-                    ingress_expiry,
+                    canister_id: Blob(self.canister_id.into_vec()),
+                    method_name: self.method_name.clone(),
+                    ingress_expiry: self.ingress_expiry,
                     arg: Blob(ARG),
                     sender: Blob(SENDER.into_vec()),
                     nonce: None,
                 },
             };
 
-            let envelope = HttpRequestEnvelope {
+            HttpRequestEnvelope {
                 content: call_content,
                 sender_pubkey: None,
                 sender_sig: None,
                 sender_delegation: None,
-            };
+            }
+        }
 
+        pub fn message_id(&self) -> MessageId {
+            let signed_ingress: SignedIngress = self.envelope().try_into().unwrap();
+            signed_ingress.id()
+        }
+    }
+
+    impl Call {
+        pub async fn call(
+            &self,
+            addr: SocketAddr,
+            ingress_message: IngressMessage,
+        ) -> reqwest::Response {
+            let envelope = ingress_message.envelope();
             let body = serde_cbor::to_vec(&envelope).unwrap();
+
             let version = match self {
                 Call::V2 => "v2",
+                Call::V3 => "v3",
             };
 
             let url = format!(
                 "http://{}/api/{}/canister/{}/call",
-                addr, version, effective_canister_id
+                addr, version, ingress_message.effective_canister_id
             );
 
             reqwest::Client::new()
@@ -590,11 +669,6 @@ pub mod test_agent {
                 .send()
                 .await
                 .unwrap()
-        }
-
-        pub async fn call_default_canister(self, addr: SocketAddr) -> reqwest::Response {
-            let canister_id = PrincipalId::default();
-            self.call_canister_id(addr, canister_id, canister_id).await
         }
     }
 

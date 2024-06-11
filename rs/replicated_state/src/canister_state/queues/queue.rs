@@ -1,12 +1,12 @@
 // TODO(MR-569) Remove when `CanisterQueues` has been updated to use this.
 #![allow(dead_code)]
 
-use super::message_pool::{Class, MessageId, MessagePool};
+use super::message_pool::{self, Kind, MessagePool};
 use crate::StateError;
 use ic_base_types::CanisterId;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::{ingress::v1 as pb_ingress, queues::v1 as pb_queues};
-use ic_types::messages::{Ingress, Request, RequestOrResponse, Response, NO_DEADLINE};
+use ic_types::messages::{Ingress, Request, RequestOrResponse, Response};
 use ic_types::{CountBytes, Cycles, Time};
 use std::collections::{BTreeMap, VecDeque};
 use std::convert::{From, TryFrom, TryInto};
@@ -16,39 +16,31 @@ use std::sync::Arc;
 #[cfg(test)]
 mod tests;
 
-/// A reference to a message, used as `CanisterQueue` item.
+/// An item enqueued into a `CanisterQueue`.
 ///
 /// May be a weak reference into the message pool; or identify a reject response to
 /// a specific callback.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum MessageReference {
-    /// Weak reference to a `Request` held in the message pool.
+pub(super) enum CanisterQueueItem {
+    /// Weak reference to a `Request` or `Response` held in the message pool.
     ///
-    /// Guaranteed response call requests in output queues and best-effort requests
-    /// in input or output queues may time out and be dropped from the pool. Such
-    /// stale references can be safely ignored. Guaranteed response call requests in
-    /// input queues never time out.
+    /// Some messages (all best-effort messages; plus guaranteed response requests
+    /// in output queues) may time out or be load shed and be dropped from the pool.
+    /// The kind (`Request` or `Response`) of such a stale reference can be learned
+    /// from the contained `Id`.
     ///
-    /// All best-effort requests are subject to load shedding and may be dropped
-    /// from the pool at any time.
-    Request(MessageId),
-
-    /// Weak reference to a `Response` held in the message pool.
-    ///
-    /// Best-effort responses in output queues may time out and be dropped from the
-    /// pool. Best-effort responses in input queues and guaranteed responses never
-    /// time out. Additionally, best-effort responses are subject to load shedding
-    /// and may be dropped from the pool at any time.
-    ///
-    /// Stale response references in output queues can be safely ignored.
-    ///
-    /// Stale response references in input queues were either enqueued as dangling
-    /// timeout reject response markers (with the corresponding response never
-    /// inserted into the pool); or they are the result of shedding a best-effort
-    /// response. Meaning that stale response references in input queues are always
-    /// `SYS_UNKNOWN` reject responses to best-effort calls ("timeout" if deadline
-    /// has expired, "drop" otherwise.)
-    Response(MessageId),
+    ///  * Stale requests are to be ignored, whether they are found in an input or
+    ///    an output queue. They timed out or were shed while enqueued and, if in an
+    ///    output queue, a corresponding reject response was generated.
+    ///  * Stale responses in output queues (always best-effort) are also to be
+    ///    ignored. They timed out or were shed while enqueued and the originating
+    ///    canister is responsible for generating a timeout response instead.
+    ///  * Stale responses in input queues (always best-effort) are responses that
+    ///    were shed while enqueued or are `SYS_UNKNOWN` reject responses enqueued
+    ///    as dangling rererences to begin with. They are to be handled as
+    ///    `SYS_UNKNOWN` reject responses ("timeout" if their deadline expired,
+    ///    "drop" otherwise).
+    Reference(message_pool::Id),
     //
     // TODO(MR-552) Define and use variants for best-effort and guaranteed reject
     // responses, so we don't need to allocate a full message.
@@ -62,16 +54,16 @@ pub(super) enum MessageReference {
     // LocalRejectBestEffortResponse(CallbackId),
 }
 
-impl MessageReference {
+impl CanisterQueueItem {
     /// Returns `true` if this is a reference to a response; or a reject response.
     pub(super) fn is_response(&self) -> bool {
-        matches!(self, Self::Response(_))
+        matches!(self, Self::Reference(id) if id.kind() == Kind::Response)
     }
 
-    /// Returns the `MessageId` behind this reference.
-    pub(super) fn id(&self) -> MessageId {
+    /// Returns the ID behind this reference.
+    pub(super) fn id(&self) -> message_pool::Id {
         match self {
-            Self::Request(id) | Self::Response(id) => *id,
+            Self::Reference(id) => *id,
         }
     }
 }
@@ -102,14 +94,14 @@ impl MessageReference {
 /// by requests to the queue capacity.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CanisterQueue {
-    /// A FIFO queue of all requests and responses.
+    /// A FIFO queue of requests and responses.
     ///
     /// Since responses may be enqueued at arbitrary points in time, reserved slots
     /// for responses cannot be explicitly represented in `queue`. They only exist
     /// as the difference between `response_slots` and the number of actually
     /// enqueued response references (calculated as `request_slots + response_slots
     /// - queue.len()`).
-    queue: VecDeque<MessageReference>,
+    queue: VecDeque<CanisterQueueItem>,
 
     /// Maximum number of requests; or responses + reserved slots; that can be held
     /// in the queue at any one time.
@@ -121,13 +113,10 @@ pub(crate) struct CanisterQueue {
     /// Number of slots used by response references or reserved for expected
     /// responses.
     response_slots: usize,
-
-    /// Memory reservations for expected guaranteed responses.
-    response_memory_reservations: usize,
 }
 
 impl CanisterQueue {
-    /// The memoty overhead of an empty `CanisterQueue`, in bytes.
+    /// The memory overhead of an empty `CanisterQueue`, in bytes.
     pub const EMPTY_SIZE_BYTES: usize = size_of::<CanisterQueue>();
 
     /// Creates a new `CanisterQueue` with the given capacity.
@@ -137,11 +126,10 @@ impl CanisterQueue {
             capacity,
             request_slots: 0,
             response_slots: 0,
-            response_memory_reservations: 0,
         }
     }
 
-    /// Returns the number slots available for requests.
+    /// Returns the number of slots available for requests.
     pub(super) fn available_request_slots(&self) -> usize {
         debug_assert!(self.request_slots <= self.capacity);
         self.capacity - self.request_slots
@@ -161,10 +149,11 @@ impl CanisterQueue {
     /// Enqueues a request.
     ///
     /// Panics if there is no available request slot.
-    pub(super) fn push_request(&mut self, id: MessageId) {
+    pub(super) fn push_request(&mut self, id: message_pool::Id) {
+        debug_assert!(id.kind() == Kind::Request);
         assert!(self.request_slots < self.capacity);
 
-        self.queue.push_back(MessageReference::Request(id));
+        self.queue.push_back(CanisterQueueItem::Reference(id));
         self.request_slots += 1;
 
         debug_assert!(self.check_invariants());
@@ -176,12 +165,9 @@ impl CanisterQueue {
         self.capacity - self.response_slots
     }
 
-    /// Reserves a slot for the response to the given request, if available; else
-    /// returns `Err(StateError::QueueFull)`.
-    ///
-    /// If the request is for a guaranteed response call, also reserves memory for
-    /// the response.
-    pub(super) fn try_reserve_response_slot(&mut self, req: &Request) -> Result<(), StateError> {
+    /// Reserves a slot for a response, if available; else returns
+    /// `Err(StateError::QueueFull)`.
+    pub(super) fn try_reserve_response_slot(&mut self) -> Result<(), StateError> {
         debug_assert!(self.response_slots <= self.capacity);
         if self.response_slots >= self.capacity {
             return Err(StateError::QueueFull {
@@ -190,9 +176,6 @@ impl CanisterQueue {
         }
 
         self.response_slots += 1;
-        if req.deadline == NO_DEADLINE {
-            self.response_memory_reservations += 1;
-        }
         debug_assert!(self.check_invariants());
         Ok(())
     }
@@ -203,52 +186,34 @@ impl CanisterQueue {
         self.request_slots + self.response_slots - self.queue.len()
     }
 
-    /// Returns `Ok(())` if there exists at least one reserved response slot and
-    /// (iff `class` is `GuaranteedResponse`) one response memory reservation,
+    /// Returns `Ok(())` if there exists at least one reserved response slot,
     /// `Err(StateError::InvariantBroken)` otherwise.
-    pub(super) fn check_has_reserved_response_slot(&self, class: Class) -> Result<(), StateError> {
+    pub(super) fn check_has_reserved_response_slot(&self) -> Result<(), StateError> {
         if self.request_slots + self.response_slots <= self.queue.len() {
             return Err(StateError::InvariantBroken(
                 "No reserved response slot".to_string(),
             ));
         }
 
-        if class == Class::GuaranteedResponse && self.response_memory_reservations == 0 {
-            // Guaranteed response, we must have a memory reservation for it.
-            return Err(StateError::InvariantBroken(
-                "No guaranteed response memory reservation".to_string(),
-            ));
-        }
-
         Ok(())
-    }
-
-    /// Returns the number of guaranteed response memory reservations.
-    pub(super) fn response_memory_reservations(&self) -> usize {
-        self.response_memory_reservations
     }
 
     /// Enqueues a response into a reserved slot, consuming the slot.
     ///
-    /// Panics if there is no reserved response slot or if this is a guaranteed
-    /// response and there is no matching guaranteed response memory reservation.
-    pub(super) fn push_response(&mut self, id: MessageId) {
-        self.check_has_reserved_response_slot(id.class()).unwrap();
+    /// Panics if there is no reserved response slot.
+    pub(super) fn push_response(&mut self, id: message_pool::Id) {
+        debug_assert!(id.kind() == Kind::Response);
+        self.check_has_reserved_response_slot().unwrap();
 
-        if id.class() == Class::GuaranteedResponse {
-            // Guaranteed response, consume one memory reservation.
-            self.response_memory_reservations -= 1;
-        }
-
-        self.queue.push_back(MessageReference::Response(id));
+        self.queue.push_back(CanisterQueueItem::Reference(id));
         debug_assert!(self.check_invariants());
     }
 
-    /// Pops a reference from the queue. Returns `None` if the queue is empty.
-    pub(super) fn pop(&mut self) -> Option<MessageReference> {
-        let reference = self.queue.pop_front()?;
+    /// Pops an item from the queue. Returns `None` if the queue is empty.
+    pub(super) fn pop(&mut self) -> Option<CanisterQueueItem> {
+        let item = self.queue.pop_front()?;
 
-        if reference.is_response() {
+        if item.is_response() {
             debug_assert!(self.response_slots > 0);
             self.response_slots -= 1;
         } else {
@@ -257,12 +222,11 @@ impl CanisterQueue {
         }
         debug_assert!(self.check_invariants());
 
-        Some(reference)
+        Some(item)
     }
 
-    /// Returns a reference to the next item in the queue; or `None` if
-    /// the queue is empty.
-    pub(super) fn peek(&self) -> Option<&MessageReference> {
+    /// Returns the next item in the queue; or `None` if the queue is empty.
+    pub(super) fn peek(&self) -> Option<&CanisterQueueItem> {
         self.queue.front()
     }
 
@@ -275,7 +239,7 @@ impl CanisterQueue {
         !self.queue.is_empty() || self.response_slots > 0
     }
 
-    /// Returns the length of the queue (including stale references but not
+    /// Returns the length of the queue (including stale references, but not
     /// including reserved slots).
     pub(super) fn len(&self) -> usize {
         self.queue.len()
@@ -295,8 +259,6 @@ impl CanisterQueue {
         assert!(responses <= self.response_slots);
         // Queue contains only requests and responses.
         assert_eq!(self.queue.len(), self.request_slots + responses);
-        // Cannot have more response memory reservations than slot reservations.
-        assert!(self.response_memory_reservations <= self.reserved_slots());
 
         true
     }
@@ -310,7 +272,49 @@ impl CanisterQueue {
     ) -> impl Iterator<Item = RequestOrResponse> + 'a {
         self.queue
             .iter()
-            .filter_map(|reference| pool.get(reference.id()).cloned())
+            .filter_map(|item| pool.get(item.id()).cloned())
+    }
+}
+
+impl From<&CanisterQueue> for pb_queues::CanisterQueue {
+    fn from(item: &CanisterQueue) -> Self {
+        Self {
+            queue: item
+                .queue
+                .iter()
+                .map(|queue_item| match queue_item {
+                    CanisterQueueItem::Reference(id) => id.into(),
+                })
+                .collect(),
+            capacity: item.capacity as u64,
+            response_slots: item.response_slots as u64,
+        }
+    }
+}
+
+impl TryFrom<pb_queues::CanisterQueue> for CanisterQueue {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_queues::CanisterQueue) -> Result<Self, Self::Error> {
+        let queue: VecDeque<CanisterQueueItem> = item
+            .queue
+            .into_iter()
+            .map(|queue_item| match queue_item.r {
+                Some(pb_queues::canister_queue::queue_item::R::Reference(_)) => {
+                    let id = message_pool::Id::try_from(queue_item)?;
+                    Ok(CanisterQueueItem::Reference(id))
+                }
+                None => Err(ProxyDecodeError::MissingField("MessageReference::r")),
+            })
+            .collect::<Result<_, ProxyDecodeError>>()?;
+        let request_slots = queue.iter().filter(|id| !id.is_response()).count();
+        let res = Self {
+            queue,
+            capacity: item.capacity as usize,
+            request_slots,
+            response_slots: item.response_slots as usize,
+        };
+
+        Ok(res)
     }
 }
 
@@ -1148,7 +1152,7 @@ pub(super) struct IngressQueue {
 }
 
 impl IngressQueue {
-    /// The memoty overhead of a per-canister ingress queue, in bytes.
+    /// The memory overhead of a per-canister ingress queue, in bytes.
     const PER_CANISTER_QUEUE_OVERHEAD_BYTES: usize =
         size_of::<Option<CanisterId>>() + size_of::<VecDeque<Arc<Ingress>>>();
 

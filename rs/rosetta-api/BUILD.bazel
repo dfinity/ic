@@ -56,7 +56,6 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     "//rs/rust_canisters/dfn_macro",
     "@crate_index//:async-trait",
-    "@crate_index//:serde_derive",
     "@crate_index//:strum_macros",
 ]
 

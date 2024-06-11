@@ -775,7 +775,7 @@ fn test_get_set_cycle_balance() {
 #[test]
 fn test_create_and_drop_instances() {
     let pic = PocketIc::new();
-    let id = pic.instance_id;
+    let id = pic.instance_id();
     assert_eq!(PocketIc::list_instances()[id], "Available".to_string());
     drop(pic);
     assert_eq!(PocketIc::list_instances()[id], "Deleted".to_string());
@@ -1013,4 +1013,48 @@ fn test_too_large_call() {
         vec![42; 16_000_000],
     )
     .unwrap_err();
+}
+
+#[tokio::test]
+async fn test_create_and_drop_instances_async() {
+    let pic = pocket_ic::nonblocking::PocketIc::new().await;
+    let id = pic.instance_id;
+    assert_eq!(
+        pocket_ic::nonblocking::PocketIc::list_instances().await[id],
+        "Available".to_string()
+    );
+    pic.drop().await;
+    assert_eq!(
+        pocket_ic::nonblocking::PocketIc::list_instances().await[id],
+        "Deleted".to_string()
+    );
+}
+
+#[tokio::test]
+async fn test_counter_canister_async() {
+    let pic = pocket_ic::nonblocking::PocketIc::new().await;
+
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister().await;
+    pic.add_cycles(can_id, INIT_CYCLES).await;
+
+    // Install the counter canister wasm file on the canister.
+    let counter_wasm = counter_wasm();
+    pic.install_canister(can_id, counter_wasm, vec![], None)
+        .await;
+
+    // Make some calls to the canister.
+    let reply = pic
+        .update_call(
+            can_id,
+            Principal::anonymous(),
+            "read",
+            encode_one(()).unwrap(),
+        )
+        .await
+        .expect("Failed to call counter canister");
+    assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 0]));
+
+    // Drop the PocketIc instance.
+    pic.drop().await;
 }

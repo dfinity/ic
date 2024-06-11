@@ -30,7 +30,7 @@ ethnum = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
-http = "0.2.6"
+http = "0.2.12"
 http-body = "0.4"
 hyper = "0.14.18"
 hyper-rustls = { workspace = true }
@@ -67,7 +67,7 @@ moka = { version = "0.12", features = ["sync", "future"] }
 nftables = "0.4"
 nix = { workspace = true }
 prometheus = { workspace = true }
-rand = "0.8.4"
+rand = { workspace = true }
 ratelimit = "0.9.1"
 rcgen = { workspace = true }
 regex = "1.3.9"
@@ -80,7 +80,7 @@ reqwest = { version = "0.11.22", default-features = false, features = [
     "stream",
 ] }
 rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
-rustls-pemfile = "^1"
+rustls-pemfile = "2.1.2"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -90,7 +90,7 @@ strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
-tokio-rustls = { workspace = true }
+tokio-rustls = { version = "0.24.1", features = ["dangerous_configuration"] }
 tower = { workspace = true }
 tower_governor = "0.1"
 tower-http = { version = "0.4.4", features = [
@@ -106,10 +106,11 @@ tracing-slog = "0.2"
 tracing-subscriber = { workspace = true }
 url = "2.1.1"
 x509-parser = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5.1", features = ["async_tokio"] }
-tempfile = "3.6.0"
+tempfile = { workspace = true }
 wiremock = "=0.5.19"
 
 [[bench]]

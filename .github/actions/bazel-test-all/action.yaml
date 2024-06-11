@@ -1,4 +1,5 @@
 name: 'Bazel-Test-All'
+description: 'Run Bazel Test'
 inputs:
   BAZEL_COMMAND:
     required: true
@@ -35,7 +36,7 @@ runs:
 
           # Todo: remove once fully migtrated to github
           sudo chown -R 1001:1001 /cache
-          
+
           ${GITHUB_WORKSPACE}/gitlab-ci/src/bazel-ci/main.sh
           BAZEL_EXIT_CODE="$?"
 

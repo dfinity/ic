@@ -62,6 +62,11 @@ impl CyclesAccountManagerBuilder {
         self
     }
 
+    pub fn with_schnorr_signature_fee(mut self, schnorr_signature_fee: Cycles) -> Self {
+        self.config.schnorr_signature_fee = schnorr_signature_fee;
+        self
+    }
+
     pub fn build(self) -> CyclesAccountManager {
         CyclesAccountManager::new(
             self.max_num_instructions,

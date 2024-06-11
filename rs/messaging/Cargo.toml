@@ -63,10 +63,10 @@ candid = { workspace = true }
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 mockall = { workspace = true }
-rand = "0.8"
-rand_chacha = "0.3"
-serde = "1.0"
-tempfile = "3.0"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+serde = { workspace = true }
+tempfile = { workspace = true }
 
 [features]
 default = []

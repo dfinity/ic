@@ -4,15 +4,23 @@ use super::{
 };
 use crate::{
     canister_snapshots::CanisterSnapshots,
-    canister_state::queues::CanisterQueuesLoopDetector,
-    canister_state::system_state::{push_input, CanisterOutputQueuesIterator},
-    metadata_state::{subnet_call_context_manager::SignWithEcdsaContext, StreamMap},
+    canister_state::{
+        queues::CanisterQueuesLoopDetector,
+        system_state::{push_input, CanisterOutputQueuesIterator},
+    },
+    metadata_state::{
+        subnet_call_context_manager::{
+            IDkgDealingsContext, SignWithEcdsaContext, SignWithThresholdContext,
+        },
+        StreamMap,
+    },
     CanisterQueues,
 };
 use ic_base_types::PrincipalId;
 use ic_btc_types_internal::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue as ProtoNextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
@@ -218,7 +226,7 @@ impl std::iter::Iterator for OutputIterator<'_> {
 }
 
 pub trait PeekableOutputIterator: std::iter::Iterator<Item = (QueueId, RequestOrResponse)> {
-    /// Peeks into the iterator and returns a reference to the item `next`
+    /// Peeks into the iterator and returns a reference to the item that `next()`
     /// would return.
     fn peek(&self) -> Option<(QueueId, &RequestOrResponse)>;
 
@@ -226,6 +234,9 @@ pub trait PeekableOutputIterator: std::iter::Iterator<Item = (QueueId, RequestOr
     /// with the same sender and receiver as the next). The messages are retained
     /// in the output queue.
     fn exclude_queue(&mut self);
+
+    /// Returns the exact number of messages left in the iterator.
+    fn size(&self) -> usize;
 }
 
 impl PeekableOutputIterator for OutputIterator<'_> {
@@ -241,6 +252,10 @@ impl PeekableOutputIterator for OutputIterator<'_> {
             }
             debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
         }
+    }
+
+    fn size(&self) -> usize {
+        self.size
     }
 }
 
@@ -366,7 +381,7 @@ impl From<&StateError> for ErrorCode {
 
 /// Represents the memory taken in bytes by various resources.
 ///
-/// Should  be used in cases where the deterministic state machine needs to
+/// Should be used in cases where the deterministic state machine needs to
 /// compute how much available memory exists for canisters to use for the
 /// various resources while respecting the relevant configured limits.
 pub struct MemoryTaken {
@@ -375,8 +390,8 @@ pub struct MemoryTaken {
     /// Wasm custom sections) where no explicit memory reservation
     /// has been made.
     execution: NumBytes,
-    /// Memory taken by canister messages.
-    messages: NumBytes,
+    /// Memory taken by guaranteed response canister messages.
+    guaranteed_response_messages: NumBytes,
     /// Memory taken by Wasm Custom Sections.
     wasm_custom_sections: NumBytes,
     /// Memory taken by canister history.
@@ -389,9 +404,9 @@ impl MemoryTaken {
         self.execution
     }
 
-    /// Returns the amount of memory taken by canister messages.
-    pub fn messages(&self) -> NumBytes {
-        self.messages
+    /// Returns the amount of memory taken by guaranteed response canister messages.
+    pub fn guaranteed_response_messages(&self) -> NumBytes {
+        self.guaranteed_response_messages
     }
 
     /// Returns the amount of memory taken by Wasm Custom Sections.
@@ -599,12 +614,59 @@ impl ReplicatedState {
         self.metadata.streams.keys().cloned().collect()
     }
 
+    /// Returns all signature request contexts
+    pub fn signature_request_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        self.metadata
+            .subnet_call_context_manager
+            .sign_with_threshold_contexts
+            .clone()
+            .into_iter()
+            .chain(
+                self.metadata
+                    .subnet_call_context_manager
+                    .sign_with_ecdsa_contexts
+                    .iter()
+                    .map(|(callback, ecdsa_context)| {
+                        (*callback, SignWithThresholdContext::from(ecdsa_context))
+                    }),
+            )
+            .collect()
+    }
+
     /// Returns all sign with ECDSA contexts
     pub fn sign_with_ecdsa_contexts(&self) -> &BTreeMap<CallbackId, SignWithEcdsaContext> {
         &self
             .metadata
             .subnet_call_context_manager
             .sign_with_ecdsa_contexts
+    }
+
+    /// Returns all IDKG dealings contexts.
+    pub fn idkg_dealings_contexts(&self) -> BTreeMap<CallbackId, IDkgDealingsContext> {
+        self.metadata
+            .subnet_call_context_manager
+            .idkg_dealings_contexts
+            .clone()
+            .into_iter()
+            .chain(
+                self.metadata
+                    .subnet_call_context_manager
+                    .ecdsa_dealings_contexts
+                    .iter()
+                    .map(|(callback, ecdsa_context)| {
+                        (
+                            *callback,
+                            IDkgDealingsContext {
+                                request: ecdsa_context.request.clone(),
+                                key_id: MasterPublicKeyId::Ecdsa(ecdsa_context.key_id.clone()),
+                                nodes: ecdsa_context.nodes.clone(),
+                                registry_version: ecdsa_context.registry_version,
+                                time: ecdsa_context.time,
+                            },
+                        )
+                    }),
+            )
+            .collect()
     }
 
     /// Retrieves a reference to the stream from this subnet to the destination
@@ -625,7 +687,7 @@ impl ReplicatedState {
     pub fn memory_taken(&self) -> MemoryTaken {
         let (
             raw_memory_taken,
-            mut message_memory_taken,
+            mut guaranteed_response_message_memory_taken,
             wasm_custom_sections_memory_taken,
             canister_history_memory_taken,
             wasm_chunk_store_memory_usage,
@@ -637,7 +699,9 @@ impl ReplicatedState {
                         MemoryAllocation::Reserved(bytes) => bytes,
                         MemoryAllocation::BestEffort => canister.execution_memory_usage(),
                     },
-                    canister.system_state.message_memory_usage(),
+                    canister
+                        .system_state
+                        .guaranteed_response_message_memory_usage(),
                     canister.wasm_custom_sections_memory_usage(),
                     canister.canister_history_memory_usage(),
                     canister.wasm_chunk_store_memory_usage(),
@@ -654,28 +718,34 @@ impl ReplicatedState {
             })
             .unwrap_or_default();
 
-        message_memory_taken += (self.subnet_queues.memory_usage() as u64).into();
+        guaranteed_response_message_memory_taken +=
+            (self.subnet_queues.guaranteed_response_memory_usage() as u64).into();
 
         MemoryTaken {
             execution: raw_memory_taken
                 + canister_history_memory_taken
                 + wasm_chunk_store_memory_usage,
-            messages: message_memory_taken,
+            guaranteed_response_messages: guaranteed_response_message_memory_taken,
             wasm_custom_sections: wasm_custom_sections_memory_taken,
             canister_history: canister_history_memory_taken,
         }
     }
 
-    /// Computes the memory taken by messages.
+    /// Computes the memory taken by guaranteed response messages.
     ///
     /// This is a more efficient alternative to `memory_taken()` for cases when only
     /// the message memory usage is necessary.
-    pub fn message_memory_taken(&self) -> NumBytes {
+    pub fn guaranteed_response_message_memory_taken(&self) -> NumBytes {
         let canisters_memory_usage: NumBytes = self
             .canisters_iter()
-            .map(|canister| canister.system_state.message_memory_usage())
+            .map(|canister| {
+                canister
+                    .system_state
+                    .guaranteed_response_message_memory_usage()
+            })
             .sum();
-        let subnet_memory_usage = (self.subnet_queues.memory_usage() as u64).into();
+        let subnet_memory_usage =
+            (self.subnet_queues.guaranteed_response_memory_usage() as u64).into();
 
         canisters_memory_usage + subnet_memory_usage
     }

@@ -17,8 +17,9 @@ futures = { workspace = true }
 httptest = "0.15.4"
 mockall = { workspace = true }
 nix = { workspace = true }
-opentelemetry = { version = "0.20", features = ["metrics"] }
-opentelemetry-prometheus = "0.13.0"
+opentelemetry = { workspace = true }
+opentelemetry-prometheus = { workspace = true }
+opentelemetry_sdk = { workspace = true }
 prometheus = { workspace = true }
 reqwest = { workspace = true }
 rsa = "0.9.2"
@@ -31,4 +32,4 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3.3.0"
+tempfile = { workspace = true }

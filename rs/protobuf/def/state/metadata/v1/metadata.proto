@@ -95,6 +95,39 @@ message SignWithEcdsaContextTree {
   SignWithEcdsaContext context = 2;
 }
 
+message EcdsaArguments {
+  registry.crypto.v1.EcdsaKeyId key_id = 1;
+  bytes message_hash = 2;
+}
+
+message SchnorrArguments {
+  registry.crypto.v1.SchnorrKeyId key_id = 1;
+  bytes message = 2;
+}
+
+message ThresholdArguments {
+  oneof threshold_scheme {
+    EcdsaArguments ecdsa = 1;
+    SchnorrArguments schnorr = 2;
+  }
+}
+
+message SignWithThresholdContext {
+  state.queues.v1.Request request = 1;
+  ThresholdArguments args = 2;
+  repeated bytes derivation_path_vec = 3;
+  bytes pseudo_random_id = 4;
+  uint64 batch_time = 5;
+  optional uint64 pre_signature_id = 6;
+  optional uint64 height = 7;
+  optional bytes nonce = 8;
+}
+
+message SignWithThresholdContextTree {
+  uint64 callback_id = 1;
+  SignWithThresholdContext context = 2;
+}
+
 enum HttpMethod {
   HTTP_METHOD_UNSPECIFIED = 0;
   HTTP_METHOD_GET = 1;
@@ -246,6 +279,7 @@ message SubnetCallContextManager {
   repeated StopCanisterCallTree stop_canister_calls = 15;
   repeated RawRandContext raw_rand_contexts = 16;
   repeated IDkgDealingsContextTree idkg_dealings_contexts = 17;
+  repeated SignWithThresholdContextTree sign_with_threshold_contexts = 18;
 }
 
 message SubnetMetrics {

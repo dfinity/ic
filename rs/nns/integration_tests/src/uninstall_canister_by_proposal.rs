@@ -42,7 +42,7 @@ fn setup_state_machine_with_nns_canisters() -> StateMachine {
 
 #[test]
 fn uninstall_canister_by_proposal() {
-    let mut state_machine = setup_state_machine_with_nns_canisters();
+    let state_machine = setup_state_machine_with_nns_canisters();
     // Pick some installed nns canister for testing
     let canister_id = CanisterId::from_u64(LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET);
     // Confirm that canister exists and has some code installed (module_hash is Some)
@@ -64,7 +64,7 @@ fn uninstall_canister_by_proposal() {
     let n1 = get_neuron_1();
     // Execute a proposal
     let response =
-        nns_governance_make_proposal(&mut state_machine, n1.principal_id, n1.neuron_id, &proposal)
+        nns_governance_make_proposal(&state_machine, n1.principal_id, n1.neuron_id, &proposal)
             .command
             .expect("Making NNS proposal failed");
     let _proposal_id = match response {

@@ -113,6 +113,11 @@ message EcdsaInitialization {
   InitialIDkgDealings dealings = 2;
 }
 
+message ChainKeyInitialization {
+  registry.crypto.v1.MasterPublicKeyId key_id = 1;
+  InitialIDkgDealings dealings = 2;
+}
+
 // Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
 // a CUP with no dependencies on previous CUPs or blocks). Such CUP materials can be used to
 // construct the genesis CUP or a recovery CUP in the event of a subnet stall.
@@ -137,6 +142,9 @@ message CatchUpPackageContents {
 
   /// The initial ECDSA dealings for boot strapping target subnets.
   repeated EcdsaInitialization ecdsa_initializations = 7;
+
+  /// The initial IDkg dealings for boot strapping target chain key subnets.
+  repeated ChainKeyInitialization chain_key_initializations = 8;
 }
 
 message RegistryStoreUri {

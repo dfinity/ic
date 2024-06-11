@@ -17,7 +17,7 @@ use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
 };
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
-use ic_management_canister_types::{CanisterStatusType, EcdsaKeyId, Method as Ic00Method};
+use ic_management_canister_types::{CanisterStatusType, MasterPublicKeyId, Method as Ic00Method};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     canister_state::{
@@ -52,8 +52,8 @@ mod round_schedule;
 use crate::util::debug_assert_or_critical_error;
 pub use round_schedule::RoundSchedule;
 use round_schedule::*;
-mod tecdsa;
-use tecdsa::*;
+mod threshold_signatures;
+use threshold_signatures::*;
 
 /// Only log potentially spammy messages this often (in rounds). With a block
 /// rate around 1.0, this will result in logging about once every 10 minutes.
@@ -479,7 +479,7 @@ impl SchedulerImpl {
         ongoing_long_install_code: bool,
         long_running_canister_ids: BTreeSet<CanisterId>,
         registry_settings: &RegistryExecutionSettings,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterPublicKey>,
+        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> ReplicatedState {
         loop {
             let mut available_subnet_messages = false;
@@ -506,7 +506,7 @@ impl SchedulerImpl {
                     round_limits,
                     registry_settings,
                     measurement_scope,
-                    ecdsa_subnet_public_keys,
+                    idkg_subnet_public_keys,
                 );
                 state = new_state;
 
@@ -538,7 +538,7 @@ impl SchedulerImpl {
         round_limits: &mut RoundLimits,
         registry_settings: &RegistryExecutionSettings,
         measurement_scope: &MeasurementScope,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterPublicKey>,
+        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let instruction_limits = get_instructions_limits_for_subnet_message(
             self.deterministic_time_slicing,
@@ -552,7 +552,7 @@ impl SchedulerImpl {
             state,
             instruction_limits,
             csprng,
-            ecdsa_subnet_public_keys,
+            idkg_subnet_public_keys,
             registry_settings,
             round_limits,
         );
@@ -645,7 +645,7 @@ impl SchedulerImpl {
         root_measurement_scope: &MeasurementScope<'a>,
         scheduler_round_limits: &mut SchedulerRoundLimits,
         registry_settings: &RegistryExecutionSettings,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterPublicKey>,
+        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> (ReplicatedState, BTreeSet<CanisterId>) {
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
@@ -698,7 +698,7 @@ impl SchedulerImpl {
                         ongoing_long_install_code,
                         long_running_canister_ids,
                         registry_settings,
-                        ecdsa_subnet_public_keys,
+                        idkg_subnet_public_keys,
                     );
                     scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
                 }
@@ -1085,6 +1085,7 @@ impl SchedulerImpl {
     ) {
         let state_time = state.time();
         let mut all_rejects = Vec::new();
+        let mut uninstalled_canisters = Vec::new();
         for canister in state.canisters_iter_mut() {
             // Postpone charging for resources when a canister has a paused execution
             // to avoid modifying the balance of a canister during an unfinished operation.
@@ -1116,6 +1117,7 @@ impl SchedulerImpl {
                     )
                     .is_err()
                 {
+                    uninstalled_canisters.push(canister.canister_id());
                     all_rejects.push(uninstall_canister(
                         &self.log,
                         canister,
@@ -1137,6 +1139,12 @@ impl SchedulerImpl {
                     self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
                 }
             }
+        }
+
+        // Delete any snapshots associated with the canister
+        // that ran out of cycles.
+        for canister_id in uninstalled_canisters {
+            state.canister_snapshots.delete_snapshots(canister_id);
         }
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
@@ -1405,8 +1413,8 @@ impl Scheduler for SchedulerImpl {
         &self,
         mut state: ReplicatedState,
         randomness: Randomness,
-        ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
-        ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<PreSigId>>,
+        idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
         current_round: ExecutionRound,
         _next_checkpoint_round: Option<ExecutionRound>,
         current_round_type: ExecutionRoundType,
@@ -1479,12 +1487,17 @@ impl Scheduler for SchedulerImpl {
                 self.purge_expired_ingress_messages(&mut state);
             }
 
-            // Once the subnet messages are executed in threads, each thread will
-            // need its own Csprng instance which is initialized with a distinct
-            // "ExecutionThread". Otherwise, two Csprng instances that are
-            // initialized with the same Randomness and ExecutionThread would
-            // reveal the same bytes and break the guarantees that we provide for
-            // raw_rand method of the virtual canister.
+            // In the future, subnet messages might be executed in threads. In
+            // that case each thread will need its own Csprng instance which
+            // is initialized with a distinct "ExecutionThread". Otherwise,
+            // two Csprng instances that are initialized with the same Randomness
+            // and ExecutionThread would reveal the same bytes and break the
+            // guarantees that we provide for raw_rand method of the virtual canister.
+            //
+            // Currently subnet messages are still executed in a single thread so
+            // passing the number of scheduler cores is ok. It would need to be
+            // updated in case the execution of subnet messages is running across
+            // many threads to ensure a unique execution thread id.
             csprng = Csprng::from_seed_and_purpose(
                 &randomness,
                 &ExecutionThread(self.config.scheduler_cores as u32),
@@ -1560,7 +1573,7 @@ impl Scheduler for SchedulerImpl {
                     &mut subnet_round_limits,
                     registry_settings,
                     &measurement_scope,
-                    &ecdsa_subnet_public_keys,
+                    &idkg_subnet_public_keys,
                 );
                 state = new_state;
                 if subnet_round_limits.reached() {
@@ -1614,7 +1627,7 @@ impl Scheduler for SchedulerImpl {
                     &mut subnet_round_limits,
                     registry_settings,
                     &measurement_scope,
-                    &ecdsa_subnet_public_keys,
+                    &idkg_subnet_public_keys,
                 );
                 state = new_state;
             }
@@ -1673,21 +1686,36 @@ impl Scheduler for SchedulerImpl {
             &root_measurement_scope,
             &mut scheduler_round_limits,
             registry_settings,
-            &ecdsa_subnet_public_keys,
+            &idkg_subnet_public_keys,
         );
 
-        // Update [`SignWithEcdsaContext`]s by assigning randomness and matching quadruples.
-        update_sign_with_ecdsa_contexts(
-            current_round,
-            ecdsa_quadruple_ids,
-            &mut state
+        // Update [`SignatureRequestContext`]s by assigning randomness and matching quadruples.
+        {
+            let contexts = state
                 .metadata
                 .subnet_call_context_manager
-                .sign_with_ecdsa_contexts,
-            &mut csprng,
-            registry_settings,
-            self.metrics.as_ref(),
-        );
+                .sign_with_ecdsa_contexts
+                .values_mut()
+                .map(SignatureRequestContext::Ecdsa)
+                .chain(
+                    state
+                        .metadata
+                        .subnet_call_context_manager
+                        .sign_with_threshold_contexts
+                        .values_mut()
+                        .map(SignatureRequestContext::Generic),
+                )
+                .collect();
+
+            update_signature_request_contexts(
+                current_round,
+                idkg_pre_signature_ids,
+                contexts,
+                &mut csprng,
+                registry_settings,
+                self.metrics.as_ref(),
+            );
+        }
 
         // Finalization.
         {
@@ -2110,25 +2138,22 @@ fn observe_replicated_state_metrics(
             }
             Some(&ExecutionTask::Heartbeat) | Some(&ExecutionTask::GlobalTimer) | None => {}
         }
-        consumed_cycles_total += canister
-            .system_state
-            .canister_metrics
-            .consumed_cycles_since_replica_started;
+        consumed_cycles_total += canister.system_state.canister_metrics.consumed_cycles;
         join_consumed_cycles_by_use_case(
             &mut consumed_cycles_total_by_use_case,
             canister
                 .system_state
                 .canister_metrics
-                .get_consumed_cycles_since_replica_started_by_use_cases(),
+                .get_consumed_cycles_by_use_cases(),
         );
         let queues = canister.system_state.queues();
         ingress_queue_message_count += queues.ingress_queue_message_count();
         ingress_queue_size_bytes += queues.ingress_queue_size_bytes();
         input_queues_message_count += queues.input_queues_message_count();
         input_queues_size_bytes += queues.input_queues_size_bytes();
-        queues_response_bytes += queues.responses_size_bytes();
-        queues_memory_reservations += queues.reserved_slots();
-        queues_oversized_requests_extra_bytes += queues.oversized_requests_extra_bytes();
+        queues_response_bytes += queues.guaranteed_responses_size_bytes();
+        queues_memory_reservations += queues.guaranteed_response_memory_reservations();
+        queues_oversized_requests_extra_bytes += queues.oversized_guaranteed_requests_extra_bytes();
         if !canister_id_ranges.contains(&canister.canister_id()) {
             canisters_not_in_routing_table += 1;
         }
@@ -2333,6 +2358,8 @@ fn get_instructions_limits_for_subnet_message(
             | SignWithECDSA
             | ComputeInitialEcdsaDealings
             | ComputeInitialIDkgDealings
+            | SchnorrPublicKey
+            | SignWithSchnorr
             | StartCanister
             | StopCanister
             | UninstallCode

@@ -16,6 +16,7 @@ ic-cdk-macros = { workspace = true }
 ic-icrc1 = { path = "../" }
 ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }
 ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
+ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }

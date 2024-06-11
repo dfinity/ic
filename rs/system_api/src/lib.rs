@@ -110,6 +110,9 @@ pub struct InstructionLimits {
     /// more instructions than this limit.
     message: NumInstructions,
 
+    /// The instruction limit to report in case of an error.
+    limit_to_report: NumInstructions,
+
     /// The number of instructions in the largest possible slice. It may
     /// exceed `self.message()` if the latter was reduced or updated by the
     /// previous executions.
@@ -122,6 +125,7 @@ impl InstructionLimits {
     pub fn new(dts: FlagStatus, message: NumInstructions, max_slice: NumInstructions) -> Self {
         Self {
             message,
+            limit_to_report: message,
             max_slice: match dts {
                 FlagStatus::Enabled => max_slice,
                 FlagStatus::Disabled => message,
@@ -132,6 +136,11 @@ impl InstructionLimits {
     /// See the comments of the corresponding field.
     pub fn message(&self) -> NumInstructions {
         self.message
+    }
+
+    /// See the comments of the corresponding field.
+    pub fn limit_to_report(&self) -> NumInstructions {
+        self.limit_to_report
     }
 
     /// Returns the effective slice size, which is the smallest of
@@ -189,6 +198,7 @@ pub enum ResponseStatus {
 /// because some non-replicated queries can call other queries. In such
 /// a case the caller has too keep the state until the callee returns.
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum NonReplicatedQueryKind {
     Stateful {
         call_context_id: CallContextId,
@@ -2060,8 +2070,8 @@ impl SystemApi for SystemApiImpl {
                     name_src,
                     name_len,
                     heap,
-                    WasmClosure::new(reply_fun, reply_env),
-                    WasmClosure::new(reject_fun, reject_env),
+                    WasmClosure::new(reply_fun, reply_env.into()),
+                    WasmClosure::new(reject_fun, reject_env.into()),
                     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
                     MULTIPLIER_MAX_SIZE_LOCAL_SUBNET,
                     self.max_sum_exported_function_name_lengths,
@@ -2169,7 +2179,7 @@ impl SystemApi for SystemApiImpl {
                     error: "ic0.call_on_cleanup called when no call is under construction."
                         .to_string(),
                 }),
-                Some(request) => request.set_on_cleanup(WasmClosure::new(fun, env)),
+                Some(request) => request.set_on_cleanup(WasmClosure::new(fun, env.into())),
             },
         };
         trace_syscall!(self, CallOnCleanup, fun, env);

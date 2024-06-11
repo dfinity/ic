@@ -13,7 +13,7 @@ ic-btc-interface = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-ckbtc-minter = { path = "../ckbtc/minter" }
-rand = "0.8.5"
+rand = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 

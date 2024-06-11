@@ -16,7 +16,7 @@ use ic_replicated_state::{
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{CanisterLayout, CanisterStateBits, CheckpointLayout, ReadOnly, ReadPolicy};
 use ic_types::batch::RawQueryStats;
-use ic_types::{CanisterTimer, Height, LongExecutionMode, Time};
+use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::parallel_map;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -382,8 +382,8 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.skipped_round_due_to_no_messages,
         canister_state_bits.executed,
         canister_state_bits.interrupted_during_execution,
-        canister_state_bits.consumed_cycles_since_replica_started,
-        canister_state_bits.consumed_cycles_since_replica_started_by_use_cases,
+        canister_state_bits.consumed_cycles,
+        canister_state_bits.consumed_cycles_by_use_cases,
     );
 
     let starting_time = Instant::now();
@@ -424,10 +424,8 @@ pub fn load_canister_state<P: ReadPolicy>(
             last_full_execution_round: canister_state_bits.last_full_execution_round,
             compute_allocation: canister_state_bits.compute_allocation,
             accumulated_priority: canister_state_bits.accumulated_priority,
-            // Longs executions get aborted at the checkpoint,
-            // so both the credit and the execution mode below are set to their defaults.
-            priority_credit: Default::default(),
-            long_execution_mode: LongExecutionMode::default(),
+            priority_credit: canister_state_bits.priority_credit,
+            long_execution_mode: canister_state_bits.long_execution_mode,
             heap_delta_debit: canister_state_bits.heap_delta_debit,
             install_code_debit: canister_state_bits.install_code_debit,
             time_of_last_allocation_charge: Time::from_nanos_since_unix_epoch(

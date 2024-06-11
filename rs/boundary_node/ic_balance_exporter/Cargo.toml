@@ -23,8 +23,9 @@ hyper = { workspace = true }
 ic-agent = { workspace = true }
 indoc = "1.0.9"
 mockall = { workspace = true }
-opentelemetry = { version = "0.20", features = ["metrics"] }
-opentelemetry-prometheus = "0.13.0"
+opentelemetry = { workspace = true }
+opentelemetry-prometheus = { workspace = true }
+opentelemetry_sdk = { workspace = true }
 prometheus = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -33,4 +34,4 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3.3.0"
+tempfile = { workspace = true }

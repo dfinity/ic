@@ -24,14 +24,15 @@ use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
 use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
-use icrc_ledger_types::icrc3::archive::ArchiveInfo;
+use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
 pub use metrics::encode_orchestrator_metrics;
 use metrics::observe_task_duration;
 use num_traits::ToPrimitive;
+use scopeguard::ScopeGuard;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display};
 use std::str::FromStr;
 use std::time::Duration;
@@ -146,6 +147,7 @@ impl TaskQueue {
 
 /// Schedules a task for execution after the given delay.
 pub fn schedule_after<R: CanisterRuntime>(delay: Duration, work: Task, runtime: &R) {
+    log!(DEBUG, "Scheduling task {:?} after {:?}", work, delay);
     let now_nanos = runtime.time();
     let execute_at_ns = now_nanos.saturating_add(delay.as_secs().saturating_mul(SEC_NANOS));
 
@@ -190,6 +192,9 @@ async fn run_task<R: CanisterRuntime>(task: TaskExecution, runtime: R) {
         Some(guard) => guard,
         None => return,
     };
+    let rerun_task_guard = scopeguard::guard(task.task_type.clone(), |task_type| {
+        schedule_after(RETRY_FREQUENCY, task_type, &runtime);
+    });
     let start = runtime.time();
     let result = task.execute(&runtime).await;
     let end = runtime.time();
@@ -197,13 +202,14 @@ async fn run_task<R: CanisterRuntime>(task: TaskExecution, runtime: R) {
 
     match result {
         Ok(()) => {
+            let _task_type = ScopeGuard::into_inner(rerun_task_guard);
             log!(INFO, "task {:?} accomplished", task.task_type);
         }
         Err(e) => {
             if e.is_recoverable() {
                 log!(INFO, "task {:?} failed: {:?}. Will retry later.", task, e);
-                schedule_after(RETRY_FREQUENCY, task.task_type, &runtime);
             } else {
+                let _task_type = ScopeGuard::into_inner(rerun_task_guard);
                 log!(
                     INFO,
                     "ERROR: task {:?} failed with unrecoverable error: {:?}. Task is discarded.",
@@ -260,7 +266,9 @@ impl UpgradeLedgerSuite {
             });
         }
         if let Some(archive_compressed_wasm_hash) = archive_compressed_wasm_hash {
-            // TODO XC-30: discover ledger archives before upgrading them
+            subtasks.push(UpgradeLedgerSuiteSubtask::DiscoverArchives {
+                contract: contract.clone(),
+            });
             subtasks.push(UpgradeLedgerSuiteSubtask::UpgradeArchives {
                 contract: contract.clone(),
                 compressed_wasm_hash: archive_compressed_wasm_hash,
@@ -329,6 +337,9 @@ pub enum UpgradeLedgerSuiteSubtask {
         contract: Erc20Token,
         compressed_wasm_hash: WasmHash,
     },
+    DiscoverArchives {
+        contract: Erc20Token,
+    },
     UpgradeArchives {
         contract: Erc20Token,
         compressed_wasm_hash: WasmHash,
@@ -354,7 +365,7 @@ impl UpgradeLedgerSuiteSubtask {
                 let canisters = read_state(|s| s.managed_canisters(contract).cloned()).ok_or(
                     UpgradeLedgerSuiteError::Erc20TokenNotFound(contract.clone()),
                 )?;
-                let canister_id = ensure_ready_for_upgrade(contract, canisters.index)?;
+                let canister_id = ensure_canister_is_installed(contract, canisters.index)?;
                 upgrade_canister::<Index, _>(canister_id, compressed_wasm_hash, runtime).await
             }
             UpgradeLedgerSuiteSubtask::UpgradeLedger {
@@ -370,8 +381,14 @@ impl UpgradeLedgerSuiteSubtask {
                 let canisters = read_state(|s| s.managed_canisters(contract).cloned()).ok_or(
                     UpgradeLedgerSuiteError::Erc20TokenNotFound(contract.clone()),
                 )?;
-                let canister_id = ensure_ready_for_upgrade(contract, canisters.ledger)?;
+                let canister_id = ensure_canister_is_installed(contract, canisters.ledger)?;
                 upgrade_canister::<Ledger, _>(canister_id, compressed_wasm_hash, runtime).await
+            }
+            UpgradeLedgerSuiteSubtask::DiscoverArchives { contract } => {
+                log!(INFO, "Discovering archive canister(s) for {:?}", contract);
+                discover_archives(select_equal_to(contract), runtime)
+                    .await
+                    .map_err(UpgradeLedgerSuiteError::DiscoverArchivesError)
             }
             UpgradeLedgerSuiteSubtask::UpgradeArchives {
                 contract,
@@ -393,7 +410,7 @@ impl UpgradeLedgerSuiteSubtask {
                 log!(
                     INFO,
                     "Upgrading archive canisters {} for {:?} to {}",
-                    display_vec(&archives),
+                    display_iter(&archives),
                     contract,
                     compressed_wasm_hash
                 );
@@ -549,6 +566,7 @@ pub enum TaskError {
     LedgerNotFound(Erc20Token),
     InterCanisterCallError(CallError),
     InsufficientCyclesToTopUp { required: u128, available: u128 },
+    DiscoverArchivesError(DiscoverArchivesError),
     UpgradeLedgerSuiteError(UpgradeLedgerSuiteError),
 }
 
@@ -563,18 +581,30 @@ impl TaskError {
             TaskError::WasmHashNotFound(_) => false,
             TaskError::WasmStoreError(_) => false,
             TaskError::LedgerNotFound(_) => true, //ledger may not yet be created
-            TaskError::InterCanisterCallError(CallError { method: _, reason }) => match reason {
-                Reason::OutOfCycles => true,
-                Reason::CanisterError(msg) => {
-                    msg.ends_with("is stopped") || msg.ends_with("is stopping")
-                }
-                Reason::Rejected(_) => false,
-                Reason::TransientInternalError(_) => true,
-                Reason::InternalError(_) => false,
-            },
+            TaskError::InterCanisterCallError(e) => is_recoverable(e),
             TaskError::InsufficientCyclesToTopUp { .. } => false, //top-up task is periodic, will retry on next interval
+            TaskError::DiscoverArchivesError(e) => e.is_recoverable(),
             TaskError::UpgradeLedgerSuiteError(e) => e.is_recoverable(),
         }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum DiscoverArchivesError {
+    InterCanisterCallError(CallError),
+}
+
+impl DiscoverArchivesError {
+    fn is_recoverable(&self) -> bool {
+        match self {
+            DiscoverArchivesError::InterCanisterCallError(e) => is_recoverable(e),
+        }
+    }
+}
+
+impl From<DiscoverArchivesError> for TaskError {
+    fn from(value: DiscoverArchivesError) -> Self {
+        TaskError::DiscoverArchivesError(value)
     }
 }
 
@@ -591,6 +621,7 @@ pub enum UpgradeLedgerSuiteError {
     UpgradeCanisterError(CallError),
     WasmHashNotFound(WasmHash),
     WasmStoreError(WasmStoreError),
+    DiscoverArchivesError(DiscoverArchivesError),
 }
 
 impl UpgradeLedgerSuiteError {
@@ -603,6 +634,7 @@ impl UpgradeLedgerSuiteError {
             UpgradeLedgerSuiteError::StopCanisterError(_) => true,
             UpgradeLedgerSuiteError::StartCanisterError(_) => true,
             UpgradeLedgerSuiteError::UpgradeCanisterError(_) => true,
+            UpgradeLedgerSuiteError::DiscoverArchivesError(e) => e.is_recoverable(),
         }
     }
 }
@@ -610,6 +642,16 @@ impl UpgradeLedgerSuiteError {
 impl From<UpgradeLedgerSuiteError> for TaskError {
     fn from(value: UpgradeLedgerSuiteError) -> Self {
         TaskError::UpgradeLedgerSuiteError(value)
+    }
+}
+
+fn is_recoverable(e: &CallError) -> bool {
+    match &e.reason {
+        Reason::OutOfCycles => true,
+        Reason::CanisterError(msg) => msg.ends_with("is stopped") || msg.ends_with("is stopping"),
+        Reason::Rejected(_) => false,
+        Reason::TransientInternalError(_) => true,
+        Reason::InternalError(_) => false,
     }
 }
 
@@ -622,8 +664,8 @@ impl TaskExecution {
                 erc20_token,
                 minter_id,
             } => notify_erc20_added(erc20_token, minter_id, runtime).await,
-            Task::DiscoverArchives => discover_archives(runtime).await,
-            Task::UpgradeLedgerSuite(upgrade) => upgrade_ledger_suite(upgrade, runtime).await,
+            Task::DiscoverArchives => Ok(discover_archives(select_all(), runtime).await?),
+            Task::UpgradeLedgerSuite(upgrade) => Ok(upgrade_ledger_suite(upgrade, runtime).await?),
         }
     }
 }
@@ -649,7 +691,7 @@ async fn maybe_top_up<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> 
         "[maybe_top_up]: Managed canisters {}. \
         Cycles management: {cycles_management:?}. \
     Required amount of cycles for orchestrator to be able to top-up: {minimum_orchestrator_cycles}. \
-    Monitored canister minimum target cycles balance {minimum_monitored_canister_cycles}", display_vec(&managed_principals)
+    Monitored canister minimum target cycles balance {minimum_monitored_canister_cycles}", display_iter(&managed_principals)
     );
 
     let mut orchestrator_cycle_balance = match runtime.canister_cycles(runtime.id()).await {
@@ -1041,9 +1083,13 @@ async fn notify_erc20_added<R: CanisterRuntime>(
     }
 }
 
-async fn discover_archives<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> {
+async fn discover_archives<R: CanisterRuntime, F: Fn(&Erc20Token) -> bool>(
+    selector: F,
+    runtime: &R,
+) -> Result<(), DiscoverArchivesError> {
     let ledgers: BTreeMap<_, _> = read_state(|s| {
         s.managed_canisters_iter()
+            .filter(|(token, _)| selector(token))
             .filter_map(|(token, canisters)| {
                 canisters
                     .ledger_canister_id()
@@ -1060,21 +1106,26 @@ async fn discover_archives<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskEr
         "[discover_archives]: discovering archives for {:?}",
         ledgers
     );
-    let results =
-        future::join_all(ledgers.values().map(|p| call_ledger_archives(*p, runtime))).await;
-    let mut errors: Vec<(Erc20Token, Principal, TaskError)> = Vec::new();
+    let results = future::join_all(
+        ledgers
+            .values()
+            .map(|p| call_ledger_icrc3_get_archives(*p, runtime)),
+    )
+    .await;
+    let mut errors: Vec<(Erc20Token, Principal, DiscoverArchivesError)> = Vec::new();
     for ((token, ledger), result) in ledgers.into_iter().zip(results) {
         match result {
             Ok(archives) => {
-                let archives: Vec<_> = archives.into_iter().map(|a| a.canister_id).collect();
+                //order is not guaranteed by the API of icrc3_get_archives.
+                let archives: BTreeSet<_> = archives.into_iter().map(|a| a.canister_id).collect();
                 log!(
                     DEBUG,
                     "[discover_archives]: archives for ERC-20 token {:?} with ledger {}: {}",
                     token,
                     ledger,
-                    display_vec(&archives)
+                    display_iter(&archives)
                 );
-                mutate_state(|s| s.record_archives(&token, archives));
+                mutate_state(|s| s.record_archives(&token, archives.into_iter().collect()));
             }
             Err(e) => errors.push((token, ledger, e)),
         }
@@ -1092,20 +1143,29 @@ async fn discover_archives<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskEr
     Ok(())
 }
 
-async fn call_ledger_archives<R: CanisterRuntime>(
+async fn call_ledger_icrc3_get_archives<R: CanisterRuntime>(
     ledger_id: Principal,
     runtime: &R,
-) -> Result<Vec<ArchiveInfo>, TaskError> {
+) -> Result<GetArchivesResult, DiscoverArchivesError> {
+    let args = GetArchivesArgs { from: None };
     runtime
-        .call_canister(ledger_id, "archives", ())
+        .call_canister(ledger_id, "icrc3_get_archives", args)
         .await
-        .map_err(TaskError::InterCanisterCallError)
+        .map_err(DiscoverArchivesError::InterCanisterCallError)
+}
+
+fn select_all<T>() -> impl Fn(&T) -> bool {
+    |_| true
+}
+
+fn select_equal_to<T: PartialEq>(expected_value: &T) -> impl Fn(&T) -> bool + '_ {
+    move |x| x == expected_value
 }
 
 async fn upgrade_ledger_suite<R: CanisterRuntime>(
     upgrade_ledger_suite: &UpgradeLedgerSuite,
     runtime: &R,
-) -> Result<(), TaskError> {
+) -> Result<(), UpgradeLedgerSuiteError> {
     let mut upgrade_ledger_suite = upgrade_ledger_suite.clone();
     if let Some(subtask) = upgrade_ledger_suite.next() {
         subtask.execute(runtime).await?;
@@ -1116,7 +1176,7 @@ async fn upgrade_ledger_suite<R: CanisterRuntime>(
     Ok(())
 }
 
-fn ensure_ready_for_upgrade<T>(
+fn ensure_canister_is_installed<T>(
     erc20_token: &Erc20Token,
     canister: Option<Canister<T>>,
 ) -> Result<Principal, UpgradeLedgerSuiteError> {
@@ -1221,10 +1281,10 @@ impl TryFrom<crate::candid::Erc20Contract> for Erc20Token {
     }
 }
 
-fn display_vec<T: Display>(v: &[T]) -> String {
+fn display_iter<I: Display, T: IntoIterator<Item = I>>(v: T) -> String {
     format!(
         "[{}]",
-        v.iter()
+        v.into_iter()
             .map(|x| format!("{}", x))
             .collect::<Vec<_>>()
             .join(", ")

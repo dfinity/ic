@@ -66,6 +66,8 @@ struct Opt {
     not_whitelisted: bool,
     #[clap(long = "expose-metrics")]
     expose_metrics: bool,
+    #[clap(long = "enable-rosetta-blocks")]
+    enable_rosetta_blocks: bool,
 }
 
 impl Opt {
@@ -226,6 +228,7 @@ async fn main() -> std::io::Result<()> {
         not_whitelisted,
         expose_metrics,
         blockchain,
+        enable_rosetta_blocks,
         ..
     } = opt;
     let client = ledger_client::LedgerClient::new(
@@ -237,6 +240,7 @@ async fn main() -> std::io::Result<()> {
         store_max_blocks,
         offline,
         root_key,
+        enable_rosetta_blocks,
     )
     .await
     .map_err(|e| {

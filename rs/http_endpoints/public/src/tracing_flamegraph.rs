@@ -33,9 +33,8 @@ pub(crate) async fn tracing_flamegraph_handle(
     State(TracingFlamegraphService(reload_handles)): State<TracingFlamegraphService>,
 ) -> impl IntoResponse {
     let writer = SharedBuffer::default();
-    let flame_layer = FlameLayer::new(writer.clone())
-        .with_empty_samples(false)
-        .with_filter(Targets::new().with_default(LevelFilter::INFO));
+    let flame_layer =
+        FlameLayer::new(writer.clone()).with_filter(Targets::new().with_default(LevelFilter::INFO));
 
     let (tx, rx) = oneshot::channel();
 

@@ -18,12 +18,12 @@ mock! {
 
         fn available_states(&self) -> Vec<StateSyncArtifactId>;
 
-        fn start_state_sync(
+        fn maybe_start_state_sync(
             &self,
             id: &StateSyncArtifactId,
         ) -> Option<Box<dyn Chunkable<T> + Send>>;
 
-        fn should_cancel(&self, id: &StateSyncArtifactId) -> bool;
+        fn cancel_if_running(&self, id: &StateSyncArtifactId) -> bool;
 
         fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk>;
     }

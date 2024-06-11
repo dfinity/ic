@@ -10,6 +10,8 @@ documentation.workspace = true
 candid = { workspace = true }
 ic-agent = { workspace = true }
 ic-icrc1 = { path = "../../icrc1" }
+ic-icrc-rosetta-client = { path = "../../icrc1/rosetta/client" }
+ic-icrc-rosetta = { path = "../../icrc1/rosetta" }
 ic-ledger-test-utils = { path = "../test_utils" }
 ic-rosetta-api = { path = "../.." }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
@@ -21,6 +23,6 @@ pocket-ic = { path = "../../../../packages/pocket-ic" }
 reqwest = { workspace = true }
 rosetta-core = { path = "../../rosetta_core" }
 serde = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }
 url = "2.2.1"
