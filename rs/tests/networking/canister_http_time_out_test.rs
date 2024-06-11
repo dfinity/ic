@@ -103,7 +103,7 @@ pub fn test(env: TestEnv) {
 
         // Test remote timeout case
         let url_to_fail = "https://[40d:40d:40d:40d:40d:40d:40d:40d]:28992".to_string();
-        request.request.url = url_to_fail.clone();
+        request.request.url.clone_from(&url_to_fail);
         let r = request.clone();
         let p = proxy_canister.clone();
         retry_with_msg_async!(

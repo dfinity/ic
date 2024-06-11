@@ -1,3 +1,4 @@
+#[cfg(test)]
 mod framework;
 
 use crate::framework::ConsensusDriver;

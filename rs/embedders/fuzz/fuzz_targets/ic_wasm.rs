@@ -282,7 +282,7 @@ fn export_name(
             .filter(|index| !visited.contains(index))
             .collect();
         let choice = u.choose(&index_choice)?;
-        name = export_func_once[*choice].clone();
+        name.clone_from(&export_func_once[*choice]);
         visited.insert(*choice);
         return Ok(name);
     }

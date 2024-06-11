@@ -346,9 +346,9 @@ impl Default for Config {
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
             canister_snapshots: FlagStatus::Disabled,
             dirty_page_logging: FlagStatus::Disabled,
-            ic00_compute_initial_i_dkg_dealings: FlagStatus::Disabled,
-            ic00_schnorr_public_key: FlagStatus::Disabled,
-            ic00_sign_with_schnorr: FlagStatus::Disabled,
+            ic00_compute_initial_i_dkg_dealings: FlagStatus::Enabled,
+            ic00_schnorr_public_key: FlagStatus::Enabled,
+            ic00_sign_with_schnorr: FlagStatus::Enabled,
         }
     }
 }

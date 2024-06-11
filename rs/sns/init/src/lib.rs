@@ -86,12 +86,13 @@ enum MinDirectParticipationThresholdValidationError {
     },
 }
 
-impl ToString for MinDirectParticipationThresholdValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for MinDirectParticipationThresholdValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "MinDirectParticipationThresholdValidationError: ";
         match self {
             Self::Unspecified => {
-                format!(
+                write!(
+                    f,
                     "{}min_direct_participation_threshold_icp_e8s must be specified.",
                     prefix
                 )
@@ -100,7 +101,8 @@ impl ToString for MinDirectParticipationThresholdValidationError {
                 min_direct_participation_threshold_icp_e8s,
                 min_direct_participation_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}min_direct_participation_threshold_icp_e8s ({}) should be greater \
                     than or equal min_direct_participation_icp_e8s ({}).",
                     prefix,
@@ -112,7 +114,8 @@ impl ToString for MinDirectParticipationThresholdValidationError {
                 min_direct_participation_threshold_icp_e8s,
                 max_direct_participation_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}min_direct_participation_threshold_icp_e8s ({}) should be less \
                     than or equal max_direct_participation_icp_e8s ({}).",
                     prefix,
@@ -139,12 +142,13 @@ enum MaxNeuronsFundParticipationValidationError {
     },
 }
 
-impl ToString for MaxNeuronsFundParticipationValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for MaxNeuronsFundParticipationValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "MaxNeuronsFundParticipationValidationError: ";
         match self {
             Self::Unspecified => {
-                format!(
+                write!(
+                    f,
                     "{}max_neurons_fund_participation_icp_e8s must be specified.",
                     prefix
                 )
@@ -153,7 +157,8 @@ impl ToString for MaxNeuronsFundParticipationValidationError {
                 max_neurons_fund_participation_icp_e8s,
                 min_participant_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}max_neurons_fund_participation_icp_e8s ({} > 0) \
                     should be greater than or equal min_participant_icp_e8s ({}).",
                     prefix, max_neurons_fund_participation_icp_e8s, min_participant_icp_e8s,
@@ -163,7 +168,8 @@ impl ToString for MaxNeuronsFundParticipationValidationError {
                 max_neurons_fund_participation_icp_e8s,
                 max_direct_participation_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}max_neurons_fund_participation_icp_e8s ({}) \
                     should be less than or equal max_direct_participation_icp_e8s ({}).",
                     prefix,
@@ -187,25 +193,28 @@ enum NeuronsFundParticipationConstraintsValidationError {
     Local(neurons_fund::NeuronsFundParticipationConstraintsValidationError),
 }
 
-impl ToString for NeuronsFundParticipationConstraintsValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronsFundParticipationConstraintsValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "NeuronsFundParticipationConstraintsValidationError: ";
         match self {
-            Self::SetBeforeProposalExecution => format!(
-                "{}neurons_fund_participation_constraints must not be set before \
-                the CreateServiceNervousSystem proposal is executed.",
-                prefix
-            ),
+            Self::SetBeforeProposalExecution => {
+                write!(
+                    f,
+                    "{}neurons_fund_participation_constraints must not be set before \
+                    the CreateServiceNervousSystem proposal is executed.",
+                    prefix
+                )
+            }
             Self::RelatedFieldUnspecified(related_field_name) => {
-                format!("{}{} must be specified.", prefix, related_field_name,)
+                write!(f, "{}{} must be specified.", prefix, related_field_name,)
             }
             Self::MinDirectParticipationThresholdValidationError(error) => {
-                format!("{}{}", prefix, error.to_string())
+                write!(f, "{}{}", prefix, error)
             }
             Self::MaxNeuronsFundParticipationValidationError(error) => {
-                format!("{}{}", prefix, error.to_string())
+                write!(f, "{}{}", prefix, error)
             }
-            Self::Local(error) => format!("{}{}", prefix, error.to_string()),
+            Self::Local(error) => write!(f, "{}{}", prefix, error),
         }
     }
 }
@@ -229,8 +238,8 @@ impl RestrictedCountriesValidationError {
     }
 }
 
-impl ToString for RestrictedCountriesValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for RestrictedCountriesValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match self {
             Self::EmptyList => {
                 "must either be None or include at least one country code".to_string()
@@ -249,7 +258,8 @@ impl ToString for RestrictedCountriesValidationError {
                 format!("must not contain duplicates, found '{item}'")
             }
         };
-        format!("{} {msg}", Self::field_name())
+
+        write!(f, "{} {msg}", Self::field_name())
     }
 }
 
@@ -274,8 +284,8 @@ impl NeuronBasketConstructionParametersValidationError {
     }
 }
 
-impl ToString for NeuronBasketConstructionParametersValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronBasketConstructionParametersValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match self {
             Self::ExceedsMaximalDissolveDelay(max_dissolve_delay_seconds) => {
                 format!(
@@ -298,7 +308,7 @@ impl ToString for NeuronBasketConstructionParametersValidationError {
                 "must not be set with the legacy flow for SNS decentralization swaps".to_string()
             }
         };
-        format!("{} {msg}", Self::field_name())
+        write!(f, "{} {msg}", Self::field_name())
     }
 }
 
@@ -334,12 +344,12 @@ impl NeuronsFundParticipationValidationError {
     }
 }
 
-impl ToString for NeuronsFundParticipationValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronsFundParticipationValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match self {
             Self::Unspecified => "must be specified".to_string(),
         };
-        format!("{} {msg}", Self::field_name())
+        write!(f, "{} {msg}", Self::field_name())
     }
 }
 

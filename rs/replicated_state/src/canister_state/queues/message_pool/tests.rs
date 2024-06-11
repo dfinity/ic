@@ -823,6 +823,17 @@ fn encode_roundtrip() {
     assert_eq!(pool, decoded);
 }
 
+/// Tests an encode-decode roundtrip of an empty `MessagePool`.
+#[test]
+fn encode_roundtrip_empty() {
+    let pool = MessagePool::default();
+
+    let encoded: pb_queues::MessagePool = (&pool).into();
+    let decoded = encoded.try_into().unwrap();
+
+    assert_eq!(pool, decoded);
+}
+
 //
 // Fixtures and helper functions.
 //

@@ -517,7 +517,7 @@ pub mod test_agent {
     };
     use reqwest::header::CONTENT_TYPE;
     use serde_cbor::Value as CBOR;
-    use std::{net::SocketAddr, time::Duration};
+    use std::time::Duration;
 
     const INGRESS_EXPIRY_DURATION: Duration = Duration::from_secs(300);
     const METHOD_NAME: &str = "test";

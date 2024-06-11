@@ -29,9 +29,9 @@ pub enum RejectCode {
     CanisterError = 5,
 }
 
-impl ToString for RejectCode {
-    fn to_string(&self) -> String {
-        self.to_str().to_owned()
+impl std::fmt::Display for RejectCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_str())
     }
 }
 
