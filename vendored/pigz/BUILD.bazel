@@ -1,0 +1,27 @@
+# The sources were downloaded from https://github.com/madler/pigz/archive/refs/tags/v2.8.zip
+
+version = "2.8"
+
+cc_binary(
+    name = "pigz",
+    srcs = [
+        version + "/pigz.c",
+        version + "/try.c",
+        version + "/try.h",
+        version + "/yarn.c",
+        version + "/yarn.h",
+    ],
+    linkopts = [
+        "-lm",
+        "-lpthread",
+        "-lz",
+    ],
+    deps = [":zopfli"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "zopfli",
+    hdrs = glob([version + "/zopfli/src/zopfli/*.h"]),
+    srcs = glob([version + "/zopfli/src/zopfli/*.c"]),
+)
