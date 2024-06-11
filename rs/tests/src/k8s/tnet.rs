@@ -244,7 +244,7 @@ impl TNet {
         .await?;
 
         debug!("Tnet owner: {}", config_map.name_any());
-        self.unique_name = config_map.metadata.name.clone();
+        self.unique_name.clone_from(&config_map.metadata.name);
         self.owner = config_map;
         self.config_url = Some(format!(
             "{}/{}/{}",

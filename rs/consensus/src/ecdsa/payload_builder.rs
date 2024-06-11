@@ -1634,8 +1634,7 @@ mod tests {
             // Make sure the previous RequestId record can be retrieved by its pseudo_random_id.
             assert!(summary_from_proto
                 .signature_agreements
-                .get(&[4; 32])
-                .is_some());
+                .contains_key(&[4; 32]));
         })
     }
 

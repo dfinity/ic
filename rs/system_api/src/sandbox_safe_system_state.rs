@@ -460,7 +460,7 @@ impl SystemStateChanges {
             if certified_data.len() > CERTIFIED_DATA_MAX_LENGTH {
                 return Err(Self::error("Certified data is too large"));
             }
-            system_state.certified_data = certified_data.clone();
+            system_state.certified_data.clone_from(certified_data);
         }
 
         // Update canister global timer

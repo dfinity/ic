@@ -414,9 +414,6 @@ impl TryFrom<OpOut> for RawSubmitIngressResult {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct ApiV2Error(String);
-
 impl From<OpOut> for (StatusCode, ApiResponse<PocketHttpResponse>) {
     fn from(value: OpOut) -> Self {
         match value {
