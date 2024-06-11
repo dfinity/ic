@@ -493,12 +493,21 @@ impl IDkgDealingInternal {
     }
 
     pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
-        serde_cbor::to_vec(self).map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
+        serde_cbor::to_vec(self).map_err(|e| {
+            CanisterThresholdSerializationError(format!(
+                "failed to serialize IDkgDealingInternal: {}",
+                e
+            ))
+        })
     }
 
     pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
-        serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
+        serde_cbor::from_slice::<Self>(bytes).map_err(|e| {
+            CanisterThresholdSerializationError(format!(
+                "failed to deserialize IDkgDealingInternal: {}",
+                e
+            ))
+        })
     }
 }
 
