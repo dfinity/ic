@@ -25,7 +25,7 @@ sudo mount -t tmpfs tmpfs-podman "/tmp/tmpfs-podman"
 
 BASE_IMAGE="docker.io/dfinity/ic-build-bazel@sha256:1978886cfda51b09057bffd60f2e5edb588c6c0b74de87696cd4e964335dba87"
 
-sudo podman --root /tmp/tmpfs-podman build --iidfile ${TMPDIR}/iidfile - <<<"
+sudo podman --root /tmp/tmpfs-podman build --network=host --cgroupns=host --iidfile ${TMPDIR}/iidfile - <<<"
     FROM $BASE_IMAGE
     USER root:root
     RUN mkdir -p /build/boot/grub
