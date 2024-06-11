@@ -23,6 +23,11 @@ USER root:root
 
 WORKDIR /tmp
 
+# Download and verify vector
+RUN \
+    curl -L -O https://boundary-nodes.s3.eu-central-1.amazonaws.com/ic-gateway_0.1.3_amd64.deb && \
+    echo "b6875e4de2d6414a8b4f1949716aa97693a5da53  ic-gateway_0.1.3_amd64.deb" | shasum -c
+
 #
 # Second build stage:
 # - Construct base images with the differences between dev and prod (IC-OS root filesystem)
@@ -50,6 +55,10 @@ RUN printf '%s\n' >/etc/nns_public_key.pem \
 FROM image-${BUILD_TYPE}
 
 USER root:root
+
+COPY --from=download /tmp/ic-gateway_0.1.2_amd64.deb /tmp/ic-gateway_0.1.2_amd64.deb
+RUN dpkg -i --force-confold /tmp/ic-gateway_0.1.2_amd64.deb && \
+    rm /tmp/ic-gateway_0.1.2_amd64.deb
 
 RUN mkdir -p /boot/config \
              /boot/efi \
@@ -115,6 +124,9 @@ RUN for SERVICE in /etc/systemd/system/*; do \
     systemd-networkd-wait-online \
     systemd-resolved \
     systemd-journal-gatewayd
+
+# TODO remove when nginx is removed from base image
+RUN systemctl disable nginx
 
 # Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf
 # E.g., systemd-timesync/coredump
@@ -187,8 +199,6 @@ RUN chown root:root /etc/node_exporter \
 # will be cached when only the binaries change.
 COPY opt /opt
 
-RUN rm -rf /etc/nginx/sites-enabled/nginx.conf
-
 RUN mkdir -p /var/www/html && chown www-data:www-data /var/www/html
 
 # Install other files (e.g. the uninstall-script)
@@ -213,14 +223,6 @@ RUN apt-get clean && \
 RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/*
-
-# Take care of nginx files
-RUN chmod 0755 /etc/nginx/* && \
-    chmod 0644 /etc/nginx/nginx.conf && \
-    rm -rf /etc/nginx/conf.d/nginx-global.conf && \
-    rm -rf /etc/nginx/conf.d/default.conf && \
-    rm -rf /etc/nginx/sites-enabled/default && \
-    rm -rf /etc/nginx/conf.d/default
 
 # Increase the default limit on the number of open files for all systemd services
 RUN sed -i '/^#DefaultLimitNOFILE=/c\DefaultLimitNOFILE=1048576:1048576' /etc/systemd/system.conf

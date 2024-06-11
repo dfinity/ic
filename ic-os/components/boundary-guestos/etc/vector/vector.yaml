@@ -19,7 +19,6 @@ sources:
     type: journald
     include_units:
     - certificate-issuer
-    - certificate-syncer
     - ic-boundary
     - danted
 
@@ -101,24 +100,6 @@ transforms:
       .service = "certificate-issuer"
       .timestamp = parse_timestamp!(.timestamp, "%+")
 
-  certificate_syncer:
-    type: filter
-    inputs:
-    - journal
-
-    condition: ._SYSTEMD_UNIT == "certificate-syncer.service"
-
-  certificate_syncer_normalized:
-    type: remap
-    inputs:
-    - certificate_syncer
-
-    source: |
-      . = parse_json!(.message)
-
-      .service = "certificate-syncer"
-      .timestamp = parse_timestamp!(.timestamp, "%+")
-
   ic_boundary:
     type: filter
     inputs:
@@ -197,7 +178,6 @@ sinks:
     type: console
     inputs:
     - certificate_issuer_normalized
-    - certificate_syncer_normalized
     - ic_boundary_filtered
 
     encoding:

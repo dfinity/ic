@@ -2,13 +2,8 @@
 
 The Boundary Node has a number of specific components:
 
-== Nginx and `ic_router.js`
-Nginx is used as reverse proxy that terminates TLS, forwards requests to `ic-boundary` and `icx-proxy`, and provides a caching layer for static assets.
-
-== `icx-proxy`
-Transforms HTTP-to-canister request as API calls.
-More details can be found link:https://github.com/dfinity/icx-proxy[here].
-
+- `ic-gateway` is used to proxy HTTP calls to `ic-boundary` using IC protocol
+- `ic-boundary` forwards the IC requests to replicas
 
 == Prober
 - Creates canisters that are probed

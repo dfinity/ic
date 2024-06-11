@@ -1,5 +1,5 @@
 [Unit]
-Description=Setup environment files for icx-proxy
+Description=Setup environment files for ic-gateway
 DefaultDependencies=no
 After=bootstrap-ic-node.service
 Requires=bootstrap-ic-node.service
@@ -7,4 +7,4 @@ Requires=bootstrap-ic-node.service
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/setup-icx-proxy.sh
+ExecStart=/opt/ic/bin/setup-ic-gateway.sh

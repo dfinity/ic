@@ -5,12 +5,19 @@ source '/opt/ic/bin/helpers.shlib'
 
 readonly BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
 
-readonly RUN_DIR='/run/ic-node/etc/icx-proxy'
+readonly RUN_DIR='/run/ic-node/etc/ic-gateway'
 readonly ENV_FILE="${RUN_DIR}/env"
 readonly ROOT_KEY="${RUN_DIR}/root_key.der"
 
 SYSTEM_DOMAINS=()
 APPLICATION_DOMAINS=()
+
+function join_by {
+    local d=${1-} f=${2-}
+    if shift 2; then
+        printf %s "$f" "${@/#/$d}"
+    fi
+}
 
 # Read the config variables. The files must be of the form
 # "key=value" for each line with a specific set of keys permissible (see
@@ -20,6 +27,7 @@ function read_variables() {
         err "missing node configuration directory: ${BOOT_DIR}"
         exit 1
     fi
+
     if [ ! -f "${BN_CONFIG}" ]; then
         err "missing domain configuration: ${BN_CONFIG}"
         exit 1
@@ -29,6 +37,7 @@ function read_variables() {
     # otherwise lead to executing arbitrary shell code!
     while IFS="=" read -r key value; do
         case "${key}" in
+            "env") ENV="${value}" ;;
             "system_domains") SYSTEM_DOMAINS+=("${value}") ;;
             "application_domains") APPLICATION_DOMAINS+=("${value}") ;;
             "denylist_url") DENYLIST_URL="${value}" ;;
@@ -36,19 +45,19 @@ function read_variables() {
     done <"${BN_CONFIG}"
 
     if [[ "${#SYSTEM_DOMAINS[@]}" -eq 0 ]]; then
-        err "SYSTEM_DOMAINS variable not set. icx-proxy won't be configured."
+        err "SYSTEM_DOMAINS variable not set. ic-gateway won't be configured."
         exit 1
     fi
 
     if [[ "${#APPLICATION_DOMAINS[@]}" -eq 0 ]]; then
-        err "APPLICATION_DOMAINS variable not set. icx-proxy won't be configured."
+        err "APPLICATION_DOMAINS variable not set. ic-gateway won't be configured."
         exit 1
     fi
 
     check_nns_pem
 }
 
-function setup_geolite2_dbs() {
+function setup_geoip_db() {
     local -r BOOT_DBS="${BOOT_DIR}/geolite2_dbs"
     local -r EMPTY_DBS='/etc/geoip'
 
@@ -78,55 +87,44 @@ function copy_deny_list() {
     fi
 }
 
-function generate_icx_proxy_config() {
-    local -r DOMAINS=(
-        "${SYSTEM_DOMAINS[@]}"
-        "${APPLICATION_DOMAINS[@]}"
-    )
-
-    local -A UNIQUE_DOMAINS
-
-    for DOMAIN in "${DOMAINS[@]}"; do
-        UNIQUE_DOMAINS[$DOMAIN]=0
-    done
-
-    for DOMAIN in "${!UNIQUE_DOMAINS[@]}"; do
-        ARG_DOMAINS+=("--domain ${DOMAIN}")
-    done
-
-    for DOMAIN in "${SYSTEM_DOMAINS[@]}"; do
-        local DOMAIN_ESCAPED=${DOMAIN//\./\\.}
-        ARG_DOMAINS_SYSTEM+=("--domain-system-regex '^([^.]+\.)?(raw\.)?${DOMAIN_ESCAPED}$'")
-    done
-
-    for DOMAIN in "${APPLICATION_DOMAINS[@]}"; do
-        local DOMAIN_ESCAPED=${DOMAIN//\./\\.}
-        ARG_DOMAINS_APPLICATION+=("--domain-app-regex '^([^.]+\.)?(raw\.)?${DOMAIN_ESCAPED}$'")
-    done
-
-    mkdir -p "${RUN_DIR}"
-
+function generate_config() {
     # Setup network key
     get_nns_der >"${ROOT_KEY}"
 
-    cat >"${ENV_FILE}" <<EOF
-DOMAINS=${ARG_DOMAINS[@]}
-DOMAINS_SYSTEM=${ARG_DOMAINS_SYSTEM[@]}
-DOMAINS_APPLICATION=${ARG_DOMAINS_APPLICATION[@]}
-DENYLIST_URL=${DENYLIST_URL:-}
-EOF
+    local DOMAINS_APP=$(join_by , ${APPLICATION_DOMAINS[@]})
+    local DOMAINS_SYSTEM=$(join_by , ${SYSTEM_DOMAINS[@]})
 
-    # Denylist canister
+    # Allow denylist canister
     cat >"${RUN_DIR}/allowlist.txt" <<EOF
 z2rt2-eaaaa-aaaal-abcva-cai
 EOF
+
+    cat >"${ENV_FILE}" <<EOF
+ENV="${ENV}"
+DOMAIN_APP="${DOMAINS_APP}"
+DOMAIN_SYSTEM="${DOMAINS_SYSTEM}"
+HTTP_SERVER_LISTEN_PLAIN="[::]:80"
+HTTP_SERVER_LISTEN_TLS="[::]:443"
+METRICS_LISTEN="[::]:9314"
+POLICY_PRE_ISOLATION_CANISTERS="${RUN_DIR}/pre_isolation_canisters.txt"
+POLICY_DENYLIST_URL="${DENYLIST_URL}"
+POLICY_DENYLIST_ALLOWLIST="${RUN_DIR}/allowlist.txt"
+POLICY_DENYLIST_SEED="${RUN_DIR}/denylist.json"
+DOMAIN_CANISTER_ALIAS="personhood:g3wsl-eqaaa-aaaan-aaaaa-cai,identity:rdmx6-jaaaa-aaaaa-aaadq-cai,nns:qoctq-giaaa-aaaaa-aaaea-cai,dscvr:h5aet-waaaa-aaaab-qaamq-cai"
+GEOIP_DB="${RUN_DIR}/GeoLite2-Country.mmdb"
+IC_URL="http://127.0.0.1:9000"
+IC_ROOT_KEY="${ROOT_KEY}"
+CERT_PROVIDER_DIR="${RUN_DIR}/certs"
+CERT_PROVIDER_ISSUER_URL="http://127.0.0.1:3000"
+LOG_STDOUT="true"
+EOF
+
+    mount --bind "${ENV_FILE}" /etc/default/ic-gateway
 }
 
 function setup_pre_isolation_canisters() {
     local -r SRC_CANISTERS_PATH="${BOOT_DIR}/pre_isolation_canisters.txt"
     local -r DST_CANISTERS_PATH="${RUN_DIR}/pre_isolation_canisters.txt"
-
-    mkdir -p "${RUN_DIR}"
 
     if [[ ! -f "${SRC_CANISTERS_PATH}" ]]; then
         touch "${DST_CANISTERS_PATH}"
@@ -135,12 +133,31 @@ function setup_pre_isolation_canisters() {
     fi
 }
 
+function setup_certs() {
+    mkdir -p "${RUN_DIR}/certs"
+
+    if [ -f "${BOOT_DIR}/certs/fullchain.pem" ]; then
+        cp "${BOOT_DIR}/certs/fullchain.pem" "${RUN_DIR}/certs/cert.pem"
+    else
+        cp "/etc/ssl/certs/ssl-cert-snakeoil.pem" "${RUN_DIR}/certs/cert.pem"
+    fi
+
+    if [ -f "${BOOT_DIR}/certs/privkey.pem" ]; then
+        cp "${BOOT_DIR}/certs/privkey.pem" "${RUN_DIR}/certs/cert.key"
+    else
+        cp "/etc/ssl/private/ssl-cert-snakeoil.key" "${RUN_DIR}/certs/cert.key"
+    fi
+}
+
 function main() {
+    mkdir -p "${RUN_DIR}"
+
     read_variables
     setup_pre_isolation_canisters
-    setup_geolite2_dbs
+    setup_geoip_db
     copy_deny_list
-    generate_icx_proxy_config
+    setup_certs
+    generate_config
 }
 
 main "$@"

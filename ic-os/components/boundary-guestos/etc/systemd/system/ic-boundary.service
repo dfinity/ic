@@ -17,7 +17,7 @@ ExecStart=/bin/bash -c ' \
         --local-store-path /var/opt/registry/store \
         --nns-pub-key-pem /run/ic-node/etc/default/nns_public_key.pem \
         --nns-urls "${NNS_URL}" \
-        --http-unix-socket /run/ic-node/ic-boundary.socket \
+        --http-port 9000 \
         --metrics-addr "[::]:9324" \
         --log-stdout \
         --log-failed-requests-only \
