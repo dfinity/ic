@@ -362,15 +362,6 @@ impl PocketIc {
         self.pocket_ic.url()
     }
 
-    /// Returns the URL at which `/api/v2` requests
-    /// for this instance can be made if the HTTP
-    /// gateway has been started.
-    pub fn url(&self) -> Option<Url> {
-        self.http_gateway
-            .as_ref()
-            .map(|res| Url::parse(&format!("http://{}:{}/", LOCALHOST, res.port)).unwrap())
-    }
-
     /// Creates an HTTP gateway for this IC instance
     /// listening on an optionally specified port
     /// and configures the IC instance to make progress

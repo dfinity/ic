@@ -604,11 +604,11 @@ dependencies = [
 
 [[package]]
 name = "async-lock"
-version = "3.4.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff6e472cdea888a4bd64f342f09b3f50e1886d32afe8df3d663c01140b811b18"
+checksum = "d034b430882f8381900d3fe6f0aaa3ad94f2cb4ac519b429692a1bc2dda4ae7b"
 dependencies = [
- "event-listener 5.3.1",
+ "event-listener 4.0.3",
  "event-listener-strategy",
  "pin-project-lite",
 ]
@@ -2256,9 +2256,9 @@ dependencies = [
 
 [[package]]
 name = "concurrent-queue"
-version = "2.5.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
+checksum = "62ec6771ecfa0762d24683ee5a32ad78487a3d3afdc0fb8cae19d2c5deb50b7c"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -3755,9 +3755,9 @@ checksum = "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
 
 [[package]]
 name = "event-listener"
-version = "5.3.1"
+version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6032be9bd27023a771701cc49f9f053c751055f71efb2e0ae5c15809093675ba"
+checksum = "67b215c49b2b248c855fb73579eb1f4f26c38ffdc12973e20e07b91d78d5646e"
 dependencies = [
  "concurrent-queue",
  "parking",
@@ -3766,11 +3766,11 @@ dependencies = [
 
 [[package]]
 name = "event-listener-strategy"
-version = "0.5.2"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f214dc438f977e6d4e3500aaa277f5ad94ca83fbbd9b1a15713ce2344ccc5a1"
+checksum = "958e4d70b6d5e81971bebec42271ec641e7ff4e170a6fa605f2b8a8b65cb97d3"
 dependencies = [
- "event-listener 5.3.1",
+ "event-listener 4.0.3",
  "pin-project-lite",
 ]
 
@@ -4791,7 +4791,7 @@ dependencies = [
  "clap 4.4.6",
  "hyper 1.3.1",
  "hyper-util",
- "rustls 0.23.9",
+ "rustls 0.23.8",
  "rustls-pemfile 2.1.2",
  "serde_json",
  "tokio",
@@ -4933,7 +4933,7 @@ dependencies = [
  "http 1.1.0",
  "hyper 1.3.1",
  "hyper-util",
- "rustls 0.23.9",
+ "rustls 0.23.8",
  "rustls-native-certs 0.7.0",
  "rustls-pki-types",
  "tokio",
@@ -5161,7 +5161,7 @@ version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f08d1b54f1834fb9637a57855f1d87bb9dbec7a9dec09499737580692829cb0"
 dependencies = [
- "async-lock 3.4.0",
+ "async-lock 3.3.0",
  "backoff",
  "cached 0.46.1",
  "candid",
@@ -8735,14 +8735,12 @@ dependencies = [
  "dfn_protobuf",
  "ic-agent",
  "ic-certification 0.9.0",
- "ic-crypto-sha2",
  "ic-ledger-canister-blocks-synchronizer-test-utils",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-types",
  "icp-ledger",
- "leb128",
  "on_wire",
  "proptest",
  "rusqlite",
@@ -12655,7 +12653,7 @@ dependencies = [
  "prometheus",
  "regex",
  "reqwest 0.12.4",
- "rustls 0.23.9",
+ "rustls 0.23.8",
  "rustls-native-certs 0.7.0",
  "rustls-pemfile 2.1.2",
  "serde",
@@ -17085,9 +17083,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.9"
+version = "0.23.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a218f0f6d05669de4eabfb24f31ce802035c952429d037507b4a4a39f0e60c5b"
+checksum = "79adb16721f56eb2d843e67676896a61ce7a0fa622dc18d3e372477a029d2740"
 dependencies = [
  "log",
  "once_cell",
@@ -19145,7 +19143,7 @@ version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c7bc40d0e5a97695bb96e27995cd3a08538541b0a846f65bba7a359f36700d4"
 dependencies = [
- "rustls 0.23.9",
+ "rustls 0.23.8",
  "rustls-pki-types",
  "tokio",
 ]
