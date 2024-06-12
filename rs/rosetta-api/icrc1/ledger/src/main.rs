@@ -205,6 +205,23 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                 / 1_000_000_000) as f64,
             "IC timestamp of the most recent block.",
         )?;
+        match ledger.blockchain().archive.read() {
+            Ok(archive_guard) => {
+                let num_archives = archive_guard
+                    .as_ref()
+                    .iter()
+                    .fold(0, |sum, archive| sum + archive.nodes().iter().len());
+                w.encode_counter(
+                    "ledger_num_archives",
+                    num_archives as f64,
+                    "Total number of archives.",
+                )?;
+            }
+            Err(err) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to read number of archives: {}", err),
+            ))?,
+        }
         w.encode_gauge(
             "ledger_num_approvals",
             ledger.approvals().get_num_approvals() as f64,
