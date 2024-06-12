@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tx hash indexer on blocks table
 ### Changed
 - Add log to console output
+- Separate read and write access between rosetta server and block synchronizer
 
 ## [1.0.2] - 2024-05-08
 ### Fixes
