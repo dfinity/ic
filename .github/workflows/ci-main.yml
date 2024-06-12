@@ -64,12 +64,12 @@ jobs:
             sudo ln -s /__w/var/sysimage /var/sysimage
           fi
       - name: Checkout
-        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
+        uses: actions/checkout@v4
         if: ${{ github.event_name == 'pull_request' }}
         with:
           fetch-depth: 256
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         if: ${{ github.event_name != 'pull_request' }}
       - name: Docker RO SA login
         id: docker-ro-login
