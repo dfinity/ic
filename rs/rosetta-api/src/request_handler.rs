@@ -353,7 +353,7 @@ impl RosettaRequestHandler {
         &self,
         block_hash: &str,
     ) -> Result<rosetta_core::objects::Block, ApiError> {
-        let hash = convert::to_hash::<ic_ledger_core::block::EncodedBlock>(&block_hash)?;
+        let hash = convert::to_hash::<ic_ledger_core::block::EncodedBlock>(block_hash)?;
         let block = {
             let blocks = self.ledger.read_blocks().await;
             if !blocks.is_verified_by_hash(&hash)? {
