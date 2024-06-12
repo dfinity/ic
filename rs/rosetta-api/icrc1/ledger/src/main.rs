@@ -179,6 +179,13 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             ledger.blockchain().num_archived_blocks as f64,
             "Total number of transactions sent to the archive.",
         )?;
+        // The sum of the two gauges above. It is necessary to have this metric explicitly exported
+        // in order to be able to accurately calculate the total transaction rate.
+        w.encode_gauge(
+            "ledger_total_transactions",
+            ledger.blockchain().num_archived_blocks.saturating_add(ledger.blockchain().blocks.len() as u64) as f64,
+            "Total number of transactions stored in the main memory, plus total number of transactions sent to the archive.",
+        )?;
         let token_pool: Nat = ledger.balances().token_pool.into();
         w.encode_gauge(
             "ledger_balances_token_pool",
