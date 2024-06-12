@@ -10,9 +10,7 @@ use ic_btc_types_internal::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_management_canister_types::{
-    EcdsaKeyId, MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse,
-};
+use ic_management_canister_types::{MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::subnet::v1 as pb_subnet,
@@ -255,25 +253,6 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
             routing_table: Some(item.routing_table.as_ref().into()),
             nns_subnet_id: Some(subnet_id_into_protobuf(item.nns_subnet_id)),
             canister_migrations: Some(item.canister_migrations.as_ref().into()),
-            // Serialize both `ecdsa_signing_subnets` and `idkg_signing_subnets` with the same ECDSA entries.
-            ecdsa_signing_subnets: item
-                .idkg_signing_subnets
-                .iter()
-                .filter_map(|(key_id, subnet_ids)| {
-                    if let MasterPublicKeyId::Ecdsa(ecdsa_key_id) = key_id {
-                        let subnet_ids = subnet_ids
-                            .iter()
-                            .map(|id| subnet_id_into_protobuf(*id))
-                            .collect();
-                        Some(pb_metadata::EcdsaKeyEntry {
-                            key_id: Some(ecdsa_key_id.into()),
-                            subnet_ids,
-                        })
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
             bitcoin_testnet_canister_ids: match item.bitcoin_testnet_canister_id {
                 Some(c) => vec![pb_types::CanisterId::from(c)],
                 None => vec![],
@@ -319,36 +298,16 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             "NetworkTopology::nns_subnet_id",
         )?)?;
 
-        let mut ecdsa_signing_subnets = BTreeMap::new();
-        for entry in item.ecdsa_signing_subnets {
+        let mut idkg_signing_subnets = BTreeMap::new();
+        for entry in item.idkg_signing_subnets {
             let mut subnet_ids = vec![];
             for subnet_id in entry.subnet_ids {
                 subnet_ids.push(subnet_id_try_from_protobuf(subnet_id)?);
             }
-            ecdsa_signing_subnets.insert(
-                try_from_option_field(entry.key_id, "EcdsaKeyEntry::key_id")?,
+            idkg_signing_subnets.insert(
+                try_from_option_field(entry.key_id, "IDkgKeyEntry::key_id")?,
                 subnet_ids,
             );
-        }
-
-        // First try to deserialize `ecdsa_signing_subnets` and if it is empty
-        // then try to deserialize `idkg_signing_subnets`.
-        let mut idkg_signing_subnets = BTreeMap::new();
-        if !ecdsa_signing_subnets.is_empty() {
-            for (key_id, subnet_ids) in ecdsa_signing_subnets {
-                idkg_signing_subnets.insert(MasterPublicKeyId::Ecdsa(key_id), subnet_ids);
-            }
-        } else {
-            for entry in item.idkg_signing_subnets {
-                let mut subnet_ids = vec![];
-                for subnet_id in entry.subnet_ids {
-                    subnet_ids.push(subnet_id_try_from_protobuf(subnet_id)?);
-                }
-                idkg_signing_subnets.insert(
-                    try_from_option_field(entry.key_id, "IDkgKeyEntry::key_id")?,
-                    subnet_ids,
-                );
-            }
         }
 
         let bitcoin_testnet_canister_id = match item.bitcoin_testnet_canister_ids.first() {
@@ -412,18 +371,6 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
                 .collect(),
             subnet_type: i32::from(item.subnet_type),
             subnet_features: Some(pb_subnet::SubnetFeatures::from(item.subnet_features)),
-            // Serialize both `ecdsa_keys_held` and `idkg_keys_held` with the same ECDSA entries.
-            ecdsa_keys_held: item
-                .idkg_keys_held
-                .iter()
-                .filter_map(|k| {
-                    if let MasterPublicKeyId::Ecdsa(ecdsa_key_id) = k {
-                        Some(ecdsa_key_id.into())
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
             idkg_keys_held: item.idkg_keys_held.iter().map(|k| k.into()).collect(),
         }
     }
@@ -437,16 +384,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
             nodes.insert(node_id_try_from_option(entry.node_id)?);
         }
 
-        let mut ecdsa_keys_held = BTreeSet::new();
-
-        for key in item.ecdsa_keys_held {
-            ecdsa_keys_held.insert(EcdsaKeyId::try_from(key)?);
-        }
-
         let mut idkg_keys_held = BTreeSet::new();
-        for key in ecdsa_keys_held {
-            idkg_keys_held.insert(MasterPublicKeyId::Ecdsa(key));
-        }
         for key in item.idkg_keys_held {
             idkg_keys_held.insert(MasterPublicKeyId::try_from(key)?);
         }
