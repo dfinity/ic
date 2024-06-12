@@ -911,6 +911,13 @@ pub fn compute_manifest(
         None => default_hash_plan(&files, max_chunk_size),
     };
 
+    // Currently, the unverified checkpoint marker file should already be removed by the time we reach this point.
+    // To account for possible changes in the checkpointing order, ensure the marker file is ignored if it already exists and
+    // not accidentally counted when building the file table chunk table.
+    debug_assert!(!files
+        .iter()
+        .any(|FileWithSize(p, _)| *p == checkpoint.unverified_checkpoint_marker()));
+
     #[cfg(debug_assertions)]
     let (seq_file_table, seq_chunk_table) = {
         let metrics_registry = ic_metrics::MetricsRegistry::new();
