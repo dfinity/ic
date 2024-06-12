@@ -197,7 +197,7 @@ fn matches_blockchain_is_empty_error(error: &rosetta_core::miscellaneous::Error)
 // once it does.
 //
 // Note: the result is boxed because of https://users.rust-lang.org/t/async-function-taking-a-reference-lifetimes-problem/83252/2
-fn run_pocket_ic_test<F>(f: F)
+fn run_pocket_ic_test<F>(enable_rosetta_blocks: bool, f: F)
 where
     F: for<'a> FnOnce(&'a mut TestEnv) -> Pin<Box<dyn Future<Output = ()> + 'a>>,
 {
@@ -237,7 +237,7 @@ where
             replica_url,
             ledger_canister_id,
             Some(rosetta_state_directory.path().to_owned()),
-            false,
+            enable_rosetta_blocks,
         )
         .await;
 
@@ -290,7 +290,7 @@ fn test_example() {
     // This is an example test that shows how to use `run_pocked_ic_test` and
     // does a sanity check that there is at least one block
 
-    run_pocket_ic_test(|env: &mut TestEnv| {
+    run_pocket_ic_test(false, |env: &mut TestEnv| {
         Box::pin(async move {
             // block 0 always exists in this setup
             env.rosetta.wait_or_panic_until_synced_up_to(0).await;
@@ -299,8 +299,8 @@ fn test_example() {
 }
 
 #[test]
-fn test_rosetta_blocks() {
-    run_pocket_ic_test(|env: &mut TestEnv| {
+fn test_rosetta_blocks_mode() {
+    run_pocket_ic_test(false, |env: &mut TestEnv| {
         Box::pin(async move {
             // Check that by default the rosetta blocks mode is not enabled
             assert_eq!(
@@ -346,6 +346,15 @@ fn test_rosetta_blocks() {
                     first_rosetta_block_index
                 }
             );
+        })
+    });
+}
+
+#[test]
+fn test_get_rosetta_block() {
+    run_pocket_ic_test(false, |env: &mut TestEnv| {
+        Box::pin(async move {
+            env.restart_rosetta_node(true).await;
         })
     });
 }
