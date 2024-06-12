@@ -3490,7 +3490,6 @@ fn can_handle_state_sync_and_commit_race_condition() {
             // It should be OK to load the checkpoint again from the state sync thread and try to remove the marker twice.
             pipe_state_sync(msg, chunkable);
 
-
             assert_eq!(
                 dst_state_manager.checkpoint_heights(),
                 vec![height(1), height(2)]

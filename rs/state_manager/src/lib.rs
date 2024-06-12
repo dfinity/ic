@@ -1429,7 +1429,7 @@ impl StateManagerImpl {
                     err
                 )
             });
-            if cp_layout.is_marked_as_unverified() {
+            if !cp_layout.is_checkpoint_verified() {
                 info!(log, "Archiving unverified checkpoint {} ", h);
                 state_layout
                     .archive_checkpoint(h)
@@ -2791,7 +2791,7 @@ impl StateManager for StateManagerImpl {
                           checkpoint_height, root_hash, height);
                     match self.state_layout.checkpoint_untracked(checkpoint_height) {
                         Ok(cp_layout) => {
-                            if cp_layout.is_marked_as_unverified() {
+                            if !cp_layout.is_checkpoint_verified() {
                                 warn!(self.log,
                                       "Unverified checkpoint @{} is not expected to be found in states metadata.",
                                       checkpoint_height

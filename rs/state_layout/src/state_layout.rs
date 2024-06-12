@@ -773,7 +773,7 @@ impl StateLayout {
             .into_iter()
             .filter(|h| {
                 self.checkpoint_untracked(*h)
-                    .map(|cp| !cp.is_marked_as_unverified())
+                    .map(|cp| cp.is_checkpoint_verified())
                     .unwrap_or(false)
             })
             .collect();
@@ -1435,8 +1435,8 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     }
 
     /// Returns if the checkpoint is marked as unverified or not.
-    pub fn is_marked_as_unverified(&self) -> bool {
-        self.unverified_checkpoint_marker().exists()
+    pub fn is_checkpoint_verified(&self) -> bool {
+        !self.unverified_checkpoint_marker().exists()
     }
 
     /// Path of unverified checkpoint marker for the given height.
