@@ -6221,7 +6221,6 @@ dependencies = [
  "serde",
  "slog",
  "tempfile",
- "url",
 ]
 
 [[package]]
@@ -7491,7 +7490,6 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "mockall",
  "rustls 0.21.12",
- "tokio",
 ]
 
 [[package]]
@@ -7998,7 +7996,6 @@ dependencies = [
  "serde_cbor",
  "slog",
  "tempfile",
- "threadpool",
  "tokio",
  "tokio-io-timeout",
  "tokio-rustls 0.24.1",
@@ -8008,7 +8005,6 @@ dependencies = [
  "tower-test",
  "tracing-flame",
  "tracing-subscriber",
- "url",
 ]
 
 [[package]]
@@ -9880,7 +9876,6 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-state-manager",
  "ic-state-sync-manager",
- "ic-test-utilities",
  "ic-test-utilities-registry",
  "ic-test-utilities-types",
  "ic-types",
@@ -11384,7 +11379,6 @@ dependencies = [
  "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-tecdsa",
- "ic-crypto-test-utils-keys",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
@@ -11658,7 +11652,6 @@ dependencies = [
  "ic-replicated-state",
  "ic-test-utilities",
  "ic-test-utilities-consensus",
- "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
 ]
@@ -11699,7 +11692,6 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-sha2",
  "ic-crypto-temp-crypto",
- "ic-crypto-test-utils",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-tree-hash",
@@ -11944,7 +11936,6 @@ name = "ic-tracing"
 version = "0.9.0"
 dependencies = [
  "tracing",
- "tracing-flame",
  "tracing-subscriber",
 ]
 
@@ -12067,7 +12058,6 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
- "prost",
  "scoped_threadpool",
  "serde",
  "serde_bytes",
@@ -15425,7 +15415,6 @@ dependencies = [
 name = "pocket-ic"
 version = "3.1.0"
 dependencies = [
- "async-trait",
  "base64 0.13.1",
  "candid",
  "flate2",
