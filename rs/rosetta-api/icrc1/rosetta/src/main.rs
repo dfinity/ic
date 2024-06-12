@@ -381,26 +381,29 @@ async fn main() -> Result<()> {
     }
 
     if !args.offline {
-        tokio::spawn(async move {
+        tokio::task::spawn_blocking(move || {
             let mut sync_wait_secs = BLOCK_SYNC_WAIT_SECS;
-            loop {
-                if let Err(e) = start_synching_blocks(
-                    icrc1_agent.clone(),
-                    storage.clone(),
-                    *MAXIMUM_BLOCKS_PER_REQUEST,
-                    shared_state.clone().archive_canister_ids.clone(),
-                )
-                .await
-                {
-                    error!("Error while syncing blocks: {}", e);
-                    sync_wait_secs = std::cmp::min(sync_wait_secs * 2, MAX_BLOCK_SYNC_WAIT_SECS);
-                    info!("Retrying in {} seconds.", sync_wait_secs);
-                } else {
-                    sync_wait_secs = BLOCK_SYNC_WAIT_SECS;
-                }
+            tokio::runtime::Handle::current().block_on(async {
+                loop {
+                    if let Err(e) = start_synching_blocks(
+                        icrc1_agent.clone(),
+                        storage.clone(),
+                        *MAXIMUM_BLOCKS_PER_REQUEST,
+                        shared_state.clone().archive_canister_ids.clone(),
+                    )
+                    .await
+                    {
+                        error!("Error while syncing blocks: {}", e);
+                        sync_wait_secs =
+                            std::cmp::min(sync_wait_secs * 2, MAX_BLOCK_SYNC_WAIT_SECS);
+                        info!("Retrying in {} seconds.", sync_wait_secs);
+                    } else {
+                        sync_wait_secs = BLOCK_SYNC_WAIT_SECS;
+                    }
 
-                tokio::time::sleep(std::time::Duration::from_secs(sync_wait_secs)).await;
-            }
+                    tokio::time::sleep(std::time::Duration::from_secs(sync_wait_secs)).await;
+                }
+            });
         });
     }
 
