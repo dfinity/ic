@@ -12,7 +12,9 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::{ExecutionRoundType, RegistryExecutionSettings};
+use ic_interfaces::execution_environment::{
+    ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings,
+};
 use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
 };
@@ -1416,7 +1418,7 @@ impl Scheduler for SchedulerImpl {
         idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
         idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
         current_round: ExecutionRound,
-        _next_checkpoint_round: Option<ExecutionRound>,
+        _round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
