@@ -63,7 +63,6 @@ jobs:
         id: docker-ro-login
         shell: bash
         run: |
-          export PATH="/usr/local/bin:$PATH"
           if which docker 2>/dev/null; then
               docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
           elif which docker-bin 2>/dev/null; then
@@ -127,7 +126,6 @@ jobs:
         id: docker-ro-login
         shell: bash
         run: |
-          export PATH="/usr/local/bin:$PATH"
           if which docker 2>/dev/null; then
               docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
           elif which docker-bin 2>/dev/null; then
@@ -154,6 +152,8 @@ jobs:
     #  if: ${{ vars.RUN_CI == 'true' && github.event_name == 'schedule' }} # disable until we have more macos runners
     runs-on:
       labels: macOS
+    env:
+      PATH: "/usr/local/bin:$PATH"
     steps:
       - name: Before script
         if: always()
@@ -184,7 +184,6 @@ jobs:
         id: docker-ro-login
         shell: bash
         run: |
-          export PATH="/usr/local/bin:$PATH"
           if which docker 2>/dev/null; then
               docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
           elif which docker-bin 2>/dev/null; then
@@ -338,7 +337,6 @@ jobs:
         id: docker-ro-login
         shell: bash
         run: |
-          export PATH="/usr/local/bin:$PATH"
           if which docker 2>/dev/null; then
               docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
           elif which docker-bin 2>/dev/null; then
