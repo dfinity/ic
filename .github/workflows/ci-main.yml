@@ -62,15 +62,7 @@ jobs:
       - name: Docker RO SA login
         id: docker-ro-login
         shell: bash
-        run: |
-          if which docker 2>/dev/null; then
-              docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          elif which docker-bin 2>/dev/null; then
-              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          else
-              echo "docker not installed"
-              exit 1
-          fi
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -125,15 +117,7 @@ jobs:
       - name: Docker RO SA login
         id: docker-ro-login
         shell: bash
-        run: |
-          if which docker 2>/dev/null; then
-              docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          elif which docker-bin 2>/dev/null; then
-              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          else
-              echo "docker not installed"
-              exit 1
-          fi
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
@@ -183,15 +167,7 @@ jobs:
       - name: Docker RO SA login
         id: docker-ro-login
         shell: bash
-        run: |
-          if which docker 2>/dev/null; then
-              docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          elif which docker-bin 2>/dev/null; then
-              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          else
-              echo "docker not installed"
-              exit 1
-          fi
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
         if: steps.filter.outputs.bazel-test-darwin-x86-64 != 'false'
@@ -336,15 +312,7 @@ jobs:
       - name: Docker RO SA login
         id: docker-ro-login
         shell: bash
-        run: |
-          if which docker 2>/dev/null; then
-              docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          elif which docker-bin 2>/dev/null; then
-              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          else
-              echo "docker not installed"
-              exit 1
-          fi
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
       - name: Run Build IC
         id: build-ic
         shell: bash
