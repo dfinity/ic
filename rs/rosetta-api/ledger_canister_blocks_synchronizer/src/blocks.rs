@@ -266,10 +266,9 @@ mod database_access {
             .query_map(named_params! { ":idx": block_idx }, |row| {
                 HashedBlock::try_from(row)
             })
-            .map_err(|e| format!("Unable to query hashed block {block_idx}: {e:?}"))?
-            .into_iter();
+            .map_err(|e| format!("Unable to query hashed block {block_idx}: {e:?}"))?;
         match blocks.next() {
-            Some(block) => return block.map_err(|e| BlockStoreError::Other(e.to_string())),
+            Some(block) => block.map_err(|e| BlockStoreError::Other(e.to_string())),
             None => Err(BlockStoreError::NotFound(*block_idx)),
         }
     }
