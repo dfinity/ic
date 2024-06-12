@@ -322,7 +322,7 @@ impl std::fmt::Display for HypervisorError {
             Self::WasmMemoryLimitExceeded { bytes, limit } => {
                 write!(f,
                         "Canister exceeded its current Wasm memory limit of {} bytes. \
-                        The peak Wasm memory usage was {} bytes.\
+                        The peak Wasm memory usage was {} bytes. \
                         If the canister reaches 4GiB, then it may stop functioning and may become unrecoverable. \
                         Please reach out to the canister owner to investigate the reason for the increased memory usage. \
                         It might be necessary to move data from the Wasm memory to the stable memory. \
