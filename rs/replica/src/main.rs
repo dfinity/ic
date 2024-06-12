@@ -1,4 +1,4 @@
-//! Replica -- Internet Computer!
+//! Replica -- Internet Computer
 
 use ic_async_utils::{abort_on_panic, shutdown_signal};
 use ic_config::Config;
