@@ -18,9 +18,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing-subscriber",
 ]
 
-MACRO_DEPENDENCIES = [
-    "@crate_index//:async-trait",
-]
+MACRO_DEPENDENCIES = []
 
 TEST_DEPENDENCIES = [
     "//rs/universal_canister/lib",
