@@ -152,8 +152,6 @@ jobs:
     #  if: ${{ vars.RUN_CI == 'true' && github.event_name == 'schedule' }} # disable until we have more macos runners
     runs-on:
       labels: macOS
-    env:
-      PATH: "/usr/local/bin:$PATH"
     steps:
       - name: Before script
         if: always()
@@ -180,6 +178,8 @@ jobs:
               - '**/*.lock'
               - '**/*.rs'
               - '**/*.toml'
+      - name: Set PATH
+        run: echo "PATH=\"/usr/local/bin:$PATH\"" >> $GITHUB_PATH
       - name: Docker RO SA login
         id: docker-ro-login
         shell: bash
