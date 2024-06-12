@@ -215,31 +215,43 @@ fn consensus_produces_expected_batches() {
         // Plus 2 initial driver steps.
         assert_eq!(batches.len(), DKG_INTERVAL_LENGTH as usize + 2);
         assert_ne!(batches[0].batch_number, batches[1].batch_number);
+        let first_batch_summary = batches[0].batch_summary.clone().unwrap();
         assert_eq!(
-            batches[0].next_checkpoint_height.unwrap(),
+            first_batch_summary.next_checkpoint_height,
             batches[0].batch_number + DKG_INTERVAL_LENGTH.into()
         );
-        // Assert the `next_checkpoint_height` is strictly greater than the `batch_number`.
         for b in &batches {
-            assert!(b.next_checkpoint_height.unwrap() > b.batch_number);
+            let batch_summary = b.batch_summary.clone().unwrap();
+            // Assert the `next_checkpoint_height` is strictly greater than the `batch_number`.
+            assert!(batch_summary.next_checkpoint_height > b.batch_number);
+            assert_eq!(
+                batch_summary.current_interval_length,
+                DKG_INTERVAL_LENGTH.into()
+            );
+            // Assert the `batch_number` plus `current_interval_length` is greater
+            // or equal than the `next_checkpoint_height`.
+            assert!(
+                // The +1 is because the "normal" `current_interval_length` is 499, not 500.
+                b.batch_number + batch_summary.current_interval_length + 1.into()
+                    >= batch_summary.next_checkpoint_height
+            );
         }
         // Assert the summary batch numbers.
         let last_batch = &batches[DKG_INTERVAL_LENGTH as usize - 1];
         assert_eq!(last_batch.batch_number.get(), DKG_INTERVAL_LENGTH);
+        let last_batch_summary = last_batch.batch_summary.clone().unwrap();
         assert_eq!(
-            last_batch.next_checkpoint_height.unwrap().get(),
+            last_batch_summary.next_checkpoint_height.get(),
             DKG_INTERVAL_LENGTH + 1
         );
         let summary_batch = &batches[DKG_INTERVAL_LENGTH as usize];
         assert_eq!(summary_batch.batch_number.get(), DKG_INTERVAL_LENGTH + 1);
+        let summary_batch_summary = summary_batch.batch_summary.clone().unwrap();
         assert_eq!(
-            summary_batch.next_checkpoint_height.unwrap().get(),
+            summary_batch_summary.next_checkpoint_height.get(),
             (DKG_INTERVAL_LENGTH + 1) * 2
         );
-        assert_eq!(
-            batches[0].next_checkpoint_height,
-            batches[1].next_checkpoint_height
-        );
+        assert_eq!(batches[0].batch_summary, batches[1].batch_summary);
         let mut msgs: Vec<_> = batches[0].messages.signed_ingress_msgs.clone();
         assert_eq!(msgs.pop(), Some(ingress0));
         let mut msgs: Vec<_> = batches[1].messages.signed_ingress_msgs.clone();
