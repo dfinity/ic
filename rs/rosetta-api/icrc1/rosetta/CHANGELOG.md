@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 - Make search/transactions a custom SQL query for latency improvement
 ### Added
+- Tx hash indexer on blocks table
 ### Changed
 - Add log to console output
 
