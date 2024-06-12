@@ -200,7 +200,7 @@ jobs:
               - '**/*.rs'
               - '**/*.toml'
       - name: Set PATH
-        run: echo "PATH=\"/usr/local/bin:$PATH\"" >> $GITHUB_PATH
+        run: echo "/usr/local/bin" >> $GITHUB_PATH
       - <<: *docker-ro-login
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
