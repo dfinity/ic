@@ -194,6 +194,14 @@ impl StorageClient {
             [],
         )?;
 
+        open_connection.execute(
+            r#"
+        CREATE INDEX IF NOT EXISTS tx_hash_index 
+        ON blocks(tx_hash)
+        "#,
+            [],
+        )?;
+
         Ok(())
     }
 
