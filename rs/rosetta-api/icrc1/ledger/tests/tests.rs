@@ -330,6 +330,7 @@ fn test_block_transformation() {
 
 mod metrics {
     use crate::{encode_init_args, ledger_wasm};
+    use ic_icrc1_ledger_sm_tests::metrics::LedgerSuiteType;
 
     #[test]
     fn should_export_num_archives_metrics() {
@@ -344,6 +345,15 @@ mod metrics {
         ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_ledger_total_memory_bytes_metric(
             ledger_wasm(),
             encode_init_args,
+        );
+    }
+
+    #[test]
+    fn should_export_ledger_total_transactions_metrics() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_ledger_total_transactions_metric(
+            ledger_wasm(),
+            encode_init_args,
+            LedgerSuiteType::ICRC,
         );
     }
 }
