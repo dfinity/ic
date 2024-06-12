@@ -361,7 +361,7 @@ fn get_random_seed() -> [u8; 32] {
 fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -> Batch {
     Batch {
         batch_number: message_routing.expected_batch_height(),
-        next_checkpoint_height: None,
+        batch_summary: None,
         requires_full_state_hash: !msgs.is_empty(),
         messages: BatchMessages {
             signed_ingress_msgs: msgs,
