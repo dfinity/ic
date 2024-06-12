@@ -1141,42 +1141,6 @@ pub fn proxy_http_canister_test(env: TestEnv) {
 }
 
 /* tag::catalog[]
-Title:: Boundary nodes valid Nginx configuration test
-
-Goal:: Verify that nginx configuration is valid by running `nginx -T` on the boundary node.
-
-Runbook:
-. Set up a subnet with 4 nodes and a boundary node.
-. SSH into the boundary node and execute `sudo nginx -t`
-
-Success:: The output contains the string
-`nginx: configuration file /etc/nginx/nginx.conf test is successful`
-
-Coverage:: NGINX configuration is not broken
-
-end::catalog[] */
-
-pub fn nginx_valid_config_test(env: TestEnv) {
-    let logger = env.logger();
-
-    let boundary_node = env
-        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-
-    let cmd_output = boundary_node
-        .block_on_bash_script("sudo nginx -t 2>&1")
-        .unwrap();
-
-    info!(logger, "nginx test result = '{}'", cmd_output.trim());
-
-    if !cmd_output.trim().contains("test is successful") {
-        panic!("nginx config failed validation");
-    }
-}
-
-/* tag::catalog[]
 Title:: Boundary nodes denylist blocking test
 
 Goal:: Ensure that access to a canister specified in the denylist is blocked

@@ -75,7 +75,6 @@ pub struct BoundaryNodeCustomDomainsConfig {
     pub task_delay_sec: Option<u64>,
     pub task_error_delay_sec: Option<u64>,
     pub peek_sleep_sec: Option<u64>,
-    pub polling_interval_sec: Option<u64>,
 }
 
 /// A builder for the initial configuration of an IC boundary node.
@@ -606,11 +605,6 @@ fn create_config_disk_image(
         if let Some(peek_sleep_sec) = cfg.peek_sleep_sec {
             cmd.arg("--certificate_issuer_peek_sleep_sec")
                 .arg(peek_sleep_sec.to_string());
-        }
-
-        if let Some(polling_interval_sec) = cfg.polling_interval_sec {
-            cmd.arg("--certificate_syncer_polling_interval_sec")
-                .arg(polling_interval_sec.to_string());
         }
     }
 

@@ -5,9 +5,8 @@ use anyhow::Result;
 use ic_tests::boundary_nodes::boundary_nodes_integration::{
     canister_allowlist_test, canister_test, denylist_test, direct_to_replica_options_test,
     direct_to_replica_rosetta_test, direct_to_replica_test, http_canister_test, http_endpoint_test,
-    icx_proxy_test, nginx_valid_config_test, prefix_canister_id_test, proxy_http_canister_test,
-    reboot_test, redirect_http_to_https_test, redirect_to_dashboard_test, redirect_to_non_raw_test,
-    seo_test,
+    icx_proxy_test, prefix_canister_id_test, proxy_http_canister_test, reboot_test,
+    redirect_http_to_https_test, redirect_to_dashboard_test, redirect_to_non_raw_test, seo_test,
 };
 use ic_tests::boundary_nodes::setup::setup_ic_with_bn;
 use ic_tests::boundary_nodes::{constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig};
@@ -30,7 +29,6 @@ fn main() -> Result<()> {
                 .add_test(systest!(http_canister_test))
                 .add_test(systest!(prefix_canister_id_test))
                 .add_test(systest!(proxy_http_canister_test))
-                .add_test(systest!(nginx_valid_config_test))
                 .add_test(systest!(redirect_http_to_https_test))
                 .add_test(systest!(redirect_to_dashboard_test))
                 .add_test(systest!(redirect_to_non_raw_test))

@@ -5,16 +5,6 @@ sources:
   vector_metrics:
     type: internal_metrics
 
-  nginx_socket:
-    type: socket
-
-    mode: unix_datagram
-    socket_file_mode: 666
-    path: /var/lib/vector/nginx.socket
-
-    decoding:
-      codec: syslog
-
   journal:
     type: journald
     include_units:
@@ -23,17 +13,6 @@ sources:
     - danted
 
 transforms:
-  nginx_access_parsed:
-    type: remap
-    inputs:
-    - nginx_socket
-
-    source: |
-      . = parse_json!(.message)
-
-      # Inject the environment
-      .env = "${ENV:?ENV must be provided}"
-
   danted:
     type: filter
     inputs:
@@ -148,31 +127,6 @@ sinks:
     default_namespace: danted
     suppress_timestamp: true
     flush_period_secs: 7200
-
-  vector_aws:
-    type: http
-    inputs:
-    - nginx_access_parsed
-
-    uri: "${LOGGING_URL:?LOGGING_URL must be provided}"
-    auth:
-      strategy: basic
-      user: "${LOGGING_USER:?LOGGING_USER must be provided}"
-      password: "${LOGGING_PASSWORD:?LOGGING_PASSWORD must be provided}"
-
-    compression: zstd
-    encoding:
-      codec: native
-
-    buffer:
-      type: memory
-      # nginx event json is usually < 2kb, even less if parsed, so 100k shouldn't take much memory
-      max_events: 100000
-
-    batch:
-      max_bytes: 10485760 # 10MB
-      max_events: 10000   # 10k
-      timeout_secs: 5
 
   console:
     type: console

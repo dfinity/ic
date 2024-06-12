@@ -64,7 +64,6 @@ function process_bootstrap() {
         certificate_issuer_enc_key.pem
         certificate_issuer_identity.pem
         certificate_issuer.conf
-        certificate_syncer.conf
         denylist.json
         ic_boundary.conf
         network.conf

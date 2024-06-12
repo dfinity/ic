@@ -9,6 +9,7 @@ readonly RUN_DIR='/run/ic-node/etc/ic-gateway'
 readonly ENV_FILE="${RUN_DIR}/env"
 readonly ROOT_KEY="${RUN_DIR}/root_key.der"
 
+API_DOMAINS=()
 SYSTEM_DOMAINS=()
 APPLICATION_DOMAINS=()
 
@@ -40,6 +41,7 @@ function read_variables() {
             "env") ENV="${value}" ;;
             "system_domains") SYSTEM_DOMAINS+=("${value}") ;;
             "application_domains") APPLICATION_DOMAINS+=("${value}") ;;
+            "api_domains") API_DOMAINS+=("${value}") ;;
             "denylist_url") DENYLIST_URL="${value}" ;;
         esac
     done <"${BN_CONFIG}"
@@ -93,6 +95,7 @@ function generate_config() {
 
     local DOMAINS_APP=$(join_by , ${APPLICATION_DOMAINS[@]})
     local DOMAINS_SYSTEM=$(join_by , ${SYSTEM_DOMAINS[@]})
+    local DOMAINS_API=$(join_by , ${API_DOMAINS[@]})
 
     # Allow denylist canister
     cat >"${RUN_DIR}/allowlist.txt" <<EOF
@@ -103,6 +106,7 @@ EOF
 ENV="${ENV}"
 DOMAIN_APP="${DOMAINS_APP}"
 DOMAIN_SYSTEM="${DOMAINS_SYSTEM}"
+DOMAIN_API="${DOMAINS_API},rosetta.dfinity.network"
 HTTP_SERVER_LISTEN_PLAIN="[::]:80"
 HTTP_SERVER_LISTEN_TLS="[::]:443"
 METRICS_LISTEN="[::]:9314"
