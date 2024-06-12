@@ -18,7 +18,6 @@ use ic_types::{
         CanisterMessage, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
         MAX_RESPONSE_COUNT_BYTES,
     },
-    xnet::{QueueId, SessionId},
     CanisterId, CountBytes, Cycles, Time,
 };
 use queue::{IngressQueue, InputQueue, OutputQueue};
@@ -130,9 +129,6 @@ pub struct CanisterQueues {
 ///    (e.g. in order to efficiently implement per destination limits).
 #[derive(Debug)]
 pub struct CanisterOutputQueuesIterator<'a> {
-    /// ID of the canister that owns the output queues being iterated.
-    owner: CanisterId,
-
     /// Priority queue of non-empty output queues. The next message to be popped
     /// / peeked is the one at the head of the first queue.
     queues: VecDeque<(&'a CanisterId, &'a mut OutputQueue)>,
@@ -149,7 +145,6 @@ pub struct CanisterOutputQueuesIterator<'a> {
 
 impl<'a> CanisterOutputQueuesIterator<'a> {
     fn new(
-        owner: CanisterId,
         queues: &'a mut BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
         memory_stats: &'a mut MemoryUsageStats,
         queue_stats: &'a mut OutputQueuesStats,
@@ -162,7 +157,6 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
         let size = Self::compute_size(&queues);
 
         CanisterOutputQueuesIterator {
-            owner,
             queues,
             size,
             memory_stats,
@@ -171,29 +165,19 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     }
 
     /// Returns a reference to the message that `pop` / `next` would return.
-    pub fn peek(&self) -> Option<(QueueId, &RequestOrResponse)> {
-        if let Some((receiver, queue)) = self.queues.front() {
+    pub fn peek(&self) -> Option<&RequestOrResponse> {
+        if let Some((_, queue)) = self.queues.front() {
             let msg = queue.peek().expect("Empty queue in iterator");
-            let queue_id = QueueId {
-                src_canister: self.owner,
-                dst_canister: **receiver,
-                session_id: SessionId::new(0),
-            };
-            return Some((queue_id, msg));
+            return Some(msg);
         }
         None
     }
 
     /// Pops a message from the next queue. If this was not the last message in
     /// that queue, the queue is moved to the back of the iteration order.
-    pub fn pop(&mut self) -> Option<(QueueId, RequestOrResponse)> {
+    pub fn pop(&mut self) -> Option<RequestOrResponse> {
         if let Some((receiver, queue)) = self.queues.pop_front() {
             let msg = queue.pop().expect("Empty queue in iterator");
-            let queue_id = QueueId {
-                src_canister: self.owner,
-                dst_canister: *receiver,
-                session_id: SessionId::new(0),
-            };
 
             if queue.num_messages() > 0 {
                 self.queues.push_back((receiver, queue));
@@ -204,7 +188,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
             self.size -= 1;
             debug_assert_eq!(Self::compute_size(&self.queues), self.size);
 
-            return Some((queue_id, msg));
+            return Some(msg);
         }
         None
     }
@@ -241,7 +225,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
 }
 
 impl Iterator for CanisterOutputQueuesIterator<'_> {
-    type Item = (QueueId, RequestOrResponse);
+    type Item = RequestOrResponse;
 
     /// Alias for `pop`.
     fn next(&mut self) -> Option<Self::Item> {
@@ -302,9 +286,8 @@ impl CanisterQueues {
     /// Returns an iterator that loops over output queues, popping one message
     /// at a time from each in a round robin fashion. The iterator consumes all
     /// popped messages.
-    pub(crate) fn output_into_iter(&mut self, owner: CanisterId) -> CanisterOutputQueuesIterator {
+    pub(crate) fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator {
         CanisterOutputQueuesIterator::new(
-            owner,
             &mut self.canister_queues,
             &mut self.memory_usage_stats,
             &mut self.output_queues_stats,

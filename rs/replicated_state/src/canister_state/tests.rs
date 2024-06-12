@@ -31,7 +31,6 @@ use ic_types::{
     },
     methods::{Callback, WasmClosure},
     nominal_cycles::NominalCycles,
-    xnet::QueueId,
     CountBytes, Cycles, Time,
 };
 use ic_wasm_types::CanisterModule;
@@ -134,7 +133,7 @@ impl CanisterStateFixture {
         )
     }
 
-    fn pop_output(&mut self) -> Option<(QueueId, RequestOrResponse)> {
+    fn pop_output(&mut self) -> Option<RequestOrResponse> {
         let mut iter = self.canister_state.output_into_iter();
         iter.pop()
     }
