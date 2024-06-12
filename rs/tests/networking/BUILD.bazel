@@ -37,8 +37,10 @@ system_test(
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "system_test_hourly",
-        "system_test_nightly",
+        # TODO(NET-1710): enable on CI again when the problematic firewall rule in the IC node has been removed.
+        #"system_test_hourly",
+        #"system_test_nightly",
+        "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
