@@ -548,7 +548,8 @@ fn compute_priority(
                 Priority::Stash
             }
         }
-        EcdsaMessageAttribute::EcdsaSigShare(request_id) => {
+        EcdsaMessageAttribute::EcdsaSigShare(request_id)
+        | EcdsaMessageAttribute::SchnorrSigShare(request_id) => {
             if request_id.height <= args.certified_height {
                 if args.requested_signatures.contains(request_id) {
                     Priority::FetchNow
@@ -565,8 +566,6 @@ fn compute_priority(
                 Priority::Stash
             }
         }
-        // Drop schnorr sig shares for now
-        EcdsaMessageAttribute::SchnorrSigShare(_) => Priority::Drop,
         EcdsaMessageAttribute::EcdsaComplaint(transcript_id)
         | EcdsaMessageAttribute::EcdsaOpening(transcript_id) => {
             let height = transcript_id.source_height();
@@ -771,10 +770,14 @@ mod tests {
             ),
             (
                 EcdsaMessageAttribute::SchnorrSigShare(request_id_fetch_1.clone()),
-                Priority::Drop,
+                Priority::FetchNow,
             ),
             (
                 EcdsaMessageAttribute::EcdsaSigShare(request_id_drop.clone()),
+                Priority::Drop,
+            ),
+            (
+                EcdsaMessageAttribute::SchnorrSigShare(request_id_drop.clone()),
                 Priority::Drop,
             ),
             (
@@ -782,7 +785,15 @@ mod tests {
                 Priority::FetchNow,
             ),
             (
+                EcdsaMessageAttribute::SchnorrSigShare(request_id_fetch_2.clone()),
+                Priority::FetchNow,
+            ),
+            (
                 EcdsaMessageAttribute::EcdsaSigShare(request_id_stash.clone()),
+                Priority::Stash,
+            ),
+            (
+                EcdsaMessageAttribute::SchnorrSigShare(request_id_stash.clone()),
                 Priority::Stash,
             ),
         ];
