@@ -42,6 +42,7 @@ struct IngressWatcherSubscription {
 #[derive(Clone)]
 pub(crate) struct IngressWatcherHandle {
     subscriber_registration_tx: Sender<IngressWatcherSubscription>,
+    metrics: HttpHandlerMetrics,
 }
 
 impl IngressWatcherHandle {
@@ -51,6 +52,10 @@ impl IngressWatcherHandle {
         self,
         message: MessageId,
     ) -> Result<IngressCertificationSubscriber, SubscriptionError> {
+        let _timer = self
+            .metrics
+            .ingress_watcher_subscription_latency_duration_seconds
+            .start_timer();
         // Cancel the subscription if the handle is dropped.
         let cancellation_token = CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
@@ -77,6 +82,7 @@ impl IngressWatcherHandle {
 
         Ok(IngressCertificationSubscriber {
             certification_notifier,
+            metrics: self.metrics,
             _drop_guard: drop_guard,
         })
     }
@@ -84,12 +90,17 @@ impl IngressWatcherHandle {
 
 pub(crate) struct IngressCertificationSubscriber {
     certification_notifier: Arc<Notify>,
+    metrics: HttpHandlerMetrics,
     /// Cancels the subscription if the subscriber is dropped.
     _drop_guard: DropGuard,
 }
 
 impl IngressCertificationSubscriber {
     pub(crate) async fn wait_for_certification(self) {
+        let _timer = self
+            .metrics
+            .ingress_watcher_wait_for_certification_duration_seconds
+            .start_timer();
         self.certification_notifier.notified().await;
     }
 }
@@ -106,7 +117,7 @@ enum MessageExecutionStatus {
 /// - 1:1 mapping of keys in `message_statuses` with execution status as completed and `completed_execution_heights`.
 pub(crate) struct IngressWatcher {
     log: ReplicaLogger,
-    _metrics: HttpHandlerMetrics,
+    metrics: HttpHandlerMetrics,
     rt_handle: Handle,
     cancellation_token: CancellationToken,
     /// Keeps track of the certified height.
@@ -135,7 +146,7 @@ impl IngressWatcher {
 
         let ingress_watcher = Self {
             log,
-            _metrics: metrics,
+            metrics: metrics.clone(),
             rt_handle: rt_handle.clone(),
             cancellation_token,
             certified_height: *certified_height_watcher.borrow(),
@@ -153,6 +164,7 @@ impl IngressWatcher {
         (
             IngressWatcherHandle {
                 subscriber_registration_tx,
+                metrics,
             },
             join_handle,
         )
@@ -218,6 +230,7 @@ impl IngressWatcher {
             select! {
                 // A new ingress message that needs to be tracked.
                 Some(ingress_subscription) = ingress_message_rx.recv() => {
+                    self.metrics.ingress_watcher_subscriptions_total.inc();
                     self.handle_ingress_message(ingress_subscription);
                 }
                 // Ingress message completed execution at `height`.
@@ -231,6 +244,7 @@ impl IngressWatcher {
                 // Cancel the tracking of an ingress message.
                 // TODO: Handle Some(Err(_)) case?
                 Some(Ok((_, message_id))) = self.cancellations.join_next() => {
+                    self.metrics.ingress_watcher_cancelled_subscriptions_total.inc();
                     self.handle_cancellation(&message_id);
                 }
 
@@ -242,6 +256,14 @@ impl IngressWatcher {
                     break;
                 }
             }
+
+            self.metrics
+                .ingress_watcher_heights_waiting_for_certification
+                .set(self.completed_execution_heights.len() as i64);
+
+            self.metrics
+                .ingress_watcher_tracked_messages
+                .set(self.message_statuses.len() as i64);
         }
     }
 
@@ -272,7 +294,10 @@ impl IngressWatcher {
                 Ok(certification_notifier)
             }
             // Seen message, return the existing notifier. This can happen if the replica gets two or more requests for the same message.
-            Entry::Occupied(_) => Err(SubscriptionError::DuplicateSubscriptionError),
+            Entry::Occupied(_) => {
+                self.metrics.ingress_watcher_duplicate_requests_total.inc();
+                Err(SubscriptionError::DuplicateSubscriptionError)
+            }
         };
 
         let _ = certification_notifier_tx.send(certification_notifier);
@@ -404,7 +429,7 @@ mod tests {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         IngressWatcher {
             log,
-            _metrics: metrics,
+            metrics,
             rt_handle: runtime.handle().clone(),
             cancellation_token,
             message_statuses: HashMap::new(),

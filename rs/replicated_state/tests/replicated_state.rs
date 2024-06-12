@@ -879,9 +879,9 @@ proptest! {
         let mut output_iter = replicated_state.output_into_iter();
 
         let mut num_requests = 0;
-        while let Some((queue_id, msg)) = output_iter.peek() {
+        while let Some(msg) = output_iter.peek() {
             num_requests += 1;
-            assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
+            assert_eq!(Some(msg.clone()), output_iter.next());
         }
 
         drop(output_iter);
@@ -905,13 +905,13 @@ proptest! {
         let mut i = start;
         let mut excluded = 0;
         let mut consumed = 0;
-        while let Some((queue_id, msg)) = output_iter.peek() {
+        while let Some(msg) = output_iter.peek() {
             i += 1;
             if i % exclude_step == 0 {
                 output_iter.exclude_queue();
                 excluded += 1;
             } else {
-                assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
+                assert_eq!(Some(msg.clone()), output_iter.next());
                 consumed += 1;
             }
         }
@@ -927,7 +927,7 @@ proptest! {
     ) {
         let mut output_iter = replicated_state.output_into_iter();
 
-        for (_, msg) in &mut output_iter {
+        for msg in &mut output_iter {
             let mut requests = raw_requests.pop_front().unwrap();
             while requests.is_empty() {
                 requests = raw_requests.pop_front().unwrap();
@@ -961,7 +961,7 @@ proptest! {
             let mut output_iter = replicated_state.output_into_iter();
 
             let mut i = start;
-            while let Some((_, msg)) = output_iter.peek() {
+            while let Some(msg) = output_iter.peek() {
 
                 let mut requests = raw_requests.pop_front().unwrap();
                 while requests.is_empty() {
@@ -982,7 +982,7 @@ proptest! {
                     continue;
                 }
 
-                let (_, msg) = output_iter.next().unwrap();
+                let msg = output_iter.next().unwrap();
                 if let Some(raw_msg) = requests.pop_front() {
                     consumed += 1;
                     assert_eq!(msg, raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);

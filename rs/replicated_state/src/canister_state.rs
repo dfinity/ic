@@ -305,7 +305,7 @@ impl CanisterState {
     /// popping one message at a time from each in a round robin fashion. The
     /// iterator consumes all popped messages.
     pub fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator {
-        self.system_state.output_into_iter(self.canister_id())
+        self.system_state.output_into_iter()
     }
 
     /// Unconditionally pushes an ingress message into the ingress pool of the

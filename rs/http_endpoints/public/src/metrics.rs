@@ -1,5 +1,8 @@
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use prometheus::{HistogramVec, IntCounter, IntCounterVec};
+use ic_metrics::{
+    buckets::{add_bucket, decimal_buckets},
+    MetricsRegistry,
+};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 
 pub const LABEL_DETAIL: &str = "detail";
 pub const LABEL_PROTOCOL: &str = "protocol";
@@ -38,6 +41,15 @@ pub struct HttpHandlerMetrics {
     pub health_status_transitions_total: IntCounterVec,
     pub connection_setup_duration: HistogramVec,
     pub connection_duration: HistogramVec,
+
+    // Ingress watcher metrics
+    pub ingress_watcher_tracked_messages: IntGauge,
+    pub ingress_watcher_heights_waiting_for_certification: IntGauge,
+    pub ingress_watcher_subscriptions_total: IntCounter,
+    pub ingress_watcher_cancelled_subscriptions_total: IntCounter,
+    pub ingress_watcher_duplicate_requests_total: IntCounter,
+    pub ingress_watcher_subscription_latency_duration_seconds: Histogram,
+    pub ingress_watcher_wait_for_certification_duration_seconds: Histogram,
 }
 
 // There is a mismatch between the labels and the public spec.
@@ -104,6 +116,40 @@ impl HttpHandlerMetrics {
                 // 10ms, 20ms, ... 50000s
                 decimal_buckets(-2, 4),
                 &[LABEL_PROTOCOL],
+            ),
+            // Ingress watcher metrics
+            ingress_watcher_subscriptions_total: metrics_registry.int_counter(
+                "replica_http_ingress_watcher_subscriptions_total",
+                "Total number of subscriptions the ingress watcher has received."
+            ),
+            ingress_watcher_cancelled_subscriptions_total: metrics_registry.int_counter(
+                "replica_http_ingress_watcher_cancelled_subscriptions_total",
+                "Total number of subscriptions that have been cancelled."
+            ),
+            ingress_watcher_duplicate_requests_total: metrics_registry.int_counter(
+                "replica_http_ingress_watcher_duplicate_requests_total",
+                "Total number of duplicate requests the ingress watcher has received."
+            ),
+            ingress_watcher_tracked_messages: metrics_registry.int_gauge(
+                "replica_http_ingress_watcher_tracked_messages",
+            "The current number of messages being tracked in the ingress watcher waiting for certification"
+            ),
+            ingress_watcher_heights_waiting_for_certification: metrics_registry.int_gauge(
+                "replica_http_ingress_watcher_heights_waiting_for_certification",
+                "The current number of unique heights that the ingress watcher is waiting for certification on."
+            ),
+            ingress_watcher_subscription_latency_duration_seconds: metrics_registry.histogram(
+                "replica_http_ingress_watcher_subscription_latency_duration_seconds",
+                "The duration the call v3 handler waits for subscribing to a message. I.e. `IngressWatcherHandle::subscribe_for_certification()`.",
+                // 0.1ms - 500ms
+                decimal_buckets(-4, -1),
+            ),
+            ingress_watcher_wait_for_certification_duration_seconds: metrics_registry.histogram(
+                "replica_http_ingress_watcher_wait_for_certification_duration_seconds",
+                "The duration the call v3 handler waits for subscribing to a message. I.e. `IngressWatcherHandle::subscribe_for_certification()`.",
+                // We have the final bucket at 10s as that is the maximum time the handler waits for certification
+                // 10ms - 10s.
+                add_bucket(10.0, decimal_buckets(-2, 0)),
             ),
         }
     }
