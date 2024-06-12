@@ -558,7 +558,7 @@ sync_wrapper = "1.0.1"
 tempfile = "3.10.1"
 thiserror = "1.0.57"
 time = { version = "0.3.36", features = ["formatting"] }
-tokio = { version = "1.37.0", features = ["full"] }
+tokio = { version = "1.38.0", features = ["full"] }
 tokio-metrics = "0.3.1"
 tokio-rustls = { version = "0.26.0", features = ["logging", "ring", "tls12"] }
 tokio-util = { version = "0.7.11", features = ["full"] }

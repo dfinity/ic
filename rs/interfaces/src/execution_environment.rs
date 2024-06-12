@@ -1161,6 +1161,22 @@ pub enum ExecutionRoundType {
     OrdinaryRound,
 }
 
+/// Execution round properties collected form the last DKG summary block.
+#[derive(Debug, Eq, PartialEq)]
+pub struct ExecutionRoundSummary {
+    /// The next checkpoint round height.
+    ///
+    /// In a case of a subnet recovery, the DSM will observe an instant
+    /// jump for the `batch_number` and `next_checkpoint_height` values.
+    /// The `next_checkpoint_height`, if set, should be always greater
+    /// than the `batch_number`.
+    pub next_checkpoint_round: ExecutionRound,
+    /// The current checkpoint interval length.
+    ///
+    /// The DKG interval length is normally 499 rounds (199 for system subnets).
+    pub current_interval_length: ExecutionRound,
+}
+
 /// Configuration of execution that comes from the registry.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RegistryExecutionSettings {
@@ -1234,7 +1250,7 @@ pub trait Scheduler: Send {
         idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
         idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
         current_round: ExecutionRound,
-        next_checkpoint_round: Option<ExecutionRound>,
+        round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> Self::State;

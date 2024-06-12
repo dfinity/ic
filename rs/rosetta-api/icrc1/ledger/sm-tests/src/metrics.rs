@@ -5,6 +5,19 @@ use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
 
+pub fn assert_existence_of_ledger_num_archives_metric<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    const METRIC: &str = "ledger_num_archives";
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+
+    assert_existence_of_metric(env, canister_id, METRIC);
+}
+
 pub fn assert_existence_of_ledger_total_memory_bytes_metric<T>(
     ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
@@ -15,7 +28,7 @@ pub fn assert_existence_of_ledger_total_memory_bytes_metric<T>(
 
     let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
 
-    assert_existence_of_total_memory_bytes_metric(env, canister_id, METRIC);
+    assert_existence_of_metric(env, canister_id, METRIC);
 }
 
 pub fn assert_existence_of_index_total_memory_bytes_metric<T>(
@@ -34,14 +47,10 @@ pub fn assert_existence_of_index_total_memory_bytes_metric<T>(
         .install_canister(index_wasm, Encode!(&args).unwrap(), None)
         .unwrap();
 
-    assert_existence_of_total_memory_bytes_metric(env, index_id, METRIC);
+    assert_existence_of_metric(env, index_id, METRIC);
 }
 
-fn assert_existence_of_total_memory_bytes_metric(
-    env: StateMachine,
-    canister_id: CanisterId,
-    metric: &str,
-) {
+fn assert_existence_of_metric(env: StateMachine, canister_id: CanisterId, metric: &str) {
     let request = HttpRequest {
         method: "GET".to_string(),
         url: "/metrics".to_string(),

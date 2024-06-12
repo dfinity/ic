@@ -42,15 +42,9 @@ use std::{
 pub struct Batch {
     /// The sequence number attached to the batch.
     pub batch_number: Height,
-    /// The next start height is always set by the consensus,
-    /// see `deliver_batches()`. But the tests and the `PocketIC`
-    /// might set it to `None`, i.e. "unknown".
-    ///
-    /// In a case of a subnet recovery, the DSM will observe an instant
-    /// jump for the `batch_number` and `next_checkpoint_height` values.
-    /// The `next_checkpoint_height`, if set, should be always greater
-    /// than the `batch_number`.
-    pub next_checkpoint_height: Option<Height>,
+    /// The batch summary is always set by the consensus, see `deliver_batches()`.
+    /// The tests and the `PocketIC` might set it to `None`, i.e. "unknown".
+    pub batch_summary: Option<BatchSummary>,
     /// Whether the state obtained by executing this batch needs to be fully
     /// hashed to be eligible for StateSync.
     pub requires_full_state_hash: bool,
@@ -116,6 +110,22 @@ pub struct BatchPayload {
     pub self_validating: SelfValidatingPayload,
     pub canister_http: Vec<u8>,
     pub query_stats: Vec<u8>,
+}
+
+/// Batch properties collected form the last DKG summary block.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BatchSummary {
+    /// The next checkpoint height.
+    ///
+    /// In a case of a subnet recovery, the DSM will observe an instant
+    /// jump for the `batch_number` and `next_checkpoint_height` values.
+    /// The `next_checkpoint_height`, if set, should be always greater
+    /// than the `batch_number`.
+    pub next_checkpoint_height: Height,
+    /// The current checkpoint interval length.
+    ///
+    /// The DKG interval length is normally 499 rounds (199 for system subnets).
+    pub current_interval_length: Height,
 }
 
 /// Return ingress messages, xnet messages, and responses from the bitcoin adapter.

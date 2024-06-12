@@ -1612,7 +1612,7 @@ impl StateMachine {
 
         let batch = Batch {
             batch_number,
-            next_checkpoint_height: None,
+            batch_summary: None,
             requires_full_state_hash: self.checkpoints_enabled.load(Ordering::Relaxed),
             messages: BatchMessages {
                 signed_ingress_msgs: payload.ingress_messages,

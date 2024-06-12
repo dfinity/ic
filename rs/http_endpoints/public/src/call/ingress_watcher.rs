@@ -1,5 +1,4 @@
 use crate::metrics::HttpHandlerMetrics;
-use futures::{Future, FutureExt};
 use ic_async_utils::JoinMap;
 use ic_logger::{error, ReplicaLogger};
 use ic_types::{messages::MessageId, Height};
@@ -89,17 +88,9 @@ pub(crate) struct IngressCertificationSubscriber {
     _drop_guard: DropGuard,
 }
 
-impl Future for IngressCertificationSubscriber {
-    type Output = ();
-
-    fn poll(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<()> {
-        self.certification_notifier
-            .notified()
-            .boxed()
-            .poll_unpin(cx)
+impl IngressCertificationSubscriber {
+    pub(crate) async fn wait_for_certification(self) {
+        self.certification_notifier.notified().await;
     }
 }
 

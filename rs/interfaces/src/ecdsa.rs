@@ -3,7 +3,7 @@
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::idkg::{
     EcdsaComplaint, EcdsaMessage, EcdsaOpening, EcdsaPrefixOf, EcdsaSigShare, EcdsaStats,
-    SchnorrSigShare,
+    SchnorrSigShare, SigShare,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
 
@@ -102,6 +102,8 @@ pub trait EcdsaPoolSection: Send + Sync {
     ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_> {
         unimplemented!()
     }
+
+    fn signature_shares(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, SigShare)> + '_>;
 
     /// Iterator for complaint objects.
     fn complaints(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaComplaint)> + '_>;
