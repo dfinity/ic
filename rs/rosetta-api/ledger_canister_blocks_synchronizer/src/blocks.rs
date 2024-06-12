@@ -262,12 +262,16 @@ mod database_access {
                    WHERE idx = :idx"#,
             )
             .map_err(|e| format!("Unable to prepare statement: {e:?}"))?;
-        let block = statement
-            .query_row(named_params! { ":idx": block_idx }, |row| {
+        let mut blocks = statement
+            .query_map(named_params! { ":idx": block_idx }, |row| {
                 HashedBlock::try_from(row)
             })
-            .map_err(|e| format!("Unable to query hashed block: {e:?}"))?;
-        Ok(block)
+            .map_err(|e| format!("Unable to query hashed block {block_idx}: {e:?}"))?
+            .into_iter();
+        match blocks.next() {
+            Some(block) => return block.map_err(|e| BlockStoreError::Other(e.to_string())),
+            None => Err(BlockStoreError::NotFound(*block_idx)),
+        }
     }
 
     fn read_hashed_block(
