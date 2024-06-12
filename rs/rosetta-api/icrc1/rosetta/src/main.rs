@@ -383,11 +383,19 @@ async fn main() -> Result<()> {
     if !args.offline {
         tokio::task::spawn_blocking(move || {
             let mut sync_wait_secs = BLOCK_SYNC_WAIT_SECS;
+
+            let block_sync_storage = match args.store_type {
+                StoreType::InMemory => storage.clone(),
+                StoreType::File => {
+                    Arc::new(StorageClient::new_persistent(&args.store_file).unwrap())
+                }
+            };
+
             tokio::runtime::Handle::current().block_on(async {
                 loop {
                     if let Err(e) = start_synching_blocks(
                         icrc1_agent.clone(),
-                        storage.clone(),
+                        block_sync_storage.clone(),
                         *MAXIMUM_BLOCKS_PER_REQUEST,
                         shared_state.clone().archive_canister_ids.clone(),
                     )
