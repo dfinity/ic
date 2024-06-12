@@ -1327,9 +1327,9 @@ impl SchedulerImpl {
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
                 state.metadata.heap_delta_estimate = NumBytes::from(0);
-                // `expected_compiled_wasms` will be cleared upon store and load
-                // of a checkpoint because it doesn't exist in the protobuf
-                // metadata, but we make it explicit here anyway.
+                // The set of compiled Wasms must be cleared when taking a
+                // checkpoint to keep it in sync with the protobuf serialization
+                // of `ReplicatedState` which doesn't store this field.
                 state.metadata.expected_compiled_wasms.clear();
 
                 if self.deterministic_time_slicing == FlagStatus::Enabled {
