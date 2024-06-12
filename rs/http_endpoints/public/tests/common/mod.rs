@@ -232,10 +232,6 @@ fn basic_state_manager_mock() -> MockStateManager {
         .returning(default_read_certified_state);
 
     mock_state_manager
-        .expect_read_certified_state()
-        .returning(default_read_certified_state);
-
-    mock_state_manager
         .expect_latest_certified_height()
         .returning(default_latest_certified_height);
 

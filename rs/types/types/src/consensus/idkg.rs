@@ -25,6 +25,7 @@ use crate::{
     },
     node_id_into_protobuf, node_id_try_from_option, Height, NodeId, RegistryVersion, SubnetId,
 };
+use common::SignatureScheme;
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -1356,6 +1357,44 @@ impl Display for SchnorrSigShare {
             "SchnorrSigShare[request_id = {:?}, signer_id = {:?}]",
             self.request_id, self.signer_id,
         )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum SigShare {
+    Ecdsa(EcdsaSigShare),
+    Schnorr(SchnorrSigShare),
+}
+
+impl Display for SigShare {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            SigShare::Ecdsa(share) => write!(f, "{share}"),
+            SigShare::Schnorr(share) => write!(f, "{share}"),
+        }
+    }
+}
+
+impl SigShare {
+    pub fn signer(&self) -> NodeId {
+        match self {
+            SigShare::Ecdsa(share) => share.signer_id,
+            SigShare::Schnorr(share) => share.signer_id,
+        }
+    }
+
+    pub fn request_id(&self) -> RequestId {
+        match self {
+            SigShare::Ecdsa(share) => share.request_id.clone(),
+            SigShare::Schnorr(share) => share.request_id.clone(),
+        }
+    }
+
+    pub fn scheme(&self) -> SignatureScheme {
+        match self {
+            SigShare::Ecdsa(_) => SignatureScheme::Ecdsa,
+            SigShare::Schnorr(_) => SignatureScheme::Schnorr,
+        }
     }
 }
 
