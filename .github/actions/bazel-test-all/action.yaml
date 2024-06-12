@@ -38,7 +38,6 @@ runs:
           if -d /cache; then
             sudo chown -R 1001:1001 /cache
           fi
-          export PATH="/usr/local/bin:$PATH"
 
           ${GITHUB_WORKSPACE}/gitlab-ci/src/bazel-ci/main.sh
           BAZEL_EXIT_CODE="$?"
