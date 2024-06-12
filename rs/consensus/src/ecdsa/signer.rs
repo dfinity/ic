@@ -8,6 +8,7 @@ use ic_consensus_utils::RoundRobin;
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
 use ic_interfaces::crypto::{
     ErrorReproducibility, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner,
 };
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
@@ -16,14 +17,18 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
 use ic_replicated_state::ReplicatedState;
 use ic_types::artifact::EcdsaMessageId;
-use ic_types::consensus::idkg::common::{CombinedSignature, ThresholdSigInputsRef};
-use ic_types::consensus::idkg::{
-    ecdsa::ThresholdEcdsaSigInputsRef, ecdsa_sig_share_prefix, EcdsaBlockReader, EcdsaMessage,
-    EcdsaSigShare, EcdsaStats, RequestId,
+use ic_types::consensus::idkg::common::{
+    CombinedSignature, SignatureScheme, ThresholdSigInputs, ThresholdSigInputsRef,
 };
-use ic_types::crypto::canister_threshold_sig::{
-    error::ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCombinedSignature,
-    ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
+use ic_types::consensus::idkg::{
+    ecdsa_sig_share_prefix, EcdsaBlockReader, EcdsaMessage, EcdsaSigShare, EcdsaStats, RequestId,
+};
+use ic_types::consensus::idkg::{schnorr_sig_share_prefix, SchnorrSigShare, SigShare};
+use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCombineSigSharesError;
+use ic_types::crypto::canister_threshold_sig::error::{
+    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifySigShareError,
+    ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
+    ThresholdSchnorrVerifySigShareError,
 };
 use ic_types::{Height, NodeId};
 use std::cell::RefCell;
@@ -32,6 +37,49 @@ use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
 
 use super::utils::{build_signature_inputs, get_context_request_id, update_purge_height};
+
+#[derive(Clone, Debug)]
+#[allow(dead_code)]
+enum CreateSigShareError {
+    Ecdsa(ThresholdEcdsaSignShareError),
+    Schnorr(ThresholdSchnorrCreateSigShareError),
+}
+
+#[derive(Clone, Debug)]
+enum VerifySigShareError {
+    Ecdsa(ThresholdEcdsaVerifySigShareError),
+    Schnorr(ThresholdSchnorrVerifySigShareError),
+    ThresholdSchemeMismatch,
+}
+
+impl VerifySigShareError {
+    fn is_reproducible(&self) -> bool {
+        match self {
+            VerifySigShareError::Ecdsa(err) => err.is_reproducible(),
+            VerifySigShareError::Schnorr(err) => err.is_reproducible(),
+            VerifySigShareError::ThresholdSchemeMismatch => true,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+enum CombineSigSharesError {
+    Ecdsa(ThresholdEcdsaCombineSigSharesError),
+    Schnorr(ThresholdSchnorrCombineSigSharesError),
+}
+
+impl CombineSigSharesError {
+    fn is_unsatisifed_reconstruction_threshold(&self) -> bool {
+        matches!(
+            self,
+            CombineSigSharesError::Ecdsa(
+                ThresholdEcdsaCombineSigSharesError::UnsatisfiedReconstructionThreshold { .. }
+            ) | CombineSigSharesError::Schnorr(
+                ThresholdSchnorrCombineSigSharesError::UnsatisfiedReconstructionThreshold { .. }
+            )
+        )
+    }
+}
 
 pub(crate) trait EcdsaSigner: Send {
     /// The on_state_change() called from the main ECDSA path.
@@ -88,17 +136,18 @@ impl EcdsaSignerImpl {
             .signature_request_contexts()
             .values()
             .flat_map(|context| build_signature_inputs(context, block_reader))
-            .filter(|(request_id, _)| {
-                !self.signer_has_issued_signature_share(ecdsa_pool, &self.node_id, request_id)
+            .filter(|(request_id, inputs_ref)| {
+                !self.signer_has_issued_share(
+                    ecdsa_pool,
+                    &self.node_id,
+                    request_id,
+                    inputs_ref.scheme(),
+                )
             })
             .flat_map(|(request_id, sig_inputs_ref)| {
-                // TODO(CON-1262): Create schnorr signature shares
-                let ThresholdSigInputsRef::Ecdsa(sig_inputs_ref) = sig_inputs_ref else {
-                    return vec![];
-                };
                 self.resolve_ref(&sig_inputs_ref, block_reader, "send_signature_shares")
                     .map(|sig_inputs| {
-                        self.crypto_create_signature_share(
+                        self.create_signature_share(
                             ecdsa_pool,
                             transcript_loader,
                             &request_id,
@@ -128,9 +177,10 @@ impl EcdsaSignerImpl {
         let mut validated_sig_shares = BTreeSet::new();
 
         let mut ret = Vec::new();
-        for (id, share) in ecdsa_pool.unvalidated().ecdsa_signature_shares() {
+        // Iterate over all signature shares of all schemes
+        for (id, share) in ecdsa_pool.unvalidated().signature_shares() {
             // Remove the duplicate entries
-            let key = (share.request_id.clone(), share.signer_id);
+            let key = (share.request_id(), share.signer());
             if validated_sig_shares.contains(&key) {
                 self.metrics
                     .sign_errors_inc("duplicate_sig_shares_in_batch");
@@ -143,66 +193,86 @@ impl EcdsaSignerImpl {
 
             match Action::new(
                 &sig_inputs_map,
-                &share.request_id,
+                &share.request_id(),
                 state_snapshot.get_height(),
             ) {
                 Action::Process(sig_inputs_ref) => {
-                    // TODO(CON-1262): Verify schnorr signature shares
-                    let ThresholdSigInputsRef::Ecdsa(sig_inputs_ref) = sig_inputs_ref else {
-                        self.metrics
-                            .sign_errors_inc("ecdsa_share_for_schnorr_inputs");
-                        ret.push(EcdsaChangeAction::HandleInvalid(
-                            id,
-                            format!("Schnorr signature shares are unsupported: {}", share),
-                        ));
-                        continue;
-                    };
-                    if self.signer_has_issued_signature_share(
+                    let action = self.validate_signature_share(
                         ecdsa_pool,
-                        &share.signer_id,
-                        &share.request_id,
-                    ) {
-                        // The node already sent a valid share for this request
-                        self.metrics.sign_errors_inc("duplicate_sig_share");
-                        ret.push(EcdsaChangeAction::HandleInvalid(
-                            id,
-                            format!("Duplicate share: {}", share),
-                        ))
-                    } else {
-                        match self.resolve_ref(
-                            sig_inputs_ref,
-                            block_reader,
-                            "validate_signature_shares",
-                        ) {
-                            Some(sig_inputs) => {
-                                let action = self.crypto_verify_signature_share(
-                                    id,
-                                    &sig_inputs,
-                                    share,
-                                    ecdsa_pool.stats(),
-                                );
-                                if let Some(EcdsaChangeAction::MoveToValidated(_)) = action {
-                                    validated_sig_shares.insert(key);
-                                }
-                                ret.append(&mut action.into_iter().collect());
-                            }
-                            None => {
-                                ret.push(EcdsaChangeAction::HandleInvalid(
-                                    id,
-                                    format!(
-                                        "validate_signature_shares(): failed to translate: {}",
-                                        share
-                                    ),
-                                ));
-                            }
-                        }
+                        block_reader,
+                        id,
+                        share,
+                        sig_inputs_ref,
+                    );
+                    if let Some(EcdsaChangeAction::MoveToValidated(_)) = action {
+                        validated_sig_shares.insert(key);
                     }
+                    ret.append(&mut action.into_iter().collect());
                 }
                 Action::Drop => ret.push(EcdsaChangeAction::RemoveUnvalidated(id)),
                 Action::Defer => {}
             }
         }
         ret
+    }
+
+    fn validate_signature_share(
+        &self,
+        ecdsa_pool: &dyn EcdsaPool,
+        block_reader: &dyn EcdsaBlockReader,
+        id: EcdsaMessageId,
+        share: SigShare,
+        inputs_ref: &ThresholdSigInputsRef,
+    ) -> Option<EcdsaChangeAction> {
+        if self.signer_has_issued_share(
+            ecdsa_pool,
+            &share.signer(),
+            &share.request_id(),
+            share.scheme(),
+        ) {
+            // The node already sent a valid share for this request
+            self.metrics.sign_errors_inc("duplicate_sig_share");
+            return Some(EcdsaChangeAction::HandleInvalid(
+                id,
+                format!("Duplicate signature share: {}", share),
+            ));
+        }
+
+        let Some(inputs) = self.resolve_ref(inputs_ref, block_reader, "validate_sig_share") else {
+            return Some(EcdsaChangeAction::HandleInvalid(
+                id,
+                format!("validate_signature_share(): failed to translate: {}", share),
+            ));
+        };
+
+        let share_string = share.to_string();
+        match self.crypto_verify_sig_share(&inputs, share, ecdsa_pool.stats()) {
+            Err(error) if error.is_reproducible() => {
+                self.metrics.sign_errors_inc("verify_sig_share_permanent");
+                Some(EcdsaChangeAction::HandleInvalid(
+                    id,
+                    format!(
+                        "Signature share validation(permanent error): {}, error = {:?}",
+                        share_string, error
+                    ),
+                ))
+            }
+            Err(error) => {
+                // Defer in case of transient errors
+                debug!(
+                    self.log,
+                    "Signature share validation(transient error): {}, error = {:?}",
+                    share_string,
+                    error
+                );
+                self.metrics.sign_errors_inc("verify_sig_share_transient");
+                None
+            }
+            Ok(share) => {
+                self.metrics.sign_metrics_inc("sig_shares_received");
+                Some(EcdsaChangeAction::MoveToValidated(share))
+            }
+        }
     }
 
     /// Purges the entries no longer needed from the artifact pool
@@ -224,7 +294,7 @@ impl EcdsaSignerImpl {
         // Unvalidated signature shares.
         let mut action = ecdsa_pool
             .unvalidated()
-            .ecdsa_signature_shares()
+            .signature_shares()
             .filter(|(_, share)| self.should_purge(share, current_height, &in_progress))
             .map(|(id, _)| EcdsaChangeAction::RemoveUnvalidated(id))
             .collect();
@@ -233,7 +303,7 @@ impl EcdsaSignerImpl {
         // Validated signature shares.
         let mut action = ecdsa_pool
             .validated()
-            .ecdsa_signature_shares()
+            .signature_shares()
             .filter(|(_, share)| self.should_purge(share, current_height, &in_progress))
             .map(|(id, _)| EcdsaChangeAction::RemoveValidated(id))
             .collect();
@@ -242,140 +312,181 @@ impl EcdsaSignerImpl {
         ret
     }
 
-    /// Load necessary transcripts for the inputs
+    /// Load necessary transcripts for the signature inputs
     fn load_dependencies(
         &self,
         ecdsa_pool: &dyn EcdsaPool,
         transcript_loader: &dyn EcdsaTranscriptLoader,
-        inputs: &ThresholdEcdsaSigInputs,
+        inputs: &ThresholdSigInputs,
     ) -> Option<EcdsaChangeSet> {
-        load_transcripts(
-            ecdsa_pool,
-            transcript_loader,
-            &[
+        let transcripts = match inputs {
+            ThresholdSigInputs::Ecdsa(inputs) => vec![
                 inputs.presig_quadruple().kappa_unmasked(),
                 inputs.presig_quadruple().lambda_masked(),
                 inputs.presig_quadruple().kappa_times_lambda(),
                 inputs.presig_quadruple().key_times_lambda(),
                 inputs.key_transcript(),
             ],
-        )
+            ThresholdSigInputs::Schnorr(inputs) => vec![
+                inputs.presig_transcript().blinder_unmasked(),
+                inputs.key_transcript(),
+            ],
+        };
+        load_transcripts(ecdsa_pool, transcript_loader, &transcripts)
     }
 
     /// Helper to create the signature share
-    fn crypto_create_signature_share(
+    fn create_signature_share(
         &self,
         ecdsa_pool: &dyn EcdsaPool,
         transcript_loader: &dyn EcdsaTranscriptLoader,
         request_id: &RequestId,
-        sig_inputs: &ThresholdEcdsaSigInputs,
+        sig_inputs: &ThresholdSigInputs,
     ) -> EcdsaChangeSet {
         if let Some(changes) = self.load_dependencies(ecdsa_pool, transcript_loader, sig_inputs) {
             return changes;
         }
 
-        ThresholdEcdsaSigner::sign_share(&*self.crypto, sig_inputs).map_or_else(
-            |error| {
+        match self.crypto_create_sig_share(request_id, sig_inputs) {
+            Err(err) => {
                 warn!(
                     self.log,
-                    "Failed to create share: request_id = {:?}, {:?}", request_id, error
+                    "Failed to create sig share: request_id = {:?}, {:?}", request_id, err
                 );
                 self.metrics.sign_errors_inc("create_sig_share");
                 Default::default()
-            },
-            |share| {
-                let sig_share = EcdsaSigShare {
-                    signer_id: self.node_id,
-                    request_id: request_id.clone(),
-                    share,
-                };
+            }
+            Ok(share) => {
                 self.metrics.sign_metrics_inc("sig_shares_sent");
-                vec![EcdsaChangeAction::AddToValidated(
-                    EcdsaMessage::EcdsaSigShare(sig_share),
-                )]
-            },
-        )
-    }
-
-    /// Helper to verify the signature share
-    fn crypto_verify_signature_share(
-        &self,
-        id: EcdsaMessageId,
-        sig_inputs: &ThresholdEcdsaSigInputs,
-        share: EcdsaSigShare,
-        stats: &dyn EcdsaStats,
-    ) -> Option<EcdsaChangeAction> {
-        let start = std::time::Instant::now();
-        let ret = ThresholdEcdsaSigVerifier::verify_sig_share(
-            &*self.crypto,
-            share.signer_id,
-            sig_inputs,
-            &share.share,
-        );
-        stats.record_sig_share_validation(&share.request_id, start.elapsed());
-
-        match ret {
-            Err(error) if error.is_reproducible() => {
-                self.metrics.sign_errors_inc("verify_sig_share_permanent");
-                Some(EcdsaChangeAction::HandleInvalid(
-                    id,
-                    format!(
-                        "Share validation(permanent error): {}, error = {:?}",
-                        share, error
-                    ),
-                ))
-            }
-            Err(error) => {
-                // Defer in case of transient errors
-                debug!(
-                    self.log,
-                    "Share validation(transient error): {}, error = {:?}", share, error
-                );
-                self.metrics.sign_errors_inc("verify_sig_share_transient");
-                None
-            }
-            Ok(()) => {
-                self.metrics.sign_metrics_inc("sig_shares_received");
-                Some(EcdsaChangeAction::MoveToValidated(
-                    EcdsaMessage::EcdsaSigShare(share),
-                ))
+                vec![EcdsaChangeAction::AddToValidated(share)]
             }
         }
     }
 
+    fn crypto_create_sig_share(
+        &self,
+        request_id: &RequestId,
+        sig_inputs: &ThresholdSigInputs,
+    ) -> Result<EcdsaMessage, CreateSigShareError> {
+        match sig_inputs {
+            ThresholdSigInputs::Ecdsa(inputs) => {
+                ThresholdEcdsaSigner::sign_share(&*self.crypto, inputs).map_or_else(
+                    |err| Err(CreateSigShareError::Ecdsa(err)),
+                    |share| {
+                        let sig_share = EcdsaSigShare {
+                            signer_id: self.node_id,
+                            request_id: request_id.clone(),
+                            share,
+                        };
+                        Ok(EcdsaMessage::EcdsaSigShare(sig_share))
+                    },
+                )
+            }
+            ThresholdSigInputs::Schnorr(inputs) => {
+                ThresholdSchnorrSigner::create_sig_share(&*self.crypto, inputs).map_or_else(
+                    |err| Err(CreateSigShareError::Schnorr(err)),
+                    |share| {
+                        let sig_share = SchnorrSigShare {
+                            signer_id: self.node_id,
+                            request_id: request_id.clone(),
+                            share,
+                        };
+                        Ok(EcdsaMessage::SchnorrSigShare(sig_share))
+                    },
+                )
+            }
+        }
+    }
+
+    /// Helper to verify the signature share
+    fn crypto_verify_sig_share(
+        &self,
+        sig_inputs: &ThresholdSigInputs,
+        share: SigShare,
+        stats: &dyn EcdsaStats,
+    ) -> Result<EcdsaMessage, VerifySigShareError> {
+        let start = std::time::Instant::now();
+        let request_id = share.request_id();
+        let ret = match (sig_inputs, share) {
+            (ThresholdSigInputs::Ecdsa(inputs), SigShare::Ecdsa(share)) => {
+                ThresholdEcdsaSigVerifier::verify_sig_share(
+                    &*self.crypto,
+                    share.signer_id,
+                    inputs,
+                    &share.share,
+                )
+                .map_or_else(
+                    |err| Err(VerifySigShareError::Ecdsa(err)),
+                    |_| Ok(EcdsaMessage::EcdsaSigShare(share)),
+                )
+            }
+            (ThresholdSigInputs::Schnorr(inputs), SigShare::Schnorr(share)) => {
+                ThresholdSchnorrSigVerifier::verify_sig_share(
+                    &*self.crypto,
+                    share.signer_id,
+                    inputs,
+                    &share.share,
+                )
+                .map_or_else(
+                    |err| Err(VerifySigShareError::Schnorr(err)),
+                    |_| Ok(EcdsaMessage::SchnorrSigShare(share)),
+                )
+            }
+            _ => Err(VerifySigShareError::ThresholdSchemeMismatch),
+        };
+
+        stats.record_sig_share_validation(&request_id, start.elapsed());
+        ret
+    }
+
     /// Checks if the signer node has already issued a signature share for the
     /// request
-    fn signer_has_issued_signature_share(
+    fn signer_has_issued_share(
         &self,
         ecdsa_pool: &dyn EcdsaPool,
         signer_id: &NodeId,
         request_id: &RequestId,
+        scheme: SignatureScheme,
     ) -> bool {
-        let prefix = ecdsa_sig_share_prefix(request_id, signer_id);
-        ecdsa_pool
-            .validated()
-            .ecdsa_signature_shares_by_prefix(prefix)
-            .any(|(_, share)| share.request_id == *request_id && share.signer_id == *signer_id)
+        let validated = ecdsa_pool.validated();
+        match scheme {
+            SignatureScheme::Ecdsa => {
+                let prefix = ecdsa_sig_share_prefix(request_id, signer_id);
+                validated
+                    .ecdsa_signature_shares_by_prefix(prefix)
+                    .any(|(_, share)| {
+                        share.request_id == *request_id && share.signer_id == *signer_id
+                    })
+            }
+            SignatureScheme::Schnorr => {
+                let prefix = schnorr_sig_share_prefix(request_id, signer_id);
+                validated
+                    .schnorr_signature_shares_by_prefix(prefix)
+                    .any(|(_, share)| {
+                        share.request_id == *request_id && share.signer_id == *signer_id
+                    })
+            }
+        }
     }
 
     /// Checks if the signature share should be purged
     fn should_purge(
         &self,
-        share: &EcdsaSigShare,
+        share: &SigShare,
         current_height: Height,
         in_progress: &BTreeSet<[u8; 32]>,
     ) -> bool {
-        let request_id = &share.request_id;
+        let request_id = share.request_id();
         request_id.height <= current_height && !in_progress.contains(&request_id.pseudo_random_id)
     }
 
-    /// Resolves the ThresholdEcdsaSigInputsRef -> ThresholdEcdsaSigInputs
+    /// Resolves the ThresholdSigInputsRef -> ThresholdSigInputs
     fn resolve_ref(
         &self,
-        sig_inputs_ref: &ThresholdEcdsaSigInputsRef,
+        sig_inputs_ref: &ThresholdSigInputsRef,
         block_reader: &dyn EcdsaBlockReader,
         reason: &str,
-    ) -> Option<ThresholdEcdsaSigInputs> {
+    ) -> Option<ThresholdSigInputs> {
         let _timer = self
             .metrics
             .on_state_change_duration
@@ -499,42 +610,45 @@ impl<'a> EcdsaSignatureBuilderImpl<'a> {
         }
     }
 
-    fn crypto_combine_signature_shares(
+    fn crypto_combine_sig_shares(
         &self,
         request_id: &RequestId,
-        inputs: &ThresholdEcdsaSigInputs,
-        shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
+        inputs: &ThresholdSigInputs,
         stats: &dyn EcdsaStats,
-    ) -> Option<ThresholdEcdsaCombinedSignature> {
+    ) -> Result<CombinedSignature, CombineSigSharesError> {
         let start = std::time::Instant::now();
-        let ret = ThresholdEcdsaSigVerifier::combine_sig_shares(self.crypto, inputs, shares);
-        stats.record_sig_share_aggregation(request_id, start.elapsed());
-
-        ret.map_or_else(
-            |error| {
-                match error {
-                    ThresholdEcdsaCombineSigSharesError::UnsatisfiedReconstructionThreshold {
-                        threshold: _,
-                        share_count: _,
-                    } => (),
-                    _ => {
-                        warn!(
-                            self.log,
-                            "Failed to combine signature shares: request_id = {:?}, {:?}",
-                            request_id,
-                            error
-                        );
-                        self.metrics.payload_errors_inc("combine_sig_share");
+        let ret = match inputs {
+            ThresholdSigInputs::Ecdsa(inputs) => {
+                // Collect the signature shares for the request.
+                let mut sig_shares = BTreeMap::new();
+                for (_, share) in self.ecdsa_pool.validated().ecdsa_signature_shares() {
+                    if share.request_id == *request_id {
+                        sig_shares.insert(share.signer_id, share.share.clone());
                     }
-                };
-                Default::default()
-            },
-            |combined_signature| {
-                self.metrics
-                    .payload_metrics_inc("signatures_completed", None);
-                Some(combined_signature)
-            },
-        )
+                }
+                ThresholdEcdsaSigVerifier::combine_sig_shares(self.crypto, inputs, &sig_shares)
+                    .map_or_else(
+                        |err| Err(CombineSigSharesError::Ecdsa(err)),
+                        |share| Ok(CombinedSignature::Ecdsa(share)),
+                    )
+            }
+            ThresholdSigInputs::Schnorr(inputs) => {
+                // Collect the signature shares for the request.
+                let mut sig_shares = BTreeMap::new();
+                for (_, share) in self.ecdsa_pool.validated().schnorr_signature_shares() {
+                    if share.request_id == *request_id {
+                        sig_shares.insert(share.signer_id, share.share.clone());
+                    }
+                }
+                ThresholdSchnorrSigVerifier::combine_sig_shares(self.crypto, inputs, &sig_shares)
+                    .map_or_else(
+                        |err| Err(CombineSigSharesError::Schnorr(err)),
+                        |share| Ok(CombinedSignature::Schnorr(share)),
+                    )
+            }
+        };
+        stats.record_sig_share_aggregation(request_id, start.elapsed());
+        ret
     }
 }
 
@@ -545,11 +659,6 @@ impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
     ) -> Option<CombinedSignature> {
         // Find the sig inputs for the request and translate the refs.
         let (request_id, sig_inputs_ref) = build_signature_inputs(context, self.block_reader)?;
-
-        // TODO(CON-1262): Combine schnorr signature shares
-        let ThresholdSigInputsRef::Ecdsa(sig_inputs_ref) = sig_inputs_ref else {
-            return None;
-        };
 
         let sig_inputs = match sig_inputs_ref.translate(self.block_reader) {
             Ok(sig_inputs) => sig_inputs,
@@ -565,22 +674,22 @@ impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
             }
         };
 
-        // Collect the signature shares for the request.
-        let mut sig_shares = BTreeMap::new();
-        for (_, share) in self.ecdsa_pool.validated().ecdsa_signature_shares() {
-            if share.request_id == request_id {
-                sig_shares.insert(share.signer_id, share.share.clone());
+        match self.crypto_combine_sig_shares(&request_id, &sig_inputs, self.ecdsa_pool.stats()) {
+            Ok(signature) => {
+                self.metrics
+                    .payload_metrics_inc("signatures_completed", None);
+                Some(signature)
+            }
+            Err(err) if err.is_unsatisifed_reconstruction_threshold() => None,
+            Err(err) => {
+                warn!(
+                    self.log,
+                    "Failed to combine signature shares: request_id = {:?}, {:?}", request_id, err
+                );
+                self.metrics.payload_errors_inc("combine_sig_share");
+                None
             }
         }
-
-        // Combine the signatures.
-        self.crypto_combine_signature_shares(
-            &request_id,
-            &sig_inputs,
-            &sig_shares,
-            self.ecdsa_pool.stats(),
-        )
-        .map(CombinedSignature::Ecdsa)
     }
 }
 
@@ -1107,7 +1216,7 @@ mod tests {
     }
 
     #[test]
-    fn test_crypto_verify_signature_share() {
+    fn test_crypto_verify_ecdsa_sig_share() {
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
@@ -1149,18 +1258,11 @@ mod tests {
                     create_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
                 let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let id = create_request_id(&mut uid_generator, Height::from(5));
-                let share = create_signature_share(NODE_2, id);
-                let changeset: Vec<_> = signer
-                    .crypto_verify_signature_share(
-                        share.message_id(),
-                        &sig_inputs,
-                        share.clone(),
-                        &(EcdsaStatsNoOp {}),
-                    )
-                    .into_iter()
-                    .collect();
+                let share = SigShare::Ecdsa(create_signature_share(NODE_2, id));
+                let inputs = ThresholdSigInputs::Ecdsa(sig_inputs);
+                let result = signer.crypto_verify_sig_share(&inputs, share, &(EcdsaStatsNoOp {}));
                 // assert that the mock signature share does not pass real crypto check
-                assert!(is_handle_invalid(&changeset, &share.message_id()));
+                assert!(result.is_err());
             })
         })
     }
