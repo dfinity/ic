@@ -175,6 +175,8 @@ jobs:
     name: Bazel Test Darwin x86-64
     timeout-minutes: 120
   #  if: ${{ vars.RUN_CI == 'true' && github.event_name == 'schedule' }} # disable until we have more macos runners
+    container:
+      <<: *image
     runs-on:
       labels: macOS
     steps:
