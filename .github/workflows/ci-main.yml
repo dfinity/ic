@@ -179,7 +179,7 @@ jobs:
               - '**/*.rs'
               - '**/*.toml'
       - name: Set PATH
-        run: echo "PATH=\"/usr/local/bin:$PATH\"" >> $GITHUB_PATH
+        run: echo "/usr/local/bin" >> $GITHUB_PATH
       - name: Docker RO SA login
         id: docker-ro-login
         shell: bash
