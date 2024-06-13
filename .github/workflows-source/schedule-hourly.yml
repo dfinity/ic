@@ -42,11 +42,7 @@ anchors:
     name: Docker RO SA login
     id: docker-ro-login
     shell: bash
-    run: |
-      docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-      if which docker-bin 2>/dev/null; then
-          docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-      fi
+    run: ./gitlab-ci/src/ci-scripts/docker-login.sh
   before-script: &before-script
     name: Before script
     if: always()
