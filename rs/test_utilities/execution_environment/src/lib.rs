@@ -2293,9 +2293,8 @@ pub fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, Requ
     let mut output: Vec<(CanisterId, RequestOrResponse)> = vec![];
     let output_iter = state.output_into_iter();
 
-    for (queue_id, msg) in output_iter {
-        let canister_id = CanisterId::try_from(queue_id.dst_canister.get()).unwrap();
-        output.push((canister_id, msg));
+    for msg in output_iter {
+        output.push((msg.receiver(), msg));
     }
     output
 }

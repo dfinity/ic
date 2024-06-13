@@ -290,7 +290,6 @@ impl From<&ThresholdEcdsaSigInputs> for TestSigInputs {
                     .unwrap(),
                 key_unmasked_ref: UnmaskedTranscript::try_from((height, key)).unwrap(),
             },
-            key_transcript_ref: UnmaskedTranscript::try_from((height, key)).unwrap(),
         };
         TestSigInputs {
             idkg_transcripts,
@@ -1253,7 +1252,6 @@ pub(crate) fn create_ecdsa_sig_inputs_with_args(
         [0u8; 32],
         Randomness::from([0_u8; 32]),
         presig_quadruple_ref,
-        key_unmasked_ref,
     );
 
     TestSigInputs {

@@ -132,10 +132,7 @@ impl SystemStateFixture {
     }
 
     fn pop_output(&mut self) -> Option<RequestOrResponse> {
-        self.system_state
-            .output_into_iter(CANISTER_ID)
-            .pop()
-            .map(|(_, msg)| msg)
+        self.system_state.output_into_iter().pop()
     }
 
     fn induct_messages_to_self(&mut self) {

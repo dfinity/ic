@@ -246,13 +246,11 @@ pub(super) fn build_signature_inputs(
     let nonce = Id::from(context.nonce?);
     let inputs = match (pre_signature, &context.args) {
         (PreSignatureRef::Ecdsa(pre_sig), ThresholdArguments::Ecdsa(args)) => {
-            let key_transcript_ref = pre_sig.key_unmasked_ref;
             ThresholdSigInputsRef::Ecdsa(ThresholdEcdsaSigInputsRef::new(
                 extended_derivation_path,
                 args.message_hash,
                 nonce,
                 pre_sig,
-                key_transcript_ref,
             ))
         }
         (PreSignatureRef::Schnorr(pre_sig), ThresholdArguments::Schnorr(args)) => {

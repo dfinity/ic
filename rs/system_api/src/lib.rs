@@ -2611,7 +2611,9 @@ impl SystemApi for SystemApiImpl {
             {
                 let wasm_memory_usage =
                     NumBytes::new(new_bytes.get().saturating_add(old_bytes.get()));
-                if wasm_memory_usage > wasm_memory_limit {
+
+                // A Wasm memory limit of 0 means unlimited.
+                if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
                     return Err(HypervisorError::WasmMemoryLimitExceeded {
                         bytes: wasm_memory_usage,
                         limit: wasm_memory_limit,

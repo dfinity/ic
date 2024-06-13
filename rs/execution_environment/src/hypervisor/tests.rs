@@ -7215,7 +7215,7 @@ fn wasm_memory_limit_is_enforced_at_start_of_update() {
         .unwrap();
     assert_eq!(WasmResult::Reply(100_i32.to_le_bytes().to_vec()), result);
 
-    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(0))
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1))
         .unwrap();
 
     let err = test
@@ -7227,6 +7227,42 @@ fn wasm_memory_limit_is_enforced_at_start_of_update() {
         .unwrap_err();
 
     assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}
+
+#[test]
+fn wasm_memory_limit_zero_means_unlimited() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let result = test
+        .ingress(canister_id, "update", use_wasm_memory_and_reply(100))
+        .unwrap();
+    assert_eq!(WasmResult::Reply(100_i32.to_le_bytes().to_vec()), result);
+
+    // The execution fails.
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1))
+        .unwrap();
+
+    let err = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().push_bytes(&[]).append_and_reply().build(),
+        )
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(0))
+        .unwrap();
+
+    // The execution succeeds.
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().push_bytes(&[]).append_and_reply().build(),
+    )
+    .unwrap();
 }
 
 #[test]
