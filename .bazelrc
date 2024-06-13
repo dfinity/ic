@@ -49,8 +49,6 @@ build:ci --remote_timeout=5m # Default is 60s.
 build --experimental_remote_downloader=bazel-remote.idx.dfinity.network --experimental_remote_downloader_local_fallback
 build:local --experimental_remote_downloader=
 
-# Does not produce valid JSON. See https://github.com/bazelbuild/bazel/issues/14209
-build --execution_log_json_file=bazel-build-log.json
 build:ci --build_event_binary_file=bazel-bep.pb
 
 build --bes_results_url=https://dash.idx.dfinity.network/invocation/
