@@ -50,29 +50,7 @@ anchors:
       group: ln1
     container:
       <<: *image
-    timeout-minutes: 60
-    if: ${{ vars.RUN_CI == 'true' }}
-  bazel-large-setup: &bazel-large-setup
-    runs-on:
-      labels: bazel-runner-large
-      group: ln1
-    container:
-      <<: *image
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
-  bazel-small-setup: &bazel-small-setup
-    runs-on:
-      labels: bazel-runner-small
-    container:
-      <<: *image
-    timeout-minutes: 45
-    if: ${{ vars.RUN_CI == 'true' }}
-  default-setup: &default-setup
-    runs-on:
-      labels: default-runner
-    container:
-      <<: *image
-    timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
   docker-ro-login: &docker-ro-login
     name: Docker RO SA login
@@ -80,19 +58,18 @@ anchors:
     shell: bash
     run: ./gitlab-ci/src/ci-scripts/docker-login.sh
 
-  bazel-clean: &bazel-clean
-    name: Bazel Clean
-    if: always()
-    run: bazel clean
   before-script: &before-script
     name: Before script
     if: always()
     id: before-script
     shell: bash
     run: |
-      git config --global http.postBuffer 524288000
-      git config --global safe.directory '*'
+      # TODO: patch runner & runner manifest for cleaner bind mount
+      # Temporary way to bring required directories to workflow container:
       if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
+      if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
+      if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
+      if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
       if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
   checkout: &checkout
     name: Checkout
@@ -106,18 +83,16 @@ anchors:
 jobs:
   bazel-test-all:
     name: Bazel Test All
-    <<: *bazel-large-setup
+    <<: *dind-large-setup
     env:
       TITLE: ${{ github.event.pull_request.title }}
     steps:
       - <<: *before-script
       - <<: *checkout
-        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
         if : ${{ github.event_name == 'pull_request' }}
         with:
           fetch-depth: 256
       - <<: *checkout
-        uses: actions/checkout@v3
         if : ${{ github.event_name != 'pull_request' }}
       - <<: *docker-ro-login
       - name: Run Bazel Test All
@@ -141,20 +116,17 @@ jobs:
           if-no-files-found: error
           path: |
             bazel-targets
-      - <<: *bazel-clean
 
   bazel-build-all-config-check:
-    <<: *bazel-large-setup
+    <<: *dind-large-setup
     name: Bazel Build All Config Check
     steps:
       - <<: *before-script
       - <<: *checkout
-        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
         if : ${{ github.event_name == 'pull_request' }}
         with:
           fetch-depth: 256
       - <<: *checkout
-        uses: actions/checkout@v3
         if : ${{ github.event_name != 'pull_request' }}
       - <<: *docker-ro-login
       - name: Run bazel build --config=check //rs/...
@@ -166,7 +138,6 @@ jobs:
           BAZEL_CI_CONFIG: "--config=check"
           # run on diff only if it is a pull request, otherwise run all targets
           RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
-      - <<: *bazel-clean
 
   bazel-test-darwin-x86-64:
     name: Bazel Test Darwin x86-64
@@ -229,7 +200,6 @@ jobs:
           BAZEL_TARGETS: "//rs/..."
           BAZEL_CI_CONFIG: "--config=ci"
           BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
-      - <<: *bazel-clean
 
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
@@ -245,7 +215,6 @@ jobs:
           BAZEL_TARGETS: "//rs/..."
           BAZEL_CI_CONFIG: "--config=ci"
           BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
-      - <<: *bazel-clean
 
   python-ci-tests:
     name: Python CI Tests
@@ -270,7 +239,7 @@ jobs:
 
   build-ic:
     name: Build IC
-    <<: *bazel-large-setup
+    <<: *dind-large-setup
     if: ${{ vars.RUN_CI == 'true' && github.event_name != 'merge_group' }}
     steps:
       - <<: *before-script

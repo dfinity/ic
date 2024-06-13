@@ -32,21 +32,7 @@ anchors:
       group: ln1
     container:
       <<: *image
-    timeout-minutes: 60
-    if: ${{ vars.RUN_CI == 'true' }}
-  bazel-small-setup: &bazel-small-setup
-    runs-on:
-      labels: bazel-runner-small
-    container:
-      <<: *image
-    timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}
-  default-setup: &default-setup
-    runs-on:
-      labels: default-runner
-    container:
-      <<: *image
-    timeout-minutes: 30
+    timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
   checkout: &checkout
     name: Checkout
@@ -57,9 +43,12 @@ anchors:
     id: before-script
     shell: bash
     run: |
-      git config --global http.postBuffer 524288000
-      git config --global safe.directory '*'
+      # TODO: patch runner & runner manifest for cleaner bind mount
+      # Temporary way to bring required directories to workflow container:
       if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
+      if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
+      if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
+      if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
       if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
   bazel-clean: &bazel-clean
     name: Bazel Clean
@@ -93,7 +82,6 @@ jobs:
       - name: No run
         if: steps.filter.outputs.fuzzers == 'false'
         run: echo "No changes in fuzzers, skipping build"
-      - <<: *bazel-clean
 
   lock-generate:
     name: Lock Generate
