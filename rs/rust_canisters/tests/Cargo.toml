@@ -42,7 +42,7 @@ path = "src/panics.rs"
 
 [dev-dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }
-criterion = "0.5"
+criterion = { workspace = true }
 assert_matches = { workspace = true }
 on_wire = { path = "../on_wire" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }

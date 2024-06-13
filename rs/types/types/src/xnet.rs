@@ -1,8 +1,8 @@
 //! Types used by the Xnet component.
-use crate::{consensus::certification::Certification, messages::RequestOrResponse, CanisterId};
+use crate::{consensus::certification::Certification, messages::RequestOrResponse};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use phantom_newtype::{AmountOf, Id};
+use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
@@ -291,20 +291,6 @@ pub struct CertifiedStreamSlice {
 
     /// The certification of the root hash.
     pub certification: Certification,
-}
-
-pub struct SessionTag {}
-/// Identifies a session between a given pair of sender,receiver canisters.
-pub type SessionId = Id<SessionTag, u64>;
-
-/// A QueueId. Identifies a message queue by destination, source and session ID.
-/// Note that the tuple order is an important consideration as it supports
-/// appropriate clustering of *outgoing* message streams.
-#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct QueueId {
-    pub dst_canister: CanisterId,
-    pub src_canister: CanisterId,
-    pub session_id: SessionId,
 }
 
 pub mod testing {

@@ -4,7 +4,6 @@ package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 DEPENDENCIES = [
     "//rs/monitoring/metrics",
-    "@crate_index//:convert_case",
     "@crate_index//:prometheus",
     "@crate_index//:strum",
 ]
@@ -13,7 +12,9 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:strum_macros",
 ]
 
-DEV_DEPENDENCIES = []
+DEV_DEPENDENCIES = [
+    "@crate_index//:convert_case",
+]
 
 MACRO_DEV_DEPENDENCIES = []
 

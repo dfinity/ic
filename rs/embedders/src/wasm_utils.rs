@@ -43,6 +43,7 @@ pub struct Complexity(pub u64);
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct WasmValidationDetails {
     pub imports_details: WasmImportsDetails,
+    pub num_tables: usize,
     pub wasm_metadata: WasmMetadata,
     pub largest_function_instruction_count: NumInstructions,
     pub max_complexity: Complexity,
@@ -234,6 +235,7 @@ fn compile_inner(
     let instance_pre = embedder.pre_instantiate(&module)?;
     let largest_function_instruction_count =
         wasm_validation_details.largest_function_instruction_count;
+    let num_tables = wasm_validation_details.num_tables;
     let max_complexity = wasm_validation_details.max_complexity.0;
     let serialized_module =
         SerializedModule::new(&module, instrumentation_output, wasm_validation_details)?;
@@ -243,6 +245,7 @@ fn compile_inner(
             largest_function_instruction_count,
             compilation_time: timer.elapsed(),
             max_complexity,
+            num_tables,
         },
         serialized_module,
     ))

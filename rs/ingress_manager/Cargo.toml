@@ -27,7 +27,7 @@ slog = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-criterion = "0.5"
+criterion = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
 ic-interfaces-mocks = { path = "../interfaces/mocks" }

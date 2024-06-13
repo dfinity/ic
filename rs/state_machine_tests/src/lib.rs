@@ -1,9 +1,8 @@
 use candid::Decode;
 use core::sync::atomic::Ordering;
-use ic_config::flag_status::FlagStatus;
 use ic_config::{
-    execution_environment::Config as HypervisorConfig, state_manager::LsmtConfig,
-    subnet_config::SubnetConfig,
+    execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
+    state_manager::LsmtConfig, subnet_config::SubnetConfig,
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
@@ -18,14 +17,14 @@ use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
 use ic_ingress_manager::{IngressManager, RandomStateKind};
-use ic_interfaces::ingress_pool::{
-    IngressPool, PoolSection, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
-};
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
     consensus::PayloadBuilder as ConsensusPayloadBuilder,
     consensus_pool::ConsensusTime,
     execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
+    ingress_pool::{
+        IngressPool, PoolSection, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
+    },
     validation::ValidationResult,
 };
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
@@ -42,19 +41,23 @@ pub use ic_management_canister_types::{
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto};
-use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
-use ic_protobuf::registry::{
-    node::v1::{ConnectionEndpoint, NodeRecord},
-    provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
-    routing_table::v1::CanisterMigrations as PbCanisterMigrations,
-    routing_table::v1::RoutingTable as PbRoutingTable,
+use ic_protobuf::{
+    registry::{
+        crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto},
+        node::v1::{ConnectionEndpoint, NodeRecord},
+        provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
+        routing_table::v1::{
+            CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
+        },
+        subnet::v1::CatchUpPackageContents,
+    },
+    types::v1::{PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
 };
-use ic_protobuf::types::v1::PrincipalId as PrincipalIdIdProto;
-use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_client_helpers::provisional_whitelist::ProvisionalWhitelistRegistry;
-use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
+use ic_registry_client_helpers::{
+    provisional_whitelist::ProvisionalWhitelistRegistry,
+    subnet::{SubnetListRegistry, SubnetRegistry},
+};
 use ic_registry_keys::{
     make_canister_migrations_record_key, make_catch_up_package_contents_key,
     make_chain_key_signing_subnet_list_key, make_crypto_node_key, make_node_record_key,
@@ -69,11 +72,10 @@ use ic_registry_subnet_features::{
     ChainKeyConfig, KeyConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
-use ic_replicated_state::page_map::Buffer;
 use ic_replicated_state::{
-    canister_state::{NumWasmPages, WASM_PAGE_SIZE_IN_BYTES},
+    canister_state::{system_state::CyclesUseCase, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES},
+    metadata_state::subnet_call_context_manager::SignWithEcdsaContext,
+    page_map::Buffer,
     Memory, PageMap, ReplicatedState,
 };
 use ic_state_layout::{CheckpointLayout, RwPolicy};
@@ -87,37 +89,35 @@ use ic_test_utilities_registry::{
     add_single_subnet_record, add_subnet_key_record, add_subnet_list_record, SubnetRecordBuilder,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
-use ic_types::artifact::IngressMessageId;
-use ic_types::batch::{
-    BlockmakerMetrics, ConsensusResponse, QueryStatsPayload, TotalQueryStats, ValidationContext,
-};
-pub use ic_types::canister_http::{CanisterHttpMethod, CanisterHttpRequestContext};
-use ic_types::consensus::block_maker::SubnetRecords;
-use ic_types::consensus::certification::CertificationContent;
-use ic_types::crypto::threshold_sig::ni_dkg::{
-    NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript,
-};
-pub use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use ic_types::crypto::{
-    canister_threshold_sig::MasterPublicKey, AlgorithmId, CombinedThresholdSig,
-    CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
-};
-use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::signature::ThresholdSignature;
-use ic_types::time::GENESIS;
-use ic_types::xnet::CertifiedStreamSlice;
 use ic_types::{
-    batch::{Batch, BatchMessages, XNetPayload},
-    consensus::certification::Certification,
+    artifact::IngressMessageId,
+    batch::{
+        Batch, BatchMessages, BlockmakerMetrics, ConsensusResponse, QueryStatsPayload,
+        TotalQueryStats, ValidationContext, XNetPayload,
+    },
+    consensus::{
+        block_maker::SubnetRecords,
+        certification::{Certification, CertificationContent},
+    },
+    crypto::{
+        canister_threshold_sig::MasterPublicKey,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript},
+        AlgorithmId, CombinedThresholdSig, CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
+    },
+    malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
         HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
         SignedIngress, SignedIngressContent, EXPECTED_MESSAGE_ID_LENGTH,
     },
-    xnet::StreamIndex,
+    signature::ThresholdSignature,
+    time::GENESIS,
+    xnet::{CertifiedStreamSlice, StreamIndex},
     CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
 };
 pub use ic_types::{
+    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
+    crypto::threshold_sig::ThresholdSigPublicKey,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, HttpRequestError, MessageId},
     time::Time,
@@ -135,21 +135,20 @@ use maplit::btreemap;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::Serialize;
 pub use slog::Level;
-use std::io::stderr;
-use std::path::Path;
-use std::str::FromStr;
-use std::string::ToString;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::RwLock;
-use std::time::{Duration, Instant, SystemTime};
-use std::{collections::BTreeMap, convert::TryFrom};
-use std::{fmt, io};
+use std::{
+    collections::BTreeMap,
+    convert::TryFrom,
+    fmt, io,
+    io::stderr,
+    path::Path,
+    str::FromStr,
+    string::ToString,
+    sync::{Arc, Mutex, RwLock},
+    time::{Duration, Instant, SystemTime},
+};
 use tempfile::TempDir;
-use tokio::runtime::Runtime;
-use tokio::sync::mpsc;
-use tower::buffer::Buffer as TowerBuffer;
-use tower::ServiceExt;
+use tokio::{runtime::Runtime, sync::mpsc};
+use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
 
 #[cfg(test)]
 mod tests;
@@ -1612,7 +1611,7 @@ impl StateMachine {
 
         let batch = Batch {
             batch_number,
-            next_checkpoint_height: None,
+            batch_summary: None,
             requires_full_state_hash: self.checkpoints_enabled.load(Ordering::Relaxed),
             messages: BatchMessages {
                 signed_ingress_msgs: payload.ingress_messages,
@@ -2263,7 +2262,9 @@ impl StateMachine {
         method: impl ToString,
         payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        const MAX_TICKS: usize = 100;
+        // Largest single message is 1T for system subnet install messages
+        // Considered with 2B instruction slices, this gives us 500 ticks
+        const MAX_TICKS: usize = 500;
         let msg_id = self.send_ingress(sender, canister_id, method, payload);
         self.await_ingress(msg_id, MAX_TICKS)
     }
