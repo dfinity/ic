@@ -62,11 +62,7 @@ jobs:
       - name: Docker RO SA login
         id: docker-ro-login
         shell: bash
-        run: |
-          docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          if which docker-bin 2>/dev/null; then
-              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          fi
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -121,11 +117,7 @@ jobs:
       - name: Docker RO SA login
         id: docker-ro-login
         shell: bash
-        run: |
-          docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          if which docker-bin 2>/dev/null; then
-              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          fi
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
@@ -170,14 +162,14 @@ jobs:
               - '**/*.lock'
               - '**/*.rs'
               - '**/*.toml'
+      - name: Set PATH
+        run: |
+          echo "/usr/local/bin" >> $GITHUB_PATH
+          echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
       - name: Docker RO SA login
         id: docker-ro-login
         shell: bash
-        run: |
-          docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          if which docker-bin 2>/dev/null; then
-              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          fi
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
         if: steps.filter.outputs.bazel-test-darwin-x86-64 != 'false'
@@ -195,7 +187,7 @@ jobs:
       - name: Purge Bazel Output
         shell: bash
         run: |
-          sudo rm -rf /var/tmp/bazel-output//${ROOT_PIPELINE_ID}
+          sudo rm -rf /private/var/tmp/bazel-output//${ROOT_PIPELINE_ID}
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     runs-on:
@@ -322,11 +314,7 @@ jobs:
       - name: Docker RO SA login
         id: docker-ro-login
         shell: bash
-        run: |
-          docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          if which docker-bin 2>/dev/null; then
-              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          fi
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
       - name: Run Build IC
         id: build-ic
         shell: bash
