@@ -64,20 +64,22 @@ RUN . /opt/nvm/nvm.sh && \
     nvm install ${dependency_mgmt_nns_dapp_node_version} && \
     nvm install ${dependency_mgmt_default_node_version}
 
-RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu
-# needed for github actions runner
-RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 buildifier
+RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu && \
+    # needed for github actions runner \
+    groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 buildifier && \
+    # CI before script requires sudo \
+    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-# CI before script requires sudo
-RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+# Add gitconfig
+COPY ./gitlab-ci/container/files/gitconfig /etc/gitconfig
 
 # Pre-populate the Bazel installation for root
 COPY .bazelversion /tmp/bazel/
 RUN cd /tmp/bazel && touch WORKSPACE  && bazel version
 
 COPY ./gitlab-ci/container/files/generate-bazel-completion.sh /tmp/
-RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh
-RUN echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
+RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh && \
+    echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
 # Add cocogitto
 ARG COCOGITTO_VERSION="5.4.0"
