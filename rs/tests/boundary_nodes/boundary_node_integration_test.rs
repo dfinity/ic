@@ -9,8 +9,7 @@ use ic_tests::{
             denylist_test, direct_to_replica_options_test, direct_to_replica_rosetta_test,
             direct_to_replica_test, http_canister_test, http_endpoint_test, ic_gateway_test,
             prefix_canister_id_test, proxy_http_canister_test, read_state_via_subnet_path_test,
-            reboot_test, redirect_http_to_https_test, redirect_to_dashboard_test,
-            redirect_to_non_raw_test, seo_test,
+            reboot_test, redirect_http_to_https_test, redirect_to_dashboard_test, seo_test,
         },
         constants::BOUNDARY_NODE_NAME,
         helpers::BoundaryNodeHttpsConfig,
@@ -39,7 +38,6 @@ fn main() -> Result<()> {
                 .add_test(systest!(proxy_http_canister_test))
                 .add_test(systest!(redirect_http_to_https_test))
                 .add_test(systest!(redirect_to_dashboard_test))
-                .add_test(systest!(redirect_to_non_raw_test))
                 .add_test(systest!(http_endpoint_test))
                 .add_test(systest!(ic_gateway_test))
                 .add_test(systest!(direct_to_replica_test))

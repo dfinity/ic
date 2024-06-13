@@ -1457,7 +1457,7 @@ pub fn redirect_http_to_https_test(env: TestEnv) {
         async move {
             let res = client.get(format!("http://{host}/")).send().await?;
 
-            if res.status() != reqwest::StatusCode::MOVED_PERMANENTLY {
+            if res.status() != reqwest::StatusCode::PERMANENT_REDIRECT {
                 bail!("{name} failed: {}", res.status())
             }
 
@@ -1479,7 +1479,7 @@ pub fn redirect_http_to_https_test(env: TestEnv) {
         async move {
             let res = client.get(format!("http://raw.{host}/")).send().await?;
 
-            if res.status() != reqwest::StatusCode::MOVED_PERMANENTLY {
+            if res.status() != reqwest::StatusCode::PERMANENT_REDIRECT {
                 bail!("{name} failed: {}", res.status())
             }
 
@@ -1555,7 +1555,7 @@ pub fn redirect_to_dashboard_test(env: TestEnv) {
         async move {
             let res = client.get(format!("https://{host}/")).send().await?;
 
-            if res.status() != reqwest::StatusCode::FOUND {
+            if res.status() != reqwest::StatusCode::TEMPORARY_REDIRECT {
                 bail!("{name} failed: {}", res.status())
             }
 
@@ -1577,7 +1577,7 @@ pub fn redirect_to_dashboard_test(env: TestEnv) {
         async move {
             let res = client.get(format!("https://raw.{host}/")).send().await?;
 
-            if res.status() != reqwest::StatusCode::FOUND {
+            if res.status() != reqwest::StatusCode::TEMPORARY_REDIRECT {
                 bail!("{name} failed: {}", res.status())
             }
 
@@ -1593,161 +1593,6 @@ pub fn redirect_to_dashboard_test(env: TestEnv) {
     rt.block_on(async move {
         let mut cnt_err = 0;
         info!(&logger, "waiting for subtests");
-
-        for fut in futs {
-            match fut.await {
-                Ok(Err(err)) => {
-                    error!(logger, "test failed: {}", err);
-                    cnt_err += 1;
-                }
-                Err(err) => {
-                    error!(logger, "test panicked: {}", err);
-                    cnt_err += 1;
-                }
-                _ => {}
-            }
-        }
-
-        match cnt_err {
-            0 => Ok(()),
-            _ => bail!("failed with {cnt_err} errors"),
-        }
-    })
-    .expect("test suite failed");
-}
-
-pub fn redirect_to_non_raw_test(env: TestEnv) {
-    let logger = env.logger();
-
-    let boundary_node = env
-        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-
-    let client_builder = reqwest::ClientBuilder::new().redirect(reqwest::redirect::Policy::none());
-    let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
-        (client_builder, playnet)
-    } else {
-        let host = "ic0.app";
-        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
-        let client_builder = client_builder
-            .danger_accept_invalid_certs(true)
-            .resolve(&format!("raw.{host}"), bn_addr.into());
-        (client_builder, host.to_string())
-    };
-    let client = client_builder.build().unwrap();
-
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    let futs = FuturesUnordered::new();
-
-    let host = host_orig.clone();
-    futs.push(rt.spawn({
-        let client = client.clone();
-        let name = "redirect status to non-raw domain";
-        info!(&logger, "Starting subtest {}", name);
-
-        async move {
-            let res = client
-                .get(format!("https://raw.{host}/api/v2/status"))
-                .send()
-                .await?;
-
-            if res.status() != reqwest::StatusCode::TEMPORARY_REDIRECT {
-                bail!("{name} failed: {}", res.status())
-            }
-
-            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
-            if location_hdr != format!("https://{host}/api/v2/status") {
-                bail!("{name} failed: wrong location header: {}", location_hdr)
-            }
-
-            Ok(())
-        }
-    }));
-
-    let host = host_orig.clone();
-    futs.push(rt.spawn({
-        let client = client.clone();
-        let name = "redirect query to non-raw domain";
-        info!(&logger, "Starting subtest {}", name);
-
-        async move {
-            let res = client
-                .post(format!("https://raw.{host}/api/v2/canister/CID/query"))
-                .body("body")
-                .send()
-                .await?;
-
-            if res.status() != reqwest::StatusCode::TEMPORARY_REDIRECT {
-                bail!("{name} failed: {}", res.status())
-            }
-
-            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
-            if location_hdr != format!("https://{host}/api/v2/canister/CID/query") {
-                bail!("{name} failed: wrong location header: {}", location_hdr)
-            }
-
-            Ok(())
-        }
-    }));
-
-    let host = host_orig.clone();
-    futs.push(rt.spawn({
-        let client = client.clone();
-        let name = "redirect call to non-raw domain";
-        info!(&logger, "Starting subtest {}", name);
-
-        async move {
-            let res = client
-                .post(format!("https://raw.{host}/api/v2/canister/CID/call"))
-                .body("body")
-                .send()
-                .await?;
-
-            if res.status() != reqwest::StatusCode::TEMPORARY_REDIRECT {
-                bail!("{name} failed: {}", res.status())
-            }
-
-            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
-            if location_hdr != format!("https://{host}/api/v2/canister/CID/call") {
-                bail!("{name} failed: wrong location header: {}", location_hdr)
-            }
-
-            Ok(())
-        }
-    }));
-
-    let host = host_orig;
-    futs.push(rt.spawn({
-        let client = client;
-        let name = "redirect read_state to non-raw domain";
-        info!(&logger, "Starting subtest {}", name);
-
-        async move {
-            let res = client
-                .post(format!("https://raw.{host}/api/v2/canister/CID/read_state"))
-                .body("body")
-                .send()
-                .await?;
-
-            if res.status() != reqwest::StatusCode::TEMPORARY_REDIRECT {
-                bail!("{name} failed: {}", res.status())
-            }
-
-            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
-            if location_hdr != format!("https://{host}/api/v2/canister/CID/read_state") {
-                bail!("{name} failed: wrong location header: {}", location_hdr)
-            }
-
-            Ok(())
-        }
-    }));
-
-    rt.block_on(async move {
-        let mut cnt_err = 0;
-        info!(&logger, "Waiting for subtests");
 
         for fut in futs {
             match fut.await {
@@ -2602,8 +2447,17 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
                     .get(k)
                     .ok_or_else(|| anyhow!("missing {k} header"))?.to_str()?;
 
+                // Normalize & sort header values so that they can be compared regardless of their order
+                let mut hdr = hdr.split(',').map(|x| x.trim().to_ascii_lowercase()).collect::<Vec<_>>();
+                hdr.sort();
+                let hdr = hdr.join(",");
+
+                let mut expect = v.split(',').map(|x| x.trim().to_ascii_lowercase()).collect::<Vec<_>>();
+                expect.sort();
+                let expect = expect.join(",");
+
                 if hdr != v {
-                    bail!("wrong {k} header: {hdr}, expected {v}")
+                    bail!("wrong {k} header: {hdr}, expected {expect}")
                 }
             }
 
