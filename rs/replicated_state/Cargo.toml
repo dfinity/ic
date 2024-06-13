@@ -48,7 +48,7 @@ uuid = { version = "1.2.1", features = ["v4", "serde"] }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-criterion = "0.5"
+criterion = { workspace = true }
 criterion-time = { path = "../criterion_time" }
 ic-btc-test-utils = { workspace = true }
 ic-crypto-ed25519 = { path = "../crypto/ed25519" }

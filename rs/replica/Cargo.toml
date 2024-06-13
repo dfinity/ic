@@ -73,7 +73,7 @@ ic-backtrace = { path = "../monitoring/backtrace" }
 [dev-dependencies]
 assert_cmd = "2.0.12"
 canister-test = { path = "../rust_canisters/canister_test" }
-criterion = "0.5"
+criterion = { workspace = true }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
 ic-test-utilities = { path = "../test_utilities" }
