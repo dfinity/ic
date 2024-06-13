@@ -237,13 +237,9 @@ fn validate_summary_payload(
     let registry_version = pool_reader.registry_version(height).ok_or(
         InvalidEcdsaPayloadReason::ConsensusRegistryVersionNotFound(height),
     )?;
-    let chain_key_config = get_chain_key_config_if_enabled(
-        subnet_id,
-        registry_version,
-        registry_client,
-        &ic_logger::replica_logger::no_op_logger(),
-    )
-    .map_err(EcdsaPayloadValidationFailure::from)?;
+    let chain_key_config =
+        get_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
+            .map_err(EcdsaPayloadValidationFailure::from)?;
     if chain_key_config.is_none() {
         if summary_payload.is_some() {
             return Err(InvalidEcdsaPayloadReason::EcdsaConfigNotFound.into());
