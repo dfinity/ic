@@ -2719,7 +2719,7 @@ fn state_sync_can_reject_invalid_chunks() {
         let (_height, mut state) = src_state_manager.take_tip();
 
         // Insert large number of canisters so that the encoded manifest is larger than 1 MiB.
-        let num_canisters = 2000;
+        let num_canisters = 5000;
         for id in 100..(100 + num_canisters) {
             insert_dummy_canister(&mut state, canister_test_id(id));
         }
@@ -2736,6 +2736,12 @@ fn state_sync_can_reject_invalid_chunks() {
         let msg = src_state_sync
             .get(&id)
             .expect("failed to get state sync messages");
+
+        let meta_manifest = build_meta_manifest(&msg.manifest);
+        assert!(
+            meta_manifest.sub_manifest_hashes.len() >= 2,
+            "The test should run with the manifest chunked in multiple pieces."
+        );
 
         assert_error_counters(src_metrics);
 
