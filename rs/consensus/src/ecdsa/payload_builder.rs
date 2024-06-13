@@ -136,20 +136,19 @@ pub(crate) fn create_summary_payload(
         subnet_id,
         curr_interval_registry_version,
         registry_client,
-        log,
     )?
     else {
         return Ok(None);
     };
 
+    let key_ids: Vec<_> = chain_key_config
+        .key_configs
+        .iter()
+        .map(|key_config| key_config.key_id.clone())
+        .collect();
+
     // Get ecdsa_payload from parent block if it exists
     let Some(ecdsa_payload) = parent_block.payload.as_ref().as_data().ecdsa.as_ref() else {
-        let key_ids = chain_key_config
-            .key_configs
-            .iter()
-            .map(|key_config| key_config.key_id.clone())
-            .collect();
-
         // Parent block doesn't have ECDSA payload and feature is enabled.
         // Create the bootstrap summary block, and create a new key for the given key_id.
         //
@@ -164,7 +163,7 @@ pub(crate) fn create_summary_payload(
             "Start to create Chain keys {:?} on subnet {} at height {}", key_ids, subnet_id, height
         );
 
-        return Ok(make_bootstrap_summary(subnet_id, key_ids, height));
+        return Ok(make_bootstrap_summary(subnet_id, key_ids.clone(), height));
     };
 
     let block_reader = block_chain_reader(
@@ -177,6 +176,7 @@ pub(crate) fn create_summary_payload(
 
     create_summary_payload_helper(
         subnet_id,
+        &key_ids,
         registry_client,
         &block_reader,
         height,
@@ -190,6 +190,7 @@ pub(crate) fn create_summary_payload(
 
 fn create_summary_payload_helper(
     subnet_id: SubnetId,
+    key_ids: &[MasterPublicKeyId],
     registry_client: &dyn RegistryClient,
     block_reader: &dyn EcdsaBlockReader,
     height: Height,
@@ -276,6 +277,17 @@ fn create_summary_payload_helper(
 
     let mut ecdsa_summary = ecdsa_payload.clone();
     ecdsa_summary.key_transcripts = key_transcripts;
+    // Start creating key transcripts for all new key ids.
+    for key_id in key_ids {
+        #[allow(clippy::map_entry)]
+        if !ecdsa_summary.key_transcripts.contains_key(key_id) {
+            ecdsa_summary.key_transcripts.insert(
+                key_id.clone(),
+                EcdsaKeyTranscript::new(key_id.clone(), idkg::KeyTranscriptCreation::Begin),
+            );
+        }
+    }
+
     ecdsa_summary.idkg_transcripts.clear();
 
     // We keep available pre-signatures for now, even if the key transcript changed, as we don't know if
@@ -504,7 +516,6 @@ pub(crate) fn create_data_payload_helper(
         subnet_id,
         curr_interval_registry_version,
         registry_client,
-        log,
     )?
     else {
         return Ok(None);
@@ -1740,6 +1751,7 @@ mod tests {
             // set to Begin (membership changed).
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
+                &[key_id.clone()],
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -1781,11 +1793,12 @@ mod tests {
                     next_key_transcript.unmasked_transcript(),
                 ),
                 deprecated_key_id: Some(fake_ecdsa_key_id()),
-                master_key_id: key_id,
+                master_key_id: key_id.clone(),
             };
 
             let payload_3 = create_summary_payload_helper(
                 subnet_id,
+                &[key_id.clone()],
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -1916,6 +1929,7 @@ mod tests {
             // set to Begin (membership changed).
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
+                &[master_public_key_id.clone()],
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -1956,6 +1970,7 @@ mod tests {
 
             let payload_2 = create_summary_payload_helper(
                 subnet_id,
+                &[master_public_key_id.clone()],
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2014,6 +2029,7 @@ mod tests {
 
             let payload_4 = create_summary_payload_helper(
                 subnet_id,
+                &[master_public_key_id.clone()],
                 registry.as_ref(),
                 &block_reader,
                 Height::from(2),
@@ -2058,7 +2074,7 @@ mod tests {
             let signature_builder = TestEcdsaSignatureBuilder::new();
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
-                    key_id: MasterPublicKeyId::Ecdsa(key_id.clone()),
+                    key_id: master_public_key_id.clone(),
                     pre_signatures_to_create_in_advance: 1,
                     max_queue_size: 1,
                 }],
@@ -2168,6 +2184,7 @@ mod tests {
             // set to Begin.
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
+                &[key_id.clone()],
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2213,6 +2230,7 @@ mod tests {
             // unfinished next_in_creation
             let payload_3 = create_summary_payload_helper(
                 subnet_id,
+                &[key_id.clone()],
                 registry.as_ref(),
                 &block_reader,
                 Height::from(3),
@@ -2249,6 +2267,7 @@ mod tests {
             );
             let payload_4 = create_summary_payload_helper(
                 subnet_id,
+                &[key_id.clone()],
                 registry.as_ref(),
                 &block_reader,
                 Height::from(3),
@@ -2312,7 +2331,7 @@ mod tests {
             let payload_0 = make_bootstrap_summary_with_initial_dealings(
                 subnet_id,
                 Height::from(0),
-                BTreeMap::from([(key_id, initial_dealings)]),
+                BTreeMap::from([(key_id.clone(), initial_dealings)]),
                 &no_op_logger(),
             );
             assert_matches!(payload_0, Ok(Some(_)));
@@ -2339,6 +2358,7 @@ mod tests {
             // set to XnetReshareOfUnmaskedParams.
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
+                &[key_id.clone()],
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2445,6 +2465,7 @@ mod tests {
             // should be created successfully
             let payload_5 = create_summary_payload_helper(
                 subnet_id,
+                &[key_id.clone()],
                 registry.as_ref(),
                 &block_reader,
                 Height::from(4),
@@ -2469,6 +2490,7 @@ mod tests {
             // should be created successfully
             let payload_6 = create_summary_payload_helper(
                 subnet_id,
+                &[key_id.clone()],
                 registry.as_ref(),
                 &block_reader,
                 Height::from(5),
@@ -2490,6 +2512,39 @@ mod tests {
             let refs = payload_6.single_key_transcript().get_refs();
             assert_eq!(refs.len(), 2);
             assert_eq!(refs[0], refs[1]);
+
+            // Step 9: the summary payload with a created key & a new key initialization,
+            // based on payload_4 should be created successfully
+            let key_id_2 =
+                MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:some_key_2").unwrap());
+            let payload_7 = create_summary_payload_helper(
+                subnet_id,
+                &[key_id.clone(), key_id_2.clone()],
+                registry.as_ref(),
+                &block_reader,
+                Height::from(5),
+                registry_version,
+                registry_version,
+                &payload_4,
+                None,
+                &no_op_logger(),
+            );
+            assert_matches!(payload_7, Ok(Some(_)));
+            let payload_7 = payload_7.unwrap().unwrap();
+            // next_in_creation should be equal to current
+            assert_matches!(
+                payload_7.key_transcripts.get(&key_id).expect("Should still have the pre-existing key_Id").next_in_creation,
+                idkg::KeyTranscriptCreation::Created(ref unmasked)
+                if unmasked.as_ref().transcript_id == transcript.transcript_id
+            );
+            assert_matches!(
+                payload_7
+                    .key_transcripts
+                    .get(&key_id_2)
+                    .expect("Should have the new key_id")
+                    .next_in_creation,
+                idkg::KeyTranscriptCreation::Begin
+            );
         })
     }
 }

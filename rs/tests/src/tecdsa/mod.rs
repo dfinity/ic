@@ -37,6 +37,7 @@ pub mod tecdsa_two_signing_subnets_test;
 
 pub(crate) const KEY_ID1: &str = "secp256k1";
 pub(crate) const KEY_ID2: &str = "some_other_key";
+pub(crate) const KEY_ID3: &str = "yet_another_key";
 
 /// The default DKG interval takes too long before the keys are created and
 /// passed to execution.
@@ -121,9 +122,9 @@ pub(crate) async fn get_public_key_with_retries(
                 if count < retries {
                     debug!(
                         logger,
-                        "ecdsa_public_key returns `{}`. Trying again...", err
+                        "ecdsa_public_key returns `{}`. Trying again in 3 seconds...", err
                     );
-                    tokio::time::sleep(Duration::from_millis(1000)).await;
+                    tokio::time::sleep(Duration::from_secs(3)).await;
                 } else {
                     return Err(err);
                 }
@@ -139,7 +140,7 @@ pub(crate) async fn get_public_key_with_logger(
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
 ) -> Result<VerifyingKey, AgentError> {
-    get_public_key_with_retries(key_id, msg_can, logger, /*retries=*/ 300).await
+    get_public_key_with_retries(key_id, msg_can, logger, /*retries=*/ 100).await
 }
 
 pub(crate) async fn execute_update_subnet_proposal(
@@ -238,9 +239,12 @@ pub(crate) async fn get_signature_with_logger(
             }
             Err(err) => {
                 count += 1;
-                if count < 20 {
-                    debug!(logger, "sign_with_ecdsa returns `{}`. Trying again...", err);
-                    tokio::time::sleep(Duration::from_millis(500)).await;
+                if count < 10 {
+                    debug!(
+                        logger,
+                        "sign_with_ecdsa returns `{}`. Trying again in 3 seconds...", err
+                    );
+                    tokio::time::sleep(Duration::from_secs(3)).await;
                 } else {
                     return Err(err);
                 }

@@ -193,18 +193,18 @@ pub fn test(env: TestEnv) {
     info!(logger, "Enabling signing on NNS.");
     enable_signing(&governance, root_subnet_id, &logger);
     registry_version.inc_assign();
-    let pub_key = get_ecdsa_pub_key(&nns_canister, &logger);
-    run_ecdsa_signature_test(&nns_canister, &logger, pub_key);
+    let pub_key = get_ecdsa_pub_key(&nns_canister, make_key(KEY_ID1), &logger);
+    run_ecdsa_signature_test(&nns_canister, &logger, make_key(KEY_ID1), pub_key);
 
     info!(logger, "Enabling signing on App subnet.");
     enable_signing(&governance, app_subnet.subnet_id, &logger);
     registry_version.inc_assign();
     wait_until_ic_mr_version(&snapshot, registry_version.get(), &logger);
-    run_ecdsa_signature_test(&nns_canister, &logger, pub_key);
+    run_ecdsa_signature_test(&nns_canister, &logger, make_key(KEY_ID1), pub_key);
 
     info!(logger, "Disabling signing on NNS.");
     disable_signing(&governance, root_subnet_id, &logger);
     registry_version.inc_assign();
     wait_until_ic_mr_version(&snapshot, registry_version.get(), &logger);
-    run_ecdsa_signature_test(&nns_canister, &logger, pub_key);
+    run_ecdsa_signature_test(&nns_canister, &logger, make_key(KEY_ID1), pub_key);
 }
