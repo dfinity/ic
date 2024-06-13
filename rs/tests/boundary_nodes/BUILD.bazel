@@ -101,7 +101,7 @@ system_test(
 )
 
 system_test(
-    name = "mainnet_boundary_node_icx_proxy_performance_test",
+    name = "mainnet_boundary_node_ic_gateway_performance_test",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,

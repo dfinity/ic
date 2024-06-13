@@ -699,7 +699,6 @@ pub fn http_canister_test(env: TestEnv) {
 
         // "x-ic-test", "no-certificate"
         // "x-ic-test", "streaming-callback"
-        // "x-icx-require-certification", "1"
 
         retry_with_msg_async!(
             format!("PUT {}", url),
@@ -892,7 +891,6 @@ pub fn prefix_canister_id_test(env: TestEnv) {
 
         // "x-ic-test", "no-certificate"
         // "x-ic-test", "streaming-callback"
-        // "x-icx-require-certification", "1"
 
         retry_with_msg_async!(
             format!("PUT {} (expecting set to bar)", url),
@@ -1056,7 +1054,6 @@ pub fn proxy_http_canister_test(env: TestEnv) {
 
         // "x-ic-test", "no-certificate"
         // "x-ic-test", "streaming-callback"
-        // "x-icx-require-certification", "1"
 
         retry_with_msg_async!(
             format!("PUT {} (expecting set to bar)", url),
@@ -1205,8 +1202,8 @@ pub fn denylist_test(env: TestEnv) {
 
         info!(&logger, "created canister={canister_id}");
 
-        // Update the denylist and restart icx-proxy
-        let denylist_command = format!(r#"echo "{{\"canisters\":{{\"{}\": {{}}}}}}" | sudo tee /run/ic-node/etc/icx-proxy/denylist.json && sudo service icx-proxy restart"#, canister_id);
+        // Update the denylist and restart ic-gateway
+        let denylist_command = format!(r#"echo "{{\"canisters\":{{\"{}\": {{}}}}}}" | sudo tee /run/ic-node/etc/ic-gateway/denylist.json && sudo service ic-gateway restart"#, canister_id);
         info!(
             logger,
             "update denylist {BOUNDARY_NODE_NAME} with {denylist_command}"
@@ -1352,8 +1349,8 @@ pub fn canister_allowlist_test(env: TestEnv) {
             }
         ).await.unwrap();
 
-        // Update the denylist and restart icx-proxy
-        let denylist_command = format!(r#"echo "{{\"canisters\":{{\"{}\": {{}}}}}}" | sudo tee /run/ic-node/etc/icx-proxy/denylist.json && sudo service icx-proxy restart"#, canister_id);
+        // Update the denylist and restart ic-gateway
+        let denylist_command = format!(r#"echo "{{\"canisters\":{{\"{}\": {{}}}}}}" | sudo tee /run/ic-node/etc/ic-gateway/denylist.json && sudo service ic-gateway restart"#, canister_id);
         info!(
             logger,
             "update denylist {BOUNDARY_NODE_NAME} with {denylist_command}"
@@ -1387,8 +1384,8 @@ pub fn canister_allowlist_test(env: TestEnv) {
             }
         ).await.unwrap();
 
-        // Update the allowlist and restart icx-proxy
-        let allowlist_command = format!(r#"echo "{}" | sudo tee /run/ic-node/etc/icx-proxy/allowlist.txt && sudo service icx-proxy restart"#, canister_id);
+        // Update the allowlist and restart ic-gateway
+        let allowlist_command = format!(r#"echo "{}" | sudo tee /run/ic-node/etc/ic-gateway/allowlist.txt && sudo service ic-gateway restart"#, canister_id);
         info!(
             logger,
             "update allowlist {BOUNDARY_NODE_NAME} with {allowlist_command}"
@@ -1774,7 +1771,7 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
     .expect("test suite failed");
 }
 
-// this tests the HTTP endpoint of the boundary node (anything that goes to icx-proxy)
+// this tests the HTTP endpoint of the boundary node
 // in particular, it ensure that the service worker uninstall script is served for
 // anyone still having a service worker lingering around.
 pub fn http_endpoint_test(env: TestEnv) {
@@ -1806,7 +1803,7 @@ pub fn http_endpoint_test(env: TestEnv) {
 
     let futs = FuturesUnordered::new();
 
-    // fetching standard assets (html page, JS script) through icx-proxy
+    // fetching standard assets (html page)
     let host = host_orig.clone();
     let logger = logger_orig.clone();
     let asset_canister = asset_canister_orig.clone();
@@ -1841,7 +1838,7 @@ pub fn http_endpoint_test(env: TestEnv) {
             let body = String::from_utf8_lossy(&body);
 
             if !body.contains("Hello World!") {
-                bail!("{name} failed: expected icx-response but got {body}")
+                bail!("{name} failed: expected response but got {body}")
             }
 
             let hello_world_js = vec![
@@ -1875,7 +1872,7 @@ pub fn http_endpoint_test(env: TestEnv) {
             let body = String::from_utf8_lossy(&body);
 
             if !body.contains(r#"console.log("Hello World!")"#) {
-                bail!("{name} failed: expected icx-response but got {body}")
+                bail!("{name} failed: expected response but got {body}")
             }
 
             Ok(())
@@ -1923,7 +1920,7 @@ pub fn http_endpoint_test(env: TestEnv) {
             let body = String::from_utf8_lossy(&body);
 
             if !body.contains("Do re mi, A B C, 1 2 3") {
-                bail!("{name} failed: expected icx-response but got {body}")
+                bail!("{name} failed: expected response but got {body}")
             }
 
             Ok(())
@@ -2138,7 +2135,7 @@ pub fn http_endpoint_test(env: TestEnv) {
     .expect("test suite failed");
 }
 
-pub fn icx_proxy_test(env: TestEnv) {
+pub fn ic_gateway_test(env: TestEnv) {
     let logger = env.logger();
 
     let boundary_node = env
@@ -2176,7 +2173,7 @@ pub fn icx_proxy_test(env: TestEnv) {
     let host = host_orig.clone();
     futs.push(rt.spawn({
         let client = client.clone();
-        let name = "get sent to icx-proxy via /_/raw/";
+        let name = "get sent to ic-gateway via /_/raw/";
         info!(&logger, "Starting subtest {}", name);
 
         async move {
@@ -2203,7 +2200,7 @@ pub fn icx_proxy_test(env: TestEnv) {
     let host = host_orig;
     futs.push(rt.spawn({
         let client = client;
-        let name = "get sent to icx-proxy via raw domain";
+        let name = "get sent to ic-gateway via raw domain";
         info!(&logger, "Starting subtest {}", name);
 
         async move {
@@ -2220,7 +2217,7 @@ pub fn icx_proxy_test(env: TestEnv) {
             let body = String::from_utf8_lossy(&body);
 
             if !body.contains("Counter is 0") {
-                bail!("{name} failed: expected icx-response but got {body}")
+                bail!("{name} failed: expected response but got {body}")
             }
 
             Ok(())
@@ -2886,7 +2883,7 @@ pub fn seo_test(env: TestEnv) {
     let asset_canister = asset_canister_orig.clone();
 
     futs.push(rt.spawn({
-        let name = "get sent to icx-proxy if you're a bot";
+        let name = "get sent to ic-gateway if you're a bot";
         info!(&logger, "Starting subtest {}", name);
 
         async move {
@@ -2919,7 +2916,7 @@ pub fn seo_test(env: TestEnv) {
             let body = String::from_utf8_lossy(&body);
 
             if !body.contains("Hello World!") {
-                bail!("{name} failed: expected icx-response but got {body}")
+                bail!("{name} failed: expected response but got {body}")
             }
 
             Ok(())

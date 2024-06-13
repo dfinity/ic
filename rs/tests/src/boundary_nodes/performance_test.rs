@@ -349,7 +349,7 @@ pub fn mainnet_query_calls_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
     }
 }
 
-pub fn mainnet_query_calls_icx_proxy_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
+pub fn mainnet_query_calls_ic_gateway_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
     const ROOT_HOST: &str = "icp0.io";
     const MAINNET_STREAMING_CANISTER_ID: &str = "4evdk-jqaaa-aaaan-qel6q-cai";
     const MAINNET_COUNTER_CANISTER_ID: &str = "3muos-6yaaa-aaaaa-qaaua-cai";
@@ -362,9 +362,9 @@ pub fn mainnet_query_calls_icx_proxy_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
 
     const NUM_AGENTS: usize = 100;
 
-    // The amount of traffic that will be directed to ICX Proxy, the remaining traffic will be direct canister query calls.
-    const ICX_PROXY_TRAFFIC_PERCENTAGE: f64 = 20.0;
-    // ICX Proxy traffic will be distributed among these requests according to their weights.
+    // The amount of traffic that will be HTTP, the remaining traffic will be direct canister query calls.
+    const HTTP_TRAFFIC_PERCENTAGE: f64 = 20.0;
+    // HTTP traffic will be distributed among these requests according to their weights.
     let weighted_http_requests = [
         (format!("https://{streaming_canister_host}/1mb.json"), 25),
         (format!("https://{streaming_canister_host}/2mb.json"), 30),
@@ -447,7 +447,7 @@ pub fn mainnet_query_calls_icx_proxy_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
                     CallMode::Query,
                 );
 
-                if prob < ICX_PROXY_TRAFFIC_PERCENTAGE {
+                if prob < HTTP_TRAFFIC_PERCENTAGE {
                     let start_time = Instant::now();
 
                     let result = http_client

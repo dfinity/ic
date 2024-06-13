@@ -1,6 +1,6 @@
 use anyhow::Result;
 use ic_tests::{
-    boundary_nodes::performance_test::{empty_setup, mainnet_query_calls_icx_proxy_test},
+    boundary_nodes::performance_test::{empty_setup, mainnet_query_calls_ic_gateway_test},
     driver::group::SystemTestGroup,
     systest,
 };
@@ -9,7 +9,7 @@ use std::{env, net::Ipv6Addr, time::Duration};
 fn main() -> Result<()> {
     let ipv6 = env::var("BOUNDARY_NODE_IPV6").expect("environment variable is not provided");
     let bn_ipv6 = ipv6.parse::<Ipv6Addr>().expect("invalid ipv6");
-    let test = move |env| mainnet_query_calls_icx_proxy_test(env, bn_ipv6);
+    let test = move |env| mainnet_query_calls_ic_gateway_test(env, bn_ipv6);
     SystemTestGroup::new()
         .with_setup(empty_setup)
         .add_test(systest!(test))
