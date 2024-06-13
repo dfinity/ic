@@ -33,6 +33,7 @@ jobs:
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
+        uses: actions/checkout@v4
       - name: Run Bazel System Test Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -54,6 +55,7 @@ jobs:
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
+        uses: actions/checkout@v4
       - name: Run Bazel System Test Staging
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
