@@ -344,7 +344,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.2.0",
             ),
             "criterion": crate.spec(
-                version = "^0.5",
+                version = "^0.5.1",
                 features = [
                     "html_reports",
                     "async_tokio",
@@ -765,7 +765,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.13.0",
             ),
             "mockall": crate.spec(
-                version = "^0.11.4",
+                version = "^0.12.1",
             ),
             "mockito": crate.spec(
                 version = "^1.2.0",

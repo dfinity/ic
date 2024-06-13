@@ -28,7 +28,7 @@ hex = { workspace = true }
 zeroize = { version = "1", features = ["zeroize_derive"] }
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
 
 [[bench]]

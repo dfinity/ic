@@ -455,6 +455,7 @@ clap = { version = "4.4.6", features = ["derive", "string"] }
 cloudflare = { git = "https://github.com/blind-oracle/cloudflare-rs.git", rev = "386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc", feature = [
     "rustls-tls",
 ] }
+criterion = { version = "0.5.1", features = ["html_reports","async_tokio"] }
 crossbeam-channel = "0.5.11"
 curve25519-dalek = { version = "4.1.2", features = ["group", "precomputed-tables"] }
 ed25519-dalek = { version = "2.1.1", features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem", "hazmat"] }
@@ -497,7 +498,7 @@ k256 = { version = "0.13.3", default_features = false, features = [
 ] }
 libnss = "0.5.0"
 local-ip-address = "0.5.6"
-mockall = "0.11.4"
+mockall = "0.12.1"
 mockito = "1.2.0"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"

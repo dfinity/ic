@@ -13,7 +13,7 @@ rand = { workspace = true }
 ic-crypto-sha3 = { path = "../../../../sha3" }
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
 hex = { workspace = true }
 
