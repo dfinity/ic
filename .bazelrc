@@ -15,10 +15,6 @@ build:fmt --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
 build:fmt --output_groups=+rustfmt_checks
 build --@rules_rust//:rustfmt.toml=//:rustfmt.toml
 
-# https://github.com/bazelbuild/rules_rust/pull/2277 breaks our build in CI
-# TODO(levsha): localise the problem and report to the upstream
-build --@rules_rust//rust/settings:experimental_toolchain_generated_sysroot=False
-
 build:ci --progress_report_interval=30
 
 # Use hermetic JDK
