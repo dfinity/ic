@@ -1466,7 +1466,7 @@ mod tests {
         );
 
         // Set up the signature requests
-        // The block contains pre-signatures for requests 1, 2, 3
+        // The block contains pre-signatures for requests 1, 2
         let block_reader = TestEcdsaBlockReader::for_signer_test(
             height,
             vec![

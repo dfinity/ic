@@ -544,7 +544,8 @@ mod tests {
     use super::*;
     use crate::ecdsa::test_utils::{
         create_available_pre_signature_with_key_transcript, fake_ecdsa_key_id,
-        fake_ecdsa_master_public_key_id, set_up_ecdsa_payload, EcdsaPayloadTestHelper,
+        fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+        set_up_ecdsa_payload, EcdsaPayloadTestHelper,
     };
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{dependencies, Dependencies};
@@ -566,7 +567,7 @@ mod tests {
             idkg::{EcdsaPayload, UnmaskedTranscript},
             BlockPayload, Payload, SummaryPayload,
         },
-        crypto::{AlgorithmId, CryptoHashOf},
+        crypto::CryptoHashOf,
         time::UNIX_EPOCH,
     };
     use pb::ChainKeyInitialization;
@@ -807,17 +808,17 @@ mod tests {
         })
     }
 
-    fn add_available_quadruples_with_key_transcript(
+    fn add_available_pre_signatures_with_key_transcript(
         ecdsa_payload: &mut EcdsaPayload,
         key_transcript: UnmaskedTranscript,
-        key_id: &EcdsaKeyId,
+        key_id: &MasterPublicKeyId,
     ) -> Vec<PreSigId> {
         let mut pre_sig_ids = vec![];
         for i in 0..10 {
             let id = create_available_pre_signature_with_key_transcript(
                 ecdsa_payload,
                 i,
-                MasterPublicKeyId::Ecdsa(key_id.clone()),
+                key_id.clone(),
                 Some(key_transcript),
             );
             pre_sig_ids.push(id);
@@ -846,14 +847,20 @@ mod tests {
     }
 
     #[test]
-    fn test_get_pre_signature_ids_to_deliver() {
+    fn test_get_pre_signature_ids_to_deliver_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_get_pre_signature_ids_to_deliver(key_id);
+        }
+    }
+
+    fn test_get_pre_signature_ids_to_deliver(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        let key_id = fake_ecdsa_key_id();
         let (mut ecdsa_payload, env, _) = set_up_ecdsa_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 8,
-            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
+            vec![key_id.clone()],
             /*should_create_key_transcript=*/ true,
         );
         let current_key_transcript = ecdsa_payload
@@ -862,7 +869,7 @@ mod tests {
             .clone()
             .unwrap();
 
-        let pre_signature_ids_to_be_delivered = add_available_quadruples_with_key_transcript(
+        let pre_signature_ids_to_be_delivered = add_available_pre_signatures_with_key_transcript(
             &mut ecdsa_payload,
             current_key_transcript.unmasked_transcript(),
             &key_id,
@@ -877,23 +884,22 @@ mod tests {
             &env,
             &dealers,
             &receivers,
-            AlgorithmId::ThresholdEcdsaSecp256k1,
+            algorithm_for_key_id(&key_id),
             &mut rng,
         );
         let old_key_transcript =
             UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
-        let pre_signature_ids_not_to_be_delivered = add_available_quadruples_with_key_transcript(
-            &mut ecdsa_payload,
-            old_key_transcript,
-            &key_id,
-        );
+        let pre_signature_ids_not_to_be_delivered =
+            add_available_pre_signatures_with_key_transcript(
+                &mut ecdsa_payload,
+                old_key_transcript,
+                &key_id,
+            );
 
         let block = make_block(Some(ecdsa_payload));
         let mut delivered_map = get_pre_signature_ids_to_deliver(&block);
         assert_eq!(delivered_map.len(), 1);
-        let delivered_ids = delivered_map
-            .remove(&MasterPublicKeyId::Ecdsa(key_id))
-            .unwrap();
+        let delivered_ids = delivered_map.remove(&key_id).unwrap();
 
         assert!(!pre_signature_ids_not_to_be_delivered
             .into_iter()
@@ -913,14 +919,20 @@ mod tests {
     }
 
     #[test]
-    fn test_block_without_key_should_not_deliver_quadruples() {
+    fn test_block_without_key_should_not_deliver_pre_signatures_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_block_without_key_should_not_deliver_pre_signatures(key_id);
+        }
+    }
+
+    fn test_block_without_key_should_not_deliver_pre_signatures(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        let key_id = fake_ecdsa_key_id();
         let (mut ecdsa_payload, env, _) = set_up_ecdsa_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 8,
-            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
+            vec![key_id.clone()],
             /*should_create_key_transcript=*/ false,
         );
 
@@ -932,12 +944,12 @@ mod tests {
             &env,
             &dealers,
             &receivers,
-            AlgorithmId::ThresholdEcdsaSecp256k1,
+            algorithm_for_key_id(&key_id),
             &mut rng,
         );
         let key_transcript_ref =
             UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
-        add_available_quadruples_with_key_transcript(
+        add_available_pre_signatures_with_key_transcript(
             &mut ecdsa_payload,
             key_transcript_ref,
             &key_id,
@@ -946,9 +958,6 @@ mod tests {
         let block = make_block(Some(ecdsa_payload));
         let delivered_ids = get_pre_signature_ids_to_deliver(&block);
 
-        assert_eq!(
-            delivered_ids.get(&MasterPublicKeyId::Ecdsa(key_id)),
-            Some(&BTreeSet::default())
-        );
+        assert_eq!(delivered_ids.get(&key_id), Some(&BTreeSet::default()));
     }
 }
