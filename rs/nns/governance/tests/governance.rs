@@ -1876,6 +1876,8 @@ fn fixture_for_manage_neuron() -> GovernanceProto {
         controller: Some(principal(id)),
         cached_neuron_stake_e8s: 1_000_000_000, // 10 ICP
         account: driver.random_byte_array().to_vec(),
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+        aging_since_timestamp_seconds: u64::MAX,
         ..Default::default()
     };
 
@@ -3686,6 +3688,8 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
             cached_neuron_stake_e8s: 10 * E8,
             account: driver.random_byte_array().to_vec(),
             kyc_verified: false,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+            aging_since_timestamp_seconds: u64::MAX,
             ..Default::default()
         },
         Neuron {
@@ -3694,6 +3698,8 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
             cached_neuron_stake_e8s: 10 * E8,
             account: driver.random_byte_array().to_vec(),
             kyc_verified: false,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+            aging_since_timestamp_seconds: u64::MAX,
             ..Default::default()
         },
         Neuron {
@@ -3702,6 +3708,8 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
             cached_neuron_stake_e8s: 10 * E8,
             account: driver.random_byte_array().to_vec(),
             kyc_verified: false,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+            aging_since_timestamp_seconds: u64::MAX,
             ..Default::default()
         },
         Neuron {
@@ -3710,6 +3718,8 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
             cached_neuron_stake_e8s: 10 * E8,
             account: driver.random_byte_array().to_vec(),
             kyc_verified: false,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+            aging_since_timestamp_seconds: u64::MAX,
             ..Default::default()
         },
     ];
@@ -3897,18 +3907,24 @@ fn test_get_neuron_ids_by_principal() {
         id: Some(NeuronId { id: 1 }),
         controller: Some(principal1),
         account: driver.random_byte_array().to_vec(),
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+        aging_since_timestamp_seconds: u64::MAX,
         ..Default::default()
     };
     let neuron_b = Neuron {
         id: Some(NeuronId { id: 2 }),
         controller: Some(principal2),
         account: driver.random_byte_array().to_vec(),
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+        aging_since_timestamp_seconds: u64::MAX,
         ..Default::default()
     };
     let neuron_c = Neuron {
         id: Some(NeuronId { id: 3 }),
         controller: Some(principal2),
         account: driver.random_byte_array().to_vec(),
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+        aging_since_timestamp_seconds: u64::MAX,
         ..Default::default()
     };
     let neuron_d = Neuron {
@@ -3916,6 +3932,8 @@ fn test_get_neuron_ids_by_principal() {
         controller: Some(principal2),
         hot_keys: vec![principal4],
         account: driver.random_byte_array().to_vec(),
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+        aging_since_timestamp_seconds: u64::MAX,
         ..Default::default()
     };
 
@@ -7514,6 +7532,8 @@ fn test_filter_proposals_neuron_visibility() {
                 hot_keys: vec![principal_hot],
                 cached_neuron_stake_e8s: 10 * E8,
                 account: driver.random_byte_array().to_vec(),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Default::default()
             },
             2 => Neuron {
@@ -7521,6 +7541,8 @@ fn test_filter_proposals_neuron_visibility() {
                 controller: Some(principal2),
                 cached_neuron_stake_e8s: 10 * E8,
                 account: driver.random_byte_array().to_vec(),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Default::default()
             },
             3 => Neuron {
@@ -7533,6 +7555,8 @@ fn test_filter_proposals_neuron_visibility() {
                         followees: vec![NeuronId { id: 1 }],
                     },
                 },
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Default::default()
             },
         },
@@ -7602,6 +7626,8 @@ fn test_filter_proposals_include_all_manage_neuron_ignores_visibility() {
                 controller: Some(principal1),
                 cached_neuron_stake_e8s: 10 * E8,
                 account: driver.random_byte_array().to_vec(),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Default::default()
             },
             2 => Neuron {
@@ -7609,6 +7635,8 @@ fn test_filter_proposals_include_all_manage_neuron_ignores_visibility() {
                 controller: Some(principal2),
                 cached_neuron_stake_e8s: 10 * E8,
                 account: driver.random_byte_array().to_vec(),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Default::default()
             },
             3 => Neuron {
@@ -7621,6 +7649,8 @@ fn test_filter_proposals_include_all_manage_neuron_ignores_visibility() {
                         followees: vec![NeuronId { id: 1 }],
                     },
                 },
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Default::default()
             },
         },
@@ -7713,6 +7743,8 @@ fn test_filter_proposals_by_status() {
                 controller: Some(principal1),
                 cached_neuron_stake_e8s: 10 * E8,
                 account: driver.random_byte_array().to_vec(),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Default::default()
             }
         },
@@ -7811,6 +7843,8 @@ fn test_filter_proposals_by_reward_status() {
                 controller: Some(principal1),
                 cached_neuron_stake_e8s: 10 * E8,
                 account: driver.random_byte_array().to_vec(),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Default::default()
             }
         },
@@ -7900,6 +7934,8 @@ fn test_filter_proposals_excluding_topics() {
                 controller: Some(principal1),
                 cached_neuron_stake_e8s: 10 * E8,
                 account: driver.random_byte_array().to_vec(),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Default::default()
             }
         },
@@ -7994,6 +8030,8 @@ fn test_filter_proposal_ballots() {
                 hot_keys: vec![principal_hot],
                 cached_neuron_stake_e8s: 10 * E8,
                 account: driver.random_byte_array().to_vec(),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Default::default()
             },
 
@@ -8002,6 +8040,8 @@ fn test_filter_proposal_ballots() {
                 controller: Some(principal2),
                 cached_neuron_stake_e8s: 10 * E8,
                 account: driver.random_byte_array().to_vec(),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Default::default()
             },
         },
@@ -8179,6 +8219,8 @@ fn test_omit_large_fields() {
                 hot_keys: vec![],
                 cached_neuron_stake_e8s: 10 * E8,
                 account: driver.random_byte_array().to_vec(),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Default::default()
             },
         },
@@ -8306,6 +8348,8 @@ fn test_list_neurons() {
                         id: Some(NeuronId { id: *x }),
                         controller: Some(principal(*x)),
                         account: driver.random_byte_array().to_vec(),
+                        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                        aging_since_timestamp_seconds: u64::MAX,
                         ..Default::default()
                     },
                 )
@@ -8787,6 +8831,7 @@ fn test_manage_neuron_merge_maturity_returns_expected_error() {
     let fixture: GovernanceProto = fixture_for_dissolving_neuron_tests(
         id,
         DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
+        DEFAULT_TEST_START_TIMESTAMP_SECONDS,
     );
     let mut gov = Governance::new(
         fixture,
@@ -8823,7 +8868,11 @@ fn test_manage_neuron_merge_maturity_returns_expected_error() {
 
 /// Creates a fixture with one neuron, aging since the test start timestamp, in
 /// a given dissolve_state.
-fn fixture_for_dissolving_neuron_tests(id: u64, dissolve_state: DissolveState) -> GovernanceProto {
+fn fixture_for_dissolving_neuron_tests(
+    id: u64,
+    dissolve_state: DissolveState,
+    aging_since_timestamp_seconds: u64,
+) -> GovernanceProto {
     GovernanceProto {
         economics: Some(NetworkEconomics::default()),
         neurons: btreemap! {
@@ -8832,7 +8881,7 @@ fn fixture_for_dissolving_neuron_tests(id: u64, dissolve_state: DissolveState) -
                 account: account(id),
                 controller: Some(principal(id)),
                 dissolve_state: Some(dissolve_state),
-                aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+                aging_since_timestamp_seconds,
                 ..Neuron::default()
             }
         },
@@ -8850,6 +8899,7 @@ fn test_start_dissolving() {
     let fixture: GovernanceProto = fixture_for_dissolving_neuron_tests(
         id,
         DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
+        DEFAULT_TEST_START_TIMESTAMP_SECONDS,
     );
     let mut gov = Governance::new(
         fixture,
@@ -8904,6 +8954,7 @@ fn test_start_dissolving_panics() {
     let fixture: GovernanceProto = fixture_for_dissolving_neuron_tests(
         id,
         DissolveState::WhenDissolvedTimestampSeconds(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
+        u64::MAX,
     );
     let mut gov = Governance::new(
         fixture,
@@ -8946,6 +8997,7 @@ fn test_stop_dissolving() {
         DissolveState::WhenDissolvedTimestampSeconds(
             DEFAULT_TEST_START_TIMESTAMP_SECONDS + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
         ),
+        u64::MAX,
     );
     let mut gov = Governance::new(
         fixture,
@@ -9003,6 +9055,7 @@ fn test_stop_dissolving_panics() {
     let fixture: GovernanceProto = fixture_for_dissolving_neuron_tests(
         id,
         DissolveState::DissolveDelaySeconds(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS),
+        DEFAULT_TEST_START_TIMESTAMP_SECONDS,
     );
     let mut gov = Governance::new(
         fixture,
@@ -9154,6 +9207,7 @@ fn test_increase_dissolve_delay() {
                     DEFAULT_TEST_START_TIMESTAMP_SECONDS
                         + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
                 )),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Neuron::default()
             },
             3 => Neuron {
@@ -9163,6 +9217,7 @@ fn test_increase_dissolve_delay() {
                 dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                     DEFAULT_TEST_START_TIMESTAMP_SECONDS - 1,
                 )),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Neuron::default()
             }
         },
@@ -9277,6 +9332,8 @@ fn test_join_neurons_fund() {
                 account: account(1),
                 cached_neuron_stake_e8s: 10 * E8,
                 controller: Some(principal(principal_a)),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Neuron::default()
             },
             2 => Neuron {
@@ -9284,6 +9341,8 @@ fn test_join_neurons_fund() {
                 account: account(2),
                 cached_neuron_stake_e8s: 20 * 100_000_000,
                 controller: Some(principal(principal_b)),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Neuron::default()
             },
             3 => Neuron {
@@ -9291,6 +9350,8 @@ fn test_join_neurons_fund() {
                 account: account(3),
                 cached_neuron_stake_e8s: 100 * 100_000_000,
                 controller: Some(principal(principal_b)),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+                aging_since_timestamp_seconds: u64::MAX,
                 ..Neuron::default()
             }
         },
@@ -12403,6 +12464,8 @@ async fn distribute_rewards_load_test() {
             controller: Some(principal(id)),
             cached_neuron_stake_e8s: 1_000_000_000,
             maturity_e8s_equivalent,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
+            aging_since_timestamp_seconds: now - 1,
             ..Default::default()
         })
         .collect::<Vec<Neuron>>();
@@ -12731,6 +12794,7 @@ async fn test_metrics() {
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS * 3,
             )),
+            aging_since_timestamp_seconds: u64::MAX,
             ..Default::default()
         },
         // Dissolved neurons: 400m.
@@ -12741,6 +12805,10 @@ async fn test_metrics() {
             account: account(4),
             controller: Some(principal(4)),
             cached_neuron_stake_e8s: 400_000_000,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                0,
+            )),
+            aging_since_timestamp_seconds: u64::MAX,
             ..Default::default()
         }
     };

@@ -815,20 +815,6 @@ mod tests {
             DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: NOW_SECONDS - 1,
             },
-            DissolveStateAndAge::LegacyDissolved {
-                aging_since_timestamp_seconds: NOW_SECONDS - 1,
-            },
-            DissolveStateAndAge::LegacyDissolvingOrDissolved {
-                when_dissolved_timestamp_seconds: NOW_SECONDS + 1,
-                aging_since_timestamp_seconds: NOW_SECONDS - 1,
-            },
-            DissolveStateAndAge::LegacyDissolvingOrDissolved {
-                when_dissolved_timestamp_seconds: NOW_SECONDS - 1,
-                aging_since_timestamp_seconds: NOW_SECONDS - 1,
-            },
-            DissolveStateAndAge::LegacyNoneDissolveState {
-                aging_since_timestamp_seconds: NOW_SECONDS - 1,
-            },
         ];
 
         for dissolve_state_and_age_invalid_for_merge in
