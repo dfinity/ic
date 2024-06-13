@@ -713,6 +713,7 @@ mod tests {
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
     use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
     use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaCombinedSignature;
+    use ic_types::crypto::canister_threshold_sig::ThresholdSchnorrCombinedSignature;
     use ic_types::crypto::AlgorithmId;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
     use ic_types::time::UNIX_EPOCH;
@@ -819,7 +820,7 @@ mod tests {
         (ecdsa_payload, env)
     }
 
-    fn set_up_sign_with_ecdsa_contexts(
+    fn set_up_signature_request_contexts(
         parameters: Vec<(MasterPublicKeyId, u8, Time, Option<PreSigId>)>,
     ) -> BTreeMap<CallbackId, SignWithThresholdContext> {
         let mut contexts = BTreeMap::new();
@@ -833,47 +834,51 @@ mod tests {
     }
 
     #[test]
-    fn test_quadruple_recreation() {
+    fn test_pre_signature_recreation_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_pre_signature_recreation(key_id);
+        }
+    }
+
+    fn test_pre_signature_recreation(valid_key_id: MasterPublicKeyId) {
         const PRE_SIGNATURES_TO_CREATE_IN_ADVANCE: u32 = 5;
-        let valid_key_id =
-            MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:valid_key").unwrap());
-        let disabled_key_id =
-            MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:disabled_key").unwrap());
+        let disabled_key_id = key_id_with_name(&valid_key_id, "disabled");
         let valid_keys = BTreeSet::from([valid_key_id.clone()]);
 
         let (mut ecdsa_payload, _env) = set_up_ecdsa_payload_with_keys(vec![valid_key_id.clone()]);
-        // Add two quadruples
-        let quadruple_for_valid_key =
+        // Add two pre-signatures
+        let pre_sig_for_valid_key =
             create_available_pre_signature(&mut ecdsa_payload, valid_key_id.clone(), 10);
-        let quadruple_for_disabled_key =
+        let pre_sig_for_disabled_key =
             create_available_pre_signature(&mut ecdsa_payload, disabled_key_id.clone(), 11);
-        let non_existant_quadruple_for_valid_key =
+        let non_existant_pre_sig_for_valid_key =
             ecdsa_payload.uid_generator.next_pre_signature_id();
 
-        let contexts = set_up_sign_with_ecdsa_contexts(vec![
-            // Two request contexts without quadruple
+        let contexts = set_up_signature_request_contexts(vec![
+            // Two request contexts without pre-signature
             (valid_key_id.clone(), 0, UNIX_EPOCH, None),
             (disabled_key_id.clone(), 1, UNIX_EPOCH, None),
-            // One valid context with matched quadruple
+            // One valid context with matched pre-signature
             (
                 valid_key_id.clone(),
                 2,
                 UNIX_EPOCH,
-                Some(quadruple_for_valid_key),
+                Some(pre_sig_for_valid_key),
             ),
-            // One invalid context with matched quadruple
+            // One invalid context with matched pre-signature
             (
                 disabled_key_id.clone(),
                 3,
                 UNIX_EPOCH,
-                Some(quadruple_for_disabled_key),
+                Some(pre_sig_for_disabled_key),
             ),
-            // One valid context matched to non-existant quadruple
+            // One valid context matched to non-existant pre-signature
             (
                 valid_key_id.clone(),
                 4,
                 UNIX_EPOCH,
-                Some(non_existant_quadruple_for_valid_key),
+                Some(non_existant_pre_sig_for_valid_key),
             ),
         ]);
 
@@ -908,40 +913,46 @@ mod tests {
         )
         .unwrap();
 
-        let num_quadruples_in_creation = ecdsa_payload.pre_signatures_in_creation.len() as u32;
-        let num_available_quadruples = ecdsa_payload.available_pre_signatures.len() as u32;
-        // The two matched quadruples remain
-        // in available_quadruples.
-        assert_eq!(num_available_quadruples, 2);
-        // Usually, matched quadruples are replenished, but since one
+        let num_pre_sigs_in_creation = ecdsa_payload.pre_signatures_in_creation.len() as u32;
+        let num_available_pre_sigs = ecdsa_payload.available_pre_signatures.len() as u32;
+        // The two matched pre-signature remain
+        // in available_pre_signatures.
+        assert_eq!(num_available_pre_sigs, 2);
+        // Usually, matched pre-signatures are replenished, but since one
         // of them was matched to a disabled key id whose request context
-        // is rejected, the quadruple is "reused" and not replenished.
+        // is rejected, the pre-signature is "reused" and not replenished.
         assert_eq!(
-            num_quadruples_in_creation,
+            num_pre_sigs_in_creation,
             PRE_SIGNATURES_TO_CREATE_IN_ADVANCE
         );
     }
 
     #[test]
-    fn test_ecdsa_signing_request_timeout() {
-        let key_id = fake_ecdsa_master_public_key_id();
+    fn test_signing_request_timeout_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_signing_request_timeout(key_id);
+        }
+    }
+
+    fn test_signing_request_timeout(key_id: MasterPublicKeyId) {
         let expired_time = UNIX_EPOCH + Duration::from_secs(10);
         let expiry_time = UNIX_EPOCH + Duration::from_secs(11);
         let non_expired_time = UNIX_EPOCH + Duration::from_secs(12);
 
         let (mut ecdsa_payload, _env) = set_up_ecdsa_payload_with_keys(vec![key_id.clone()]);
-        // Add quadruples
+        // Add pre-signatures
         let discarded_pre_sig_id =
             create_available_pre_signature(&mut ecdsa_payload, key_id.clone(), 10);
         let matched_pre_sig_id =
             create_available_pre_signature(&mut ecdsa_payload, key_id.clone(), 11);
 
-        let contexts = set_up_sign_with_ecdsa_contexts(vec![
-            // One expired context without quadruple
+        let contexts = set_up_signature_request_contexts(vec![
+            // One expired context without pre-signature
             (key_id.clone(), 0, expired_time, None),
-            // One expired context with matched quadruple
+            // One expired context with matched pre-signature
             (key_id.clone(), 1, expired_time, Some(discarded_pre_sig_id)),
-            // One non-expired context with matched quadruple
+            // One non-expired context with matched pre-signature
             (
                 key_id.clone(),
                 2,
@@ -963,7 +974,7 @@ mod tests {
             None,
         );
 
-        // Only the expired context with matched quadruple should receive a reject response
+        // Only the expired context with matched pre-signature should receive a reject response
         assert_eq!(ecdsa_payload.signature_agreements.len(), 1);
         let Some(idkg::CompletedSignature::Unreported(response)) =
             ecdsa_payload.signature_agreements.get(&[1; 32])
@@ -989,19 +1000,23 @@ mod tests {
     }
 
     #[test]
-    fn test_ecdsa_request_with_invalid_key() {
-        let valid_key_id =
-            MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap());
-        let invalid_key_id =
-            MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:some_invalid_key").unwrap());
+    fn test_request_with_invalid_key_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_request_with_invalid_key(key_id);
+        }
+    }
+
+    fn test_request_with_invalid_key(valid_key_id: MasterPublicKeyId) {
+        let invalid_key_id = key_id_with_name(&valid_key_id, "invalid");
         let (mut ecdsa_payload, _env) = set_up_ecdsa_payload_with_keys(vec![valid_key_id.clone()]);
-        // Add quadruples
+        // Add pre-signatures
         let pre_sig_id1 =
             create_available_pre_signature(&mut ecdsa_payload, valid_key_id.clone(), 1);
         let pre_sig_id2 =
             create_available_pre_signature(&mut ecdsa_payload, invalid_key_id.clone(), 2);
 
-        let contexts = set_up_sign_with_ecdsa_contexts(vec![
+        let contexts = set_up_signature_request_contexts(vec![
             // One matched context with valid key
             (valid_key_id.clone(), 1, UNIX_EPOCH, Some(pre_sig_id1)),
             // One matched context with invalid key
@@ -1047,17 +1062,23 @@ mod tests {
             if context.message().contains("Invalid key_id")
         );
 
-        // The quadruple matched with the expired context should not be deleted
+        // The pre-signature matched with the expired context should not be deleted
         assert_eq!(ecdsa_payload.available_pre_signatures.len(), 2);
     }
 
     #[test]
-    fn test_ecdsa_signature_is_only_delivered_once() {
-        let key_id = fake_ecdsa_master_public_key_id();
+    fn test_signature_is_only_delivered_once_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_signature_is_only_delivered_once(key_id);
+        }
+    }
+
+    fn test_signature_is_only_delivered_once(key_id: MasterPublicKeyId) {
         let (mut ecdsa_payload, _env) = set_up_ecdsa_payload_with_keys(vec![key_id.clone()]);
         let pre_sig_id = create_available_pre_signature(&mut ecdsa_payload, key_id.clone(), 13);
         let context = fake_completed_signature_request_context(0, key_id.clone(), pre_sig_id);
-        let sign_with_ecdsa_contexts = BTreeMap::from([context.clone()]);
+        let signature_request_contexts = BTreeMap::from([context.clone()]);
 
         let valid_keys = BTreeSet::from([key_id.clone()]);
 
@@ -1067,9 +1088,18 @@ mod tests {
 
         signature_builder.signatures.insert(
             get_context_request_id(&context.1).unwrap(),
-            CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
-                signature: vec![1; 32],
-            }),
+            match key_id {
+                MasterPublicKeyId::Ecdsa(_) => {
+                    CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
+                        signature: vec![1; 32],
+                    })
+                }
+                MasterPublicKeyId::Schnorr(_) => {
+                    CombinedSignature::Schnorr(ThresholdSchnorrCombinedSignature {
+                        signature: vec![2; 32],
+                    })
+                }
+            },
         );
 
         // create first ecdsa payload
@@ -1082,7 +1112,7 @@ mod tests {
             RegistryVersion::from(9),
             CertifiedHeight::ReachedSummaryHeight,
             &[node_test_id(0)],
-            &sign_with_ecdsa_contexts,
+            &signature_request_contexts,
             &BTreeMap::default(),
             &block_reader,
             &transcript_builder,
@@ -1106,7 +1136,7 @@ mod tests {
             RegistryVersion::from(9),
             CertifiedHeight::ReachedSummaryHeight,
             &[node_test_id(0)],
-            &sign_with_ecdsa_contexts,
+            &signature_request_contexts,
             &BTreeMap::default(),
             &block_reader,
             &transcript_builder,
