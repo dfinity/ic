@@ -1220,7 +1220,7 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
         let mut pool = MessagePool::default();
 
         if !item.input_queues.is_empty() || !item.output_queues.is_empty() {
-            // Forwards compatibility: deserialize from `input_queues` and `output_queues`.
+            // Backward compatibility: deserialize from `input_queues` and `output_queues`.
 
             if item.pool.is_some() || !item.canister_queues.is_empty() {
                 return Err(ProxyDecodeError::Other(
@@ -1320,7 +1320,7 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
             remote_subnet_input_schedule.push_back(canister_id.try_into()?);
         }
 
-        let queue = Self {
+        let queues = Self {
             ingress_queue: IngressQueue::try_from(item.ingress_queue)?,
             canister_queues,
             pool,
@@ -1332,12 +1332,12 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
 
         // Safe to call with invalid `own_canister_id` and empty `local_canisters`, as
         // the validation logic allows for deleted local canisters.
-        queue
+        queues
             .schedules_ok(
                 &CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
                 &BTreeMap::new(),
             )
-            .map(|()| queue)
+            .map(|()| queues)
             .map_err(ProxyDecodeError::Other)
     }
 }

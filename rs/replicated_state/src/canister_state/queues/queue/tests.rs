@@ -466,32 +466,28 @@ fn canister_queue_try_from_output_queue() {
 
 #[test]
 fn input_queue_try_from_canister_queue() {
-    let req1 = make_request(1, 13);
-    let req2 = make_request(2, 0);
-    let req3 = make_request(3, 14);
+    let req1 = make_request(1, 0);
+    let req2 = make_request(2, 14);
     let rep = ResponseBuilder::default()
         .originator_reply_callback(CallbackId::new(4))
         .build();
 
-    // A `CanisterQueue` with a couple of requests and a response, a stale request
-    // and a reserved slot.
+    // A `CanisterQueue` with a couple of requests and a response and a reserved
+    // slot.
     let mut pool = MessagePool::default();
     let mut queue = CanisterQueue::new(10);
-    // Enqueue and shed a request.
-    queue.push_request(pool.insert_inbound(req1.clone().into()));
-    pool.shed_largest_message().unwrap();
     // Enqueue a couple of requests and a response.
+    queue.push_request(pool.insert_inbound(req1.clone().into()));
     queue.push_request(pool.insert_inbound(req2.clone().into()));
-    queue.push_request(pool.insert_inbound(req3.clone().into()));
     queue.try_reserve_response_slot().unwrap();
     queue.push_response(pool.insert_inbound(rep.clone().into()));
     // Make an extra response reservation.
     queue.try_reserve_response_slot().unwrap();
 
-    // Expected `InputQueue`. The stale request is not preserved.
+    // Expected `InputQueue`.
     let mut expected_input_queue = InputQueue::new(10);
+    expected_input_queue.push(req1.into()).unwrap();
     expected_input_queue.push(req2.into()).unwrap();
-    expected_input_queue.push(req3.into()).unwrap();
     expected_input_queue.reserve_slot().unwrap();
     expected_input_queue.push(rep.into()).unwrap();
     expected_input_queue.reserve_slot().unwrap();
@@ -510,30 +506,23 @@ fn output_queue_try_from_canister_queue() {
     let req1 = make_request(1, 11);
     let req2 = make_request(2, 0);
     let req3 = make_request(3, 13);
-    let rep1 = ResponseBuilder::default()
-        .originator_reply_callback(CallbackId::new(4))
-        .deadline(CoarseTime::floor(t0))
-        .build();
-    let rep2 = ResponseBuilder::default()
+    let rep = ResponseBuilder::default()
         .originator_reply_callback(CallbackId::new(4))
         .build();
 
-    // A `CanisterQueue` with a couple of requests and a response, a stale request,
-    // a stale response and a reserved slot.
+    // A `CanisterQueue` with a couple of requests and a response, a stale request
+    // and a reserved slot.
     let mut pool = MessagePool::default();
     let mut queue = CanisterQueue::new(10);
-    // Enqueue and then shed a request and a response.
+    // Enqueue and then shed a request.
     queue.push_request(pool.insert_outbound_request(req1.clone().into(), t0));
     pool.shed_largest_message().unwrap();
-    queue.try_reserve_response_slot().unwrap();
-    queue.push_response(pool.insert_outbound_response(rep1.clone().into()));
-    pool.shed_largest_message().unwrap();
-    assert_eq!(2, queue.len());
+    assert_eq!(1, queue.len());
     // Enqueue a couple of requests and a response.
     queue.push_request(pool.insert_outbound_request(req2.clone().into(), t2));
     queue.push_request(pool.insert_outbound_request(req3.clone().into(), t3));
     queue.try_reserve_response_slot().unwrap();
-    queue.push_response(pool.insert_outbound_response(rep2.clone().into()));
+    queue.push_response(pool.insert_outbound_response(rep.clone().into()));
     // Make an extra response reservation.
     queue.try_reserve_response_slot().unwrap();
 
@@ -544,7 +533,7 @@ fn output_queue_try_from_canister_queue() {
     // inherits `req2`'s deadline.
     expected_output_queue.push_request(req3.into(), d2).unwrap();
     expected_output_queue.reserve_slot().unwrap();
-    expected_output_queue.push_response(rep2.into());
+    expected_output_queue.push_response(rep.into());
     expected_output_queue.reserve_slot().unwrap();
 
     let output_queue: OutputQueue = (&queue, &pool).try_into().unwrap();
