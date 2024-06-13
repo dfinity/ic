@@ -11,7 +11,6 @@
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -34,7 +33,6 @@
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit: bazel-testlogs-gitlab/**/test.xml
@@ -125,7 +123,6 @@
 ".build-ic":
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - build-ic.tar
     reports:
       dotenv: nns.release.env
@@ -245,7 +242,6 @@ bazel-build-fuzzers:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -268,7 +264,6 @@ bazel-build-fuzzers:
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit:
@@ -312,7 +307,6 @@ bazel-build-fuzzers-afl:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -335,7 +329,6 @@ bazel-build-fuzzers-afl:
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit:
@@ -379,7 +372,6 @@ bazel-build-fuzzers-archives:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -402,7 +394,6 @@ bazel-build-fuzzers-archives:
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit:
@@ -442,7 +433,6 @@ bazel-build-fuzzers-weekly:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -465,7 +455,6 @@ bazel-build-fuzzers-weekly:
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit:
@@ -506,7 +495,6 @@ bazel-config-check-all-rebuild:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -529,7 +517,6 @@ bazel-config-check-all-rebuild:
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit:
@@ -576,7 +563,6 @@ bazel-system-test-hotfix:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -599,7 +585,6 @@ bazel-system-test-hotfix:
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit:
@@ -645,7 +630,6 @@ bazel-system-test-hourly:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -668,7 +652,6 @@ bazel-system-test-hourly:
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit:
@@ -708,7 +691,6 @@ bazel-system-test-nightly:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -731,7 +713,6 @@ bazel-system-test-nightly:
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit:
@@ -779,7 +760,6 @@ bazel-system-test-nightly-nns:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -802,7 +782,6 @@ bazel-system-test-nightly-nns:
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit:
@@ -841,7 +820,6 @@ bazel-system-test-staging:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -865,7 +843,6 @@ bazel-system-test-staging:
   allow_failure: true
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit:
@@ -912,7 +889,6 @@ bazel-system-tests-k8s:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -935,7 +911,6 @@ bazel-system-tests-k8s:
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit:
@@ -979,7 +954,6 @@ bazel-test-all:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -1002,7 +976,6 @@ bazel-test-all:
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json.gz
       - bazel-bep.pb
       - bazel-targets
     reports:
@@ -1050,7 +1023,6 @@ bazel-test-all-rebuild:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -1073,7 +1045,6 @@ bazel-test-all-rebuild:
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit:
@@ -1115,7 +1086,6 @@ bazel-test-bare-metal:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -1138,7 +1108,6 @@ bazel-test-bare-metal:
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit:
@@ -1224,7 +1193,6 @@ bazel-test-macos:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -1247,7 +1215,6 @@ bazel-test-macos:
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit:
@@ -1340,7 +1307,6 @@ benchmarks:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -1733,7 +1699,6 @@ build-hostos-base-dev:
 build-ic:
   artifacts:
     paths:
-      - bazel-build-log*.json*
       - build-ic.tar
     reports:
       dotenv:
