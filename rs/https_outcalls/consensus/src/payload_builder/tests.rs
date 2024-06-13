@@ -3,11 +3,15 @@
 //!
 //! Some tests are run over a range of subnet configurations to check for corner cases.
 
-use crate::payload_builder::parse::{bytes_to_payload, payload_to_bytes};
+use crate::payload_builder::{
+    divergence_response_into_reject,
+    parse::{bytes_to_payload, payload_to_bytes},
+};
 
 use super::CanisterHttpPayloadBuilderImpl;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+use ic_error_types::RejectCode;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
     canister_http::{
@@ -38,12 +42,14 @@ use ic_types::{
     },
     consensus::get_faults_tolerated,
     crypto::{crypto_hash, BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
-    messages::CallbackId,
+    messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
     signature::{BasicSignature, BasicSignatureBatch},
     time::UNIX_EPOCH,
     Height, NumBytes, RegistryVersion, Time,
 };
+use rand::Rng;
+use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 use std::{
     collections::BTreeMap,
     ops::DerefMut,
@@ -758,6 +764,58 @@ fn divergence_response_validation_test() {
             }
         });
     }
+}
+
+/// Check that the divergence error message is constructed correctly and readable
+#[test]
+fn divergence_error_message() {
+    let (_, metadata) = test_response_and_metadata(1);
+
+    let mut rng = ChaCha20Rng::seed_from_u64(1337);
+    let mut response_shares = (0..6)
+        .map(|node_id| {
+            let mut sample = metadata.clone();
+            let mut new_hash = [0; 32];
+            rng.fill(&mut new_hash);
+
+            sample.content_hash = CryptoHashOf::from(CryptoHash(new_hash.to_vec()));
+
+            Signed {
+                content: sample,
+                signature: BasicSignature {
+                    signature: BasicSigOf::new(BasicSig(vec![])),
+                    signer: node_test_id(node_id),
+                },
+            }
+        })
+        .collect::<Vec<_>>();
+
+    // Duplicate some responses
+    response_shares.push(response_shares[0].clone());
+    response_shares.push(response_shares[0].clone());
+    response_shares.push(response_shares[1].clone());
+
+    let divergence_response = CanisterHttpResponseDivergence {
+        shares: response_shares,
+    };
+
+    let divergence_reject = divergence_response_into_reject(&divergence_response).unwrap();
+
+    assert_eq!(
+        divergence_reject.payload,
+        Payload::Reject(RejectContext::new(
+            RejectCode::SysTransient,
+            "No consensus could be reached. Replicas had different responses. \
+            Details: request_id: 1, timeout: 10000000000, hashes: \
+            [30bb6555f891c35fbc820c74a7db7c1ae621f924340712e12febe78a9be0a908: 3], \
+            [e93edfdefc581e2bdb54a08b55dd67bc675afafbbb32697ef6b8bf9cc75fe69b: 2], \
+            [af4dcbc617e83bc998190e3031123dbd26bcf0c5a5013b5465017234a98f7d74: 1], \
+            [51a9af560377af0994fe4be465ea5adff3372623c6ac692c4d3e23b323ef8486: 1], \
+            [2b7e888246a3b450c67396062e53c8b6c4b776e082e7d2a81c5536e89fe6013e: 1], \
+            [000b3b9ca14f1136c076b7f681b0a496f5108f721833e6465d0671c014e60b43: 1]"
+                .to_string()
+        ))
+    );
 }
 
 /// Build some test metadata and response, which is valid and can be used in

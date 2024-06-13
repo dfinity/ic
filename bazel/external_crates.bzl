@@ -1265,7 +1265,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.36",
             ),
             "tokio": crate.spec(
-                version = "^1.37.0",
+                version = "^1.38.0",
                 features = [
                     "full",
                 ],

@@ -6221,7 +6221,6 @@ dependencies = [
  "serde",
  "slog",
  "tempfile",
- "url",
 ]
 
 [[package]]
@@ -7491,7 +7490,6 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "mockall",
  "rustls 0.21.12",
- "tokio",
 ]
 
 [[package]]
@@ -7998,7 +7996,6 @@ dependencies = [
  "serde_cbor",
  "slog",
  "tempfile",
- "threadpool",
  "tokio",
  "tokio-io-timeout",
  "tokio-rustls 0.24.1",
@@ -8008,7 +8005,6 @@ dependencies = [
  "tower-test",
  "tracing-flame",
  "tracing-subscriber",
- "url",
 ]
 
 [[package]]
@@ -8095,6 +8091,7 @@ dependencies = [
 name = "ic-https-outcalls-consensus"
 version = "0.9.0"
 dependencies = [
+ "hex",
  "ic-artifact-pool",
  "ic-consensus-mocks",
  "ic-consensus-utils",
@@ -8119,6 +8116,8 @@ dependencies = [
  "ic-types",
  "mockall",
  "prometheus",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "slog",
 ]
 
@@ -9880,7 +9879,6 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-state-manager",
  "ic-state-sync-manager",
- "ic-test-utilities",
  "ic-test-utilities-registry",
  "ic-test-utilities-types",
  "ic-types",
@@ -11384,7 +11382,6 @@ dependencies = [
  "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-tecdsa",
- "ic-crypto-test-utils-keys",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
@@ -11658,7 +11655,6 @@ dependencies = [
  "ic-replicated-state",
  "ic-test-utilities",
  "ic-test-utilities-consensus",
- "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
 ]
@@ -11699,7 +11695,6 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-sha2",
  "ic-crypto-temp-crypto",
- "ic-crypto-test-utils",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-tree-hash",
@@ -11944,7 +11939,6 @@ name = "ic-tracing"
 version = "0.9.0"
 dependencies = [
  "tracing",
- "tracing-flame",
  "tracing-subscriber",
 ]
 
@@ -12067,7 +12061,6 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
- "prost",
  "scoped_threadpool",
  "serde",
  "serde_bytes",
@@ -15425,7 +15418,6 @@ dependencies = [
 name = "pocket-ic"
 version = "3.1.0"
 dependencies = [
- "async-trait",
  "base64 0.13.1",
  "candid",
  "flate2",
@@ -19056,9 +19048,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.37.0"
+version = "1.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1adbebffeca75fcfd058afa480fb6c0b81e165a0323f9c9d39c9697e37c46787"
+checksum = "ba4f4a02a7a80d6f274636f0aa95c7e383b912d41fe721a31f29e29698585a4a"
 dependencies = [
  "backtrace",
  "bytes",
@@ -19085,9 +19077,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-macros"
-version = "2.2.0"
+version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b8a1e28f2deaa14e508979454cb3a223b10b938b45af148bc0986de36f1923b"
+checksum = "5f5ae998a069d4b5aba8ee9dad856af7d520c3699e6159b185c2acd48155d39a"
 dependencies = [
  "proc-macro2 1.0.75",
  "quote 1.0.35",

@@ -241,7 +241,7 @@ fn sync_until_end_block(
                     headers.extend(new_headers);
 
                     blocks.extend(new_blocks.iter().map(|block| deserialize(block).unwrap()));
-                    anchor = headers.last().unwrap().clone();
+                    anchor.clone_from(headers.last().unwrap());
                 }
             }
             Ok(BitcoinAdapterResponseWrapper::SendTransactionResponse(_))

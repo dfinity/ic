@@ -757,7 +757,7 @@ impl Player {
         let batch_number = message_routing.expected_batch_height();
         let mut extra_batch = Batch {
             batch_number,
-            next_checkpoint_height: None,
+            batch_summary: None,
             requires_full_state_hash: true,
             messages: BatchMessages::default(),
             // Use a fake randomness here since we don't have random tape for extra messages

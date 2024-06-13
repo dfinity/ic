@@ -34,7 +34,7 @@ impl Registry {
         let mutations = payload.node_ids.into_iter().map(|node_id| {
             let key = make_api_boundary_node_record_key(node_id);
             let mut api_boundary_node = self.get_api_boundary_node_or_panic(node_id);
-            api_boundary_node.version = payload.version.clone();
+            api_boundary_node.version.clone_from(&payload.version);
 
             update(key, encode_or_panic(&api_boundary_node))
         });

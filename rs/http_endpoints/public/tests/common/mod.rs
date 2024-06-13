@@ -232,10 +232,6 @@ fn basic_state_manager_mock() -> MockStateManager {
         .returning(default_read_certified_state);
 
     mock_state_manager
-        .expect_read_certified_state()
-        .returning(default_read_certified_state);
-
-    mock_state_manager
         .expect_latest_certified_height()
         .returning(default_latest_certified_height);
 
@@ -517,7 +513,7 @@ pub mod test_agent {
     };
     use reqwest::header::CONTENT_TYPE;
     use serde_cbor::Value as CBOR;
-    use std::{net::SocketAddr, time::Duration};
+    use std::time::Duration;
 
     const INGRESS_EXPIRY_DURATION: Duration = Duration::from_secs(300);
     const METHOD_NAME: &str = "test";

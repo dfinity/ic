@@ -33,17 +33,20 @@ use crate::ecdsa::payload_builder::{create_data_payload_helper, create_summary_p
 use crate::ecdsa::utils::build_signature_inputs;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::pool_reader::PoolReader;
+use ic_interfaces::crypto::{ThresholdEcdsaSigVerifier, ThresholdSchnorrSigVerifier};
 use ic_interfaces::validation::{ValidationError, ValidationResult};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
-use ic_management_canister_types::{Payload, SignWithECDSAReply};
+use ic_management_canister_types::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
 use ic_replicated_state::ReplicatedState;
 use ic_types::consensus::idkg::common::{CombinedSignature, ThresholdSigInputsRef};
+use ic_types::crypto::canister_threshold_sig::error::ThresholdSchnorrVerifyCombinedSigError;
+use ic_types::crypto::canister_threshold_sig::ThresholdSchnorrCombinedSignature;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        idkg::{self, ecdsa, EcdsaBlockReader, TranscriptRef},
+        idkg::{self, ecdsa, schnorr, EcdsaBlockReader, TranscriptRef},
         Block, BlockPayload, HasHeight,
     },
     crypto::canister_threshold_sig::{
@@ -84,8 +87,10 @@ pub(crate) enum InvalidEcdsaPayloadReason {
     UnexpectedDataPayload(Option<EcdsaPayloadError>),
     InvalidChainCacheError(InvalidChainCacheError),
     ThresholdEcdsaSigInputsError(ecdsa::ThresholdEcdsaSigInputsError),
+    ThresholdSchnorrSigInputsError(schnorr::ThresholdSchnorrSigInputsError),
     TranscriptParamsError(idkg::TranscriptParamsError),
     ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
+    ThresholdSchnorrVerifyCombinedSignatureError(ThresholdSchnorrVerifyCombinedSigError),
     IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
     IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
     // local errors
@@ -127,6 +132,12 @@ impl From<InvalidChainCacheError> for InvalidEcdsaPayloadReason {
 impl From<ecdsa::ThresholdEcdsaSigInputsError> for InvalidEcdsaPayloadReason {
     fn from(err: ecdsa::ThresholdEcdsaSigInputsError) -> Self {
         InvalidEcdsaPayloadReason::ThresholdEcdsaSigInputsError(err)
+    }
+}
+
+impl From<schnorr::ThresholdSchnorrSigInputsError> for InvalidEcdsaPayloadReason {
+    fn from(err: schnorr::ThresholdSchnorrSigInputsError) -> Self {
+        InvalidEcdsaPayloadReason::ThresholdSchnorrSigInputsError(err)
     }
 }
 
@@ -487,8 +498,8 @@ fn validate_reshare_dealings(
     let mut new_reshare_agreement = BTreeMap::new();
     for (request, dealings) in curr_payload.xnet_reshare_agreements.iter() {
         if let idkg::CompletedReshareRequest::Unreported(dealings) = &dealings {
-            if prev_payload.xnet_reshare_agreements.get(request).is_none() {
-                if prev_payload.ongoing_xnet_reshares.get(request).is_none() {
+            if !prev_payload.xnet_reshare_agreements.contains_key(request) {
+                if !prev_payload.ongoing_xnet_reshares.contains_key(request) {
                     return Err(XNetReshareAgreementWithoutRequest(request.clone()).into());
                 }
                 new_reshare_agreement.insert(request.clone(), dealings);
@@ -497,7 +508,7 @@ fn validate_reshare_dealings(
     }
     let mut new_dealings = BTreeMap::new();
     for (request, config) in prev_payload.ongoing_xnet_reshares.iter() {
-        if curr_payload.ongoing_xnet_reshares.get(request).is_none() {
+        if !curr_payload.ongoing_xnet_reshares.contains_key(request) {
             if let Some(response) = new_reshare_agreement.get(request) {
                 use ic_management_canister_types::ComputeInitialEcdsaDealingsResponse;
                 if let ic_types::messages::Payload::Data(data) = &response.payload {
@@ -548,7 +559,7 @@ fn validate_new_signature_agreements(
     for (random_id, completed) in curr_payload.signature_agreements.iter() {
         if let idkg::CompletedSignature::Unreported(response) = completed {
             if let ic_types::messages::Payload::Data(data) = &response.payload {
-                if prev_payload.signature_agreements.get(random_id).is_some() {
+                if prev_payload.signature_agreements.contains_key(random_id) {
                     return Err(
                         InvalidEcdsaPayloadReason::NewSignatureUnexpected(*random_id).into(),
                     );
@@ -570,16 +581,25 @@ fn validate_new_signature_agreements(
                         let signature = ThresholdEcdsaCombinedSignature {
                             signature: reply.signature,
                         };
-                        crypto
-                            .verify_combined_sig(&input, &signature)
+                        ThresholdEcdsaSigVerifier::verify_combined_sig(crypto, &input, &signature)
                             .map_err(ThresholdEcdsaVerifyCombinedSignatureError)?;
                         new_signatures.insert(*random_id, CombinedSignature::Ecdsa(signature));
                     }
-                    ThresholdSigInputsRef::Schnorr(_input_ref) => {
-                        // TODO(CON-1262): Verifiy Schnorr signatures
-                        return Err(
-                            InvalidEcdsaPayloadReason::NewSignatureUnexpected(*random_id).into(),
-                        );
+                    ThresholdSigInputsRef::Schnorr(input_ref) => {
+                        let input = input_ref
+                            .translate(block_reader)
+                            .map_err(InvalidEcdsaPayloadReason::from)?;
+                        let reply = SignWithSchnorrReply::decode(data).map_err(|err| {
+                            InvalidEcdsaPayloadReason::DecodingError(format!("{:?}", err))
+                        })?;
+                        let signature = ThresholdSchnorrCombinedSignature {
+                            signature: reply.signature,
+                        };
+                        ThresholdSchnorrSigVerifier::verify_combined_sig(
+                            crypto, &input, &signature,
+                        )
+                        .map_err(ThresholdSchnorrVerifyCombinedSignatureError)?;
+                        new_signatures.insert(*random_id, CombinedSignature::Schnorr(signature));
                     }
                 }
             }

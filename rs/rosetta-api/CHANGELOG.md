@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replacing internal crypto library `ic_canister_client_sender` with `ic_crypto_ed25519` 
   and `ic_crypto_ecdsa_secp256k1`.
 - Return the correct `signature_type` in the `payloads` returned by the `construction_payloads` endpoint.
+- Enable store-location option to be set by a user
 ### Added
 - Add `timestamp` to the `blocks` table
 - Add support for `list_neurons`. Let's a user query a list of all they neurons a user has created.

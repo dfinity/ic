@@ -272,7 +272,7 @@ async fn get_all_neurons(env: &TestEnv) -> Vec<ic_sns_governance::pb::v1::Neuron
                 .neurons;
             match neurons_page.last() {
                 Some(last_neuron) => {
-                    start_page_at = last_neuron.id.clone();
+                    start_page_at.clone_from(&last_neuron.id);
                 }
                 None => {
                     assert!(neurons_page.is_empty());

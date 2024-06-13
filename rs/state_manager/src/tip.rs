@@ -119,6 +119,13 @@ pub(crate) enum TipRequest {
         states: Arc<parking_lot::RwLock<SharedState>>,
         persist_metadata_guard: Arc<Mutex<()>>,
     },
+    /// Validate the checkpointed state is valid and identical to the execution state.
+    /// Crash if diverges.
+    #[cfg(debug_assertions)]
+    ValidateReplicatedState {
+        checkpointed_state: Box<ReplicatedState>,
+        execution_state: Box<ReplicatedState>,
+    },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
     Wait {
@@ -429,6 +436,24 @@ pub(crate) fn spawn_tip_thread(
                             );
                             have_latest_manifest = true;
                         }
+
+                        #[cfg(debug_assertions)]
+                        TipRequest::ValidateReplicatedState {
+                            checkpointed_state,
+                            execution_state,
+                        } => {
+                            let mut checkpointed_state = *checkpointed_state;
+                            let mut execution_state = *execution_state;
+                            execution_state.metadata.expected_compiled_wasms = BTreeSet::new();
+                            checkpointed_state.metadata.expected_compiled_wasms = BTreeSet::new();
+                            debug_assert!(
+                                checkpointed_state == execution_state,
+                                "Divergence: checkpointed {:#?}, \nexecution: {:#?}",
+                                checkpointed_state,
+                                execution_state,
+                            );
+                        }
+
                         TipRequest::Noop => {}
                     }
                 }

@@ -180,8 +180,8 @@ fn start_server_initialization(
         metrics
             .health_status_transitions_total
             .with_label_values(&[
-                &health_status.load().as_ref(),
-                &ReplicaHealthStatus::WaitingForCertifiedState.as_ref(),
+                (health_status.load().as_ref()),
+                (ReplicaHealthStatus::WaitingForCertifiedState.as_ref()),
             ])
             .inc();
         health_status.store(ReplicaHealthStatus::WaitingForCertifiedState);
@@ -213,8 +213,8 @@ fn start_server_initialization(
         metrics
             .health_status_transitions_total
             .with_label_values(&[
-                &health_status.load().as_ref(),
-                &ReplicaHealthStatus::Healthy.as_ref(),
+                (health_status.load().as_ref()),
+                (ReplicaHealthStatus::Healthy.as_ref()),
             ])
             .inc();
         health_status.store(ReplicaHealthStatus::Healthy);

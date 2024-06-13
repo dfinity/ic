@@ -27,7 +27,6 @@ serde_json = { workspace = true }
 serde_bytes = { workspace = true }
 ic-cdk = "0.13.2"
 base64 = "^0.13.1"
-async-trait = { workspace = true }
 hex = { workspace = true }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }

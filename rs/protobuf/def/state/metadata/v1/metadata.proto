@@ -27,21 +27,14 @@ message SubnetTopology {
   bytes public_key = 2;
   registry.subnet.v1.SubnetType subnet_type = 3;
   registry.subnet.v1.SubnetFeatures subnet_features = 4;
-  // TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
-  repeated registry.crypto.v1.EcdsaKeyId ecdsa_keys_held = 5;
+  reserved 5;
+  reserved "ecdsa_keys_held";
   repeated registry.crypto.v1.MasterPublicKeyId idkg_keys_held = 6;
 }
 
 message SubnetsEntry {
   types.v1.SubnetId subnet_id = 1;
   SubnetTopology subnet_topology = 2;
-}
-
-// TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
-message EcdsaKeyEntry {
-  reserved 1;
-  registry.crypto.v1.EcdsaKeyId key_id = 3;
-  repeated types.v1.SubnetId subnet_ids = 2;
 }
 
 message IDkgKeyEntry {
@@ -54,8 +47,8 @@ message NetworkTopology {
   registry.routing_table.v1.RoutingTable routing_table = 2;
   types.v1.SubnetId nns_subnet_id = 3;
   registry.routing_table.v1.CanisterMigrations canister_migrations = 4;
-  // TODO(EXC-1621): Remove after fully migrating to idkg_signing_subnets.
-  repeated EcdsaKeyEntry ecdsa_signing_subnets = 5;
+  reserved 5;
+  reserved "ecdsa_signing_subnets";
   repeated types.v1.CanisterId bitcoin_testnet_canister_ids = 6;
   repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
   repeated IDkgKeyEntry idkg_signing_subnets = 8;

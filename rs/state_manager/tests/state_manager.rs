@@ -2183,7 +2183,9 @@ fn can_do_simple_state_sync_transfer() {
 
             let mut tip = dst_state_manager.take_tip().1;
             // Because `take_tip()` modifies the `prev_state_hash`, we change it back to compare the rest of state.
-            tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
+            tip.metadata
+                .prev_state_hash
+                .clone_from(&state.metadata.prev_state_hash);
             assert_eq!(*state.as_ref(), tip);
             assert_eq!(vec![height(1)], heights_to_certify(&*dst_state_manager));
 
@@ -2314,7 +2316,9 @@ fn test_start_and_cancel_state_sync() {
 
             let mut tip = dst_state_manager.take_tip().1;
             // Because `take_tip()` modifies the `prev_state_hash`, we change it back to compare the rest of state.
-            tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
+            tip.metadata
+                .prev_state_hash
+                .clone_from(&state.metadata.prev_state_hash);
             assert_eq!(*state.as_ref(), tip);
             assert_eq!(
                 vec![height(1), height(3)],
@@ -3075,7 +3079,9 @@ fn can_state_sync_based_on_old_checkpoint() {
             let mut tip = dst_state_manager.take_tip().1;
             let state = expected_state.take();
             // Because `take_tip()` modifies the `prev_state_hash`, we change it back to compare the rest of state.
-            tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
+            tip.metadata
+                .prev_state_hash
+                .clone_from(&state.metadata.prev_state_hash);
             assert_eq!(tip, *state.as_ref());
 
             assert_no_remaining_chunks(dst_metrics);
@@ -3286,7 +3292,9 @@ fn can_recover_from_corruption_on_state_sync() {
             let mut tip = dst_state_manager.take_tip().1;
             let state = expected_state.take();
             // Because `take_tip()` modifies the `prev_state_hash`, we change it back to compare the rest of state.
-            tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
+            tip.metadata
+                .prev_state_hash
+                .clone_from(&state.metadata.prev_state_hash);
             assert_eq!(tip, *state.as_ref());
 
             assert_no_remaining_chunks(dst_metrics);
@@ -5120,6 +5128,7 @@ fn can_reset_stable_memory() {
 #[test]
 fn can_reset_wasm_chunk_store() {
     state_manager_test(|metrics, state_manager| {
+        use ic_replicated_state::canister_state::system_state::wasm_chunk_store::DEFAULT_MAX_SIZE;
         let (_height, mut state) = state_manager.take_tip();
 
         // One canister with some data.
@@ -5154,8 +5163,9 @@ fn can_reset_wasm_chunk_store() {
 
         // Wipe data and write different data.
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
-        // Chunk size does not matter for this test, as we interact with the `PageMap` directly.
-        canister_state.system_state.wasm_chunk_store = WasmChunkStore::new_for_testing(42.into());
+        // Chunk size must be default because we cannot deserialize the value properly.
+        canister_state.system_state.wasm_chunk_store =
+            WasmChunkStore::new_for_testing(DEFAULT_MAX_SIZE);
         canister_state
             .system_state
             .wasm_chunk_store
@@ -5216,7 +5226,8 @@ fn can_reset_wasm_chunk_store() {
         );
 
         // Wipe data completely.
-        canister_state.system_state.wasm_chunk_store = WasmChunkStore::new_for_testing(42.into());
+        canister_state.system_state.wasm_chunk_store =
+            WasmChunkStore::new_for_testing(DEFAULT_MAX_SIZE);
 
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
 
@@ -5480,7 +5491,10 @@ fn can_recover_ingress_history() {
 
         state_manager.commit_and_certify(state.clone(), height(2), CertificationScope::Full);
         let (_height, state2) = state_manager.take_tip();
-        state.metadata.prev_state_hash = state2.metadata.prev_state_hash.clone();
+        state
+            .metadata
+            .prev_state_hash
+            .clone_from(&state2.metadata.prev_state_hash);
         assert_eq!(state2, state);
     });
 }

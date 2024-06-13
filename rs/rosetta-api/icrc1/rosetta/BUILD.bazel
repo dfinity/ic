@@ -258,8 +258,6 @@ container_image(
     directory = "/home/ic_icrc_rosetta",
     entrypoint = [
         "/home/ic_icrc_rosetta/ic-icrc-rosetta-bin",
-        "--store-file",
-        "/data/db.sqlite",
     ],
     files = [
         ":ic-icrc-rosetta-bin",
