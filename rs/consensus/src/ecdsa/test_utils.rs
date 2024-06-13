@@ -39,11 +39,12 @@ use ic_types::consensus::idkg::{
     schnorr::{PreSignatureTranscriptRef, ThresholdSchnorrSigInputsRef},
     EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript,
     EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaSigShare,
-    HasMasterPublicKeyId, IDkgReshareRequest, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
+    IDkgReshareRequest, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
     IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript, PreSigId, RequestId,
     ReshareOfMaskedParams, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
     UnmaskedTranscript,
 };
+use ic_types::consensus::idkg::{HasMasterPublicKeyId, SchnorrSigShare};
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin, IDkgOpening,
     IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
@@ -51,7 +52,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 };
 use ic_types::crypto::canister_threshold_sig::{
     ExtendedDerivationPath, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
-    ThresholdSchnorrSigInputs,
+    ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::messages::CallbackId;
@@ -1134,12 +1135,22 @@ pub(crate) fn create_sig_inputs_with_height(
         algorithm_id: algorithm_for_key_id(&key_id),
         internal_transcript_raw: vec![],
     };
+    create_sig_inputs_with_args(caller, &receivers, key_unmasked, height, &key_id)
+}
+
+pub(crate) fn create_sig_inputs_with_args(
+    caller: u8,
+    receivers: &BTreeSet<NodeId>,
+    key_unmasked: IDkgTranscript,
+    height: Height,
+    key_id: &MasterPublicKeyId,
+) -> TestSigInputs {
     match key_id {
         MasterPublicKeyId::Ecdsa(key_id) => {
-            create_ecdsa_sig_inputs_with_args(caller, &receivers, key_unmasked, height, key_id)
+            create_ecdsa_sig_inputs_with_args(caller, receivers, key_unmasked, height, key_id)
         }
         MasterPublicKeyId::Schnorr(key_id) => {
-            create_schnorr_sig_inputs_with_args(caller, &receivers, key_unmasked, height, key_id)
+            create_schnorr_sig_inputs_with_args(caller, receivers, key_unmasked, height, key_id)
         }
     }
 }
@@ -1150,7 +1161,7 @@ pub(crate) fn create_ecdsa_sig_inputs_with_args(
     receivers: &BTreeSet<NodeId>,
     key_unmasked: IDkgTranscript,
     height: Height,
-    key_id: EcdsaKeyId,
+    key_id: &EcdsaKeyId,
 ) -> TestSigInputs {
     let transcript_id = |offset| {
         let val = caller as u64;
@@ -1237,7 +1248,7 @@ pub(crate) fn create_ecdsa_sig_inputs_with_args(
     );
 
     let presig_quadruple_ref = PreSignatureQuadrupleRef::new(
-        key_id,
+        key_id.clone(),
         kappa_unmasked_ref,
         lambda_masked_ref,
         kappa_unmasked_times_lambda_masked_ref,
@@ -1266,7 +1277,7 @@ pub(crate) fn create_schnorr_sig_inputs_with_args(
     receivers: &BTreeSet<NodeId>,
     key_unmasked: IDkgTranscript,
     height: Height,
-    key_id: SchnorrKeyId,
+    key_id: &SchnorrKeyId,
 ) -> TestSigInputs {
     let transcript_id = |offset| {
         let val = caller as u64;
@@ -1301,7 +1312,7 @@ pub(crate) fn create_schnorr_sig_inputs_with_args(
     idkg_transcripts.insert(*key_unmasked_ref.as_ref(), key_unmasked);
 
     let presig_transcript_ref =
-        PreSignatureTranscriptRef::new(key_id, blinder_unmasked_ref, key_unmasked_ref);
+        PreSignatureTranscriptRef::new(key_id.clone(), blinder_unmasked_ref, key_unmasked_ref);
     let sig_inputs_ref = ThresholdSchnorrSigInputsRef::new(
         ExtendedDerivationPath {
             caller: PrincipalId::try_from(&vec![caller]).unwrap(),
@@ -1325,22 +1336,36 @@ pub(crate) fn create_sig_inputs(caller: u8, key_id: &MasterPublicKeyId) -> TestS
 
 // Creates a test signature share
 pub(crate) fn create_signature_share_with_nonce(
+    key_id: &MasterPublicKeyId,
     signer_id: NodeId,
     request_id: RequestId,
     nonce: u8,
-) -> EcdsaSigShare {
-    EcdsaSigShare {
-        signer_id,
-        request_id,
-        share: ThresholdEcdsaSigShare {
-            sig_share_raw: vec![nonce],
-        },
+) -> EcdsaMessage {
+    match key_id {
+        MasterPublicKeyId::Ecdsa(_) => EcdsaMessage::EcdsaSigShare(EcdsaSigShare {
+            signer_id,
+            request_id,
+            share: ThresholdEcdsaSigShare {
+                sig_share_raw: vec![nonce],
+            },
+        }),
+        MasterPublicKeyId::Schnorr(_) => EcdsaMessage::SchnorrSigShare(SchnorrSigShare {
+            signer_id,
+            request_id,
+            share: ThresholdSchnorrSigShare {
+                sig_share_raw: vec![nonce],
+            },
+        }),
     }
 }
 
 // Creates a test signature share
-pub(crate) fn create_signature_share(signer_id: NodeId, request_id: RequestId) -> EcdsaSigShare {
-    create_signature_share_with_nonce(signer_id, request_id, 0)
+pub(crate) fn create_signature_share(
+    key_id: &MasterPublicKeyId,
+    signer_id: NodeId,
+    request_id: RequestId,
+) -> EcdsaMessage {
+    create_signature_share_with_nonce(key_id, signer_id, request_id, 0)
 }
 
 pub(crate) fn create_complaint_with_nonce(
@@ -1504,6 +1529,14 @@ pub(crate) fn is_signature_share_added_to_validated(
                 return true;
             }
         }
+        if let EcdsaChangeAction::AddToValidated(EcdsaMessage::SchnorrSigShare(share)) = action {
+            if share.request_id.height == requested_height
+                && share.request_id == *request_id
+                && share.signer_id == NODE_1
+            {
+                return true;
+            }
+        }
     }
     false
 }
@@ -1592,6 +1625,15 @@ pub(crate) fn empty_ecdsa_payload_with_key_ids(
             })
             .collect(),
     )
+}
+
+pub(crate) fn key_id_with_name(key_id: &MasterPublicKeyId, name: &str) -> MasterPublicKeyId {
+    let mut key_id = key_id.clone();
+    match key_id {
+        MasterPublicKeyId::Ecdsa(ref mut key_id) => key_id.name = name.into(),
+        MasterPublicKeyId::Schnorr(ref mut key_id) => key_id.name = name.into(),
+    }
+    key_id
 }
 
 pub(crate) fn fake_ecdsa_key_id() -> EcdsaKeyId {

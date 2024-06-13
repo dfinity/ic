@@ -9,6 +9,6 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { workspace = true }
 ic-test-utilities-execution-environment = { path = "../../../test_utilities/execution_environment" }
 ic-types = { path = "../../../types/types" }

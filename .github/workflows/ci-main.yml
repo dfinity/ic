@@ -36,7 +36,7 @@ jobs:
       labels: bazel-runner-large
       group: ln1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
+      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     env:
@@ -47,8 +47,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -62,11 +60,7 @@ jobs:
       - name: Docker RO SA login
         id: docker-ro-login
         shell: bash
-        run: |
-          docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          if which docker-bin 2>/dev/null; then
-              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          fi
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -96,7 +90,7 @@ jobs:
       labels: bazel-runner-large
       group: ln1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
+      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     name: Bazel Build All Config Check
@@ -106,8 +100,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -121,11 +113,7 @@ jobs:
       - name: Docker RO SA login
         id: docker-ro-login
         shell: bash
-        run: |
-          docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          if which docker-bin 2>/dev/null; then
-              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          fi
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
@@ -150,8 +138,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -170,14 +156,14 @@ jobs:
               - '**/*.lock'
               - '**/*.rs'
               - '**/*.toml'
+      - name: Set PATH
+        run: |
+          echo "/usr/local/bin" >> $GITHUB_PATH
+          echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
       - name: Docker RO SA login
         id: docker-ro-login
         shell: bash
-        run: |
-          docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          if which docker-bin 2>/dev/null; then
-              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          fi
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
         if: steps.filter.outputs.bazel-test-darwin-x86-64 != 'false'
@@ -195,14 +181,14 @@ jobs:
       - name: Purge Bazel Output
         shell: bash
         run: |
-          sudo rm -rf /var/tmp/bazel-output//${ROOT_PIPELINE_ID}
+          sudo rm -rf /private/var/tmp/bazel-output//${ROOT_PIPELINE_ID}
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     runs-on:
       labels: dind-runner-large
       group: ln1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
+      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
     timeout-minutes: 60
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -211,8 +197,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -234,7 +218,7 @@ jobs:
       labels: dind-runner-large
       group: ln1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
+      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
     timeout-minutes: 60
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -243,8 +227,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -271,8 +253,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -298,7 +278,7 @@ jobs:
       labels: bazel-runner-large
       group: ln1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
+      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' && github.event_name != 'merge_group' }}
     steps:
@@ -307,8 +287,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -322,11 +300,7 @@ jobs:
       - name: Docker RO SA login
         id: docker-ro-login
         shell: bash
-        run: |
-          docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          if which docker-bin 2>/dev/null; then
-              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
-          fi
+        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
       - name: Run Build IC
         id: build-ic
         shell: bash
@@ -384,8 +358,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -416,7 +388,7 @@ jobs:
       labels: dind-runner-large
       group: ln1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
+      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
     timeout-minutes: 60
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -425,8 +397,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -460,7 +430,7 @@ jobs:
       labels: dind-runner-large
       group: ln1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:eb85228ebf7511e2589f86788345eb3d1c8144914a8a2fa771d4347ddacac413
+      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
     timeout-minutes: 60
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -469,8 +439,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout

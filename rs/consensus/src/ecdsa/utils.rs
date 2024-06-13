@@ -323,9 +323,10 @@ pub(crate) fn inspect_chain_key_initializations(
 ) -> Result<BTreeMap<MasterPublicKeyId, InitialIDkgDealings>, String> {
     let mut initial_dealings_per_key_id = BTreeMap::new();
 
-    // TODO(CON-1053): remove this check
-    if ecdsa_initializations.len() + chain_key_initializations.len() > 1 {
-        return Err("More than one chain_key_initialization is not supported".to_string());
+    if !ecdsa_initializations.is_empty() && !chain_key_initializations.is_empty() {
+        return Err("`chain_key_initialization` and `ecdsa_initializations` \
+            cannot be present at the same time"
+            .to_string());
     }
 
     // TODO(CON-1332): Do not panic if fields are missing
@@ -405,9 +406,8 @@ pub(crate) fn get_chain_key_config_if_enabled(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     registry_client: &dyn RegistryClient,
-    log: &ReplicaLogger,
 ) -> Result<Option<ChainKeyConfig>, RegistryClientError> {
-    if let Some(mut chain_key_config) =
+    if let Some(chain_key_config) =
         registry_client.get_chain_key_config(subnet_id, registry_version)?
     {
         // A key that has `presignatures_to_create_in_advance` set to 0 is not active
@@ -417,19 +417,10 @@ pub(crate) fn get_chain_key_config_if_enabled(
             .filter(|key_config| key_config.pre_signatures_to_create_in_advance != 0)
             .count();
 
-        match num_active_key_ids {
-            // This means it is not enabled
-            0 => Ok(None),
-            1 => Ok(Some(chain_key_config)),
-            _ => {
-                // TODO(CON-1053): remove this check
-                warn!(
-                        log,
-                        "Wrong chain_key_config: multiple key_ids is not yet supported. Pick the first one."
-                    );
-                chain_key_config.key_configs = vec![chain_key_config.key_configs[0].clone()];
-                Ok(Some(chain_key_config))
-            }
+        if num_active_key_ids == 0 {
+            Ok(None)
+        } else {
+            Ok(Some(chain_key_config))
         }
     } else {
         Ok(None)
@@ -553,7 +544,8 @@ mod tests {
     use super::*;
     use crate::ecdsa::test_utils::{
         create_available_pre_signature_with_key_transcript, fake_ecdsa_key_id,
-        fake_ecdsa_master_public_key_id, set_up_ecdsa_payload, EcdsaPayloadTestHelper,
+        fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+        set_up_ecdsa_payload, EcdsaPayloadTestHelper,
     };
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{dependencies, Dependencies};
@@ -562,7 +554,6 @@ mod tests {
         IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types::{EcdsaKeyId, SchnorrKeyId};
     use ic_protobuf::registry::subnet::v1::EcdsaInitialization;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -576,7 +567,7 @@ mod tests {
             idkg::{EcdsaPayload, UnmaskedTranscript},
             BlockPayload, Payload, SummaryPayload,
         },
-        crypto::{AlgorithmId, CryptoHashOf},
+        crypto::CryptoHashOf,
         time::UNIX_EPOCH,
     };
     use pb::ChainKeyInitialization;
@@ -638,6 +629,10 @@ mod tests {
             ic_types::crypto::AlgorithmId::ThresholdEcdsaSecp256k1,
             &mut rng,
         );
+        let initial_dealings_2 = dummy_initial_idkg_dealing_for_tests(
+            ic_types::crypto::AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         let master_key_id = MasterPublicKeyId::Ecdsa(key_id.clone());
         let key_id_2 = EcdsaKeyId::from_str("Secp256k1:some_key_2").unwrap();
@@ -649,7 +644,7 @@ mod tests {
         };
         let ecdsa_init_2 = EcdsaInitialization {
             key_id: Some((&key_id_2).into()),
-            dealings: Some((&initial_dealings).into()),
+            dealings: Some((&initial_dealings_2).into()),
         };
         let chain_key_init = ChainKeyInitialization {
             key_id: Some((&master_key_id).into()),
@@ -657,23 +652,35 @@ mod tests {
         };
         let chain_key_init_2 = ChainKeyInitialization {
             key_id: Some((&master_key_id_2).into()),
-            dealings: Some((&initial_dealings).into()),
+            dealings: Some((&initial_dealings_2).into()),
         };
 
-        inspect_chain_key_initializations(&[ecdsa_init.clone(), ecdsa_init_2.clone()], &[])
-            .expect_err("Should fail because of the multiple keys");
+        let init =
+            inspect_chain_key_initializations(&[ecdsa_init.clone(), ecdsa_init_2.clone()], &[])
+                .expect("Should successfully inspect initializations");
+        assert_eq!(
+            init,
+            BTreeMap::from([
+                (master_key_id.clone(), initial_dealings.clone()),
+                (master_key_id_2.clone(), initial_dealings_2.clone()),
+            ])
+        );
 
-        inspect_chain_key_initializations(&[ecdsa_init.clone(), ecdsa_init.clone()], &[])
-            .expect_err("Should fail because of the multiple keys");
+        let init = inspect_chain_key_initializations(
+            &[],
+            &[chain_key_init.clone(), chain_key_init_2.clone()],
+        )
+        .expect("Should successfully inspect initializations");
+        assert_eq!(
+            init,
+            BTreeMap::from([
+                (master_key_id.clone(), initial_dealings.clone()),
+                (master_key_id_2.clone(), initial_dealings_2.clone()),
+            ])
+        );
 
-        inspect_chain_key_initializations(&[], &[chain_key_init.clone(), chain_key_init_2.clone()])
-            .expect_err("Should fail because of the multiple keys");
-
-        inspect_chain_key_initializations(&[], &[chain_key_init.clone(), chain_key_init.clone()])
-            .expect_err("Should fail because of the multiple keys");
-
-        inspect_chain_key_initializations(&[ecdsa_init.clone()], &[chain_key_init.clone()])
-            .expect_err("Should fail because of the multiple keys");
+        inspect_chain_key_initializations(&[ecdsa_init.clone()], &[chain_key_init_2.clone()])
+            .expect_err("Should fail when both arguments are non-empty");
     }
 
     fn set_up_get_chain_key_config_test(
@@ -708,13 +715,8 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&chain_key_config_with_no_keys, pool_config);
 
-            let config = get_chain_key_config_if_enabled(
-                subnet_id,
-                version,
-                registry.as_ref(),
-                &no_op_logger(),
-            )
-            .expect("Should successfully get the config");
+            let config = get_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+                .expect("Should successfully get the config");
 
             assert!(config.is_none());
         })
@@ -737,13 +739,8 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&chain_key_config_with_one_key, pool_config);
 
-            let config = get_chain_key_config_if_enabled(
-                subnet_id,
-                version,
-                registry.as_ref(),
-                &no_op_logger(),
-            )
-            .expect("Should successfully get the config");
+            let config = get_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+                .expect("Should successfully get the config");
 
             assert_eq!(config, Some(chain_key_config_with_one_key));
         })
@@ -768,25 +765,20 @@ mod tests {
             };
 
             let chain_key_config_with_two_keys = ChainKeyConfig {
-                key_configs: vec![key_config.clone(), key_config_2],
+                key_configs: vec![key_config.clone(), key_config_2.clone()],
                 ..ChainKeyConfig::default()
             };
 
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&chain_key_config_with_two_keys, pool_config);
 
-            let config = get_chain_key_config_if_enabled(
-                subnet_id,
-                version,
-                registry.as_ref(),
-                &no_op_logger(),
-            )
-            .expect("Should successfully get the config");
+            let config = get_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+                .expect("Should successfully get the config");
 
             assert_eq!(
                 config,
                 Some(ChainKeyConfig {
-                    key_configs: vec![key_config],
+                    key_configs: vec![key_config, key_config_2],
                     ..chain_key_config_with_two_keys
                 })
             );
@@ -809,29 +801,24 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
 
-            let config = get_chain_key_config_if_enabled(
-                subnet_id,
-                version,
-                registry.as_ref(),
-                &no_op_logger(),
-            )
-            .expect("Should successfully get the config");
+            let config = get_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
+                .expect("Should successfully get the config");
 
             assert!(config.is_none());
         })
     }
 
-    fn add_available_quadruples_with_key_transcript(
+    fn add_available_pre_signatures_with_key_transcript(
         ecdsa_payload: &mut EcdsaPayload,
         key_transcript: UnmaskedTranscript,
-        key_id: &EcdsaKeyId,
+        key_id: &MasterPublicKeyId,
     ) -> Vec<PreSigId> {
         let mut pre_sig_ids = vec![];
         for i in 0..10 {
             let id = create_available_pre_signature_with_key_transcript(
                 ecdsa_payload,
                 i,
-                MasterPublicKeyId::Ecdsa(key_id.clone()),
+                key_id.clone(),
                 Some(key_transcript),
             );
             pre_sig_ids.push(id);
@@ -860,14 +847,20 @@ mod tests {
     }
 
     #[test]
-    fn test_get_pre_signature_ids_to_deliver() {
+    fn test_get_pre_signature_ids_to_deliver_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_get_pre_signature_ids_to_deliver(key_id);
+        }
+    }
+
+    fn test_get_pre_signature_ids_to_deliver(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        let key_id = fake_ecdsa_key_id();
         let (mut ecdsa_payload, env, _) = set_up_ecdsa_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 8,
-            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
+            vec![key_id.clone()],
             /*should_create_key_transcript=*/ true,
         );
         let current_key_transcript = ecdsa_payload
@@ -876,7 +869,7 @@ mod tests {
             .clone()
             .unwrap();
 
-        let pre_signature_ids_to_be_delivered = add_available_quadruples_with_key_transcript(
+        let pre_signature_ids_to_be_delivered = add_available_pre_signatures_with_key_transcript(
             &mut ecdsa_payload,
             current_key_transcript.unmasked_transcript(),
             &key_id,
@@ -891,23 +884,22 @@ mod tests {
             &env,
             &dealers,
             &receivers,
-            AlgorithmId::ThresholdEcdsaSecp256k1,
+            algorithm_for_key_id(&key_id),
             &mut rng,
         );
         let old_key_transcript =
             UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
-        let pre_signature_ids_not_to_be_delivered = add_available_quadruples_with_key_transcript(
-            &mut ecdsa_payload,
-            old_key_transcript,
-            &key_id,
-        );
+        let pre_signature_ids_not_to_be_delivered =
+            add_available_pre_signatures_with_key_transcript(
+                &mut ecdsa_payload,
+                old_key_transcript,
+                &key_id,
+            );
 
         let block = make_block(Some(ecdsa_payload));
         let mut delivered_map = get_pre_signature_ids_to_deliver(&block);
         assert_eq!(delivered_map.len(), 1);
-        let delivered_ids = delivered_map
-            .remove(&MasterPublicKeyId::Ecdsa(key_id))
-            .unwrap();
+        let delivered_ids = delivered_map.remove(&key_id).unwrap();
 
         assert!(!pre_signature_ids_not_to_be_delivered
             .into_iter()
@@ -927,14 +919,20 @@ mod tests {
     }
 
     #[test]
-    fn test_block_without_key_should_not_deliver_quadruples() {
+    fn test_block_without_key_should_not_deliver_pre_signatures_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_block_without_key_should_not_deliver_pre_signatures(key_id);
+        }
+    }
+
+    fn test_block_without_key_should_not_deliver_pre_signatures(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        let key_id = fake_ecdsa_key_id();
         let (mut ecdsa_payload, env, _) = set_up_ecdsa_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 8,
-            vec![MasterPublicKeyId::Ecdsa(key_id.clone())],
+            vec![key_id.clone()],
             /*should_create_key_transcript=*/ false,
         );
 
@@ -946,12 +944,12 @@ mod tests {
             &env,
             &dealers,
             &receivers,
-            AlgorithmId::ThresholdEcdsaSecp256k1,
+            algorithm_for_key_id(&key_id),
             &mut rng,
         );
         let key_transcript_ref =
             UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
-        add_available_quadruples_with_key_transcript(
+        add_available_pre_signatures_with_key_transcript(
             &mut ecdsa_payload,
             key_transcript_ref,
             &key_id,
@@ -960,9 +958,6 @@ mod tests {
         let block = make_block(Some(ecdsa_payload));
         let delivered_ids = get_pre_signature_ids_to_deliver(&block);
 
-        assert_eq!(
-            delivered_ids.get(&MasterPublicKeyId::Ecdsa(key_id)),
-            Some(&BTreeSet::default())
-        );
+        assert_eq!(delivered_ids.get(&key_id), Some(&BTreeSet::default()));
     }
 }

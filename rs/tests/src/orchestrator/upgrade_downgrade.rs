@@ -39,11 +39,13 @@ use crate::{
 use candid::Principal;
 use futures::future::join_all;
 use ic_agent::Agent;
+use ic_management_canister_types::EcdsaKeyId;
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, SubnetId};
 use k256::ecdsa::VerifyingKey;
 use slog::{info, Logger};
+use std::collections::BTreeMap;
 use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 
@@ -111,7 +113,13 @@ pub fn upgrade_downgrade_app_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
     let branch_version = bless_branch_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
-    get_ecdsa_canister_and_key(&env, &nns_node, &agent, SubnetType::Application);
+    get_ecdsa_canister_and_key(
+        &env,
+        &nns_node,
+        &agent,
+        SubnetType::Application,
+        vec![make_key(KEY_ID1)],
+    );
 
     let logger = env.logger();
     let (app_subnet, app_node) = get_app_subnet_and_node(&env.topology_snapshot());
@@ -170,7 +178,14 @@ pub fn downgrade_app_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
     let mainnet_version = bless_mainnet_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
-    let ecdsa_state = get_ecdsa_canister_and_key(&env, &nns_node, &agent, SubnetType::Application);
+    let ecdsa_state = get_ecdsa_canister_and_key(
+        &env,
+        &nns_node,
+        &agent,
+        SubnetType::Application,
+        vec![make_key(KEY_ID1)],
+    );
+
     upgrade(
         &env,
         &nns_node,
@@ -185,7 +200,14 @@ pub fn upgrade_app_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
     let branch_version = bless_branch_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
-    let ecdsa_state = get_ecdsa_canister_and_key(&env, &nns_node, &agent, SubnetType::Application);
+    let ecdsa_state = get_ecdsa_canister_and_key(
+        &env,
+        &nns_node,
+        &agent,
+        SubnetType::Application,
+        vec![make_key(KEY_ID1)],
+    );
+
     upgrade(
         &env,
         &nns_node,
@@ -273,7 +295,8 @@ fn get_ecdsa_canister_and_key<'a>(
     nns_node: &IcNodeSnapshot,
     agent: &'a Agent,
     subnet_type: SubnetType,
-) -> (MessageCanister<'a>, VerifyingKey) {
+    key_ids: Vec<EcdsaKeyId>,
+) -> (MessageCanister<'a>, BTreeMap<EcdsaKeyId, VerifyingKey>) {
     let logger = env.logger();
     let nns_canister = block_on(MessageCanister::new(
         agent,
@@ -286,9 +309,14 @@ fn get_ecdsa_canister_and_key<'a>(
         .unwrap()
         .subnet_id;
     info!(logger, "Enabling ECDSA signing on {subnet_id}.");
-    let key = enable_ecdsa_signing_on_subnet(nns_node, &nns_canister, subnet_id, &logger);
-    run_ecdsa_signature_test(&nns_canister, &logger, key);
-    (nns_canister, key)
+    let public_keys =
+        enable_ecdsa_signing_on_subnet(nns_node, &nns_canister, subnet_id, key_ids, &logger);
+
+    for (key_id, public_key) in &public_keys {
+        run_ecdsa_signature_test(&nns_canister, &logger, key_id.clone(), *public_key);
+    }
+
+    (nns_canister, public_keys)
 }
 
 // Upgrades a subnet with one faulty node.
@@ -298,7 +326,7 @@ fn upgrade(
     nns_node: &IcNodeSnapshot,
     upgrade_version: &str,
     subnet_type: SubnetType,
-    ecdsa_canister_key: Option<&(MessageCanister, VerifyingKey)>,
+    ecdsa_canister_key: Option<&(MessageCanister, BTreeMap<EcdsaKeyId, VerifyingKey>)>,
 ) -> (IcNodeSnapshot, Principal, String) {
     let logger = env.logger();
     let (subnet_id, subnet_node, faulty_node, redundant_nodes) =
@@ -393,8 +421,10 @@ fn upgrade(
     ));
     info!(logger, "Could store and read message '{}'", msg_2);
 
-    if let Some((canister, key)) = ecdsa_canister_key {
-        run_ecdsa_signature_test(canister, &logger, *key);
+    if let Some((canister, public_keys)) = ecdsa_canister_key {
+        for (key_id, public_key) in public_keys {
+            run_ecdsa_signature_test(canister, &logger, key_id.clone(), *public_key);
+        }
     }
 
     // Start redundant nodes.

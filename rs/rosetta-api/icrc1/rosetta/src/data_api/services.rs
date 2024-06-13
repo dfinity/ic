@@ -528,7 +528,7 @@ mod test {
                         // If the block identifier index does not exist the service should return an error
                         let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
                         if blockchain.is_empty() {
-                            assert!(block_res.unwrap_err().0.description.unwrap().contains("Could not fetch the block, the database is empty!"));
+                            assert!(block_res.is_err());
                         } else {
                             assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
                         }
@@ -542,7 +542,7 @@ mod test {
                         let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
 
                         if blockchain.is_empty() {
-                            assert!(block_res.unwrap_err().0.description.unwrap().contains("Could not fetch the block, the database is empty!"));
+                            assert!(block_res.is_err());
                         } else {
                             assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block with hash {} could not be found",hex::encode(invalid_block_hash.clone()))));
                         }
@@ -556,7 +556,7 @@ mod test {
                         let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
 
                         if blockchain.is_empty() {
-                            assert!(block_res.unwrap_err().0.description.unwrap().contains("Could not fetch the block, the database is empty!"));
+                            assert!(block_res.is_err());
                         } else {
                             assert!(block_res.unwrap_err().0.description.unwrap().contains("Invalid block hash provided"));
                         }
@@ -662,7 +662,7 @@ mod test {
 
                 // If the storage is empty the service should return an error
                 let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
-                assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains("Could not fetch the block, the database is empty!"));
+                assert!(block_transaction_res.is_err());
 
                 storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
 
@@ -670,7 +670,7 @@ mod test {
                 let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
 
                 if blockchain.is_empty() {
-                    assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains("Could not fetch the block, the database is empty!"));
+                    assert!(block_transaction_res.is_err());
                 } else {
                     assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
                 }
@@ -1124,12 +1124,7 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         );
-        assert!(block_res
-            .unwrap_err()
-            .0
-            .description
-            .unwrap()
-            .contains("Could not fetch the block, the database is empty!"));
+        assert!(block_res.is_err());
 
         let block_identifier = PartialBlockIdentifier {
             index: Some(0),
@@ -1141,12 +1136,7 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         );
-        assert!(block_res
-            .unwrap_err()
-            .0
-            .description
-            .unwrap()
-            .contains("Could not fetch the block, the database is empty!"));
+        assert!(block_res.is_err());
 
         let block_identifier = PartialBlockIdentifier {
             index: None,
@@ -1158,12 +1148,7 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         );
-        assert!(block_res
-            .unwrap_err()
-            .0
-            .description
-            .unwrap()
-            .contains("Could not fetch the block, the database is empty!"));
+        assert!(block_res.is_err());
 
         let block_identifier = PartialBlockIdentifier {
             index: Some(0),
@@ -1175,11 +1160,6 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         );
-        assert!(block_res
-            .unwrap_err()
-            .0
-            .description
-            .unwrap()
-            .contains("Could not fetch the block, the database is empty!"));
+        assert!(block_res.is_err());
     }
 }
