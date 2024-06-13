@@ -62,6 +62,7 @@ alias(
 # See https://github.com/bazelbuild/bazel-gazelle#running-gazelle-with-bazel
 # gazelle:prefix github.com/dfinity/ic
 #
+#
 # gazelle:proto disable
 gazelle(
     name = "gazelle",
