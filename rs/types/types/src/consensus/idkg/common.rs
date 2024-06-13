@@ -1078,7 +1078,6 @@ impl TryFrom<&pb::PreSignatureRef> for PreSignatureRef {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(clippy::large_enum_variant)]
 pub enum ThresholdSigInputsRef {
     Ecdsa(ThresholdEcdsaSigInputsRef),
     Schnorr(ThresholdSchnorrSigInputsRef),
