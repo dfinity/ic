@@ -621,9 +621,7 @@ mod test {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces_state_manager::CertifiedStateSnapshot;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{
-        EcdsaKeyId, MasterPublicKeyId, Payload, SignWithECDSAReply,
-    };
+    use ic_management_canister_types::{MasterPublicKeyId, Payload, SignWithECDSAReply};
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
@@ -634,7 +632,7 @@ mod test {
         messages::CallbackId,
         Height,
     };
-    use std::{collections::BTreeSet, str::FromStr};
+    use std::collections::BTreeSet;
 
     #[test]
     fn test_validate_transcript_refs_all_algorithms() {
@@ -857,7 +855,14 @@ mod test {
     }
 
     #[test]
-    fn test_validate_new_signature_agreements() {
+    fn test_validate_new_signature_agreements_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_validate_new_signature_agreements(key_id);
+        }
+    }
+
+    fn test_validate_new_signature_agreements(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
         let num_nodes = 4;
         let subnet_id = subnet_test_id(0);
@@ -866,8 +871,6 @@ mod test {
         let mut block_reader = TestEcdsaBlockReader::new();
         let height = Height::from(1);
         let mut valid_keys = BTreeSet::new();
-        let ecdsa_key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        let key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
         valid_keys.insert(key_id.clone());
 
         let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
@@ -877,14 +880,15 @@ mod test {
 
         // There are three requests in state, two are completed, one is still
         // missing its nonce.
-        let sign_with_ecdsa_contexts = BTreeMap::from_iter([
+        let signature_request_contexts = BTreeMap::from_iter([
             fake_completed_signature_request_context(1, key_id.clone(), pre_sig_id1),
             fake_completed_signature_request_context(2, key_id.clone(), pre_sig_id2),
             fake_signature_request_context_with_pre_sig(3, key_id.clone(), Some(pre_sig_id3)),
         ]);
-        let snapshot = fake_state_with_signature_requests(height, sign_with_ecdsa_contexts.clone());
+        let snapshot =
+            fake_state_with_signature_requests(height, signature_request_contexts.clone());
 
-        let request_ids = sign_with_ecdsa_contexts
+        let request_ids = signature_request_contexts
             .values()
             .flat_map(get_context_request_id)
             .collect::<Vec<_>>();
@@ -896,12 +900,12 @@ mod test {
         // Add the quadruples and transcripts to block reader and payload
         let sig_inputs = (1..4)
             .map(|i| {
-                create_ecdsa_sig_inputs_with_args(
+                create_sig_inputs_with_args(
                     i,
                     &env.nodes.ids(),
                     key_transcript.clone(),
                     Height::from(44),
-                    ecdsa_key_id.clone(),
+                    &key_id,
                 )
             })
             .collect::<Vec<_>>();
@@ -926,7 +930,7 @@ mod test {
         );
 
         update_signature_agreements(
-            &sign_with_ecdsa_contexts,
+            &signature_request_contexts,
             &signature_builder,
             None,
             &mut ecdsa_payload,
@@ -952,7 +956,7 @@ mod test {
             }),
         );
         update_signature_agreements(
-            &sign_with_ecdsa_contexts,
+            &signature_request_contexts,
             &signature_builder,
             None,
             &mut ecdsa_payload,
@@ -1006,31 +1010,43 @@ mod test {
     }
 
     #[test]
-    fn test_validate_new_signature_agreements_missing_input() {
+    fn test_validate_new_signature_agreements_missing_input_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_validate_new_signature_agreements_missing_input(key_id);
+        }
+    }
+
+    fn test_validate_new_signature_agreements_missing_input(key_id: MasterPublicKeyId) {
         let height = Height::from(0);
         let subnet_id = subnet_test_id(0);
         let crypto = &CryptoReturningOk::default();
         let block_reader = TestEcdsaBlockReader::new();
-        let key_id = fake_ecdsa_master_public_key_id();
 
         let mut prev_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let pre_sig_id = prev_payload.uid_generator.next_pre_signature_id();
 
-        let sign_with_ecdsa_contexts =
+        let signature_request_contexts =
             BTreeMap::from_iter([fake_signature_request_context_with_pre_sig(
                 1,
                 key_id.clone(),
                 Some(pre_sig_id),
             )]);
-        let snapshot = fake_state_with_signature_requests(height, sign_with_ecdsa_contexts.clone());
+        let snapshot =
+            fake_state_with_signature_requests(height, signature_request_contexts.clone());
 
         let fake_context = fake_signature_request_context(key_id.clone(), [4; 32]);
         let fake_response =
             CompletedSignature::Unreported(ic_types::batch::ConsensusResponse::new(
                 CallbackId::from(0),
-                ic_types::messages::Payload::Data(
-                    SignWithECDSAReply { signature: vec![] }.encode(),
-                ),
+                ic_types::messages::Payload::Data(match key_id {
+                    MasterPublicKeyId::Ecdsa(_) => {
+                        SignWithECDSAReply { signature: vec![] }.encode()
+                    }
+                    MasterPublicKeyId::Schnorr(_) => {
+                        SignWithSchnorrReply { signature: vec![] }.encode()
+                    }
+                }),
             ));
 
         // Insert agreement for incomplete context
