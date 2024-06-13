@@ -199,12 +199,6 @@ RUN chown root:root /etc/node_exporter \
 # will be cached when only the binaries change.
 COPY opt /opt
 
-RUN mkdir -p /var/www/html && chown www-data:www-data /var/www/html
-
-# Install other files (e.g. the uninstall-script)
-COPY var/www/html /var/www/html
-RUN chmod 0644 /var/www/html/*
-
 # Clear all files that may lead to indeterministic build.
 RUN apt-get clean && \
     rm -rf \

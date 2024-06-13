@@ -60,8 +60,6 @@ component_files = {
     Label("boundary-guestos/opt/ic/bin/setup-var-log.sh"): "/opt/ic/bin/setup-var-log.sh",
     Label("boundary-guestos/opt/ic/bin/setup-vector.sh"): "/opt/ic/bin/setup-vector.sh",
     Label("boundary-guestos/opt/ic/bin/setup-version-metric.sh"): "/opt/ic/bin/setup-version-metric.sh",
-    Label("boundary-guestos/var/www/html/451.html"): "/var/www/html/451.html",
-    Label("boundary-guestos/var/www/html/uninstall-script.js"): "/var/www/html/uninstall-script.js",
     Label("boundary-guestos/opt/ic/share/ark.pem"): "/opt/ic/share/ark.pem",
 
     # consolidated files:
