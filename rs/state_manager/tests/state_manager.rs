@@ -45,7 +45,7 @@ use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
-use ic_test_utilities_state::{arb_stream, arb_stream_slice, arb_stream_with_config, canister_ids};
+use ic_test_utilities_state::{arb_stream, arb_stream_slice, canister_ids};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
@@ -5744,10 +5744,8 @@ fn lsmt_shard_size_is_stable() {
 }
 
 proptest! {
-    // TODO(MR-549) Go back to using plain `arb_stream()` once the canonical state
-    // encodes deadlines.
     #[test]
-    fn stream_store_encode_decode(stream in arb_stream_with_config(0, 10, 0, 10, true, false), size_limit in 0..20usize) {
+    fn stream_store_encode_decode(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
         encode_decode_stream_test(
             /* stream to be used */
             stream,
