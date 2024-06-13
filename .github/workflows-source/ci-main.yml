@@ -121,7 +121,6 @@ jobs:
         if : ${{ github.event_name != 'pull_request' }}
       - <<: *docker-ro-login
       - name: Run Bazel Aquery
-        id: bazel-test-all
         uses:  ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: "aquery"
