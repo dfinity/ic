@@ -47,8 +47,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -102,8 +100,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -142,8 +138,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -203,8 +197,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -235,8 +227,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -263,8 +253,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -299,8 +287,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -372,8 +358,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -413,8 +397,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
@@ -457,8 +439,6 @@ jobs:
         id: before-script
         shell: bash
         run: |
-          git config --global http.postBuffer 524288000
-          git config --global safe.directory '*'
           if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
