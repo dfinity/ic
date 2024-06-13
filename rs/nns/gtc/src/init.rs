@@ -241,12 +241,24 @@ fn make_neuron(
         state.finish()
     };
 
+    let (dissolve_state, aging_since_timestamp_seconds) = if dissolve_delay_seconds == 0 {
+        (
+            Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+            u64::MAX,
+        )
+    } else {
+        (
+            Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
+            aging_since_timestamp_seconds,
+        )
+    };
+
     Neuron {
         id: Some(NeuronId::from_subaccount(&subaccount)),
         account: subaccount.to_vec(),
         controller: Some(GENESIS_TOKEN_CANISTER_ID.get()),
         cached_neuron_stake_e8s: stake_e8s,
-        dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
+        dissolve_state,
         aging_since_timestamp_seconds,
         ..Default::default()
     }
@@ -347,14 +359,14 @@ mod tests {
         );
         assert_eq!(
             account_a_neurons
-                .first()
+                .last()
                 .unwrap()
                 .aging_since_timestamp_seconds,
             12345678
         );
         assert_eq!(
             account_b_neurons
-                .first()
+                .last()
                 .unwrap()
                 .aging_since_timestamp_seconds,
             87654321
