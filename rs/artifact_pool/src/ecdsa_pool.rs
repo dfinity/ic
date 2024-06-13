@@ -21,7 +21,6 @@ use ic_interfaces::p2p::consensus::{
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::artifact::{ArtifactKind, EcdsaMessageId};
 use ic_types::artifact_kind::EcdsaArtifact;
 use ic_types::consensus::{
     idkg::{
@@ -31,6 +30,10 @@ use ic_types::consensus::{
     CatchUpPackage,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
+use ic_types::{
+    artifact::{ArtifactKind, EcdsaMessageId},
+    consensus::idkg::SigShare,
+};
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -247,6 +250,21 @@ impl EcdsaPoolSection for InMemoryEcdsaPoolSection {
     ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_> {
         let object_pool = self.get_pool(EcdsaMessageType::SchnorrSigShare);
         object_pool.iter_by_prefix(prefix)
+    }
+
+    fn signature_shares(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, SigShare)> + '_> {
+        let ecdsa_pool = self.get_pool(EcdsaMessageType::EcdsaSigShare);
+        let schnorr_pool = self.get_pool(EcdsaMessageType::SchnorrSigShare);
+        Box::new(
+            ecdsa_pool
+                .iter()
+                .map(|(id, share)| (id, SigShare::Ecdsa(share)))
+                .chain(
+                    schnorr_pool
+                        .iter()
+                        .map(|(id, share)| (id, SigShare::Schnorr(share))),
+                ),
+        )
     }
 
     fn complaints(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaComplaint)> + '_> {

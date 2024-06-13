@@ -29,7 +29,6 @@ use ic_types::{
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     time::CoarseTime,
-    xnet::QueueId,
     CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
 };
 use rand::{Rng, SeedableRng};
@@ -163,13 +162,12 @@ impl<'a> OutputIterator<'a> {
     fn new(
         canisters: &'a mut BTreeMap<CanisterId, CanisterState>,
         subnet_queues: &'a mut CanisterQueues,
-        own_subnet_id: SubnetId,
         seed: u64,
     ) -> Self {
         let mut canister_iterators: VecDeque<_> = canisters
-            .iter_mut()
-            .filter(|(_, canister)| canister.has_output())
-            .map(|(owner, canister)| canister.system_state.output_into_iter(*owner))
+            .values_mut()
+            .filter(|canister| canister.has_output())
+            .map(|canister| canister.system_state.output_into_iter())
             .collect();
 
         let mut rng = ChaChaRng::seed_from_u64(seed);
@@ -178,7 +176,7 @@ impl<'a> OutputIterator<'a> {
 
         // Push the subnet queues in front in order to make sure that at least one
         // system message is always routed as long as there is space for it.
-        let subnet_queues_iter = subnet_queues.output_into_iter(CanisterId::from(own_subnet_id));
+        let subnet_queues_iter = subnet_queues.output_into_iter();
         if !subnet_queues_iter.is_empty() {
             canister_iterators.push_front(subnet_queues_iter)
         }
@@ -200,7 +198,7 @@ impl<'a> OutputIterator<'a> {
 }
 
 impl std::iter::Iterator for OutputIterator<'_> {
-    type Item = (QueueId, RequestOrResponse);
+    type Item = RequestOrResponse;
 
     /// Pops a message from the next canister. If this was not the last message
     /// for that canister, the canister iterator is moved to the back of the
@@ -213,13 +211,13 @@ impl std::iter::Iterator for OutputIterator<'_> {
             let next = canister_iterator.next();
             self.size += canister_iterator.size();
 
-            if let Some((queue_id, msg)) = next {
+            if next.is_some() {
                 if !canister_iterator.is_empty() {
                     self.canister_iterators.push_back(canister_iterator);
                 }
 
                 debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
-                return Some((queue_id, msg));
+                return next;
             }
         }
 
@@ -237,10 +235,10 @@ impl std::iter::Iterator for OutputIterator<'_> {
     }
 }
 
-pub trait PeekableOutputIterator: std::iter::Iterator<Item = (QueueId, RequestOrResponse)> {
+pub trait PeekableOutputIterator: std::iter::Iterator<Item = RequestOrResponse> {
     /// Peeks into the iterator and returns a reference to the item that `next()`
     /// would return.
-    fn peek(&mut self) -> Option<(QueueId, &RequestOrResponse)>;
+    fn peek(&mut self) -> Option<&RequestOrResponse>;
 
     /// Permanently filters out from iteration the next queue (i.e. all messages
     /// with the same sender and receiver as the next). The messages are retained
@@ -253,7 +251,7 @@ pub trait PeekableOutputIterator: std::iter::Iterator<Item = (QueueId, RequestOr
 }
 
 impl PeekableOutputIterator for OutputIterator<'_> {
-    fn peek(&mut self) -> Option<(QueueId, &RequestOrResponse)> {
+    fn peek(&mut self) -> Option<&RequestOrResponse> {
         while let Some(canister_iterator) = self.canister_iterators.front_mut() {
             // `peek()` may consume an arbitrary number of stale references.
             self.size -= canister_iterator.size();
@@ -912,13 +910,11 @@ impl ReplicatedState {
     /// state. All messages that have not been explicitly consumed will remain
     /// in the state.
     pub fn output_into_iter(&mut self) -> impl PeekableOutputIterator + '_ {
-        let own_subnet_id = self.metadata.own_subnet_id;
         let time = self.metadata.time();
 
         OutputIterator::new(
             &mut self.canister_states,
             &mut self.subnet_queues,
-            own_subnet_id,
             // We seed the output iterator with the time. We can do this because
             // we don't need unpredictability of the rotation.
             time.as_nanos_since_unix_epoch(),

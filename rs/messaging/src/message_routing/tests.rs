@@ -1028,7 +1028,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         );
         batch_processor.process_batch(Batch {
             batch_number: height.increment().increment(),
-            next_checkpoint_height: None,
+            batch_summary: None,
             requires_full_state_hash: false,
             messages: BatchMessages::default(),
             randomness: Randomness::new([123; 32]),
@@ -1822,7 +1822,7 @@ fn process_batch_updates_subnet_metrics() {
 
         batch_processor.process_batch(Batch {
             batch_number: height.increment().increment(),
-            next_checkpoint_height: None,
+            batch_summary: None,
             requires_full_state_hash: false,
             messages: BatchMessages::default(),
             randomness: Randomness::new([123; 32]),

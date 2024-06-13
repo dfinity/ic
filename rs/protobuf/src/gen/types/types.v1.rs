@@ -440,30 +440,6 @@ pub struct EcdsaKeyTranscript {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct OngoingSignature {
-    #[prost(message, optional, tag = "1")]
-    pub request_id: ::core::option::Option<RequestId>,
-    #[prost(message, optional, tag = "2")]
-    pub sig_inputs: ::core::option::Option<ThresholdEcdsaSigInputsRef>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AvailableQuadruple {
-    #[prost(uint64, tag = "1")]
-    pub pre_signature_id: u64,
-    #[prost(message, optional, tag = "2")]
-    pub quadruple: ::core::option::Option<PreSignatureQuadrupleRef>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct QuadrupleInProgress {
-    #[prost(uint64, tag = "1")]
-    pub pre_signature_id: u64,
-    #[prost(message, optional, tag = "2")]
-    pub quadruple: ::core::option::Option<QuadrupleInCreation>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AvailablePreSignature {
     #[prost(uint64, tag = "1")]
     pub pre_signature_id: u64,
@@ -671,21 +647,6 @@ pub struct PreSignatureQuadrupleRef {
     pub key_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
     #[prost(message, optional, tag = "6")]
     pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ThresholdEcdsaSigInputsRef {
-    #[prost(message, optional, tag = "1")]
-    pub derivation_path:
-        ::core::option::Option<super::super::registry::subnet::v1::ExtendedDerivationPath>,
-    #[prost(bytes = "vec", tag = "2")]
-    pub hashed_message: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "3")]
-    pub nonce: ::prost::alloc::vec::Vec<u8>,
-    #[prost(message, optional, tag = "4")]
-    pub presig_quadruple_ref: ::core::option::Option<PreSignatureQuadrupleRef>,
-    #[prost(message, optional, tag = "5")]
-    pub key_transcript_ref: ::core::option::Option<UnmaskedTranscript>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

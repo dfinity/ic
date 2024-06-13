@@ -11,7 +11,6 @@ DEPENDENCIES = [
     "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/extended_bip32",
     "//rs/crypto/interfaces/sig_verification",
-    "//rs/crypto/test_utils/keys",
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",

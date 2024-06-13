@@ -20,7 +20,6 @@ use ic_types::messages::{
     CanisterMessage, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
     MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
-use ic_types::xnet::{QueueId, SessionId};
 use ic_types::{CanisterId, CountBytes, Time};
 use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::convert::{From, TryFrom};
@@ -119,9 +118,6 @@ pub struct CanisterQueues {
 ///    (e.g. in order to efficiently implement per destination limits).
 #[derive(Debug)]
 pub struct CanisterOutputQueuesIterator<'a> {
-    /// ID of the canister that owns the output queues being iterated.
-    owner: CanisterId,
-
     /// Priority queue of non-empty output queues. The next message to be popped
     /// / peeked is the one at the head of the first queue.
     queues: VecDeque<(&'a CanisterId, &'a mut CanisterQueue)>,
@@ -134,7 +130,6 @@ pub struct CanisterOutputQueuesIterator<'a> {
 
 impl<'a> CanisterOutputQueuesIterator<'a> {
     fn new(
-        owner: CanisterId,
         queues: &'a mut BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
         pool: &'a mut MessagePool,
     ) -> Self {
@@ -145,12 +140,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
             .collect();
         let size = Self::compute_size(&queues);
 
-        CanisterOutputQueuesIterator {
-            owner,
-            queues,
-            pool,
-            size,
-        }
+        CanisterOutputQueuesIterator { queues, pool, size }
     }
 
     /// Returns the first (non-stale) message from the first queue holding one.
@@ -163,27 +153,17 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     /// stale queue entries whenever we see them or else risk turning this into an
     /// `O(N)` time operation. We could instead fall back on internal mutability,
     /// but the additional complexity is unnecessary given the current uses.
-    pub fn peek(&mut self) -> Option<(QueueId, &RequestOrResponse)> {
-        while let Some((receiver, queue)) = self.queues.front_mut() {
+    pub fn peek(&mut self) -> Option<&RequestOrResponse> {
+        while let Some((_, queue)) = self.queues.front_mut() {
             while let Some(item) = queue.peek() {
-                match self.pool.get(item.id()) {
-                    Some(msg) => {
-                        let queue_id = QueueId {
-                            src_canister: self.owner,
-                            dst_canister: **receiver,
-                            session_id: SessionId::new(0),
-                        };
+                if let msg @ Some(_) = self.pool.get(item.id()) {
+                    return msg;
+                }
 
-                        return Some((queue_id, msg));
-                    }
-
-                    // Stale reference, pop it and try again.
-                    None => {
-                        // FIXME: Add a test that covers skipping over stale references.
-                        queue.pop();
-                        self.size -= 1;
-                    }
-                };
+                // Stale reference, pop it and try again.
+                // FIXME: Add a test that covers skipping over stale references.
+                queue.pop();
+                self.size -= 1;
             }
 
             // Queue only contained stale references and was exhausted.
@@ -198,29 +178,25 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     ///
     /// Consumes all encountered stale references. Removes all consumed queues from
     /// the iteration order.
-    pub fn pop(&mut self) -> Option<(QueueId, RequestOrResponse)> {
+    pub fn pop(&mut self) -> Option<RequestOrResponse> {
         while let Some((receiver, queue)) = self.queues.pop_front() {
             while let Some(item) = queue.pop() {
                 // FIXME: Add a test that covers skipping over stale references.
                 self.size -= 1;
 
                 // Consume any stale references.
-                if let Some(msg) = self.pool.take(item.id()) {
+                if let msg @ Some(_) = self.pool.take(item.id()) {
                     if queue.len() > 0 {
                         self.queues.push_back((receiver, queue));
                     }
-
                     debug_assert_eq!(Self::compute_size(&self.queues), self.size);
 
-                    let queue_id = QueueId {
-                        src_canister: self.owner,
-                        dst_canister: *receiver,
-                        session_id: SessionId::new(0),
-                    };
-                    return Some((queue_id, msg));
+                    return msg;
                 }
             }
         }
+
+        debug_assert_eq!(Self::compute_size(&self.queues), self.size);
         None
     }
 
@@ -253,7 +229,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
         self.size
     }
 
-    /// Computes the number of (potentially stale) messages left in `queues``.
+    /// Computes the number of (potentially stale) messages left in `queues`.
     ///
     /// Time complexity: O(N).
     fn compute_size(queues: &VecDeque<(&'a CanisterId, &'a mut CanisterQueue)>) -> usize {
@@ -262,7 +238,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
 }
 
 impl Iterator for CanisterOutputQueuesIterator<'_> {
-    type Item = (QueueId, RequestOrResponse);
+    type Item = RequestOrResponse;
 
     /// Alias for `pop`.
     fn next(&mut self) -> Option<Self::Item> {
@@ -343,8 +319,8 @@ impl CanisterQueues {
     /// Returns an iterator that loops over output queues, popping one message
     /// at a time from each in a round robin fashion. The iterator consumes all
     /// popped messages.
-    pub(crate) fn output_into_iter(&mut self, owner: CanisterId) -> CanisterOutputQueuesIterator {
-        CanisterOutputQueuesIterator::new(owner, &mut self.canister_queues, &mut self.pool)
+    pub(crate) fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator {
+        CanisterOutputQueuesIterator::new(&mut self.canister_queues, &mut self.pool)
     }
 
     /// See `IngressQueue::filter_messages()` for documentation.
@@ -970,7 +946,7 @@ impl CanisterQueues {
 
     /// Helper function to concisely validate `CanisterQueues` input schedules
     /// during deserialization; or in debug builds, by writing
-    /// `debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters)``.
+    /// `debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters)`.
     ///
     /// Checks that all canister IDs of input queues that contain at least one message
     /// are found exactly once in either the input schedule for the local subnet or the

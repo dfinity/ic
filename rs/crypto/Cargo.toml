@@ -36,10 +36,8 @@ ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
-ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
-ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-types = { path = "../types/types" }
 parking_lot = "0.12.1"
 # We use the `dangerous_configuration` flag for rustls to be able to set custom `ClientCertVerifier` and
@@ -54,7 +52,7 @@ tokio = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-criterion = "0.5"
+criterion = { workspace = true }
 ic-certification-test-utils = { path = "../certification/test-utils" }
 ic-crypto-for-verification-only = { path = "for_verification_only" }
 ic-crypto-internal-basic-sig-der-utils = { path = "internal/crypto_lib/basic_sig/der_utils" }
@@ -86,6 +84,8 @@ ic-crypto-test-utils-reproducible-rng = { path = "test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "tree_hash" }
 ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
 ic-registry-client = { path = "../registry/client" }
+ic-registry-client-fake = { path = "../registry/fake" }
+ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
