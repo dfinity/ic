@@ -78,8 +78,8 @@ impl CanisterQueuesFixture {
         ));
     }
 
-    fn pop_output(&mut self) -> Option<(QueueId, RequestOrResponse)> {
-        let mut iter = self.queues.output_into_iter(self.other);
+    fn pop_output(&mut self) -> Option<RequestOrResponse> {
+        let mut iter = self.queues.output_into_iter();
         iter.pop()
     }
 
@@ -393,8 +393,8 @@ impl CanisterQueuesMultiFixture {
         )
     }
 
-    fn pop_output(&mut self, other: CanisterId) -> Option<(QueueId, RequestOrResponse)> {
-        let mut iter = self.queues.output_into_iter(other);
+    fn pop_output(&mut self) -> Option<RequestOrResponse> {
+        let mut iter = self.queues.output_into_iter();
         iter.pop()
     }
 
@@ -429,7 +429,7 @@ fn test_message_picking_round_robin() {
     // Local response from `other_2`.
     // First push then pop a request to `other_2`, in order to get a reserved slot.
     queues.push_output_request(other_2).unwrap();
-    queues.pop_output(other_2).unwrap();
+    queues.pop_output().unwrap();
     queues.push_input_response(other_2, LocalSubnet).unwrap();
 
     // Local request from `other_2`.
@@ -773,11 +773,11 @@ fn test_output_into_iter() {
     ];
     assert_eq!(expected.len(), queues.output_message_count());
 
-    for (i, (qid, msg)) in queues.output_into_iter(this).enumerate() {
-        assert_eq!(this, qid.src_canister);
-        assert_eq!(*expected[i].0, qid.dst_canister);
+    for (i, msg) in queues.output_into_iter().enumerate() {
         match msg {
             RequestOrResponse::Request(msg) => {
+                assert_eq!(this, msg.sender);
+                assert_eq!(*expected[i].0, msg.receiver);
                 assert_eq!(vec![expected[i].1], msg.method_payload)
             }
             msg => panic!("unexpected message popped: {:?}", msg),
@@ -1190,7 +1190,7 @@ fn test_stats() {
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
     // Call `output_into_iter()` but don't consume any messages.
-    queues.output_into_iter(this).peek();
+    queues.output_into_iter().peek();
     // Stats should stay unchanged.
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1198,11 +1198,11 @@ fn test_stats() {
 
     // Call `output_into_iter()` and consume a single message.
     match queues
-        .output_into_iter(this)
+        .output_into_iter()
         .next()
         .expect("could not pop a message")
     {
-        (_, RequestOrResponse::Response(msg)) => {
+        RequestOrResponse::Response(msg) => {
             expected_oq_stats -= OutputQueuesStats {
                 message_count: 1,
                 cycles: msg.refund,
@@ -1220,11 +1220,11 @@ fn test_stats() {
 
     // Consume the outgoing request.
     match queues
-        .output_into_iter(this)
+        .output_into_iter()
         .next()
         .expect("could not pop a message")
     {
-        (_, RequestOrResponse::Request(msg)) => {
+        RequestOrResponse::Request(msg) => {
             expected_oq_stats -= OutputQueuesStats {
                 message_count: 1,
                 cycles: msg.payment,
@@ -1241,7 +1241,7 @@ fn test_stats() {
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
     // Ensure no more outgoing messages.
-    assert!(queues.output_into_iter(this).next().is_none());
+    assert!(queues.output_into_iter().next().is_none());
     expected_oq_stats = OutputQueuesStats {
         message_count: 0,
         cycles: Cycles::new(0),
@@ -1488,7 +1488,7 @@ fn test_garbage_collect() {
     assert_eq!(1, queues.canister_queues.len());
 
     // "Route" output request.
-    queues.output_into_iter(this).next();
+    queues.output_into_iter().next();
     // No-op.
     queues.garbage_collect();
     // No messages, but the queue pair is not GC-ed (due to the reserved slot).
@@ -1688,12 +1688,12 @@ proptest! {
     fn peek_and_next_consistent(
         (mut canister_queues, raw_requests) in arb_canister_queues(100, Some(10))
     ) {
-        let mut output_iter = canister_queues.output_into_iter(CanisterId::from_u64(0));
+        let mut output_iter = canister_queues.output_into_iter();
 
         let mut popped = 0;
-        while let Some((queue_id, msg)) = output_iter.peek() {
+        while let Some(msg) = output_iter.peek() {
             popped += 1;
-            assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
+            assert_eq!(Some(msg.clone()), output_iter.next());
         }
 
         assert_eq!(output_iter.next(), None);
@@ -1706,12 +1706,12 @@ proptest! {
         start in 0..=1,
         exclude_step in 2..=5,
     ) {
-        let mut output_iter = canister_queues.output_into_iter(CanisterId::from_u64(0));
+        let mut output_iter = canister_queues.output_into_iter();
 
         let mut i = start;
         let mut popped = 0;
         let mut excluded = 0;
-        while let Some((queue_id, msg)) = output_iter.peek() {
+        while let Some(msg) = output_iter.peek() {
             i += 1;
             if i % exclude_step == 0 {
                 output_iter.exclude_queue();
@@ -1719,7 +1719,7 @@ proptest! {
                 continue;
             }
             popped += 1;
-            assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
+            assert_eq!(Some(msg.clone()), output_iter.next());
         }
         assert_eq!(output_iter.pop(), None);
         assert_eq!(raw_requests.len(), excluded + popped);
@@ -1734,10 +1734,10 @@ proptest! {
         // Consume half of the messages in the canister queues and verify whether we pop the
         // expected elements.
         {
-            let mut output_iter = canister_queues.output_into_iter(CanisterId::from_u64(0));
+            let mut output_iter = canister_queues.output_into_iter();
 
             for _ in 0..num_requests / 2 {
-                let (_, popped_message) = output_iter.next().unwrap();
+                let popped_message = output_iter.next().unwrap();
                 let expected_message = raw_requests.pop_front().unwrap();
                 assert_eq!(popped_message, expected_message);
             }
@@ -1769,7 +1769,7 @@ proptest! {
         // Consume half of the messages in the canister queues and verify whether we pop the
         // expected elements.
         {
-            let mut output_iter = canister_queues.output_into_iter(CanisterId::from_u64(0));
+            let mut output_iter = canister_queues.output_into_iter();
 
             let mut i = start;
             let mut excluded = 0;
@@ -1784,7 +1784,7 @@ proptest! {
                     continue;
                 }
 
-                let (_, popped_message) = output_iter.pop().unwrap();
+                let popped_message = output_iter.pop().unwrap();
                 let expected_message = raw_requests.pop_front().unwrap();
                 assert_eq!(popped_message, expected_message);
             }
@@ -1811,8 +1811,7 @@ proptest! {
         (mut canister_queues, raw_requests) in arb_canister_queues(100, Some(10))
     ) {
         let recovered: VecDeque<_> = canister_queues
-            .output_into_iter(CanisterId::from_u64(0))
-            .map(|(_, msg)| msg)
+            .output_into_iter()
             .collect();
 
         assert_eq!(raw_requests, recovered);
@@ -1823,7 +1822,7 @@ proptest! {
         (mut canister_queues, _) in arb_canister_queues(100, Some(10)),
     ) {
         let expected_canister_queues = canister_queues.clone();
-        let mut output_iter = canister_queues.output_into_iter(CanisterId::from_u64(0));
+        let mut output_iter = canister_queues.output_into_iter();
 
         while output_iter.peek().is_some() {
             output_iter.exclude_queue();
@@ -1838,7 +1837,7 @@ proptest! {
     fn peek_pop_loop_terminates(
         (mut canister_queues, _) in arb_canister_queues(100, Some(10)),
     ) {
-        let mut output_iter = canister_queues.output_into_iter(CanisterId::from_u64(0));
+        let mut output_iter = canister_queues.output_into_iter();
 
         while output_iter.peek().is_some() {
             output_iter.next();
@@ -1851,7 +1850,7 @@ proptest! {
         start in 0..=1,
         exclude_step in 2..=5,
     ) {
-        let mut output_iter = canister_queues.output_into_iter(CanisterId::from_u64(0));
+        let mut output_iter = canister_queues.output_into_iter();
 
         let mut i = start;
         while output_iter.peek().is_some() {

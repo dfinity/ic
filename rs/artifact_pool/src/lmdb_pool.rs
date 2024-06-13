@@ -13,6 +13,7 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::certification::CertificationMessageHash;
+use ic_types::consensus::idkg::SigShare;
 use ic_types::consensus::{DataPayload, HasHash, SummaryPayload};
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId, EcdsaMessageId},
@@ -1951,6 +1952,21 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
     ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_> {
         let message_db = self.get_message_db(EcdsaMessageType::SchnorrSigShare);
         message_db.iter(Some(prefix))
+    }
+
+    fn signature_shares(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, SigShare)> + '_> {
+        let ecdsa_db = self.get_message_db(EcdsaMessageType::EcdsaSigShare);
+        let schnorr_db = self.get_message_db(EcdsaMessageType::SchnorrSigShare);
+        Box::new(
+            ecdsa_db
+                .iter(None)
+                .map(|(id, share)| (id, SigShare::Ecdsa(share)))
+                .chain(
+                    schnorr_db
+                        .iter(None)
+                        .map(|(id, share)| (id, SigShare::Schnorr(share))),
+                ),
+        )
     }
 
     fn complaints(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaComplaint)> + '_> {

@@ -5,8 +5,6 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/interfaces/registry",
     "//rs/monitoring/metrics",
-    "//rs/registry/helpers",
-    "//rs/registry/proto",
     "//rs/types/types",
     "//rs/utils/thread",
     "@crate_index//:crossbeam-channel",
@@ -16,6 +14,8 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    "//rs/registry/proto",
+    "//rs/registry/helpers",
     "//rs/registry/proto_data_provider",
     "//rs/test_utilities/metrics",
     "@crate_index//:assert_matches",

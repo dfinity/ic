@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Fixes
 - Make search/transactions a custom SQL query for latency improvement
+- Use spawn_blocking for blocking threads in a tokio environment
+- Enable store-file option to be set by a user
 ### Added
+- Tx hash indexer on blocks table
 ### Changed
 - Add log to console output
+- Separate read and write access between rosetta server and block synchronizer
 
 ## [1.0.2] - 2024-05-08
 ### Fixes

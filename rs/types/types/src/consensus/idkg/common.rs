@@ -6,7 +6,8 @@ use crate::crypto::{
             IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
             IDkgTranscriptType,
         },
-        ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
+        ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+        ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
     },
     AlgorithmId,
 };
@@ -18,13 +19,22 @@ use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
 use std::convert::{AsMut, AsRef, TryFrom};
 use std::hash::Hash;
+use std::{
+    collections::BTreeSet,
+    fmt::{self, Display, Formatter},
+};
 
 use super::{
-    ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsRef},
-    schnorr::{PreSignatureTranscriptRef, ThresholdSchnorrSigInputsRef, TranscriptInCreation},
+    ecdsa::{
+        PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsError,
+        ThresholdEcdsaSigInputsRef,
+    },
+    schnorr::{
+        PreSignatureTranscriptRef, ThresholdSchnorrSigInputsError, ThresholdSchnorrSigInputsRef,
+        TranscriptInCreation,
+    },
 };
 
 /// PseudoRandomId is defined in execution context as plain 32-byte vector, we give it a synonym here.
@@ -1077,8 +1087,31 @@ impl TryFrom<&pb::PreSignatureRef> for PreSignatureRef {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum ThresholdSigInputsError {
+    Ecdsa(ThresholdEcdsaSigInputsError),
+    Schnorr(ThresholdSchnorrSigInputsError),
+}
+
+type ThresholdSigInputsResult = Result<ThresholdSigInputs, ThresholdSigInputsError>;
+
+fn ok_ecdsa(inputs: ThresholdEcdsaSigInputs) -> ThresholdSigInputsResult {
+    Ok(ThresholdSigInputs::Ecdsa(inputs))
+}
+
+fn ok_schnorr(inputs: ThresholdSchnorrSigInputs) -> ThresholdSigInputsResult {
+    Ok(ThresholdSigInputs::Schnorr(inputs))
+}
+
+fn err_ecdsa(err: ThresholdEcdsaSigInputsError) -> ThresholdSigInputsResult {
+    Err(ThresholdSigInputsError::Ecdsa(err))
+}
+
+fn err_schnorr(err: ThresholdSchnorrSigInputsError) -> ThresholdSigInputsResult {
+    Err(ThresholdSigInputsError::Schnorr(err))
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(clippy::large_enum_variant)]
 pub enum ThresholdSigInputsRef {
     Ecdsa(ThresholdEcdsaSigInputsRef),
     Schnorr(ThresholdSchnorrSigInputsRef),
@@ -1102,10 +1135,48 @@ impl ThresholdSigInputsRef {
             ThresholdSigInputsRef::Schnorr(inputs) => inputs.derivation_path.caller,
         }
     }
+
+    pub fn scheme(&self) -> SignatureScheme {
+        match self {
+            ThresholdSigInputsRef::Ecdsa(_) => SignatureScheme::Ecdsa,
+            ThresholdSigInputsRef::Schnorr(_) => SignatureScheme::Schnorr,
+        }
+    }
+
+    pub fn translate(&self, resolver: &dyn EcdsaBlockReader) -> ThresholdSigInputsResult {
+        match self {
+            ThresholdSigInputsRef::Ecdsa(inputs_ref) => inputs_ref
+                .translate(resolver)
+                .map_or_else(err_ecdsa, ok_ecdsa),
+            ThresholdSigInputsRef::Schnorr(inputs_ref) => inputs_ref
+                .translate(resolver)
+                .map_or_else(err_schnorr, ok_schnorr),
+        }
+    }
+}
+
+pub enum ThresholdSigInputs {
+    Ecdsa(ThresholdEcdsaSigInputs),
+    Schnorr(ThresholdSchnorrSigInputs),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CombinedSignature {
     Ecdsa(ThresholdEcdsaCombinedSignature),
     Schnorr(ThresholdSchnorrCombinedSignature),
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum SignatureScheme {
+    Ecdsa,
+    Schnorr,
+}
+
+impl Display for SignatureScheme {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            SignatureScheme::Ecdsa => write!(f, "ECDSA"),
+            SignatureScheme::Schnorr => write!(f, "Schnorr"),
+        }
+    }
 }

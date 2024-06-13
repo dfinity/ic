@@ -89,9 +89,14 @@ pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
     // TODO, remove when this is the value set in the normal IC build
     // This is to uncover issues in testing that might affect performance in production
     const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2_000_000_000); // 2 Billion is the value used in app subnets
+    const MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE: NumInstructions =
+        NumInstructions::new(2_000_000_000);
 
     let mut subnet_config = SubnetConfig::new(SubnetType::System);
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
+    subnet_config
+        .scheduler_config
+        .max_instructions_per_install_code_slice = MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE;
 
     StateMachineBuilder::new()
         .with_current_time()

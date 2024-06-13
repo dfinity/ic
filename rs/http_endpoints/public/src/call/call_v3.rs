@@ -17,6 +17,7 @@ use axum::{
 use http::Request;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path};
+use ic_error_types::UserError;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn};
 use ic_replicated_state::ReplicatedState;
@@ -31,7 +32,70 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
+use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
+
+enum CallV3Response {
+    Certificate(Certificate),
+    UserError(UserError),
+    Accepted(&'static str),
+    HttpError(HttpError),
+}
+
+impl IntoResponse for CallV3Response {
+    fn into_response(self) -> Response {
+        match self {
+            CallV3Response::Certificate(cert) => Cbor(CBOR::Map(BTreeMap::from([
+                (
+                    CBOR::Text("status".to_string()),
+                    CBOR::Text("replied".to_string()),
+                ),
+                (
+                    CBOR::Text("certificate".to_string()),
+                    CBOR::Bytes(into_cbor(&cert)),
+                ),
+            ])))
+            .into_response(),
+
+            CallV3Response::UserError(user_err) => Cbor(CBOR::Map(BTreeMap::from([
+                (
+                    CBOR::Text("status".to_string()),
+                    CBOR::Text("non_replicated_rejection".to_string()),
+                ),
+                (
+                    CBOR::Text("error_code".to_string()),
+                    CBOR::Text(user_err.code().to_string()),
+                ),
+                (
+                    CBOR::Text("reject_message".to_string()),
+                    CBOR::Text(user_err.description().to_string()),
+                ),
+                (
+                    CBOR::Text("reject_code".to_string()),
+                    CBOR::Integer(user_err.reject_code() as i128),
+                ),
+            ])))
+            .into_response(),
+
+            CallV3Response::Accepted(reason) => {
+                (StatusCode::ACCEPTED, reason.to_string()).into_response()
+            }
+
+            CallV3Response::HttpError(HttpError { status, message }) => {
+                (status, message).into_response()
+            }
+        }
+    }
+}
+
+impl From<IngressError> for CallV3Response {
+    fn from(err: IngressError) -> Self {
+        match err {
+            IngressError::UserError(user_err) => CallV3Response::UserError(user_err),
+            IngressError::HttpError(http_err) => CallV3Response::HttpError(http_err),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct CallServiceV3 {
@@ -100,44 +164,25 @@ async fn call_sync_v3(
         delegation_from_nns,
     }): State<CallServiceV3>,
     request: Cbor<HttpRequestEnvelope<HttpCallContent>>,
-) -> Result<impl IntoResponse, Response> {
+) -> CallV3Response {
     let log = call_handler.log.clone();
 
-    let ingress_submitter = call_handler
+    let ingress_submitter = match call_handler
         .validate_ingress_message(request, effective_canister_id)
         .await
-        .map_err(|err| match err {
-            IngressError::UserError(user_err) => Cbor(CBOR::Map(BTreeMap::from([
-                (
-                    CBOR::Text("status".to_string()),
-                    CBOR::Text("non_replicated_rejection".to_string()),
-                ),
-                (
-                    CBOR::Text("error_code".to_string()),
-                    CBOR::Text(user_err.code().to_string()),
-                ),
-                (
-                    CBOR::Text("reject_message".to_string()),
-                    CBOR::Text(user_err.description().to_string()),
-                ),
-                (
-                    CBOR::Text("reject_code".to_string()),
-                    CBOR::Integer(user_err.reject_code() as i128),
-                ),
-            ])))
-            .into_response(),
-            IngressError::HttpError(HttpError { status, message }) => {
-                (status, message).into_response()
-            }
-        })?;
+    {
+        Ok(ingress_submitter) => ingress_submitter,
+        Err(err) => return CallV3Response::from(err),
+    };
 
     let message_id = ingress_submitter.message_id();
 
-    let certification_subscriber = match tokio::time::timeout(
-        Duration::from_secs(ingress_message_certificate_timeout_seconds),
-        ingress_watcher_handle.subscribe_for_certification(message_id.clone()),
-    )
-    .await
+    let timeout = Duration::from_secs(ingress_message_certificate_timeout_seconds);
+
+    let certification_subscriber = match ingress_watcher_handle
+        .subscribe_for_certification(message_id.clone())
+        .timeout(timeout)
+        .await
     {
         Ok(Ok(message_subscriber)) => Ok(message_subscriber),
         Ok(Err(SubscriptionError::DuplicateSubscriptionError)) => {
@@ -162,29 +207,28 @@ async fn call_sync_v3(
         }
     };
 
-    ingress_submitter
-        .try_submit()
-        .map_err(|HttpError { status, message }| (status, message).into_response())?;
+    let ingres_submission = ingress_submitter.try_submit();
 
-    let make_accepted_response =
-        |reason: &str| Ok((StatusCode::ACCEPTED, reason.to_string()).into_response());
-
+    if let Err(ingress_submission) = ingres_submission {
+        return CallV3Response::HttpError(ingress_submission);
+    }
+    // The ingress message was submitted successfully.
+    // From this point on we only return a certificate or `Accepted 202``.
     let certification_subscriber = match certification_subscriber {
         Ok(certification_subscriber) => certification_subscriber,
         Err(reason) => {
-            return make_accepted_response(reason);
+            return CallV3Response::Accepted(reason);
         }
     };
 
-    match tokio::time::timeout(
-        Duration::from_secs(ingress_message_certificate_timeout_seconds),
-        certification_subscriber,
-    )
-    .await
+    match certification_subscriber
+        .wait_for_certification()
+        .timeout(timeout)
+        .await
     {
         Ok(()) => (),
         Err(_) => {
-            return make_accepted_response(
+            return CallV3Response::Accepted(
                 "Message did not complete execution and certification within the replica defined timeout.",
             );
         }
@@ -197,7 +241,7 @@ async fn call_sync_v3(
     {
         Ok(Some(certified_state_reader)) => certified_state_reader,
         Ok(None) | Err(_) => {
-            return make_accepted_response(
+            return CallV3Response::Accepted(
                 "Certified state is not available. Please try /read_state.",
             );
         }
@@ -213,25 +257,17 @@ async fn call_sync_v3(
             .expect("Path is within length bound.");
 
     let Some((tree, certification)) = certified_state_reader.read_certified_state(&tree) else {
-        return make_accepted_response("Certified state is not available. Please try /read_state.");
+        return CallV3Response::Accepted(
+            "Certified state is not available. Please try /read_state.",
+        );
     };
 
     let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
     let signature = certification.signed.signature.signature.get().0;
-    let certified_response = Cbor(CBOR::Map(BTreeMap::from([
-        (
-            CBOR::Text("status".to_string()),
-            CBOR::Text("replied".to_string()),
-        ),
-        (
-            CBOR::Text("certificate".to_string()),
-            CBOR::Bytes(into_cbor(&Certificate {
-                tree,
-                signature: Blob(signature),
-                delegation: delegation_from_nns,
-            })),
-        ),
-    ])));
 
-    Ok(certified_response.into_response())
+    CallV3Response::Certificate(Certificate {
+        tree,
+        signature: Blob(signature),
+        delegation: delegation_from_nns,
+    })
 }
