@@ -390,6 +390,8 @@ fn test_can_remove_unverified_marker_file_twice() {
             .unwrap()
             .remove_unverified_checkpoint_marker();
         assert!(res.is_ok());
+
+        drop(checkpoint);
     });
 }
 
