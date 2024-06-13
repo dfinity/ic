@@ -57,14 +57,14 @@ use ic_types::{
     consensus::HasHeight,
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
-    NodeId, SubnetId,
+    Height, NodeId, SubnetId,
 };
 use std::{
     net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
 };
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{mpsc::UnboundedSender, watch};
 use tower_http::trace::TraceLayer;
 
 pub const MAX_ADVERT_BUFFER: usize = 100_000;
@@ -116,6 +116,7 @@ pub fn setup_consensus_and_p2p(
     cycles_account_manager: Arc<CyclesAccountManager>,
     canister_http_adapter_client: CanisterHttpAdapterClient,
     registry_poll_delay_duration_ms: u64,
+    max_certified_height_tx: watch::Sender<Height>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
     UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
@@ -149,6 +150,7 @@ pub fn setup_consensus_and_p2p(
         registry_poll_delay_duration_ms,
         canister_http_adapter_client,
         time_source.clone(),
+        max_certified_height_tx,
     );
 
     // StateSync
@@ -232,6 +234,7 @@ fn start_consensus(
     registry_poll_delay_duration_ms: u64,
     canister_http_adapter_client: CanisterHttpAdapterClient,
     time_source: Arc<dyn TimeSource>,
+    max_certified_height_tx: watch::Sender<Height>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
     UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
@@ -379,6 +382,7 @@ fn start_consensus(
             Arc::clone(&consensus_pool_cache) as Arc<_>,
             metrics_registry.clone(),
             log.clone(),
+            max_certified_height_tx,
         );
 
         let certifier_gossip = Arc::new(certifier_gossip);
