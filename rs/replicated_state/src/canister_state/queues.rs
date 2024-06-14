@@ -4,7 +4,7 @@ mod queue;
 mod tests;
 
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
-use crate::{CanisterState, CheckpointLoadingMetrics, InputQueueType, NextInputQueue, StateError};
+use crate::{CanisterState, InputQueueType, NextInputQueue, StateError};
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
 use ic_management_canister_types::IC_00;
@@ -875,7 +875,7 @@ impl CanisterQueues {
         true
     }
 
-    /// Helper function to concisely validate `CanisterQueues`' input schedules
+    /// Helper function to concisely validate `CanisterQueues` input schedules
     /// during deserialization; or in debug builds, by writing
     /// `debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters)``.
     ///
@@ -1150,11 +1150,9 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
     }
 }
 
-impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for CanisterQueues {
+impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
     type Error = ProxyDecodeError;
-    fn try_from(
-        (item, metrics): (pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics),
-    ) -> Result<Self, Self::Error> {
+    fn try_from(item: pb_queues::CanisterQueues) -> Result<Self, Self::Error> {
         let mut canister_queues = BTreeMap::new();
         if !item.input_queues.is_empty() || !item.output_queues.is_empty() {
             if item.input_queues.len() != item.output_queues.len() {
@@ -1210,11 +1208,11 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 
         if memory_usage_stats.reserved_slots as u64 != item.guaranteed_response_memory_reservations
         {
-            metrics.observe_broken_soft_invariant(format!(
+            return Err(ProxyDecodeError::Other(format!(
                 "Mismatched guaranteed response memory reservations: persisted ({}) != calculated ({})",
                 item.guaranteed_response_memory_reservations,
                 memory_usage_stats.reserved_slots
-            ));
+            )));
         }
 
         let next_input_queue = NextInputQueue::from(
@@ -1230,7 +1228,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
             remote_subnet_input_schedule.push_back(canister_id.try_into()?);
         }
 
-        let mut queues = Self {
+        let queues = Self {
             ingress_queue: IngressQueue::try_from(item.ingress_queue)?,
             canister_queues,
             input_queues_stats,
@@ -1248,20 +1246,8 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
                 &CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
                 &BTreeMap::new(),
             )
-            .unwrap_or_else(|e| {
-                metrics.observe_broken_soft_invariant(e);
-
-                // Generate new input schedules.
-                queues.local_subnet_input_schedule.clear();
-                queues.remote_subnet_input_schedule.clear();
-                for (canister_id, (input_queue, _)) in queues.canister_queues.iter() {
-                    if input_queue.num_messages() != 0 {
-                        queues.remote_subnet_input_schedule.push_back(*canister_id);
-                    }
-                }
-            });
-
-        Ok(queues)
+            .map(|()| queues)
+            .map_err(ProxyDecodeError::Other)
     }
 }
 
