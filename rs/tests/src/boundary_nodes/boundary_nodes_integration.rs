@@ -48,10 +48,10 @@ use ic_agent::{
     export::Principal,
     Agent,
 };
-use reqwest::{Method, ClientBuilder, redirect::Policy};
+use reqwest::{redirect::Policy, ClientBuilder, Method};
 use serde::Deserialize;
 use slog::{error, info, Logger};
-use tokio::{time::sleep, runtime::Runtime};
+use tokio::{runtime::Runtime, time::sleep};
 
 const CANISTER_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
 const CANISTER_RETRY_BACKOFF: Duration = Duration::from_secs(2);
@@ -237,7 +237,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-        let rt = runtime();
+    let rt = runtime();
 
     rt.block_on(async move {
         info!(&logger, "Deploying asset canister...");
@@ -655,12 +655,11 @@ pub fn http_canister_test(env: TestEnv) {
         info!(&logger, "created kv_store canister={canister_id}");
 
         // Wait for the canisters to finish installing
-        
+
         // TODO: maybe this should be status calls?
         sleep(Duration::from_secs(5)).await;
 
-        let client_builder =
-            ClientBuilder::new().redirect(Policy::none());
+        let client_builder = ClientBuilder::new().redirect(Policy::none());
         let (client_builder, host, invalid_host) =
             if let Some(playnet) = boundary_node.get_playnet() {
                 (
@@ -2269,7 +2268,7 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
             if ![StatusCode::NO_CONTENT, StatusCode::OK].contains(&res.status())  {
                 bail!("{name} failed: {}", res.status())
             }
- 
+
             // Normalize & sort header values so that they can be compared regardless of their order
             fn normalize(hdr: &str) -> String {
                 let mut hdr = hdr.split(',').map(|x| x.trim().to_ascii_lowercase()).collect::<Vec<_>>();
