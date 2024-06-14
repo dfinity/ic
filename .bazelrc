@@ -49,15 +49,17 @@ build:ci --remote_timeout=5m # Default is 60s.
 build --experimental_remote_downloader=bazel-remote.idx.dfinity.network --experimental_remote_downloader_local_fallback
 build:local --experimental_remote_downloader=
 
-build:ci --build_event_binary_file=bazel-bep.pb
-
 build --bes_results_url=https://dash.idx.dfinity.network/invocation/
 build --bes_backend=bes.idx.dfinity.network
 build --bes_timeout=60s # Default is no timeout.
 build --bes_upload_mode=wait_for_upload_complete
-build:ci --bes_timeout=180s # Default is no timeout.
-build:ci --bes_upload_mode=fully_async
 build --experimental_remote_build_event_upload=minimal
+
+build:ci --bes_timeout=180s # Default is no timeout.
+# TODO: this is overwritten
+build:ci --bes_upload_mode=fully_async
+# Read by bazel/exporter
+build:ci --build_event_binary_file=bazel-bep.pb
 
 build --remote_local_fallback
 build --workspace_status_command=$(pwd)/bazel/workspace_status.sh

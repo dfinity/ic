@@ -15,6 +15,7 @@ exports_files([
     "mainnet-canisters.bzl",
 ])
 
+
 # bazel/workspace_status.sh will write the current timestamp to this file on every run to provade an input that always changes for some targets.
 # The file does not have to and should not be committed, therefore will not exist on the first run on a clean source tree.
 # Therefore glob is used to not fail when the file does not exist.
