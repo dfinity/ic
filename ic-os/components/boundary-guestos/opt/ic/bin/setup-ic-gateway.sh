@@ -56,6 +56,8 @@ function read_variables() {
         exit 1
     fi
 
+    API_DOMAINS+=("rosetta.dfinity.network")
+
     check_nns_pem
 }
 
@@ -106,12 +108,11 @@ EOF
 ENV="${ENV}"
 DOMAIN_APP="${DOMAINS_APP}"
 DOMAIN_SYSTEM="${DOMAINS_SYSTEM}"
-DOMAIN_API="${DOMAINS_API},rosetta.dfinity.network"
+DOMAIN_API="${DOMAINS_API}"
 HTTP_SERVER_LISTEN_PLAIN="[::]:80"
 HTTP_SERVER_LISTEN_TLS="[::]:443"
 METRICS_LISTEN="[::]:9314"
 POLICY_PRE_ISOLATION_CANISTERS="${RUN_DIR}/pre_isolation_canisters.txt"
-POLICY_DENYLIST_URL="${DENYLIST_URL}"
 POLICY_DENYLIST_ALLOWLIST="${RUN_DIR}/allowlist.txt"
 POLICY_DENYLIST_SEED="${RUN_DIR}/denylist.json"
 DOMAIN_CANISTER_ALIAS="personhood:g3wsl-eqaaa-aaaan-aaaaa-cai,identity:rdmx6-jaaaa-aaaaa-aaadq-cai,nns:qoctq-giaaa-aaaaa-aaaea-cai,dscvr:h5aet-waaaa-aaaab-qaamq-cai"
@@ -123,7 +124,9 @@ CERT_PROVIDER_ISSUER_URL="http://127.0.0.1:3000"
 LOG_STDOUT="true"
 EOF
 
-    mount --bind "${ENV_FILE}" /etc/default/ic-gateway
+    if [ ! -z "${DENYLIST_URL}" ]; then
+        echo "POLICY_DENYLIST_URL=\"${DENYLIST_URL}\"" >>"${ENV_FILE}"
+    fi
 }
 
 function setup_pre_isolation_canisters() {

@@ -28,6 +28,7 @@ component_files = {
     Label("boundary-guestos/etc/systemd/system/firewall-counter-check.timer"): "/etc/systemd/system/firewall-counter-check.timer",
     Label("boundary-guestos/etc/systemd/system/generate-dante-config.service"): "/etc/systemd/system/generate-dante-config.service",
     Label("boundary-guestos/etc/systemd/system/ic-boundary.service"): "/etc/systemd/system/ic-boundary.service",
+    Label("boundary-guestos/etc/systemd/system/ic-gateway.service"): "/etc/systemd/system/ic-gateway.service",
     Label("boundary-guestos/etc/systemd/system/logrotate.timer"): "/etc/systemd/system/logrotate.timer",
     Label("boundary-guestos/etc/systemd/system/nftables.service.d/override.conf"): "/etc/systemd/system/nftables.service.d/override.conf",
     Label("boundary-guestos/etc/systemd/system/node_exporter.service"): "/etc/systemd/system/node_exporter.service",
