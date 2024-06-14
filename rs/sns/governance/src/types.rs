@@ -208,39 +208,43 @@ impl governance::Mode {
         }
     }
 
+    fn proposal_types_disallowed_in_pre_initialization_swap() -> Vec<NervousSystemFunction> {
+        vec![
+            NervousSystemFunction::manage_nervous_system_parameters(),
+            NervousSystemFunction::transfer_sns_treasury_funds(),
+        ]
+    }
+
     fn proposal_action_is_allowed_in_pre_initialization_swap_or_err(
         action: &Action,
         disallowed_target_canister_ids: &HashSet<CanisterId>,
         id_to_nervous_system_function: &BTreeMap<u64, NervousSystemFunction>,
     ) -> Result<(), GovernanceError> {
-        match action {
-            Action::ExecuteGenericNervousSystemFunction(execute) => {
-                Self::execute_generic_nervous_system_function_is_allowed_in_pre_initialization_swap_or_err(
+        // ExecuteGenericNervousSystemFunction is special in that it
+        // is only disallowed in some cases.
+        if let Action::ExecuteGenericNervousSystemFunction(execute) = action {
+            return Self::execute_generic_nervous_system_function_is_allowed_in_pre_initialization_swap_or_err(
                     execute,
                     disallowed_target_canister_ids,
                     id_to_nervous_system_function,
-                )
-            }
+                );
+        }
 
-            Action::ManageNervousSystemParameters(_) => Err(GovernanceError::new_with_message(
+        let is_action_disallowed = Self::proposal_types_disallowed_in_pre_initialization_swap()
+            .into_iter()
+            .any(|t| t.id == NervousSystemFunction::from(action.clone()).id);
+
+        if is_action_disallowed {
+            Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "ManageNervousSystemParameters proposals are not allowed while \
-                         governance is in PreInitializationSwap mode: {:#?}",
+                    "This proposal type is not allowed while governance is in \
+                     PreInitializationSwap mode: {:#?}",
                     action,
                 ),
-            )),
-
-            Action::TransferSnsTreasuryFunds(_) => Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                format!(
-                    "TransferSnsTreasuryFunds proposals are not allowed while \
-                        governance is in PreInitializationSwap mode: {:#?}",
-                    action
-                )
-            )),
-
-            _ => Ok(()),
+            ))
+        } else {
+            Ok(())
         }
     }
 
@@ -275,9 +279,8 @@ impl governance::Mode {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "ExecuteGenericNervousSystemFunction proposals are not allowed while \
-                     governance is in PreInitializationSwap mode: {:#?}",
-                    execute,
+                    "ExecuteGenericNervousSystemFunction proposals targeting {target_canister_id:?} are not allowed while \
+                     governance is in PreInitializationSwap mode: {execute:#?}"
                 ),
             ));
         }
