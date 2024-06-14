@@ -919,7 +919,7 @@ cc_library(
     urls = ["https://github.com/miracl/core/archive/ec77b2817a0e360b1893affe4cfa44d19391efc7.tar.gz"],
 )
 
-# Interface spec v0.22
+# interface spec v0.22
 http_file(
     name = "interface_spec",
     downloaded_file_path = "ic.did",

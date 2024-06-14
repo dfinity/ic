@@ -33,7 +33,7 @@ anchors:
       group: ln1
     container:
       <<: *image
-    timeout-minutes: 90
+    timeout-minutes: 120
     if: ${{ vars.RUN_CI == 'true' }}
   checkout: &checkout
     name: Checkout
