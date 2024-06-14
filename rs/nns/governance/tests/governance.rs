@@ -23,8 +23,9 @@ use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
 use ic_nervous_system_common::{
-    cmc::CMC, ledger::IcpLedger, NervousSystemError, E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
-    ONE_YEAR_SECONDS,
+    cmc::CMC,
+    ledger::{compute_neuron_staking_subaccount_bytes, IcpLedger},
+    NervousSystemError, E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -5614,49 +5615,6 @@ fn assert_neuron_spawn_partial(
     assert_eq!(child_neuron.maturity_e8s_equivalent, 0);
 }
 
-/// Assert that a neuron cannot be created with a non self-authenticating
-/// controller `PrincipalId` (via a call to `spawn_neuron`).
-#[test]
-fn test_neuron_with_non_self_authenticating_controller_cannot_be_spawned() {
-    let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
-    // Compute the subaccount to which the transfer would have been made
-    let nonce = 1234u64;
-
-    let block_height = 543212234;
-    let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
-    let neuron_stake_e8s = 1_000_000_000;
-
-    let (_, mut gov, id, _) = governance_with_staked_neuron(
-        dissolve_delay_seconds,
-        neuron_stake_e8s,
-        block_height,
-        from,
-        nonce,
-    );
-
-    gov.with_neuron_mut(&id, |neuron| {
-        neuron.maturity_e8s_equivalent = 123_456_789;
-    })
-    .expect("Neuron did not exist");
-
-    let non_self_authenticating_principal_id = PrincipalId::new_user_test_id(144);
-
-    let result: Result<NeuronId, GovernanceError> = gov.spawn_neuron(
-        &id,
-        &from,
-        &Spawn {
-            new_controller: Some(non_self_authenticating_principal_id),
-            nonce: None,
-            percentage_to_spawn: None,
-        },
-    );
-
-    assert_matches!(
-        result,
-        Err(GovernanceError{ error_type: code, error_message: msg })
-            if code == PreconditionFailed as i32 && msg.contains("must be self-authenticating"));
-}
-
 #[test]
 fn test_staked_maturity() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
@@ -5795,6 +5753,74 @@ fn test_staked_maturity() {
         .expect("Neuron not found");
     assert_eq!(neuron.maturity_e8s_equivalent, 54719555847781u64);
     assert_eq!(neuron.staked_maturity_e8s_equivalent, None);
+}
+
+/// It used to be that controllers must be self-authenticating. Later (Jun, 2024) we got rid of that
+/// requirement. That is, the controller can be any type of principal (including canister).
+/// Discussed here:
+/// https://forum.dfinity.org/t/reevaluating-neuron-control-restrictions/28597
+#[tokio::test]
+async fn test_neuron_with_non_self_authenticating_controller_is_now_allowed() {
+    // Step 1: Prepare the world.
+
+    let controller = PrincipalId::new_user_test_id(42);
+    assert!(!controller.is_self_authenticating(), "{:?}", controller);
+
+    let memo = 43;
+    let neuron_subaccount = Subaccount(compute_neuron_staking_subaccount_bytes(controller, memo));
+
+    let amount_e8s = 10 * E8;
+
+    // Step 1.1: Initialize ledger with 10 ICP in the (governance) subaccount where
+    // (non-self-authenticating) controller will claim new a neuron.
+    let driver = fake::FakeDriver::default()
+        .at(56)
+        .with_ledger_accounts(vec![fake::FakeAccount {
+            id: AccountIdentifier::new(
+                ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
+                Some(neuron_subaccount),
+            ),
+            amount_e8s,
+        }])
+        .with_supply(Tokens::from_tokens(400_000_000).unwrap());
+
+    // Step 1.2: Construct Governance.
+    let mut gov = Governance::new(
+        empty_fixture(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Call code under test.
+
+    let claim_or_refresh = manage_neuron::Command::ClaimOrRefresh(ClaimOrRefresh {
+        by: Some(By::Memo(memo)),
+    });
+    let manage_neuron = ManageNeuron {
+        id: None,
+        neuron_id_or_subaccount: None,
+        command: Some(claim_or_refresh),
+    };
+    let caller = controller;
+    let result: ManageNeuronResponse = gov.manage_neuron(&caller, &manage_neuron).await;
+
+    // Step 3: Inspect result(s).
+
+    // Step 3.1: Assert that a plausible neuron ID was returned.
+    let manage_neuron_response::Command::ClaimOrRefresh(manage_neuron_response) =
+        result.command.as_ref().unwrap()
+    else {
+        panic!("{:#?}", result);
+    };
+    let Some(neuron_id) = manage_neuron_response.refreshed_neuron_id else {
+        panic!("{:#?}", result);
+    };
+    assert!(neuron_id.id > 0, "{:#?}", result);
+
+    // Step 3.2: Inspect the new neuron's controller.
+    let neuron = gov.get_full_neuron(&neuron_id, &caller).unwrap();
+    assert_eq!(neuron.controller.unwrap(), controller, "{:#?}", neuron);
 }
 
 #[test]
