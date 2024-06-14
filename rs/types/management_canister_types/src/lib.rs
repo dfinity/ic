@@ -1,5 +1,6 @@
 //! Data types used for encoding/decoding the Candid payloads of ic:00.
 mod bounded_vec;
+mod data_size;
 mod http;
 mod provisional;
 
@@ -7,6 +8,7 @@ mod provisional;
 use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
 pub use bounded_vec::*;
 use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode};
+pub use data_size::*;
 pub use http::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader,
     HttpMethod, TransformArgs, TransformContext, TransformFunc,
