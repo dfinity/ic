@@ -24,18 +24,6 @@ jobs:
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
-      - name: Before script
-        if: always()
-        id: before-script
-        shell: bash
-        run: |
-          # TODO: patch runner & runner manifest for cleaner bind mount
-          # Temporary way to bring required directories to workflow container:
-          if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
-          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
-          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
-          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
         uses: actions/checkout@v4
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
@@ -55,9 +43,6 @@ jobs:
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}"/bin
           ./build-all-fuzzers.sh --zip
-      - name: No run
-        if: steps.filter.outputs.fuzzers == 'false'
-        run: echo "No changes in fuzzers, skipping build"
   lock-generate:
     name: Lock Generate
     runs-on:
@@ -67,18 +52,6 @@ jobs:
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
-      - name: Before script
-        if: always()
-        id: before-script
-        shell: bash
-        run: |
-          # TODO: patch runner & runner manifest for cleaner bind mount
-          # Temporary way to bring required directories to workflow container:
-          if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
-          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
-          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
-          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
         uses: actions/checkout@v4
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
@@ -99,9 +72,6 @@ jobs:
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
         run: ./gitlab-ci/src/ci-scripts/lock-generate.sh
-      - name: No run
-        if: steps.filter.outputs.lock-generate == 'false'
-        run: echo "No changes in lock-generate, skipping run"
   pre-commit:
     name: Pre Commit Test
     runs-on:
@@ -111,18 +81,6 @@ jobs:
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
-      - name: Before script
-        if: always()
-        id: before-script
-        shell: bash
-        run: |
-          # TODO: patch runner & runner manifest for cleaner bind mount
-          # Temporary way to bring required directories to workflow container:
-          if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
-          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
-          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
-          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -131,7 +89,7 @@ jobs:
         id: pre-commit
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/pre-commit.sh
-  # Todo: remove when migration complete
+  # TODO: remove when migration complete
   change-base-branch:
     name: Change Base Branch
     runs-on: ubuntu-latest

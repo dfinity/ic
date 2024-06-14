@@ -42,6 +42,10 @@ jobs:
     env:
       TITLE: ${{ github.event.pull_request.title }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Before script
         if: always()
         id: before-script
@@ -54,18 +58,6 @@ jobs:
           if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
           if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
-      - name: Checkout
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request' }}
-        with:
-          fetch-depth: 256
-      - name: Checkout
-        uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request' }}
-      - name: Docker RO SA login
-        id: docker-ro-login
-        shell: bash
-        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -97,6 +89,10 @@ jobs:
     if: ${{ vars.RUN_CI == 'true' }}
     name: Bazel Build All Config Check
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Before script
         if: always()
         id: before-script
@@ -109,18 +105,6 @@ jobs:
           if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
           if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
-      - name: Checkout
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request' }}
-        with:
-          fetch-depth: 256
-      - name: Checkout
-        uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request' }}
-      - name: Docker RO SA login
-        id: docker-ro-login
-        shell: bash
-        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
@@ -137,21 +121,12 @@ jobs:
     runs-on:
       labels: macOS
     steps:
-      - name: Before script
-        if: always()
-        id: before-script
-        shell: bash
-        run: |
-          # TODO: patch runner & runner manifest for cleaner bind mount
-          # Temporary way to bring required directories to workflow container:
-          if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
-          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
-          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
-          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
         uses: actions/checkout@v4
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         if: ${{ github.event_name == 'pull_request' }}
         with:
@@ -169,10 +144,18 @@ jobs:
         run: |
           echo "/usr/local/bin" >> $GITHUB_PATH
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
-      - name: Docker RO SA login
-        id: docker-ro-login
+      - name: Before script
+        if: always()
+        id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
+        run: |
+          # TODO: patch runner & runner manifest for cleaner bind mount
+          # Temporary way to bring required directories to workflow container:
+          if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
+          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
+          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
+          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
+          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
         if: steps.filter.outputs.bazel-test-darwin-x86-64 != 'false'
@@ -184,9 +167,6 @@ jobs:
           BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output//${ROOT_PIPELINE_ID}"
           BAZEL_TARGETS: "//rs/... //publish/binaries/..."
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
-      - name: No run
-        if: steps.filter.outputs.bazel-test-darwin-x86-64 == 'false'
-        run: echo "No changes, skipping run"
       - name: Purge Bazel Output
         shell: bash
         run: |
@@ -201,6 +181,10 @@ jobs:
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Before script
         if: always()
         id: before-script
@@ -213,8 +197,6 @@ jobs:
           if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
           if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
-      - name: Checkout
-        uses: actions/checkout@v4
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
         uses: ./.github/actions/bazel-test-all/
@@ -233,6 +215,10 @@ jobs:
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Before script
         if: always()
         id: before-script
@@ -245,8 +231,6 @@ jobs:
           if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
           if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
-      - name: Checkout
-        uses: actions/checkout@v4
       - name: Run Bazel Build Fuzzers AFL
         id: bazel-build-fuzzers-afl
         uses: ./.github/actions/bazel-test-all/
@@ -261,20 +245,10 @@ jobs:
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
-      - name: Before script
-        if: always()
-        id: before-script
-        shell: bash
-        run: |
-          # TODO: patch runner & runner manifest for cleaner bind mount
-          # Temporary way to bring required directories to workflow container:
-          if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
-          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
-          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
-          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
@@ -300,6 +274,10 @@ jobs:
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' && github.event_name != 'merge_group' }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Before script
         if: always()
         id: before-script
@@ -312,18 +290,6 @@ jobs:
           if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
           if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
-      - name: Checkout
-        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
-        if: ${{ github.event_name == 'pull_request' }}
-        with:
-          fetch-depth: 256
-      - name: Checkout
-        uses: actions/checkout@v3
-        if: ${{ github.event_name != 'pull_request' }}
-      - name: Docker RO SA login
-        id: docker-ro-login
-        shell: bash
-        run: ./gitlab-ci/src/ci-scripts/docker-login.sh
       - name: Run Build IC
         id: build-ic
         shell: bash
@@ -376,20 +342,10 @@ jobs:
             PATH1: "build-ic/icos/setupos"
             SETUPOS_FLAG: "true"
     steps:
-      - name: Before script
-        if: always()
-        id: before-script
-        shell: bash
-        run: |
-          # TODO: patch runner & runner manifest for cleaner bind mount
-          # Temporary way to bring required directories to workflow container:
-          if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
-          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
-          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
-          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Download bazel-targets [bazel-test-all]
         uses: actions/download-artifact@v3
         with:
@@ -420,20 +376,10 @@ jobs:
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
-      - name: Before script
-        if: always()
-        id: before-script
-        shell: bash
-        run: |
-          # TODO: patch runner & runner manifest for cleaner bind mount
-          # Temporary way to bring required directories to workflow container:
-          if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
-          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
-          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
-          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Filter Rust Files [*.{rs,toml,lock}]
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -467,20 +413,10 @@ jobs:
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
-      - name: Before script
-        if: always()
-        id: before-script
-        shell: bash
-        run: |
-          # TODO: patch runner & runner manifest for cleaner bind mount
-          # Temporary way to bring required directories to workflow container:
-          if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
-          if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-          if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
-          if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
-          if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Filter Rust Files [*.{rs,toml,lock}]
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
