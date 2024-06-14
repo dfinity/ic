@@ -821,6 +821,7 @@ fn is_latency_sensitive(msg: &ConsensusMessage) -> bool {
         ConsensusMessage::NotarizationShare(_) => true,
         ConsensusMessage::RandomBeaconShare(_) => true,
         ConsensusMessage::RandomTapeShare(_) => true,
+        ConsensusMessage::EquivocationProof(_) => true,
         // Might be big and is relayed and can cause excessive BW usage.
         ConsensusMessage::CatchUpPackage(_) => false,
         ConsensusMessage::CatchUpPackageShare(_) => true,
