@@ -160,11 +160,9 @@ pub fn node_id_into_protobuf(id: NodeId) -> pb::NodeId {
 /// use `impl TryFrom<Option<pb::NodeId>> for NodeId` here however we cannot
 /// as both `Id` and `pb::NodeId` are defined in other crates.
 pub fn node_id_try_from_option(value: Option<pb::NodeId>) -> Result<NodeId, ProxyDecodeError> {
-    let value: pb::NodeId = try_from_option_field(value, "NodeId missing")?;
-    let inner: pb::PrincipalId = try_from_option_field(value.principal_id, "PrincipalId missing")?;
-
-    let principal_id = PrincipalId::try_from(inner)
-        .map_err(|e| ProxyDecodeError::InvalidPrincipalId(Box::new(e)))?;
+    let value: pb::NodeId = value.ok_or(ProxyDecodeError::MissingField("NodeId"))?;
+    let principal_id: PrincipalId =
+        try_from_option_field(value.principal_id, "NodeId::PrincipalId")?;
     Ok(NodeId::from(principal_id))
 }
 
