@@ -67,6 +67,7 @@ jobs:
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: "aquery"
+            # what is "deleted_packages"?
           BAZEL_TARGETS: "//cpp:prestorecon_bin --deleted_packages=gitlab-ci/src/gitlab_config"
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           # check if PR title contains release and set timeout filters accordingly
