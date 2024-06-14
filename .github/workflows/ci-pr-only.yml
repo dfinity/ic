@@ -12,6 +12,8 @@ env:
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
+  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
+  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
   ORG: ${{ github.repository_owner }}
 jobs:
   bazel-build-fuzzers-archives:
