@@ -34,6 +34,7 @@ rand_chacha = { workspace = true }
 rayon = "1.5.1"
 slog = { workspace = true }
 strum_macros = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

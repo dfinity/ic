@@ -176,9 +176,19 @@ pub fn tecdsa_performance_test(
     let (app_subnet, app_node) = get_app_subnet_and_node(&topology_snapshot);
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
 
+    let key_ids = vec![make_key(KEY_ID1)];
     info!(log, "Step 1: Enabling tECDSA signing and ensuring it works");
-    let key = enable_ecdsa_signing_on_subnet(&nns_node, &nns_canister, app_subnet.subnet_id, &log);
-    run_ecdsa_signature_test(&nns_canister, &log, key);
+    let keys = enable_ecdsa_signing_on_subnet(
+        &nns_node,
+        &nns_canister,
+        app_subnet.subnet_id,
+        key_ids.clone(),
+        &log,
+    );
+
+    for (key_id, public_key) in keys {
+        run_ecdsa_signature_test(&nns_canister, &log, key_id, public_key);
+    }
 
     info!(log, "Step 2: Installing Message canisters");
     let requests = (0..CANISTER_COUNT)

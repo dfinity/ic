@@ -21,7 +21,7 @@ use ic_test_utilities_metrics::{
     HistogramStats, MetricVec,
 };
 use ic_test_utilities_registry::SubnetRecordBuilder;
-use ic_test_utilities_state::{arb_stream_slice, arb_stream_with_config};
+use ic_test_utilities_state::{arb_stream, arb_stream_slice};
 use ic_test_utilities_types::ids::{
     NODE_1, NODE_2, NODE_3, NODE_4, NODE_42, NODE_5, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4,
     SUBNET_5,
@@ -445,7 +445,7 @@ proptest! {
     /// Tests payload building from a pool containing an empty slice only.
     #[test]
     fn get_xnet_payload_empty_slice(
-        out_stream in arb_stream_with_config(1, 1, 0, 10, true, false),
+        out_stream in arb_stream(1, 1, 0, 10),
     ) {
         // Empty incoming stream.
         let from = out_stream.signals_end();
@@ -521,7 +521,7 @@ proptest! {
     /// stream throttling limit.
     #[test]
     fn system_subnet_stream_throttling(
-        out_stream in arb_stream_with_config(SYSTEM_SUBNET_STREAM_MSG_LIMIT / 2 + 1, SYSTEM_SUBNET_STREAM_MSG_LIMIT + 10, 0, 10, true, false),
+        out_stream in arb_stream(SYSTEM_SUBNET_STREAM_MSG_LIMIT / 2 + 1, SYSTEM_SUBNET_STREAM_MSG_LIMIT + 10, 0, 10),
         (stream, from, msg_count) in arb_stream_slice(SYSTEM_SUBNET_STREAM_MSG_LIMIT / 2 + 1, SYSTEM_SUBNET_STREAM_MSG_LIMIT, 0, 10),
     ) {
         // Set the outgoing stream's signals_end to the slice begin.

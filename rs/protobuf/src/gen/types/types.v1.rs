@@ -1006,7 +1006,7 @@ pub struct Block {
 pub struct ConsensusMessage {
     #[prost(
         oneof = "consensus_message::Msg",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11"
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"
     )]
     pub msg: ::core::option::Option<consensus_message::Msg>,
 }
@@ -1038,6 +1038,8 @@ pub mod consensus_message {
         Cup(super::CatchUpPackage),
         #[prost(message, tag = "11")]
         CupShare(super::CatchUpPackageShare),
+        #[prost(message, tag = "12")]
+        EquivocationProof(super::EquivocationProof),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1159,6 +1161,28 @@ pub struct NotarizationShare {
     pub signature: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "5")]
     pub signer: ::core::option::Option<NodeId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EquivocationProof {
+    #[prost(message, optional, tag = "1")]
+    pub signer: ::core::option::Option<NodeId>,
+    #[prost(string, tag = "2")]
+    pub version: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "3")]
+    pub height: u64,
+    #[prost(message, optional, tag = "4")]
+    pub subnet_id: ::core::option::Option<SubnetId>,
+    /// First equivocating block
+    #[prost(bytes = "vec", tag = "5")]
+    pub hash1: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "6")]
+    pub signature1: ::prost::alloc::vec::Vec<u8>,
+    /// Second equivocating block
+    #[prost(bytes = "vec", tag = "7")]
+    pub hash2: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "8")]
+    pub signature2: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1390,7 +1414,7 @@ pub struct ConsensusMessageId {
 pub struct ConsensusMessageHash {
     #[prost(
         oneof = "consensus_message_hash::Kind",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11"
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"
     )]
     pub kind: ::core::option::Option<consensus_message_hash::Kind>,
 }
@@ -1421,6 +1445,8 @@ pub mod consensus_message_hash {
         CatchUpPackage(::prost::alloc::vec::Vec<u8>),
         #[prost(bytes, tag = "11")]
         CatchUpPackageShare(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "12")]
+        EquivocationProof(::prost::alloc::vec::Vec<u8>),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

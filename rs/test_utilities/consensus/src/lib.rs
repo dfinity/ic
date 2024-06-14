@@ -181,7 +181,7 @@ pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
 pub struct EcdsaStatsNoOp {}
 impl EcdsaStats for EcdsaStatsNoOp {
     fn update_active_transcripts(&self, _block_reader: &dyn EcdsaBlockReader) {}
-    fn update_active_quadruples(&self, _block_reader: &dyn EcdsaBlockReader) {}
+    fn update_active_pre_signatures(&self, _block_reader: &dyn EcdsaBlockReader) {}
     fn record_support_validation(&self, _support: &IDkgDealingSupport, _duration: Duration) {}
     fn record_support_aggregation(
         &self,

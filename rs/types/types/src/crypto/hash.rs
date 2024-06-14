@@ -13,8 +13,8 @@ use crate::consensus::{
         SchnorrSigShare,
     },
     Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
-    CatchUpShareContent, ConsensusMessage, FinalizationContent, HashedBlock, NotarizationContent,
-    RandomBeaconContent, RandomTapeContent,
+    CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgDealingSupport, SignedIDkgDealing,
@@ -71,7 +71,7 @@ mod private {
 
     impl CryptoHashDomainSeal for Block {}
     impl CryptoHashDomainSeal for Signed<HashedBlock, BasicSignature<BlockMetadata>> {}
-
+    impl CryptoHashDomainSeal for EquivocationProof {}
     impl CryptoHashDomainSeal for BlockPayload {}
 
     impl CryptoHashDomainSeal for RandomBeaconContent {}
@@ -216,6 +216,12 @@ impl CryptoHashDomain for Block {
 impl CryptoHashDomain for Signed<HashedBlock, BasicSignature<BlockMetadata>> {
     fn domain(&self) -> String {
         DomainSeparator::BlockMetadataProposal.to_string()
+    }
+}
+
+impl CryptoHashDomain for EquivocationProof {
+    fn domain(&self) -> String {
+        DomainSeparator::EquivocationProof.to_string()
     }
 }
 
