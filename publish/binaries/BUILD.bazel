@@ -58,6 +58,7 @@ BINARIES = {
     "icx-proxy": "//rs/boundary_node/icx_proxy:icx-proxy",
     "icx-proxy-dev": "//rs/boundary_node/icx_proxy:icx-proxy-dev",
     "metrics-proxy": "@crate_index//:metrics-proxy__metrics-proxy",
+    "nft-exporter": "//rs/ic_os/nft_exporter:nft-exporter",
     "nfplot": "//rs/nervous_system/neurons_fund/nfplot",
     "orchestrator": "//rs/orchestrator",
     "sandbox_launcher": "//rs/canister_sandbox:sandbox_launcher",
