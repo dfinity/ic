@@ -15,42 +15,38 @@ build:fmt --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
 build:fmt --output_groups=+rustfmt_checks
 build --@rules_rust//:rustfmt.toml=//:rustfmt.toml
 
-build:ci --progress_report_interval=30
-
 # Use hermetic JDK
 # See https://bazel.build/docs/bazel-and-java#hermetic-testing
 build --java_runtime_version=remotejdk_17
 
-common --experimental_allow_tags_propagation
-build --nosandbox_default_allow_network
+common --experimental_allow_tags_propagation # propagate build tags from rules to actions
+build --nosandbox_default_allow_network # make sandbox stricter by default
 build --incompatible_strict_action_env # use an environment with a static value for PATH and do not inherit LD_LIBRARY_PATH
 
-# default to optimized and unstripped binaries.
+# default to optimized and unstripped binaries
 build --compilation_mode=opt
-build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
-build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
-build --strategy_regexp=ic-os/.*=local
+# Global rustc flags
+build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
+build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 
-build    --remote_upload_local_results=false
-build:ci --remote_upload_local_results=true
+build --strategy_regexp=ic-os/.*=local # build ic-os/ targets without sandbox
+
+build    --remote_upload_local_results=false # don't upload artifacts from dev machines
+build:ci --remote_upload_local_results=true # do upload artifacts from CI
+
+# Remote cache config & optimizations
 build --remote_cache=bazel-remote.idx.dfinity.network
 build --experimental_remote_cache_async
 build --experimental_remote_cache_compression # If enabled, compress/decompress cache blobs with zstd.
 build --remote_timeout=60s # Default is also 60s but we set it explicitly to remind ourselves of this timeout.
 build:ci --remote_timeout=5m # Default is 60s.
-# TODO: re-enable after fixing the error like this:
-# `Failed to fetch file with hash 'xxx' because it does not exist remotely. --remote_download_outputs=minimal does not work if your remote cache evicts files during builds.`
-# Probably disabling `--experimental_remote_cache_async` will help
-#build --remote_download_minimal # https://bazel.build/reference/command-line-reference#flag--remote_download_minimal
-#build --remote_download_outputs=toplevel # Still download outputs from top level targets.
-
 build --experimental_remote_downloader=bazel-remote.idx.dfinity.network --experimental_remote_downloader_local_fallback
 build:local --experimental_remote_downloader=
 
-build:ci --build_event_binary_file=bazel-bep.pb
-
+# Build events config
+build:ci --build_event_binary_file=bazel-bep.pb # Read by bazel/exporter and sent to honeycomb
 build --bes_results_url=https://dash.idx.dfinity.network/invocation/
 build --bes_backend=bes.idx.dfinity.network
 build --bes_timeout=60s # Default is no timeout.
@@ -59,12 +55,10 @@ build:ci --bes_timeout=180s # Default is no timeout.
 build:ci --bes_upload_mode=fully_async
 build --experimental_remote_build_event_upload=minimal
 
-build --remote_local_fallback
-build --workspace_status_command=$(pwd)/bazel/workspace_status.sh
+build --noremote_local_fallback
+build --workspace_status_command=$(pwd)/bazel/workspace_status.sh # buildbuddy metadata: https://www.buildbuddy.io/docs/guide-metadata/#workspace-info
 
 build --experimental_repository_downloader_retries=3 # https://bazel.build/reference/command-line-reference#flag--experimental_repository_downloader_retries
-
-build --cxxopt='-std=c++17'
 
 build --flag_alias=ic_version=//bazel:ic_version
 build --flag_alias=ic_version_rc_only=//bazel:ic_version_rc_only
@@ -81,10 +75,10 @@ test:alltests --test_tag_filters=""
 test:paritytests --test_tag_filters="-system_test"
 test:ci --test_tag_filters="-post_master,-system_test_hourly,-system_test_nightly,-system_test_nightly_nns,-system_test_staging,-system_test_hotfix,-fuzz_test"
 
-test --test_output=errors
-test --test_env=RUST_BACKTRACE=full
+test --test_output=errors # print extra test logs for failed tests
+test --test_env=RUST_BACKTRACE=full # env var set for test runner
 
-test:precommit --build_tests_only --test_tag_filters="smoke"
+test:precommit --build_tests_only --test_tag_filters="smoke" # run 'smoke' tests on pre-commit (for *_did_git_test)
 
 build:systest --build_tag_filters= --s3_endpoint=https://s3-upload.idx.dfinity.network
 test:systest --remote_upload_local_results=true --test_output=streamed --test_tag_filters=
@@ -103,7 +97,6 @@ test --sandbox_tmpfs_path=/tmp
 test    --flaky_test_attempts=1
 test:ci --flaky_test_attempts=default
 
-build:ci --noremote_local_fallback
 build:ci --build_tag_filters="-system_test,-fuzz_test"
 build:ci --verbose_failures
 
