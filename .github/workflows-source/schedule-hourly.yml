@@ -62,8 +62,8 @@ jobs:
     name: Bazel Build All No Cache
     <<: *dind-large-setup
     steps:
-      - <<: *before-script
       - <<: *checkout
+      - <<: *before-script
       - <<: *docker-ro-login
       - name: Run Bazel Build All No Cache
         uses:  ./.github/actions/bazel-test-all/
@@ -75,7 +75,6 @@ jobs:
   bazel-system-test-hourly:
     name: Bazel System Tests Hourly
     <<: *dind-large-setup
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - <<: *before-script
       - <<: *checkout
