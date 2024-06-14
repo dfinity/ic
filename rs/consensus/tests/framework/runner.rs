@@ -14,6 +14,7 @@ use ic_interfaces::time_source::TimeSource;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::malicious_flags::MaliciousFlags;
+use ic_types::Height;
 use ic_types::Time;
 use rand::{thread_rng, Rng, RngCore};
 use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
@@ -22,6 +23,7 @@ use std::cell::{RefCell, RefMut};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
+use tokio::sync::watch;
 
 fn stop_immediately(_: &ConsensusInstance<'_>) -> bool {
     true
@@ -193,6 +195,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.consensus_pool.read().unwrap().get_cache(),
             deps.metrics_registry.clone(),
             replica_logger.clone(),
+            watch::channel(Height::from(0)).0,
         );
         let now = self.time.get_relative_time();
         let in_queue: Queue<Input> = Default::default();

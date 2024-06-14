@@ -31,6 +31,7 @@ DEPENDENCIES = [
     "@crate_index//:rand_chacha",
     "@crate_index//:rayon",
     "@crate_index//:slog",
+    "@crate_index//:tokio",
 ]
 
 DEV_DEPENDENCIES = [

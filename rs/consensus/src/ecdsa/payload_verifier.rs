@@ -25,8 +25,8 @@ use super::payload_builder::EcdsaPayloadError;
 use super::pre_signer::EcdsaTranscriptBuilder;
 use super::signer::EcdsaSignatureBuilder;
 use super::utils::{
-    block_chain_cache, get_chain_key_config_if_enabled, EcdsaBlockReaderImpl,
-    InvalidChainCacheError,
+    block_chain_cache, get_chain_key_config_if_enabled, BuildSignatureInputsError,
+    EcdsaBlockReaderImpl, InvalidChainCacheError,
 };
 use crate::consensus::metrics::timed_call;
 use crate::ecdsa::payload_builder::{create_data_payload_helper, create_summary_payload};
@@ -104,7 +104,7 @@ pub(crate) enum InvalidEcdsaPayloadReason {
     NewTranscriptMiscount(u64),
     NewTranscriptMissingParams(IDkgTranscriptId),
     NewSignatureUnexpected(idkg::PseudoRandomId),
-    NewSignatureMissingInput(idkg::PseudoRandomId),
+    NewSignatureBuildInputsError(BuildSignatureInputsError),
     NewSignatureMissingContext(idkg::PseudoRandomId),
     XNetReshareAgreementWithoutRequest(idkg::IDkgReshareRequest),
     XNetReshareRequestDisappeared(idkg::IDkgReshareRequest),
@@ -563,9 +563,8 @@ fn validate_new_signature_agreements(
                 let context = context_map.get(random_id).ok_or(
                     InvalidEcdsaPayloadReason::NewSignatureMissingContext(*random_id),
                 )?;
-                let (_, input_ref) = build_signature_inputs(context, block_reader).ok_or(
-                    InvalidEcdsaPayloadReason::NewSignatureMissingInput(*random_id),
-                )?;
+                let (_, input_ref) = build_signature_inputs(context, block_reader)
+                    .map_err(InvalidEcdsaPayloadReason::NewSignatureBuildInputsError)?;
                 match input_ref {
                     ThresholdSigInputsRef::Ecdsa(input_ref) => {
                         let input = input_ref
@@ -1065,7 +1064,9 @@ mod test {
         assert_matches!(
             res,
             Err(ValidationError::InvalidArtifact(
-                InvalidEcdsaPayloadReason::NewSignatureMissingInput(_)
+                InvalidEcdsaPayloadReason::NewSignatureBuildInputsError(
+                    BuildSignatureInputsError::MissingPreSignature(_)
+                )
             ))
         );
 
