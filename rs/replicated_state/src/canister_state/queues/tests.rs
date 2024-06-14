@@ -911,6 +911,18 @@ fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, reques
     }
 }
 
+struct StrictMetrics;
+impl CheckpointLoadingMetrics for StrictMetrics {
+    fn observe_broken_soft_invariant(&self, msg: String) {
+        panic!("{}", msg);
+    }
+}
+
+struct NoOpMetrics;
+impl CheckpointLoadingMetrics for NoOpMetrics {
+    fn observe_broken_soft_invariant(&self, _: String) {}
+}
+
 /// Tests that an encode-decode roundtrip yields a result equal to the
 /// original (and the queue size metrics of an organically constructed
 /// `CanisterQueues` match those of a deserialized one).
@@ -923,7 +935,7 @@ fn encode_roundtrip() {
     queues
         .push_input(
             RequestBuilder::default().sender(this).build().into(),
-            InputQueueType::RemoteSubnet,
+            InputQueueType::LocalSubnet,
         )
         .unwrap();
     queues
@@ -938,8 +950,53 @@ fn encode_roundtrip() {
     queues.push_ingress(IngressBuilder::default().receiver(this).build());
 
     let encoded: pb_queues::CanisterQueues = (&queues).into();
-    let decoded = encoded.try_into().unwrap();
+    let decoded = (encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)
+        .try_into()
+        .unwrap();
 
+    assert_eq!(queues, decoded);
+}
+
+/// Tests decoding a `CanisterQueues` with an invalid input schedule.
+#[test]
+fn decode_invalid_input_schedule() {
+    let mut queues = CanisterQueues::default();
+
+    let this = canister_test_id(13);
+    let other = canister_test_id(14);
+    queues
+        .push_input(
+            RequestBuilder::default().sender(this).build().into(),
+            InputQueueType::LocalSubnet,
+        )
+        .unwrap();
+    queues
+        .push_input(
+            RequestBuilder::default().sender(other).build().into(),
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
+    queues.push_ingress(IngressBuilder::default().receiver(this).build());
+
+    let mut encoded: pb_queues::CanisterQueues = (&queues).into();
+    // Wipe the input schedule.
+    encoded.local_subnet_input_schedule.clear();
+
+    // Decoding should succeed.
+    let mut decoded =
+        CanisterQueues::try_from((encoded, &NoOpMetrics as &dyn CheckpointLoadingMetrics)).unwrap();
+    // And the input schedules should be valid.
+    decoded
+        .schedules_ok(
+            &CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
+            &BTreeMap::new(),
+        )
+        .unwrap();
+
+    // If we replace the input schedules with the original ones, the rest should be
+    // equal.
+    decoded.local_subnet_input_schedule = queues.local_subnet_input_schedule.clone();
+    decoded.remote_subnet_input_schedule = queues.remote_subnet_input_schedule.clone();
     assert_eq!(queues, decoded);
 }
 
@@ -1071,7 +1128,12 @@ fn decode_forward_compatibility() {
     expected_queues.memory_usage_stats =
         CanisterQueues::calculate_memory_usage_stats(&expected_queues.canister_queues);
 
-    let queues: CanisterQueues = queues_proto.try_into().unwrap();
+    let queues = (
+        queues_proto,
+        &StrictMetrics as &dyn CheckpointLoadingMetrics,
+    )
+        .try_into()
+        .unwrap();
     assert_eq!(expected_queues, queues);
 }
 
