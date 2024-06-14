@@ -408,12 +408,7 @@ impl CanisterQueues {
             self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
             debug_assert!(self.stats_ok());
 
-            let msg = match msg {
-                RequestOrResponse::Request(msg) => CanisterMessage::Request(msg),
-                RequestOrResponse::Response(msg) => CanisterMessage::Response(msg),
-            };
-
-            return Some(msg);
+            return Some(msg.into());
         }
 
         None
@@ -428,11 +423,8 @@ impl CanisterQueues {
         if let Some(sender) = input_schedule.front() {
             // Get the message queue of this canister.
             let input_queue = &self.canister_queues.get(sender).unwrap().0;
-            let msg = match input_queue.peek().unwrap() {
-                RequestOrResponse::Request(msg) => CanisterMessage::Request(Arc::clone(msg)),
-                RequestOrResponse::Response(msg) => CanisterMessage::Response(Arc::clone(msg)),
-            };
-            return Some(msg);
+            let msg = input_queue.peek().unwrap();
+            return Some(msg.clone().into());
         }
 
         None
