@@ -14,7 +14,7 @@ configure_make(
     autogen = True,
     configure_in_place = True,
     configure_options = ["--disable-tests"],
-    configure_env_vars = {"CXXFLAGS": "-lstdc++17"}
+    configure_env_vars = {"CXXFLAGS": "-stdc++17"}
     copts = ["-UNDEBUG"],
     lib_source = ":all_srcs",
     out_binaries = ["bitcoind"],
