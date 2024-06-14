@@ -74,6 +74,8 @@ anchors:
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
+    with:
+      fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
   python-setup: &python-setup
     name: Set up Python
     uses: actions/setup-python@v2
@@ -87,14 +89,8 @@ jobs:
     env:
       TITLE: ${{ github.event.pull_request.title }}
     steps:
+      - <<: *checkout
       - <<: *before-script
-      - <<: *checkout
-        if : ${{ github.event_name == 'pull_request' }}
-        with:
-          fetch-depth: 256
-      - <<: *checkout
-        if : ${{ github.event_name != 'pull_request' }}
-      - <<: *docker-ro-login
       - name: Run Bazel Test All
         id: bazel-test-all
         uses:  ./.github/actions/bazel-test-all/
@@ -121,14 +117,8 @@ jobs:
     <<: *dind-large-setup
     name: Bazel Build All Config Check
     steps:
+      - <<: *checkout
       - <<: *before-script
-      - <<: *checkout
-        if : ${{ github.event_name == 'pull_request' }}
-        with:
-          fetch-depth: 256
-      - <<: *checkout
-        if : ${{ github.event_name != 'pull_request' }}
-      - <<: *docker-ro-login
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
@@ -146,9 +136,9 @@ jobs:
     runs-on:
       labels: macOS
     steps:
-      - <<: *before-script
       - <<: *checkout
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         if: ${{ github.event_name == 'pull_request' }}
         with:
@@ -166,7 +156,7 @@ jobs:
         run: |
           echo "/usr/local/bin" >> $GITHUB_PATH
           echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
-      - <<: *docker-ro-login
+      - <<: *before-script
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
         if: steps.filter.outputs.bazel-test-darwin-x86-64 != 'false'
@@ -178,9 +168,6 @@ jobs:
           BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output//${ROOT_PIPELINE_ID}"
           BAZEL_TARGETS: "//rs/... //publish/binaries/..."
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
-      - name: No run
-        if: steps.filter.outputs.bazel-test-darwin-x86-64 == 'false'
-        run: echo "No changes, skipping run"
       - name: Purge Bazel Output
         shell: bash
         run: |
@@ -190,8 +177,8 @@ jobs:
     name: Bazel Build Fuzzers
     <<: *dind-large-setup
     steps:
-      - <<: *before-script
       - <<: *checkout
+      - <<: *before-script
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
         uses:  ./.github/actions/bazel-test-all/
@@ -205,8 +192,8 @@ jobs:
     name: Bazel Build Fuzzers AFL
     <<: *dind-large-setup
     steps:
-      - <<: *before-script
       - <<: *checkout
+      - <<: *before-script
       - name: Run Bazel Build Fuzzers AFL
         id: bazel-build-fuzzers-afl
         uses:  ./.github/actions/bazel-test-all/
@@ -222,7 +209,6 @@ jobs:
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
-      - <<: *before-script
       - <<: *checkout
       - <<: *python-setup
       - name: Run Python CI Tests
@@ -242,16 +228,8 @@ jobs:
     <<: *dind-large-setup
     if: ${{ vars.RUN_CI == 'true' && github.event_name != 'merge_group' }}
     steps:
+      - <<: *checkout
       - <<: *before-script
-      - <<: *checkout
-        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
-        if : ${{ github.event_name == 'pull_request' }}
-        with:
-          fetch-depth: 256
-      - <<: *checkout
-        uses: actions/checkout@v3
-        if : ${{ github.event_name != 'pull_request' }}
-      - <<: *docker-ro-login
       - name: Run Build IC
         id: build-ic
         shell: bash
@@ -305,7 +283,6 @@ jobs:
             PATH1: "build-ic/icos/setupos"
             SETUPOS_FLAG: "true"
     steps:
-      - <<: *before-script
       - <<: *checkout
       - name: Download bazel-targets [bazel-test-all]
         uses: actions/download-artifact@v3
@@ -332,7 +309,6 @@ jobs:
     name: Cargo Clippy Linux
     <<: *dind-large-setup
     steps:
-      - <<: *before-script
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
@@ -362,7 +338,6 @@ jobs:
     name: Cargo Build Release Linux
     <<: *dind-large-setup
     steps:
-      - <<: *before-script
       - <<: *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
