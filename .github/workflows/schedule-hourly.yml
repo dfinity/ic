@@ -31,6 +31,8 @@ jobs:
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Before script
         if: always()
         id: before-script
@@ -43,8 +45,6 @@ jobs:
           if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
           if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
           if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
-      - name: Checkout
-        uses: actions/checkout@v4
       - name: Docker RO SA login
         id: docker-ro-login
         shell: bash
