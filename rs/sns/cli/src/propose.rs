@@ -11,13 +11,14 @@ use ic_nns_governance::{
     init::TEST_NEURON_1_ID,
     pb::v1::{manage_neuron::NeuronIdOrSubaccount, proposal::Action, Proposal},
 };
+use ic_sns_governance::pb::v1::governance::Mode;
+use itertools::Itertools;
 use std::{
     collections::HashSet,
     fmt::{Debug, Display, Formatter},
     fs::{write, OpenOptions},
     path::{Path, PathBuf},
 };
-
 #[cfg(test)]
 mod propose_tests;
 
@@ -66,6 +67,11 @@ pub struct ProposeArgs {
     ///  }
     #[clap(long)]
     pub save_to: Option<PathBuf>,
+
+    /// If this flag is set, the proposal will be submitted without asking for
+    /// confirmation. This is useful for automated scripts.
+    #[clap(long)]
+    pub skip_confirmation: bool,
 }
 
 pub fn exec(args: ProposeArgs) {
@@ -76,7 +82,10 @@ pub fn exec(args: ProposeArgs) {
         neuron_memo,
         save_to,
         test_neuron_proposer,
+        skip_confirmation,
     } = args;
+    // We automatically skip confirming with the user if the network is "local", to save time during testing.
+    let skip_confirmation = skip_confirmation || network == "local";
 
     // Step 0: Load configuration
     let proposal = load_configuration_and_validate_or_exit(&network, &init_config_file);
@@ -90,6 +99,9 @@ pub fn exec(args: ProposeArgs) {
             std::process::exit(1);
         }
     }
+
+    // Step 2: Verify with the user that they want to proceed.
+    inform_user_of_sns_behavior(&proposal, skip_confirmation);
 
     // Step 2: Send the proposal.
     eprintln!("Loaded configuration.");
@@ -161,6 +173,80 @@ pub fn exec(args: ProposeArgs) {
             std::process::exit(1)
         }
     };
+}
+
+fn confirmation_messages(proposal: &Proposal) -> Vec<String> {
+    let canisters = match &proposal.action {
+        Some(Action::CreateServiceNervousSystem(csns)) => csns
+            .dapp_canisters
+            .iter()
+            .filter_map(|canister| canister.id.as_ref())
+            .map(|id| format!("  - {}", id))
+            .join("\n"),
+        _ => {
+            eprintln!(
+                "Internal error: Somehow a proposal was made not of type CreateServiceNervousSystem",
+            );
+            std::process::exit(1);
+        }
+    };
+    let dapp_canister_controllers = format!(
+        r#"A CreateServiceNervousSystem proposal will be submitted.
+If adopted, this proposal will create an SNS, which will control these canisters:
+{canisters}
+These canisters must have NNS root as a co-controller when the proposal is adopted, otherwise the SNS launch will be aborted.
+Otherwise, when the proposal is adopted, the SNS will be created and the SNS will take sole control over those canisters."#
+    );
+
+    let disallowed_types = Mode::proposal_types_disallowed_in_pre_initialization_swap()
+        .into_iter()
+        .map(|t| format!("  - {}", t.name))
+        .join("\n");
+    let allowed_proposals = format!(
+        r#"After the proposal is adopted, a swap is started. While the swap is running, the SNS will be in a restricted mode.
+Within this restricted mode, some proposal actions will not be allowed:
+{disallowed_types}
+Once the swap is completed, the SNS will be in normal mode and these proposal actions will become available again."#
+    );
+
+    vec![dapp_canister_controllers, allowed_proposals]
+}
+
+fn inform_user_of_sns_behavior(proposal: &Proposal, skip_confirmation: bool) {
+    let messages = confirmation_messages(proposal);
+    for message in messages {
+        println!();
+        println!("{}", message);
+        confirm_understanding(skip_confirmation);
+    }
+}
+
+fn confirm_understanding(skip_confirmation: bool) {
+    use std::io::{self, Write};
+
+    if skip_confirmation {
+        return;
+    }
+
+    let mut input = String::new();
+    print!("I understand [y/N]: ");
+    io::stdout().flush().unwrap(); // Make sure the prompt is displayed before input
+
+    match io::stdin().read_line(&mut input) {
+        Ok(_) => {
+            let input = input.trim().to_lowercase(); // Clean and normalize the input
+            if input == "y" || input == "yes" {
+                println!("Confirmed.");
+            } else {
+                println!("Exiting.");
+                std::process::exit(1); // Exit the program if the response is not affirmative
+            }
+        }
+        Err(error) => {
+            println!("Error reading input: {}", error);
+            std::process::exit(1); // Exit on input error
+        }
+    }
 }
 
 fn load_configuration_and_validate_or_exit(
@@ -381,4 +467,53 @@ fn save_proposal_id_to_file(path: &Path, proposal_id: &ProposalId) -> Result<(),
     write(path, json_str)
         .map_err(|e| SaveToErrors::FileWriteFailed(path.to_path_buf(), e.to_string()))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use crate::init_config_file::friendly::SnsConfigurationFile;
+
+    use super::*;
+
+    #[test]
+    fn confirmation_messages_test() {
+        // Step 1: Prepare the world.
+        let test_root_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let test_root_dir = Path::new(&test_root_dir);
+
+        let contents: String =
+            std::fs::read_to_string(test_root_dir.join("test_sns_init_v2.yaml")).unwrap();
+        let sns_configuration_file =
+            serde_yaml::from_str::<SnsConfigurationFile>(&contents).unwrap();
+
+        // Step 2: Call code under test.
+        let observed_create_service_nervous_system = sns_configuration_file
+            .try_convert_to_create_service_nervous_system(test_root_dir)
+            .unwrap();
+
+        let proposal = Proposal {
+            title: Some("Test Proposal".to_string()),
+            action: Some(Action::CreateServiceNervousSystem(
+                observed_create_service_nervous_system,
+            )),
+            summary: "Test Proposal Summary".to_string(),
+            url: "https://example.com".to_string(),
+        };
+
+        let observed_messages = confirmation_messages(&proposal);
+        let expected_messages = vec![
+            r#"A CreateServiceNervousSystem proposal will be submitted.
+If adopted, this proposal will create an SNS, which will control these canisters:
+  - c2n4r-wni5m-dqaaa-aaaap-4ai
+  - ucm27-3lxwy-faaaa-aaaap-4ai
+These canisters must have NNS root as a co-controller when the proposal is adopted, otherwise the SNS launch will be aborted.
+Otherwise, when the proposal is adopted, the SNS will be created and the SNS will take sole control over those canisters."#,
+            r#"After the proposal is adopted, a swap is started. While the swap is running, the SNS will be in a restricted mode.
+Within this restricted mode, some proposal actions will not be allowed:
+  - Manage nervous system parameters
+  - Transfer SNS treasury funds
+Once the swap is completed, the SNS will be in normal mode and these proposal actions will become available again."#,
+        ];
+        assert_eq!(observed_messages, expected_messages);
+    }
 }
