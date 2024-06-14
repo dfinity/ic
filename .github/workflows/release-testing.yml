@@ -22,6 +22,8 @@ env:
   BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 
+# TODO: DRY ~ put under wokflow-source
+
 jobs:
   bazel-system-test-nightly:
     name: Bazel System Test Nightly
@@ -34,6 +36,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Before script
+        id: before-script
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+
       - name: Run Bazel System Test Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -54,8 +62,15 @@ jobs:
     timeout-minutes: 180 # 3 hours
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Before script
+        id: before-script
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+
       - name: Run Bazel System Test Staging
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/

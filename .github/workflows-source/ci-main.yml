@@ -52,25 +52,11 @@ anchors:
       <<: *image
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
-  docker-ro-login: &docker-ro-login
-    name: Docker RO SA login
-    id: docker-ro-login
-    shell: bash
-    run: ./gitlab-ci/src/ci-scripts/docker-login.sh
-
   before-script: &before-script
     name: Before script
-    if: always()
     id: before-script
     shell: bash
-    run: |
-      # TODO: patch runner & runner manifest for cleaner bind mount
-      # Temporary way to bring required directories to workflow container:
-      if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
-      if [ -e /__w/ceph-s3-info ]; then sudo ln -s /__w/ceph-s3-info /; fi
-      if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then sudo ln -s /__w/var/tmp /var/tmp; fi
-      if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then sudo ln -s /__w/var/sysimage /var/sysimage; fi
-      if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
+    run: ./gitlab-ci/src/ci-scripts/before-script.sh
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4

@@ -18,7 +18,7 @@ env:
 
 anchors:
   image: &image
-      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
+    image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
   dind-small-setup: &dind-small-setup
     runs-on:
       labels: dind-runner-small
@@ -34,6 +34,11 @@ anchors:
       <<: *image
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
+  before-script: &before-script
+    name: Before script
+    id: before-script
+    shell: bash
+    run: ./gitlab-ci/src/ci-scripts/before-script.sh
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -44,9 +49,9 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
-
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        name: Filter Relevant Files
+      - <<: *before-script
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
           filters: |
@@ -54,7 +59,6 @@ jobs:
               - '.github/workflows/pr-only.yml'
               - 'bin/build-all-fuzzers.sh'
               - 'bazel/fuzz_testing.bzl'
-
       - name: Run Bazel Build Fuzzers Archives
         id: bazel-build-fuzzers-archives
         if: steps.filter.outputs.fuzzers == 'true'
@@ -69,9 +73,9 @@ jobs:
     <<: *dind-small-setup
     steps:
       - <<: *checkout
-
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        name: Filter Relevant Files
+      - <<: *before-script
+      - name: Filter Relevant Files
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
           filters: |
@@ -84,7 +88,6 @@ jobs:
               - '**/*.lock'
               - '**/*.rs'
               - '**/*.toml'
-
       - name: Run Lock Generate
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
@@ -97,7 +100,6 @@ jobs:
       - <<: *checkout
         with:
           fetch-depth: 256
-
       - name: Pre-Commit
         id: pre-commit
         shell: bash
@@ -109,12 +111,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - <<: *checkout
-
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: '3.10'
-
       - name: Run script
         run: |
           python -m pip install --upgrade pip
