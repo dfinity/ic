@@ -40,6 +40,7 @@ ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-icp-index = { path = "index" }
 ic-ledger-test-utils = { path = "test_utils" }
 ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_state" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ledger-canister-protobuf-generator = { path = "./protobuf_generator" }
 maplit = "1.0.2"

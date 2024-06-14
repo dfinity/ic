@@ -88,6 +88,72 @@ rust_canister(
 )
 
 rust_ic_test_suite(
+    name = "ledger_canister_integration_golden_nns_state_test",
+    timeout = "long",
+    srcs = [
+        "tests/recovered_mainnet_state.rs",
+    ],
+    data = [
+        "ledger.did",
+        "ledger_archive.did",
+        ":ledger_proxy.wasm",
+        ":test_notified_canister",
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
+        "//rs/rosetta-api/icp_ledger/index:ic-icp-index-canister",
+        "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
+        "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+        "@mainnet_icp_index_canister//file",
+        "@mainnet_icp_ledger-archive-node-canister//file",
+        "@mainnet_icp_ledger_canister//file",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger",
+        "IC_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/index:ic-icp-index-canister)",
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm)",
+        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
+        "LEDGER_PROXY_WASM_PATH": "$(rootpath :ledger_proxy.wasm)",
+        "MAINNET_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_index_canister//file)",
+        "MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger-archive-node-canister//file)",
+        "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "TEST_NOTIFIED_WASM_PATH": "$(rootpath :test_notified_canister)",
+    },
+    tags = [
+        "manual",  # CI should not be downloading nns_state.tar.zst.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
+    deps = [
+        ":icp_ledger",
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/pocket-ic",
+        "//rs/canister_client/sender",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils/golden_nns_state",
+        "//rs/rosetta-api/icp_ledger/index:ic-icp-index",
+        "//rs/rosetta-api/icp_ledger/test_utils",
+        "//rs/rosetta-api/ledger_canister_core",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/rust_canisters/http_types",
+        "//rs/rust_canisters/on_wire",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:candid_parser",
+        "@crate_index//:hex",
+        "@crate_index//:maplit",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+    ],
+)
+
+rust_ic_test_suite(
     name = "ledger_canister_integration_test",
     timeout = "long",
     srcs = [

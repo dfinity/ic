@@ -4,12 +4,20 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::NumInstructions;
 
+use std::path::PathBuf;
 use std::{ops::RangeInclusive, path::Path, process::Command, str::FromStr};
 use tempfile::TempDir;
 
 // TODO: Add support for PocketIc.
 
-pub fn new_state_machine_with_golden_nns_state_or_panic() -> StateMachine {
+pub enum GoldenStateLocation {
+    Local(PathBuf),
+    Remote,
+}
+
+pub fn new_state_machine_with_golden_nns_state_or_panic(
+    golden_state_location: GoldenStateLocation,
+) -> StateMachine {
     // TODO, remove when this is the value set in the normal IC build This is to
     // uncover issues in testing that might affect performance in production.
     // Application subnets have this set to 2 billion.
@@ -37,7 +45,14 @@ pub fn new_state_machine_with_golden_nns_state_or_panic() -> StateMachine {
         PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
             .unwrap(),
     );
-    let state_dir = download_and_untar_golden_nns_state_or_panic();
+    let state_dir: TempDir = match golden_state_location {
+        GoldenStateLocation::Local(path) => {
+            let state_dir = bazel_test_compatible_temp_dir_or_panic();
+            untar_state_archive_or_panic(&path, state_dir.path());
+            state_dir
+        }
+        GoldenStateLocation::Remote => download_and_untar_golden_nns_state_or_panic(),
+    };
     let state_machine_builder = state_machine_builder
         .with_state_dir(state_dir)
         // Patch StateMachine. This is a bit of a hack that we need because we
@@ -125,18 +140,21 @@ fn download_golden_nns_state_or_panic(destination: &Path) {
 fn untar_state_archive_or_panic(source: &Path, destination: &Path) {
     println!("Unpacking {:?} to {:?}...", source, destination);
 
-    // TODO: Mathias reports having problems with this (or something similar) on Mac.
+    let mut command = Command::new("tar");
+    command.arg("--extract").arg("--file").arg(source);
+
     let unpack_destination = bazel_test_compatible_temp_dir_or_panic();
     let unpack_destination = unpack_destination
         .path()
         .to_str()
         .expect("Was trying to convert a Path to a string.");
-    let tar_out = Command::new("tar")
-        .arg("--extract")
-        .arg("--file")
-        .arg(source)
-        .arg("--directory")
-        .arg(unpack_destination)
+    command.arg("--directory").arg(unpack_destination);
+
+    if cfg!(target_os = "macos") {
+        command.arg("--use-compress-program=/opt/homebrew/bin/zstd -d -q");
+    }
+
+    let tar_out = command
         .output()
         .unwrap_or_else(|err| panic!("Could not unpack {:?}: {}", source, err));
 

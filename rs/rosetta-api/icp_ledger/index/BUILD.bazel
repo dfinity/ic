@@ -28,6 +28,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    "//rs/rosetta-api/icp_ledger/test_utils",
     "//rs/rosetta-api/icrc1/ledger/sm-tests",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
