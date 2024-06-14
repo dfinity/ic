@@ -15,6 +15,7 @@ use crate::{Height, RegistryVersion};
 use ic_base_types::{NodeId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
@@ -42,9 +43,9 @@ pub type PseudoRandomId = [u8; 32];
 
 /// RequestId is used for two purposes:
 /// 1. to identify the matching request in sign_with_ecdsa_contexts.
-/// 2. to identify which quadruple the request is matched to.
+/// 2. to identify which pre-signature the request is matched to.
 ///
-/// Quadruples must be matched with requests in the same order as requests
+/// Pre-signatures must be matched with requests in the same order as requests
 /// are created.
 ///
 /// The height field represents at which block the RequestId is created.
@@ -651,7 +652,9 @@ pub trait EcdsaBlockReader: Send + Sync {
     fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
 
     /// Returns the IDs of pre-signatures in creation by the tip.
-    fn pre_signatures_in_creation(&self) -> Box<dyn Iterator<Item = &PreSigId> + '_>;
+    fn pre_signatures_in_creation(
+        &self,
+    ) -> Box<dyn Iterator<Item = (PreSigId, MasterPublicKeyId)> + '_>;
 
     /// For the given pre-signature ID, returns the pre-signature ref if available.
     fn available_pre_signature(&self, id: &PreSigId) -> Option<&PreSignatureRef>;

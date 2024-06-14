@@ -15,7 +15,7 @@ use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     SignWithThresholdContext, ThresholdArguments,
 };
-use ic_types::consensus::idkg::common::{PreSignatureRef, ThresholdSigInputsRef};
+use ic_types::consensus::idkg::common::{PreSignatureRef, SignatureScheme, ThresholdSigInputsRef};
 use ic_types::consensus::idkg::ecdsa::ThresholdEcdsaSigInputsRef;
 use ic_types::consensus::idkg::schnorr::ThresholdSchnorrSigInputsRef;
 use ic_types::consensus::idkg::HasMasterPublicKeyId;
@@ -78,15 +78,20 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             })
     }
 
-    fn pre_signatures_in_creation(&self) -> Box<dyn Iterator<Item = &PreSigId> + '_> {
-        self.chain
-            .tip()
-            .payload
-            .as_ref()
-            .as_ecdsa()
-            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
-                Box::new(ecdsa_payload.pre_signatures_in_creation.keys())
-            })
+    fn pre_signatures_in_creation(
+        &self,
+    ) -> Box<dyn Iterator<Item = (PreSigId, MasterPublicKeyId)> + '_> {
+        self.chain.tip().payload.as_ref().as_ecdsa().map_or(
+            Box::new(std::iter::empty()),
+            |ecdsa_payload| {
+                Box::new(
+                    ecdsa_payload
+                        .pre_signatures_in_creation
+                        .iter()
+                        .map(|(id, pre_sig)| (*id, pre_sig.key_id())),
+                )
+            },
+        )
     }
 
     fn available_pre_signature(&self, id: &PreSigId) -> Option<&PreSignatureRef> {
@@ -229,21 +234,51 @@ pub(super) fn get_context_request_id(context: &SignWithThresholdContext) -> Opti
         })
 }
 
+#[derive(Debug)]
+#[allow(dead_code)]
+pub(crate) enum BuildSignatureInputsError {
+    /// The context wasn't matched to a pre-signature yet, or is still missing its random nonce
+    ContextIncomplete,
+    /// The context was matched to a pre-signature which cannot be found in the latest block payload
+    MissingPreSignature(RequestId),
+    /// The context was matched to a pre-signature of the wrong signature scheme
+    SignatureSchemeMismatch(RequestId, SignatureScheme),
+}
+
+impl BuildSignatureInputsError {
+    /// Fatal errors indicate a problem in the construction of payloads,
+    /// request contexts, or the match between both. They should only
+    /// appear in exceptional cases (i.e. subnet recoveries).
+    pub(crate) fn is_fatal(&self) -> bool {
+        matches!(
+            self,
+            BuildSignatureInputsError::MissingPreSignature(_)
+                | BuildSignatureInputsError::SignatureSchemeMismatch(_, _)
+        )
+    }
+}
+
 /// Helper to build threshold signature inputs from the context and
 /// the pre-signature
 pub(super) fn build_signature_inputs(
     context: &SignWithThresholdContext,
     block_reader: &dyn EcdsaBlockReader,
-) -> Option<(RequestId, ThresholdSigInputsRef)> {
-    let request_id = get_context_request_id(context)?;
+) -> Result<(RequestId, ThresholdSigInputsRef), BuildSignatureInputsError> {
+    let request_id =
+        get_context_request_id(context).ok_or(BuildSignatureInputsError::ContextIncomplete)?;
     let extended_derivation_path = ExtendedDerivationPath {
         caller: context.request.sender.into(),
         derivation_path: context.derivation_path.clone(),
     };
     let pre_signature = block_reader
-        .available_pre_signature(&request_id.pre_signature_id)?
+        .available_pre_signature(&request_id.pre_signature_id)
+        .ok_or_else(|| BuildSignatureInputsError::MissingPreSignature(request_id.clone()))?
         .clone();
-    let nonce = Id::from(context.nonce?);
+    let nonce = Id::from(
+        context
+            .nonce
+            .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
+    );
     let inputs = match (pre_signature, &context.args) {
         (PreSignatureRef::Ecdsa(pre_sig), ThresholdArguments::Ecdsa(args)) => {
             let key_transcript_ref = pre_sig.key_unmasked_ref;
@@ -263,10 +298,21 @@ pub(super) fn build_signature_inputs(
                 pre_sig,
             ))
         }
-        _ => return None,
+        (PreSignatureRef::Ecdsa(_), _) => {
+            return Err(BuildSignatureInputsError::SignatureSchemeMismatch(
+                request_id,
+                SignatureScheme::Ecdsa,
+            ))
+        }
+        (PreSignatureRef::Schnorr(_), _) => {
+            return Err(BuildSignatureInputsError::SignatureSchemeMismatch(
+                request_id,
+                SignatureScheme::Schnorr,
+            ))
+        }
     };
 
-    Some((request_id, inputs))
+    Ok((request_id, inputs))
 }
 
 /// Load the given transcripts

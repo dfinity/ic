@@ -135,7 +135,17 @@ impl EcdsaSignerImpl {
             .get_state()
             .signature_request_contexts()
             .values()
-            .flat_map(|context| build_signature_inputs(context, block_reader))
+            .flat_map(|context| {
+                build_signature_inputs(context, block_reader).map_err(|err| {
+                    if err.is_fatal() {
+                        warn!(every_n_seconds => 15, self.log,
+                            "send_signature_shares(): failed to build signature inputs: {:?}",
+                            err
+                        );
+                        self.metrics.sign_errors_inc("signature_inputs_malformed");
+                    }
+                })
+            })
             .filter(|(request_id, inputs_ref)| {
                 !self.signer_has_issued_share(
                     ecdsa_pool,
@@ -170,7 +180,16 @@ impl EcdsaSignerImpl {
             .get_state()
             .signature_request_contexts()
             .values()
-            .map(|c| (c.pseudo_random_id, build_signature_inputs(c, block_reader)))
+            .map(|c| {
+                let inputs = build_signature_inputs(c, block_reader).map_err(|err| if err.is_fatal() {
+                    warn!(every_n_seconds => 15, self.log,
+                        "validate_signature_shares(): failed to build signatures inputs: {:?}", 
+                        err
+                    );
+                    self.metrics.sign_errors_inc("signature_inputs_malformed");
+                }).ok();
+                (c.pseudo_random_id, inputs)
+            })
             .collect::<BTreeMap<_, _>>();
 
         // Collection of validated shares
@@ -658,7 +677,18 @@ impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
         context: &SignWithThresholdContext,
     ) -> Option<CombinedSignature> {
         // Find the sig inputs for the request and translate the refs.
-        let (request_id, sig_inputs_ref) = build_signature_inputs(context, self.block_reader)?;
+        let (request_id, sig_inputs_ref) = build_signature_inputs(context, self.block_reader)
+            .map_err(|err| {
+                if err.is_fatal() {
+                    warn!(every_n_seconds => 15, self.log,
+                        "get_completed_signature(): failed to build signature inputs: {:?}",
+                        err
+                    );
+                    self.metrics
+                        .payload_errors_inc("signature_inputs_malformed");
+                }
+            })
+            .ok()?;
 
         let sig_inputs = match sig_inputs_ref.translate(self.block_reader) {
             Ok(sig_inputs) => sig_inputs,
