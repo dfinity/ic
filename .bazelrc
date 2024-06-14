@@ -57,7 +57,7 @@ build --experimental_remote_build_event_upload=minimal
 
 build:ci --bes_timeout=180s # Default is no timeout.
 # TODO: this is overwritten
-build:ci --bes_upload_mode=fully_async
+#build:ci --bes_upload_mode=fully_async
 # Read by bazel/exporter
 build:ci --build_event_binary_file=bazel-bep.pb
 
