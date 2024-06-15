@@ -38,6 +38,7 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-icp-index = { path = "index" }
+ic-icrc1-ledger-sm-tests = { path = "../icrc1/ledger/sm-tests" }
 ic-ledger-test-utils = { path = "test_utils" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_state" }

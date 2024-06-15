@@ -16,6 +16,8 @@ rust_library(
         "//rs/rosetta-api/icp_ledger/index:ic-icp-index",
         "//rs/rosetta-api/ledger_core",
         "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/rust_canisters/on_wire",
         "//rs/state_machine_tests",
         "//rs/types/base_types",
         "@crate_index//:candid",

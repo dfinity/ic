@@ -8876,6 +8876,7 @@ dependencies = [
  "candid",
  "candid_parser",
  "canister-test",
+ "dfn_protobuf",
  "ic-base-types",
  "ic-icp-index",
  "ic-ledger-core",
@@ -8884,6 +8885,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-types",
  "maplit",
+ "on_wire",
  "pocket-ic",
  "serde",
 ]
@@ -12488,6 +12490,7 @@ dependencies = [
  "ic-cdk 0.13.2",
  "ic-crypto-sha2",
  "ic-icp-index",
+ "ic-icrc1-ledger-sm-tests",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
