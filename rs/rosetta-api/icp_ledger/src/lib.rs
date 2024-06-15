@@ -681,6 +681,11 @@ impl LedgerCanisterUpgradePayloadBuilder {
         self
     }
 
+    pub fn feature_flags(mut self, feature_flags: FeatureFlags) -> Self {
+        self.feature_flags = Some(feature_flags);
+        self
+    }
+
     pub fn build(self) -> Result<LedgerCanisterUpgradePayload, String> {
         Ok(LedgerCanisterUpgradePayload(
             LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
