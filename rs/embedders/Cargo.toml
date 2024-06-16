@@ -27,7 +27,7 @@ libflate = "1.1.2"
 memory_tracker = { path = "../memory_tracker" }
 nix = { workspace = true }
 prometheus = { workspace = true }
-rayon = "1.5.1"
+rayon = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
