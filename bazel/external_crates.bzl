@@ -416,7 +416,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "flate2": crate.spec(
-                version = "^1.0.22",
+                version = "^1.0.30",
             ),
             "form_urlencoded": crate.spec(
                 version = "^1.0.0",
@@ -975,7 +975,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.9.1",
             ),
             "rayon": crate.spec(
-                version = "^1.5.1",
+                version = "^1.10.0",
             ),
             "rcgen": crate.spec(
                 version = "^0.13.1",
@@ -987,7 +987,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8.37",
             ),
             "regex": crate.spec(
-                version = "^1.3.9",
+                version = "^1.10.4",
             ),
             "reqwest_0_11_27": crate.spec(
                 package = "reqwest",

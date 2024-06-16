@@ -16,7 +16,7 @@ ic-cdk-macros = { workspace = true }
 candid = { workspace = true }
 ic-certified-map = "0.3"
 base64 = { workspace = true }
-flate2 = "1"
+flate2 = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 sha2 = "0.10.6"

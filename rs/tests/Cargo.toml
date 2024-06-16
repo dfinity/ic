@@ -32,7 +32,7 @@ dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_json = { path = "../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
 dfn_core = { path = "../rust_canisters/dfn_core" }
-flate2 = "1.0.22"
+flate2 = { workspace = true }
 futures = { workspace = true }
 humantime = "2.0"
 ic-base-types = { path = "../types/base_types" }
@@ -143,9 +143,9 @@ prost = { workspace = true }
 quickcheck = "1.0.3"
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-rayon = "1"
+rayon = { workspace = true }
 rcgen = { workspace = true }
-regex = "1.5.0"
+regex = { workspace = true }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 ring = { version = "0.17.7", features = ["std"] }
