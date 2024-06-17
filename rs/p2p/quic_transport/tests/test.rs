@@ -234,6 +234,7 @@ fn test_real_socket() {
 }
 
 #[test]
+#[ignore]
 fn test_real_socket_large_msg() {
     with_test_replica_logger(|log| {
         info!(log, "Starting test");

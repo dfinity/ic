@@ -12,6 +12,8 @@
 //!       encoded header and body and reconstructing it into a typed request.
 //! Response encoding Response<Bytes>:
 //!     - Same as request expect that the header contains a HeaderMap and a Statuscode.
+use std::collections::{BTreeMap, BinaryHeap, HashMap};
+
 use anyhow::Context;
 use axum::{
     body::{Body, HttpBody},
@@ -20,8 +22,9 @@ use axum::{
     middleware::Next,
 };
 use bincode::Options;
-use bytes::Bytes;
-use quinn::{RecvStream, SendStream};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use quinn::{Chunk, RecvStream, SendStream};
+use reed_solomon_erasure::ReedSolomon;
 use serde::{Deserialize, Serialize};
 
 use crate::metrics::QuicTransportMetrics;
@@ -36,11 +39,149 @@ fn bincode_config() -> impl Options {
         .with_limit(MAX_MESSAGE_SIZE_BYTES as u64)
 }
 
-pub(crate) async fn read_request(
-    mut recv_stream: RecvStream,
-) -> Result<Request<Body>, anyhow::Error> {
-    let raw_msg = recv_stream
-        .read_to_end(MAX_MESSAGE_SIZE_BYTES)
+#[derive(Debug, Clone, Copy)]
+struct EcHeader {
+    len: u32,
+    scheme: (u8, u8),
+    padding: u32,
+}
+
+async fn assemble(mut recv_stream: RecvStream) -> Result<Bytes, anyhow::Error> {
+    let chunk_size = 1024;
+    let ec_header_size = 4 + 1 + 1 + 4;
+    let tot_ec_size = chunk_size + ec_header_size;
+
+    let mut header = None;
+
+    let mut chunk_map: HashMap<usize, BinaryHeap<_>> = HashMap::new();
+    let mut decoded_map: BTreeMap<usize, Bytes> = BTreeMap::new();
+    while let Some(Chunk { offset, mut bytes }) = recv_stream
+        .read_chunk(MAX_MESSAGE_SIZE_BYTES, false)
+        .await?
+    {
+        let mut pos = offset as usize;
+        println!("chunk {offset} b {}", bytes.len());
+        while !bytes.is_empty() {
+            let ec_idx = pos / tot_ec_size;
+            // offset is at chunk boundary
+            let c = if pos % tot_ec_size == 0 {
+                if bytes.len() < tot_ec_size {
+                    pos += bytes.len();
+                    bytes.split_to(bytes.len())
+                } else {
+                    pos += tot_ec_size;
+                    bytes.split_to(tot_ec_size)
+                }
+            } else {
+                let dist_to_next_ec = tot_ec_size - (pos % tot_ec_size);
+                if bytes.len() < dist_to_next_ec {
+                    pos += bytes.len();
+                    bytes.split_to(bytes.len())
+                } else {
+                    pos += dist_to_next_ec;
+                    bytes.split_to(dist_to_next_ec)
+                }
+            };
+            println!("ec {ec_idx} c {}", c.len());
+            let e = chunk_map.entry(ec_idx).or_default();
+            e.push((pos, c));
+
+            if e.iter().map(|c| c.1.len()).sum::<usize>() == tot_ec_size {
+                println!("decoding");
+                let mut bm = BytesMut::new();
+                while let Some(c) = e.pop() {
+                    bm.extend_from_slice(&c.1);
+                }
+                println!("decoding {}", bm.len());
+
+                let mut ec_header = bm.split_off(bm.len() - ec_header_size);
+                println!("decoding {:?}", ec_header);
+                if header.is_none() {
+                    header = Some(EcHeader {
+                        len: ec_header.get_u32(),
+                        scheme: (ec_header.get_u8(), ec_header.get_u8()),
+                        padding: ec_header.get_u32(),
+                    });
+                }
+                decoded_map.insert(ec_idx, bm.freeze());
+            }
+        }
+        println!("d {}", decoded_map.len());
+
+        let h1 = header.clone();
+        println!("h {:?}", h1);
+        if h1.is_some_and(|h| h.scheme.0 >= decoded_map.len() as u8) {
+            let header = h1.unwrap();
+            let r: ReedSolomon<reed_solomon_erasure::galois_8::Field> =
+                ReedSolomon::new(header.scheme.0 as usize, header.scheme.1 as usize).unwrap();
+            let mut shards: Vec<Option<Vec<u8>>> = (0..header.scheme.0 + header.scheme.1)
+                .map(|b| {
+                    if let Some(s) = decoded_map.get(&(b as usize)) {
+                        Some(s.to_vec())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            match r.reconstruct_data(&mut shards) {
+                Ok(()) => {
+                    let mut data = Bytes::from(
+                        shards
+                            .into_iter()
+                            .take(header.scheme.0 as usize)
+                            .map(|s| s.unwrap())
+                            .flatten()
+                            .collect::<Vec<u8>>(),
+                    );
+                    let a = data.split_to(chunk_size - header.padding as usize);
+                    return Ok(a);
+                }
+                Err(e) => {
+                    println!("reconstruct failed {e:?}");
+                }
+            }
+        }
+    }
+    panic!("ah")
+}
+
+async fn disassemble(
+    send_stream: &mut SendStream,
+    mut bytes: Vec<u8>,
+) -> Result<(), anyhow::Error> {
+    println!("raw {bytes:?}");
+    let len_bytes = bytes.len();
+    let chunk_size = 1024;
+    let padding = chunk_size - bytes.len() % chunk_size;
+    bytes.resize(chunk_size * bytes.len().div_ceil(chunk_size), 0);
+    assert!(bytes.len() % chunk_size == 0);
+    let data_shards = bytes.len() / chunk_size;
+    let parity_shards = data_shards + data_shards / 2;
+    println!("data {data_shards} parity {parity_shards} len bytes {len_bytes} padding {padding}");
+    let r: ReedSolomon<reed_solomon_erasure::galois_8::Field> =
+        ReedSolomon::new(data_shards, parity_shards).unwrap();
+    bytes.resize(data_shards * chunk_size + parity_shards * chunk_size, 0);
+    let mut shards: Vec<_> = bytes.chunks_mut(chunk_size).collect();
+    r.encode(&mut shards).unwrap();
+    let mut ecs: Vec<Bytes> = shards
+        .into_iter()
+        .map(|x| {
+            let mut b = BytesMut::new();
+            b.extend_from_slice(x);
+            b.put_u32(len_bytes as u32);
+            b.put_u8(data_shards as u8);
+            b.put_u8(parity_shards as u8);
+            b.put_u32(padding as u32);
+            b.freeze()
+        })
+        .collect();
+    send_stream.write_chunks(&mut ecs).await?;
+    Ok(())
+}
+
+pub(crate) async fn read_request(recv_stream: RecvStream) -> Result<Request<Body>, anyhow::Error> {
+    let raw_msg = assemble(recv_stream)
         .await
         .with_context(|| "Failed to read request from the stream.")?;
 
@@ -54,12 +195,12 @@ pub(crate) async fn read_request(
 }
 
 pub(crate) async fn read_response(
-    mut recv_stream: RecvStream,
+    recv_stream: RecvStream,
 ) -> Result<Response<Bytes>, anyhow::Error> {
-    let raw_msg = recv_stream
-        .read_to_end(MAX_MESSAGE_SIZE_BYTES)
+    let raw_msg = assemble(recv_stream)
         .await
         .with_context(|| "Failed to read response from the stream.")?;
+
     let msg: WireResponse = bincode_config()
         .deserialize(&raw_msg)
         .with_context(|| "Failed to deserialize response.")?;
@@ -83,10 +224,7 @@ pub(crate) async fn write_request(
     let res = bincode_config()
         .serialize(&msg)
         .with_context(|| "Failed to serialize request.")?;
-    send_stream
-        .write_all(&res)
-        .await
-        .with_context(|| "Failed to write request to the stream.")
+    disassemble(send_stream, res).await
 }
 
 pub(crate) async fn write_response(
@@ -106,10 +244,7 @@ pub(crate) async fn write_response(
     let res = bincode_config()
         .serialize(&msg)
         .with_context(|| "Failed to serialize response.")?;
-    send_stream
-        .write_all(&res)
-        .await
-        .with_context(|| "Failed to write response to the wire.")
+    disassemble(send_stream, res).await
 }
 
 #[derive(Serialize, Deserialize)]

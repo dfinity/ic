@@ -27,6 +27,7 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:quinn",
     "@crate_index//:rustls_0_21_12",
+    "@crate_index//:reed-solomon-erasure",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:slog",

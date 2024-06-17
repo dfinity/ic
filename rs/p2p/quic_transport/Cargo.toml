@@ -24,6 +24,8 @@ ic-metrics = { path = "../../monitoring/metrics" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 quinn = { workspace = true }
+reed-solomon-erasure = "6.0.0"
+raptor-code = "1.0.6"
 rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

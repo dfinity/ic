@@ -1,5 +1,5 @@
 {
-  "checksum": "a057a2424c54a06d8b29ccec7f394bb93e63c4f2edf22ea97763f4d4327a5988",
+  "checksum": "b9c9e93291f9685c139a83dc9ab8ee7236776a62edd57f7f73e068d2935f76d3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17766,6 +17766,10 @@
               "target": "randomkit"
             },
             {
+              "id": "raptor-code 1.0.6",
+              "target": "raptor_code"
+            },
+            {
               "id": "ratelimit 0.9.1",
               "target": "ratelimit"
             },
@@ -17776,6 +17780,10 @@
             {
               "id": "rcgen 0.13.1",
               "target": "rcgen"
+            },
+            {
+              "id": "reed-solomon-erasure 6.0.0",
+              "target": "reed_solomon_erasure"
             },
             {
               "id": "regex 1.10.2",
@@ -24349,6 +24357,9 @@
         ],
         "crate_features": {
           "common": [
+            "ahash",
+            "default",
+            "inline-more",
             "raw"
           ],
           "selects": {}
@@ -35616,6 +35627,22 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default",
+            "hashbrown"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "hashbrown 0.12.3",
+              "target": "hashbrown"
+            }
+          ],
+          "selects": {}
+        },
         "edition": "2015",
         "version": "0.7.8"
       },
@@ -45516,6 +45543,44 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "primes 0.3.0": {
+      "name": "primes",
+      "version": "0.3.0",
+      "package_url": "https://github.com/wackywendell/primes/tree/master",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/primes/0.3.0/download",
+          "sha256": "68a61082d8bceecd71a3870e9162002bb75f7ba9c7aa8b76227e887782fef9c8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "primes",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "primes",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.3.0"
+      },
+      "license": "BSD-3-Clause",
+      "license_ids": [
+        "BSD-3-Clause"
+      ],
+      "license_file": "LICENSE"
+    },
     "primitive-types 0.12.2": {
       "name": "primitive-types",
       "version": "0.12.2",
@@ -49559,6 +49624,57 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "raptor-code 1.0.6": {
+      "name": "raptor-code",
+      "version": "1.0.6",
+      "package_url": "https://github.com/ypo/raptor",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/raptor-code/1.0.6/download",
+          "sha256": "842f8ab0b62f5670639474e2b6ec7c235610fe1b5dbf5f09ea4a85701e4a15bd"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "raptor_code",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "raptor_code",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "primes 0.3.0",
+              "target": "primes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.0.6"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "ratelimit 0.9.1": {
       "name": "ratelimit",
       "version": "0.9.1",
@@ -50056,6 +50172,98 @@
         },
         "edition": "2018",
         "version": "0.4.3"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "reed-solomon-erasure 6.0.0": {
+      "name": "reed-solomon-erasure",
+      "version": "6.0.0",
+      "package_url": "https://github.com/darrenldl/reed-solomon-erasure",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/reed-solomon-erasure/6.0.0/download",
+          "sha256": "7263373d500d4d4f505d43a2a662d475a894aa94503a1ee28e9188b5f3960d4f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "reed_solomon_erasure",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "reed_solomon_erasure",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "parking_lot",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "libm 0.2.8",
+              "target": "libm"
+            },
+            {
+              "id": "lru 0.7.8",
+              "target": "lru"
+            },
+            {
+              "id": "parking_lot 0.11.2",
+              "target": "parking_lot"
+            },
+            {
+              "id": "reed-solomon-erasure 6.0.0",
+              "target": "build_script_build"
+            },
+            {
+              "id": "smallvec 1.13.2",
+              "target": "smallvec"
+            },
+            {
+              "id": "spin 0.9.8",
+              "target": "spin"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "6.0.0"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ]
       },
       "license": "MIT",
       "license_ids": [
@@ -76519,9 +76727,11 @@
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
     "randomkit 0.1.1",
+    "raptor-code 1.0.6",
     "ratelimit 0.9.1",
     "rayon 1.8.0",
     "rcgen 0.13.1",
+    "reed-solomon-erasure 6.0.0",
     "regex 1.10.2",
     "reqwest 0.11.27",
     "reqwest 0.12.4",

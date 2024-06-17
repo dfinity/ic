@@ -1,0 +1,3515 @@
+{
+  "commandArgs": ["bazel-out/k8-opt-exec-2B5CBBC6/bin/external/rules_rust/util/process_wrapper/process_wrapper", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__futures-core-0.3.28/futures-core_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__serde-1.0.190/serde_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__futures-channel-0.3.28/futures-channel_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__futures-task-0.3.28/futures-task_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__futures-util-0.3.28/futures-util_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__memchr-2.5.0/memchr_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__slab-0.4.8/slab_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__ahash-0.7.6/ahash_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__libc-0.2.150/libc_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__indexmap-1.9.3/indexmap_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__lock_api-0.4.10/lock_api_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__backtrace-0.3.68/backtrace_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__parking_lot_core-0.9.8/parking_lot_core_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__httparse-1.8.0/httparse_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__erased-serde-0.3.28/erased-serde_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__slog-2.7.0/slog_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__axum-0.6.20/axum_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__axum-core-0.3.4/axum-core_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__generic-array-0.14.7/generic-array_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__typenum-1.16.0/typenum_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__serde_json-1.0.108/serde_json_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__libm-0.2.7/libm_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__num-traits-0.2.15/num-traits_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__anyhow-1.0.72/anyhow_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__candid-0.9.10/candid_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__crc32fast-1.3.2/crc32fast_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__num-bigint-0.4.3/num-bigint_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__num-integer-0.1.45/num-integer_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__thiserror-1.0.43/thiserror_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__psm-0.1.21/psm_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__stacker-0.1.15/stacker_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__memoffset-0.6.5/memoffset_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__tempfile-3.6.0/tempfile_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__io-lifetimes-1.0.11/io-lifetimes_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__rustix-0.37.23/rustix_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__crossbeam-utils-0.8.16/crossbeam-utils_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__slog-async-2.7.0/slog-async_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/rs/monitoring/adapter_metrics_service/build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__prometheus-0.13.3/prometheus_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__protobuf-2.28.0/protobuf_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__procfs-0.14.2/procfs_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__rustix-0.36.15/rustix_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/lmdb_rkv/lmdb-sys/lmdb_sys_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__ring-0.16.20/ring_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__rustls-0.21.7/rustls_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__oid-registry-0.6.1/oid-registry_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__num-bigint-dig-0.8.4/num-bigint-dig_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__num-iter-0.1.43/num-iter_build_script.linksearchpaths", "--arg-file", "bazel-out/k8-opt/bin/external/crate_index__sev-2.0.2/sev_build_script.linksearchpaths", "--subst", "pwd\u003d${pwd}", "--", "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/bin/rustc", "@bazel-out/k8-opt/bin/rs/p2p/consensus_manager/libic_consensus_manager-1541008932.rlib-0.params"],
+  "environmentVariables": [{
+    "name": "CARGO_CFG_TARGET_ARCH",
+    "value": "x86_64"
+  }, {
+    "name": "CARGO_CFG_TARGET_OS",
+    "value": "linux"
+  }, {
+    "name": "CARGO_CRATE_NAME",
+    "value": "ic_consensus_manager"
+  }, {
+    "name": "CARGO_MANIFEST_DIR",
+    "value": "${pwd}/rs/p2p/consensus_manager"
+  }, {
+    "name": "CARGO_PKG_AUTHORS",
+    "value": ""
+  }, {
+    "name": "CARGO_PKG_DESCRIPTION",
+    "value": ""
+  }, {
+    "name": "CARGO_PKG_HOMEPAGE",
+    "value": ""
+  }, {
+    "name": "CARGO_PKG_NAME",
+    "value": "consensus_manager"
+  }, {
+    "name": "CARGO_PKG_VERSION",
+    "value": "0.8.0"
+  }, {
+    "name": "CARGO_PKG_VERSION_MAJOR",
+    "value": "0"
+  }, {
+    "name": "CARGO_PKG_VERSION_MINOR",
+    "value": "8"
+  }, {
+    "name": "CARGO_PKG_VERSION_PATCH",
+    "value": "0"
+  }, {
+    "name": "CARGO_PKG_VERSION_PRE",
+    "value": ""
+  }, {
+    "name": "PATH",
+    "value": "/bin:/usr/bin:/usr/local/bin"
+  }, {
+    "name": "SYSROOT",
+    "value": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain"
+  }],
+  "platform": {
+    "properties": []
+  },
+  "inputs": [{
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__asn1-rs-derive-0.4.0/libasn1_rs_derive-1502904574.so",
+    "digest": {
+      "hash": "745c36f4e277eab7ff89fc1462c9c8dd4c2a5cf92438f6aefe06a55b2d63420c",
+      "sizeBytes": "9226008",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__asn1-rs-impl-0.1.0/libasn1_rs_impl-1857262005.so",
+    "digest": {
+      "hash": "e8db5c1f687b8bfc43c00fa9caa8d73f97fa9dd7178c06b6d0e641ba90aa420b",
+      "sizeBytes": "6624032",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__async-stream-impl-0.3.5/libasync_stream_impl-33813829.so",
+    "digest": {
+      "hash": "2e3bc6898bd01519f5f6319adde484d30e47fe3089b148f85b9b9c7756544732",
+      "sizeBytes": "8251648",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__async-trait-0.1.73/libasync_trait-152551278.so",
+    "digest": {
+      "hash": "00aef50d04b101cfa7f1e78d680217b69ea8af2ad925c25ac306588d90dd63ef",
+      "sizeBytes": "8816192",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__binread_derive-2.1.0/libbinread_derive-91198482.so",
+    "digest": {
+      "hash": "22b75cb5f76408d2656645bb69e5152343163e7cd20cb3c66b32dfc75506d852",
+      "sizeBytes": "9217728",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__candid_derive-0.6.3/libcandid_derive-1736236406.so",
+    "digest": {
+      "hash": "2f0af51a776be7f9fc431e2b70d7e0e8326ba53694729b01398595416626bda1",
+      "sizeBytes": "8793056",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__clap_derive-3.2.25/libclap_derive-1597891631.so",
+    "digest": {
+      "hash": "287ea8b6dace0889e4319b8576e8b70052ea3f30b6c25314bdcd5c830ce61e48",
+      "sizeBytes": "9257984",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__comparable_derive-0.5.4/libcomparable_derive-1672895669.so",
+    "digest": {
+      "hash": "b26362b661b41aae2c38f81eb39a1ed42be55a58b469f060f3d7f2576c1dfb1c",
+      "sizeBytes": "9035088",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__comparable_helper-0.5.4/libcomparable_helper-452205682.so",
+    "digest": {
+      "hash": "a203d7d1bdfb6711ee2de7427bc402ccf889b8bae456c6cf3715477912b6d490",
+      "sizeBytes": "8106624",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__der_derive-0.7.2/libder_derive-690089862.so",
+    "digest": {
+      "hash": "be631973a765522d4a5c7600a6a59e675b47f6f4e49105fea6a10d23d458fdd6",
+      "sizeBytes": "8925744",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__derive_more-0.99.8-alpha.0/libderive_more-468722864.so",
+    "digest": {
+      "hash": "11719499c1d7c6eb823e69350975a38d16f38769134b170a31e172d9b42df4d6",
+      "sizeBytes": "9601432",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__displaydoc-0.2.4/libdisplaydoc-1291775329.so",
+    "digest": {
+      "hash": "235c5b73a22a671434b30295449a8a8d62ca1c93674c017d8a11b6678fc83c77",
+      "sizeBytes": "8511208",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__futures-macro-0.3.28/libfutures_macro-1669337536.so",
+    "digest": {
+      "hash": "c1957eeb869cc8ba6557f18885ba1f04853d71db973d926dd71eaddf3fa2cc5c",
+      "sizeBytes": "8575008",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__logos-derive-0.13.0/liblogos_derive-2267930739.so",
+    "digest": {
+      "hash": "cee3bad3faaef2e0f2f74e9a48cdb29169fb3a6042cc48e8d40935f19513a837",
+      "sizeBytes": "9916208",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__num_enum_derive-0.6.1/libnum_enum_derive-870626123.so",
+    "digest": {
+      "hash": "39075d4550d276094e984936607d5246ebcff72ab841d18c892787d3d940892f",
+      "sizeBytes": "9139640",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__paste-1.0.14/libpaste-764734934.so",
+    "digest": {
+      "hash": "8303de29a11ac85a01ef730d3188834801e0e38b440d04fff7b76e8f9f088587",
+      "sizeBytes": "6378568",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__pest_derive-2.7.1/libpest_derive-670345617.so",
+    "digest": {
+      "hash": "bc7f9ec83cca2340b35fb422fd8f7b9acec3a97a1987270b1e6a1a63f87eb8c4",
+      "sizeBytes": "8821472",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__pin-project-internal-1.1.2/libpin_project_internal-2977218964.so",
+    "digest": {
+      "hash": "71449578f4f2f331cdf6eaa1c18bc47e51ef11cde93a1213f33dd7ed0d76fa70",
+      "sizeBytes": "9113592",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__prost-derive-0.12.2/libprost_derive-1996779713.so",
+    "digest": {
+      "hash": "e41690de5d4bb60b02648fb9822dd0c624dcaabef39413ac3c760b7c4011139b",
+      "sizeBytes": "9343720",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__rustversion-1.0.14/librustversion-714312983.so",
+    "digest": {
+      "hash": "32a55d30472179c2b37cffea3c7f108266f04e9975ecd7fcbb7352cfbb0a0efd",
+      "sizeBytes": "6398320",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__serde_derive-1.0.190/libserde_derive-1667851370.so",
+    "digest": {
+      "hash": "2e933c6794391222caf87f4bab28728d6223e3d1c77c319cb4b082f9369302f6",
+      "sizeBytes": "9589128",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__serde_with_macros-1.5.2/libserde_with_macros-1215139873.so",
+    "digest": {
+      "hash": "1b0160bd7c54aa171a5b1a432a11fbb35aae28b290b911be3ac1f362839c93e0",
+      "sizeBytes": "9108032",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__strum_macros-0.24.3/libstrum_macros-1494588814.so",
+    "digest": {
+      "hash": "1225107859330658ec0001fd3cb4ae76caac11b98352aa6953bdabe2d898a7e5",
+      "sizeBytes": "9211232",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__thiserror-impl-1.0.43/libthiserror_impl-890428520.so",
+    "digest": {
+      "hash": "fcf5ec62ad7fc032d6185a979acdd36bef7d6963338385d465fa69e1c9c3141c",
+      "sizeBytes": "8784032",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__time-macros-0.2.10/libtime_macros-111279676.so",
+    "digest": {
+      "hash": "9a685ac278e72604fa4a62a0e73017c2c4a1d2d611e338380599e19dff4b570a",
+      "sizeBytes": "6645024",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__tokio-macros-2.1.0/libtokio_macros-436670865.so",
+    "digest": {
+      "hash": "5dad60a363f89fb56e96306625e69d57e4f57224a9874c97a396f6a74332b978",
+      "sizeBytes": "8786888",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__tracing-attributes-0.1.26/libtracing_attributes-321727867.so",
+    "digest": {
+      "hash": "7204b89c24dc03918473e11f3ee2ae2de47cff5448b695f6f158cf1f52b8bd50",
+      "sizeBytes": "9037664",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/crate_index__zeroize_derive-1.4.2/libzeroize_derive-182313465.so",
+    "digest": {
+      "hash": "2a47fac0d0ba2e0b5fa62a374189679f5e1640c360e2b492ff1f7aa85796517a",
+      "sizeBytes": "8792688",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/rules_rust/util/process_wrapper/process_wrapper",
+    "digest": {
+      "hash": "9da17ce114751b19815843d58ecc92252c51736b3fdca04626f88f7d4ea70db1",
+      "sizeBytes": "800528",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": true
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/rules_rust/util/process_wrapper/process_wrapper",
+    "digest": {
+      "hash": "9da17ce114751b19815843d58ecc92252c51736b3fdca04626f88f7d4ea70db1",
+      "sizeBytes": "800528",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": true
+  }, {
+    "path": "bazel-out/k8-opt-exec-2B5CBBC6/bin/external/rules_rust/util/process_wrapper/process_wrapper",
+    "digest": {
+      "hash": "9da17ce114751b19815843d58ecc92252c51736b3fdca04626f88f7d4ea70db1",
+      "sizeBytes": "800528",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": true
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__addr2line-0.20.0/libaddr2line-1523310760.rlib",
+    "digest": {
+      "hash": "275d57ce701f0ada040666eaf03785adebeabc93d744a094656d93c0e24faaa4",
+      "sizeBytes": "445696",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__adler-1.0.2/libadler-1679410123.rlib",
+    "digest": {
+      "hash": "6fa064ddb06fa16e8eeef4c5d8bd9ab81ae23a630a2bc1f724a48e8ad7433a8f",
+      "sizeBytes": "45090",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__ahash-0.7.6/ahash_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__ahash-0.7.6/libahash-1118726098.rlib",
+    "digest": {
+      "hash": "2d493fb2c0111b0198d5377879f9ac1a402d3177c18a0a6e8a8ec69012263c44",
+      "sizeBytes": "438092",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__aho-corasick-1.0.2/libaho_corasick-1513791343.rlib",
+    "digest": {
+      "hash": "7345bc4fce4a4ec1f32f625dc6682aff046f6d4c6077e127e1770cd7f1ec54b7",
+      "sizeBytes": "3953526",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__anyhow-1.0.72/anyhow_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__anyhow-1.0.72/libanyhow-202080703.rlib",
+    "digest": {
+      "hash": "9480966f2429136b20d3f5beac6e2c268acdaeaf8dcc5ff328cd04f7920efea4",
+      "sizeBytes": "666396",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__arc-swap-1.6.0/libarc_swap-2067146345.rlib",
+    "digest": {
+      "hash": "70d14e387ebaf9a155d7de241c1784029a1afa182a5bc3e32cac4a949eb8ec39",
+      "sizeBytes": "517710",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__arrayvec-0.5.2/libarrayvec-1488991800.rlib",
+    "digest": {
+      "hash": "7e2bb9ff7f37f6b3a66aae5a9e908f172289047cda52e8f40e1b4d98963aab46",
+      "sizeBytes": "502180",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__asn1-rs-0.5.2/libasn1_rs-721109130.rlib",
+    "digest": {
+      "hash": "1d3a49651215f7734582d20ccc8b329b26c5bc1362c4ec06f2b438134b68ab3a",
+      "sizeBytes": "3471514",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__async-stream-0.3.5/libasync_stream-2933393774.rlib",
+    "digest": {
+      "hash": "ec6aca6f085f9d0643c3c1457b1e8c83f12d54da264669552897dae5884c8b3f",
+      "sizeBytes": "74318",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__atty-0.2.14/libatty-695267695.rlib",
+    "digest": {
+      "hash": "fc0b7d6298f0500c27190667e6540641c0d840142ec2c6209bd037c7ed9c05ec",
+      "sizeBytes": "14974",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__axum-0.6.20/axum_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__axum-0.6.20/libaxum-2280444294.rlib",
+    "digest": {
+      "hash": "2fe32604facad9cdd30144c852f3b3555b7b0707a5d1ae365f69ab75631d4ebc",
+      "sizeBytes": "7241412",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__axum-core-0.3.4/axum-core_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__axum-core-0.3.4/libaxum_core-1088370802.rlib",
+    "digest": {
+      "hash": "00002b4afcb490e31a52ea1d91f9dcff6484c2a3f32b68a19c19c9c386193800",
+      "sizeBytes": "2808246",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__backoff-0.3.0/libbackoff-598865287.rlib",
+    "digest": {
+      "hash": "5776291e171e8fa6615a51f53978f93f19f87778c54baf5344b735ee9f4284d3",
+      "sizeBytes": "86042",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__backtrace-0.3.68/backtrace_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__backtrace-0.3.68/libbacktrace-633971841.rlib",
+    "digest": {
+      "hash": "1b21c17507e4df55b8fd07083440da67cf4088174fc0994c2f6137366adb5515",
+      "sizeBytes": "2151080",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__base16ct-0.2.0/libbase16ct-1767199818.rlib",
+    "digest": {
+      "hash": "fa32e058a4d1ca85a625b8d859c2d76863eba641fb4451a60a0a8647b193aada",
+      "sizeBytes": "100220",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__base32-0.4.0/libbase32-2045340439.rlib",
+    "digest": {
+      "hash": "e3e1c4dd2c77faeb6bd9037da3585c2bcd396d4740f575b633b13dcefec66b08",
+      "sizeBytes": "39424",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__base64-0.13.1/libbase64-1175187928.rlib",
+    "digest": {
+      "hash": "057f87ce5ca53c8f1a942fe365e549eb902aaa85ae52dcb3eb95110a7eda2a7f",
+      "sizeBytes": "492862",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__base64-0.21.2/libbase64-174651668.rlib",
+    "digest": {
+      "hash": "5c3819605f556ddfef3e1628f0012ff6cbeebcbaf8c093af1ae49a0a3fc4d39c",
+      "sizeBytes": "514272",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__base64ct-1.6.0/libbase64ct-3613475437.rlib",
+    "digest": {
+      "hash": "130cd91c815ddb30b39fe7f192e09e1acbb3a27e669464dccf903e28cf0612d4",
+      "sizeBytes": "462446",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__bincode-1.3.3/libbincode-1132567763.rlib",
+    "digest": {
+      "hash": "60531445f68d9493dab3078046de19837851013f5fdddc61d52ac12eedb950b1",
+      "sizeBytes": "821110",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__binread-2.2.0/libbinread-758123140.rlib",
+    "digest": {
+      "hash": "9ff2d8edd94efe1bcb278434c894e356e61b4e0d7ce76ee0450d993520bbce98",
+      "sizeBytes": "2717556",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__bitfield-0.13.2/libbitfield-1882930528.rlib",
+    "digest": {
+      "hash": "0ee5d443b1afb0f15b4a70a1def7957d7fef13af2023e5253030a0c2b0666e6d",
+      "sizeBytes": "316732",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__bitflags-1.3.2/libbitflags-146562053.rlib",
+    "digest": {
+      "hash": "9960d19277238befac1799478076727a5a419ffa698bd3baa298c9161e680776",
+      "sizeBytes": "55588",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__block-buffer-0.10.4/libblock_buffer-2340519853.rlib",
+    "digest": {
+      "hash": "ea2048c91edbc1a662e67502209b2cc22b72281238b2f3928a01e9a30974d167",
+      "sizeBytes": "88330",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__byte-unit-4.0.19/libbyte_unit-3763370722.rlib",
+    "digest": {
+      "hash": "fcd2f577150fd1091a6e0204228ea8e037bbf37f64c364aaa2afe5021932170b",
+      "sizeBytes": "297632",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__byteorder-1.4.3/libbyteorder-541749115.rlib",
+    "digest": {
+      "hash": "d9ff7cd022b4c3c9d9c183797dd715076cb5a1336b09f07eed5af37817df4bc2",
+      "sizeBytes": "393024",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__bytes-1.5.0/libbytes-693716810.rlib",
+    "digest": {
+      "hash": "2b6cdf91c2a8102f8ac186c91d1c810abcff4315bdab39af71fecd7efc274f41",
+      "sizeBytes": "1134956",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__candid-0.9.10/candid_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__candid-0.9.10/libcandid-2348128662.rlib",
+    "digest": {
+      "hash": "258a4fe78cdc6ad3b1037978fd7daaac00608c2a85dae868d4c19247c2a81844",
+      "sizeBytes": "23049430",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__cfg-if-1.0.0/libcfg_if-2241051819.rlib",
+    "digest": {
+      "hash": "8ddf4ce2dffb1b5d0c81c06e5b2236dd1b120657843a0b71dd0b2187a5acada7",
+      "sizeBytes": "10272",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__chrono-0.4.19/libchrono-112355690.rlib",
+    "digest": {
+      "hash": "fd5aba65e4a1d732a409af5c03ef218621ebaeecc670ca014a46115ee00df567",
+      "sizeBytes": "2429590",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__clap-3.2.25/libclap-591707371.rlib",
+    "digest": {
+      "hash": "a339101a429d81841e14339e882c846c9a8e2f715bc44a82a6a6985df210e754",
+      "sizeBytes": "8084620",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__clap_lex-0.2.4/libclap_lex-761941027.rlib",
+    "digest": {
+      "hash": "d1bd51fae8b2ca7dcfb2783ddc2339c2be7e2e51fb8dafcdbabd0de190d21cf0",
+      "sizeBytes": "241772",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__codespan-reporting-0.11.1/libcodespan_reporting-3243938901.rlib",
+    "digest": {
+      "hash": "fb3c9b83f824236487b1254030ff20b743737a5232516a2390cf350fc5bf1e3d",
+      "sizeBytes": "686792",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__codicon-3.0.0/libcodicon-85155600.rlib",
+    "digest": {
+      "hash": "35bddb7965db5fc16e49a2cadac56cdc711c11d0564d1a20797d839ab5694801",
+      "sizeBytes": "10368",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__comparable-0.5.4/libcomparable-1373568053.rlib",
+    "digest": {
+      "hash": "d88eec0133d5afca91aba429cc1593a20fc92b6169d5c3b811bd4fcd4493fc57",
+      "sizeBytes": "574222",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__const-oid-0.9.4/libconst_oid-541360781.rlib",
+    "digest": {
+      "hash": "326d5a5c2cbba6292b37575dce6e1633b070f27968eeb2c8597534f41dfff8a8",
+      "sizeBytes": "1113020",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__convert_case-0.6.0/libconvert_case-1137984295.rlib",
+    "digest": {
+      "hash": "6b82b821a7af8fac936f01db391affceef2388d1d1b8bab6f7b16a2d7c9fe977",
+      "sizeBytes": "497752",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__cpufeatures-0.2.9/libcpufeatures-529863908.rlib",
+    "digest": {
+      "hash": "e6fe33db7e82ebae83735fb8e9d45a665e8aa53f00aa23d96e7d84f6390039b6",
+      "sizeBytes": "41378",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__crc32fast-1.3.2/crc32fast_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__crc32fast-1.3.2/libcrc32fast-2799908462.rlib",
+    "digest": {
+      "hash": "4f193b03fc6edc937cba6ddf11394aab231f73197e70be53c52ebdd17b13ba59",
+      "sizeBytes": "190704",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__crossbeam-channel-0.5.8/libcrossbeam_channel-866607154.rlib",
+    "digest": {
+      "hash": "b39c950b8e33b7530b3cbc619f8f9e33fb5cc7444c94ad5b11c3c4c4a1fc1c8a",
+      "sizeBytes": "1221824",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__crossbeam-utils-0.8.16/crossbeam-utils_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__crossbeam-utils-0.8.16/libcrossbeam_utils-1604425532.rlib",
+    "digest": {
+      "hash": "82d08ccd6e0fd6618717c73bdffd390a560f00b521ff785adea1bd7112971514",
+      "sizeBytes": "902578",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__crypto-bigint-0.5.2/libcrypto_bigint-1580909652.rlib",
+    "digest": {
+      "hash": "ac92622e87477302434f0a487b1bcd536f270f342b74aea37b6a02a42e11efd2",
+      "sizeBytes": "2490094",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__crypto-common-0.1.6/libcrypto_common-432742616.rlib",
+    "digest": {
+      "hash": "abc75a915545715a86bb7dfe589f12f67ab016c5f620fef1063ff440c51dc62e",
+      "sizeBytes": "49050",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__cvt-0.1.2/libcvt-277755104.rlib",
+    "digest": {
+      "hash": "aef0153e24a596723778c7a311ac880c45f0153e1388fa7fbf126fdc5b5458c4",
+      "sizeBytes": "20380",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__data-encoding-2.4.0/libdata_encoding-3068453817.rlib",
+    "digest": {
+      "hash": "790f8a5e58344bcee69d94b88a90936a3208249229891718080725093ef19e97",
+      "sizeBytes": "1037100",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__der-0.7.7/libder-3265086288.rlib",
+    "digest": {
+      "hash": "b42533dd85d9cfbe84d7e090e73c301107448a4e7d201a6457a0f1ec3b771f0c",
+      "sizeBytes": "3492992",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__der-parser-8.2.0/libder_parser-4421596.rlib",
+    "digest": {
+      "hash": "42f9c1b8e646d4cf9ea7c2fa4951136d84f39bc3050e9ab8abaf96bba103b86b",
+      "sizeBytes": "1156262",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__diff-0.1.13/libdiff-672230870.rlib",
+    "digest": {
+      "hash": "59deb1e8b9ed2bd262efb3557c1e3b5f85d908f0952b24e4b6d9424f44d46c94",
+      "sizeBytes": "202132",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__digest-0.10.7/libdigest-1553147521.rlib",
+    "digest": {
+      "hash": "dd8f9c340985b1751a83e3500b042de9000cf0b26aeb08ec3b03962da44a352b",
+      "sizeBytes": "277262",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__dirs-5.0.1/libdirs-2694396943.rlib",
+    "digest": {
+      "hash": "ad9868b731caa42827dcd54c26b5f2f210cc7d1c425fb80f4a26a775073cdeab",
+      "sizeBytes": "58624",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__dirs-next-2.0.0/libdirs_next-1466326901.rlib",
+    "digest": {
+      "hash": "4d77d62a4856c2578690ceff4a785a108c5ae08839631c3743b36a588ff55019",
+      "sizeBytes": "51908",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__dirs-sys-0.4.1/libdirs_sys-421616159.rlib",
+    "digest": {
+      "hash": "a39711c855f9a93986a659528b30965b787d4b5de06fc67156681281a1d9136c",
+      "sizeBytes": "170316",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__dirs-sys-next-0.1.2/libdirs_sys_next-157779805.rlib",
+    "digest": {
+      "hash": "37d20b0e04fbe8d216a868b1ee30a2d7ce4f66d3cd80562407042a66639d6cef",
+      "sizeBytes": "169174",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__ecdsa-0.16.7/libecdsa-1251784951.rlib",
+    "digest": {
+      "hash": "7bd3157dbfaa3c3d535518e697d8be0144658136e7b3ba949567c6f42aa3e251",
+      "sizeBytes": "519304",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__either-1.8.1/libeither-1806072696.rlib",
+    "digest": {
+      "hash": "09836bff7b15aa04612835c3b11f6225413e490c3c2fcf60441c0d9ceac93849",
+      "sizeBytes": "191384",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__elliptic-curve-0.13.5/libelliptic_curve-3640600749.rlib",
+    "digest": {
+      "hash": "b50886000ceeac0a1218447ab17b6da236af0211ac715f20c9e401dc0fb2f18e",
+      "sizeBytes": "485420",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__erased-serde-0.3.28/erased-serde_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__erased-serde-0.3.28/liberased_serde-1841905287.rlib",
+    "digest": {
+      "hash": "74b1e5594cee3f5beeebbf63910e9287b9873f475b1cd06b13910a821594bad2",
+      "sizeBytes": "1213908",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__fastrand-1.9.0/libfastrand-3028061132.rlib",
+    "digest": {
+      "hash": "9ae7c2fac671e378fd9a40d3581536fb30da63f5afd96362347a99e5d97ada4b",
+      "sizeBytes": "275442",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__ff-0.13.0/libff-2476277891.rlib",
+    "digest": {
+      "hash": "96e405f94aebb070a062998d02599624ae522a3e55a6caa565c88866ae4b8b71",
+      "sizeBytes": "100200",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__fixedbitset-0.4.2/libfixedbitset-79475528.rlib",
+    "digest": {
+      "hash": "8a91312305ce36b8b7f1839914da2c44f5365dbc14ac660804793e816e4b8d48",
+      "sizeBytes": "219546",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__flagset-0.4.3/libflagset-883193323.rlib",
+    "digest": {
+      "hash": "71abbe792315418ba303ee8968361325126586799f3f80724d122ba898bc6a1b",
+      "sizeBytes": "100538",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__flate2-1.0.26/libflate2-62640885.rlib",
+    "digest": {
+      "hash": "9f7616ee2810786535400a6ddb1d1200c579ff690a9e5c5d3c9a5dc3ce31894a",
+      "sizeBytes": "896338",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__fnv-1.0.7/libfnv-2309456350.rlib",
+    "digest": {
+      "hash": "162a8b8588bd02951e41797c366edc740545d560dc1bb7f55fde3673fafea58e",
+      "sizeBytes": "17314",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__form_urlencoded-1.2.0/libform_urlencoded-510751047.rlib",
+    "digest": {
+      "hash": "9c8aae08b3d7d357094fc3ab6659f8215af64df1ba5218957c7df606cbe462ab",
+      "sizeBytes": "108652",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__futures-0.3.28/libfutures-1499111021.rlib",
+    "digest": {
+      "hash": "96eeb4637266e9756bdd93441867dcce06ad23ef5b7d9d61c35ae133d26cc64e",
+      "sizeBytes": "23666",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__futures-channel-0.3.28/futures-channel_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__futures-channel-0.3.28/libfutures_channel-90753303.rlib",
+    "digest": {
+      "hash": "2545f516f2e72fe13afa175937e87f44e244974c5bde9859202c9488b6164cdf",
+      "sizeBytes": "367310",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__futures-core-0.3.28/futures-core_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__futures-core-0.3.28/libfutures_core-3924661481.rlib",
+    "digest": {
+      "hash": "166649309834cb639cd246c2107049a018b1bc6ee8ed565435f246ffe952dc2e",
+      "sizeBytes": "85274",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__futures-executor-0.3.28/libfutures_executor-2677246469.rlib",
+    "digest": {
+      "hash": "dda17e5201f14a6e61b07775fea5f56555ceaadaf69ffc23b3f2bcef41ebfd78",
+      "sizeBytes": "360688",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__futures-io-0.3.28/libfutures_io-1599972350.rlib",
+    "digest": {
+      "hash": "9370a880fc30d045a63e72eefe9900fe2c73272e04a4e723a196cf2057328c1f",
+      "sizeBytes": "109160",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__futures-sink-0.3.28/libfutures_sink-470303685.rlib",
+    "digest": {
+      "hash": "c15973f461a4f29ece295ec1499e43d5302eb4bdb2cc307fa5e7042400d01aea",
+      "sizeBytes": "41108",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__futures-task-0.3.28/futures-task_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__futures-task-0.3.28/libfutures_task-188938853.rlib",
+    "digest": {
+      "hash": "cef3cb1526478f6acca9cdf7b025d0c19bee1f6b2c2e9ffe2fa213264f6b2b25",
+      "sizeBytes": "179634",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__futures-util-0.3.28/futures-util_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__futures-util-0.3.28/libfutures_util-767992430.rlib",
+    "digest": {
+      "hash": "9ceb6d7012900e8bc4839cbc95098d6b9290c9d6a4ddf47afdad9ff7a94f98c8",
+      "sizeBytes": "7324506",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__generic-array-0.14.7/generic-array_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__generic-array-0.14.7/libgeneric_array-3405829428.rlib",
+    "digest": {
+      "hash": "8aefaffccb44eb06e064dba299fafed7530882d9097c13676013c8a8638c9a9f",
+      "sizeBytes": "1277388",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__getrandom-0.2.10/libgetrandom-2863060860.rlib",
+    "digest": {
+      "hash": "cda1f3aaa513348bcff869a234002fb18f3c29375aedcadcce26feaf2b41b6f5",
+      "sizeBytes": "170680",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__gimli-0.27.3/libgimli-1612238037.rlib",
+    "digest": {
+      "hash": "7fd46aebea57621b489c1d960bb626d5982f0f63e21efa04b147be3c6b34ab4d",
+      "sizeBytes": "6207342",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__group-0.13.0/libgroup-801025598.rlib",
+    "digest": {
+      "hash": "1cb28166c9140979d968002b86bf4afbea2297e80583ef64daa4f171db0a519e",
+      "sizeBytes": "117184",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__h2-0.3.20/libh2-1317337231.rlib",
+    "digest": {
+      "hash": "9ea7878be877c9466b3eba487b867beb1cbb8d790dc25732270772eb1d2eb209",
+      "sizeBytes": "10231564",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__half-1.8.2/libhalf-1017757032.rlib",
+    "digest": {
+      "hash": "592eb7dfad4a5b7003b4f3defc7b5b41178286736d3f19aff3e70c5a442a6be3",
+      "sizeBytes": "438120",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__hashbrown-0.12.3/libhashbrown-3704139125.rlib",
+    "digest": {
+      "hash": "8675a94b8eafee96326453025de5fe758c318d3993e7c52965a3da7b950369c0",
+      "sizeBytes": "1368276",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__hdrhistogram-7.5.2/libhdrhistogram-494469079.rlib",
+    "digest": {
+      "hash": "6a3ea9e796461b3c0708ca98883ab5cfa2ed6db28eea3168db72688c0c983c4c",
+      "sizeBytes": "359870",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__headers-0.3.8/libheaders-1295607205.rlib",
+    "digest": {
+      "hash": "6c3bbe78f4e0f47d09eb8dac8dadb12f8af286a9dbbdcb67667f8330a6741e05",
+      "sizeBytes": "2102300",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__headers-core-0.2.0/libheaders_core-524310473.rlib",
+    "digest": {
+      "hash": "acec75b53f01499c57f05e80b80dc855265e71e2167c5a476fe99cf4e7dc484d",
+      "sizeBytes": "20328",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__hex-0.4.3/libhex-20579930.rlib",
+    "digest": {
+      "hash": "d8e1c1c5ddadeb0ab2374d5e16f274479b4dab32c9a0d1ec672e02691f798794",
+      "sizeBytes": "519434",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__hkdf-0.12.3/libhkdf-1606690888.rlib",
+    "digest": {
+      "hash": "6ab1d2a7422b853511e7caf9e025f5160cb9fbbaa432546c663b733e044ece62",
+      "sizeBytes": "68394",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__hmac-0.12.1/libhmac-1126725710.rlib",
+    "digest": {
+      "hash": "29d708f7e9cbe0cf03b1668d069364bf389e374d9a7912cb2e62d3958c2aaaa1",
+      "sizeBytes": "78124",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__http-0.2.9/libhttp-2740278531.rlib",
+    "digest": {
+      "hash": "b6c5dea67d088aad3e5b3613b8e5e85433d32fe2f12c6901ed78c7d73a2033b3",
+      "sizeBytes": "2568992",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__http-body-0.4.5/libhttp_body-4076530360.rlib",
+    "digest": {
+      "hash": "d387c32740352d2bbef1450ee05b1f27d89d7aab9167847888cbba12ee19cb8c",
+      "sizeBytes": "262294",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__http-serde-1.1.2/libhttp_serde-1155235573.rlib",
+    "digest": {
+      "hash": "9f7f427d4235e85af36ed1d5a51a597c4bab2d358046c038c204ef10d685f864",
+      "sizeBytes": "126402",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__httparse-1.8.0/httparse_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__httparse-1.8.0/libhttparse-433877372.rlib",
+    "digest": {
+      "hash": "093e0686b829f2d899d354ecaae39dc8a6aa8a1f7a72396b17ee6329f74d652c",
+      "sizeBytes": "355550",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__httpdate-1.0.2/libhttpdate-804717029.rlib",
+    "digest": {
+      "hash": "ed6857130fa5ece08a728f8d415a005882ea7529efbdbe47e80a63fb65cb8419",
+      "sizeBytes": "132438",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__hyper-0.14.27/libhyper-196705109.rlib",
+    "digest": {
+      "hash": "6d01b21a36631a22bfd3e00feb0787dafb08ee4c1dbe130b667478eb6fbcd25b",
+      "sizeBytes": "10930140",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__hyper-timeout-0.4.1/libhyper_timeout-1001183443.rlib",
+    "digest": {
+      "hash": "14445d3f6fff4a3ea65f7e86183ada2139dc99a3d5f52a73b464002dcdfe294a",
+      "sizeBytes": "74902",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__ic-btc-interface-0.1.0/libic_btc_interface-2800999567.rlib",
+    "digest": {
+      "hash": "e4980e44599550e691f4710f0ddf29c9f3af650d81f7becc1243fdfee95c4eb0",
+      "sizeBytes": "1497356",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__ic-stable-structures-0.5.6/libic_stable_structures-2851937844.rlib",
+    "digest": {
+      "hash": "5fba8669e476205ff6fcc72a4237ff50c9025a9524d24ea2eee191a52c5f48a3",
+      "sizeBytes": "1127904",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__idna-0.4.0/libidna-1080485771.rlib",
+    "digest": {
+      "hash": "8843c87940347f3ddfdd8274be131f358ad0b4b0fd7d8b95e894424927eadb9f",
+      "sizeBytes": "1739662",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__indexmap-1.9.3/indexmap_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__indexmap-1.9.3/libindexmap-1061505597.rlib",
+    "digest": {
+      "hash": "44e049c4d4ee1647f9d7750aff011883e9318f91935397fe9a9a94f193c24616",
+      "sizeBytes": "855312",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__instant-0.1.12/libinstant-931817820.rlib",
+    "digest": {
+      "hash": "47459f586aed6a815bf95ab572b5529575941f93135122c552fe3e9408b4ac0e",
+      "sizeBytes": "13110",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__io-lifetimes-1.0.11/io-lifetimes_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__io-lifetimes-1.0.11/libio_lifetimes-2058095486.rlib",
+    "digest": {
+      "hash": "078b8f138678a79e32a60eb094c357f863caf29b70758220b6bffbe8f146eeab",
+      "sizeBytes": "101420",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__iocuddle-0.1.1/libiocuddle-1374444724.rlib",
+    "digest": {
+      "hash": "f7c364c39d9199fd9872978fbe243b9641ba03d52ebc0f10000e184edff6fd15",
+      "sizeBytes": "66432",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__itoa-1.0.9/libitoa-467554704.rlib",
+    "digest": {
+      "hash": "1ac0b8ef9b3df60fded5456ea8b580c1233742abf373ad92f552e1587a2fc5a3",
+      "sizeBytes": "123556",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__json5-0.4.1/libjson5-1416592692.rlib",
+    "digest": {
+      "hash": "37ca7d000c22fcbdc93ed7c78c493f9bd1c8e9aa3dcb9fe6f6c49fcb36c1ce89",
+      "sizeBytes": "1168478",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__lalrpop-util-0.20.0/liblalrpop_util-648412638.rlib",
+    "digest": {
+      "hash": "4a347aa25c42298a2664eab6adde2e0d0468948a466e311ea4bb476f1e00be84",
+      "sizeBytes": "228228",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__lazy_static-1.4.0/liblazy_static-267309784.rlib",
+    "digest": {
+      "hash": "ed29a61124735d0901006a0d09e9e9e8f137806a397f175b4e45dbec95bc2e1d",
+      "sizeBytes": "21082",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__leb128-0.2.5/libleb128-476775035.rlib",
+    "digest": {
+      "hash": "2e1802ae24a16123c520856f37de24110c2ce81860eac066177356f554fdc2a5",
+      "sizeBytes": "43756",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__libc-0.2.150/libc_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__libc-0.2.150/liblibc-1708982631.rlib",
+    "digest": {
+      "hash": "699605e5252eb8b72365c0fd6904c1b21df9eda34435c51ce4c6419c8fd22151",
+      "sizeBytes": "5647930",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__libm-0.2.7/liblibm-1609825785.rlib",
+    "digest": {
+      "hash": "a2d4d37145077ef01f15d29fb114a1c1d51dc8ca85bcbd4297d717df8a2fc2f6",
+      "sizeBytes": "1043192",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__libm-0.2.7/libm_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__linux-raw-sys-0.1.4/liblinux_raw_sys-455624234.rlib",
+    "digest": {
+      "hash": "a1e596ee87d0f9dedbe5d9458e6c44d40602e1787864115eb82deb4f4b4ef16d",
+      "sizeBytes": "3008490",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__linux-raw-sys-0.3.8/liblinux_raw_sys-1300619498.rlib",
+    "digest": {
+      "hash": "f88196ac97b2adae37da82518fda02a54a0a71c1bf460de0a54241f366c12647",
+      "sizeBytes": "3225748",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__lock_api-0.4.10/liblock_api-2037130277.rlib",
+    "digest": {
+      "hash": "672a0f0d50ae43290c01593400bac01d0703cc2fbf0dbad9ccc9aa47d401c8ad",
+      "sizeBytes": "445070",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__lock_api-0.4.10/lock_api_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__log-0.4.19/liblog-2874396249.rlib",
+    "digest": {
+      "hash": "68cd3f6937406f68b86f70804b0cbf68720f6b727ae0ede39ab84c219cb3df62",
+      "sizeBytes": "351056",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__logos-0.13.0/liblogos-41694219.rlib",
+    "digest": {
+      "hash": "d08ff2c997b8b4af3a8e7dc4156e1fe901009a870934a084f844091f7ae1dfb0",
+      "sizeBytes": "134724",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__maplit-1.0.2/libmaplit-1447158176.rlib",
+    "digest": {
+      "hash": "c16fdae37fa44eb3485338addcd2981d9031daf935c81ae18c8fc8b302b91135",
+      "sizeBytes": "21032",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__matchit-0.7.0/libmatchit-3796242289.rlib",
+    "digest": {
+      "hash": "ff632f284910f7a2ba1866b12c2b0ffc303de3fd211af102d09fd3b481a750bf",
+      "sizeBytes": "337972",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__memchr-2.5.0/libmemchr-3764055515.rlib",
+    "digest": {
+      "hash": "101c2dc5d9cf2109b1bc848b588bae916d98482d49df209880a206df03801626",
+      "sizeBytes": "1479156",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__memchr-2.5.0/memchr_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__memoffset-0.6.5/libmemoffset-1177426553.rlib",
+    "digest": {
+      "hash": "371d312d8e153b01f456658a125d0e11657c7c06a3848efb4b79c23ae60a2d04",
+      "sizeBytes": "28366",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__memoffset-0.6.5/memoffset_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__mime-0.3.17/libmime-781407839.rlib",
+    "digest": {
+      "hash": "a7e8ab42a1071920a76e2497867c587eccfb702c12eececc8fd4f7bf8615e3e0",
+      "sizeBytes": "340810",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__minimal-lexical-0.2.1/libminimal_lexical-1896888229.rlib",
+    "digest": {
+      "hash": "09cb9debd35671c398895bbf928703de949403f280a11ae609a0e0cf1e9afac7",
+      "sizeBytes": "456284",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__miniz_oxide-0.7.1/libminiz_oxide-1600166716.rlib",
+    "digest": {
+      "hash": "68671acff5fd471ef6cf83b1989736722e2556a9e56733ca2800f5d65ab87d56",
+      "sizeBytes": "979320",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__mio-0.8.8/libmio-1393666062.rlib",
+    "digest": {
+      "hash": "bcaa284371e0638d0598a59ccbae5d654084a3f3e831b12dc51588e384d2ecbb",
+      "sizeBytes": "956382",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__nix-0.24.3/libnix-4255153856.rlib",
+    "digest": {
+      "hash": "10f4b34f2f25d775e446df62959732332eeafb1e00810ca4765c32d669686fa5",
+      "sizeBytes": "9553408",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__nom-7.1.3/libnom-3602109013.rlib",
+    "digest": {
+      "hash": "47bad71c7a783109039eb20620b9673696cedffffb1d82e9e02fc1d15e0c1c48",
+      "sizeBytes": "4256166",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__num-bigint-0.4.3/libnum_bigint-1358935249.rlib",
+    "digest": {
+      "hash": "e832f25ee2ab86b826574ef28fc5ac661c011c21f91c21fe16f8f83ac5538366",
+      "sizeBytes": "3961102",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__num-bigint-0.4.3/num-bigint_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__num-bigint-dig-0.8.4/libnum_bigint_dig-871808702.rlib",
+    "digest": {
+      "hash": "14ac54ba1b84058414fdaaa3e7958756991b8ada459b7a9f30880dd684d0d15c",
+      "sizeBytes": "3778286",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__num-bigint-dig-0.8.4/num-bigint-dig_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__num-integer-0.1.45/libnum_integer-539624712.rlib",
+    "digest": {
+      "hash": "f0978e9a03bb27fc9ad435c0490867f697edc7f216e7b6320d1bf4d6486e4c78",
+      "sizeBytes": "478546",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__num-integer-0.1.45/num-integer_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__num-iter-0.1.43/libnum_iter-3625712700.rlib",
+    "digest": {
+      "hash": "db1903bfbb414c73ff6246bc984b0e20b710077a4b129f52ee3024df76614d1a",
+      "sizeBytes": "54332",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__num-iter-0.1.43/num-iter_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__num-traits-0.2.15/libnum_traits-1633949531.rlib",
+    "digest": {
+      "hash": "e56d0c275359b57665b344bd12e7de75cdafa11ba244849b024eb563f76156e5",
+      "sizeBytes": "2145442",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__num-traits-0.2.15/num-traits_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__num_cpus-1.16.0/libnum_cpus-3319805339.rlib",
+    "digest": {
+      "hash": "7c592aea66d766f03e151cf74b76e23a6ac77e2f844bcd80c850c773e8a592e6",
+      "sizeBytes": "244606",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__num_enum-0.6.1/libnum_enum-2336147719.rlib",
+    "digest": {
+      "hash": "0d79aeb8ca161f1e9c8490b5ec2f87fb797ed2c3000589b7f03d9dd7d7806490",
+      "sizeBytes": "17956",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__num_threads-0.1.6/libnum_threads-488503247.rlib",
+    "digest": {
+      "hash": "96ffe91a2bf6d71d14b94e01831ecfc2d05bfcce019a5038b14d34bc83c6fa16",
+      "sizeBytes": "27312",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__object-0.31.1/libobject-20229760.rlib",
+    "digest": {
+      "hash": "81ffe4d748e74927d8362f81b40eaabd72d20b4bc6ff1144ebf18a37ba7929db",
+      "sizeBytes": "8185748",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__oid-registry-0.6.1/liboid_registry-183812507.rlib",
+    "digest": {
+      "hash": "4dbffd95b8f88cb2f3db84903b701a69a0f100c9b28bfcbcbad63d6c2109ea25",
+      "sizeBytes": "692636",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__oid-registry-0.6.1/oid-registry_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__once_cell-1.18.0/libonce_cell-621934525.rlib",
+    "digest": {
+      "hash": "0e867b137f2f3e34c691a7faaa70db4c9bf2530941ce4995491fb90813570610",
+      "sizeBytes": "284698",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__openssl-probe-0.1.5/libopenssl_probe-51848914.rlib",
+    "digest": {
+      "hash": "a46a1f6803dc074bd678a37a5e76f918fd9d0dac5a1736652ca81fbb192de07f",
+      "sizeBytes": "82904",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__option-ext-0.2.0/liboption_ext-356886878.rlib",
+    "digest": {
+      "hash": "e27ac61498d2e5f8780677644034a885771c45225895345ca657f89e1dc83b06",
+      "sizeBytes": "13912",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__os_str_bytes-6.5.1/libos_str_bytes-1196584391.rlib",
+    "digest": {
+      "hash": "c431265b5948dfa0d0b66332dfef247015ae14174afc3e3e7c71f9f698896b75",
+      "sizeBytes": "335842",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__p384-0.13.0/libp384-1928822662.rlib",
+    "digest": {
+      "hash": "5070d74c433a5ed1abfc5bb01cbe5623d649c6d42d5e4e960945c584fecb9ec6",
+      "sizeBytes": "2854266",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__parking_lot-0.12.1/libparking_lot-899749037.rlib",
+    "digest": {
+      "hash": "5d370df2a1e3d9892fabb12909af603146880f048398b055f64166955d66811c",
+      "sizeBytes": "739332",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__parking_lot_core-0.9.8/libparking_lot_core-3030779253.rlib",
+    "digest": {
+      "hash": "780ea62b75f18d38de0884bb17b8983c6fd72683bf810a291aab529e1beb37b4",
+      "sizeBytes": "1442910",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__parking_lot_core-0.9.8/parking_lot_core_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__pem-rfc7468-0.7.0/libpem_rfc7468-894958618.rlib",
+    "digest": {
+      "hash": "55fa2ff2f6dd99cd51440e79bdc0b1e11573cf19cecbece113c9d8035f796759",
+      "sizeBytes": "288342",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__percent-encoding-2.3.0/libpercent_encoding-1365706066.rlib",
+    "digest": {
+      "hash": "7006a024b8dac159f0592411ff42d8419714893c6645a5996700e56151a992c1",
+      "sizeBytes": "104068",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__pest-2.7.1/libpest-474596599.rlib",
+    "digest": {
+      "hash": "19eae32d29c7ebcecf40eac91d65fc9acf4d5ab5385a5087b5632298215386db",
+      "sizeBytes": "7483252",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__petgraph-0.6.3/libpetgraph-103504064.rlib",
+    "digest": {
+      "hash": "ab9f2789b5d2957b9787ae6132a21884c92fc3b4c6c5d99457ee555a348765e5",
+      "sizeBytes": "3898912",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__pin-project-1.1.2/libpin_project-2348817870.rlib",
+    "digest": {
+      "hash": "69aaedfee3f91c10ceaa11dd6ab172bd274ef16786aacbc2392fd5c765c93816",
+      "sizeBytes": "25346",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__pin-project-lite-0.2.13/libpin_project_lite-1943571515.rlib",
+    "digest": {
+      "hash": "519dc5bed4a311d3223479a06be62155380a73de3004234ef8d92a888862a1fd",
+      "sizeBytes": "116132",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__pin-utils-0.1.0/libpin_utils-1061898758.rlib",
+    "digest": {
+      "hash": "ebe161ef12a990afff4e9f62f27bcfa1a7dbe3471a53c0ac77f444f9e406deaa",
+      "sizeBytes": "14094",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__pkcs1-0.7.5/libpkcs1-2511438373.rlib",
+    "digest": {
+      "hash": "f9b8495431c13f8a8f93c58abd8703aa1f9b054d0ab596d8b1459ad6d3b188d7",
+      "sizeBytes": "967058",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__pkcs8-0.10.2/libpkcs8-572969008.rlib",
+    "digest": {
+      "hash": "d374b8c60968e43fd11d19ed05019ad7e8ad6746a49e4e3f5989c281ca0842ea",
+      "sizeBytes": "444416",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__ppv-lite86-0.2.17/libppv_lite86-1140784732.rlib",
+    "digest": {
+      "hash": "8a9084dd8f5deadb0df52fd0913af380cb32f3aca6e49b9f3e0b36c0a47c7c21",
+      "sizeBytes": "1102080",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__pretty-0.12.1/libpretty-1328183071.rlib",
+    "digest": {
+      "hash": "07fe5737f986a7c10fdbd5c66a59bb34ae090cef1891f599273c5937a5fe9653",
+      "sizeBytes": "525874",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__pretty_assertions-1.4.0/libpretty_assertions-2385519367.rlib",
+    "digest": {
+      "hash": "748c58e7573776de86b4e2e7f81a2e952fed13eb2d1ae2356450be6df653b281",
+      "sizeBytes": "179970",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__primeorder-0.13.2/libprimeorder-3258385542.rlib",
+    "digest": {
+      "hash": "19d4be36cfafab9d6145e5a755d45d09788d7c7aed8300a85097d23218baeea2",
+      "sizeBytes": "291736",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__procfs-0.14.2/libprocfs-762229472.rlib",
+    "digest": {
+      "hash": "dfedac91aa3d3b5acafe3823f3ddad663eb1b66a8b1e6ca691a5af366d9e5d69",
+      "sizeBytes": "7383648",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__procfs-0.14.2/procfs_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__procfs-0.9.1/libprocfs-1321140778.rlib",
+    "digest": {
+      "hash": "f3c171dd9c4e0e3dc5a048f4f8fec05979d932c249b18debcabb84ae1bc97d25",
+      "sizeBytes": "6285410",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__prometheus-0.13.3/libprometheus-2358088757.rlib",
+    "digest": {
+      "hash": "a3c5f8593463566081b9b0d34cb36757e546711fad278b0e2a9f2bb850ba9ad3",
+      "sizeBytes": "5004068",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__prometheus-0.13.3/prometheus_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__prost-0.12.2/libprost-1240399761.rlib",
+    "digest": {
+      "hash": "1db57a820e67676ce0e59825be62eeb0e914dd8606303208257812dce2ee185a",
+      "sizeBytes": "746530",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__protobuf-2.28.0/libprotobuf-799108518.rlib",
+    "digest": {
+      "hash": "cc385d4e3abb29f19e1b24992e9c0d4f7fee84b2981819b52933ca16677015fe",
+      "sizeBytes": "17026206",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__protobuf-2.28.0/protobuf_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__psm-0.1.21/libpsm-2338403539.rlib",
+    "digest": {
+      "hash": "a74f733004092bf343a224aee517db64ba8a36c3d57d26b1e1290e6a4d7175b8",
+      "sizeBytes": "38648",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__psm-0.1.21/psm_build_script.linksearchpaths",
+    "digest": {
+      "hash": "d531bdfb23ff5ad32bee04cc4d6a4ae2f35156be931078a451d0c19480b8726d",
+      "sizeBytes": "94",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__quinn-0.10.2/libquinn-1146673112.rlib",
+    "digest": {
+      "hash": "8ab6e16cbd1f2b28802631a5f4d54691bb367c4f76b40ea6aa56736327e23271",
+      "sizeBytes": "3015414",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__quinn-proto-0.10.5/libquinn_proto-2346417583.rlib",
+    "digest": {
+      "hash": "6183ce744f8d629fc8c0638c6b463207244e86b587dec9bfe86b2caf9792e72f",
+      "sizeBytes": "8244542",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__quinn-udp-0.4.0/libquinn_udp-116607194.rlib",
+    "digest": {
+      "hash": "2659518014bf4f1e0bbb6566010469aa01bd02a6dce4b28bf9be92ba604a044a",
+      "sizeBytes": "288248",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rand-0.8.5/librand-2215928286.rlib",
+    "digest": {
+      "hash": "2a57ff7632189ee2040de73d63b0f4d2f1bcc295061ebd146c3424c323fe9549",
+      "sizeBytes": "1717310",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rand_chacha-0.3.1/librand_chacha-1165314265.rlib",
+    "digest": {
+      "hash": "6fbc1501ddd904e0f51c438453f2da93dce85f5f5b7e37e09a318619e1d644db",
+      "sizeBytes": "317980",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rand_core-0.6.4/librand_core-485768168.rlib",
+    "digest": {
+      "hash": "a4e66b7d749753eb21972033505be229944bdc5e681922593ff1189a0bb2a009",
+      "sizeBytes": "215700",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__regex-1.9.1/libregex-2053274554.rlib",
+    "digest": {
+      "hash": "d19dfba9050149de780dd74a9409709c677ca6144fb6adc7aa85b9520ce3d2ae",
+      "sizeBytes": "1627360",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__regex-automata-0.3.3/libregex_automata-1511195537.rlib",
+    "digest": {
+      "hash": "910c81d80923a8ff962b5502de04cf490edf1e07bb4602d7b91e0c916cb2af73",
+      "sizeBytes": "9811038",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__regex-syntax-0.7.4/libregex_syntax-93743916.rlib",
+    "digest": {
+      "hash": "1883c07846dbe83f262e7e33260f04803aaa51fb94de83de18bc74f7acb8a356",
+      "sizeBytes": "10369224",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rfc6979-0.4.0/librfc6979-1201801261.rlib",
+    "digest": {
+      "hash": "0927218c90f1e1da21024fd59997976c843169986d4507ae0136a91ac68d48b4",
+      "sizeBytes": "54498",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__ring-0.16.20/libring-2641645575.rlib",
+    "digest": {
+      "hash": "ee993cdb2320f2e1b4eef43ed60839fcbf61cee9a42f36a6e089497d9157775d",
+      "sizeBytes": "6025062",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__ring-0.16.20/ring_build_script.linksearchpaths",
+    "digest": {
+      "hash": "3f0b03db90c384103ed09650468ffe92640d136a15f2af1dfa8f16af1670d79d",
+      "sizeBytes": "97",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rsa-0.9.2/librsa-1005454433.rlib",
+    "digest": {
+      "hash": "6b8e90ee006a5fc40b7b5295cf60fa0248b643f30155272a4602600db1b04dbd",
+      "sizeBytes": "1761312",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rustc-demangle-0.1.23/librustc_demangle-1776431290.rlib",
+    "digest": {
+      "hash": "b4e3b60c4409041a0e181d835d89d323b536563af554492831570d74f19be2fc",
+      "sizeBytes": "395682",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rustc-hash-1.1.0/librustc_hash-4046836749.rlib",
+    "digest": {
+      "hash": "0e166b2b77beb1f091c69461befed08794b870d1943510c6eb789a09eec2faab",
+      "sizeBytes": "31400",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rusticata-macros-4.1.0/librusticata_macros-2451300485.rlib",
+    "digest": {
+      "hash": "fd3e68ae37435742412a9e1c226e05310c84f49ee1ec28310ddd29e77fd32f71",
+      "sizeBytes": "109972",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rustix-0.36.15/librustix-1669309740.rlib",
+    "digest": {
+      "hash": "1fcbdf0f3e2af59fb2a3398fb7f69fafd8fe9386d3dfa54663d4b777ae639ddc",
+      "sizeBytes": "5377220",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rustix-0.36.15/rustix_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rustix-0.37.23/librustix-242656988.rlib",
+    "digest": {
+      "hash": "19df7ee2402febb5107a918dc5e66aff30d1ebbe9c6c193b95961b0faac75d57",
+      "sizeBytes": "4770618",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rustix-0.37.23/rustix_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rustls-0.21.7/librustls-1736762614.rlib",
+    "digest": {
+      "hash": "9fbdc42e12d3db7623b2979b5aec5b0847686739655d9d1c0b7b02a4716030cc",
+      "sizeBytes": "8563892",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rustls-0.21.7/rustls_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rustls-native-certs-0.6.3/librustls_native_certs-2110042630.rlib",
+    "digest": {
+      "hash": "3a078a8127167143c14095695c6ffa88fb8ae7a8154242a61f930a569bb1701b",
+      "sizeBytes": "158964",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rustls-pemfile-1.0.3/librustls_pemfile-1116599989.rlib",
+    "digest": {
+      "hash": "bd7f06188df536049562ab8a697ab3300601aff1e881c05f445cef90f65018a4",
+      "sizeBytes": "112760",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__rustls-webpki-0.101.4/libwebpki-2030077891.rlib",
+    "digest": {
+      "hash": "81ac97476f4f9ea081b602ac923fbf465c439075e2a98eb50673f601cd06de1a",
+      "sizeBytes": "1255502",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__ryu-1.0.15/libryu-1086466769.rlib",
+    "digest": {
+      "hash": "36139c9d349c34c7e8f84262f52fb7f6bd8d0e840f430f065af165b49b23a420",
+      "sizeBytes": "195100",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__scoped_threadpool-0.1.9/libscoped_threadpool-1094534484.rlib",
+    "digest": {
+      "hash": "2de4b4d53f0e905a3e2a430ad5f33d23dbf825d9c468d95cc702c1f06ec03e21",
+      "sizeBytes": "693492",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__scopeguard-1.2.0/libscopeguard-1775325130.rlib",
+    "digest": {
+      "hash": "31f070e74bc6cf2e7a352ead14a3edab98a95fffe58f799a26e8c8ebc6320d59",
+      "sizeBytes": "43404",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__sct-0.7.0/libsct-625760387.rlib",
+    "digest": {
+      "hash": "1e76e9ad9e47808200fe337b80636ea7575754e6f99a8f078cf900e18b8d48be",
+      "sizeBytes": "97688",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__sec1-0.7.3/libsec1-3231823245.rlib",
+    "digest": {
+      "hash": "e9080f8ae65a605ef59a55c0f23964ac2f842cd04a0802853bfca0f3e4205843",
+      "sizeBytes": "565312",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__serde-1.0.190/libserde-3706220576.rlib",
+    "digest": {
+      "hash": "f98ac6ab6535ee053807c003097b387ee44ced2b69dc7b5d7ceb626dec041b69",
+      "sizeBytes": "6108020",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__serde-1.0.190/serde_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__serde-big-array-0.5.1/libserde_big_array-2415648123.rlib",
+    "digest": {
+      "hash": "e91eb4e44546be2017124ac01fc4e4953a2ead1f7359c32b98c3103a16d0112c",
+      "sizeBytes": "72106",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__serde_bytes-0.11.12/libserde_bytes-159444788.rlib",
+    "digest": {
+      "hash": "a37fc24650cc0908b103cfb98ebb5323b2f2b13c1be56ed3b190d7639141544e",
+      "sizeBytes": "155020",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__serde_cbor-0.11.2/libserde_cbor-4047740061.rlib",
+    "digest": {
+      "hash": "d41b9ca27cbee16f8ef2853a38f6c4ede25bfec5aeca942f4190281687c2e5b8",
+      "sizeBytes": "1337558",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__serde_json-1.0.108/libserde_json-484717639.rlib",
+    "digest": {
+      "hash": "c50b68900d607a7aab632f0285dff003839e4711fe68f01829a6d13b14b568b1",
+      "sizeBytes": "3245776",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__serde_json-1.0.108/serde_json_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__serde_path_to_error-0.1.14/libserde_path_to_error-791935645.rlib",
+    "digest": {
+      "hash": "83c88a68ed50db34179ae8c6d882a3ba2198b4e36a754bec183dd92650e7ab62",
+      "sizeBytes": "526678",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__serde_urlencoded-0.7.1/libserde_urlencoded-2355445132.rlib",
+    "digest": {
+      "hash": "b64f3b672cd15a348bb0bf5ad60c7247fdca27988cfe1b53090b0f7d511bbd4a",
+      "sizeBytes": "303552",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__serde_with-1.14.0/libserde_with-1302647127.rlib",
+    "digest": {
+      "hash": "79c56e55c004096339836658542dcb40f2f99f5ed2ce31701f8f84e9beb04250",
+      "sizeBytes": "3163876",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__sev-2.0.2/libsev-2795181149.rlib",
+    "digest": {
+      "hash": "bc986689203ab0cc107309952b03da951c3e55c3e9199c3a709141741267c31e",
+      "sizeBytes": "6727712",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__sev-2.0.2/sev_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__sha1-0.10.5/libsha1-2280573944.rlib",
+    "digest": {
+      "hash": "607698c1173010363207ebb05f5b7343217ae529f43d8f95667c0c3e17ae1ba8",
+      "sizeBytes": "337388",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__sha2-0.10.8/libsha2-1974027515.rlib",
+    "digest": {
+      "hash": "0bacd91ba2acaac290a69744d6a21a056c3544dce446ad88041e87bf630497a4",
+      "sizeBytes": "728518",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__signal-hook-registry-1.4.1/libsignal_hook_registry-993921389.rlib",
+    "digest": {
+      "hash": "93bce15e4de8103577367a6e378989c50ecbcb3d03778f2765bf24abeb754796",
+      "sizeBytes": "413212",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__signature-2.1.0/libsignature-1494464361.rlib",
+    "digest": {
+      "hash": "46a040f63345afad3a0b1d5b273493b965e9c0d5dd2d5d8fd2ce836baa24c397",
+      "sizeBytes": "76822",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__slab-0.4.8/libslab-903256143.rlib",
+    "digest": {
+      "hash": "2e74ef9e88c9146df7c8939e63df525d8beca8a0efbcfa499bae53a2eca7bdb9",
+      "sizeBytes": "197156",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__slab-0.4.8/slab_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__slog-2.7.0/libslog-2162175198.rlib",
+    "digest": {
+      "hash": "e86d2c6f37c598e557dd5f457690c15a19af866c0c65691f3c672da89ab0d006",
+      "sizeBytes": "656834",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__slog-2.7.0/slog_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__slog-async-2.7.0/libslog_async-554892018.rlib",
+    "digest": {
+      "hash": "ff1e27ae91d68b7da72e88e69b5c095938529d9dd8bd3a1890aac065ed37e486",
+      "sizeBytes": "966490",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__slog-async-2.7.0/slog-async_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__slog-json-2.6.1/libslog_json-1634663403.rlib",
+    "digest": {
+      "hash": "57e2778de740503476c806e8e1ffb8ad4f620d1661e1cfd9c2f4857198b1ab1d",
+      "sizeBytes": "130806",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__slog-scope-4.4.0/libslog_scope-2004583204.rlib",
+    "digest": {
+      "hash": "84bd0055bd1e2b702d484b18740e487e76ae6c540f0627646d9aa445cf90275a",
+      "sizeBytes": "253780",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__slog-term-2.9.0/libslog_term-1396309927.rlib",
+    "digest": {
+      "hash": "e8145675725cdc6f9c24b078b696ab863d4b9e609c382b11aaa5138712e5bc46",
+      "sizeBytes": "677282",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__smallvec-1.11.0/libsmallvec-338023222.rlib",
+    "digest": {
+      "hash": "f817e37d27d6fa314b53af3253a0acdcca98dd007b52c190dd85215006c0953e",
+      "sizeBytes": "368000",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__socket2-0.4.9/libsocket2-2471941022.rlib",
+    "digest": {
+      "hash": "3660d5572a9938f491e879d13bbb067c6facd9a37df3fb2e019a2b87be7795de",
+      "sizeBytes": "786342",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__socket2-0.5.3/libsocket2-164888638.rlib",
+    "digest": {
+      "hash": "8f43f7568f349766b7be5003e3306d184d71ea6557e2b618b46808e198531cee",
+      "sizeBytes": "964972",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__spin-0.5.2/libspin-2765983313.rlib",
+    "digest": {
+      "hash": "05503cce4eded9744222b1e9b92d136ed2dc9ea3bd212cf0f75f74a473e9e7b8",
+      "sizeBytes": "141504",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__spki-0.7.2/libspki-2316107308.rlib",
+    "digest": {
+      "hash": "00a5a0c7ecc40d6c9f9d23c22891bb03bff11867af77fb987c4b540cbbf9b424",
+      "sizeBytes": "217228",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__stacker-0.1.15/libstacker-1085048600.rlib",
+    "digest": {
+      "hash": "0430b484f7f90e6ab8eedb0838af92a1d6953b387350fc8e84aeba0e269b70d7",
+      "sizeBytes": "69916",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__stacker-0.1.15/stacker_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__static_assertions-1.1.0/libstatic_assertions-521553119.rlib",
+    "digest": {
+      "hash": "03c51ccef817ee1574315137174263aad55ac71d46d8f1718fc70e080f349494",
+      "sizeBytes": "59950",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__strsim-0.10.0/libstrsim-3777818517.rlib",
+    "digest": {
+      "hash": "d9c5f7905639b0b3bbeca53fa491a999e4b9f0b4e1e7f1d843e4bccd2d932b80",
+      "sizeBytes": "279928",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__strum-0.24.1/libstrum-203507756.rlib",
+    "digest": {
+      "hash": "74c53076fd86b1547d8647a7fd6b92f2894645bb09f3a626e2401048a3348547",
+      "sizeBytes": "36696",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__subtle-2.5.0/libsubtle-65566234.rlib",
+    "digest": {
+      "hash": "1593e725f53cdbc65a63b9598196499157d157730c533709738cf7681b5db68d",
+      "sizeBytes": "178742",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__sync_wrapper-0.1.2/libsync_wrapper-473071980.rlib",
+    "digest": {
+      "hash": "a336f469c4fa36b3ddfc2716e6783f9922c924f6fbcb8d2085a7d2de0325493e",
+      "sizeBytes": "23748",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__take_mut-0.2.2/libtake_mut-623088773.rlib",
+    "digest": {
+      "hash": "97e2884a6af63ba48a576aad73b97dde37250b79e0df273155020882b6b7eb1f",
+      "sizeBytes": "38636",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tempfile-3.6.0/libtempfile-668879809.rlib",
+    "digest": {
+      "hash": "2a07b330ca41f00497636c9e69dfd4a00e5d69f811ae3799970fa5136cfa2fb7",
+      "sizeBytes": "767480",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tempfile-3.6.0/tempfile_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__term-0.7.0/libterm-1610682535.rlib",
+    "digest": {
+      "hash": "c77f10a84ddf952a38a16ce9d0ba95f9f1cd90c4ff95aa1eea531875fadfd6a1",
+      "sizeBytes": "1422000",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__termcolor-1.1.3/libtermcolor-1512372790.rlib",
+    "digest": {
+      "hash": "408693d212ce5cf1c7f75d2607375af1ebc9fb50d7acad9cccfb4a06be051b72",
+      "sizeBytes": "404932",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__textwrap-0.16.0/libtextwrap-442605092.rlib",
+    "digest": {
+      "hash": "7d74e0f2e2d2cfecc57cb93fbc6c3429328beae726bdf2940888406753383c6b",
+      "sizeBytes": "604086",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__thiserror-1.0.43/libthiserror-1516037171.rlib",
+    "digest": {
+      "hash": "88fac2ea8bda566223c837af76db78d3e3e37d00acec7277a04d4bad2971966e",
+      "sizeBytes": "29012",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__thiserror-1.0.43/thiserror_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__thousands-0.2.0/libthousands-931785588.rlib",
+    "digest": {
+      "hash": "76a8ccf1df8627212c5bce787872d1077d35b7b9bab1225f5a2504a7202ad582",
+      "sizeBytes": "109434",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__thread-id-4.1.0/libthread_id-3190456753.rlib",
+    "digest": {
+      "hash": "07eea8055a8e5583e58eff5c148a976ffb6be7a789433c8242098c15e5bc6344",
+      "sizeBytes": "8382",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__thread_local-1.1.7/libthread_local-3519924889.rlib",
+    "digest": {
+      "hash": "328c34499a127eeb2cf6dcae09793a23e11e6846f656564dd0922f2f5c7c3524",
+      "sizeBytes": "260358",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__time-0.1.45/libtime-1058952944.rlib",
+    "digest": {
+      "hash": "214517a24d74a539820a6e3e55582de37034f0385fb17ace904eab4f3f64ddb7",
+      "sizeBytes": "584906",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__time-0.3.23/libtime-787113740.rlib",
+    "digest": {
+      "hash": "7b232f90edd4d463b8171c9ad960d51c0be649a749ddde4e6b99b2fb26fa3bbd",
+      "sizeBytes": "5018736",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__time-core-0.1.1/libtime_core-1593302320.rlib",
+    "digest": {
+      "hash": "4f6cdc9bd0bd19e6ab8b1c04d4272ce375c26d937b80d8d1f618c52b367473cc",
+      "sizeBytes": "78046",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tinyvec-1.6.0/libtinyvec-2371915251.rlib",
+    "digest": {
+      "hash": "dfbaa55e8f3a41c2b87b09fa90328d9c4f8c959b9331f3407b86b965d0c1745a",
+      "sizeBytes": "1822750",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tinyvec_macros-0.1.1/libtinyvec_macros-2311529899.rlib",
+    "digest": {
+      "hash": "b4a41800cf7edd7276f80adae30f7871d196e54f93b80e724ee11c45e4ac11c7",
+      "sizeBytes": "7056",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tokio-1.32.0/libtokio-2934152039.rlib",
+    "digest": {
+      "hash": "34cbbc901b0b6a30326a8e50e9b8c21f69a482dd1e02b7c478fe95b7ef79787b",
+      "sizeBytes": "15796116",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tokio-io-timeout-1.2.0/libtokio_io_timeout-1178144426.rlib",
+    "digest": {
+      "hash": "90128c76ef58c39faf9ccf3d7f1c4123b1c0063c983c96689fb9faa644de40a5",
+      "sizeBytes": "346172",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tokio-metrics-0.3.0/libtokio_metrics-3435298009.rlib",
+    "digest": {
+      "hash": "bfdc7f2cbcd253af236065409bd09f6dc0a889895210f859cb070ccf232090e7",
+      "sizeBytes": "276560",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tokio-rustls-0.24.1/libtokio_rustls-717831251.rlib",
+    "digest": {
+      "hash": "bbb11e954bf90f4beb9fa6c8cb501039070c1e433cd9da8448aa437c3f21105e",
+      "sizeBytes": "236642",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tokio-stream-0.1.14/libtokio_stream-624146020.rlib",
+    "digest": {
+      "hash": "8ae33a450359b57a158bda16bc6f00affa71da4cefc065fb6d06f2e1234bbc06",
+      "sizeBytes": "933232",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tokio-util-0.7.8/libtokio_util-1738474820.rlib",
+    "digest": {
+      "hash": "c5b1f5c2ab717fc7a819f3387b9ff781d3ca40f0d4cd413f25e5e36adb66fd12",
+      "sizeBytes": "2715272",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tonic-0.10.2/libtonic-1105239952.rlib",
+    "digest": {
+      "hash": "69ba9d39a0f214d6cb3c6d5f8bcdf9c0795748cd43e1d716d47b5214d050e0db",
+      "sizeBytes": "13565132",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tower-0.4.13/libtower-644117900.rlib",
+    "digest": {
+      "hash": "36d4b7de0f5dfa342b94c058df3f4bf202fc39bf172cbec17146116ccc88e0f8",
+      "sizeBytes": "4264080",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tower-layer-0.3.2/libtower_layer-1160913114.rlib",
+    "digest": {
+      "hash": "d59219d88bed9eedb9f7f652883a943a40148470951e53172a630a14a76cd8d5",
+      "sizeBytes": "96986",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tower-service-0.3.2/libtower_service-508102910.rlib",
+    "digest": {
+      "hash": "6847d9594260ee8d107334a52eddaa8cde9ba52c82c1c25f4536b8be3aed22f9",
+      "sizeBytes": "27398",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tracing-0.1.37/libtracing-1116431099.rlib",
+    "digest": {
+      "hash": "40419bedf3e270cb68a3b92307bb9af7a95a19d5c140816c17d547b4f3d48212",
+      "sizeBytes": "747868",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__tracing-core-0.1.31/libtracing_core-1560127265.rlib",
+    "digest": {
+      "hash": "c23a7eaf996d015e795f324d408089e3e5bdc201f2c67f97c8f81e5f256f6334",
+      "sizeBytes": "1282412",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__try-lock-0.2.4/libtry_lock-850261622.rlib",
+    "digest": {
+      "hash": "d25ad2867b3194d167997a4394e4c48fe1cd4843b6158e0b554021234e4f497e",
+      "sizeBytes": "38654",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__typed-arena-2.0.2/libtyped_arena-1412713393.rlib",
+    "digest": {
+      "hash": "ab366b5c1b7ccb1bb7dc9fd534b4983529fb0b335883c7643ab7d3a82371d8df",
+      "sizeBytes": "100594",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__typenum-1.16.0/libtypenum-465063825.rlib",
+    "digest": {
+      "hash": "1386f01cadb585442b0e95683eaa248f86b622c9726dc1c6958aa822774c32dc",
+      "sizeBytes": "2202714",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__typenum-1.16.0/typenum_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__ucd-trie-0.1.6/libucd_trie-1368240364.rlib",
+    "digest": {
+      "hash": "ff46ad92759cca71c896ec5d6a2d3ef64260adcd76043e77784bb946ad1f1e68",
+      "sizeBytes": "206072",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__unicode-bidi-0.3.13/libunicode_bidi-1715329649.rlib",
+    "digest": {
+      "hash": "f9bdb8a4cc0d86208753d8a3cc276f84c495eaea7e851f174ba2c95cf2ffad37",
+      "sizeBytes": "1065190",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__unicode-normalization-0.1.22/libunicode_normalization-2356528290.rlib",
+    "digest": {
+      "hash": "3e7bec6d1801f4476d653d34aabf4c102f63a2b0a310e9b9e30349f734c4c7de",
+      "sizeBytes": "2344398",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__unicode-segmentation-1.10.1/libunicode_segmentation-1334466773.rlib",
+    "digest": {
+      "hash": "07cf6676e3c49c200f47495244a2eb684fc9bcb90dbdaa604747b251ba008377",
+      "sizeBytes": "1462356",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__unicode-width-0.1.10/libunicode_width-717345017.rlib",
+    "digest": {
+      "hash": "3545ce4bb4724ba878e0d7e5c2085fb38f0cc6056ff57f943232b9cf1df03537",
+      "sizeBytes": "149378",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__untrusted-0.7.1/libuntrusted-323816164.rlib",
+    "digest": {
+      "hash": "9c0c119c3953fa7d8231d7e7e2ab8f08bc992a4067dbdbb09144312a4986cf2e",
+      "sizeBytes": "85230",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__url-2.4.1/liburl-1090755794.rlib",
+    "digest": {
+      "hash": "4dc703317305375a6c89ea078778f9d0b3472aa469ec439d64f0f60446cd3067",
+      "sizeBytes": "1501436",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__utf8-width-0.1.6/libutf8_width-4155846729.rlib",
+    "digest": {
+      "hash": "cb9c31232d5943729413fbffce17a677afdeac3e74fff31eacbab0d59a8452e2",
+      "sizeBytes": "12896",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__uuid-1.5.0/libuuid-137024282.rlib",
+    "digest": {
+      "hash": "a4f3aa01ab53bc8069330e59b0c83243d9e77cc1c0301336e4dcd5e8a3758b8f",
+      "sizeBytes": "687950",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__want-0.3.1/libwant-1438169975.rlib",
+    "digest": {
+      "hash": "cf207bf00ad0883610d233d3b8fa72a7ed85a74ee58a11be2ac6860a7285a7bf",
+      "sizeBytes": "68766",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__wsl-0.1.0/libwsl-1048927407.rlib",
+    "digest": {
+      "hash": "00d0019bf7fbaff20a0ee9b619b3727b483625a7cac4e4e6443a41e761b44336",
+      "sizeBytes": "35268",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__x509-cert-0.2.4/libx509_cert-1404108900.rlib",
+    "digest": {
+      "hash": "ae8bc033aabc9a37eb6ec03afeed67224707356804c1a84922317289e25dcdc5",
+      "sizeBytes": "5144900",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__x509-parser-0.15.1/libx509_parser-1417792645.rlib",
+    "digest": {
+      "hash": "3ca5869437649a38f8f5bf791fc39a0a383af39edcf51dee658f23ee946057e6",
+      "sizeBytes": "4147212",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__yansi-0.5.1/libyansi-2695192581.rlib",
+    "digest": {
+      "hash": "24245142fb5e9bfefe3f34445038ee6a55ab5f6f8d440e788afb47b0bcfa4b74",
+      "sizeBytes": "248868",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/crate_index__zeroize-1.6.0/libzeroize-840370699.rlib",
+    "digest": {
+      "hash": "253de1e85cb50f403e773cb509f535224398575e829bea6ee3690d5b31a00d17",
+      "sizeBytes": "378350",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/lmdb_rkv/liblmdb-43900654.rlib",
+    "digest": {
+      "hash": "19eba564bb1f8ee653a61e40c3a687ed6b6e37dc42f64cd2684dfbcfae56165c",
+      "sizeBytes": "561042",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/lmdb_rkv/lmdb-sys/liblmdb_sys-119010039.rlib",
+    "digest": {
+      "hash": "58400eb9b60b45448203ab37bd4cf1ce273c75f3b775080936804537e3086d34",
+      "sizeBytes": "207104",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/lmdb_rkv/lmdb-sys/lmdb_sys_build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/bin/cargo",
+    "digest": {
+      "hash": "dd48d97ff7cea46b784f84b823ac44fa772743ad6d7df9df02679d5a5055a4cb",
+      "sizeBytes": "41703200",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/bin/clippy-driver",
+    "digest": {
+      "hash": "90f2e78045137968f4a9797997768696201d7f07777d45e563e669e05c84fccd",
+      "sizeBytes": "12591328",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/bin/rustc",
+    "digest": {
+      "hash": "9f9737ae4f83c249b92bdcb82cc5aab386bbbc0b7efa75fb889b7219fb3a77ca",
+      "sizeBytes": "2880008",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/bin/rustdoc",
+    "digest": {
+      "hash": "aa1fc16fc6506e331d7173b9607afb2ec7ac3a0c621305c13cd6ea6e5f1bfb7f",
+      "sizeBytes": "14560992",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/bin/rustfmt",
+    "digest": {
+      "hash": "1e3f7d237e0442cc653517c2872775f0307ea2cea019035a81f315f51673d8a6",
+      "sizeBytes": "4757672",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/libLLVM-17-rust-1.74.0-stable.so",
+    "digest": {
+      "hash": "9dc86062663677341d98440a824fc9f676f25d075b4e17afd6f5a425efab6c29",
+      "sizeBytes": "145253840",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/librustc_driver-fd05879751a9d790.so",
+    "digest": {
+      "hash": "365fb95a5e3c0b73679324d138083728d92b7324a50ba94461374489652bedc9",
+      "sizeBytes": "110186944",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/libstd-fcf70ff533b679b2.so",
+    "digest": {
+      "hash": "9afc8e0e055bb7ad46d2e8fcf25538446d14b61036b076ddf0286f7e3af27098",
+      "sizeBytes": "14393664",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/libtest-d7d5d62f1a503db9.so",
+    "digest": {
+      "hash": "6a364290d88ab84bfe25ee617b5a7a8e28135eddb3f4cc4884e4984bdef8db59",
+      "sizeBytes": "3508800",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/bin/rust-lld",
+    "digest": {
+      "hash": "b1f41c10c6b89311a5ff0eac7a1b70cc26c1baf7116b9e468e24d615bf0d193a",
+      "sizeBytes": "8396304",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libLLVM-17-rust-1.74.0-stable.so",
+    "digest": {
+      "hash": "9dc86062663677341d98440a824fc9f676f25d075b4e17afd6f5a425efab6c29",
+      "sizeBytes": "145253840",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libaddr2line-809f163ce43a1738.rlib",
+    "digest": {
+      "hash": "c2cda753b5ee83c4abf295f0f37be033f6d9f33e57a3cae37e9a10e85c89b0a8",
+      "sizeBytes": "450550",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libadler-f89fab2dfdbb31f7.rlib",
+    "digest": {
+      "hash": "ee90774e3febcf6aae15cd90ec0f4870b56a0c0175491f2f1bdd0cb65b712af1",
+      "sizeBytes": "41400",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/liballoc-e7c6d1877111e953.rlib",
+    "digest": {
+      "hash": "0c5e4eaeaf095f0a130a091b7e2166bba0ed66c9daab5962446591a8f87e903f",
+      "sizeBytes": "6383218",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libcfg_if-43dc09dbe07dbc55.rlib",
+    "digest": {
+      "hash": "3776a0b8b28496720acee9431528ce3663f8eebec2c361ba7856fad2d0e3d42c",
+      "sizeBytes": "10910",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libcompiler_builtins-90c8d5109b409073.rlib",
+    "digest": {
+      "hash": "b545abe65fe38a54a680ed0d4816133ee07c76abada2d60d73371eef0b765ce5",
+      "sizeBytes": "3132242",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libcore-a241e0394ca8cc1d.rlib",
+    "digest": {
+      "hash": "ad1e2ec0c78b14ad26d1073ac1a9a3ffd681c43644213c6a273c053ba69fda1f",
+      "sizeBytes": "50750280",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libgetopts-dc027ebbbf001ad3.rlib",
+    "digest": {
+      "hash": "3d13f94c4d22d5820ae855ede284bd22edce8637c570f06eb27bf799c9097ef8",
+      "sizeBytes": "1076278",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libgimli-175dcc30aa334793.rlib",
+    "digest": {
+      "hash": "08c5aac8fe0c9a38202a1777efb68b3c0f3a490d2ed88a7d70782349454ee8ad",
+      "sizeBytes": "6224846",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libhashbrown-cb31e582b020f933.rlib",
+    "digest": {
+      "hash": "67f740e3e8a72f86ea5d66a3a19195abfd5a71d1a0e2d1c64e92f9e81eaf9544",
+      "sizeBytes": "1444874",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/liblibc-90b35e743da38af2.rlib",
+    "digest": {
+      "hash": "2a03f9f26b6bb866249929985ea79948ad962183ecc9315aa1554747de9b108e",
+      "sizeBytes": "3568556",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libmemchr-d78ac6160f3d6c83.rlib",
+    "digest": {
+      "hash": "52a33800559acdd50883d2ff4e22233d5e1247a2d7d24a1c8f00f70127adb536",
+      "sizeBytes": "1261258",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libminiz_oxide-fadf2e6707443620.rlib",
+    "digest": {
+      "hash": "2970707c4d70f4b9b8585aaf47a753dcd538066d3faf57c8200fc5be15406fc2",
+      "sizeBytes": "365204",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libobject-1c489496724861fb.rlib",
+    "digest": {
+      "hash": "0463be415c050384674e7618003331a52cf90e0c74f089ff2bbf51ab61251a1d",
+      "sizeBytes": "8223394",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libpanic_abort-79e1698d6e765f41.rlib",
+    "digest": {
+      "hash": "afaa0bc9be66b4cd1140d6a1994bb51fc8b89d0d1814af348c0c66c8c6942572",
+      "sizeBytes": "13916",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libpanic_unwind-0c444f82ff6357fe.rlib",
+    "digest": {
+      "hash": "33e5e908459f8b1a740aa3654f0e6c826b518ccf8904f527cb08984332442e71",
+      "sizeBytes": "41750",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libproc_macro-f8ed734f7de31b1e.rlib",
+    "digest": {
+      "hash": "35b3166df3b75fdd9164affaaf98c35c8679ab49328f596db85861baf2924c27",
+      "sizeBytes": "6243504",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libprofiler_builtins-841afd0eed70c8b2.rlib",
+    "digest": {
+      "hash": "72a91c46ef3c470255752c4663f13f80b5dd9c3f8b46d85e4c2c1c612e1587bb",
+      "sizeBytes": "436818",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a",
+    "digest": {
+      "hash": "8e0679f177f334f93d316c11066636ebaa3bfd67f67b9c930756069a56ce8fae",
+      "sizeBytes": "5697134",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.lsan.a",
+    "digest": {
+      "hash": "43c620819a1ba21b916b1c14d099b18b8522b1527db6b5c078a86f4a4c7a6ddb",
+      "sizeBytes": "1925520",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.msan.a",
+    "digest": {
+      "hash": "7229df0640a67938b63fc945d6490f81ee623052d3c5184ba19e0fe68854fd97",
+      "sizeBytes": "4551866",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.safestack.a",
+    "digest": {
+      "hash": "693dedd6e330c2ff1c9394cebfcbdfdba3ac818ad864786b55e9e11e705bcd1c",
+      "sizeBytes": "28778",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.tsan.a",
+    "digest": {
+      "hash": "0255857813d4ea5b07dbbd4c31894b0a4fa2e6137153fbf62bed55af25e4d001",
+      "sizeBytes": "5451866",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc_demangle-cd8ec97f4bc5bb94.rlib",
+    "digest": {
+      "hash": "29729da3cc6ff3def2b463c516c289717ee01f4a0754805af5b43aa3f6d6f9a3",
+      "sizeBytes": "765334",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc_std_workspace_alloc-9ec867386c5b7a05.rlib",
+    "digest": {
+      "hash": "72de7c5fcd327d4b0b56ae71c4e50e74491ef11de96ac576ed06b45267383b2a",
+      "sizeBytes": "6260",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc_std_workspace_core-5532010d21dfada0.rlib",
+    "digest": {
+      "hash": "69408be69bc886d5b0946e4693c67b3e19a38e3392ad64b5218e189ebb4ff41c",
+      "sizeBytes": "8962",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc_std_workspace_std-266667c1d67f6bdd.rlib",
+    "digest": {
+      "hash": "abf21679c476ad9f674216a1ddadb4ee59917090cf25fc6d7fbaa0a919b59fe8",
+      "sizeBytes": "10792",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libstd-fcf70ff533b679b2.rlib",
+    "digest": {
+      "hash": "d03bead8aa4464e259e54c4b68c9366f0418a22391d7b88e44ffcaf5d53961df",
+      "sizeBytes": "18780582",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libstd-fcf70ff533b679b2.so",
+    "digest": {
+      "hash": "9afc8e0e055bb7ad46d2e8fcf25538446d14b61036b076ddf0286f7e3af27098",
+      "sizeBytes": "14393664",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libstd_detect-ee389c47b08d0950.rlib",
+    "digest": {
+      "hash": "e042eff02b7ccaecde4a18e5f1269201fa570ff75a8c782fcc7936b155b5dffe",
+      "sizeBytes": "456434",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libsysroot-d3b023ba09530f83.rlib",
+    "digest": {
+      "hash": "59d8494eab7b5180046696aa350ca411535f456b8270cf75479edb94539fba5e",
+      "sizeBytes": "6128",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libtest-d7d5d62f1a503db9.rlib",
+    "digest": {
+      "hash": "801f4cf08c878c1de68a8a86b1fb536f4a4af9fd09b642aa050971e7af44bea4",
+      "sizeBytes": "7761418",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libtest-d7d5d62f1a503db9.so",
+    "digest": {
+      "hash": "6a364290d88ab84bfe25ee617b5a7a8e28135eddb3f4cc4884e4984bdef8db59",
+      "sizeBytes": "3508800",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libunicode_width-c381f4198afc0944.rlib",
+    "digest": {
+      "hash": "fa3ce099445fbdbf2c5a6a3a9f5f5657163e9864427a438fc69fc94b70af58d8",
+      "sizeBytes": "150856",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/libunwind-6b9f3014e302f71b.rlib",
+    "digest": {
+      "hash": "d7c175d7470979c91436be9467d5f464e9dbf446924781cac4d8c81a3b28c050",
+      "sizeBytes": "49328",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/artifact_pool/libic_artifact_pool-2774108040.rlib",
+    "digest": {
+      "hash": "ee210817497d017b5b57665a46e0dee781c309594b1d565b53cbb80fc0222d14",
+      "sizeBytes": "19892488",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/async_utils/libic_async_utils-3472017005.rlib",
+    "digest": {
+      "hash": "98dc74f921f83fd17b3341d7f647b897cc0f0717445a7f744bc6dde773e1682e",
+      "sizeBytes": "261710",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/bitcoin/types/internal/libic_btc_types_internal-1799040268.rlib",
+    "digest": {
+      "hash": "36dbc0993918bf52dae0c41d2f94b5a7ed05fa5d4dee09d6e3d733addbf16d21",
+      "sizeBytes": "1432184",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/config/libic_config-575724437.rlib",
+    "digest": {
+      "hash": "97fe12d390600148596893b79f186c69ea070a5390379b1615e0a251c07a5982",
+      "sizeBytes": "6657196",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/constants/libic_constants-342299986.rlib",
+    "digest": {
+      "hash": "5e8e7300782bb448bf6bfa67e5e2c8a668b76d1c5873abbad3a89a9c4c3c8f9e",
+      "sizeBytes": "10020",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/crypto/interfaces/sig_verification/libic_crypto_interfaces_sig_verification-1530440640.rlib",
+    "digest": {
+      "hash": "41d527a6468027d2f56cd9c422bb1ff16c8f1189a2b19eb2f443453677d09408",
+      "sizeBytes": "18782",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/crypto/internal/crypto_lib/sha2/libic_crypto_internal_sha2-157857637.rlib",
+    "digest": {
+      "hash": "9afd478ab952ec7550c35af565a622e92ec49501b91c2f3082395df3c112dc3f",
+      "sizeBytes": "132464",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/crypto/internal/crypto_lib/types/libic_crypto_internal_types-2698076796.rlib",
+    "digest": {
+      "hash": "da7b997a3305de48cd9af2b252db316b2840fc0fc9cc3159d52ec7c1811ac782",
+      "sizeBytes": "2509800",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/crypto/sha2/libic_crypto_sha2-1355410863.rlib",
+    "digest": {
+      "hash": "03778751821db37bbe9eac2f9dca39ba6092044facc8ec16166efd64040d0c42",
+      "sizeBytes": "9456",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/crypto/tls_interfaces/libic_crypto_tls_interfaces-3829610297.rlib",
+    "digest": {
+      "hash": "af5662272148824e382702a6cc59886f07688d9a62246cc4153655a88659a4ec",
+      "sizeBytes": "521228",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/crypto/tree_hash/libic_crypto_tree_hash-429224594.rlib",
+    "digest": {
+      "hash": "c41dab48ad16b2ff82a334b79afd84f875f16c8c885840d98caaae2f4c3803e6",
+      "sizeBytes": "2372978",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/crypto/utils/tls/libic_crypto_utils_tls-808378750.rlib",
+    "digest": {
+      "hash": "08daa5392d4bab3bc095e4508dc86499c0cf46cd317fa4da4bb1649066e1897a",
+      "sizeBytes": "156062",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/ic_os/sev/libic_icos_sev-1206144419.rlib",
+    "digest": {
+      "hash": "c233cd6d76376e7b80bd6bf7945655b749bde4fd51e69b14907464204ba67abf",
+      "sizeBytes": "408450",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/interfaces/libic_interfaces-1328823939.rlib",
+    "digest": {
+      "hash": "8b4c0acf1ee603f9204c5df6872a4fb2ffc5d45517b2ce6b5fd01dd1ee5015ae",
+      "sizeBytes": "3264680",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/interfaces/registry/libic_interfaces_registry-1431409716.rlib",
+    "digest": {
+      "hash": "2a28d82edb90a467e1309edf48170c429f13879a8b6a8e8c7acfdf15cfdd1777",
+      "sizeBytes": "91680",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/interfaces/state_manager/libic_interfaces_state_manager-1150140514.rlib",
+    "digest": {
+      "hash": "0718489d7fcec7679f9493b0deb6b97461b26c747626d646ab4268d36ee4f6ba",
+      "sizeBytes": "128060",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/monitoring/adapter_metrics/libic_adapter_metrics-774110474.rlib",
+    "digest": {
+      "hash": "28587751e3af04c0c3b98a143b6e02bc47694efef364edb69d87c5779609aa19",
+      "sizeBytes": "7060688",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/monitoring/adapter_metrics_service/build_script.linksearchpaths",
+    "digest": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sizeBytes": "0",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/monitoring/adapter_metrics_service/libic_adapter_metrics_service-1369437868.rlib",
+    "digest": {
+      "hash": "625e196b0924b788268b0b7726a61ab07de06ce3825e20876e653c8b627a476d",
+      "sizeBytes": "110876",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/monitoring/context_logger/libic_context_logger-1407528699.rlib",
+    "digest": {
+      "hash": "dd0f494029b58f25f23196b9d38086aa35503887d70f4b838984d8831ba931a8",
+      "sizeBytes": "83040",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/monitoring/logger/libic_logger-3892157291.rlib",
+    "digest": {
+      "hash": "49f7c9bd4b53f11aa21abbb088d4415fc036c1cdb4bc6a75763af65f14141ef9",
+      "sizeBytes": "4107434",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/monitoring/metrics/libic_metrics-1795587558.rlib",
+    "digest": {
+      "hash": "58d811a703c2fa53d8f6e68d0b978e4013e2140cae2c7c8559e095b85a433f9e",
+      "sizeBytes": "1170554",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/p2p/consensus_manager/libic_consensus_manager-1541008932.rlib-0.params",
+    "digest": {
+      "hash": "f6712da47304e67a7f80160546ed05d4568c889b609166fcb9b39e9817f53343",
+      "sizeBytes": "25806",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/p2p/peer_manager/libic_peer_manager-400913723.rlib",
+    "digest": {
+      "hash": "742fa01dd581b58590ea818ffdf0a6189bca79b35c36b3f2ce5e03a820c14b3e",
+      "sizeBytes": "1619362",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/p2p/quic_transport/libic_quic_transport-1939191277.rlib",
+    "digest": {
+      "hash": "fd862153090095ce5bbe59101560e364f320409c1fed7889a0c64314cd66af25",
+      "sizeBytes": "6531892",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/phantom_newtype/libphantom_newtype-685849433.rlib",
+    "digest": {
+      "hash": "033da9eb9d0ac3f24218667045db38d854ca549eecf2acaaca5b8ca4a95e4e78",
+      "sizeBytes": "155626",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/protobuf/libic_protobuf-371281076.rlib",
+    "digest": {
+      "hash": "98de9c878702581e2c3816d137e26abab935659d6eac5b2c6239648a34cc9cb4",
+      "sizeBytes": "25540234",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/registry/helpers/libic_registry_client_helpers-1626323320.rlib",
+    "digest": {
+      "hash": "b3a4d8c8c0320c414bf38268cde803d7914c25b7b071767198963489698f1ad0",
+      "sizeBytes": "2812862",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/registry/keys/libic_registry_keys-2803411675.rlib",
+    "digest": {
+      "hash": "df1c164a60d3d58bd6b4b714e4ee356573cdaf7ad966d05c2db99370c5771932",
+      "sizeBytes": "261062",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/registry/proto/libic_registry_common_proto-1176472843.rlib",
+    "digest": {
+      "hash": "ee0e1c161a519b8f1fa56bf2e9a04ce27a6410b6b39975de09378d002a44db9a",
+      "sizeBytes": "185768",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/registry/provisional_whitelist/libic_registry_provisional_whitelist-175507883.rlib",
+    "digest": {
+      "hash": "e58c4d7c8b443ff8bc23fb76d8aaa4e1f0b34a2a2f5e3b019b9b4d2a9548369e",
+      "sizeBytes": "165274",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/registry/routing_table/libic_registry_routing_table-897272024.rlib",
+    "digest": {
+      "hash": "367cb78568de3b7a47e751f926f53ec5c472b8832bab6896d799a042c686cdc1",
+      "sizeBytes": "1407258",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/registry/subnet_features/libic_registry_subnet_features-1169466018.rlib",
+    "digest": {
+      "hash": "2145f93fd22a0cffcb154296ee0273bc8990200626cd27887b82cb83a3591bcb",
+      "sizeBytes": "308994",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/registry/subnet_type/libic_registry_subnet_type-1652982017.rlib",
+    "digest": {
+      "hash": "8c528833cab51b392291d961f753f8c4f0cbb68d49e885d70813812d2c230163",
+      "sizeBytes": "111760",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/sys/libic_sys-1832039852.rlib",
+    "digest": {
+      "hash": "bded28b5b952006435e57d51c6fa6eb73f9a50b1801a97765d0cac9ca87017f0",
+      "sizeBytes": "388452",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/types/base_types/libic_base_types-2888982240.rlib",
+    "digest": {
+      "hash": "4f5dfb6363b0589a845b21ea2d6d15a999936c662d578dab5f503d90b758b4cc",
+      "sizeBytes": "556264",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/types/error_types/libic_error_types-1899703809.rlib",
+    "digest": {
+      "hash": "49eea3146e7f6b90d8d9b0efcd97b0b40b2277fe9bfdc55a1282d5cb1a15e7e8",
+      "sizeBytes": "463242",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/types/ic00_types/libic_ic00_types-537414505.rlib",
+    "digest": {
+      "hash": "ca8441c38b09ef9d14af534b400dd769a75c3ad7f7070eb0bbaf69b794ae2bb0",
+      "sizeBytes": "10700970",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/types/types/libic_types-1452128808.rlib",
+    "digest": {
+      "hash": "7e19cd28bd93b1dd9ebb6d21661fd68673c1763eb8cb7f16e7c42beeb4ae53d8",
+      "sizeBytes": "39978610",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/types/wasm_types/libic_wasm_types-2413567603.rlib",
+    "digest": {
+      "hash": "87e968b03c16eb70f4b28f2d319be7bafb8ba8f4492bd2738df4723b11266d98",
+      "sizeBytes": "717794",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "bazel-out/k8-opt/bin/rs/utils/libic_utils-449933360.rlib",
+    "digest": {
+      "hash": "2178ccee23c719c0f152fa6b3d611a9074d1075b809b4134de4c7a41d019d152",
+      "sizeBytes": "376988",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "external/bazel_tools/tools/cpp/build_interface_so",
+    "digest": {
+      "hash": "a947181cd43e29dac3502c1244a76733f30fcf691f9efe2a82a9f8635bb48baf",
+      "sizeBytes": "109",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "external/bazel_tools/tools/cpp/link_dynamic_library.sh",
+    "digest": {
+      "hash": "aa41d7f3d9710edf6690a24c86e23fb94d85735a6aa2326fd662d76024a62dc2",
+      "sizeBytes": "4117",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "external/local_config_cc/builtin_include_directory_paths",
+    "digest": {
+      "hash": "dd602611c1655a9ebfa806123ea15f1d65beedb1da209580e372dffd728267ea",
+      "sizeBytes": "562",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "rs/p2p/consensus_manager/src/lib.rs",
+    "digest": {
+      "hash": "a8e5b5e6da8c2dd6458c60fb09bf615a590ff4e5094a721f0b81c0b7732442df",
+      "sizeBytes": "6554",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "rs/p2p/consensus_manager/src/metrics.rs",
+    "digest": {
+      "hash": "23f632da1421e5aef22aae4a8bfd918def307f17127e31a91dc8adcbbe7118e2",
+      "sizeBytes": "11196",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "rs/p2p/consensus_manager/src/receiver.rs",
+    "digest": {
+      "hash": "728a867072d9703b9660e5074894a0d8fb7ed83aaa6c6a125e94b5270235db94",
+      "sizeBytes": "66935",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }, {
+    "path": "rs/p2p/consensus_manager/src/sender.rs",
+    "digest": {
+      "hash": "db6308102fea22fff1a4379d54f7c1a85e38193226bc2d49b55ab56530aaac94",
+      "sizeBytes": "27846",
+      "hashFunctionName": "SHA-256"
+    },
+    "isTool": false
+  }],
+  "listedOutputs": ["bazel-out/k8-opt/bin/rs/p2p/consensus_manager/libic_consensus_manager-1541008932.rlib"],
+  "remotable": true,
+  "cacheable": true,
+  "timeoutMillis": "0",
+  "progressMessage": "Compiling Rust rlib consensus_manager v0.8.0 (4 files)",
+  "mnemonic": "Rustc",
+  "actualOutputs": [],
+  "runner": "linux-sandbox",
+  "remoteCacheHit": false,
+  "status": "NON_ZERO_EXIT",
+  "exitCode": 1,
+  "remoteCacheable": true,
+  "walltime": "0.300012s",
+  "targetLabel": "//rs/p2p/consensus_manager:consensus_manager"
+}
