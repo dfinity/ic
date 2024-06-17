@@ -9,10 +9,12 @@ pub const LABEL_PROTOCOL: &str = "protocol";
 /// For requests defined in the interface specification, the request type label is extracted from
 /// specified request part the CBOR-encoded request body.
 pub const LABEL_REQUEST_TYPE: &str = "request_type";
-pub const LABEL_STATUS: &str = "status";
+pub const LABEL_HTTP_STATUS_CODE: &str = "status";
 pub const LABEL_HTTP_VERSION: &str = "http_version";
 pub const LABEL_HEALTH_STATUS_BEFORE: &str = "before";
 pub const LABEL_HEALTH_STATUS_AFTER: &str = "after";
+
+pub const LABEL_CALL_V3_CERTIFICATE_STATUS: &str = "status";
 
 /// Placeholder used when we can't determine the appropriate prometheus label.
 pub const LABEL_UNKNOWN: &str = "unknown";
@@ -27,7 +29,8 @@ pub const LABEL_TLS_ERROR: &str = "tls_handshake_failed";
 pub const LABEL_TIMEOUT_ERROR: &str = "timeout";
 
 pub const REQUESTS_NUM_LABELS: usize = 2;
-pub const REQUESTS_LABEL_NAMES: [&str; REQUESTS_NUM_LABELS] = [LABEL_REQUEST_TYPE, LABEL_STATUS];
+pub const REQUESTS_LABEL_NAMES: [&str; REQUESTS_NUM_LABELS] =
+    [LABEL_REQUEST_TYPE, LABEL_HTTP_STATUS_CODE];
 
 // Struct holding only Prometheus metric objects. Hence, it is thread-safe iff
 // the data members are thread-safe.
@@ -50,6 +53,8 @@ pub struct HttpHandlerMetrics {
     pub ingress_watcher_duplicate_requests_total: IntCounter,
     pub ingress_watcher_subscription_latency_duration_seconds: Histogram,
     pub ingress_watcher_wait_for_certification_duration_seconds: Histogram,
+
+    pub call_v3_certificate_status_total: IntCounterVec,
 }
 
 // There is a mismatch between the labels and the public spec.
@@ -108,7 +113,7 @@ impl HttpHandlerMetrics {
                 "HTTP connection setup durations, by status and detail (protocol on status=\"success\", error type on status=\"error\").",
                 // 10ms, 20ms, ... 500s
                 decimal_buckets(-2, 2),
-                &[LABEL_STATUS, LABEL_DETAIL],
+                &[LABEL_HTTP_STATUS_CODE, LABEL_DETAIL],
             ),
             connection_duration: metrics_registry.histogram_vec(
                 "replica_http_connection_duration_seconds",
@@ -150,6 +155,11 @@ impl HttpHandlerMetrics {
                 // We have the final bucket at 10s as that is the maximum time the handler waits for certification
                 // 10ms - 10s.
                 add_bucket(10.0, decimal_buckets(-2, 0)),
+            ),
+            call_v3_certificate_status_total: metrics_registry.int_counter_vec(
+                "replica_http_call_v3_certificate_status_total",
+                "The count of certificate states returned by the /v3/.../call endpoint. I.e. replied, rejected, unknown, etc.",
+                &[LABEL_CALL_V3_CERTIFICATE_STATUS],
             ),
         }
     }
