@@ -4,6 +4,12 @@ on:
   merge_group:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+    inputs:
+      rosetta-api-release:
+        description: 'Is this for a Rosetta-API release?'
+        required: true
+        default: false
+        type: boolean
   schedule:
     - cron: "0 * * * *"
   pull_request:
@@ -354,7 +360,7 @@ jobs:
     name: Rosetta API Docker Image
     <<: *dind-small-setup
     needs: [bazel-test-all]
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.rosetta-api-release == true }}
     steps:
       - <<: *checkout
       - name: Build rosetta-api image
