@@ -83,7 +83,7 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
             .allocate_vm(&env)
             .expect("Allocation of BoundaryNode failed.")
             .for_ic(&env, "")
-            .use_ipv6_certs()
+            .use_real_certs_and_dns()
             .start(&env)
             .expect("failed to setup BoundaryNode VM");
     }
