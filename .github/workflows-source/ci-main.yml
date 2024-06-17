@@ -91,7 +91,7 @@ jobs:
           RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Upload bazel-targets
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: bazel-targets
           retention-days: 1
@@ -232,7 +232,7 @@ jobs:
           RUN_ON_DIFF_ONLY: "true"
           BAZEL_COMMAND: "build"
       - name: Upload build-ic.tar
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: build-ic
           retention-days: 1
@@ -272,11 +272,11 @@ jobs:
     steps:
       - <<: *checkout
       - name: Download bazel-targets [bazel-test-all]
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: bazel-targets
       - name: Download build-ic.tar [build-ic]
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: build-ic
       - name: Build Determinism Test
