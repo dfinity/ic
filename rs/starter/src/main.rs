@@ -38,15 +38,14 @@ use ic_config::{
     ConfigOptional as ReplicaConfig,
 };
 use ic_logger::{info, new_replica_logger_from_config};
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::{NodeConfiguration, NodeIndex},
     subnet_configuration::{SubnetConfig, SubnetRunningState},
 };
-use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, EcdsaConfig};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
 use serde::{Deserialize, Serialize};
@@ -97,15 +96,26 @@ fn main() -> Result<()> {
             },
         );
 
-        let ecdsa_config = config.ecdsa_keyid.clone().map(|key_id| EcdsaConfig {
-            quadruples_to_create_in_advance: 1,
-            key_ids: vec![(&key_id).into()],
-            max_queue_size: 64,
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        });
-
-        let chain_key_config = ecdsa_config.clone().map(ChainKeyConfig::from);
+        let chain_key_config = if !config.chain_key_ids.is_empty() {
+            Some(
+                ChainKeyConfig {
+                    key_configs: config
+                        .chain_key_ids
+                        .iter()
+                        .map(|key_id| KeyConfig {
+                            key_id: key_id.clone(),
+                            max_queue_size: 64,
+                            pre_signatures_to_create_in_advance: 1,
+                        })
+                        .collect(),
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: None,
+                }
+                .into(),
+            )
+        } else {
+            None
+        };
 
         let mut topology_config = TopologyConfig::default();
         topology_config.insert_subnet(
@@ -126,7 +136,7 @@ fn main() -> Result<()> {
                 None,
                 None,
                 Some(config.subnet_features),
-                ecdsa_config,
+                None,
                 chain_key_config,
                 None,
                 vec![],
@@ -322,6 +332,11 @@ struct CliArgs {
     #[clap(long = "ecdsa-keyid")]
     ecdsa_keyid: Option<String>,
 
+    /// Enable threshold signatures by assigning the given key id a freshly generated key. Key IDs have
+    /// the form `schnorr:[algorithm]:[name]` for tSchnorr, and `ecdsa:[curve]:[name]` for tECDSA
+    #[clap(long = "chain-key-ids")]
+    chain_key_ids: Vec<String>,
+
     /// Subnet type
     #[clap(long = "subnet-type",
                 possible_values = &["application", "verified_application", "system"])]
@@ -515,6 +530,21 @@ impl CliArgs {
                 )
             })?;
 
+        let mut chain_key_ids = self
+            .chain_key_ids
+            .iter()
+            .map(|s| MasterPublicKeyId::from_str(s))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Invalid chain_key_ids: {}", err),
+                )
+            })?;
+        if let Some(ecdsa_key_id) = ecdsa_keyid {
+            chain_key_ids.push(MasterPublicKeyId::Ecdsa(ecdsa_key_id));
+        }
+
         Ok(ValidatedConfig {
             replica_path,
             replica_version,
@@ -537,7 +567,7 @@ impl CliArgs {
             dkg_interval_length: self.dkg_interval_length.map(Height::from),
             consensus_pool_backend: self.consensus_pool_backend,
             subnet_features: to_subnet_features(&self.subnet_features),
-            ecdsa_keyid,
+            chain_key_ids,
             subnet_type,
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path,
             https_outcalls_uds_path: self.canister_http_uds_path,
@@ -578,7 +608,7 @@ struct ValidatedConfig {
     dkg_interval_length: Option<Height>,
     consensus_pool_backend: Option<String>,
     subnet_features: SubnetFeatures,
-    ecdsa_keyid: Option<EcdsaKeyId>,
+    chain_key_ids: Vec<MasterPublicKeyId>,
     subnet_type: SubnetType,
     bitcoin_testnet_uds_path: Option<PathBuf>,
     https_outcalls_uds_path: Option<PathBuf>,
