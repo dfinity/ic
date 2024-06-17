@@ -1,5 +1,5 @@
 """
-This module declares all direct rust dependencies.
+This module declares all direct rust dependencies!
 
 Run `./bin/bazel-pin.sh` from the top-level directory of the working tree after changing this file
 to regenerate Cargo Bazel lockfiles.
