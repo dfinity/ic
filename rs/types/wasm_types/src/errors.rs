@@ -73,7 +73,7 @@ pub enum WasmValidationError {
         complexity: usize,
         allowed: usize,
     },
-    /// A function contains un unsupported Wasm instruction.
+    /// A function contains an unsupported Wasm instruction.
     UnsupportedWasmInstruction { index: usize, instruction: String },
     /// A function was too large.
     FunctionTooLarge {

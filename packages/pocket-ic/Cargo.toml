@@ -36,7 +36,7 @@ sha2 = "0.10.8"
 tokio = { workspace = true }
 
 [dev-dependencies]
-flate2 = "1.0.27"
+flate2 = { workspace = true }
 ic-universal-canister = { path = "../../rs/universal_canister/lib" }
 ic-base-types = { path = "../../rs/types/base_types" }
 icp-ledger = { path = "../../rs/rosetta-api/icp_ledger" }

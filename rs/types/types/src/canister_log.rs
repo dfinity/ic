@@ -6,15 +6,11 @@ use std::collections::VecDeque;
 /// The maximum allowed size of a canister log buffer.
 pub const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
 
-fn create_record(idx: u64, timestamp_nanos: u64, content: &[u8]) -> CanisterLogRecord {
+fn truncate_content(mut record: CanisterLogRecord) -> CanisterLogRecord {
     let max_content_size =
-        MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE - CanisterLogRecord::default().data_size();
-    let size = content.len().min(max_content_size);
-    CanisterLogRecord {
-        idx,
-        timestamp_nanos,
-        content: content[..size].to_vec(),
-    }
+        MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE - std::mem::size_of::<CanisterLogRecord>();
+    record.content.truncate(max_content_size);
+    record
 }
 
 // Helper struct to hold canister log records and keep track of the used space.
@@ -28,11 +24,8 @@ struct Records {
 impl Records {
     fn from(records: Vec<CanisterLogRecord>) -> Self {
         let records: Vec<_> = records
-            .iter()
-            .map(|r| {
-                // Apply size limit to each record's content.
-                create_record(r.idx, r.timestamp_nanos, &r.content)
-            })
+            .into_iter()
+            .map(truncate_content) // Apply size limit to each record's content.
             .collect();
         let used_space = records.iter().map(|r| r.data_size()).sum();
         let mut result = Self {
@@ -158,7 +151,7 @@ impl CanisterLog {
     }
 
     /// Adds a new log record.
-    pub fn add_record(&mut self, is_enabled: bool, timestamp_nanos: u64, content: &[u8]) {
+    pub fn add_record(&mut self, is_enabled: bool, timestamp_nanos: u64, content: Vec<u8>) {
         if !is_enabled {
             // If logging is disabled do not add new records,
             // but still make sure the buffer is within limit.
@@ -167,8 +160,11 @@ impl CanisterLog {
         }
 
         // Add record and update the next index.
-        self.records
-            .push_back(create_record(self.next_idx, timestamp_nanos, content));
+        self.records.push_back(truncate_content(CanisterLogRecord {
+            idx: self.next_idx,
+            timestamp_nanos,
+            content,
+        }));
         self.next_idx += 1;
     }
 
@@ -189,7 +185,7 @@ mod tests {
     use ic_management_canister_types::CanisterLogRecord;
 
     const TEST_MAX_ALLOWED_SIZE: usize = 4 * 1024;
-    const BIGGER_THAN_LIMIT_MESSAGE: &[u8] = &[42; 2 * TEST_MAX_ALLOWED_SIZE];
+    const BIGGER_THAN_LIMIT_MESSAGE: &[u8] = &[b'a'; 2 * TEST_MAX_ALLOWED_SIZE];
 
     fn canister_log_records(data: &[(u64, u64, &[u8])]) -> Vec<CanisterLogRecord> {
         data.iter()
@@ -231,9 +227,9 @@ mod tests {
     #[test]
     fn test_canister_log_add_record_applies_memory_limit() {
         let mut log = CanisterLog::default();
-        log.add_record(true, 100, BIGGER_THAN_LIMIT_MESSAGE);
-        log.add_record(true, 100, BIGGER_THAN_LIMIT_MESSAGE);
-        log.add_record(true, 100, BIGGER_THAN_LIMIT_MESSAGE);
+        log.add_record(true, 100, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
+        log.add_record(true, 100, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
+        log.add_record(true, 100, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
         // Assert log has only one record and it's size is within limit.
         assert_eq!(log.records().len(), 1);
         assert_eq!(log.used_space(), TEST_MAX_ALLOWED_SIZE);
@@ -245,9 +241,9 @@ mod tests {
     fn test_canister_log_clear() {
         // Arrange.
         let mut log = CanisterLog::default();
-        log.add_record(true, 100, BIGGER_THAN_LIMIT_MESSAGE);
-        log.add_record(true, 100, BIGGER_THAN_LIMIT_MESSAGE);
-        log.add_record(true, 100, BIGGER_THAN_LIMIT_MESSAGE);
+        log.add_record(true, 100, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
+        log.add_record(true, 100, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
+        log.add_record(true, 100, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
         // Act.
         log.clear();
         // Assert log has no records and memory usage is zero.
@@ -262,7 +258,7 @@ mod tests {
         let records_number = 42;
         let mut log = CanisterLog::default();
         for _ in 0..records_number {
-            log.add_record(true, 0, BIGGER_THAN_LIMIT_MESSAGE);
+            log.add_record(true, 0, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
         }
         // Assert log has only one record and next_idx is increased.
         assert_eq!(log.records().len(), 1);
@@ -272,9 +268,9 @@ mod tests {
     #[test]
     fn test_canister_log_adds_records() {
         let mut log = CanisterLog::default();
-        log.add_record(true, 100, b"record #0");
-        log.add_record(true, 101, b"record #1");
-        log.add_record(true, 102, b"record #2");
+        log.add_record(true, 100, b"record #0".to_vec());
+        log.add_record(true, 101, b"record #1".to_vec());
+        log.add_record(true, 102, b"record #2".to_vec());
         assert_eq!(
             log.records(),
             &VecDeque::from(canister_log_records(&[
@@ -297,9 +293,9 @@ mod tests {
             ]),
         );
         let mut delta = CanisterLog::new_with_next_index(main.next_idx());
-        delta.add_record(true, 200, b"delta #0");
-        delta.add_record(true, 201, b"delta #1");
-        delta.add_record(true, 202, b"delta #2");
+        delta.add_record(true, 200, b"delta #0".to_vec());
+        delta.add_record(true, 201, b"delta #1".to_vec());
+        delta.add_record(true, 202, b"delta #2".to_vec());
 
         // Act.
         main.append(&mut delta);
@@ -331,9 +327,9 @@ mod tests {
         );
         let mut delta = CanisterLog::new_with_next_index(main.next_idx());
         // Add big records to reach memory limit and a small one at the end.
-        delta.add_record(true, 200, BIGGER_THAN_LIMIT_MESSAGE);
-        delta.add_record(true, 201, BIGGER_THAN_LIMIT_MESSAGE);
-        delta.add_record(true, 202, b"delta #2");
+        delta.add_record(true, 200, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
+        delta.add_record(true, 201, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
+        delta.add_record(true, 202, b"delta #2".to_vec());
 
         // Act.
         main.append(&mut delta);

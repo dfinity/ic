@@ -1,5 +1,5 @@
 {
-  "checksum": "9a64fe8a1b3086b1fd621eee3e5f5df84cfe4a038e5c1276890a89e23a3dc8c0",
+  "checksum": "6cfb35a716bef67cd51c6626c3d5b24e4fe86f83c3883d1130dc3f5bdae60e7f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -209,7 +209,7 @@
               "target": "futures_sink"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
@@ -533,7 +533,7 @@
               "target": "http"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -964,7 +964,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -1559,7 +1559,6 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "perf-literal",
             "std"
           ],
@@ -1568,7 +1567,7 @@
         "deps": {
           "common": [
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             }
           ],
@@ -3381,7 +3380,7 @@
               "target": "futures_core"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
@@ -4208,7 +4207,7 @@
               "target": "matchit"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
@@ -4398,7 +4397,7 @@
               "target": "matchit"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
@@ -6104,7 +6103,7 @@
               "target": "quote"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -6235,7 +6234,7 @@
               "target": "quote"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -8010,7 +8009,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
@@ -8071,7 +8070,7 @@
         "deps": {
           "common": [
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
@@ -10355,7 +10354,7 @@
               "target": "pest_vm"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -12266,7 +12265,7 @@
               "target": "libc"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -13761,11 +13760,11 @@
               "target": "plotters"
             },
             {
-              "id": "rayon 1.7.0",
+              "id": "rayon 1.10.0",
               "target": "rayon"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -14847,7 +14846,7 @@
         "deps": {
           "common": [
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             }
           ],
@@ -17603,7 +17602,7 @@
               "target": "ratelimit"
             },
             {
-              "id": "rayon 1.7.0",
+              "id": "rayon 1.10.0",
               "target": "rayon"
             },
             {
@@ -17611,7 +17610,7 @@
               "target": "rcgen"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -19694,7 +19693,7 @@
               "target": "log"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             }
           ],
@@ -20325,7 +20324,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -22724,7 +22723,7 @@
               "target": "futures_io"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
@@ -23011,7 +23010,7 @@
               "target": "futures_task"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
@@ -26263,7 +26262,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -32010,7 +32009,7 @@
               "target": "pest"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -33044,7 +33043,7 @@
               "target": "pico_args"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -33121,7 +33120,7 @@
         "deps": {
           "common": [
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             }
           ],
@@ -36256,7 +36255,7 @@
               "target": "log"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
@@ -36338,14 +36337,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "memchr 2.5.0": {
+    "memchr 2.7.4": {
       "name": "memchr",
-      "version": "2.5.0",
+      "version": "2.7.4",
       "package_url": "https://github.com/BurntSushi/memchr",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/memchr/2.5.0/download",
-          "sha256": "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
+          "url": "https://static.crates.io/crates/memchr/2.7.4/download",
+          "sha256": "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
         }
       },
       "targets": [
@@ -36353,18 +36352,6 @@
           "Library": {
             "crate_name": "memchr",
             "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": false,
               "include": [
@@ -36381,29 +36368,16 @@
         ],
         "crate_features": {
           "common": [
+            "alloc",
             "default",
             "std"
           ],
           "selects": {}
         },
-        "deps": {
-          "common": [
-            {
-              "id": "memchr 2.5.0",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "2.5.0"
+        "edition": "2021",
+        "version": "2.7.4"
       },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "Unlicense/MIT",
+      "license": "Unlicense OR MIT",
       "license_ids": [
         "MIT",
         "Unlicense"
@@ -36899,7 +36873,7 @@
               "target": "rand"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -37651,7 +37625,7 @@
               "target": "rand"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -37953,7 +37927,7 @@
               "target": "log"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
@@ -38594,7 +38568,7 @@
         "deps": {
           "common": [
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
@@ -40078,7 +40052,7 @@
         "deps": {
           "common": [
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             }
           ],
@@ -40153,7 +40127,7 @@
               "target": "indexmap"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             }
           ],
@@ -45132,7 +45106,7 @@
               "target": "predicates_core"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             }
           ],
@@ -46535,7 +46509,7 @@
               "target": "libc"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
@@ -46622,7 +46596,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             }
           ],
@@ -46945,7 +46919,7 @@
               "target": "prost_types"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -47469,7 +47443,7 @@
               "target": "bitflags"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
@@ -47675,7 +47649,7 @@
         "deps": {
           "common": [
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             }
           ],
@@ -49732,14 +49706,14 @@
       ],
       "license_file": "LICENSE.md"
     },
-    "rayon 1.7.0": {
+    "rayon 1.10.0": {
       "name": "rayon",
-      "version": "1.7.0",
+      "version": "1.10.0",
       "package_url": "https://github.com/rayon-rs/rayon",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rayon/1.7.0/download",
-          "sha256": "1d2df5196e37bcc87abebc0053e20787d73847bb33134a69841207dd0a47f03b"
+          "url": "https://static.crates.io/crates/rayon/1.10.0/download",
+          "sha256": "b418a60154510ca1a002a752ca9714984e21e4241e804d32555251faf8b78ffa"
         }
       },
       "targets": [
@@ -49768,14 +49742,14 @@
               "target": "either"
             },
             {
-              "id": "rayon-core 1.11.0",
+              "id": "rayon-core 1.12.1",
               "target": "rayon_core"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.7.0"
+        "version": "1.10.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -49784,14 +49758,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rayon-core 1.11.0": {
+    "rayon-core 1.12.1": {
       "name": "rayon-core",
-      "version": "1.11.0",
+      "version": "1.12.1",
       "package_url": "https://github.com/rayon-rs/rayon",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rayon-core/1.11.0/download",
-          "sha256": "4b8f95bd6966f5c87776639160a66bd8ab9895d9d4ab01ddba9fc60661aebe8d"
+          "url": "https://static.crates.io/crates/rayon-core/1.12.1/download",
+          "sha256": "1465873a3dfdaa8ae7cb14b4383657caab0b3e8a0aa9ae8e04b044854c8dfce2"
         }
       },
       "targets": [
@@ -49828,10 +49802,6 @@
         "deps": {
           "common": [
             {
-              "id": "crossbeam-channel 0.5.11",
-              "target": "crossbeam_channel"
-            },
-            {
               "id": "crossbeam-deque 0.8.5",
               "target": "crossbeam_deque"
             },
@@ -49840,18 +49810,14 @@
               "target": "crossbeam_utils"
             },
             {
-              "id": "num_cpus 1.16.0",
-              "target": "num_cpus"
-            },
-            {
-              "id": "rayon-core 1.11.0",
+              "id": "rayon-core 1.12.1",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.11.0"
+        "version": "1.12.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -50213,14 +50179,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "regex 1.9.1": {
+    "regex 1.10.5": {
       "name": "regex",
-      "version": "1.9.1",
+      "version": "1.10.5",
       "package_url": "https://github.com/rust-lang/regex",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/regex/1.9.1/download",
-          "sha256": "b2eae68fc220f7cf2532e4494aded17545fce192d59cd996e0fe7887f4ceb575"
+          "url": "https://static.crates.io/crates/regex/1.10.5/download",
+          "sha256": "b91213439dad192326a0d7c6ee3955910425f441d7038e0d6933b0aec5c4517f"
         }
       },
       "targets": [
@@ -50271,22 +50237,22 @@
               "target": "aho_corasick"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
-              "id": "regex-automata 0.3.3",
+              "id": "regex-automata 0.4.7",
               "target": "regex_automata"
             },
             {
-              "id": "regex-syntax 0.7.4",
+              "id": "regex-syntax 0.8.4",
               "target": "regex_syntax"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.9.1"
+        "version": "1.10.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -50382,9 +50348,53 @@
         ],
         "crate_features": {
           "common": [
+            "dfa-search"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.3.3"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "regex-automata 0.4.7": {
+      "name": "regex-automata",
+      "version": "0.4.7",
+      "package_url": "https://github.com/rust-lang/regex/tree/master/regex-automata",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/regex-automata/0.4.7/download",
+          "sha256": "38caf58cc5ef2fed281f89292ef23f6365465ed9a41b7a7754eb4e26496c92df"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "regex_automata",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "regex_automata",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
             "alloc",
             "dfa-onepass",
-            "dfa-search",
             "hybrid",
             "meta",
             "nfa-backtrack",
@@ -50415,18 +50425,18 @@
               "target": "aho_corasick"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
-              "id": "regex-syntax 0.7.4",
+              "id": "regex-syntax 0.8.4",
               "target": "regex_syntax"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.3"
+        "version": "0.4.7"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -50534,6 +50544,60 @@
         },
         "edition": "2021",
         "version": "0.7.4"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "regex-syntax 0.8.4": {
+      "name": "regex-syntax",
+      "version": "0.8.4",
+      "package_url": "https://github.com/rust-lang/regex/tree/master/regex-syntax",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/regex-syntax/0.8.4/download",
+          "sha256": "7a66a03ae7c801facd77a29370b4faec201768915ac14a721ba36f20bc9c209b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "regex_syntax",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "regex_syntax",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std",
+            "unicode",
+            "unicode-age",
+            "unicode-bool",
+            "unicode-case",
+            "unicode-gencat",
+            "unicode-perl",
+            "unicode-script",
+            "unicode-segment"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.8.4"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -52500,7 +52564,7 @@
               "target": "quote"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -58964,7 +59028,7 @@
               "target": "log"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -66196,7 +66260,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -70318,7 +70382,7 @@
               "target": "once_cell"
             },
             {
-              "id": "rayon 1.7.0",
+              "id": "rayon 1.10.0",
               "target": "rayon"
             },
             {
@@ -71103,7 +71167,7 @@
               "target": "leb128"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
@@ -71169,7 +71233,7 @@
               "target": "leb128"
             },
             {
-              "id": "memchr 2.5.0",
+              "id": "memchr 2.7.4",
               "target": "memchr"
             },
             {
@@ -74150,7 +74214,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.9.1",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -76603,9 +76667,9 @@
     "rand_pcg 0.3.1",
     "randomkit 0.1.1",
     "ratelimit 0.9.1",
-    "rayon 1.7.0",
+    "rayon 1.10.0",
     "rcgen 0.13.1",
-    "regex 1.9.1",
+    "regex 1.10.5",
     "reqwest 0.11.27",
     "reqwest 0.12.4",
     "rgb 0.8.37",

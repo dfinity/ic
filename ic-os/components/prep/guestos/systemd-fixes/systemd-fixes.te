@@ -21,6 +21,11 @@ require_read_run_systemd(syslogd_t)
 # XXX: not clear
 allow syslogd_t syslogd_t : netlink_generic_socket { create ioctl };
 
+# /var/log does not exist at boot. Allow journald to create it in the correct
+# context.
+require { type var_log_t; }
+filetrans_pattern(syslogd_t, var_t, var_log_t, dir, "log")
+
 # journald wants to scan the /run/user hierarchy (presumably relating to login sessions)
 require { type user_runtime_root_t, user_runtime_t; }
 allow syslogd_t user_runtime_root_t : dir { search };

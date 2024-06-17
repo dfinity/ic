@@ -1,5 +1,5 @@
 {
-  "checksum": "a057a2424c54a06d8b29ccec7f394bb93e63c4f2edf22ea97763f4d4327a5988",
+  "checksum": "392e801f10b34862e7c0dfc76674c3af4f16a69d9e1a199b75d3c3aafe3d1bae",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -337,7 +337,7 @@
               "target": "encoding_rs"
             },
             {
-              "id": "flate2 1.0.28",
+              "id": "flate2 1.0.30",
               "target": "flate2"
             },
             {
@@ -533,7 +533,7 @@
               "target": "http"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -957,7 +957,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -1545,7 +1545,6 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "perf-literal",
             "std"
           ],
@@ -3359,7 +3358,7 @@
               "target": "brotli"
             },
             {
-              "id": "flate2 1.0.28",
+              "id": "flate2 1.0.30",
               "target": "flate2"
             },
             {
@@ -6137,7 +6136,7 @@
               "target": "quote"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -6268,7 +6267,7 @@
               "target": "quote"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -8152,7 +8151,7 @@
               "target": "memchr"
             },
             {
-              "id": "regex-automata 0.4.3",
+              "id": "regex-automata 0.4.7",
               "target": "regex_automata"
             }
           ],
@@ -9642,7 +9641,7 @@
               "target": "colored"
             },
             {
-              "id": "flate2 1.0.28",
+              "id": "flate2 1.0.30",
               "target": "flate2"
             },
             {
@@ -10454,7 +10453,7 @@
               "target": "pest_vm"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -12365,7 +12364,7 @@
               "target": "libc"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -13928,11 +13927,11 @@
               "target": "plotters"
             },
             {
-              "id": "rayon 1.8.0",
+              "id": "rayon 1.10.0",
               "target": "rayon"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -17222,7 +17221,7 @@
               "target": "ff"
             },
             {
-              "id": "flate2 1.0.28",
+              "id": "flate2 1.0.30",
               "target": "flate2"
             },
             {
@@ -17770,7 +17769,7 @@
               "target": "ratelimit"
             },
             {
-              "id": "rayon 1.8.0",
+              "id": "rayon 1.10.0",
               "target": "rayon"
             },
             {
@@ -17778,7 +17777,7 @@
               "target": "rcgen"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -19861,7 +19860,7 @@
               "target": "log"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             }
           ],
@@ -20471,7 +20470,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -21877,14 +21876,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "flate2 1.0.28": {
+    "flate2 1.0.30": {
       "name": "flate2",
-      "version": "1.0.28",
+      "version": "1.0.30",
       "package_url": "https://github.com/rust-lang/flate2-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/flate2/1.0.28/download",
-          "sha256": "46303f565772937ffe1d394a4fac6f411c6013172fadde9dcdb1e147a086940e"
+          "url": "https://static.crates.io/crates/flate2/1.0.30/download",
+          "sha256": "5f54427cfd1c7829e2a139fcefea601bf088ebca651d2bf53ebc600eac295dae"
         }
       },
       "targets": [
@@ -21929,7 +21928,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.28"
+        "version": "1.0.30"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -26360,7 +26359,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -28789,7 +28788,7 @@
               "target": "candid"
             },
             {
-              "id": "flate2 1.0.28",
+              "id": "flate2 1.0.30",
               "target": "flate2"
             },
             {
@@ -32036,7 +32035,7 @@
               "target": "pest"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -33070,7 +33069,7 @@
               "target": "pico_args"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -33147,7 +33146,7 @@
         "deps": {
           "common": [
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             }
           ],
@@ -36825,7 +36824,7 @@
               "target": "rand"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -37577,7 +37576,7 @@
               "target": "rand"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -45063,7 +45062,7 @@
               "target": "predicates_core"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             }
           ],
@@ -46231,7 +46230,7 @@
               "target": "byteorder"
             },
             {
-              "id": "flate2 1.0.28",
+              "id": "flate2 1.0.30",
               "target": "flate2"
             },
             {
@@ -46553,7 +46552,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             }
           ],
@@ -46875,7 +46874,7 @@
               "target": "prost_types"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -49662,14 +49661,14 @@
       ],
       "license_file": "LICENSE.md"
     },
-    "rayon 1.8.0": {
+    "rayon 1.10.0": {
       "name": "rayon",
-      "version": "1.8.0",
+      "version": "1.10.0",
       "package_url": "https://github.com/rayon-rs/rayon",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rayon/1.8.0/download",
-          "sha256": "9c27db03db7734835b3f53954b534c91069375ce6ccaa2e065441e07d9b6cdb1"
+          "url": "https://static.crates.io/crates/rayon/1.10.0/download",
+          "sha256": "b418a60154510ca1a002a752ca9714984e21e4241e804d32555251faf8b78ffa"
         }
       },
       "targets": [
@@ -49698,14 +49697,14 @@
               "target": "either"
             },
             {
-              "id": "rayon-core 1.12.0",
+              "id": "rayon-core 1.12.1",
               "target": "rayon_core"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.8.0"
+        "version": "1.10.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -49714,14 +49713,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rayon-core 1.12.0": {
+    "rayon-core 1.12.1": {
       "name": "rayon-core",
-      "version": "1.12.0",
+      "version": "1.12.1",
       "package_url": "https://github.com/rayon-rs/rayon",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rayon-core/1.12.0/download",
-          "sha256": "5ce3fb6ad83f861aac485e76e1985cd109d9a3713802152be56c3b1f0e0658ed"
+          "url": "https://static.crates.io/crates/rayon-core/1.12.1/download",
+          "sha256": "1465873a3dfdaa8ae7cb14b4383657caab0b3e8a0aa9ae8e04b044854c8dfce2"
         }
       },
       "targets": [
@@ -49766,14 +49765,14 @@
               "target": "crossbeam_utils"
             },
             {
-              "id": "rayon-core 1.12.0",
+              "id": "rayon-core 1.12.1",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.12.0"
+        "version": "1.12.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -50135,14 +50134,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "regex 1.10.2": {
+    "regex 1.10.5": {
       "name": "regex",
-      "version": "1.10.2",
+      "version": "1.10.5",
       "package_url": "https://github.com/rust-lang/regex",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/regex/1.10.2/download",
-          "sha256": "380b951a9c5e80ddfd6136919eef32310721aa4aacd4889a8d39124b026ab343"
+          "url": "https://static.crates.io/crates/regex/1.10.5/download",
+          "sha256": "b91213439dad192326a0d7c6ee3955910425f441d7038e0d6933b0aec5c4517f"
         }
       },
       "targets": [
@@ -50197,7 +50196,7 @@
               "target": "memchr"
             },
             {
-              "id": "regex-automata 0.4.3",
+              "id": "regex-automata 0.4.7",
               "target": "regex_automata"
             },
             {
@@ -50208,7 +50207,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.10.2"
+        "version": "1.10.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -50273,14 +50272,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "regex-automata 0.4.3": {
+    "regex-automata 0.4.7": {
       "name": "regex-automata",
-      "version": "0.4.3",
+      "version": "0.4.7",
       "package_url": "https://github.com/rust-lang/regex/tree/master/regex-automata",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/regex-automata/0.4.3/download",
-          "sha256": "5f804c7828047e88b2d32e2d7fe5a105da8ee3264f01902f796c8e067dc2483f"
+          "url": "https://static.crates.io/crates/regex-automata/0.4.7/download",
+          "sha256": "38caf58cc5ef2fed281f89292ef23f6365465ed9a41b7a7754eb4e26496c92df"
         }
       },
       "targets": [
@@ -50348,7 +50347,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.4.3"
+        "version": "0.4.7"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -52476,7 +52475,7 @@
               "target": "quote"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -58817,7 +58816,7 @@
               "target": "log"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -66049,7 +66048,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -70171,7 +70170,7 @@
               "target": "once_cell"
             },
             {
-              "id": "rayon 1.8.0",
+              "id": "rayon 1.10.0",
               "target": "rayon"
             },
             {
@@ -74032,7 +74031,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.10.2",
+              "id": "regex 1.10.5",
               "target": "regex"
             },
             {
@@ -76378,7 +76377,7 @@
     "exec 0.3.1",
     "eyre 0.6.8",
     "ff 0.12.1",
-    "flate2 1.0.28",
+    "flate2 1.0.30",
     "form_urlencoded 1.2.0",
     "fs_extra 1.3.0",
     "futures 0.3.30",
@@ -76520,9 +76519,9 @@
     "rand_pcg 0.3.1",
     "randomkit 0.1.1",
     "ratelimit 0.9.1",
-    "rayon 1.8.0",
+    "rayon 1.10.0",
     "rcgen 0.13.1",
-    "regex 1.10.2",
+    "regex 1.10.5",
     "reqwest 0.11.27",
     "reqwest 0.12.4",
     "rgb 0.8.37",

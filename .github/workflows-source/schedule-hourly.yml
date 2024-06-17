@@ -26,63 +26,44 @@ env:
 
 anchors:
   image: &image
-      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
-  bazel-large-setup: &bazel-large-setup
+    image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
+  dind-large-setup: &dind-large-setup
     runs-on:
-      labels: bazel-runner-large
+      labels: dind-runner-large
       group: ln1
     container:
       <<: *image
     timeout-minutes: 120
-    if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
+    if: ${{ vars.RUN_CI == 'true' }}
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
-  docker-ro-login: &docker-ro-login
-    name: Docker RO SA login
-    id: docker-ro-login
-    shell: bash
-    run: ./gitlab-ci/src/ci-scripts/docker-login.sh
   before-script: &before-script
     name: Before script
-    if: always()
     id: before-script
     shell: bash
-    run: |
-      git config --global http.postBuffer 524288000
-      git config --global safe.directory '*'
-      if [ -e /__w/cache ]; then sudo ln -s /__w/cache /; fi
-      if [ -n "${NODE_NAME:-}" ]; then echo "Node: $NODE_NAME"; fi
-  bazel-clean: &bazel-clean
-    name: Bazel Clean
-    if: always()
-    run: bazel clean
+    run: ./gitlab-ci/src/ci-scripts/before-script.sh
 
 jobs:
   bazel-build-all-no-cache:
     name: Bazel Build All No Cache
-    <<: *bazel-large-setup
+    <<: *dind-large-setup
     steps:
-      - <<: *before-script
       - <<: *checkout
-        uses: actions/checkout@v3
-      - <<: *docker-ro-login
+      - <<: *before-script
       - name: Run Bazel Build All No Cache
         uses:  ./.github/actions/bazel-test-all/
         with:
           BAZEL_CI_CONFIG: "--config=ci"
           BAZEL_COMMAND: "build"
           BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
-      - <<: *bazel-clean
 
   bazel-system-test-hourly:
     name: Bazel System Tests Hourly
-    <<: *bazel-large-setup
-    if: ${{ vars.RUN_CI == 'true' }}
+    <<: *dind-large-setup
     steps:
-      - <<: *before-script
       - <<: *checkout
-        uses: actions/checkout@v3
+      - <<: *before-script
       - name: Run Bazel System Test Hourly
         id: bazel-test-all
         uses:  ./.github/actions/bazel-test-all/
@@ -92,15 +73,13 @@ jobs:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_EXTRA_ARGS: "--keep_going --verbose_failures --test_tag_filters=system_test_hourly"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
-      - <<: *bazel-clean
 
   bazel-test-coverage:
     name: Bazel Test Coverage
-    <<: *bazel-large-setup
+    <<: *dind-large-setup
     steps:
-      - <<: *before-script
       - <<: *checkout
-        uses: actions/checkout@v3
+      - <<: *before-script
       - name: Run Bazel Test Coverage
         shell: bash
         run: |
@@ -129,4 +108,3 @@ jobs:
             cov_targets.txt
             cov_report.dat
             cov_html/
-      - <<: *bazel-clean

@@ -506,9 +506,13 @@ fn test_canister_log_stays_within_limit() {
     }
     let result = fetch_canister_logs(&env, controller, canister_id);
     let response = FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap();
-    // Expect that the total size of the log records is less than the limit.
+    // Expect records' total size to be under the limit, excluding the outer vector's static size.
     assert_le!(
-        response.canister_log_records.data_size(),
+        response
+            .canister_log_records
+            .iter()
+            .map(|r| r.data_size())
+            .sum::<usize>(),
         MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE
     );
 }

@@ -202,7 +202,7 @@ pub fn test(
             });
         }
         Latency::Constant(value) => {
-            app_subnet.nodes().enumerate().for_each(|(_, node)| {
+            app_subnet.nodes().for_each(|node| {
                 let session = node
                     .block_on_ssh_session()
                     .expect("Failed to ssh into node");

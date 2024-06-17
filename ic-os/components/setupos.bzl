@@ -28,6 +28,7 @@ component_files = {
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",
     Label("misc/serial-getty@/setupos/serial-getty@.service"): "/etc/systemd/system/serial-getty@.service",
+    Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
 
     # networking
     Label("networking/generate-network-config/setupos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",

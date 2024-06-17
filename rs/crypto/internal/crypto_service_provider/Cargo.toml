@@ -42,7 +42,7 @@ parking_lot = "0.12.1"
 prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-rayon = "1.8"
+rayon = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }

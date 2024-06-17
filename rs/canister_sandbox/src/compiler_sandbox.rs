@@ -15,7 +15,8 @@ fn compile_and_serialize(
     embedder: &WasmtimeEmbedder,
     wasm_src: Vec<u8>,
 ) -> HypervisorResult<(CompilationResult, SerializedModule)> {
-    let wasm = wasm_utils::decoding::decode_wasm(Arc::new(wasm_src))?;
+    let wasm =
+        wasm_utils::decoding::decode_wasm(embedder.config().wasm_max_size, Arc::new(wasm_src))?;
     let (_cache, res) = wasm_utils::compile(embedder, &wasm);
     res
 }
