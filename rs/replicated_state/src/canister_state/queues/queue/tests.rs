@@ -8,6 +8,7 @@ use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, Response
 use ic_types::messages::{CallbackId, RequestOrResponse};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::Time;
+use message_pool::REQUEST_LIFETIME;
 use proptest::prelude::*;
 use std::time::Duration;
 
@@ -380,7 +381,6 @@ fn make_request(callback_id: u64, deadline_seconds: u32) -> Request {
         .build()
 }
 
-#[test]
 fn canister_queue_try_from_input_queue() {
     let req1 = make_request(1, 0);
     let req2 = make_request(2, 0);
@@ -462,6 +462,83 @@ fn canister_queue_try_from_output_queue() {
     let queue: CanisterQueue = (output_queue, &mut pool).try_into().unwrap();
 
     assert_eq!((expected_pool, expected_queue), (pool, queue));
+}
+
+#[test]
+fn input_queue_try_from_canister_queue() {
+    let req1 = make_request(1, 0);
+    let req2 = make_request(2, 14);
+    let rep = ResponseBuilder::default()
+        .originator_reply_callback(CallbackId::new(4))
+        .build();
+
+    // A `CanisterQueue` with a couple of requests and a response and a reserved
+    // slot.
+    let mut pool = MessagePool::default();
+    let mut queue = CanisterQueue::new(10);
+    // Enqueue a couple of requests and a response.
+    queue.push_request(pool.insert_inbound(req1.clone().into()));
+    queue.push_request(pool.insert_inbound(req2.clone().into()));
+    queue.try_reserve_response_slot().unwrap();
+    queue.push_response(pool.insert_inbound(rep.clone().into()));
+    // Make an extra response reservation.
+    queue.try_reserve_response_slot().unwrap();
+
+    // Expected `InputQueue`.
+    let mut expected_input_queue = InputQueue::new(10);
+    expected_input_queue.push(req1.into()).unwrap();
+    expected_input_queue.push(req2.into()).unwrap();
+    expected_input_queue.reserve_slot().unwrap();
+    expected_input_queue.push(rep.into()).unwrap();
+    expected_input_queue.reserve_slot().unwrap();
+
+    let input_queue: InputQueue = (&queue, &pool).try_into().unwrap();
+
+    assert_eq!(expected_input_queue, input_queue);
+}
+
+#[test]
+fn output_queue_try_from_canister_queue() {
+    let t0 = Time::from_secs_since_unix_epoch(10).unwrap();
+    let t2 = t0 + Duration::from_secs(2);
+    let t3 = t0 + Duration::from_secs(3);
+    let d2 = t2 + REQUEST_LIFETIME;
+    let req1 = make_request(1, 11);
+    let req2 = make_request(2, 0);
+    let req3 = make_request(3, 13);
+    let rep = ResponseBuilder::default()
+        .originator_reply_callback(CallbackId::new(4))
+        .build();
+
+    // A `CanisterQueue` with a couple of requests and a response, a stale request
+    // and a reserved slot.
+    let mut pool = MessagePool::default();
+    let mut queue = CanisterQueue::new(10);
+    // Enqueue and then shed a request.
+    queue.push_request(pool.insert_outbound_request(req1.clone().into(), t0));
+    pool.shed_largest_message().unwrap();
+    assert_eq!(1, queue.len());
+    // Enqueue a couple of requests and a response.
+    queue.push_request(pool.insert_outbound_request(req2.clone().into(), t2));
+    queue.push_request(pool.insert_outbound_request(req3.clone().into(), t3));
+    queue.try_reserve_response_slot().unwrap();
+    queue.push_response(pool.insert_outbound_response(rep.clone().into()));
+    // Make an extra response reservation.
+    queue.try_reserve_response_slot().unwrap();
+
+    // Expected `OutputQueue`. The stale request and response are not preserved.
+    let mut expected_output_queue = OutputQueue::new(10);
+    expected_output_queue.push_request(req2.into(), d2).unwrap();
+    // `CanisterQueue` does not record when `req3` was pushed (at `t3`), so it
+    // inherits `req2`'s deadline.
+    expected_output_queue.push_request(req3.into(), d2).unwrap();
+    expected_output_queue.reserve_slot().unwrap();
+    expected_output_queue.push_response(rep.into());
+    expected_output_queue.reserve_slot().unwrap();
+
+    let output_queue: OutputQueue = (&queue, &pool).try_into().unwrap();
+
+    assert_eq!(expected_output_queue, output_queue);
 }
 
 #[test]

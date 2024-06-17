@@ -57,7 +57,7 @@ pprof = { version = "0.13", default-features = false, features = [
 ], optional = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
-regex = "1.3.9"
+regex = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

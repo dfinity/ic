@@ -54,6 +54,24 @@
       "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm",
       "candid": "../../../rosetta-api/icrc1/index-ng/index-ng.did",
       "shrink": false
+    },
+    "cklink_ledger": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm"
+      ],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm",
+      "candid": "../../../rosetta-api/icrc1/ledger/ledger.did",
+      "shrink": false
+    },
+    "cklink_index": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm"
+      ],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm",
+      "candid": "../../../rosetta-api/icrc1/index-ng/index-ng.did",
+      "shrink": false
     }
   },
   "defaults": {
