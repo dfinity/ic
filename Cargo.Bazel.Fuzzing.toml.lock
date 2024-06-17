@@ -3096,6 +3096,7 @@ dependencies = [
  "rayon",
  "rcgen",
  "reed-solomon-erasure",
+ "reed-solomon-simd",
  "regex",
  "reqwest 0.11.27",
  "reqwest 0.12.4",
@@ -8527,6 +8528,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "readme-rustdocifier"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08ad765b21a08b1a8e5cdce052719188a23772bcbefb3c439f0baaf62c56ceac"
+
+[[package]]
 name = "redox_syscall"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8566,6 +8573,18 @@ dependencies = [
  "parking_lot 0.11.2",
  "smallvec",
  "spin 0.9.8",
+]
+
+[[package]]
+name = "reed-solomon-simd"
+version = "2.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f92a3b45e82548f565105fba0fed2cbc02777018b2ac33388d1fbc563963f38"
+dependencies = [
+ "bytemuck",
+ "fixedbitset",
+ "once_cell",
+ "readme-rustdocifier",
 ]
 
 [[package]]

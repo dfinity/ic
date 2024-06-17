@@ -1,5 +1,5 @@
 {
-  "checksum": "27b97fba2cdfe26067a5bbbaaca89d9c85f7188e327b0a04d50e1ac4162276b7",
+  "checksum": "18aa45416235fa03d5cf72aa6c7d2af7afdd0ccc59369cadfaf941a998b86158",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17619,6 +17619,10 @@
               "target": "reed_solomon_erasure"
             },
             {
+              "id": "reed-solomon-simd 2.2.2",
+              "target": "reed_solomon_simd"
+            },
+            {
               "id": "regex 1.9.1",
               "target": "regex"
             },
@@ -21690,6 +21694,13 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
         "edition": "2015",
         "version": "0.4.2"
       },
@@ -50108,6 +50119,70 @@
       ],
       "license_file": "LICENSE"
     },
+    "readme-rustdocifier 0.1.1": {
+      "name": "readme-rustdocifier",
+      "version": "0.1.1",
+      "package_url": "https://github.com/malaire/readme-rustdocifier",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/readme-rustdocifier/0.1.1/download",
+          "sha256": "08ad765b21a08b1a8e5cdce052719188a23772bcbefb3c439f0baaf62c56ceac"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "readme_rustdocifier",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "readme_rustdocifier",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "readme-rustdocifier 0.1.1",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.1"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "redox_syscall 0.2.16": {
       "name": "redox_syscall",
       "version": "0.2.16",
@@ -50345,6 +50420,92 @@
       },
       "license": "MIT",
       "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "reed-solomon-simd 2.2.2": {
+      "name": "reed-solomon-simd",
+      "version": "2.2.2",
+      "package_url": "https://github.com/AndersTrier/reed-solomon-simd",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/reed-solomon-simd/2.2.2/download",
+          "sha256": "4f92a3b45e82548f565105fba0fed2cbc02777018b2ac33388d1fbc563963f38"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "reed_solomon_simd",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "reed_solomon_simd",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bytemuck 1.13.1",
+              "target": "bytemuck"
+            },
+            {
+              "id": "fixedbitset 0.4.2",
+              "target": "fixedbitset"
+            },
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "reed-solomon-simd 2.2.2",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.2.2"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "readme-rustdocifier 0.1.1",
+              "target": "readme_rustdocifier"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT AND BSD-3-Clause",
+      "license_ids": [
+        "BSD-3-Clause",
         "MIT"
       ],
       "license_file": "LICENSE"
@@ -76815,6 +76976,7 @@
     "rayon 1.7.0",
     "rcgen 0.13.1",
     "reed-solomon-erasure 6.0.0",
+    "reed-solomon-simd 2.2.2",
     "regex 1.9.1",
     "reqwest 0.11.27",
     "reqwest 0.12.4",

@@ -989,6 +989,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "reed-solomon-erasure": crate.spec(
                 version = "^6.0.0",
             ),
+            "reed-solomon-simd": crate.spec(
+                version = "^2.2.0",
+            ),
             "raptor-code": crate.spec(
                 version = "^1.0.0",
             ),

@@ -12,7 +12,10 @@
 //!       encoded header and body and reconstructing it into a typed request.
 //! Response encoding Response<Bytes>:
 //!     - Same as request expect that the header contains a HeaderMap and a Statuscode.
-use std::collections::{BTreeMap, BinaryHeap, HashMap};
+use std::{
+    cmp::Reverse,
+    collections::{BTreeMap, BinaryHeap, HashMap},
+};
 
 use anyhow::Context;
 use axum::{
@@ -26,6 +29,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use quinn::{Chunk, RecvStream, SendStream};
 use reed_solomon_erasure::ReedSolomon;
 use serde::{Deserialize, Serialize};
+use tokio::io::AsyncReadExt;
 
 use crate::metrics::QuicTransportMetrics;
 
@@ -42,13 +46,13 @@ fn bincode_config() -> impl Options {
 #[derive(Debug, Clone, Copy)]
 struct EcHeader {
     len: u32,
-    scheme: (u8, u8),
+    scheme: (u32, u32),
     padding: u32,
 }
 
 async fn assemble(mut recv_stream: RecvStream) -> Result<Bytes, anyhow::Error> {
-    let chunk_size = 1024;
-    let ec_header_size = 4 + 1 + 1 + 4;
+    let chunk_size = 1280;
+    let ec_header_size = 4 + 4 + 4 + 4;
     let tot_ec_size = chunk_size + ec_header_size;
 
     let mut header = None;
@@ -59,89 +63,101 @@ async fn assemble(mut recv_stream: RecvStream) -> Result<Bytes, anyhow::Error> {
         .read_chunk(MAX_MESSAGE_SIZE_BYTES, false)
         .await?
     {
+        println!("read chunk at {offset} size {}", bytes.len());
         let mut pos = offset as usize;
-        println!("chunk {offset} b {}", bytes.len());
         while !bytes.is_empty() {
             let ec_idx = pos / tot_ec_size;
             // offset is at chunk boundary
             let c = if pos % tot_ec_size == 0 {
                 if bytes.len() < tot_ec_size {
                     pos += bytes.len();
-                    bytes.split_to(bytes.len())
+                    let b = bytes.split_to(bytes.len());
+                    assert!(bytes.is_empty());
+                    b
                 } else {
                     pos += tot_ec_size;
+                    assert!(pos % tot_ec_size == 0);
                     bytes.split_to(tot_ec_size)
                 }
             } else {
                 let dist_to_next_ec = tot_ec_size - (pos % tot_ec_size);
                 if bytes.len() < dist_to_next_ec {
                     pos += bytes.len();
-                    bytes.split_to(bytes.len())
+                    let b = bytes.split_to(bytes.len());
+                    assert!(bytes.is_empty());
+                    b
                 } else {
                     pos += dist_to_next_ec;
+                    assert!(pos % tot_ec_size == 0);
                     bytes.split_to(dist_to_next_ec)
                 }
             };
-            println!("ec {ec_idx} c {}", c.len());
             let e = chunk_map.entry(ec_idx).or_default();
-            e.push((pos, c));
+            e.push((Reverse(pos), c));
 
-            if e.iter().map(|c| c.1.len()).sum::<usize>() == tot_ec_size {
-                println!("decoding");
+            let sum = e.iter().map(|c| c.1.len()).sum::<usize>();
+            if sum > tot_ec_size {
+                println!("ahh {decoded_map:?} {sum}");
+            }
+            assert!(sum <= tot_ec_size);
+            if sum == tot_ec_size {
                 let mut bm = BytesMut::new();
-                while let Some(c) = e.pop() {
-                    bm.extend_from_slice(&c.1);
+                while let Some((Reverse(_), s)) = e.pop() {
+                    bm.extend_from_slice(&s);
                 }
-                println!("decoding {}", bm.len());
 
                 let mut ec_header = bm.split_off(bm.len() - ec_header_size);
-                println!("decoding {:?}", ec_header);
                 if header.is_none() {
                     header = Some(EcHeader {
                         len: ec_header.get_u32(),
-                        scheme: (ec_header.get_u8(), ec_header.get_u8()),
+                        scheme: (ec_header.get_u32(), ec_header.get_u32()),
                         padding: ec_header.get_u32(),
                     });
+                    println!("{header:?} recvd");
                 }
                 decoded_map.insert(ec_idx, bm.freeze());
             }
         }
-        println!("d {}", decoded_map.len());
+        println!("decopdec map {}", decoded_map.len());
 
         let h1 = header.clone();
-        println!("h {:?}", h1);
-        if h1.is_some_and(|h| h.scheme.0 >= decoded_map.len() as u8) {
+        if h1.is_some_and(|h| h.scheme.0 <= decoded_map.len() as u32) {
             let header = h1.unwrap();
-            let r: ReedSolomon<reed_solomon_erasure::galois_8::Field> =
-                ReedSolomon::new(header.scheme.0 as usize, header.scheme.1 as usize).unwrap();
-            let mut shards: Vec<Option<Vec<u8>>> = (0..header.scheme.0 + header.scheme.1)
-                .map(|b| {
-                    if let Some(s) = decoded_map.get(&(b as usize)) {
-                        Some(s.to_vec())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            match r.reconstruct_data(&mut shards) {
-                Ok(()) => {
-                    let mut data = Bytes::from(
-                        shards
-                            .into_iter()
-                            .take(header.scheme.0 as usize)
-                            .map(|s| s.unwrap())
-                            .flatten()
-                            .collect::<Vec<u8>>(),
-                    );
-                    let a = data.split_to(chunk_size - header.padding as usize);
-                    return Ok(a);
-                }
-                Err(e) => {
-                    println!("reconstruct failed {e:?}");
-                }
-            }
+            println!("assembling {header:?}");
+            let shards: (Vec<(usize, Bytes)>, Vec<(usize, Bytes)>) =
+                decoded_map
+                    .into_iter()
+                    .fold((Vec::new(), Vec::new()), |mut acc, x| {
+                        if x.0 < header.scheme.0 as usize {
+                            acc.0.push(x);
+                        } else {
+                            acc.1.push((x.0 - header.scheme.1 as usize, x.1));
+                        }
+                        acc
+                    });
+            let mut v: Vec<_> = if shards.0.len() == header.scheme.0 as usize {
+                shards.0.into_iter().map(|(i, b)| (i, b.to_vec())).collect()
+            } else {
+                reed_solomon_simd::decode(
+                    header.scheme.0 as usize,
+                    header.scheme.1 as usize,
+                    shards.0,
+                    shards.1,
+                )
+                .unwrap()
+                .into_iter()
+                .collect()
+            };
+            v.sort_unstable();
+            let data: Vec<u8> = v.into_iter().map(|x| x.1).flatten().collect();
+            let mut data = Bytes::from(data);
+            let a = data.split_to(data.len() - header.padding as usize);
+            return Ok(a);
         }
+    }
+    for (k, v) in decoded_map {
+        println!("k {k}");
+        assert!(v.len() <= 1280);
     }
     panic!("ah")
 }
@@ -150,28 +166,26 @@ async fn disassemble(
     send_stream: &mut SendStream,
     mut bytes: Vec<u8>,
 ) -> Result<(), anyhow::Error> {
-    println!("raw {bytes:?}");
     let len_bytes = bytes.len();
-    let chunk_size = 1024;
+    let chunk_size = 1280;
     let padding = chunk_size - bytes.len() % chunk_size;
     bytes.resize(chunk_size * bytes.len().div_ceil(chunk_size), 0);
     assert!(bytes.len() % chunk_size == 0);
-    let data_shards = bytes.len() / chunk_size;
-    let parity_shards = data_shards + data_shards / 2;
-    println!("data {data_shards} parity {parity_shards} len bytes {len_bytes} padding {padding}");
-    let r: ReedSolomon<reed_solomon_erasure::galois_8::Field> =
-        ReedSolomon::new(data_shards, parity_shards).unwrap();
-    bytes.resize(data_shards * chunk_size + parity_shards * chunk_size, 0);
-    let mut shards: Vec<_> = bytes.chunks_mut(chunk_size).collect();
-    r.encode(&mut shards).unwrap();
+    let data_shards = std::cmp::max(1, bytes.len() / chunk_size);
+    let parity_shards = std::cmp::max(1, data_shards / 2);
+    println!("data len {} {data_shards}:{parity_shards}", bytes.len(),);
+    bytes.resize(data_shards * chunk_size, 0);
+    let shards: Vec<_> = bytes.chunks(chunk_size).collect();
+    let parity = reed_solomon_simd::encode(data_shards, parity_shards, &shards).unwrap();
     let mut ecs: Vec<Bytes> = shards
         .into_iter()
+        .chain(parity.iter().map(|x| x.as_slice()))
         .map(|x| {
             let mut b = BytesMut::new();
             b.extend_from_slice(x);
             b.put_u32(len_bytes as u32);
-            b.put_u8(data_shards as u8);
-            b.put_u8(parity_shards as u8);
+            b.put_u32(data_shards as u32);
+            b.put_u32(parity_shards as u32);
             b.put_u32(padding as u32);
             b.freeze()
         })

@@ -234,7 +234,6 @@ fn test_real_socket() {
 }
 
 #[test]
-#[ignore]
 fn test_real_socket_large_msg() {
     with_test_replica_logger(|log| {
         info!(log, "Starting test");
@@ -293,7 +292,7 @@ fn test_real_socket_large_msg() {
 
                 let request = Request::builder()
                     .uri("/Ping")
-                    .body(Bytes::from(vec![0; 100_000_000]))
+                    .body(Bytes::from(vec![0; 40_000_000]))
                     .unwrap();
                 let node_1_reachable_from_node_2 = transport_2.push(&NODE_1, request).await.is_ok();
                 let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
@@ -302,6 +301,7 @@ fn test_real_socket_large_msg() {
                     break;
                 }
             }
+            tokio::time::sleep(Duration::from_secs(30)).await
         });
     })
 }
