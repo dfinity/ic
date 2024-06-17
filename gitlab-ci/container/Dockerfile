@@ -164,6 +164,6 @@ RUN curl -sSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kub
     echo "7506a0ae7a59b35089853e1da2b0b9ac0258c5309ea3d165c3412904a9051d48  ${KUBECTL_BIN}" | sha256sum -c - && \
     chmod +x "${KUBECTL_BIN}"
 
-USER ubuntu
+USER 1001
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
