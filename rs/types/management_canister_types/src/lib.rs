@@ -2696,10 +2696,18 @@ impl Payload<'_> for CanisterLogRecord {}
 
 impl DataSize for CanisterLogRecord {
     fn data_size(&self) -> usize {
-        self.idx.data_size()
-            + self.timestamp_nanos.data_size()
-            + self.content.as_slice().data_size()
+        std::mem::size_of::<Self>() + self.content.as_slice().data_size()
     }
+}
+
+#[test]
+fn test_canister_log_record_data_size() {
+    let record = CanisterLogRecord {
+        idx: 100,
+        timestamp_nanos: 200,
+        content: vec![1, 2, 3],
+    };
+    assert_eq!(record.data_size(), 8 + 8 + 24 + 3);
 }
 
 impl From<&CanisterLogRecord> for pb_canister_state_bits::CanisterLogRecord {
