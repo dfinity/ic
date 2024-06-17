@@ -164,5 +164,9 @@ RUN curl -sSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kub
     echo "7506a0ae7a59b35089853e1da2b0b9ac0258c5309ea3d165c3412904a9051d48  ${KUBECTL_BIN}" | sha256sum -c - && \
     chmod +x "${KUBECTL_BIN}"
 
+# Use buildifier (uid 1001) if /entrypoint.sh is overriden
+# In GitHub that is the case and we need 1001 and we set it via ARG.
+ARG CI_USER="ubuntu"
+USER $CI_USER
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
