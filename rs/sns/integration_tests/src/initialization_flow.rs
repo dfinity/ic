@@ -143,9 +143,6 @@ pub struct SnsInitializationFlowTestSetup {
     /// The dapp canisters being decentralized with the SNS.
     pub dapp_canisters: Vec<CanisterId>,
 
-    /// The developer principal used to propose and own the dapp being decentralized.
-    pub developer_principal_id: PrincipalId,
-
     /// Principals that have ICP in their main ledger account and can be used in the test, most
     /// likely used to participate in the swap.
     pub funded_principals: Vec<PrincipalId>,
@@ -225,7 +222,6 @@ impl SnsInitializationFlowTestSetup {
         Self {
             state_machine,
             dapp_canisters: vec![dapp_canister],
-            developer_principal_id,
             funded_principals,
         }
     }

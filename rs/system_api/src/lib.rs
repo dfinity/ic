@@ -1472,11 +1472,13 @@ impl SystemApiImpl {
         self.sandbox_safe_system_state.append_canister_log(
             is_enabled,
             self.api_type.time(),
-            valid_subslice("save_log_message", src, size, heap).unwrap_or(
-                // Do not trap here!
-                // If the specified memory range is invalid, ignore it and log the error message.
-                b"(debug_print message out of memory bounds)",
-            ),
+            valid_subslice("save_log_message", src, size, heap)
+                .unwrap_or(
+                    // Do not trap here!
+                    // If the specified memory range is invalid, ignore it and log the error message.
+                    b"(debug_print message out of memory bounds)",
+                )
+                .to_vec(),
         );
     }
 
