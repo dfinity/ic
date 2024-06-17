@@ -36,7 +36,7 @@ jobs:
       labels: dind-runner-large-p
       group: zh1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:a8f7f1315daaafd1c75832352f246d269823b7518ccce40f50d10d7fad381d3c
+      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
     timeout-minutes: 90
     env:
       TITLE: ${{ github.event.pull_request.title }}
@@ -79,7 +79,7 @@ jobs:
       labels: dind-runner-large
       group: ln1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:a8f7f1315daaafd1c75832352f246d269823b7518ccce40f50d10d7fad381d3c
+      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     name: Bazel Build All Config Check
@@ -157,7 +157,7 @@ jobs:
       labels: dind-runner-large
       group: ln1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:a8f7f1315daaafd1c75832352f246d269823b7518ccce40f50d10d7fad381d3c
+      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -183,7 +183,7 @@ jobs:
       labels: dind-runner-large
       group: ln1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:a8f7f1315daaafd1c75832352f246d269823b7518ccce40f50d10d7fad381d3c
+      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -234,7 +234,7 @@ jobs:
       labels: dind-runner-large
       group: ln1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:a8f7f1315daaafd1c75832352f246d269823b7518ccce40f50d10d7fad381d3c
+      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' && github.event_name != 'merge_group' }}
     steps:
@@ -328,7 +328,7 @@ jobs:
       labels: dind-runner-large
       group: ln1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:a8f7f1315daaafd1c75832352f246d269823b7518ccce40f50d10d7fad381d3c
+      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -365,7 +365,7 @@ jobs:
       labels: dind-runner-large
       group: ln1
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:a8f7f1315daaafd1c75832352f246d269823b7518ccce40f50d10d7fad381d3c
+      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
