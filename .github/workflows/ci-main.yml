@@ -147,7 +147,7 @@ jobs:
       - name: Purge Bazel Output
         shell: bash
         run: |
-          sudo rm -rf /private/var/tmp/bazel-output//${ROOT_PIPELINE_ID}
+          sudo rm -rf /private/var/tmp/bazel-output/${ROOT_PIPELINE_ID}
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     runs-on:
