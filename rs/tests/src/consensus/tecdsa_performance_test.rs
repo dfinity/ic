@@ -265,19 +265,25 @@ pub fn tecdsa_performance_test(
             "Minimal expected number of success calls {}", min_expected_success_calls,
         );
 
-        let json_report = format!(
-            "{{
-                \"benchmark_name\": \"tecdsa_performance_test\",
-                \"success_calls\": {},
-                \"failure_calls\": {},
-                \"success_rps\": {}
-            }}",
-            metrics.success_calls() as f32,
-            metrics.failure_calls() as f32,
-            metrics.success_calls() as f32 / TESTING_PERIOD.as_secs() as f32
+        let timestamp =
+            chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).to_rfc3339();
+
+        let json_report = serde_json::json!(
+            {
+                "benchmark_name": "tecdsa_performance_test",
+                "timestamp": timestamp,
+                "package": "replica-benchmarks",
+                "benchmark_results": {
+                    "success_calls": metrics.success_calls() as f32,
+                    "failure_calls": metrics.failure_calls() as f32,
+                    "success_rps": metrics.success_calls() as f32 / TESTING_PERIOD.as_secs() as f32
+                }
+            }
         );
 
-        info!(log, "json benchmark report: {json_report}");
+        let json_report_str = serde_json::to_string_pretty(&json_report).unwrap();
+
+        info!(log, "json benchmark report:\n{json_report_str}");
 
         let report_path = env.base_path().join(BENCHMARK_REPORT_FILE);
 
@@ -287,11 +293,41 @@ pub fn tecdsa_performance_test(
         };
 
         let open_and_write_to_file_result =
-            ic_sys::fs::write_atomically(&report_path, |f| f.write_all(json_report.as_bytes()));
+            ic_sys::fs::write_atomically(&report_path, |f| f.write_all(json_report_str.as_bytes()));
 
         match create_dir_result.and(open_and_write_to_file_result) {
             Ok(()) => info!(log, "Benchmark report written to {}", report_path.display()),
             Err(e) => error!(log, "Failed to write benchmark report: {}", e),
+        }
+
+        if cfg!(feature = "upload_perf_systest_results") {
+            // elastic search url
+            const ES_URL: &str =
+                "https://elasticsearch.testnet.dfinity.network/ci-performance-test/_doc";
+            const NUM_UPLOAD_ATTEMPS: usize = 3;
+            info!(
+                log,
+                "Starting to upload performance test results to {ES_URL}"
+            );
+
+            for i in 1..=NUM_UPLOAD_ATTEMPS {
+                info!(
+                    log,
+                    "Uploading performance test results attempt {}/{}", i, NUM_UPLOAD_ATTEMPS
+                );
+
+                let client = reqwest::Client::new();
+                match client.post(ES_URL).json(&json_report).send().await {
+                    Ok(response) => {
+                        info!(
+                            log,
+                            "Successfully uploaded performance test results: {response:?}"
+                        );
+                        break;
+                    }
+                    Err(e) => error!(log, "Failed to upload performance test results: {e:?}"),
+                }
+            }
         }
 
         if download_p8s_data {
