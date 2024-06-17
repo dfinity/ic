@@ -1182,7 +1182,6 @@ fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> 
     let body = response.text()?;
 
     // body should look like:
-    // eb2bd3cc9db26427dcee039b0e696a4127c2466e2e487d8628c4a7b2d3ecdbd3 *disk-img.tar.gz
     // 7348b0f4b0267da7424306efddd57e26dc5a858cd642d64afaeaa592c4974af8 *disk-img.tar.zst
 
     let lines = body

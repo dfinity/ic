@@ -3,7 +3,7 @@ mod metrics;
 
 pub use crate::client::BrokenCanisterHttpClient;
 use crate::client::CanisterHttpAdapterClientImpl;
-use ic_adapter_metrics::AdapterMetrics;
+use ic_adapter_metrics_client::AdapterMetrics;
 use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_config::adapters::AdaptersConfig;
 use ic_interfaces::execution_environment::QueryExecutionService;
