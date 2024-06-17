@@ -21,6 +21,8 @@ env:
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
+  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
+  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
 
 # TODO: DRY ~ put under wokflow-source
 
