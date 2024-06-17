@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-adapter-metrics = { path = "../../monitoring/adapter_metrics" }
+ic-adapter-metrics-client = { path = "../../monitoring/adapter_metrics/client" }
 ic-async-utils = { path = "../../async_utils" }
 ic-btc-service = { path = "../service" }
 ic-btc-types-internal = { path = "../types/internal" }

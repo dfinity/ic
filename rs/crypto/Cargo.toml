@@ -12,7 +12,7 @@ bincode = "1.2.1"
 clap = { version = "3.2.25", features = ["derive"] }
 ed25519-consensus = "2.0.1"
 hex = { workspace = true }
-ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics_server" }
+ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics/server" }
 ic-async-utils = { path = "../async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
