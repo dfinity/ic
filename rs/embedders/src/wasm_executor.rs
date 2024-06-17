@@ -399,8 +399,10 @@ impl WasmExecutorImpl {
                 }
                 None => {
                     use std::borrow::Cow;
-                    let decoded_wasm: Cow<'_, BinaryEncodedWasm> =
-                        Cow::Owned(decode_wasm(wasm_binary.binary.to_shared_vec())?);
+                    let decoded_wasm: Cow<'_, BinaryEncodedWasm> = Cow::Owned(decode_wasm(
+                        self.wasm_embedder.config().wasm_max_size,
+                        wasm_binary.binary.to_shared_vec(),
+                    )?);
                     let (cache, result) = compile(&self.wasm_embedder, decoded_wasm.as_ref());
                     *guard = Some(cache.clone());
                     let (compilation_result, serialized_module) = result?;
