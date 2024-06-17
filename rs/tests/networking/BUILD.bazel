@@ -119,6 +119,8 @@ system_test(
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        # The not_on_github is only temporary until the bonding on ln1-idx1 is configured
+        "not_on_github",
         "system_test_hourly",
         "system_test_nightly",
     ],
