@@ -871,8 +871,8 @@ prop_compose! {
         from_percent in -20..120i64,
         percent_above_min_size in 0..120i64,
     ) ->  (Stream, StreamIndex, usize) {
-        let from_percent = from_percent.max(0).min(100) as usize;
-        let percent_above_min_size = percent_above_min_size.max(0).min(100) as usize;
+        let from_percent = from_percent.clamp(0, 100) as usize;
+        let percent_above_min_size = percent_above_min_size.clamp(0, 100) as usize;
         let msg_count = min_size +
             (stream.messages().len() - min_size) * percent_above_min_size / 100;
         let from = stream.messages_begin() +

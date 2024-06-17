@@ -1,5 +1,4 @@
 use std::{
-    cmp::{max, min},
     collections::HashMap,
     fs::{self, File},
     net::SocketAddr,
@@ -327,10 +326,10 @@ where
                 .with_context(_ctx.clone())
                 .await;
 
-            tokio::time::sleep(max(
-                Duration::ZERO,
-                min(self.probe_interval, end_time - Instant::now()),
-            ))
+            tokio::time::sleep(
+                self.probe_interval
+                    .clamp(Duration::ZERO, end_time - Instant::now()),
+            )
             .await;
 
             if Instant::now() > end_time {

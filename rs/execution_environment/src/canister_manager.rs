@@ -122,6 +122,7 @@ pub(crate) struct CanisterMgrConfig {
     rate_limiting_of_heap_delta: FlagStatus,
     heap_delta_rate_limit: NumBytes,
     upload_wasm_chunk_instructions: NumInstructions,
+    wasm_chunk_store_max_size: NumBytes,
 }
 
 impl CanisterMgrConfig {
@@ -141,6 +142,7 @@ impl CanisterMgrConfig {
         rate_limiting_of_heap_delta: FlagStatus,
         heap_delta_rate_limit: NumBytes,
         upload_wasm_chunk_instructions: NumInstructions,
+        wasm_chunk_store_max_size: NumBytes,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -157,6 +159,7 @@ impl CanisterMgrConfig {
             rate_limiting_of_heap_delta,
             heap_delta_rate_limit,
             upload_wasm_chunk_instructions,
+            wasm_chunk_store_max_size,
         }
     }
 }
@@ -1590,7 +1593,7 @@ impl CanisterManager {
         canister
             .system_state
             .wasm_chunk_store
-            .can_insert_chunk(chunk)
+            .can_insert_chunk(self.config.wasm_chunk_store_max_size, chunk)
             .map_err(|err| CanisterManagerError::WasmChunkStoreError { message: err })?;
 
         let chunk_bytes = wasm_chunk_store::chunk_size();
@@ -1742,7 +1745,7 @@ impl CanisterManager {
         let hash = canister
             .system_state
             .wasm_chunk_store
-            .insert_chunk(chunk)
+            .insert_chunk(self.config.wasm_chunk_store_max_size, chunk)
             .expect("Error: Insert chunk cannot fail after checking `can_insert_chunk`");
         Ok(UploadChunkResult {
             reply: UploadChunkReply {

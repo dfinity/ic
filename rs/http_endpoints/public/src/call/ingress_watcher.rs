@@ -218,9 +218,7 @@ impl IngressWatcher {
 
                 debug_assert_eq!(
                     messages_with_completed_execution.len(),
-                    self.completed_execution_heights
-                        .iter()
-                        .map(|(_, messages)| messages.len())
+                    self.completed_execution_heights.values().map(|messages| messages.len())
                         .sum::<usize>(),
                     "The number of messages in `self.message_statuses` with completed
                     execution status should be equal to the number of messages in `self.completed_execution_heights`."

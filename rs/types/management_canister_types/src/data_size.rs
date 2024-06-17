@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 // NOTES:
 // 1) We cannot use `CountBytes` here because it is implemented in an
 //    upstream crate `rs/types/types`.
@@ -13,10 +11,6 @@ use std::collections::VecDeque;
 // instead of `CountBytes`.
 
 /// Trait to reasonably estimate the memory usage of a value in bytes.
-///
-/// It does not take alignment or memory layouts into account,
-/// or unusual behavior or optimizations of allocators.
-/// It is depending entirely on the data inside the type.
 ///
 /// Default implementation returns zero.
 pub trait DataSize {
@@ -58,13 +52,7 @@ impl DataSize for String {
 
 impl<T: DataSize> DataSize for Vec<T> {
     fn data_size(&self) -> usize {
-        self.iter().map(|x| x.data_size()).sum()
-    }
-}
-
-impl<T: DataSize> DataSize for VecDeque<T> {
-    fn data_size(&self) -> usize {
-        self.iter().map(|x| x.data_size()).sum()
+        std::mem::size_of::<Self>() + self.iter().map(|x| x.data_size()).sum::<usize>()
     }
 }
 
@@ -73,36 +61,41 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_data_size() {
-        // u8.
+    fn test_data_size_u8() {
         assert_eq!(0_u8.data_size(), 1);
         assert_eq!(42_u8.data_size(), 1);
+    }
 
-        // [u8].
+    #[test]
+    fn test_data_size_u8_slice() {
         let a: [u8; 0] = [];
         assert_eq!(a.data_size(), 0);
         assert_eq!([1_u8].data_size(), 1);
         assert_eq!([1_u8, 2_u8].data_size(), 2);
+    }
 
-        // u64.
+    #[test]
+    fn test_data_size_u64() {
         assert_eq!(0_u64.data_size(), 8);
         assert_eq!(42_u64.data_size(), 8);
+    }
 
-        // Vec<u8>.
-        assert_eq!(Vec::<u8>::from([]).data_size(), 0);
-        assert_eq!(Vec::<u8>::from([1]).data_size(), 1);
-        assert_eq!(Vec::<u8>::from([1, 2]).data_size(), 2);
+    #[test]
+    fn test_data_size_u8_vec() {
+        let base = 24;
+        assert_eq!(Vec::<u8>::from([]).data_size(), base);
+        assert_eq!(Vec::<u8>::from([1]).data_size(), base + 1);
+        assert_eq!(Vec::<u8>::from([1, 2]).data_size(), base + 2);
+    }
 
-        // VecDeque<u8>.
-        assert_eq!(VecDeque::<u8>::from([]).data_size(), 0);
-        assert_eq!(VecDeque::<u8>::from([1]).data_size(), 1);
-        assert_eq!(VecDeque::<u8>::from([1, 2]).data_size(), 2);
-
-        // &str.
+    #[test]
+    fn test_data_size_str() {
         assert_eq!("a".data_size(), 1);
         assert_eq!("ab".data_size(), 2);
+    }
 
-        // String.
+    #[test]
+    fn test_data_size_string() {
         assert_eq!(String::from("a").data_size(), 1);
         assert_eq!(String::from("ab").data_size(), 2);
         for size_bytes in 0..1_024 {

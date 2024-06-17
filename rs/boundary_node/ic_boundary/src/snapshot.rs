@@ -43,7 +43,6 @@ pub struct Node {
     pub addr: IpAddr,
     pub port: u16,
     pub tls_certificate: Vec<u8>,
-    pub replica_version: String,
 }
 
 // Lightweight Eq, just compare principals
@@ -132,7 +131,6 @@ pub trait Snapshot: Send + Sync {
 pub struct RegistrySnapshot {
     pub version: u64,
     pub timestamp: u64,
-    pub nns_subnet_id: Principal,
     pub nns_public_key: Vec<u8>,
     pub subnets: Vec<Subnet>,
     pub nodes: HashMap<String, Arc<Node>>,
@@ -295,7 +293,6 @@ impl Snapshotter {
                                 .context("unable to parse IP address")?,
                             port: http_endpoint.port as u16, // Port is u16 anyway
                             tls_certificate: cert.certificate_der,
-                            replica_version: replica_version.to_string(),
                         };
                         let node = Arc::new(node);
 
@@ -331,7 +328,6 @@ impl Snapshotter {
         Ok(RegistrySnapshot {
             version: version.get(),
             timestamp,
-            nns_subnet_id: nns_subnet_id.get().0,
             nns_public_key: nns_key_with_prefix,
             subnets,
             nodes: nodes_map,
@@ -458,7 +454,6 @@ pub fn generate_stub_snapshot(subnets: Vec<Subnet>) -> RegistrySnapshot {
     RegistrySnapshot {
         version: 0,
         timestamp: 0,
-        nns_subnet_id: subnet_test_id(666).get().0,
         nns_public_key: vec![],
         subnets,
         nodes,
@@ -479,7 +474,6 @@ pub fn generate_stub_subnet(nodes: Vec<SocketAddr>) -> Subnet {
                 addr: x.ip(),
                 port: x.port(),
                 tls_certificate: vec![],
-                replica_version: "".into(),
             })
         })
         .collect::<Vec<_>>();

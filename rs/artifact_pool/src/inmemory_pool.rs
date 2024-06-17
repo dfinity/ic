@@ -335,7 +335,7 @@ pub mod test {
             || {
                 let mut pool = InMemoryPoolSection::new();
                 let min = Height::from(1);
-                let max = Height::from(std::u64::MAX);
+                let max = Height::from(u64::MAX);
                 pool.insert(make_artifact(fake_random_beacon(min)));
                 pool.insert(make_artifact(fake_random_beacon(max)));
 
