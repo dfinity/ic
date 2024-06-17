@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 futures = { workspace = true }
-ic-adapter-metrics = { path = "../adapter_metrics" }
+ic-adapter-metrics-client = { path = "../adapter_metrics/client" }
 libc = "0.2.91"
 prometheus = { workspace = true }
 tokio = { workspace = true }
