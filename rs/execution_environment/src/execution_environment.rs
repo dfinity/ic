@@ -394,6 +394,7 @@ impl ExecutionEnvironment {
             config.rate_limiting_of_heap_delta,
             heap_delta_rate_limit,
             upload_wasm_chunk_instructions,
+            config.embedders_config.wasm_max_size,
         );
         let metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
         let canister_manager = CanisterManager::new(
