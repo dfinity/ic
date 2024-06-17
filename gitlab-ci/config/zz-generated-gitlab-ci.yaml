@@ -1979,7 +1979,7 @@ default:
     expire_in: 3 days
     when: always
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:7db88a32f9eac1ce30cc9c73ec7a1b1d244e517fd61b31f85aa4d9b59f3729ca
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:b4086a27b58281b34b3c1a5833567256c11b2140d9504c9e819c40f483d72c6a
   interruptible: true
   retry:
     max: 2
