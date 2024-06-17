@@ -135,7 +135,7 @@ jobs:
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
-        if: steps.filter.outputs.bazel-test-darwin-x86-64 != 'false'
+        if: steps.filter.outputs.bazel-test-darwin-x86-64 != 'false' || github.event_name == 'schedule'
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_CI_CONFIG: "--config=ci --config macos_ci"
