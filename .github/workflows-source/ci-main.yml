@@ -9,7 +9,10 @@ on:
         description: 'Is this for a Rosetta-API release?'
         required: true
         default: false
-        type: boolean
+        type: choice # use choice instead of boolean because the UI is not intuitive
+        options:
+        - true
+        - false
   schedule:
     - cron: "0 * * * *"
   pull_request:
