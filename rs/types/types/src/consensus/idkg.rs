@@ -819,6 +819,19 @@ pub enum EcdsaMessage {
     EcdsaOpening(EcdsaOpening),
 }
 
+impl EcdsaMessage {
+    pub fn message_id(&self) -> EcdsaArtifactId {
+        match self {
+            EcdsaMessage::EcdsaSignedDealing(x) => x.message_id(),
+            EcdsaMessage::EcdsaDealingSupport(x) => x.message_id(),
+            EcdsaMessage::EcdsaSigShare(x) => x.message_id(),
+            EcdsaMessage::SchnorrSigShare(x) => x.message_id(),
+            EcdsaMessage::EcdsaComplaint(x) => x.message_id(),
+            EcdsaMessage::EcdsaOpening(x) => x.message_id(),
+        }
+    }
+}
+
 impl From<EcdsaMessage> for pb::EcdsaMessage {
     fn from(value: EcdsaMessage) -> Self {
         use pb::ecdsa_message::Msg;
@@ -1944,8 +1957,8 @@ pub trait EcdsaStats: Send + Sync {
     /// Updates the set of transcripts being tracked currently.
     fn update_active_transcripts(&self, block_reader: &dyn EcdsaBlockReader);
 
-    /// Updates the set of quadruples being tracked currently.
-    fn update_active_quadruples(&self, block_reader: &dyn EcdsaBlockReader);
+    /// Updates the set of pre-signatures being tracked currently.
+    fn update_active_pre_signatures(&self, block_reader: &dyn EcdsaBlockReader);
 
     /// Records the time taken to verify the support share received for a dealing.
     fn record_support_validation(&self, support: &IDkgDealingSupport, duration: Duration);

@@ -70,7 +70,7 @@ prometheus = { workspace = true }
 rand = { workspace = true }
 ratelimit = "0.9.1"
 rcgen = { workspace = true }
-regex = "1.3.9"
+regex = { workspace = true }
 reqwest = { version = "0.11.22", default-features = false, features = [
     "blocking",
     "json",

@@ -343,7 +343,7 @@ proptest! {
                     // But GC should fail.
                     match unpacked.garbage_collect(&ExpectedIndices {
                         message_index: from.increment(),
-                        signal_index: StreamIndex::from(std::u64::MAX),
+                        signal_index: StreamIndex::from(u64::MAX),
                     }) {
                         Err(CertifiedSliceError::WitnessPruningFailed(_)) => {}
                         actual => panic!(

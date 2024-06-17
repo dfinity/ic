@@ -1931,15 +1931,6 @@ impl Governance {
     /// - the controller principal is self-authenticating
     #[cfg(feature = "test")]
     pub fn update_neuron(&mut self, neuron: NeuronProto) -> Result<(), GovernanceError> {
-        // The controller principal is self-authenticating.
-        if !neuron.controller.unwrap().is_self_authenticating() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Cannot update neuron, controller PrincipalId must be self-authenticating"
-                    .to_string(),
-            ));
-        }
-
         let neuron_id = neuron.id.expect("Neuron must have a NeuronId");
         // Must clobber an existing neuron.
         self.with_neuron_mut(&neuron_id, |old_neuron| {
@@ -1990,13 +1981,6 @@ impl Governance {
                     "Cannot add neuron. There is already a neuron with id: {:?}",
                     neuron_id
                 ),
-            ));
-        }
-
-        if !neuron.controller().is_self_authenticating() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Cannot add neuron, controller PrincipalId must be self-authenticating".to_string(),
             ));
         }
 
@@ -3171,13 +3155,6 @@ impl Governance {
                 )
             })?
             .clone();
-
-        if !child_controller.is_self_authenticating() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "Child neuron controller for disburse neuron must be self-authenticating",
-            ));
-        }
 
         let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
         let from_subaccount = parent_neuron.subaccount();

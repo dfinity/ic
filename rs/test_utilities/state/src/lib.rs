@@ -828,14 +828,12 @@ prop_compose! {
 
 prop_compose! {
     /// Produces a strategy that generates a stream with between
-    /// `[min_size, max_size]` messages; between `[min_signal_count, max_signal_count]`
-    /// reject signals; and with or without request metadata and/or message deadlines.
-    pub fn arb_stream_with_config(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize, populate_request_metadata: bool, populate_deadline: bool)(
+    /// `[min_size, max_size]` messages; and between
+    /// `[min_signal_count, max_signal_count]` reject signals.
+    pub fn arb_stream_with_config(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
         msg_start in 0..10000u64,
         msgs in prop::collection::vec(
-            // TODO(MR-549) Use `request_or_response()` once the canonical state can encode
-            // message deadlines.
-            arbitrary::request_or_response_with_config(populate_request_metadata, populate_deadline),
+            arbitrary::request_or_response_with_config(true, true),
             min_size..=max_size
         ),
         (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count),
@@ -856,10 +854,10 @@ prop_compose! {
 
 prop_compose! {
     /// Produces a strategy that generates a stream with between
-    /// `[min_size, max_size]` messages and between `[min_signal_count, max_signal_count]`
-    /// reject signals.
+    /// `[min_size, max_size]` messages and between
+    /// `[min_signal_count, max_signal_count]` reject signals.
     pub fn arb_stream(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
-        stream in arb_stream_with_config(min_size, max_size, min_signal_count, max_signal_count, true, true)
+        stream in arb_stream_with_config(min_size, max_size, min_signal_count, max_signal_count)
     ) -> Stream {
         stream
     }
@@ -869,14 +867,12 @@ prop_compose! {
     /// Produces a strategy consisting of an arbitrary stream and valid slice begin and message
     /// count values for extracting a slice from the stream.
     pub fn arb_stream_slice(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
-        // TODO(MR-549) Use `arb_stream()` once the canonical state can encode
-        // message deadlines.
-        stream in arb_stream_with_config(min_size, max_size, min_signal_count, max_signal_count, true, false),
+        stream in arb_stream(min_size, max_size, min_signal_count, max_signal_count),
         from_percent in -20..120i64,
         percent_above_min_size in 0..120i64,
     ) ->  (Stream, StreamIndex, usize) {
-        let from_percent = from_percent.max(0).min(100) as usize;
-        let percent_above_min_size = percent_above_min_size.max(0).min(100) as usize;
+        let from_percent = from_percent.clamp(0, 100) as usize;
+        let percent_above_min_size = percent_above_min_size.clamp(0, 100) as usize;
         let msg_count = min_size +
             (stream.messages().len() - min_size) * percent_above_min_size / 100;
         let from = stream.messages_begin() +
