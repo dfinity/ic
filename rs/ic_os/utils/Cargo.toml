@@ -3,7 +3,7 @@ name = "utils"
 version = "1.0.0"
 edition = "2021"
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[dependencies]
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
