@@ -11632,6 +11632,7 @@ dependencies = [
  "ic-utils 0.9.0",
  "ic-wasm-types",
  "maplit",
+ "more-asserts",
  "prometheus",
  "serde",
  "serde_bytes",
