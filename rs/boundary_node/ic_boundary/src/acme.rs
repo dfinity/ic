@@ -11,7 +11,9 @@ pub struct OrderHandle(instant_acme::Order);
 
 #[derive(Debug)]
 pub struct ChallengeResponse {
+    #[allow(dead_code)]
     pub token: String,
+    #[allow(dead_code)]
     pub key_authorization: String,
 }
 

@@ -40,6 +40,7 @@ pub struct ConnectionConfig {
 pub enum ConnectionState {
     /// This variant represents that the connection has not yet been connected.
     Initializing {
+        #[allow(dead_code)]
         /// This field represents when the connection state was changed to this value.
         timestamp: SystemTime,
     },
@@ -50,17 +51,20 @@ pub enum ConnectionState {
     },
     /// This variant represents that the version handshake has been completed.
     HandshakeComplete {
+        #[allow(dead_code)]
         /// This field represents when the connection state was changed to this value.
         timestamp: SystemTime,
     },
     /// This variant represents that the adapter has discarded the connection
     /// due to bad behavior.
     AdapterDiscarded {
+        #[allow(dead_code)]
         /// This field represents when the connection state was changed to this value.
         timestamp: SystemTime,
     },
     /// This variant represents that the connection has been dropped.
     NodeDisconnected {
+        #[allow(dead_code)]
         /// This field represents when the connection state was changed to this value.
         timestamp: SystemTime,
     },
