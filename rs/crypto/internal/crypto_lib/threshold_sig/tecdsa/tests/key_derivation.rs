@@ -3,7 +3,6 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 use std::convert::{TryFrom, TryInto};
 
-#[allow(dead_code)]
 mod test_utils;
 
 use crate::test_utils::*;
