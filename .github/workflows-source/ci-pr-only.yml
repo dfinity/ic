@@ -31,7 +31,7 @@ anchors:
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-runner-large
-      group: sf1
+      group: zh1
     container:
       <<: *image
     timeout-minutes: 90
