@@ -33,11 +33,11 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType, ClearChunkStoreArgs,
-    ComputeInitialEcdsaDealingsArgs, ComputeInitialIDkgDealingsArgs, CreateCanisterArgs,
-    DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialEcdsaDealingsArgs,
+    ComputeInitialIDkgDealingsArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs,
+    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
+    Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
     ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrKeyId,
     SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
     SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
@@ -666,10 +666,7 @@ impl ExecutionEnvironment {
 
                                 let sender_canister_version = args.get_sender_canister_version();
 
-                                let settings = match args.settings {
-                                    None => CanisterSettingsArgs::default(),
-                                    Some(settings) => settings,
-                                };
+                                let settings = args.settings.unwrap_or_default();
                                 let result = match CanisterSettings::try_from(settings) {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
                                         response: Err(err.into()),

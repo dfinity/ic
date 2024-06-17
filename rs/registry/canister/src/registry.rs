@@ -111,7 +111,7 @@ impl Registry {
     ) -> Vec<RegistryDelta> {
         let max_version = match max_versions {
             Some(max_versions) => version.saturating_add(max_versions as u64),
-            None => std::u64::MAX,
+            None => u64::MAX,
         };
 
         self.store

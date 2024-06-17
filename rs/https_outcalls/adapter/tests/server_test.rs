@@ -423,7 +423,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         use std::path::{Path, PathBuf};
         use std::{
             pin::Pin,
-            sync::Arc,
             task::{Context, Poll},
         };
         use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -457,20 +456,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         pub struct UnixStream(pub tokio::net::UnixStream);
 
         impl Connected for UnixStream {
-            type ConnectInfo = UdsConnectInfo;
+            type ConnectInfo = ();
 
-            fn connect_info(&self) -> Self::ConnectInfo {
-                UdsConnectInfo {
-                    peer_addr: self.0.peer_addr().ok().map(Arc::new),
-                    peer_cred: self.0.peer_cred().ok(),
-                }
-            }
-        }
-
-        #[derive(Clone, Debug)]
-        pub struct UdsConnectInfo {
-            pub peer_addr: Option<Arc<tokio::net::unix::SocketAddr>>,
-            pub peer_cred: Option<tokio::net::unix::UCred>,
+            fn connect_info(&self) -> Self::ConnectInfo {}
         }
 
         impl AsyncRead for UnixStream {

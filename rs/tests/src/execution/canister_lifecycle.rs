@@ -1015,7 +1015,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
                 &agent,
                 app_node.effective_canister_id(),
                 MAX_COMP_ALLOC,
-                Some(std::u64::MAX as u128),
+                Some(u64::MAX as u128),
                 None,
                 &logger,
             )
@@ -1030,7 +1030,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
             &agent,
             app_node.effective_canister_id(),
             MAX_COMP_ALLOC,
-            Some(std::u64::MAX as u128),
+            Some(u64::MAX as u128),
             None,
         )
         .await;
@@ -1062,7 +1062,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
             &agent,
             app_node.effective_canister_id(),
             Some(0),
-            Some(std::u64::MAX as u128),
+            Some(u64::MAX as u128),
             None,
             &logger,
         )

@@ -346,12 +346,10 @@ impl TopologySnapshot {
         }
         let subnets: Vec<_> = self
             .subnets()
-            .enumerate()
-            .map(|(_, s)| {
+            .map(|s| {
                 let nodes: Vec<_> = s
                     .nodes()
-                    .enumerate()
-                    .map(|(_, n)| NodeView {
+                    .map(|n| NodeView {
                         id: n.node_id,
                         ipv6: n.get_ip_addr(),
                     })
@@ -365,8 +363,7 @@ impl TopologySnapshot {
             .collect();
         let unassigned_nodes: Vec<_> = self
             .unassigned_nodes()
-            .enumerate()
-            .map(|(_, n)| NodeView {
+            .map(|n| NodeView {
                 id: n.node_id,
                 ipv6: n.get_ip_addr(),
             })
@@ -2206,16 +2203,8 @@ pub async fn install_nns_canisters(
     );
     let mut init_payloads = NnsInitPayloadsBuilder::new();
     if nns_test_neurons_present {
-        let mut ledger_balances = if let Some(ledger_balances) = ledger_balances {
-            ledger_balances
-        } else {
-            HashMap::new()
-        };
-        let neurons = if let Some(neurons) = neurons {
-            neurons
-        } else {
-            Vec::new()
-        };
+        let mut ledger_balances = ledger_balances.unwrap_or_default();
+        let neurons = neurons.unwrap_or_default();
         ledger_balances.insert(
             LIFELINE_CANISTER_ID.get().into(),
             Tokens::from_tokens(10_000).unwrap(),

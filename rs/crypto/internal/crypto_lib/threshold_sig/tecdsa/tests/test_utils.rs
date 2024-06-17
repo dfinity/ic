@@ -1,3 +1,7 @@
+// TODO: This #![allow(dead_code)] is needed because each file in the tests directory is
+// also compiled as its own separate crate.
+// The easiest way to solve this is to move tests/test_utils.rs to tests/test_utils/mod.rs,
+// because files in subdirectories of the tests directory don’t get compiled as separate crates.
 #![allow(dead_code)]
 
 use assert_matches::assert_matches;
