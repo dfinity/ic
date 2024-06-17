@@ -349,3 +349,14 @@ jobs:
           set -eExuo pipefail
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
               cargo build --release
+
+  rosetta-api-docker-image:
+    name: Rosetta API Docker Image
+    <<: *dind-small-setup
+    needs: [bazel-test-all]
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    steps:
+      - <<: *checkout
+      - name: Build rosetta-api image
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/rosseta-api-docker-image.sh
