@@ -38,7 +38,7 @@ use crate::{
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
     metrics::{
-        HttpHandlerMetrics, LABEL_INSECURE, LABEL_IO_ERROR, LABEL_SECURE, LABEL_STATUS,
+        HttpHandlerMetrics, LABEL_HTTP_STATUS_CODE, LABEL_INSECURE, LABEL_IO_ERROR, LABEL_SECURE,
         LABEL_TIMEOUT_ERROR, LABEL_TLS_ERROR, LABEL_UNKNOWN, REQUESTS_LABEL_NAMES, STATUS_ERROR,
         STATUS_SUCCESS,
     },
@@ -354,6 +354,7 @@ pub fn start_server(
             call::CallServiceV3::new_router(
                 call_handler,
                 ingress_watcher_handle,
+                metrics.clone(),
                 config.ingress_message_certificate_timeout_seconds,
                 delegation_from_nns.clone(),
                 state_reader.clone(),
@@ -776,7 +777,7 @@ async fn collect_timer_metric(
     // This is a workaround for `StatusCode::as_str()` not returning a `&'static
     // str`. It ensures `request_timer` is dropped before `status`.
     let mut timer = request_timer;
-    timer.set_label(LABEL_STATUS, status.as_str());
+    timer.set_label(LABEL_HTTP_STATUS_CODE, status.as_str());
 
     metrics
         .response_body_size_bytes
