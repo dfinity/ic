@@ -16,6 +16,13 @@ pub const LABEL_HEALTH_STATUS_AFTER: &str = "after";
 
 pub const LABEL_CALL_V3_CERTIFICATE_STATUS: &str = "status";
 
+// Call v3 labels
+pub const LABEL_CALL_V3_EARLY_RESPONSE_TRIGGER: &str = "trigger";
+pub const CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING: &str = "ingress_watcher_not_running";
+pub const CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION: &str = "duplicate_subscription";
+pub const CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT: &str = "subscription_timeout";
+pub const CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT: &str = "certification_timeout";
+
 /// Placeholder used when we can't determine the appropriate prometheus label.
 pub const LABEL_UNKNOWN: &str = "unknown";
 
@@ -54,6 +61,8 @@ pub struct HttpHandlerMetrics {
     pub ingress_watcher_subscription_latency_duration_seconds: Histogram,
     pub ingress_watcher_wait_for_certification_duration_seconds: Histogram,
 
+    // Call v3 handler metrics
+    pub call_v3_early_response_trigger_total: IntCounterVec,
     pub call_v3_certificate_status_total: IntCounterVec,
 }
 
@@ -160,6 +169,11 @@ impl HttpHandlerMetrics {
                 "replica_http_call_v3_certificate_status_total",
                 "The count of certificate states returned by the /v3/.../call endpoint. I.e. replied, rejected, unknown, etc.",
                 &[LABEL_CALL_V3_CERTIFICATE_STATUS],
+            ),
+            call_v3_early_response_trigger_total: metrics_registry.int_counter_vec(
+                "replica_http_call_v3_early_response_trigger_total",
+                "The count of early response triggers for the /v3/.../call endpoint.",
+                &[LABEL_CALL_V3_EARLY_RESPONSE_TRIGGER],
             ),
         }
     }

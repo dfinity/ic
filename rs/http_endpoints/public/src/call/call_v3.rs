@@ -6,7 +6,12 @@ use super::{
 };
 use crate::{
     common::{into_cbor, Cbor},
-    metrics::HttpHandlerMetrics,
+    metrics::{
+        HttpHandlerMetrics, CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
+        CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
+        CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
+        CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT,
+    },
     HttpError,
 };
 use axum::{
@@ -196,7 +201,10 @@ async fn call_sync_v3(
         Ok(Ok(message_subscriber)) => Ok(message_subscriber),
         Ok(Err(SubscriptionError::DuplicateSubscriptionError)) => {
             // TODO: At this point we could return early without submitting the ingress message.
-            Err("Duplicate request. Message is already being tracked and executed.")
+            Err((
+                "Duplicate request. Message is already being tracked and executed.",
+                CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
+            ))
         }
         Ok(Err(SubscriptionError::IngressWatcherNotRunning { error_message })) => {
             // TODO: Send a warning or notification.
@@ -205,14 +213,20 @@ async fn call_sync_v3(
                 log,
                 "Error while waiting for subscriber of ingress message: {}", error_message
             );
-            Err("Could not track the ingress message. Please try /read_state for the status.")
+            Err((
+                "Could not track the ingress message. Please try /read_state for the status.",
+                CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
+            ))
         }
         Err(_) => {
             warn!(
                 log,
                 "Timed out while submitting a certification subscription.";
             );
-            Err("Could not track the ingress message. Please try /read_state for the status.")
+            Err((
+                "Could not track the ingress message. Please try /read_state for the status.",
+                CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT,
+            ))
         }
     };
 
@@ -225,7 +239,11 @@ async fn call_sync_v3(
     // From this point on we only return a certificate or `Accepted 202``.
     let certification_subscriber = match certification_subscriber {
         Ok(certification_subscriber) => certification_subscriber,
-        Err(reason) => {
+        Err((reason, metric_label)) => {
+            metrics
+                .call_v3_early_response_trigger_total
+                .with_label_values(&[metric_label])
+                .inc();
             return CallV3Response::Accepted(reason);
         }
     };
@@ -237,6 +255,10 @@ async fn call_sync_v3(
     {
         Ok(()) => (),
         Err(_) => {
+            metrics
+                .call_v3_early_response_trigger_total
+                .with_label_values(&[CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT])
+                .inc();
             return CallV3Response::Accepted(
                 "Message did not complete execution and certification within the replica defined timeout.",
             );
