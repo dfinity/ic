@@ -77,6 +77,10 @@ const STABLE_MEMORY_DIRTY_PAGE_LIMIT_MESSAGE: NumOsPages =
 // is allowed to access.
 const STABLE_MEMORY_ACCESSED_PAGE_LIMIT: NumOsPages = NumOsPages::new(8 * GiB / (PAGE_SIZE as u64));
 
+/// The maximum size in bytes for an uncompressed Wasm module. This value is
+/// also used as the maximum size for the Wasm chunk store of each canister.
+const WASM_MAX_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024); // 100 MiB
+
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
     /// If this flag is enabled, then the output of the `debug_print` system-api
@@ -208,6 +212,9 @@ pub struct Config {
 
     /// The dirty page copying overhead, in instructions.
     pub dirty_page_copy_overhead: NumInstructions,
+
+    /// The maximum allowed size for an uncompressed canister Wasm module.
+    pub wasm_max_size: NumBytes,
 }
 
 impl Config {
@@ -237,6 +244,7 @@ impl Config {
             trace_execution: FlagStatus::Disabled,
             max_dirty_pages_without_optimization: DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION,
             dirty_page_copy_overhead: DIRTY_PAGE_COPY_OVERHEAD,
+            wasm_max_size: WASM_MAX_SIZE,
         }
     }
 }
