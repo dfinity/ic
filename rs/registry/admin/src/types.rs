@@ -3,7 +3,7 @@
 use ic_protobuf::registry::{
     node::v1::IPv4InterfaceConfig,
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
-    subnet::v1::{GossipConfig as GossipConfigProto, SubnetRecord as SubnetRecordProto},
+    subnet::v1::SubnetRecord as SubnetRecordProto,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
@@ -59,7 +59,6 @@ pub(crate) struct SubnetRecord {
     pub initial_notary_delay_millis: u64,
     pub replica_version_id: String,
     pub dkg_interval_length: u64,
-    pub gossip_config: Option<GossipConfigProto>,
     pub start_as_nns: bool,
     pub subnet_type: SubnetType,
     pub max_instructions_per_message: u64,
@@ -112,7 +111,6 @@ impl From<&SubnetRecordProto> for SubnetRecord {
             initial_notary_delay_millis: value.initial_notary_delay_millis,
             replica_version_id: value.replica_version_id.clone(),
             dkg_interval_length: value.dkg_interval_length,
-            gossip_config: value.gossip_config.clone(),
             start_as_nns: value.start_as_nns,
             subnet_type: SubnetType::try_from(value.subnet_type).unwrap(),
             max_instructions_per_message: value.max_instructions_per_message,
