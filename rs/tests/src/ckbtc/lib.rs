@@ -404,10 +404,15 @@ pub(crate) async fn install_bitcoin_canister_with_network(
             get_current_fee_percentiles_maximum: 0,
             send_transaction_base: 0,
             send_transaction_per_byte: 0,
+            get_block_headers_base: 0,
+            get_block_headers_cycles_per_ten_instructions: 0,
+            get_block_headers_maximum: 0,
         },
         api_access: Flag::Enabled,
         disable_api_if_not_fully_synced: Flag::Disabled,
         watchdog_canister: None,
+        burn_cycles: Flag::Enabled,
+        lazily_evaluate_fee_percentiles: Flag::Enabled,
     };
 
     install_rust_canister_from_path(
