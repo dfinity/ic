@@ -31,12 +31,12 @@ use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
     consensus::{CatchUpPackage, HasHeight},
-    NodeId, SubnetId,
+    Height, NodeId, SubnetId,
 };
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{mpsc::UnboundedSender, watch};
 
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
@@ -277,6 +277,8 @@ pub fn construct_ic_stack(
         .into_payload_builder(state_manager.clone(), node_id, log.clone());
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
+    let (max_certified_height_tx, max_certified_height_rx) = watch::channel(Height::from(0));
+
     let (ingress_throttler, ingress_tx, p2p_runner) = setup_consensus_and_p2p(
         log,
         metrics_registry,
@@ -305,6 +307,7 @@ pub fn construct_ic_stack(
         cycles_account_manager,
         canister_http_adapter_client,
         config.nns_registry_replicator.poll_delay_duration_ms,
+        max_certified_height_tx,
     );
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------
     ic_http_endpoints_public::start_server(
@@ -331,7 +334,7 @@ pub fn construct_ic_stack(
         Arc::new(Pprof),
         tracing_handle,
         // TODO(NET-1620): Remove optional arguments to enable the sync call endpoint.
-        None,
+        Some(max_certified_height_rx),
         None,
     );
 

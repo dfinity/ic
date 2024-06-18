@@ -411,8 +411,8 @@ mod tests {
             .add_neuron(
                 create_test_neuron_builder(
                     13,
-                    DissolveStateAndAge::LegacyNoneDissolveState {
-                        aging_since_timestamp_seconds: now,
+                    DissolveStateAndAge::DissolvingOrDissolved {
+                        when_dissolved_timestamp_seconds: now - ONE_YEAR_SECONDS,
                     },
                 )
                 .with_cached_neuron_stake_e8s(4_450_000_000)
@@ -423,8 +423,8 @@ mod tests {
             .add_neuron(
                 create_test_neuron_builder(
                     14,
-                    DissolveStateAndAge::LegacyNoneDissolveState {
-                        aging_since_timestamp_seconds: now,
+                    DissolveStateAndAge::DissolvingOrDissolved {
+                        when_dissolved_timestamp_seconds: now - ONE_YEAR_SECONDS,
                     },
                 )
                 .with_cached_neuron_stake_e8s(1_220_000_000)

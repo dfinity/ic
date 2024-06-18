@@ -13,7 +13,7 @@ http = "0.2.12"
 hyper = { version = "0.14.18", features = ["full"] }
 hyper-socks2 = "^0.8.0"
 hyper-rustls = { workspace = true }
-ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics_server" }
+ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics/server" }
 ic-async-utils = { path = "../../async_utils" }
 ic-config = { path = "../../config" }
 ic-https-outcalls-service = { path = "../service" }

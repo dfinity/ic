@@ -5,7 +5,7 @@ pub mod common;
 
 use crate::common::{
     create_conn_and_send_request, default_get_latest_state, default_latest_certified_height,
-    get_free_localhost_socket_addr,
+    default_read_certified_state, get_free_localhost_socket_addr,
     test_agent::{self, wait_for_status_healthy, IngressMessage},
     HttpEndpointBuilder,
 };
@@ -1284,6 +1284,158 @@ fn test_synchronous_call_endpoint_no_certification(
             response.status(),
             "{:?}",
             response.text().await
+        );
+    });
+}
+
+struct FakeCertifiedStateSnapshot;
+
+impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
+    type State = ReplicatedState;
+
+    fn get_state(&self) -> &ReplicatedState {
+        unimplemented!()
+    }
+
+    fn get_height(&self) -> Height {
+        unimplemented!()
+    }
+
+    fn read_certified_state(
+        &self,
+        _paths: &LabeledTree<()>,
+    ) -> Option<(MixedHashTree, Certification)> {
+        None
+    }
+}
+
+/// Tests that the /v3/.../call endpoint responds with `202 ACCEPTED` for
+/// ingress messages that complete execution, but the state reader fails to
+/// read the certified state.
+#[rstest]
+#[case::certified_state_snapshot_unavailable(None)]
+#[case::reading_certified_state_fails(Some(Box::new(FakeCertifiedStateSnapshot) as _))]
+fn test_call_v3_response_when_state_reader_fails(
+    #[case] certified_state_snapshot: Option<
+        Box<dyn CertifiedStateSnapshot<State = ReplicatedState>>,
+    >,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        max_request_size_bytes: 2048,
+        ..Default::default()
+    };
+
+    let mut mock_state_manager = MockStateManager::new();
+    mock_state_manager
+        .expect_get_latest_state()
+        .returning(default_get_latest_state);
+
+    mock_state_manager
+        .expect_read_certified_state()
+        .returning(default_read_certified_state);
+
+    mock_state_manager
+        .expect_latest_certified_height()
+        .returning(default_latest_certified_height);
+
+    // Inject the mock certified state snapshot
+    mock_state_manager
+        .expect_get_certified_state_snapshot()
+        .return_once(move || certified_state_snapshot);
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_state_manager(mock_state_manager)
+        .run();
+
+    let message = IngressMessage::default();
+
+    // Mock ingress filter to always accept the message.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(()))
+        }
+    });
+
+    rt.spawn(async move {
+        let new_ingress = handlers.ingress_rx.recv().await.unwrap();
+        let UnvalidatedArtifactMutation::Insert((message, _)) = new_ingress else {
+            panic!("Expected Insert");
+        };
+        let message_id = message.id();
+
+        // Execute the ingress and certify it.
+        handlers
+            .terminal_state_ingress_messages
+            .send((message_id, Height::from(0)))
+            .unwrap();
+        handlers
+            .certified_height_watcher
+            .send(Height::from(1))
+            .unwrap();
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = test_agent::Call::V3.call(addr, message).await;
+        let status = response.status();
+        let text = response.text().await;
+        assert_eq!(StatusCode::ACCEPTED, status, "{:?}", text.unwrap());
+
+        assert_eq!(
+            "Certified state is not available. Please try /read_state.",
+            text.unwrap()
+        )
+    });
+}
+
+/// Tests that the HTTP endpoint return `INTERNAL_SERVER_ERROR`
+/// if the call handler is unable to submit the ingress message to
+/// P2P.
+#[rstest]
+fn test_call_response_when_p2p_not_running(
+    #[values(test_agent::Call::V2, test_agent::Call::V3)] call_agent: test_agent::Call,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        // We set the timeout to 0, to avoid waiting for subscription.
+        ingress_message_certificate_timeout_seconds: 0,
+        ..Default::default()
+    };
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+
+    // Ingress filter mock that returns empty Ok(()) response.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(()))
+        }
+    });
+
+    // Wait for the endpoint to be healthy.
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        // Drop the P2P receiver to simulate P2P not running.
+        drop(handlers.ingress_rx);
+
+        let response = call_agent.call(addr, IngressMessage::default()).await;
+
+        assert_eq!(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            response.status(),
+            "{:?}",
+            response.text().await
+        );
+
+        assert_eq!(
+            "P2P is not running on this node.",
+            response.text().await.unwrap()
         );
     });
 }

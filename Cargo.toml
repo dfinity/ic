@@ -152,8 +152,9 @@ members = [
     "rs/interfaces/state_manager/mocks",
     "rs/memory_tracker",
     "rs/messaging",
-    "rs/monitoring/adapter_metrics",
-    "rs/monitoring/adapter_metrics_service",
+    "rs/monitoring/adapter_metrics/client",
+    "rs/monitoring/adapter_metrics/server",
+    "rs/monitoring/adapter_metrics/service",
     "rs/monitoring/backtrace",
     "rs/monitoring/context_logger",
     "rs/monitoring/logger",
@@ -424,7 +425,7 @@ opt-level = 3
 # released this can be removed.
 jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
 
-        [workspace.dependencies]
+[workspace.dependencies]
 anyhow = "1.0.80"
 arrayvec = "0.7.4"
 askama = { version = "0.12.1", features = ["serde-json"] }
@@ -455,11 +456,23 @@ clap = { version = "4.4.6", features = ["derive", "string"] }
 cloudflare = { git = "https://github.com/blind-oracle/cloudflare-rs.git", rev = "386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc", feature = [
     "rustls-tls",
 ] }
+criterion = { version = "0.5.1", features = ["html_reports","async_tokio"] }
 crossbeam-channel = "0.5.11"
-curve25519-dalek = { version = "4.1.2", features = ["group", "precomputed-tables"] }
-ed25519-dalek = { version = "2.1.1", features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem", "hazmat"] }
+curve25519-dalek = { version = "4.1.2", features = [
+    "group",
+    "precomputed-tables",
+] }
+ed25519-dalek = { version = "2.1.1", features = [
+    "std",
+    "zeroize",
+    "digest",
+    "batch",
+    "pkcs8",
+    "pem",
+    "hazmat",
+] }
 ethnum = { version = "1.3.2", features = ["serde"] }
-flate2 = "1.0.28"
+flate2 = "1.0.30"
 futures = "0.3.30"
 futures-util = "0.3.30"
 hex = { version = "0.4.3", features = ["serde"] }
@@ -482,7 +495,7 @@ ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
 ic-stable-structures = "0.6.4"
 ic-utils = { version = "0.35.0", features = ["raw"] }
-ic-btc-interface = "0.2.0"
+ic-btc-interface = "0.2.2"
 ic-btc-validation = "0.1.0"
 ic-btc-test-utils = "0.1.0"
 itertools = "0.12.0"
@@ -497,7 +510,7 @@ k256 = { version = "0.13.3", default_features = false, features = [
 ] }
 libnss = "0.5.0"
 local-ip-address = "0.5.6"
-mockall = "0.11.4"
+mockall = "0.12.1"
 mockito = "1.2.0"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
@@ -521,9 +534,11 @@ prost = "0.12.3"
 prost-build = "0.12.3"
 quinn = { version = "0.10.2", features = ["ring"] }
 quinn-udp = "0.5.1"
+rayon = "1.10.0"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rand_chacha = "0.3.1"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
+regex = "1.10.4"
 reqwest = { version = "0.12.3", default-features = false, features = [
     "blocking",
     "http2",
@@ -535,7 +550,11 @@ reqwest = { version = "0.12.3", default-features = false, features = [
     "stream",
 ] }
 rstest = "0.19.0"
-rustls = { version = "0.23.8", default-features = false, features = ["ring", "logging", "tls12"] }
+rustls = { version = "0.23.8", default-features = false, features = [
+    "ring",
+    "logging",
+    "tls12",
+] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.14"
 serde_cbor = "0.11.2"
@@ -557,8 +576,9 @@ syn = { version = "1.0.109", features = ["fold", "full"] }
 sync_wrapper = "1.0.1"
 tempfile = "3.10.1"
 thiserror = "1.0.57"
+threadpool = "1.8.1"
 time = { version = "0.3.36", features = ["formatting"] }
-tokio = { version = "1.37.0", features = ["full"] }
+tokio = { version = "1.38.0", features = ["full"] }
 tokio-metrics = "0.3.1"
 tokio-rustls = { version = "0.26.0", features = ["logging", "ring", "tls12"] }
 tokio-util = { version = "0.7.11", features = ["full"] }

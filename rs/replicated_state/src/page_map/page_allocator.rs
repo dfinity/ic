@@ -68,7 +68,7 @@ impl Clone for PageAllocator {
     }
 }
 
-#[cfg_attr(feature = "cargo-clippy", allow(clippy::new_without_default))]
+#[allow(clippy::new_without_default)]
 impl PageAllocator {
     pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
         Self(Arc::new(PageAllocatorInner::new(fd_factory)))

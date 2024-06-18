@@ -552,7 +552,7 @@ pub(super) mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::idkg::{common::PreSignatureRef, EcdsaPayload, UnmaskedTranscript},
-        crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, AlgorithmId},
+        crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
         SubnetId,
     };
     use idkg::IDkgTranscriptOperationRef;
@@ -1048,9 +1048,15 @@ pub(super) mod tests {
     }
 
     #[test]
-    fn test_matched_quadruples_are_not_purged() {
+    fn test_matched_pre_signatures_are_not_purged_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_matched_pre_signatures_are_not_purged(key_id);
+        }
+    }
+
+    fn test_matched_pre_signatures_are_not_purged(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        let key_id = fake_ecdsa_master_public_key_id();
         let (mut payload, env, _) = set_up(
             &mut rng,
             subnet_test_id(1),
@@ -1067,13 +1073,13 @@ pub(super) mod tests {
             &env,
             &dealers,
             &receivers,
-            AlgorithmId::ThresholdEcdsaSecp256k1,
+            algorithm_for_key_id(&key_id),
             &mut rng,
         );
         let key_transcript2 =
             UnmaskedTranscript::try_from((Height::from(200), &transcript)).unwrap();
 
-        // Create three quadruples, with the current, a different, no key transcript.
+        // Create three pre-signatures, with the current, a different, no key transcript.
         let pre_sig_ids = vec![
             create_available_pre_signature_with_key_transcript(
                 &mut payload,
@@ -1095,7 +1101,7 @@ pub(super) mod tests {
             ),
         ];
 
-        // All three quadruples are matched with a context
+        // All three pre-signatures are matched with a context
         let contexts = BTreeMap::from_iter(pre_sig_ids.into_iter().map(|id| {
             fake_signature_request_context_with_pre_sig(id.id() as u8, key_id.clone(), Some(id))
         }));
@@ -1107,9 +1113,15 @@ pub(super) mod tests {
     }
 
     #[test]
-    fn test_unmatched_quadruples_of_current_key_are_not_purged() {
+    fn test_unmatched_pre_signatures_of_current_key_are_not_purged_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_unmatched_pre_signatures_of_current_key_are_not_purged(key_id);
+        }
+    }
+
+    fn test_unmatched_pre_signatures_of_current_key_are_not_purged(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        let key_id = fake_ecdsa_master_public_key_id();
         let (mut payload, _, _) = set_up(
             &mut rng,
             subnet_test_id(1),
@@ -1118,7 +1130,7 @@ pub(super) mod tests {
         );
         let key_transcript = get_current_unmasked_key_transcript(&payload);
 
-        // Create three quadruples of the current key transcript
+        // Create three pre-signatures of the current key transcript
         for i in 0..3 {
             create_available_pre_signature_with_key_transcript(
                 &mut payload,
@@ -1142,9 +1154,15 @@ pub(super) mod tests {
     }
 
     #[test]
-    fn test_unmatched_quadruples_of_different_key_are_purged() {
+    fn test_unmatched_pre_signatures_of_different_key_are_purged_all_algorithms() {
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            println!("Running test for key ID {key_id}");
+            test_unmatched_pre_signatures_of_different_key_are_purged(key_id);
+        }
+    }
+
+    fn test_unmatched_pre_signatures_of_different_key_are_purged(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        let key_id = fake_ecdsa_master_public_key_id();
         let (mut payload, env, _) = set_up(
             &mut rng,
             subnet_test_id(1),
@@ -1160,13 +1178,13 @@ pub(super) mod tests {
             &env,
             &dealers,
             &receivers,
-            AlgorithmId::ThresholdEcdsaSecp256k1,
+            algorithm_for_key_id(&key_id),
             &mut rng,
         );
         let other_key_transcript =
             UnmaskedTranscript::try_from((Height::from(200), &transcript)).unwrap();
 
-        // Create two quadruples of the other key transcript
+        // Create two pre-signatures of the other key transcript
         let pre_sig_ids = (0..2)
             .map(|i| {
                 create_available_pre_signature_with_key_transcript(

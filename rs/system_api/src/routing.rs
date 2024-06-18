@@ -139,6 +139,14 @@ pub(super) fn resolve_destination(
                 own_subnet,
             ))
         }
+        Ok(Ic00Method::BitcoinGetBlockHeaders) => {
+            let args = BitcoinGetBlockHeaders::decode(payload)?;
+            Ok(route_bitcoin_message(
+                args.network,
+                network_topology,
+                own_subnet,
+            ))
+        }
         Ok(Ic00Method::BitcoinSendTransaction) => {
             let args = BitcoinSendTransactionArgs::decode(payload)?;
 

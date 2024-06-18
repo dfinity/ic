@@ -382,8 +382,8 @@ pub fn print(data: &[u8]) {
 
 pub fn bad_print() {
     unsafe {
-        ic0::debug_print(u32::max_value() - 2, 1);
-        ic0::debug_print(u32::max_value() - 2, 3);
+        ic0::debug_print(u32::MAX - 2, 1);
+        ic0::debug_print(u32::MAX - 2, 3);
     }
 }
 

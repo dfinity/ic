@@ -183,7 +183,7 @@ impl From<&EcdsaPayload> for EcdsaStats {
                     .as_ref()
                     .map(|transcript| &transcript.as_ref().transcript_id);
                 if Some(transcript_id) != current_transcript_id
-                    && payload.idkg_transcripts.get(transcript_id).is_some()
+                    && payload.idkg_transcripts.contains_key(transcript_id)
                 {
                     *key_transcript_created.entry(key_id.clone()).or_default() += 1;
                 }
@@ -1055,17 +1055,18 @@ impl EcdsaTranscriptMetrics {
 }
 
 #[derive(Clone)]
-pub struct EcdsaQuadrupleMetrics {
-    pub quadruple_e2e_latency: Histogram,
+pub struct EcdsaPreSignatureMetrics {
+    pub pre_signature_e2e_latency: HistogramVec,
 }
 
-impl EcdsaQuadrupleMetrics {
+impl EcdsaPreSignatureMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
-            quadruple_e2e_latency: metrics_registry.histogram(
+            pre_signature_e2e_latency: metrics_registry.histogram_vec(
                 "ecdsa_quadruple_e2e_latency",
-                "End to end latency to build the quadruple, in sec",
-                linear_buckets(2.0, 0.5, 60),
+                "End to end latency to build the pre-signature, in sec",
+                linear_buckets(1.0, 0.5, 30),
+                &["key_id"],
             ),
         }
     }

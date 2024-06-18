@@ -615,6 +615,7 @@ prop_compose! {
         ledger_suite_orchestrator_id in proptest::option::of(arb_principal()),
         erc20_helper_contract_address in proptest::option::of(arb_address()),
         last_erc20_scraped_block_number in proptest::option::of(arb_nat()),
+        evm_rpc_id in proptest::option::of(arb_principal()),
     ) -> UpgradeArg {
         UpgradeArg {
             ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
@@ -623,7 +624,8 @@ prop_compose! {
             next_transaction_nonce,
             ledger_suite_orchestrator_id,
             erc20_helper_contract_address: erc20_helper_contract_address.map(|addr| addr.to_string()),
-            last_erc20_scraped_block_number
+            last_erc20_scraped_block_number,
+            evm_rpc_id
         }
     }
 }
@@ -1052,6 +1054,7 @@ fn state_equivalence() {
         skipped_blocks: Default::default(),
         last_transaction_price_estimate: None,
         ledger_suite_orchestrator_id: Some("2s5qh-7aaaa-aaaar-qadya-cai".parse().unwrap()),
+        evm_rpc_id: Some("7hfb6-caaaa-aaaar-qadga-cai".parse().unwrap()),
         ckerc20_tokens,
     };
 

@@ -34,8 +34,10 @@ runs:
         run: |
           set -x +e
 
-          # Todo: remove once fully migtrated to github
-          sudo chown -R 1001:1001 /cache
+          # TODO: remove once fully migtrated to github
+          if [ -e /cache ]; then
+            sudo chown -RL 1001:1001 /cache
+          fi
 
           ${GITHUB_WORKSPACE}/gitlab-ci/src/bazel-ci/main.sh
           BAZEL_EXIT_CODE="$?"

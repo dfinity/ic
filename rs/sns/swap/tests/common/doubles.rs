@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{ledger::ICRC1Ledger, NervousSystemError};
 use ic_nervous_system_common_test_utils::SpyLedger;
@@ -12,8 +12,9 @@ use ic_sns_swap::{
     clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
     environment::CanisterClients,
     pb::v1::{
-        CanisterCallError, SetDappControllersRequest, SetDappControllersResponse,
-        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+        set_dapp_controllers_request::CanisterIds, CanisterCallError, SetDappControllersRequest,
+        SetDappControllersResponse, SettleNeuronsFundParticipationRequest,
+        SettleNeuronsFundParticipationResponse,
     },
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -40,6 +41,21 @@ impl SnsRootClient for ExplodingSnsRootClient {
 #[derive(Debug, PartialEq)]
 pub enum SnsRootClientCall {
     SetDappControllers(SetDappControllersRequest),
+}
+
+impl SnsRootClientCall {
+    pub fn set_dapp_controllers(
+        canisters: Option<Vec<CanisterId>>,
+        controllers: Vec<PrincipalId>,
+    ) -> Self {
+        let request = SetDappControllersRequest {
+            canister_ids: canisters.map(|canisters| CanisterIds {
+                canister_ids: canisters.into_iter().map(|x| x.get()).collect(),
+            }),
+            controller_principal_ids: controllers,
+        };
+        SnsRootClientCall::SetDappControllers(request)
+    }
 }
 
 #[allow(clippy::large_enum_variant)]

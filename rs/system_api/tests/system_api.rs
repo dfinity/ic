@@ -10,7 +10,6 @@ use ic_interfaces::execution_environment::{
     PerformanceCounterType, SubnetAvailableMemory, SystemApi, SystemApiCallId, TrapCode,
 };
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::DataSize;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     testing::CanisterQueuesTesting, CallOrigin, Memory, NetworkTopology, SystemState,
@@ -34,6 +33,7 @@ use ic_types::{
     MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
 };
 use maplit::btreemap;
+use more_asserts::assert_le;
 use std::{
     collections::BTreeSet,
     convert::From,
@@ -1809,8 +1809,8 @@ fn test_save_log_message_keeps_total_log_size_limited() {
         let bytes = vec![b'x'; long_message_size];
         api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, bytes.len(), &bytes);
     }
-    // Expect only one log record to be kept, with the total size kept within the limit.
-    let records = api.canister_log().records();
-    assert_eq!(records.len(), initial_records_number + 1);
-    assert!(records.data_size() <= MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
+    // Expect only one log record to be kept, staying within the size limit.
+    let log = api.canister_log();
+    assert_eq!(log.records().len(), initial_records_number + 1);
+    assert_le!(log.used_space(), MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
 }

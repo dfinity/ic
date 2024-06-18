@@ -8,6 +8,12 @@
   "ckusdc_ledger": {
     "ic": "yfumr-cyaaa-aaaar-qaela-cai"
   },
+  "cklink_index": {
+    "ic": "ri55p-riaaa-aaaar-qaf2a-cai"
+  },
+  "cklink_ledger": {
+    "ic": "r52mc-qaaaa-aaaar-qafzq-cai"
+  },
   "index": {
     "ic": "sh5u2-cqaaa-aaaar-qacna-cai"
   },

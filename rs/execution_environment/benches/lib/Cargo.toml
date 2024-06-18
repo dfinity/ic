@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { workspace = true }
 ic-config = { path = "../../../config" }
 ic-constants = { path = "../../../constants" }
 ic-cycles-account-manager = { path = "../../../cycles_account_manager" }

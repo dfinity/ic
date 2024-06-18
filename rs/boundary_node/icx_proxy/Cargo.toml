@@ -46,7 +46,7 @@ opentelemetry = { workspace = true }
 opentelemetry-prometheus = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 prometheus = { workspace = true }
-regex = "1.3.9"
+regex = { workspace = true }
 reqwest = { workspace = true }
 rustls = { workspace = true }
 rustls-native-certs = "0.7.0"

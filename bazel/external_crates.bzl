@@ -344,7 +344,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.2.0",
             ),
             "criterion": crate.spec(
-                version = "^0.5",
+                version = "^0.5.1",
                 features = [
                     "html_reports",
                     "async_tokio",
@@ -416,7 +416,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "flate2": crate.spec(
-                version = "^1.0.22",
+                version = "^1.0.30",
             ),
             "form_urlencoded": crate.spec(
                 version = "^1.0.0",
@@ -558,7 +558,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "ic-btc-interface": crate.spec(
-                version = "^0.2.0",
+                version = "^0.2.2",
             ),
             "ic-btc-validation": crate.spec(
                 version = "^0.1.0",
@@ -765,7 +765,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.13.0",
             ),
             "mockall": crate.spec(
-                version = "^0.11.4",
+                version = "^0.12.1",
             ),
             "mockito": crate.spec(
                 version = "^1.2.0",
@@ -975,7 +975,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.9.1",
             ),
             "rayon": crate.spec(
-                version = "^1.5.1",
+                version = "^1.10.0",
             ),
             "rcgen": crate.spec(
                 version = "^0.13.1",
@@ -987,7 +987,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8.37",
             ),
             "regex": crate.spec(
-                version = "^1.3.9",
+                version = "^1.10.4",
             ),
             "reqwest_0_11_27": crate.spec(
                 package = "reqwest",
@@ -1265,7 +1265,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.36",
             ),
             "tokio": crate.spec(
-                version = "^1.37.0",
+                version = "^1.38.0",
                 features = [
                     "full",
                 ],

@@ -168,7 +168,7 @@ impl TNet {
         self.version = version.to_string();
         if self.image_url.is_empty() {
             self.image_url = format!(
-                "{}/ic/{}/guest-os/disk-img-dev/disk-img.tar.gz",
+                "{}/ic/{}/guest-os/disk-img-dev/disk-img.tar.zst",
                 *TNET_CDN_URL, self.version
             );
         }
@@ -244,7 +244,7 @@ impl TNet {
         .await?;
 
         debug!("Tnet owner: {}", config_map.name_any());
-        self.unique_name = config_map.metadata.name.clone();
+        self.unique_name.clone_from(&config_map.metadata.name);
         self.owner = config_map;
         self.config_url = Some(format!(
             "{}/{}/{}",
@@ -650,7 +650,7 @@ mod tests {
         assert_eq!(tnet.version, "1.0.0");
         assert_eq!(
             tnet.image_url,
-            "https://download.dfinity.systems/ic/1.0.0/guest-os/disk-img-dev/disk-img.tar.gz"
+            "https://download.dfinity.systems/ic/1.0.0/guest-os/disk-img-dev/disk-img.tar.zst"
         );
     }
 }

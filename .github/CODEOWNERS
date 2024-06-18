@@ -151,8 +151,6 @@ go_deps.bzl               @dfinity/idx
 /rs/memory_tracker/                                     @dfinity/runtime
 /rs/messaging/                                          @dfinity/ic-message-routing-owners
 /rs/monitoring/adapter_metrics/                         @dfinity/networking
-/rs/monitoring/adapter_metrics_server/                  @dfinity/networking
-/rs/monitoring/adapter_metrics_service/                 @dfinity/networking
 /rs/monitoring/backtrace/                               @dfinity/ic-message-routing-owners @dfinity/networking
 /rs/nervous_system/                                     @dfinity/nns-team
 /rs/nns/                                                @dfinity/nns-team
@@ -194,6 +192,8 @@ go_deps.bzl               @dfinity/idx
 /rs/replica/                                            @dfinity/networking
 /rs/replica_tests/                                      @dfinity/execution
 /rs/replicated_state/                                   @dfinity/execution @dfinity/ic-message-routing-owners
+/rs/replicated_state/src/canister_state/queues.rs       @dfinity/ic-message-routing-owners
+/rs/replicated_state/src/canister_state/queues          @dfinity/ic-message-routing-owners
 /rs/replicated_state/src/page_map.rs                    @dfinity/ic-message-routing-owners @dfinity/runtime
 /rs/replicated_state/src/page_map/                      @dfinity/ic-message-routing-owners @dfinity/runtime
 /rs/rosetta-api/                                        @dfinity/finint

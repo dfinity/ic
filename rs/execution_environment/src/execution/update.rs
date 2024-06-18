@@ -308,7 +308,8 @@ impl UpdateHelper {
                 });
 
             if let Some(wasm_memory_limit) = clean_canister.system_state.wasm_memory_limit {
-                if wasm_memory_usage > wasm_memory_limit {
+                // A Wasm memory limit of 0 means unlimited.
+                if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
                     let err = HypervisorError::WasmMemoryLimitExceeded {
                         bytes: wasm_memory_usage,
                         limit: wasm_memory_limit,

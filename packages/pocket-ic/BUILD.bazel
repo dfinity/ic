@@ -12,15 +12,14 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:base64",
     "@crate_index//:hex",
+    "@crate_index//:sha2",
     "@crate_index//:tokio",
     "@crate_index//:tracing",
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
 ]
 
-MACRO_DEPENDENCIES = [
-    "@crate_index//:async-trait",
-]
+MACRO_DEPENDENCIES = []
 
 TEST_DEPENDENCIES = [
     "//rs/universal_canister/lib",

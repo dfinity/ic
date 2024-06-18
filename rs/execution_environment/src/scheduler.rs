@@ -12,7 +12,9 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::{ExecutionRoundType, RegistryExecutionSettings};
+use ic_interfaces::execution_environment::{
+    ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings,
+};
 use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
 };
@@ -1325,9 +1327,9 @@ impl SchedulerImpl {
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
                 state.metadata.heap_delta_estimate = NumBytes::from(0);
-                // `expected_compiled_wasms` will be cleared upon store and load
-                // of a checkpoint because it doesn't exist in the protobuf
-                // metadata, but we make it explicit here anyway.
+                // The set of compiled Wasms must be cleared when taking a
+                // checkpoint to keep it in sync with the protobuf serialization
+                // of `ReplicatedState` which doesn't store this field.
                 state.metadata.expected_compiled_wasms.clear();
 
                 if self.deterministic_time_slicing == FlagStatus::Enabled {
@@ -1416,7 +1418,7 @@ impl Scheduler for SchedulerImpl {
         idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
         idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
         current_round: ExecutionRound,
-        _next_checkpoint_round: Option<ExecutionRound>,
+        _round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
@@ -2366,6 +2368,7 @@ fn get_instructions_limits_for_subnet_message(
             | UpdateSettings
             | BitcoinGetBalance
             | BitcoinGetUtxos
+            | BitcoinGetBlockHeaders
             | BitcoinSendTransaction
             | BitcoinSendTransactionInternal
             | BitcoinGetCurrentFeePercentiles

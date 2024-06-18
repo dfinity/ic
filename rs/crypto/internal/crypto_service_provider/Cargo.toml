@@ -13,7 +13,7 @@ bytes = { workspace = true }
 educe = "0.4"
 futures = { workspace = true }
 hex = { workspace = true }
-ic-adapter-metrics = { path = "../../../monitoring/adapter_metrics" }
+ic-adapter-metrics-client = { path = "../../../monitoring/adapter_metrics/client" }
 ic-config = { path = "../../../config" }
 ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "../crypto_lib/basic_sig/ecdsa_secp256k1" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../crypto_lib/basic_sig/ecdsa_secp256r1" }
@@ -42,7 +42,7 @@ parking_lot = "0.12.1"
 prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-rayon = "1.8"
+rayon = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }

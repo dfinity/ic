@@ -292,6 +292,7 @@ fn canister_manager_config(
         // 10 MiB should be enough for all the tests.
         NumBytes::from(10 * 1024 * 1024),
         SchedulerConfig::application_subnet().upload_wasm_chunk_instructions,
+        ic_config::embedders::Config::default().wasm_max_size,
     )
 }
 
@@ -3530,7 +3531,10 @@ fn install_code_preserves_system_state_and_scheduler_state() {
 
     // 3. UPGRADE
     // reset certified_data cleared by install and reinstall in the previous steps
-    original_canister.system_state.certified_data = certified_data.clone();
+    original_canister
+        .system_state
+        .certified_data
+        .clone_from(&certified_data);
     state
         .canister_state_mut(&canister_id)
         .unwrap()
@@ -3893,7 +3897,10 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         .unwrap()
         .system_state
         .wasm_chunk_store
-        .insert_chunk(&[0x41; 200])
+        .insert_chunk(
+            canister_manager.config.wasm_chunk_store_max_size,
+            &[0x41; 200],
+        )
         .unwrap();
 
     assert!(state
