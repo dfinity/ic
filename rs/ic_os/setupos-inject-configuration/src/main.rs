@@ -229,7 +229,7 @@ async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Er
     };
 
     if let Some(nns_url) = &cfg.nns_url {
-        deployment_json.nns.url = vec![nns_url.clone()];
+        deployment_json.nns.url = nns_url.clone();
     }
 
     if let Some(memory) = cfg.memory_gb {
