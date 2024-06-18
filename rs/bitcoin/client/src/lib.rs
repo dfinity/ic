@@ -4,7 +4,7 @@ use crate::metrics::{
     Metrics, LABEL_GET_SUCCESSORS, LABEL_REQUEST_TYPE, LABEL_SEND_TRANSACTION, LABEL_STATUS,
     OK_LABEL, REQUESTS_LABEL_NAMES, UNKNOWN_LABEL,
 };
-use ic_adapter_metrics::AdapterMetrics;
+use ic_adapter_metrics_client::AdapterMetrics;
 use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_btc_service::{
     btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,

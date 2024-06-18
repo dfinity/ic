@@ -3,13 +3,6 @@ use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::io::Read;
 use std::sync::Arc;
 
-fn make_module_too_large_error(max_size: NumBytes) -> WasmValidationError {
-    WasmValidationError::DecodingError(format!(
-        "Wasm module is too large, it can be at most {} bytes",
-        max_size,
-    ))
-}
-
 enum WasmEncoding {
     Wasm,
     Gzip,
@@ -74,7 +67,10 @@ pub fn decode_wasm(
     let module_bytes = module.as_slice();
     let (encoding, uncompressed_size) = wasm_encoding_and_size(module_bytes)?;
     if uncompressed_size as u64 > max_size.get() {
-        return Err(make_module_too_large_error(max_size));
+        return Err(WasmValidationError::ModuleTooLarge {
+            size: uncompressed_size as u64,
+            allowed: max_size.get(),
+        });
     }
 
     match encoding {
