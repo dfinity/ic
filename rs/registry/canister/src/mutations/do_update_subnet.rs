@@ -297,6 +297,7 @@ macro_rules! maybe_set_option {
 // skipped, otherwise it overwrites the corresponding value in the
 // `SubnetRecord`.
 #[allow(clippy::cognitive_complexity)]
+#[allow(unused_variables)]
 fn merge_subnet_record(
     mut subnet_record: SubnetRecordPb,
     payload: UpdateSubnetPayload,
@@ -452,7 +453,6 @@ mod tests {
             replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
-            gossip_config: None,
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
@@ -537,7 +537,6 @@ mod tests {
                 replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 8,
                 dkg_dealings_per_block: 1,
-                gossip_config: None,
                 start_as_nns: true,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: true,
@@ -574,7 +573,6 @@ mod tests {
             replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
-            gossip_config: None,
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
@@ -641,7 +639,6 @@ mod tests {
                 replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 2,
                 dkg_dealings_per_block: 1,
-                gossip_config: None,
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,

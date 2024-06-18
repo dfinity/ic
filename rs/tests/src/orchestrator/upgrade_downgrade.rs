@@ -43,7 +43,6 @@ use ic_management_canister_types::EcdsaKeyId;
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, SubnetId};
-use k256::ecdsa::VerifyingKey;
 use slog::{info, Logger};
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -296,7 +295,7 @@ fn get_ecdsa_canister_and_key<'a>(
     agent: &'a Agent,
     subnet_type: SubnetType,
     key_ids: Vec<EcdsaKeyId>,
-) -> (MessageCanister<'a>, BTreeMap<EcdsaKeyId, VerifyingKey>) {
+) -> (MessageCanister<'a>, BTreeMap<EcdsaKeyId, Vec<u8>>) {
     let logger = env.logger();
     let nns_canister = block_on(MessageCanister::new(
         agent,
@@ -313,7 +312,7 @@ fn get_ecdsa_canister_and_key<'a>(
         enable_ecdsa_signing_on_subnet(nns_node, &nns_canister, subnet_id, key_ids, &logger);
 
     for (key_id, public_key) in &public_keys {
-        run_ecdsa_signature_test(&nns_canister, &logger, key_id.clone(), *public_key);
+        run_ecdsa_signature_test(&nns_canister, &logger, key_id.clone(), public_key.clone());
     }
 
     (nns_canister, public_keys)
@@ -326,7 +325,7 @@ fn upgrade(
     nns_node: &IcNodeSnapshot,
     upgrade_version: &str,
     subnet_type: SubnetType,
-    ecdsa_canister_key: Option<&(MessageCanister, BTreeMap<EcdsaKeyId, VerifyingKey>)>,
+    ecdsa_canister_key: Option<&(MessageCanister, BTreeMap<EcdsaKeyId, Vec<u8>>)>,
 ) -> (IcNodeSnapshot, Principal, String) {
     let logger = env.logger();
     let (subnet_id, subnet_node, faulty_node, redundant_nodes) =
@@ -423,7 +422,7 @@ fn upgrade(
 
     if let Some((canister, public_keys)) = ecdsa_canister_key {
         for (key_id, public_key) in public_keys {
-            run_ecdsa_signature_test(canister, &logger, key_id.clone(), *public_key);
+            run_ecdsa_signature_test(canister, &logger, key_id.clone(), public_key.clone());
         }
     }
 

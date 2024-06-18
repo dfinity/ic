@@ -105,6 +105,11 @@ impl SwapBuilder {
         self
     }
 
+    pub fn with_sns_root_canister_id(mut self, sns_root_canister_id: CanisterId) -> Self {
+        self.sns_root_canister_id = sns_root_canister_id;
+        self
+    }
+
     pub fn with_lifecycle(mut self, lifecycle: Lifecycle) -> Self {
         self.lifecycle = lifecycle;
         self

@@ -3832,18 +3832,12 @@ prop_compose! {
         last_round: usize,
     )
     (
-        a in -100..120,
+        a in -100_i16..120_i16,
         round in 0..=last_round,
     ) -> (ComputeAllocation, ExecutionRound) {
         // Clamp `a` to [0, 100], but with high probability for 0 and somewhat
         // higher probability for 100.
-        let a = if a < 0 {
-            0
-        } else if a > 100 {
-            100
-        } else {
-            a
-        };
+        let a = a.clamp(0, 100);
 
         (
             ComputeAllocation::try_from(a as u64).unwrap(),

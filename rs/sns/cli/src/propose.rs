@@ -176,13 +176,8 @@ pub fn exec(args: ProposeArgs) {
 }
 
 fn confirmation_messages(proposal: &Proposal) -> Vec<String> {
-    let canisters = match &proposal.action {
-        Some(Action::CreateServiceNervousSystem(csns)) => csns
-            .dapp_canisters
-            .iter()
-            .filter_map(|canister| canister.id.as_ref())
-            .map(|id| format!("  - {}", id))
-            .join("\n"),
+    let csns = match &proposal.action {
+        Some(Action::CreateServiceNervousSystem(csns)) => csns,
         _ => {
             eprintln!(
                 "Internal error: Somehow a proposal was made not of type CreateServiceNervousSystem",
@@ -190,13 +185,30 @@ fn confirmation_messages(proposal: &Proposal) -> Vec<String> {
             std::process::exit(1);
         }
     };
-    let dapp_canister_controllers = format!(
-        r#"A CreateServiceNervousSystem proposal will be submitted.
+    let fallback_controllers = csns
+        .fallback_controller_principal_ids
+        .iter()
+        .map(|id| format!("  - {}", id))
+        .join("\n");
+    let dapp_canister_controllers = if !csns.dapp_canisters.is_empty() {
+        let canisters = csns
+            .dapp_canisters
+            .iter()
+            .filter_map(|canister| canister.id.as_ref())
+            .map(|id| format!("  - {}", id))
+            .join("\n");
+        format!(
+            r#"A CreateServiceNervousSystem proposal will be submitted.
 If adopted, this proposal will create an SNS, which will control these canisters:
 {canisters}
-These canisters must have NNS root as a co-controller when the proposal is adopted, otherwise the SNS launch will be aborted.
-Otherwise, when the proposal is adopted, the SNS will be created and the SNS will take sole control over those canisters."#
-    );
+If these canisters do not have NNS root as a co-controller when the proposal is adopted, the SNS launch will be aborted.
+Otherwise, when the proposal is adopted, the SNS will be created and the SNS and NNS will have sole control over those canisters.
+Then, if the swap completes successfully, the SNS will take sole control. If the swap fails, control will be given to the fallback controllers:
+{fallback_controllers}"#
+        )
+    } else {
+        r#"A CreateServiceNervousSystem proposal will be submitted. If adopted, this proposal will create an SNS that controls no canisters."#.to_string()
+    };
 
     let disallowed_types = Mode::proposal_types_disallowed_in_pre_initialization_swap()
         .into_iter()
@@ -487,14 +499,14 @@ mod test {
             serde_yaml::from_str::<SnsConfigurationFile>(&contents).unwrap();
 
         // Step 2: Call code under test.
-        let observed_create_service_nervous_system = sns_configuration_file
+        let create_service_nervous_system = sns_configuration_file
             .try_convert_to_create_service_nervous_system(test_root_dir)
             .unwrap();
 
         let proposal = Proposal {
             title: Some("Test Proposal".to_string()),
             action: Some(Action::CreateServiceNervousSystem(
-                observed_create_service_nervous_system,
+                create_service_nervous_system,
             )),
             summary: "Test Proposal Summary".to_string(),
             url: "https://example.com".to_string(),
@@ -506,14 +518,54 @@ mod test {
 If adopted, this proposal will create an SNS, which will control these canisters:
   - c2n4r-wni5m-dqaaa-aaaap-4ai
   - ucm27-3lxwy-faaaa-aaaap-4ai
-These canisters must have NNS root as a co-controller when the proposal is adopted, otherwise the SNS launch will be aborted.
-Otherwise, when the proposal is adopted, the SNS will be created and the SNS will take sole control over those canisters."#,
+If these canisters do not have NNS root as a co-controller when the proposal is adopted, the SNS launch will be aborted.
+Otherwise, when the proposal is adopted, the SNS will be created and the SNS and NNS will have sole control over those canisters.
+Then, if the swap completes successfully, the SNS will take sole control. If the swap fails, control will be given to the fallback controllers:
+  - 5zxxw-63ouu-faaaa-aaaap-4ai"#,
             r#"After the proposal is adopted, a swap is started. While the swap is running, the SNS will be in a restricted mode.
 Within this restricted mode, some proposal actions will not be allowed:
   - Manage nervous system parameters
   - Transfer SNS treasury funds
+  - Mint SNS tokens
+  - Upgrade SNS controlled canister
+  - Register dapp canisters
+  - Deregister Dapp Canisters
 Once the swap is completed, the SNS will be in normal mode and these proposal actions will become available again."#,
         ];
         assert_eq!(observed_messages, expected_messages);
+    }
+
+    #[test]
+    fn confirmation_messages_no_dapp_canisters() {
+        // Step 1: Prepare the world.
+        let test_root_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let test_root_dir = Path::new(&test_root_dir);
+
+        let contents: String =
+            std::fs::read_to_string(test_root_dir.join("test_sns_init_v2.yaml")).unwrap();
+        let sns_configuration_file =
+            serde_yaml::from_str::<SnsConfigurationFile>(&contents).unwrap();
+
+        // Step 2: Call code under test.
+        let create_service_nervous_system = {
+            let mut create_service_nervous_system = sns_configuration_file
+                .try_convert_to_create_service_nervous_system(test_root_dir)
+                .unwrap();
+            create_service_nervous_system.dapp_canisters = vec![];
+            create_service_nervous_system
+        };
+
+        let proposal = Proposal {
+            title: Some("Test Proposal".to_string()),
+            action: Some(Action::CreateServiceNervousSystem(
+                create_service_nervous_system,
+            )),
+            summary: "Test Proposal Summary".to_string(),
+            url: "https://example.com".to_string(),
+        };
+
+        let observed_message = &confirmation_messages(&proposal)[0];
+        let expected_message = r#"A CreateServiceNervousSystem proposal will be submitted. If adopted, this proposal will create an SNS that controls no canisters."#;
+        assert_eq!(observed_message, expected_message);
     }
 }

@@ -33,6 +33,10 @@ impl EthRpcClient {
     }
 
     pub const fn from_state(state: &State) -> Self {
+        if state.evm_rpc_id.is_some() {
+            //TODO XC-131: use EVM-RPC canister to retrieve last finalized block
+            unimplemented!();
+        }
         Self::new(state.ethereum_network())
     }
 

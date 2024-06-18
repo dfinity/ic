@@ -266,7 +266,7 @@ mod tests {
         // This test verifies that the structures containing BoundedVec correctly
         // throw an error when the total data size exceeds the maximum allowed.
         const MAX_ALLOWED_TOTAL_DATA_SIZE: usize = 100;
-        const ELEMENT_SIZE: usize = 7;
+        const ELEMENT_SIZE: usize = 37;
         // Assert element size is not a multiple of total size.
         assert_ne!(MAX_ALLOWED_TOTAL_DATA_SIZE % ELEMENT_SIZE, 0);
         for aimed_total_size in 64..=256 {
@@ -274,7 +274,7 @@ mod tests {
             type BoundedSize =
                 BoundedVec<UNBOUNDED, MAX_ALLOWED_TOTAL_DATA_SIZE, UNBOUNDED, Vec<u8>>;
             impl Payload<'_> for BoundedSize {}
-            let element = vec![42; ELEMENT_SIZE];
+            let element = vec![b'a'; ELEMENT_SIZE - std::mem::size_of::<Vec<u8>>()];
             let elements_count = aimed_total_size / element.data_size();
             let data = BoundedSize::new(vec![element; elements_count]);
             let actual_total_size = data.get().data_size();
@@ -314,7 +314,7 @@ mod tests {
             type BoundedSize =
                 BoundedVec<UNBOUNDED, UNBOUNDED, MAX_ALLOWED_ELEMENT_DATA_SIZE, Vec<u8>>;
             impl Payload<'_> for BoundedSize {}
-            let element = vec![42; element_size];
+            let element = vec![b'a'; element_size - std::mem::size_of::<Vec<u8>>()];
             let data = BoundedSize::new(vec![element; 42]);
 
             // Act.
