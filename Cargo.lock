@@ -5041,7 +5041,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-adapter-metrics"
+name = "ic-adapter-metrics-client"
 version = "0.9.0"
 dependencies = [
  "ic-adapter-metrics-service",
@@ -5531,7 +5531,7 @@ dependencies = [
 name = "ic-btc-adapter-client"
 version = "0.9.0"
 dependencies = [
- "ic-adapter-metrics",
+ "ic-adapter-metrics-client",
  "ic-async-utils",
  "ic-btc-service",
  "ic-btc-types-internal",
@@ -6780,7 +6780,7 @@ dependencies = [
  "educe",
  "futures",
  "hex",
- "ic-adapter-metrics",
+ "ic-adapter-metrics-client",
  "ic-config",
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
@@ -8066,7 +8066,7 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "futures",
- "ic-adapter-metrics",
+ "ic-adapter-metrics-client",
  "ic-async-utils",
  "ic-config",
  "ic-error-types",
@@ -9062,7 +9062,7 @@ name = "ic-metrics"
 version = "0.9.0"
 dependencies = [
  "futures",
- "ic-adapter-metrics",
+ "ic-adapter-metrics-client",
  "ic-logger",
  "libc",
  "procfs 0.9.1",

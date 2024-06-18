@@ -6,6 +6,12 @@ use super::{
 };
 use crate::{
     common::{into_cbor, Cbor},
+    metrics::{
+        HttpHandlerMetrics, CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
+        CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
+        CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
+        CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT,
+    },
     HttpError,
 };
 use axum::{
@@ -16,7 +22,9 @@ use axum::{
 };
 use http::Request;
 use hyper::StatusCode;
-use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path};
+use ic_crypto_tree_hash::{
+    sparse_labeled_tree_from_paths, Label, LookupStatus, MixedHashTree, Path,
+};
 use ic_error_types::UserError;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn};
@@ -101,6 +109,7 @@ impl From<IngressError> for CallV3Response {
 pub struct CallServiceV3 {
     ingress_watcher_handle: IngressWatcherHandle,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    metrics: HttpHandlerMetrics,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ingress_message_certificate_timeout_seconds: u64,
     call_handler: IngressValidator,
@@ -114,6 +123,7 @@ impl CallServiceV3 {
     pub(crate) fn new_router(
         call_handler: IngressValidator,
         ingress_watcher_handle: IngressWatcherHandle,
+        metrics: HttpHandlerMetrics,
         ingress_message_certificate_timeout_seconds: u64,
         delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -121,6 +131,7 @@ impl CallServiceV3 {
         let call_service = Self {
             delegation_from_nns,
             ingress_watcher_handle,
+            metrics,
             ingress_message_certificate_timeout_seconds,
             call_handler,
             state_reader,
@@ -138,6 +149,7 @@ impl CallServiceV3 {
     pub fn new_service(
         call_handler: IngressValidator,
         ingress_watcher_handle: IngressWatcherHandle,
+        metrics: HttpHandlerMetrics,
         ingress_message_certificate_timeout_seconds: u64,
         delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -145,6 +157,7 @@ impl CallServiceV3 {
         let router = Self::new_router(
             call_handler,
             ingress_watcher_handle,
+            metrics,
             ingress_message_certificate_timeout_seconds,
             delegation_from_nns,
             state_reader,
@@ -159,6 +172,7 @@ async fn call_sync_v3(
     State(CallServiceV3 {
         call_handler,
         ingress_watcher_handle,
+        metrics,
         ingress_message_certificate_timeout_seconds,
         state_reader,
         delegation_from_nns,
@@ -187,7 +201,10 @@ async fn call_sync_v3(
         Ok(Ok(message_subscriber)) => Ok(message_subscriber),
         Ok(Err(SubscriptionError::DuplicateSubscriptionError)) => {
             // TODO: At this point we could return early without submitting the ingress message.
-            Err("Duplicate request. Message is already being tracked and executed.")
+            Err((
+                "Duplicate request. Message is already being tracked and executed.",
+                CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
+            ))
         }
         Ok(Err(SubscriptionError::IngressWatcherNotRunning { error_message })) => {
             // TODO: Send a warning or notification.
@@ -196,14 +213,20 @@ async fn call_sync_v3(
                 log,
                 "Error while waiting for subscriber of ingress message: {}", error_message
             );
-            Err("Could not track the ingress message. Please try /read_state for the status.")
+            Err((
+                "Could not track the ingress message. Please try /read_state for the status.",
+                CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
+            ))
         }
         Err(_) => {
             warn!(
                 log,
                 "Timed out while submitting a certification subscription.";
             );
-            Err("Could not track the ingress message. Please try /read_state for the status.")
+            Err((
+                "Could not track the ingress message. Please try /read_state for the status.",
+                CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT,
+            ))
         }
     };
 
@@ -216,7 +239,11 @@ async fn call_sync_v3(
     // From this point on we only return a certificate or `Accepted 202``.
     let certification_subscriber = match certification_subscriber {
         Ok(certification_subscriber) => certification_subscriber,
-        Err(reason) => {
+        Err((reason, metric_label)) => {
+            metrics
+                .call_v3_early_response_trigger_total
+                .with_label_values(&[metric_label])
+                .inc();
             return CallV3Response::Accepted(reason);
         }
     };
@@ -228,6 +255,10 @@ async fn call_sync_v3(
     {
         Ok(()) => (),
         Err(_) => {
+            metrics
+                .call_v3_early_response_trigger_total
+                .with_label_values(&[CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT])
+                .inc();
             return CallV3Response::Accepted(
                 "Message did not complete execution and certification within the replica defined timeout.",
             );
@@ -249,8 +280,10 @@ async fn call_sync_v3(
 
     // We always add time path to comply with the IC spec.
     let time_path = Path::from(Label::from("time"));
-    let request_status_path =
-        Path::from(vec![Label::from("request_status"), Label::from(message_id)]);
+    let request_status_path = Path::from(vec![
+        Label::from("request_status"),
+        Label::from(message_id.clone()),
+    ]);
 
     let tree: ic_crypto_tree_hash::LabeledTree<()> =
         sparse_labeled_tree_from_paths(&[time_path, request_status_path])
@@ -261,6 +294,23 @@ async fn call_sync_v3(
             "Certified state is not available. Please try /read_state.",
         );
     };
+
+    {
+        let status_path = [&b"request_status"[..], message_id.as_ref(), &b"status"[..]];
+
+        let status_label = match tree.lookup(&status_path) {
+            LookupStatus::Found(MixedHashTree::Leaf(status)) => String::from_utf8(status.clone())
+                .unwrap_or_else(|_| "invalid_utf8_status".to_string()),
+            // This should never happen. Otherwise the tree is not following the spec.
+            LookupStatus::Found(_) => "Status not a leaf".to_string(),
+            LookupStatus::Absent | LookupStatus::Unknown => "unknown".to_string(),
+        };
+
+        metrics
+            .call_v3_certificate_status_total
+            .with_label_values(&[&status_label])
+            .inc();
+    }
 
     let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
     let signature = certification.signed.signature.signature.get().0;
