@@ -30,7 +30,8 @@ anchors:
     if: ${{ vars.RUN_CI == 'true' }}
   dind-large-setup: &dind-large-setup
     runs-on:
-      group: dind-large
+      labels: dind-runner-large
+      group: ln1
     container:
       <<: *image
     timeout-minutes: 90
