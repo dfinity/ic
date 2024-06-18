@@ -1,3 +1,5 @@
+# please build stuff
+
 load("@bazel_gazelle//:def.bzl", "gazelle")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
 
