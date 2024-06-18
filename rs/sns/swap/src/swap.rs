@@ -1345,12 +1345,45 @@ impl Swap {
             .await)
     }
 
+    /// Calls SNS Root's set_dapp_controllers with SNS Root's principal id,
+    /// giving SNS Root sole control.
+    pub async fn take_sole_control_of_dapp_controllers(
+        &self,
+        sns_root_client: &mut impl SnsRootClient,
+    ) -> Result<Result<SetDappControllersResponse, CanisterCallError>, String> {
+        let sns_root_principal_id = self.init()?.sns_root()?.get();
+        Ok(sns_root_client
+            .set_dapp_controllers(SetDappControllersRequest {
+                canister_ids: None,
+                controller_principal_ids: vec![sns_root_principal_id],
+            })
+            .await)
+    }
+
     /// Calls restore_dapp_controllers() and handles errors for finalize
     async fn restore_dapp_controllers_for_finalize(
         &self,
         sns_root_client: &mut impl SnsRootClient,
     ) -> SetDappControllersCallResult {
         let result = self.restore_dapp_controllers(sns_root_client).await;
+
+        match result {
+            Ok(result) => result.into(),
+            Err(err_message) => {
+                log!(ERROR, "Halting set_dapp_controllers(), {:?}", err_message);
+                SetDappControllersCallResult { possibility: None }
+            }
+        }
+    }
+
+    /// Calls take_sole_control_of_dapp_controllers() and handles errors for finalize
+    async fn take_sole_control_of_dapp_controllers_for_finalize(
+        &self,
+        sns_root_client: &mut impl SnsRootClient,
+    ) -> SetDappControllersCallResult {
+        let result = self
+            .take_sole_control_of_dapp_controllers(sns_root_client)
+            .await;
 
         match result {
             Ok(result) => result.into(),
@@ -1531,6 +1564,15 @@ impl Swap {
         finalize_swap_response.set_set_mode_call_result(
             Self::set_sns_governance_to_normal_mode(environment.sns_governance_mut()).await,
         );
+
+        // The following step is non-critical, so we'll do it after we set
+        // governance to normal mode, but only if there were no errors.
+        if !finalize_swap_response.has_error_message() {
+            finalize_swap_response.set_set_dapp_controllers_result(
+                self.take_sole_control_of_dapp_controllers_for_finalize(environment.sns_root_mut())
+                    .await,
+            );
+        }
 
         finalize_swap_response
     }

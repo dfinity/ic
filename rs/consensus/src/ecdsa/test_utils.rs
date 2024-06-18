@@ -137,14 +137,15 @@ pub fn fake_completed_signature_request_context(
     key_id: MasterPublicKeyId,
     pre_signature_id: PreSigId,
 ) -> (CallbackId, SignWithThresholdContext) {
-    fake_signature_request_context_from_id(
+    let (_, context) = fake_signature_request_context_from_id(
         key_id,
         &RequestId {
             pre_signature_id,
             pseudo_random_id: [id; 32],
             height: Height::from(1),
         },
-    )
+    );
+    (CallbackId::from(id as u64), context)
 }
 
 pub fn fake_signature_request_context_from_id(

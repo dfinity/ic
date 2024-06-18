@@ -212,6 +212,10 @@ impl governance::Mode {
         vec![
             NervousSystemFunction::manage_nervous_system_parameters(),
             NervousSystemFunction::transfer_sns_treasury_funds(),
+            NervousSystemFunction::mint_sns_tokens(),
+            NervousSystemFunction::upgrade_sns_controlled_canister(),
+            NervousSystemFunction::register_dapp_canisters(),
+            NervousSystemFunction::deregister_dapp_canisters(),
         ]
     }
 
@@ -2994,15 +2998,18 @@ pub(crate) mod tests {
             Action,      // ExecuteGenericNervousSystemFunction, but target is not one of the distinguished canisters.
         ) = {
             let allowed_in_pre_initialization_swap = vec! [
-                Action::Motion                             (Default::default()),
-                Action::UpgradeSnsControlledCanister       (Default::default()),
-                Action::AddGenericNervousSystemFunction    (Default::default()),
-                Action::RemoveGenericNervousSystemFunction (Default::default()),
-            ];
+                Action::Motion(Default::default()),
+                Action::AddGenericNervousSystemFunction(Default::default()),
+                Action::RemoveGenericNervousSystemFunction(Default::default()),
+            ]; 
 
             let disallowed_in_pre_initialization_swap = vec! [
                 Action::ManageNervousSystemParameters(Default::default()),
-                Action::TransferSnsTreasuryFunds(Default::default())
+                Action::TransferSnsTreasuryFunds(Default::default()),
+                Action::MintSnsTokens(Default::default()),
+                Action::UpgradeSnsControlledCanister(Default::default()),
+                Action::RegisterDappCanisters(Default::default()),
+                Action::DeregisterDappCanisters(Default::default()),
             ];
 
             // Conditionally allow: No targeting SNS canisters.
