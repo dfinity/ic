@@ -24,7 +24,8 @@ jobs:
   bazel-build-all-no-cache:
     name: Bazel Build All No Cache
     runs-on:
-      group: dind-large
+      labels: dind-runner-large
+      group: ln1
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 120
@@ -45,7 +46,8 @@ jobs:
   bazel-system-test-hourly:
     name: Bazel System Tests Hourly
     runs-on:
-      group: dind-large
+      labels: dind-runner-large
+      group: ln1
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 120
@@ -70,7 +72,8 @@ jobs:
   bazel-test-coverage:
     name: Bazel Test Coverage
     runs-on:
-      group: dind-large
+      labels: dind-runner-large
+      group: ln1
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 120
