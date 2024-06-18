@@ -38,6 +38,7 @@ env:
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
   BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
+  PYTHONPATH: "${{ github.workspace }}/gitlab-ci/src:${{ github.workspace }}/gitlab-ci/src/dependencies"
 jobs:
   bazel-test-all:
     name: Bazel Test All
@@ -228,6 +229,7 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
+          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
           pytest --ignore=gitlab_config/ --ignore=git_changes/ -v -o junit_family=xunit1 \
