@@ -7415,6 +7415,28 @@ fn wasm_memory_limit_is_enforced_in_post_upgrade() {
 }
 
 #[test]
+fn wasm_memory_limit_is_enforced_with_static_memory_in_post_upgrade() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_post_upgrade")
+            )
+            (memory 10)
+        )"#;
+
+    let canister_id = test.canister_from_wat(wat).unwrap();
+
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1))
+        .unwrap();
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    // The post-upgrade is expected to fail.
+    let err = test.upgrade_canister(canister_id, wasm).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}
+
+#[test]
 fn wasm_memory_limit_is_enforced_in_init() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
@@ -7423,6 +7445,28 @@ fn wasm_memory_limit_is_enforced_in_init() {
                 (drop (memory.grow (i32.const 10)))
             )
             (memory 0)
+        )"#;
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1))
+        .unwrap();
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    // The canister init is expected to fail.
+    let err = test.install_canister(canister_id, wasm).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}
+
+#[test]
+fn wasm_memory_limit_is_enforced_with_static_memory_in_init() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_init")
+            )
+            (memory 10)
         )"#;
 
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
