@@ -526,6 +526,10 @@ Then, if the swap completes successfully, the SNS will take sole control. If the
 Within this restricted mode, some proposal actions will not be allowed:
   - Manage nervous system parameters
   - Transfer SNS treasury funds
+  - Mint SNS tokens
+  - Upgrade SNS controlled canister
+  - Register dapp canisters
+  - Deregister Dapp Canisters
 Once the swap is completed, the SNS will be in normal mode and these proposal actions will become available again."#,
         ];
         assert_eq!(observed_messages, expected_messages);
