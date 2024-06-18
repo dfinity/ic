@@ -42,6 +42,7 @@ env:
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
   BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
+  PYTHONPATH: "${{ github.workspace }}/gitlab-ci/src:${{ github.workspace }}/gitlab-ci/src/dependencies"
 
 anchors:
   image: &image
