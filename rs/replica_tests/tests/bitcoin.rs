@@ -505,6 +505,15 @@ fn test_canister_routing(env: StateMachine, networks: Vec<BitcoinNetwork>) {
                 .encode(),
             ),
             (
+                "bitcoin_get_block_headers",
+                BitcoinGetBlockHeadersArgs {
+                    network,
+                    start_height: 0,
+                    end_height: None,
+                }
+                .encode(),
+            ),
+            (
                 "bitcoin_get_current_fee_percentiles",
                 BitcoinGetCurrentFeePercentilesArgs { network }.encode(),
             ),
@@ -652,6 +661,15 @@ fn requests_are_rejected_if_no_bitcoin_canisters_are_set() {
                     network,
                     address: String::from(""),
                     filter: None,
+                }
+                .encode(),
+            ),
+            (
+                "bitcoin_get_block_headers",
+                BitcoinGetBlockHeadersArgs {
+                    network,
+                    start_height: 0,
+                    end_height: None,
                 }
                 .encode(),
             ),
