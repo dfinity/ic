@@ -424,7 +424,7 @@ opt-level = 3
 # released this can be removed.
 jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
 
-        [workspace.dependencies]
+[workspace.dependencies]
 anyhow = "1.0.80"
 arrayvec = "0.7.4"
 askama = { version = "0.12.1", features = ["serde-json"] }
@@ -456,8 +456,19 @@ cloudflare = { git = "https://github.com/blind-oracle/cloudflare-rs.git", rev = 
     "rustls-tls",
 ] }
 crossbeam-channel = "0.5.11"
-curve25519-dalek = { version = "4.1.2", features = ["group", "precomputed-tables"] }
-ed25519-dalek = { version = "2.1.1", features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem", "hazmat"] }
+curve25519-dalek = { version = "4.1.2", features = [
+    "group",
+    "precomputed-tables",
+] }
+ed25519-dalek = { version = "2.1.1", features = [
+    "std",
+    "zeroize",
+    "digest",
+    "batch",
+    "pkcs8",
+    "pem",
+    "hazmat",
+] }
 ethnum = { version = "1.3.2", features = ["serde"] }
 flate2 = "1.0.28"
 futures = "0.3.30"
@@ -482,7 +493,7 @@ ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
 ic-stable-structures = "0.6.4"
 ic-utils = { version = "0.35.0", features = ["raw"] }
-ic-btc-interface = "0.2.0"
+ic-btc-interface = "0.2.2"
 ic-btc-validation = "0.1.0"
 ic-btc-test-utils = "0.1.0"
 itertools = "0.12.0"
@@ -535,7 +546,11 @@ reqwest = { version = "0.12.3", default-features = false, features = [
     "stream",
 ] }
 rstest = "0.19.0"
-rustls = { version = "0.23.8", default-features = false, features = ["ring", "logging", "tls12"] }
+rustls = { version = "0.23.8", default-features = false, features = [
+    "ring",
+    "logging",
+    "tls12",
+] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.14"
 serde_cbor = "0.11.2"
