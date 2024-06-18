@@ -36,18 +36,10 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
-  dind-small-setup: &dind-small-setup
-    runs-on:
-      labels: dind-runner-small
-    container:
-      <<: *image
-    timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}
+    image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
   dind-large-setup: &dind-large-setup
     runs-on:
-      labels: dind-runner-large
-      group: ln1
+      group: dind-large
     container:
       <<: *image
     timeout-minutes: 90
