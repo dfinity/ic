@@ -23,6 +23,9 @@ rust_library(
     crate_name = "utils",
     edition = "2021",
     proc_macro_deps = [],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     deps = DEPENDENCIES,
 )
 

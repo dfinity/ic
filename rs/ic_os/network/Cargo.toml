@@ -3,7 +3,7 @@ name = "network"
 version = "1.0.0"
 edition = "2021"
 
-[dependencies]
+[target.'cfg(target_os = "linux")'.dependencies]
 config = { path = "../config" }
 utils = { path = "../utils" }
 anyhow = { workspace = true }
