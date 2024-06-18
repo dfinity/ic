@@ -3322,11 +3322,13 @@ dependencies = [
 name = "discower_bowndary"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "arc-swap",
  "async-trait",
  "http 1.1.0",
  "ic-agent",
  "rand 0.8.5",
+ "ring 0.17.8",
  "simple_moving_average",
  "thiserror",
  "tokio",
