@@ -407,7 +407,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     #  needs: [bazel-test-all]
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.rosetta-api-release == true }}
+    if: ${{ inputs.rosetta-api-release == true }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
