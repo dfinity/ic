@@ -1,3 +1,4 @@
+use ic00::BitcoinGetBlockHeadersArgs;
 use ic_async_utils::incoming_from_path;
 use ic_base_types::CanisterId;
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
