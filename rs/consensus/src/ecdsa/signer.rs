@@ -69,7 +69,7 @@ enum CombineSigSharesError {
 }
 
 impl CombineSigSharesError {
-    fn is_unsatisifed_reconstruction_threshold(&self) -> bool {
+    fn is_unsatisfied_reconstruction_threshold(&self) -> bool {
         matches!(
             self,
             CombineSigSharesError::Ecdsa(
@@ -710,7 +710,7 @@ impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
                     .payload_metrics_inc("signatures_completed", None);
                 Some(signature)
             }
-            Err(err) if err.is_unsatisifed_reconstruction_threshold() => None,
+            Err(err) if err.is_unsatisfied_reconstruction_threshold() => None,
             Err(err) => {
                 warn!(
                     self.log,
