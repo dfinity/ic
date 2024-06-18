@@ -17,8 +17,8 @@ use ic_management_canister_types::{EcdsaKeyId, SetupInitialDKGArgs, SetupInitial
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig, EcdsaConfig, GossipConfig,
-        SubnetFeatures as pbSubnetFeatures, SubnetRecord,
+        CatchUpPackageContents, ChainKeyConfig, EcdsaConfig, SubnetFeatures as pbSubnetFeatures,
+        SubnetRecord,
     },
 };
 use ic_registry_keys::{
@@ -332,17 +332,6 @@ impl From<CreateSubnetPayload> for SubnetRecord {
             initial_notary_delay_millis: val.initial_notary_delay_millis,
             dkg_interval_length: val.dkg_interval_length,
             dkg_dealings_per_block: val.dkg_dealings_per_block,
-
-            gossip_config: Some(GossipConfig {
-                max_artifact_streams_per_peer: val.gossip_max_artifact_streams_per_peer,
-                max_chunk_wait_ms: val.gossip_max_chunk_wait_ms,
-                max_duplicity: val.gossip_max_duplicity,
-                max_chunk_size: val.gossip_max_chunk_size,
-                receive_check_cache_size: val.gossip_receive_check_cache_size,
-                pfn_evaluation_period_ms: val.gossip_pfn_evaluation_period_ms,
-                registry_poll_period_ms: val.gossip_registry_poll_period_ms,
-                retransmission_request_ms: val.gossip_retransmission_request_ms,
-            }),
 
             start_as_nns: val.start_as_nns,
 
