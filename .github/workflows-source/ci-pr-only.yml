@@ -21,9 +21,9 @@ env:
 anchors:
   image: &image
     image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
-  dind-small-setup: &dind-small-setup
+  bazel-small-setup: &bazel-small-setup
     runs-on:
-      labels: bazel-runner-large
+      labels: bazel-runner-small
     container:
       <<: *image
     timeout-minutes: 30
@@ -72,7 +72,7 @@ jobs:
 
   lock-generate:
     name: Lock Generate
-    <<: *dind-small-setup
+    <<: *bazel-small-setup
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -97,7 +97,7 @@ jobs:
 
   pre-commit:
     name: Pre Commit Test
-    <<: *dind-small-setup
+    <<: *bazel-small-setup
     steps:
       - <<: *checkout
         with:
