@@ -106,6 +106,7 @@ jobs:
         with:
           name: prof
           path: prof.json
+      - name: Upload bazel-targets
         uses: actions/upload-artifact@v4
         with:
           name: bazel-targets
