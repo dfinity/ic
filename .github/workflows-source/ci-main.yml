@@ -366,10 +366,10 @@ jobs:
     name: Rosetta API Docker Image
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [bazel-test-all]
+  #  needs: [bazel-test-all]
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.rosetta-api-release == true }}
     steps:
       - <<: *checkout
       - name: Build rosetta-api image
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/rosseta-api-docker-image.sh
+        run: ./gitlab-ci/src/ci-scripts/rosetta-api-docker-image.sh
