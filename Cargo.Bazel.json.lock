@@ -1,5 +1,5 @@
 {
-  "checksum": "6cfb35a716bef67cd51c6626c3d5b24e4fe86f83c3883d1130dc3f5bdae60e7f",
+  "checksum": "52839a23e37a1c39a433b7ace151eb8fc9e83fdd472c95dd5d0fa68c65e6ab42",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17174,7 +17174,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-btc-interface 0.2.0",
+              "id": "ic-btc-interface 0.2.2",
               "target": "ic_btc_interface"
             },
             {
@@ -27619,14 +27619,14 @@
       ],
       "license_file": null
     },
-    "ic-btc-interface 0.2.0": {
+    "ic-btc-interface 0.2.2": {
       "name": "ic-btc-interface",
-      "version": "0.2.0",
+      "version": "0.2.2",
       "package_url": "https://github.com/dfinity/bitcoin-canister",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-btc-interface/0.2.0/download",
-          "sha256": "46c2d1eedb5fcd02b6aab21fa6e0989ae560505e510bf221af9ab57bffbc83ac"
+          "url": "https://static.crates.io/crates/ic-btc-interface/0.2.2/download",
+          "sha256": "b0152e14e697b0e988dbfdcb3f7e352d1c76a65b7d2d75c5d76bad22c3aca10d"
         }
       },
       "targets": [
@@ -27666,7 +27666,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.0"
+        "version": "0.2.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -76554,7 +76554,7 @@
     "hyper-util 0.1.3",
     "hyperlocal-next 0.9.0",
     "ic-agent 0.35.0",
-    "ic-btc-interface 0.2.0",
+    "ic-btc-interface 0.2.2",
     "ic-btc-test-utils 0.1.0",
     "ic-btc-validation 0.1.0",
     "ic-canister-log 0.2.0",
