@@ -475,6 +475,7 @@ fn mock_bitcoin_canister_wat(network: BitcoinNetwork) -> String {
               (data (i32.const 0) "Hello from {}!")
               (export "canister_update bitcoin_get_balance" (func $ping))
               (export "canister_update bitcoin_get_utxos" (func $ping))
+              (export "canister_update bitcoin_get_block_headers" (func $ping))
               (export "canister_update bitcoin_send_transaction" (func $ping))
               (export "canister_update bitcoin_get_current_fee_percentiles" (func $ping))
             )"#,
