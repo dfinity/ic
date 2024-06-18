@@ -1,12 +1,10 @@
+use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 use std::convert::{TryFrom, TryInto};
 
-mod test_utils;
-
-use crate::test_utils::*;
-use assert_matches::assert_matches;
+use ic_crypto_internal_threshold_sig_ecdsa_test_utils::*;
 
 #[test]
 fn verify_bip32_extended_key_derivation_max_length_enforced() -> Result<(), CanisterThresholdError>
