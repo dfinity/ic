@@ -2165,6 +2165,8 @@ message Governance {
     map<uint64, double> dissolving_neurons_e8s_buckets_ect = 33;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_seed = 34;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_ect = 35;
+    optional uint64 total_voting_power_non_self_authenticating_controller = 36;
+    optional uint64 total_staked_e8s_non_self_authenticating_controller = 37;
   }
 
   GovernanceCachedMetrics metrics = 15;
