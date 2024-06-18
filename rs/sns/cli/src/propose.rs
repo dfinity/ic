@@ -176,13 +176,8 @@ pub fn exec(args: ProposeArgs) {
 }
 
 fn confirmation_messages(proposal: &Proposal) -> Vec<String> {
-    let canisters = match &proposal.action {
-        Some(Action::CreateServiceNervousSystem(csns)) => csns
-            .dapp_canisters
-            .iter()
-            .filter_map(|canister| canister.id.as_ref())
-            .map(|id| format!("  - {}", id))
-            .join("\n"),
+    let csns = match &proposal.action {
+        Some(Action::CreateServiceNervousSystem(csns)) => csns,
         _ => {
             eprintln!(
                 "Internal error: Somehow a proposal was made not of type CreateServiceNervousSystem",
@@ -190,12 +185,25 @@ fn confirmation_messages(proposal: &Proposal) -> Vec<String> {
             std::process::exit(1);
         }
     };
+    let canisters = csns
+        .dapp_canisters
+        .iter()
+        .filter_map(|canister| canister.id.as_ref())
+        .map(|id| format!("  - {}", id))
+        .join("\n");
+    let fallback_controllers = csns
+        .fallback_controller_principal_ids
+        .iter()
+        .map(|id| format!("  - {}", id))
+        .join("\n");
     let dapp_canister_controllers = format!(
         r#"A CreateServiceNervousSystem proposal will be submitted.
 If adopted, this proposal will create an SNS, which will control these canisters:
 {canisters}
-These canisters must have NNS root as a co-controller when the proposal is adopted, otherwise the SNS launch will be aborted.
-Otherwise, when the proposal is adopted, the SNS will be created and the SNS will take sole control over those canisters."#
+If these canisters do not have NNS root as a co-controller when the proposal is adopted, the SNS launch will be aborted.
+Otherwise, when the proposal is adopted, the SNS will be created and the SNS and NNS will have sole control over those canisters.
+Then, if the swap completes successfully, the SNS will take sole control. If the swap fails, control will be given to the fallback controllers:
+{fallback_controllers}"#
     );
 
     let disallowed_types = Mode::proposal_types_disallowed_in_pre_initialization_swap()
@@ -506,8 +514,10 @@ mod test {
 If adopted, this proposal will create an SNS, which will control these canisters:
   - c2n4r-wni5m-dqaaa-aaaap-4ai
   - ucm27-3lxwy-faaaa-aaaap-4ai
-These canisters must have NNS root as a co-controller when the proposal is adopted, otherwise the SNS launch will be aborted.
-Otherwise, when the proposal is adopted, the SNS will be created and the SNS will take sole control over those canisters."#,
+If these canisters do not have NNS root as a co-controller when the proposal is adopted, the SNS launch will be aborted.
+Otherwise, when the proposal is adopted, the SNS will be created and the SNS and NNS will have sole control over those canisters.
+Then, if the swap completes successfully, the SNS will take sole control. If the swap fails, control will be given to the fallback controllers:
+  - 5zxxw-63ouu-faaaa-aaaap-4ai"#,
             r#"After the proposal is adopted, a swap is started. While the swap is running, the SNS will be in a restricted mode.
 Within this restricted mode, some proposal actions will not be allowed:
   - Manage nervous system parameters

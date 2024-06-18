@@ -46,6 +46,7 @@ use ic_state_machine_tests::StateMachine;
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use lazy_static::lazy_static;
 use maplit::hashmap;
+use std::collections::BTreeSet;
 use std::{collections::HashMap, time::UNIX_EPOCH};
 
 // Valid images to be used in the CreateServiceNervousSystem proposal.
@@ -393,8 +394,13 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
                 .as_ref()
                 .unwrap()
                 .settings
-                .controllers,
-            vec![test_sns.root_canister_id.unwrap()]
+                .controllers
+                .clone()
+                .into_iter()
+                .collect::<BTreeSet<_>>(),
+            vec![test_sns.root_canister_id.unwrap(), ROOT_CANISTER_ID.get()]
+                .into_iter()
+                .collect::<BTreeSet<_>>()
         );
     }
 
@@ -699,8 +705,13 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
                 .as_ref()
                 .unwrap()
                 .settings
-                .controllers,
-            vec![test_sns.root_canister_id.unwrap()]
+                .controllers
+                .clone()
+                .into_iter()
+                .collect::<BTreeSet<_>>(),
+            vec![test_sns.root_canister_id.unwrap(), ROOT_CANISTER_ID.get()]
+                .into_iter()
+                .collect::<BTreeSet<_>>()
         );
     }
 
@@ -1011,8 +1022,13 @@ fn test_one_proposal_sns_initialization_failed_swap_returns_neurons_fund_and_dap
                 .as_ref()
                 .unwrap()
                 .settings
-                .controllers,
-            vec![test_sns.root_canister_id.unwrap()]
+                .controllers
+                .clone()
+                .into_iter()
+                .collect::<BTreeSet<_>>(),
+            vec![test_sns.root_canister_id.unwrap(), ROOT_CANISTER_ID.get()]
+                .into_iter()
+                .collect::<BTreeSet<_>>(),
         );
     }
 
