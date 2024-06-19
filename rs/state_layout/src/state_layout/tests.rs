@@ -365,9 +365,14 @@ fn test_can_remove_unverified_marker_file_twice() {
         let scratchpad_layout =
             CheckpointLayout::<RwPolicy<()>>::new_untracked(state_sync_scratchpad, height)
                 .expect("failed to create checkpoint layout");
+        // Create at least a file in the scratchpad layout. Otherwise, empty folders can be overridden without errors
+        // and calling "scratchpad_to_checkpoint" twice will not fail as expected.
+        File::create(scratchpad_layout.raw_path().join(SYSTEM_METADATA_FILE)).unwrap();
+
         let tip_path = state_layout.tip_path();
         let tip = CheckpointLayout::<RwPolicy<()>>::new_untracked(tip_path, height)
             .expect("failed to create tip layout");
+        File::create(tip.raw_path().join(SYSTEM_METADATA_FILE)).unwrap();
 
         // Create marker files in both the scratchpad and tip and try to promote them to a checkpoint.
         scratchpad_layout
