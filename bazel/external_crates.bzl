@@ -360,7 +360,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1",
             ),
             "curve25519-dalek": crate.spec(
-                version = "^4.1.2",
+                version = "^4.1.3",
                 features = ["group", "precomputed-tables"],
             ),
             "cvt": crate.spec(
