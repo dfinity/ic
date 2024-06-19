@@ -16,7 +16,6 @@ use ic_nns_test_utils::{
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
-use std::str::FromStr;
 use std::{
     env,
     fmt::{Debug, Formatter},
