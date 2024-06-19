@@ -354,7 +354,7 @@ impl RosettaRequestHandler {
         &self,
         block_hash: &str,
     ) -> Result<rosetta_core::objects::Block, ApiError> {
-        let hash = convert::to_hash::<ic_ledger_core::block::EncodedBlock>(&block_hash)?;
+        let hash = convert::to_hash::<ic_ledger_core::block::EncodedBlock>(block_hash)?;
         let block = {
             let blocks = self.ledger.read_blocks().await;
             if !blocks.is_verified_by_hash(&hash)? {
@@ -596,7 +596,10 @@ impl RosettaRequestHandler {
         for hb in block_range.into_iter().rev() {
             txs.push(BlockTransaction {
                 block_identifier: convert::block_id(&hb)?,
-                transaction: convert::block_to_transaction(&hb, self.ledger.token_symbol())?,
+                transaction: convert::hashed_block_to_rosetta_core_transaction(
+                    &hb,
+                    self.ledger.token_symbol(),
+                )?,
             });
         }
 
@@ -745,7 +748,10 @@ impl RosettaRequestHandler {
                 let hb = blocks.get_hashed_block(&i)?;
                 txs.push(BlockTransaction {
                     block_identifier: convert::block_id(&hb)?,
-                    transaction: convert::block_to_transaction(&hb, self.ledger.token_symbol())?,
+                    transaction: convert::hashed_block_to_rosetta_core_transaction(
+                        &hb,
+                        self.ledger.token_symbol(),
+                    )?,
                 });
             } else {
                 return Err(ApiError::InvalidBlockId(true, Default::default()));
@@ -833,7 +839,10 @@ fn hashed_block_to_rosetta_core_block(
     let block = Block::decode(hashed_block.block.clone())
         .map_err(|err| ApiError::internal_error(format!("Cannot decode block: {}", err)))?;
     let block_id = convert::block_id(&hashed_block)?;
-    let transactions = vec![convert::block_to_transaction(&hashed_block, token_symbol)?];
+    let transactions = vec![convert::hashed_block_to_rosetta_core_transaction(
+        &hashed_block,
+        token_symbol,
+    )?];
     Ok(models::Block::new(
         block_id,
         parent_id,
