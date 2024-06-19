@@ -13,7 +13,12 @@
 use crate::CertificationVersion;
 use ic_error_types::TryFromError;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::{messages::NO_DEADLINE, time::CoarseTime, xnet::StreamIndex, Time};
+use ic_types::{
+    messages::NO_DEADLINE,
+    time::CoarseTime,
+    xnet::{RejectReason, RejectSignal, StreamIndex},
+    Time,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
@@ -204,10 +209,10 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
 
         let mut next_index = header.signals_end();
         let mut reject_signal_deltas = vec![0; header.reject_signals().len()];
-        for (i, stream_index) in header.reject_signals().iter().enumerate().rev() {
-            assert!(next_index > *stream_index);
-            reject_signal_deltas[i] = next_index.get() - stream_index.get();
-            next_index = *stream_index;
+        for (i, reject_signal) in header.reject_signals().iter().enumerate().rev() {
+            assert!(next_index > reject_signal.index);
+            reject_signal_deltas[i] = next_index.get() - reject_signal.index.get();
+            next_index = reject_signal.index;
         }
 
         let mut flags = 0;
@@ -243,7 +248,10 @@ impl TryFrom<StreamHeader> for ic_types::xnet::StreamHeader {
                 )));
             }
             stream_index -= StreamIndex::new(*delta);
-            reject_signals.push_front(stream_index);
+            reject_signals.push_front(RejectSignal::new(
+                RejectReason::CanisterMigrating,
+                stream_index,
+            ));
         }
 
         if header.flags & !STREAM_SUPPORTED_FLAGS != 0 {
