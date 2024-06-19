@@ -73,7 +73,7 @@ pub fn to_rosetta_core_transaction(
     })
 }
 
-pub fn block_to_transaction(
+pub fn hashed_block_to_rosetta_core_transaction(
     hb: &HashedBlock,
     token_symbol: &str,
 ) -> Result<models::Transaction, ApiError> {
