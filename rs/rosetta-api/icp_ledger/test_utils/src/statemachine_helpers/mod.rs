@@ -20,6 +20,8 @@ pub fn assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
 ) {
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
+    // TODO: The performance of the parity check may be improved by not first getting all the blocks
+    //  and then comparing, but instead comparing the blocks one batch at a time.
     let ledger_blocks = icp_get_blocks(env, ledger_id);
     println!(
         "retrieved {} blocks from the ledger using get_blocks",
@@ -216,7 +218,11 @@ const SYNC_STEP_SECONDS: Duration = Duration::from_secs(60);
 // the index canister has synced all the blocks up to the
 // last one in the ledger or enough attempts passed and therefore
 // it fails
-fn wait_until_sync_is_completed(env: &StateMachine, index_id: CanisterId, ledger_id: CanisterId) {
+pub fn wait_until_sync_is_completed(
+    env: &StateMachine,
+    index_id: CanisterId,
+    ledger_id: CanisterId,
+) {
     const MAX_ATTEMPTS: u8 = 100; // no reason for this number
     let mut num_blocks_synced = u64::MAX;
     let mut chain_length = u64::MAX;
