@@ -445,6 +445,14 @@ pub fn get_blockchain_gaps(
     Ok(gap_limits)
 }
 
+pub fn get_block_count(connection: &Connection) -> anyhow::Result<u64> {
+    let command = "SELECT COUNT(*) FROM blocks";
+    let mut stmt = connection.prepare_cached(command)?;
+    let mut rows = stmt.query(params![])?;
+    let count: u64 = rows.next()?.unwrap().get(0)?;
+    Ok(count)
+}
+
 // Returns icrc1 Transactions if the transaction hash exists in the database, else returns None.
 // Returns an Error if the query fails.
 pub fn get_blocks_by_transaction_hash(

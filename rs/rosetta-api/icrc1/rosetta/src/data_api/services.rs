@@ -1,3 +1,6 @@
+use std::sync::Arc;
+use std::sync::Mutex;
+
 use crate::common::constants::DEFAULT_BLOCKCHAIN;
 use crate::common::constants::MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST;
 use crate::common::constants::STATUS_COMPLETED;
@@ -15,6 +18,7 @@ use crate::common::{
 use candid::Nat;
 use candid::Principal;
 use ic_ledger_core::tokens::Zero;
+use ic_rosetta_api::models::SyncStatus;
 use icrc_ledger_types::icrc1::account::Account;
 use num_bigint::{BigInt, BigUint};
 use rosetta_core::miscellaneous::OperationStatus;
@@ -76,7 +80,10 @@ pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
     }
 }
 
-pub fn network_status(storage_client: &StorageClient) -> Result<NetworkStatusResponse, Error> {
+pub fn network_status(
+    storage_client: &StorageClient,
+    synch_state: Arc<Mutex<Option<bool>>>,
+) -> Result<NetworkStatusResponse, Error> {
     let highest_processed_block = storage_client
         .get_highest_block_idx_in_account_balance_table()
         .map_err(|e| Error::unable_to_find_block(&e))?
@@ -107,7 +114,10 @@ pub fn network_status(storage_client: &StorageClient) -> Result<NetworkStatusRes
         current_block_identifier: BlockIdentifier::from(current_block),
         genesis_block_identifier: genesis_block_identifier.clone(),
         oldest_block_identifier: Some(genesis_block_identifier),
-        sync_status: None,
+        sync_status: Some(SyncStatus::new(
+            highest_processed_block as i64,
+            Some(initial_sync_is_completed(storage_client, synch_state)),
+        )),
         peers: vec![],
     })
 }
@@ -436,6 +446,27 @@ pub fn search_transactions(
         },
     })
 }
+
+pub fn initial_sync_is_completed(
+    storage_client: &StorageClient,
+    sync_state: Arc<Mutex<Option<bool>>>,
+) -> bool {
+    let mut synched = sync_state.lock().unwrap();
+    if synched.is_some() && synched.unwrap() {
+        synched.unwrap()
+    } else {
+        let block_count = storage_client.get_block_count();
+        let highest_index = storage_client.get_highest_block_idx_in_account_balance_table();
+        *synched = Some(match (block_count, highest_index) {
+            // If the blockchain contains no blocks we mark it as not completed
+            (Ok(block_count), Ok(Some(highest_index))) if block_count == highest_index + 1 => true,
+            _ => false,
+        });
+        // Unwrap is safe because it was just set
+        (*synched).unwrap()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -467,6 +498,7 @@ mod test {
                        #[test]
                     fn test_network_status_service(blockchain in valid_blockchain_strategy::<U256>(BLOCKCHAIN_LENGTH)){
                         let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
+                        let synch_state = Arc::new(Mutex::new(None));
                         let mut rosetta_blocks = vec![];
                         let mut added_index = 0;
                         for block in blockchain.clone().into_iter() {
@@ -479,7 +511,7 @@ mod test {
                         }
 
                         // If there is no block in the database the service should return an error
-                        let network_status_err = network_status(&storage_client_memory).unwrap_err();
+                        let network_status_err = network_status(&storage_client_memory,synch_state.clone()).unwrap_err();
                         assert!(network_status_err.0.message.contains("Unable to find block"));
                         if !rosetta_blocks.is_empty() {
 
@@ -488,14 +520,14 @@ mod test {
                         let block_with_highest_idx = storage_client_memory.get_block_with_highest_block_idx().unwrap().unwrap();
                         let genesis_block = storage_client_memory.get_block_with_lowest_block_idx().unwrap().unwrap();
 
-                        let network_status_response = network_status(&storage_client_memory).unwrap();
+                        let network_status_response = network_status(&storage_client_memory,synch_state).unwrap();
 
                         assert_eq!(NetworkStatusResponse {
                             current_block_identifier: BlockIdentifier::from(block_with_highest_idx.clone()),
                             current_block_timestamp: convert_timestamp_to_millis(block_with_highest_idx.get_timestamp()).map_err(|err| Error::parsing_unsuccessful(&err)).unwrap(),
                             genesis_block_identifier: BlockIdentifier::from(genesis_block.clone()),
                             oldest_block_identifier: Some(BlockIdentifier::from(genesis_block)),
-                            sync_status: None,
+                            sync_status: Some(SyncStatus { current_index: block_with_highest_idx.index as i64, target_index: None, stage: None, synced: Some(true) }),
                             peers: vec![],
                         },network_status_response)
                     }
