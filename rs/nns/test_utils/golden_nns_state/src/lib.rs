@@ -4,7 +4,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::NumInstructions;
 
-use std::env;
 use std::{ops::RangeInclusive, path::Path, process::Command, str::FromStr};
 use tempfile::TempDir;
 
@@ -90,15 +89,6 @@ impl ScpLocation {
 fn download_golden_nns_state_or_panic(destination: &Path) {
     let source = NNS_STATE_SOURCE.to_argument();
     println!("Downloading {} to {:?} ...", source, destination,);
-
-    println!("SSH_AUTH_SOCK = {}", env::var("SSH_AUTH_SOCK").unwrap());
-
-    let ssh_add_out = Command::new("ssh-add")
-        .arg("-L")
-        .output()
-        .unwrap_or_else(|err| panic!("Could run ssh-add because: {:?}!", err));
-
-    println!("ssh-add -L: {:#?}", ssh_add_out);
 
     // Actually download.
     let scp_out = Command::new("scp")
