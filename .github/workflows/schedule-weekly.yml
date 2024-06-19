@@ -5,6 +5,10 @@ on:
     - cron: "0 8 * * 3"
   workflow_dispatch:
 
+env:
+  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
+  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+
 jobs:
   bazel-build-fuzzers-weekly:
     runs-on:
