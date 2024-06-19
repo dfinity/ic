@@ -82,7 +82,7 @@ go_deps.bzl               @dfinity/idx
 /testnet/env/                                              @dfinity/platform-operations
 /testnet/release/                                          @dfinity/dre
 /testnet/tools/nns-tools/                                  @dfinity/nns-team
-/testnet/mainnet_revisions.json                            @dfinity/consensus
+/testnet/mainnet_revisions.json                            @dfinity/consensus @dfinity/dre
 
 # [Rust]
 /rs/                                                    @dfinity/ic-interface-owners
