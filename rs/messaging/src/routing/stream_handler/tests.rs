@@ -26,7 +26,7 @@ use ic_types::{
     time::UNIX_EPOCH,
     xnet::{
         testing::{StreamHeaderTesting, StreamSliceTesting},
-        StreamFlags, StreamIndex, StreamIndexedQueue,
+        RejectReason, RejectSignal, StreamFlags, StreamIndex, StreamIndexedQueue,
     },
     CanisterId, CountBytes, Cycles,
 };
@@ -780,7 +780,11 @@ fn garbage_collect_messages_success() {
 
         let slice_signals_end = 33.into();
         // Reject signals for already GC-ed messages.
-        let slice_reject_signals = vec![29.into(), 30.into()].into();
+        let slice_reject_signals = vec![
+            RejectSignal::new(RejectReason::CanisterMigrating, 29.into()),
+            RejectSignal::new(RejectReason::CanisterMigrating, 30.into()),
+        ]
+        .into();
 
         // The expected state must contain a stream that does not contain the specified
         // messages; the stream header should be unmodified from the input (and is not
@@ -824,7 +828,11 @@ fn garbage_collect_messages_with_reject_signals_success() {
         });
 
         let slice_signals_end = 33.into();
-        let slice_reject_signals = vec![32.into()].into();
+        let slice_reject_signals = vec![RejectSignal::new(
+            RejectReason::CanisterMigrating,
+            32.into(),
+        )]
+        .into();
 
         // The expected state must contain a stream that does not contain the specified
         // messages; the stream header should be unmodified from the input (and is not
@@ -836,7 +844,10 @@ fn garbage_collect_messages_with_reject_signals_success() {
             reject_signals: None,
         });
 
-        let expected_rejected_messages = vec![stream.messages().get(32.into()).unwrap().clone()];
+        let expected_rejected_messages = vec![(
+            RejectReason::CanisterMigrating,
+            stream.messages().get(32.into()).unwrap().clone(),
+        )];
 
         let mut stats = Default::default();
         let rejected_messages = stream_handler.garbage_collect_messages(
@@ -865,7 +876,12 @@ fn garbage_collect_signals_success() {
             messages_begin: 31,
             message_count: 3,
             signals_end: 153,
-            reject_signals: Some(vec![138, 139, 142, 145]),
+            reject_signals: Some(vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+            ]),
         });
 
         let slice = generate_stream_slice(StreamSliceConfig {
@@ -882,7 +898,10 @@ fn garbage_collect_signals_success() {
             messages_begin: 31,
             message_count: 3,
             signals_end: 153,
-            reject_signals: Some(vec![142, 145]),
+            reject_signals: Some(vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+            ]),
         });
 
         let mut stats = Default::default();
@@ -904,7 +923,7 @@ fn garbage_collect_signals_success() {
 
 #[test]
 #[should_panic(
-    expected = "Invalid signal indices in stream to subnet 5h3gz-qaxaa-aaaaa-aaaap-yai: signals_end 153, signals [138, 139, 145, 142]"
+    expected = "Invalid signal indices in stream to subnet 5h3gz-qaxaa-aaaaa-aaaap-yai: signals_end 153, signals [RejectSignal { reason: CanisterMigrating, index: 138 }, RejectSignal { reason: CanisterMigrating, index: 139 }, RejectSignal { reason: CanisterMigrating, index: 145 }, RejectSignal { reason: CanisterMigrating, index: 142 }]"
 )]
 fn garbage_collect_signals_in_wrong_order() {
     with_test_replica_logger(|log| {
@@ -913,7 +932,12 @@ fn garbage_collect_signals_in_wrong_order() {
             message_count: 3,
             signals_end: 153,
             // Reject signals not in order.
-            reject_signals: Some(vec![138, 139, 145, 142]),
+            reject_signals: Some(vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
+            ]),
         });
 
         let slice = generate_stream_slice(StreamSliceConfig {
@@ -946,7 +970,12 @@ fn garbage_collect_signals_with_invalid_slice_messages() {
             messages_begin: 31,
             message_count: 3,
             signals_end: 153,
-            reject_signals: Some(vec![138, 139, 142, 145]),
+            reject_signals: Some(vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+            ]),
         });
 
         let slice = generate_stream_slice(StreamSliceConfig {
@@ -980,7 +1009,12 @@ fn garbage_collect_signals_with_invalid_empty_slice() {
             messages_begin: 31,
             message_count: 3,
             signals_end: 153,
-            reject_signals: Some(vec![138, 139, 142, 145]),
+            reject_signals: Some(vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+            ]),
         });
 
         let slice = generate_stream_slice(StreamSliceConfig {
@@ -1020,7 +1054,11 @@ fn assert_garbage_collect_messages_last_signal_before_first_message() {
         });
 
         let slice_signals_end = 24.into();
-        let slice_reject_signals = vec![19.into(), 20.into()].into();
+        let slice_reject_signals = vec![
+            RejectSignal::new(RejectReason::CanisterMigrating, 19.into()),
+            RejectSignal::new(RejectReason::CanisterMigrating, 20.into()),
+        ]
+        .into();
 
         let mut stats = Default::default();
         stream_handler.garbage_collect_messages(
@@ -1048,7 +1086,11 @@ fn assert_garbage_collect_messages_last_signal_after_last_message() {
         });
 
         let slice_signals_end = 35.into();
-        let slice_reject_signals = vec![30.into(), 31.into()].into();
+        let slice_reject_signals = vec![
+            RejectSignal::new(RejectReason::CanisterMigrating, 30.into()),
+            RejectSignal::new(RejectReason::CanisterMigrating, 31.into()),
+        ]
+        .into();
 
         let mut stats = Default::default();
         stream_handler.garbage_collect_messages(
@@ -1246,7 +1288,10 @@ fn garbage_collect_local_state_with_reject_signals_for_response_success() {
             messages_begin: 43,
             message_count: 2,
             signals_end: 34,
-            reject_signals: Some(vec![33]),
+            reject_signals: Some(vec![RejectSignal::new(
+                RejectReason::CanisterMigrating,
+                33.into(),
+            )]),
             flags: Default::default(),
         });
 
@@ -1317,7 +1362,10 @@ fn garbage_collect_local_state_with_reject_signals_for_request() {
             messages_begin: 43,
             message_count: 2,
             signals_end: 33,
-            reject_signals: Some(vec![31]),
+            reject_signals: Some(vec![RejectSignal::new(
+                RejectReason::CanisterMigrating,
+                31.into(),
+            )]),
             flags: Default::default(),
         });
 
@@ -1358,7 +1406,7 @@ fn reroute_rejected_messages_success() {
         // Act
         let mut streams = initial_state.take_streams();
         stream_handler.reroute_rejected_messages(
-            vec![response],
+            vec![(RejectReason::CanisterMigrating, response)],
             &mut streams,
             initial_state
                 .metadata
@@ -1950,7 +1998,10 @@ fn induct_stream_slices_with_messages_to_migrating_canister() {
             },
             SignalConfig {
                 end: 45,
-                reject_signals: Some(vec![44]),
+                reject_signals: Some(vec![RejectSignal::new(
+                    RejectReason::CanisterMigrating,
+                    44.into(),
+                )]),
             },
         );
         // ...and a reject response for the incoming request.
@@ -2084,7 +2135,10 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
             },
             SignalConfig {
                 end: 45,
-                reject_signals: Some(vec![44]),
+                reject_signals: Some(vec![RejectSignal::new(
+                    RejectReason::CanisterMigrating,
+                    44.into(),
+                )]),
             },
         );
 
@@ -2604,7 +2658,12 @@ fn process_stream_slices_with_reject_signals_partial_success() {
             messages_begin: 31,
             message_count: 2,
             signals_end: 153,
-            reject_signals: Some(vec![138, 139, 142, 145]),
+            reject_signals: Some(vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+            ]),
         });
         initial_stream.push(test_response(*LOCAL_CANISTER, *REMOTE_CANISTER).into());
         initial_stream.push(test_request(*LOCAL_CANISTER, *REMOTE_CANISTER).into());
@@ -2626,7 +2685,10 @@ fn process_stream_slices_with_reject_signals_partial_success() {
             messages_begin: 153,
             message_count: 1,
             signals_end: 34,
-            reject_signals: Some(vec![33]),
+            reject_signals: Some(vec![RejectSignal::new(
+                RejectReason::CanisterMigrating,
+                33.into(),
+            )]),
             flags: Default::default(),
         });
         // ...and a second message from a canister not mapped in the routing table.
@@ -2666,7 +2728,10 @@ fn process_stream_slices_with_reject_signals_partial_success() {
             messages_begin: 34,
             message_count: 0,
             signals_end: 155,
-            reject_signals: Some(vec![142, 145]),
+            reject_signals: Some(vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+            ]),
         });
         pruned_stream.push(test_request(*LOCAL_CANISTER, *REMOTE_CANISTER).into());
 
@@ -2822,7 +2887,12 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
             messages_begin: 31,
             message_count: 2,
             signals_end: 153,
-            reject_signals: Some(vec![138, 139, 142, 145]),
+            reject_signals: Some(vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+            ]),
         });
         initial_stream.push(test_response(*LOCAL_CANISTER, *REMOTE_CANISTER).into());
         initial_stream.push(test_request(*LOCAL_CANISTER, *REMOTE_CANISTER).into());
@@ -2844,7 +2914,10 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
             messages_begin: 153,
             message_count: 1,
             signals_end: 34,
-            reject_signals: Some(vec![33]),
+            reject_signals: Some(vec![RejectSignal::new(
+                RejectReason::CanisterMigrating,
+                33.into(),
+            )]),
             flags: Default::default(),
         });
         // ...one incoming request to the migrated canister....
@@ -2897,7 +2970,12 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
             message_count: 0,
             // `signals_end` is incremented and `reject_signals` are garbage collected.
             signals_end: 158,
-            reject_signals: Some(vec![142, 145, 155, 157]),
+            reject_signals: Some(vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 155.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 157.into()),
+            ]),
         });
         // ...one initial message left in the `pruned_stream`...
         pruned_stream.push(test_request(*LOCAL_CANISTER, *REMOTE_CANISTER).into());
@@ -3125,7 +3203,7 @@ fn make_input_queue_reservations(canister: &mut CanisterState, count: usize, rem
 #[derive(Clone)]
 struct SignalConfig {
     end: u64,
-    reject_signals: Option<Vec<u64>>,
+    reject_signals: Option<Vec<RejectSignal>>,
 }
 
 #[derive(Clone)]
@@ -3161,11 +3239,11 @@ fn generate_stream(msg_config: MessageConfig, signal_config: SignalConfig) -> St
         .unwrap_or_else(|| StreamIndexedQueue::with_begin(msg_begin));
 
     if let Some(reject_signals) = signal_config.reject_signals {
-        let reject_signals: VecDeque<StreamIndex> = reject_signals
-            .iter()
-            .map(|x| StreamIndex::from(*x))
-            .collect();
-        Stream::with_signals(messages, slice.header().signals_end(), reject_signals)
+        Stream::with_signals(
+            messages,
+            slice.header().signals_end(),
+            reject_signals.into(),
+        )
     } else {
         Stream::new(messages, slice.header().signals_end())
     }
@@ -3176,7 +3254,7 @@ struct StreamConfig {
     messages_begin: u64,
     message_count: u64,
     signals_end: u64,
-    reject_signals: Option<Vec<u64>>,
+    reject_signals: Option<Vec<RejectSignal>>,
 }
 
 fn generate_outgoing_stream(config: StreamConfig) -> Stream {
@@ -3216,7 +3294,7 @@ struct StreamSliceConfig {
     messages_begin: u64,
     message_count: u64,
     signals_end: u64,
-    reject_signals: Option<Vec<u64>>,
+    reject_signals: Option<Vec<RejectSignal>>,
     flags: StreamFlags,
 }
 

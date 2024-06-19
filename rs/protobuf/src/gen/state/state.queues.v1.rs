@@ -16,6 +16,14 @@ pub struct Funds {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RejectSignal {
+    #[prost(enumeration = "RejectReason", tag = "1")]
+    pub reason: i32,
+    #[prost(uint64, tag = "2")]
+    pub index: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StreamFlags {
     #[prost(bool, tag = "1")]
     pub deprecated_responses_only: bool,
@@ -29,8 +37,11 @@ pub struct Stream {
     pub messages: ::prost::alloc::vec::Vec<RequestOrResponse>,
     #[prost(uint64, tag = "5")]
     pub signals_end: u64,
+    /// TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
     #[prost(uint64, repeated, tag = "6")]
-    pub reject_signals: ::prost::alloc::vec::Vec<u64>,
+    pub deprecated_reject_signals: ::prost::alloc::vec::Vec<u64>,
+    #[prost(message, repeated, tag = "8")]
+    pub reject_signals: ::prost::alloc::vec::Vec<RejectSignal>,
     #[prost(message, optional, tag = "7")]
     pub reverse_stream_flags: ::core::option::Option<StreamFlags>,
 }
@@ -299,6 +310,32 @@ pub mod canister_queues {
                 "NEXT_INPUT_QUEUE_REMOTE_SUBNET" => Some(Self::RemoteSubnet),
                 _ => None,
             }
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum RejectReason {
+    Unspecified = 0,
+    CanisterMigrating = 1,
+}
+impl RejectReason {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            RejectReason::Unspecified => "REJECT_REASON_UNSPECIFIED",
+            RejectReason::CanisterMigrating => "REJECT_REASON_CANISTER_MIGRATING",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "REJECT_REASON_UNSPECIFIED" => Some(Self::Unspecified),
+            "REJECT_REASON_CANISTER_MIGRATING" => Some(Self::CanisterMigrating),
+            _ => None,
         }
     }
 }

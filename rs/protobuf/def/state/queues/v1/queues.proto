@@ -18,6 +18,16 @@ message Funds {
   Cycles cycles_struct = 3;
 }
 
+enum RejectReason {
+  REJECT_REASON_UNSPECIFIED = 0;
+  REJECT_REASON_CANISTER_MIGRATING = 1;
+}
+
+message RejectSignal {
+  RejectReason reason = 1;
+  uint64 index = 2;
+}
+
 message StreamFlags {
   bool deprecated_responses_only = 1;
 }
@@ -28,7 +38,9 @@ message Stream {
   reserved 3, 4;
   reserved "signals_begin", "signals";
   uint64 signals_end = 5;
-  repeated uint64 reject_signals = 6;
+  // TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
+  repeated uint64 deprecated_reject_signals = 6;
+  repeated RejectSignal reject_signals = 8;
   StreamFlags reverse_stream_flags = 7;
 }
 
