@@ -264,10 +264,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "canbench": crate.spec(
-                version = "^0.1.3",
+                version = "^0.1.4",
             ),
             "canbench-rs": crate.spec(
-                version = "^0.1.1",
+                version = "^0.1.4",
             ),
             "candid": crate.spec(
                 version = "^0.10.6",
