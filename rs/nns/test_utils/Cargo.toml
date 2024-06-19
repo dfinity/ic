@@ -16,7 +16,7 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_http = { path = "../../rust_canisters/dfn_http" }
 dfn_json = { path = "../../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
-flate2 = "1.0.27"
+flate2 = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }

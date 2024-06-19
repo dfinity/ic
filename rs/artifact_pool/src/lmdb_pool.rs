@@ -13,6 +13,7 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::certification::CertificationMessageHash;
+use ic_types::consensus::idkg::SigShare;
 use ic_types::consensus::{DataPayload, HasHash, SummaryPayload};
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId, EcdsaMessageId},
@@ -25,9 +26,9 @@ use ic_types::{
             EcdsaPrefix, EcdsaPrefixOf, EcdsaSigShare, SchnorrSigShare,
         },
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
-        ConsensusMessageHash, ConsensusMessageHashable, Finalization, FinalizationShare, HasHeight,
-        Notarization, NotarizationShare, Payload, PayloadType, RandomBeacon, RandomBeaconShare,
-        RandomTape, RandomTapeShare,
+        ConsensusMessageHash, ConsensusMessageHashable, EquivocationProof, Finalization,
+        FinalizationShare, HasHeight, Notarization, NotarizationShare, Payload, PayloadType,
+        RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
     },
     crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
     crypto::{CryptoHash, CryptoHashOf, CryptoHashable},
@@ -156,6 +157,7 @@ pub(crate) enum TypeKey {
     RandomTapeShare,
     CatchUpPackage,
     CatchUpPackageShare,
+    EquivocationProof,
     // Certification messages
     Certification,
     CertificationShare,
@@ -213,6 +215,7 @@ impl From<&ConsensusMessageId> for TypeKey {
             ConsensusMessageHash::RandomTapeShare(_) => TypeKey::RandomTapeShare,
             ConsensusMessageHash::CatchUpPackage(_) => TypeKey::CatchUpPackage,
             ConsensusMessageHash::CatchUpPackageShare(_) => TypeKey::CatchUpPackageShare,
+            ConsensusMessageHash::EquivocationProof(_) => TypeKey::EquivocationProof,
         }
     }
 }
@@ -852,7 +855,7 @@ where
 }
 
 ///////////////////////////// Consensus Pool /////////////////////////////
-const CONSENSUS_KEYS: [TypeKey; 12] = [
+const CONSENSUS_KEYS: [TypeKey; 13] = [
     TypeKey::RandomBeacon,
     TypeKey::Finalization,
     TypeKey::Notarization,
@@ -865,6 +868,7 @@ const CONSENSUS_KEYS: [TypeKey; 12] = [
     TypeKey::RandomTapeShare,
     TypeKey::CatchUpPackage,
     TypeKey::CatchUpPackageShare,
+    TypeKey::EquivocationProof,
 ];
 
 impl HasTypeKey for RandomBeacon {
@@ -933,6 +937,12 @@ impl HasTypeKey for CatchUpPackageShare {
     }
 }
 
+impl HasTypeKey for EquivocationProof {
+    fn type_key() -> TypeKey {
+        TypeKey::EquivocationProof
+    }
+}
+
 impl From<&ConsensusMessageId> for ArtifactKey {
     fn from(msg_id: &ConsensusMessageId) -> Self {
         Self {
@@ -959,6 +969,7 @@ impl TryFrom<ArtifactKey> for ConsensusMessageId {
             TypeKey::RandomTapeShare => ConsensusMessageHash::RandomTapeShare(h.into()),
             TypeKey::CatchUpPackage => ConsensusMessageHash::CatchUpPackage(h.into()),
             TypeKey::CatchUpPackageShare => ConsensusMessageHash::CatchUpPackageShare(h.into()),
+            TypeKey::EquivocationProof => ConsensusMessageHash::EquivocationProof(h.into()),
             TypeKey::BlockPayload => {
                 return Err("Block payloads do not have a ConsensusMessageId".into())
             }
@@ -1309,6 +1320,10 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
     }
 
     fn catch_up_package_share(&self) -> &dyn HeightIndexedPool<CatchUpPackageShare> {
+        self
+    }
+
+    fn equivocation_proof(&self) -> &dyn HeightIndexedPool<EquivocationProof> {
         self
     }
 
@@ -1951,6 +1966,21 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
     ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SchnorrSigShare)> + '_> {
         let message_db = self.get_message_db(EcdsaMessageType::SchnorrSigShare);
         message_db.iter(Some(prefix))
+    }
+
+    fn signature_shares(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, SigShare)> + '_> {
+        let ecdsa_db = self.get_message_db(EcdsaMessageType::EcdsaSigShare);
+        let schnorr_db = self.get_message_db(EcdsaMessageType::SchnorrSigShare);
+        Box::new(
+            ecdsa_db
+                .iter(None)
+                .map(|(id, share)| (id, SigShare::Ecdsa(share)))
+                .chain(
+                    schnorr_db
+                        .iter(None)
+                        .map(|(id, share)| (id, SigShare::Schnorr(share))),
+                ),
+        )
     }
 
     fn complaints(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaComplaint)> + '_> {

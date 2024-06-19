@@ -232,10 +232,6 @@ fn basic_state_manager_mock() -> MockStateManager {
         .returning(default_read_certified_state);
 
     mock_state_manager
-        .expect_read_certified_state()
-        .returning(default_read_certified_state);
-
-    mock_state_manager
         .expect_latest_certified_height()
         .returning(default_latest_certified_height);
 
@@ -253,6 +249,15 @@ fn basic_consensus_pool_cache() -> MockConsensusPoolCache {
         .expect_is_replica_behind()
         .return_const(false);
     mock_consensus_cache
+}
+
+// basic ingress pool throttler mock
+fn basic_ingress_pool_throttler() -> MockIngressPoolThrottler {
+    let mut mock_ingress_pool_throttler = MockIngressPoolThrottler::new();
+    mock_ingress_pool_throttler
+        .expect_exceeds_threshold()
+        .return_const(false);
+    mock_ingress_pool_throttler
 }
 
 // Basic registry client mock at version 1
@@ -352,7 +357,7 @@ pub async fn create_conn_and_send_request(addr: SocketAddr) -> (SendRequest<Body
 }
 
 mock! {
-    IngressPoolThrottler {}
+    pub IngressPoolThrottler {}
 
     impl IngressPoolThrottler for IngressPoolThrottler {
         fn exceeds_threshold(&self) -> bool;
@@ -377,6 +382,7 @@ pub struct HttpEndpointBuilder {
     pprof_collector: Arc<dyn PprofCollector>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     certified_height: Option<Height>,
+    ingress_pool_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
 }
 
 impl HttpEndpointBuilder {
@@ -387,6 +393,7 @@ impl HttpEndpointBuilder {
             state_manager: Arc::new(basic_state_manager_mock()),
             consensus_cache: Arc::new(basic_consensus_pool_cache()),
             registry_client: Arc::new(basic_registry_client()),
+            ingress_pool_throttler: Arc::new(RwLock::new(basic_ingress_pool_throttler())),
             delegation_from_nns: None,
             pprof_collector: Arc::new(Pprof),
             tls_config: Arc::new(MockTlsConfig::new()),
@@ -435,6 +442,14 @@ impl HttpEndpointBuilder {
         self
     }
 
+    pub fn with_ingress_pool_throttler(
+        mut self,
+        ingress_pool_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
+    ) -> Self {
+        self.ingress_pool_throttler = ingress_pool_throttler;
+        self
+    }
+
     pub fn run(self) -> HttpEndpointHandles {
         let metrics = MetricsRegistry::new();
 
@@ -459,11 +474,6 @@ impl HttpEndpointBuilder {
         #[allow(clippy::disallowed_methods)]
         let (ingress_tx, ingress_rx) = tokio::sync::mpsc::unbounded_channel();
 
-        let mut ingress_pool_throttler = MockIngressPoolThrottler::new();
-        ingress_pool_throttler
-            .expect_exceeds_threshold()
-            .returning(|| false);
-
         let log = no_op_logger();
 
         start_server(
@@ -472,7 +482,7 @@ impl HttpEndpointBuilder {
             self.config,
             ingress_filter,
             query_exe,
-            Arc::new(RwLock::new(ingress_pool_throttler)),
+            self.ingress_pool_throttler,
             ingress_tx,
             self.state_manager,
             crypto as Arc<_>,

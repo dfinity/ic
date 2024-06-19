@@ -52,7 +52,7 @@ bench = false
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-criterion = "0.5"
+criterion = { workspace = true }
 criterion-time = { path = "../criterion_time" }
 ic-canonical-state-tree-hash-test-utils = { path = "../canonical_state/tree_hash/test_utils" }
 ic-certification-version = { path = "../canonical_state/certification_version" }

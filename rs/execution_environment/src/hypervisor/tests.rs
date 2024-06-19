@@ -7076,7 +7076,7 @@ fn yield_abort_does_not_modify_state() {
 }
 
 #[test]
-fn yield_for_dirty_page_copy_does_not_trigger_on_system_subnets() {
+fn yield_for_dirty_page_copy_triggers_dts_slice_with_many_pages_on_system_subnets() {
     let pages_to_touch = 100;
     let wat = generate_wat_to_touch_pages(pages_to_touch);
 
@@ -7104,7 +7104,50 @@ fn yield_for_dirty_page_copy_does_not_trigger_on_system_subnets() {
     let _result = test.ingress_raw(canister_id, "test", vec![]);
 
     // The test touches `pages_to_touch`, but the embedder is configured to yield when `pages_to_touch - 1` pages are dirty.
-    // This should not happen for system subnets.
+    // Therefore we should have two slices here.
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong
+    );
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+}
+
+#[test]
+fn yield_for_dirty_page_copy_does_not_trigger_dts_slice_without_enough_dirty_pages_on_system_subnets(
+) {
+    let pages_to_touch = 100;
+    let wat = generate_wat_to_touch_pages(pages_to_touch);
+
+    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .with_slice_instruction_limit(
+            SchedulerConfig::system_subnet()
+                .max_instructions_per_slice
+                .get(),
+        )
+        .with_instruction_limit(
+            SchedulerConfig::system_subnet()
+                .max_instructions_per_message
+                .get(),
+        )
+        .with_manual_execution()
+        .with_max_dirty_pages_optimization_embedder_config(pages_to_touch + 1)
+        .build();
+
+    let wasm = wat::parse_str(wat).unwrap();
+    let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
+
+    let _result = test.ingress_raw(canister_id, "test", vec![]);
+
+    // The test touches `pages_to_touch`, but the embedder is configured to yield when `pages_to_touch + 1` pages are dirty.
+    // Therefore we should have only one slice here.
     test.execute_slice(canister_id);
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
@@ -7137,40 +7180,6 @@ fn yield_for_dirty_page_copy_does_not_trigger_on_system_subnets_without_dts() {
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
         NextExecution::None
-    );
-}
-
-#[test]
-fn table_grow_fails_with_too_many_elements() {
-    let wat = r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (import "ic0" "msg_reply_data_append"
-                (func $msg_reply_data_append (param i32 i32))
-            )
-            (func (export "canister_update table_grow")
-                (i32.store (i32.const 0)
-                    (table.grow 0 (ref.null extern) (i32.const 2000000))
-                )
-                (call $msg_reply_data_append (i32.const 0) (i32.const 4))
-                (call $msg_reply)
-            )
-            (table 0 externref)
-            (memory 1)
-        )
-    "#;
-    let mut test = ExecutionTestBuilder::new().build();
-    let canister_id = test.canister_from_wat(wat).unwrap();
-    let ingress_id = test.ingress_raw(canister_id, "table_grow", vec![]).0;
-    test.execute_message(canister_id);
-    let ingress_status = test.ingress_status(&ingress_id);
-    let ingress_state = match ingress_status {
-        IngressStatus::Known { state, .. } => state,
-        IngressStatus::Unknown => unreachable!("Expected known ingress status"),
-    };
-    assert_eq!(
-        IngressState::Completed(WasmResult::Reply((-1_i32).to_le_bytes().to_vec())),
-        ingress_state
     );
 }
 
@@ -7249,7 +7258,7 @@ fn wasm_memory_limit_is_enforced_at_start_of_update() {
         .unwrap();
     assert_eq!(WasmResult::Reply(100_i32.to_le_bytes().to_vec()), result);
 
-    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(0))
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1))
         .unwrap();
 
     let err = test
@@ -7261,6 +7270,42 @@ fn wasm_memory_limit_is_enforced_at_start_of_update() {
         .unwrap_err();
 
     assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}
+
+#[test]
+fn wasm_memory_limit_zero_means_unlimited() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    let result = test
+        .ingress(canister_id, "update", use_wasm_memory_and_reply(100))
+        .unwrap();
+    assert_eq!(WasmResult::Reply(100_i32.to_le_bytes().to_vec()), result);
+
+    // The execution fails.
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1))
+        .unwrap();
+
+    let err = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().push_bytes(&[]).append_and_reply().build(),
+        )
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(0))
+        .unwrap();
+
+    // The execution succeeds.
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().push_bytes(&[]).append_and_reply().build(),
+    )
+    .unwrap();
 }
 
 #[test]
@@ -7413,6 +7458,28 @@ fn wasm_memory_limit_is_enforced_in_post_upgrade() {
 }
 
 #[test]
+fn wasm_memory_limit_is_enforced_with_static_memory_in_post_upgrade() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_post_upgrade")
+            )
+            (memory 10)
+        )"#;
+
+    let canister_id = test.canister_from_wat(wat).unwrap();
+
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1))
+        .unwrap();
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    // The post-upgrade is expected to fail.
+    let err = test.upgrade_canister(canister_id, wasm).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}
+
+#[test]
 fn wasm_memory_limit_is_enforced_in_init() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
@@ -7421,6 +7488,28 @@ fn wasm_memory_limit_is_enforced_in_init() {
                 (drop (memory.grow (i32.const 10)))
             )
             (memory 0)
+        )"#;
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1))
+        .unwrap();
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    // The canister init is expected to fail.
+    let err = test.install_canister(canister_id, wasm).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}
+
+#[test]
+fn wasm_memory_limit_is_enforced_with_static_memory_in_init() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_init")
+            )
+            (memory 10)
         )"#;
 
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));

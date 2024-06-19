@@ -848,18 +848,13 @@ fn test_sns_lifecycle(
             })
         };
 
-        let expected_set_dapp_controllers_call_result =
-            if swap_finalization_status == SwapFinalizationStatus::Aborted {
-                Some(SetDappControllersCallResult {
-                    possibility: Some(set_dapp_controllers_call_result::Possibility::Ok(
-                        SetDappControllersResponse {
-                            failed_updates: vec![],
-                        },
-                    )),
-                })
-            } else {
-                None
-            };
+        let expected_set_dapp_controllers_call_result = Some(SetDappControllersCallResult {
+            possibility: Some(set_dapp_controllers_call_result::Possibility::Ok(
+                SetDappControllersResponse {
+                    failed_updates: vec![],
+                },
+            )),
+        });
 
         assert_eq!(
             sns::swap::finalize_swap(&pocket_ic, swap_canister_id),

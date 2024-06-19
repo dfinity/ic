@@ -17,7 +17,7 @@ rust_library(
         "//rs/bitcoin/types/internal",
         "//rs/config",
         "//rs/interfaces/adapter_client",
-        "//rs/monitoring/adapter_metrics",
+        "//rs/monitoring/adapter_metrics/client",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "@crate_index//:prometheus",

@@ -31,13 +31,14 @@ phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-rayon = "1.5.1"
+rayon = { workspace = true }
 slog = { workspace = true }
 strum_macros = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-criterion = "0.5"
+criterion = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-config = { path = "../config" }

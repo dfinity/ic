@@ -64,20 +64,22 @@ RUN . /opt/nvm/nvm.sh && \
     nvm install ${dependency_mgmt_nns_dapp_node_version} && \
     nvm install ${dependency_mgmt_default_node_version}
 
-RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu
-# needed for github actions runner
-RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 buildifier
+RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu && \
+    # needed for github actions runner \
+    groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 buildifier && \
+    # CI before script requires sudo \
+    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-# CI before script requires sudo
-RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+# Add gitconfig
+COPY ./gitlab-ci/container/files/gitconfig /etc/gitconfig
 
 # Pre-populate the Bazel installation for root
 COPY .bazelversion /tmp/bazel/
 RUN cd /tmp/bazel && touch WORKSPACE  && bazel version
 
 COPY ./gitlab-ci/container/files/generate-bazel-completion.sh /tmp/
-RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh
-RUN echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
+RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh && \
+    echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
 # Add cocogitto
 ARG COCOGITTO_VERSION="5.4.0"
@@ -86,6 +88,34 @@ ARG COCOGITTO_OUT="cocogitto-${COCOGITTO_VERSION}-x86_64-unknown-linux-musl.tar.
 RUN curl -fsSL "https://github.com/cocogitto/cocogitto/releases/download/${COCOGITTO_VERSION}/cocogitto-${COCOGITTO_VERSION}-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C "/usr/local/bin" && \
     rm "/usr/local/bin/LICENSE" && \
     echo "26a64a7ace621a0c8aabf9305987b91aa9e84c35db949e8809d4a97ae977fa34  ${COCOGITTO_BIN}" | shasum -a 256 -c -
+
+# Add buf
+ARG BUF_BIN="/usr/local/bin/buf"
+ARG BUF_VERSION="1.31.0"
+RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-$(uname -s)-$(uname -m)" -o "${BUF_BIN}" && \
+    echo "a4589eea3afa5f8cda01c3830cdc0112ddd08c32f8b1d45007291fae9fc9bbf4  ${BUF_BIN}" | shasum -a 256 -c - && \
+    chmod +x "${BUF_BIN}"
+
+# Add yq
+ARG YQ_BIN="/usr/local/bin/yq"
+ARG YQ_VERSION="4.34.1"
+RUN curl -sSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" -o "${YQ_BIN}" && \
+    echo "c5a92a572b3bd0024c7b1fe8072be3251156874c05f017c23f9db7b3254ae71a  ${YQ_BIN}" | shasum -a 256 -c - && \
+    chmod +x "${YQ_BIN}"
+
+# Add mold linker
+ARG MOLD_BIN="/usr/local/bin/mold"
+ARG MOLD_VERSION=2.4.1
+RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-$(uname -m)-linux.tar.gz" | tar -C /usr/local --strip-components=1 -xzf - && \
+    echo "4d34b489a0810e71a937103f38e4b6c951abac36b5b60c58bc07b73efa7139cd  ${MOLD_BIN}" | shasum -a 256 -c - && \
+    ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
+
+# Add kubectl
+ARG KUBECTL_BIN="/usr/local/bin/kubectl"
+ARG KUBECTL_VERSION="1.22.17"
+RUN curl -sSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o "${KUBECTL_BIN}" && \
+    echo "7506a0ae7a59b35089853e1da2b0b9ac0258c5309ea3d165c3412904a9051d48  ${KUBECTL_BIN}" | sha256sum -c - && \
+    chmod +x "${KUBECTL_BIN}"
 
 # Install AFLplusplus
 ARG AFL_RELEASE_VERSION=v4.09c
@@ -99,6 +129,11 @@ RUN mkdir -p /afl && \
     mv afl-fuzz afl-showmap  /afl && \
     cd .. && rm -rf AFLplusplus
 
+RUN mv /usr/bin/docker /usr/bin/docker-bin
+COPY ./gitlab-ci/container/files/containers.conf /etc/containers/containers.conf
+COPY ./gitlab-ci/container/files/docker.sh /usr/bin/docker
+COPY ./gitlab-ci/container/files/entrypoint.sh /entrypoint.sh
+
 USER ubuntu
 
 # Set PATH for ubuntu user
@@ -109,7 +144,7 @@ ENV PYTHONPATH=/ic/gitlab-ci/src:/ic/gitlab-ci/src/dependencies:$PYTHONPATH
 RUN cd /tmp/bazel && bazel version
 
 # Add Rust/Cargo support
-ARG RUST_VERSION=1.78.0
+ARG RUST_VERSION=1.79.0
 RUN curl --fail https://sh.rustup.rs -sSf \
     | sh -s -- -y --default-toolchain ${RUST_VERSION}-x86_64-unknown-linux-gnu --no-modify-path && \
     rustup default ${RUST_VERSION}-x86_64-unknown-linux-gnu && \
@@ -120,47 +155,14 @@ RUN curl --fail https://sh.rustup.rs -sSf \
 ARG CARGO_AUDIT_VERSION=0.20.0
 RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
 
-# Add buf
-ARG BUF_BIN="/usr/local/bin/buf"
-ARG BUF_VERSION="1.31.0"
-RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-$(uname -s)-$(uname -m)" -o "${BUF_BIN}" && \
-    echo "a4589eea3afa5f8cda01c3830cdc0112ddd08c32f8b1d45007291fae9fc9bbf4  ${BUF_BIN}" | shasum -a 256 -c - && \
-    chmod +x "${BUF_BIN}"
-
+COPY ./gitlab-ci/container/TAG /home/ubuntu/.DFINITY-TAG
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./gitlab-ci/container/files/zshrc /home/ubuntu/.zshrc
 
-# Add yq
-ARG YQ_BIN="/usr/local/bin/yq"
-ARG YQ_VERSION="4.34.1"
-RUN curl -sSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" -o "${YQ_BIN}" && \
-    echo "c5a92a572b3bd0024c7b1fe8072be3251156874c05f017c23f9db7b3254ae71a  ${YQ_BIN}" | shasum -a 256 -c - && \
-    chmod +x "${YQ_BIN}"
-
-COPY ./gitlab-ci/container/TAG /home/ubuntu/.DFINITY-TAG
-
 WORKDIR /
-USER 0
-
-RUN mv /usr/bin/docker /usr/bin/docker-bin
-COPY ./gitlab-ci/container/files/containers.conf /etc/containers/containers.conf
-COPY ./gitlab-ci/container/files/docker.sh /usr/bin/docker
-COPY ./gitlab-ci/container/files/entrypoint.sh /entrypoint.sh
-
-# Add mold linker
-ARG MOLD_BIN="/usr/local/bin/mold"
-ARG MOLD_VERSION=2.4.1
-RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-$(uname -m)-linux.tar.gz" | tar -C /usr/local --strip-components=1 -xzf - && \
-    echo "4d34b489a0810e71a937103f38e4b6c951abac36b5b60c58bc07b73efa7139cd  ${MOLD_BIN}" | shasum -a 256 -c - && \
-    ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
-
-
-# Add kubectl
-ARG KUBECTL_BIN="/usr/local/bin/kubectl"
-ARG KUBECTL_VERSION="1.22.17"
-RUN curl -sSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o "${KUBECTL_BIN}" && \
-    echo "7506a0ae7a59b35089853e1da2b0b9ac0258c5309ea3d165c3412904a9051d48  ${KUBECTL_BIN}" | sha256sum -c - && \
-    chmod +x "${KUBECTL_BIN}"
-
+# Use buildifier (uid 1001) if /entrypoint.sh is overriden
+# In GitHub that is the case and we need 1001 and we set it via ARG.
+ARG CI_USER="root"
+USER $CI_USER
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]

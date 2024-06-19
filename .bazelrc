@@ -15,10 +15,6 @@ build:fmt --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
 build:fmt --output_groups=+rustfmt_checks
 build --@rules_rust//:rustfmt.toml=//:rustfmt.toml
 
-# https://github.com/bazelbuild/rules_rust/pull/2277 breaks our build in CI
-# TODO(levsha): localise the problem and report to the upstream
-build --@rules_rust//rust/settings:experimental_toolchain_generated_sysroot=False
-
 build:ci --progress_report_interval=30
 
 # Use hermetic JDK
@@ -53,8 +49,6 @@ build:ci --remote_timeout=5m # Default is 60s.
 build --experimental_remote_downloader=bazel-remote.idx.dfinity.network --experimental_remote_downloader_local_fallback
 build:local --experimental_remote_downloader=
 
-# Does not produce valid JSON. See https://github.com/bazelbuild/bazel/issues/14209
-build --execution_log_json_file=bazel-build-log.json
 build:ci --build_event_binary_file=bazel-bep.pb
 
 build --bes_results_url=https://dash.idx.dfinity.network/invocation/
@@ -69,8 +63,6 @@ build --remote_local_fallback
 build --workspace_status_command=$(pwd)/bazel/workspace_status.sh
 
 build --experimental_repository_downloader_retries=3 # https://bazel.build/reference/command-line-reference#flag--experimental_repository_downloader_retries
-
-build --cxxopt='-std=c++17'
 
 build --flag_alias=ic_version=//bazel:ic_version
 build --flag_alias=ic_version_rc_only=//bazel:ic_version_rc_only

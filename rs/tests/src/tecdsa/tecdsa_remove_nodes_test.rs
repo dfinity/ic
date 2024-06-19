@@ -32,6 +32,7 @@ use crate::{
 };
 use canister_test::{Canister, Cycles};
 use ic_base_types::NodeId;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
@@ -74,21 +75,17 @@ pub fn test(env: TestEnv) {
     NnsInstallationBuilder::new()
         .install(nns_node, &env)
         .expect("Could not install NNS canisters");
-    let message_hash = [0xabu8; 32];
+    let message_hash = vec![0xabu8; 32];
+    let ecdsa_key_id = make_key(KEY_ID1);
+    let key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
     let (canister_id, public_key) = block_on(async {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         info!(log, "Enable ECDSA signing");
-        enable_ecdsa_signing(
-            &governance,
-            nns_subnet.subnet_id,
-            vec![make_key(KEY_ID1)],
-            &log,
-        )
-        .await;
+        enable_ecdsa_signing(&governance, nns_subnet.subnet_id, vec![ecdsa_key_id], &log).await;
         let msg_can = MessageCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
         info!(log, "Getting public key");
-        let public_key = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &log)
+        let public_key = get_public_key_with_logger(&key_id, &msg_can, &log)
             .await
             .unwrap();
         (msg_can.canister_id(), public_key)
@@ -126,19 +123,19 @@ pub fn test(env: TestEnv) {
     info!(log, "Verify signature");
     block_on(async {
         let msg_can = MessageCanister::from_canister_id(&nns_agent, canister_id);
-        let public_key_ = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &log)
+        let public_key_ = get_public_key_with_logger(&key_id, &msg_can, &log)
             .await
             .unwrap();
         assert_eq!(public_key, public_key_);
         let signature = get_signature_with_logger(
-            &message_hash,
+            message_hash.clone(),
             Cycles::zero(),
-            make_key(KEY_ID1),
+            &key_id,
             &msg_can,
             &log,
         )
         .await
         .unwrap();
-        verify_signature(&message_hash, &public_key, &signature);
+        verify_signature(&key_id, &message_hash, &public_key, &signature);
     });
 }

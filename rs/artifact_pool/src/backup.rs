@@ -402,7 +402,8 @@ fn store_artifacts(artifacts: Vec<ConsensusMessage>, path: &Path) -> Result<(), 
             | NotarizationShare(_)
             | FinalizationShare(_)
             | RandomTapeShare(_)
-            | CatchUpPackageShare(_) => None,
+            | CatchUpPackageShare(_)
+            | EquivocationProof(_) => None,
         })
         .try_for_each(|artifact| artifact.write_to_disk(path))
 }

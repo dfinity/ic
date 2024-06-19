@@ -138,7 +138,7 @@ impl PreSignatureTranscriptRef {
         }
     }
 
-    /// Resolves the refs to get the PreSignatureQuadruple.
+    /// Resolves the refs to get the PreSignatureTranscript.
     pub fn translate(
         &self,
         resolver: &dyn EcdsaBlockReader,

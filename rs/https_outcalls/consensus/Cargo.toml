@@ -19,6 +19,7 @@ ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
+hex = { workspace = true }
 prometheus = { workspace = true }
 slog = { workspace = true }
 
@@ -35,3 +36,5 @@ ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 mockall = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
