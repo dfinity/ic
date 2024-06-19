@@ -343,35 +343,83 @@ impl CountBytes for HypervisorError {
 
 impl AsErrorHelp for HypervisorError {
     fn error_help(&self) -> ErrorHelp {
-        let empty_user_error = ErrorHelp::UserError {
-            suggestion: "".to_string(),
-            doc_link: "".to_string(),
-        };
         match self {
             Self::FunctionNotFound(_, _)
-            | Self::ToolchainContractViolation { .. } => ErrorHelp::ToolchainError,
+            | Self::ToolchainContractViolation { .. } 
+            | Self::InvalidPrincipalId(_) => ErrorHelp::ToolchainError,
             Self::MethodNotFound(_) => ErrorHelp::UserError {
                 suggestion: "Check that the method being called is exported by the target canister.".to_string(),
                 doc_link: "http://internetcomputer.org/docs/current/references/execution-errors#method-not-found".to_string(),
             },
-            Self::InstructionLimitExceeded(_)
-            | Self::Trapped(_)
-            | Self::CalledTrap(_)
-            | Self::WasmModuleNotFound
-            | Self::OutOfMemory
-            | Self::InvalidPrincipalId(_)
-            | Self::MessageRejected
-            | Self::InsufficientCyclesBalance(_)
-            | Self::Cleanup { .. }
-            | Self::WasmEngineError(_)
-            | Self::ReservedPagesForOldMotoko
-            | Self::Aborted
-            | Self::SliceOverrun { .. }
-            | Self::MemoryAccessLimitExceeded(_)
-            | Self::InsufficientCyclesInMemoryGrow { .. }
-            | Self::ReservedCyclesLimitExceededInMemoryGrow { .. }
-            | Self::InsufficientCyclesInMessageMemoryGrow { .. }
-            | Self::WasmMemoryLimitExceeded { .. } => empty_user_error,
+            Self::InstructionLimitExceeded(_) => ErrorHelp::UserError {
+                suggestion: "Try optimizing this method to consume fewer instructions or split the work across multiple messages.".to_string(),
+                doc_link: "https://internetcomputer.org/docs/current/references/execution-errors#instruction-limit-exceeded".to_string(),
+            },
+            Self::Trapped(_) => ErrorHelp::UserError {
+                suggestion: "Consider gracefully handling failures from this canister or altering the canister to handle exceptions.".to_string(),
+                doc_link: "https://internetcomputer.org/docs/current/references/execution-errors#trapped".to_string(),
+
+            },
+            Self::CalledTrap(_) => ErrorHelp::UserError { 
+                suggestion: "Consider gracefully handling failures from this canister or altering the canister to handle exceptions.".to_string(), 
+                doc_link: "https://internetcomputer.org/docs/current/references/execution-errors#trapped-explicitly".to_string(), 
+            }, 
+            Self::WasmModuleNotFound => ErrorHelp::UserError { 
+                suggestion: "Please install code to this canister before calling it.".to_string(), 
+                doc_link: "https://internetcomputer.org/docs/current/references/execution-errors#wasm-module-not-found".to_string(), 
+            }, 
+            Self::OutOfMemory => ErrorHelp::UserError { 
+                suggestion: "Check the canister's memory usage against its allocation and the system wide limits to determine why more memory cannot be allocated.".to_string(), 
+                doc_link: "https://internetcomputer.org/docs/current/references/execution-errors#out-of-memory".to_string(),
+            }, 
+            Self::MessageRejected => ErrorHelp::UserError { 
+                suggestion: "".to_string(), 
+                doc_link: "".to_string(), 
+            }, 
+            Self::InsufficientCyclesBalance(_) => ErrorHelp::UserError { 
+                suggestion: "".to_string(), 
+                doc_link: "".to_string(), 
+            }, 
+            Self::Cleanup { .. } => ErrorHelp::UserError { 
+                suggestion: "".to_string(), 
+                doc_link: "".to_string(), 
+            }, 
+            Self::WasmEngineError(_) => ErrorHelp::UserError { 
+                suggestion: "".to_string(), 
+                doc_link: "".to_string(), 
+            }, 
+            Self::ReservedPagesForOldMotoko => ErrorHelp::UserError { 
+                suggestion: "Upgrade the canister to the latest version of Motoko.".to_string(), 
+                doc_link: "https://internetcomputer.org/docs/current/references/execution-errors#reserved-pages-for-old-motoko".to_string(), 
+            }, 
+            Self::Aborted => ErrorHelp::UserError { 
+                suggestion: "".to_string(), 
+                doc_link: "".to_string(), 
+            }, 
+            Self::SliceOverrun { .. } => ErrorHelp::UserError { 
+                suggestion: "Try breaking up large copies within the canister code into smaller chunks.".to_string(), 
+                doc_link: "https://internetcomputer.org/docs/current/references/execution-errors#slice-overrun".to_string(), 
+            }, 
+            Self::MemoryAccessLimitExceeded(_) => ErrorHelp::UserError { 
+                suggestion: "Try optimizing the use of stable memory so that individual messages don't need to access as much stable memory.".to_string(), 
+                doc_link: "https://internetcomputer.org/docs/current/references/execution-errors#memory-access-limit-exceeded".to_string(), 
+            }, 
+            Self::InsufficientCyclesInMemoryGrow { .. } => ErrorHelp::UserError { 
+                suggestion: "Try topping up the canister.".to_string(), 
+                doc_link: "https://internetcomputer.org/docs/current/references/execution-errors#insufficient-cycles-in-memory-grow".to_string(), 
+            }, 
+            Self::ReservedCyclesLimitExceededInMemoryGrow { .. } => ErrorHelp::UserError { 
+                suggestion: "Try increasing the canister's reserved cycles limit.".to_string(), 
+                doc_link: "https://internetcomputer.org/docs/current/references/execution-errors#reserved-cycles-limit-exceeded-in-memory-grow".to_string(), 
+            }, 
+            Self::InsufficientCyclesInMessageMemoryGrow { .. } => ErrorHelp::UserError { 
+                suggestion: "Try topping up the canister.".to_string(), 
+                doc_link: "https://internetcomputer.org/docs/current/references/execution-errors#insufficient-cycles-in-message-memory-grow".to_string(), 
+            },
+            Self::WasmMemoryLimitExceeded { .. } => ErrorHelp::UserError {
+                suggestion: "Try checking the canister for a possible memory leak or modifying it to use more stable memory instead of Wasm memory.".to_string(),
+                doc_link: "https://internetcomputer.org/docs/current/references/execution-errors#wasm-memory-limit-exceeded".to_string(),
+            },
             Self::UserContractViolation {
                 suggestion,
                 doc_link,
