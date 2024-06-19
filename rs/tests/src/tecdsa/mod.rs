@@ -8,8 +8,10 @@ use ic_agent::AgentError;
 use ic_base_types::{NodeId, SubnetId};
 use ic_canister_client::Sender;
 use ic_management_canister_types::{
-    DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, Payload,
-    SignWithECDSAArgs, SignWithECDSAReply,
+    DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
+    MasterPublicKeyId, Payload, SchnorrAlgorithm, SchnorrKeyId, SchnorrPublicKeyArgs,
+    SchnorrPublicKeyResponse, SignWithECDSAArgs, SignWithECDSAReply, SignWithSchnorrArgs,
+    SignWithSchnorrReply,
 };
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::NeuronId;
@@ -37,6 +39,7 @@ pub mod tecdsa_two_signing_subnets_test;
 
 pub(crate) const KEY_ID1: &str = "secp256k1";
 pub(crate) const KEY_ID2: &str = "some_other_key";
+pub(crate) const KEY_ID3: &str = "yet_another_key";
 
 /// The default DKG interval takes too long before the keys are created and
 /// passed to execution.
@@ -86,19 +89,35 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
 }
 
 pub(crate) async fn get_public_key_with_retries(
-    key_id: EcdsaKeyId,
+    key_id: &MasterPublicKeyId,
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
     retries: u64,
-) -> Result<VerifyingKey, AgentError> {
+) -> Result<Vec<u8>, AgentError> {
+    match key_id {
+        MasterPublicKeyId::Ecdsa(key_id) => {
+            get_ecdsa_public_key_with_retries(key_id, msg_can, logger, retries).await
+        }
+        MasterPublicKeyId::Schnorr(key_id) => {
+            get_schnorr_public_key_with_retries(key_id, msg_can, logger, retries).await
+        }
+    }
+}
+
+pub(crate) async fn get_ecdsa_public_key_with_retries(
+    key_id: &EcdsaKeyId,
+    msg_can: &MessageCanister<'_>,
+    logger: &Logger,
+    retries: u64,
+) -> Result<Vec<u8>, AgentError> {
     let public_key_request = ECDSAPublicKeyArgs {
         canister_id: None,
         derivation_path: DerivationPath::new(vec![]),
-        key_id,
+        key_id: key_id.clone(),
     };
     info!(
         logger,
-        "Sending a 'get public key' request: {:?}", public_key_request
+        "Sending a 'get ecdsa public key' request: {:?}", public_key_request
     );
 
     let mut count = 0;
@@ -121,7 +140,58 @@ pub(crate) async fn get_public_key_with_retries(
                 if count < retries {
                     debug!(
                         logger,
-                        "ecdsa_public_key returns `{}`. Trying again...", err
+                        "ecdsa_public_key returns `{}`. Trying again in 3 seconds...", err
+                    );
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+                } else {
+                    return Err(err);
+                }
+            }
+        }
+    };
+    let pk =
+        VerifyingKey::from_sec1_bytes(&public_key[..]).expect("Bytes are not a valid public key");
+    info!(logger, "ecdsa_public_key returns {:?}", pk);
+    Ok(public_key)
+}
+
+pub(crate) async fn get_schnorr_public_key_with_retries(
+    key_id: &SchnorrKeyId,
+    msg_can: &MessageCanister<'_>,
+    logger: &Logger,
+    retries: u64,
+) -> Result<Vec<u8>, AgentError> {
+    let public_key_request = SchnorrPublicKeyArgs {
+        canister_id: None,
+        derivation_path: DerivationPath::new(vec![]),
+        key_id: key_id.clone(),
+    };
+    info!(
+        logger,
+        "Sending a 'get schnorr public key' request: {:?}", public_key_request
+    );
+
+    let mut count = 0;
+    let public_key = loop {
+        let res = msg_can
+            .forward_to(
+                &Principal::management_canister(),
+                "schnorr_public_key",
+                Encode!(&public_key_request).unwrap(),
+            )
+            .await;
+        match res {
+            Ok(bytes) => {
+                let key = SchnorrPublicKeyResponse::decode(&bytes)
+                    .expect("failed to decode SchnorrPublicKeyResponse");
+                break key.public_key;
+            }
+            Err(err) => {
+                count += 1;
+                if count < retries {
+                    debug!(
+                        logger,
+                        "schnorr_public_key returns `{}`. Trying again...", err
                     );
                     tokio::time::sleep(Duration::from_millis(1000)).await;
                 } else {
@@ -130,16 +200,33 @@ pub(crate) async fn get_public_key_with_retries(
             }
         }
     };
-    info!(logger, "ecdsa_public_key returns {:?}", public_key);
-    Ok(VerifyingKey::from_sec1_bytes(&public_key).expect("Response is not a valid public key"))
+
+    match key_id.algorithm {
+        SchnorrAlgorithm::Bip340Secp256k1 => {
+            use schnorr_fun::fun::{marker::*, Point};
+            assert_eq!(public_key.len(), 33);
+            let bip340_pk_array =
+                <[u8; 32]>::try_from(&public_key[1..]).expect("public key is not 32 bytes");
+
+            let vk = Point::<EvenY, Public>::from_xonly_bytes(bip340_pk_array)
+                .expect("failed to parse public key");
+            info!(logger, "schnorr_public_key returns {:?}", vk);
+        }
+        SchnorrAlgorithm::Ed25519 => {
+            let pk: [u8; 32] = public_key[..].try_into().expect("Public key wrong size");
+            let vk = ed25519_dalek::VerifyingKey::from_bytes(&pk).unwrap();
+            info!(logger, "schnorr_public_key returns {:?}", vk);
+        }
+    }
+    Ok(public_key)
 }
 
 pub(crate) async fn get_public_key_with_logger(
-    key_id: EcdsaKeyId,
+    key_id: &MasterPublicKeyId,
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
-) -> Result<VerifyingKey, AgentError> {
-    get_public_key_with_retries(key_id, msg_can, logger, /*retries=*/ 300).await
+) -> Result<Vec<u8>, AgentError> {
+    get_public_key_with_retries(key_id, msg_can, logger, /*retries=*/ 100).await
 }
 
 pub(crate) async fn execute_update_subnet_proposal(
@@ -205,18 +292,40 @@ pub(crate) async fn execute_create_subnet_proposal(
 }
 
 pub(crate) async fn get_signature_with_logger(
-    message_hash: &[u8; 32],
+    message: Vec<u8>,
     cycles: Cycles,
-    key_id: EcdsaKeyId,
+    key_id: &MasterPublicKeyId,
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
-) -> Result<Signature, AgentError> {
+) -> Result<Vec<u8>, AgentError> {
+    match key_id {
+        MasterPublicKeyId::Ecdsa(key_id) => {
+            let message_hash =
+                <[u8; 32]>::try_from(&message[..]).expect("message hash is not 32 bytes");
+            get_ecdsa_signature_with_logger(&message_hash, cycles, key_id, msg_can, logger).await
+        }
+        MasterPublicKeyId::Schnorr(key_id) => {
+            get_schnorr_signature_with_logger(message, cycles, key_id, msg_can, logger).await
+        }
+    }
+}
+
+pub(crate) async fn get_ecdsa_signature_with_logger(
+    message_hash: &[u8; 32],
+    cycles: Cycles,
+    key_id: &EcdsaKeyId,
+    msg_can: &MessageCanister<'_>,
+    logger: &Logger,
+) -> Result<Vec<u8>, AgentError> {
     let signature_request = SignWithECDSAArgs {
         message_hash: *message_hash,
         derivation_path: DerivationPath::new(Vec::new()),
-        key_id,
+        key_id: key_id.clone(),
     };
-    info!(logger, "Sending a signing request: {:?}", signature_request);
+    info!(
+        logger,
+        "Sending an ECDSA signing request: {:?}", signature_request
+    );
 
     let mut count = 0;
     let signature = loop {
@@ -238,9 +347,12 @@ pub(crate) async fn get_signature_with_logger(
             }
             Err(err) => {
                 count += 1;
-                if count < 20 {
-                    debug!(logger, "sign_with_ecdsa returns `{}`. Trying again...", err);
-                    tokio::time::sleep(Duration::from_millis(500)).await;
+                if count < 5 {
+                    debug!(
+                        logger,
+                        "sign_with_ecdsa returns `{}`. Trying again in 3 seconds...", err
+                    );
+                    tokio::time::sleep(Duration::from_secs(3)).await;
                 } else {
                     return Err(err);
                 }
@@ -249,16 +361,61 @@ pub(crate) async fn get_signature_with_logger(
     };
     info!(logger, "sign_with_ecdsa returns {:?}", signature);
 
-    Ok(Signature::try_from(signature.as_ref()).expect("Response is not a valid signature"))
+    Ok(signature)
 }
 
-pub(crate) fn verify_signature(
-    message_hash: &[u8],
-    public_key: &VerifyingKey,
-    signature: &Signature,
-) {
-    // Verify the signature:
-    assert!(public_key.verify_prehash(message_hash, signature).is_ok());
+pub(crate) async fn get_schnorr_signature_with_logger(
+    message: Vec<u8>,
+    cycles: Cycles,
+    key_id: &SchnorrKeyId,
+    msg_can: &MessageCanister<'_>,
+    logger: &Logger,
+) -> Result<Vec<u8>, AgentError> {
+    let signature_request = SignWithSchnorrArgs {
+        message,
+        derivation_path: DerivationPath::new(Vec::new()),
+        key_id: key_id.clone(),
+    };
+    info!(
+        logger,
+        "Sending a Schnorr signing request: {:?}", signature_request
+    );
+
+    let mut count = 0;
+    let signature = loop {
+        // Ask for a signature.
+        let res = msg_can
+            .forward_with_cycles_to(
+                &Principal::management_canister(),
+                "sign_with_schnorr",
+                Encode!(&signature_request).unwrap(),
+                cycles,
+            )
+            .await;
+        match res {
+            Ok(reply) => {
+                let signature = SignWithSchnorrReply::decode(&reply)
+                    .expect("failed to decode SignWithSchnorrReply")
+                    .signature;
+                break signature;
+            }
+            Err(err) => {
+                count += 1;
+                if count < 20 {
+                    debug!(
+                        logger,
+                        "sign_with_schnorr returns `{}`. Trying again...", err
+                    );
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                } else {
+                    return Err(err);
+                }
+            }
+        }
+    };
+    info!(logger, "sign_with_schnorr returns {:?}", signature);
+
+    Ok(signature)
 }
 
 pub(crate) async fn enable_ecdsa_signing(
@@ -391,4 +548,55 @@ pub(crate) async fn create_new_subnet_with_keys(
         }),
     };
     execute_create_subnet_proposal(governance, payload, logger).await;
+}
+
+pub fn verify_bip340_signature(sec1_pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
+    use schnorr_fun::{
+        fun::{marker::*, Point},
+        Message, Schnorr, Signature,
+    };
+    use sha2::Sha256;
+
+    let sig_array = <[u8; 64]>::try_from(sig).expect("signature is not 64 bytes");
+    assert_eq!(sec1_pk.len(), 33);
+    // The public key is a BIP-340 public key, which is a 32-byte
+    // compressed public key ignoring the y coordinate in the first byte of the
+    // SEC1 encoding.
+    let bip340_pk_array = <[u8; 32]>::try_from(&sec1_pk[1..]).expect("public key is not 32 bytes");
+
+    let schnorr = Schnorr::<Sha256>::verify_only();
+    let public_key = Point::<EvenY, Public>::from_xonly_bytes(bip340_pk_array)
+        .expect("failed to parse public key");
+    let signature = Signature::<Public>::from_bytes(sig_array).unwrap();
+    schnorr.verify(&public_key, Message::<Secret>::raw(msg), &signature)
+}
+
+pub fn verify_ed25519_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
+    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+
+    let pk: [u8; 32] = pk.try_into().expect("Public key wrong size");
+    let vk = VerifyingKey::from_bytes(&pk).unwrap();
+
+    let signature = Signature::from_slice(sig).expect("Signature incorrect length");
+
+    vk.verify(msg, &signature).is_ok()
+}
+
+pub fn verify_ecdsa_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
+    let pk = VerifyingKey::from_sec1_bytes(pk).expect("Bytes are not a valid public key");
+    let signature = Signature::try_from(sig).expect("Bytes are not a valid signature");
+    pk.verify_prehash(msg, &signature).is_ok()
+}
+
+pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: &[u8]) {
+    let res = match key_id {
+        MasterPublicKeyId::Ecdsa(key_id) => match key_id.curve {
+            EcdsaCurve::Secp256k1 => verify_ecdsa_signature(pk, sig, msg),
+        },
+        MasterPublicKeyId::Schnorr(key_id) => match key_id.algorithm {
+            SchnorrAlgorithm::Bip340Secp256k1 => verify_bip340_signature(pk, sig, msg),
+            SchnorrAlgorithm::Ed25519 => verify_ed25519_signature(pk, sig, msg),
+        },
+    };
+    assert!(res);
 }

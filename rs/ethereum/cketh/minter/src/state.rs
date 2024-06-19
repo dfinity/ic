@@ -92,6 +92,10 @@ pub struct State {
     /// can add new ERC-20 token to the minter
     pub ledger_suite_orchestrator_id: Option<Principal>,
 
+    /// Canister ID of the EVM RPC canister that
+    /// handles communication with Ethereum
+    pub evm_rpc_id: Option<Principal>,
+
     /// ERC-20 tokens that the minter can mint:
     /// - primary key: ledger ID for the ckERC20 token
     /// - secondary key: ERC-20 contract address on Ethereum
@@ -463,6 +467,7 @@ impl State {
             ledger_suite_orchestrator_id,
             erc20_helper_contract_address,
             last_erc20_scraped_block_number,
+            evm_rpc_id,
         } = upgrade_args;
         if let Some(nonce) = next_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
@@ -498,6 +503,9 @@ impl State {
         }
         if let Some(orchestrator_id) = ledger_suite_orchestrator_id {
             self.ledger_suite_orchestrator_id = Some(orchestrator_id);
+        }
+        if let Some(evm_id) = evm_rpc_id {
+            self.evm_rpc_id = Some(evm_id);
         }
         self.validate_config()
     }

@@ -55,6 +55,8 @@ pub enum WasmValidationError {
     InvalidImportSection(String),
     /// Module contains an invalid export section
     InvalidExportSection(String),
+    /// Module contains an invalid export section caused by a user error.
+    UserInvalidExportSection(String),
     /// Module contains an invalid data section
     InvalidDataSection(String),
     /// Module contains an invalid custom section
@@ -73,7 +75,7 @@ pub enum WasmValidationError {
         complexity: usize,
         allowed: usize,
     },
-    /// A function contains un unsupported Wasm instruction.
+    /// A function contains an unsupported Wasm instruction.
     UnsupportedWasmInstruction { index: usize, instruction: String },
     /// A function was too large.
     FunctionTooLarge {
@@ -83,6 +85,8 @@ pub enum WasmValidationError {
     },
     /// The code section is too large.
     CodeSectionTooLarge { size: u32, allowed: u32 },
+    /// The total module size is too large.
+    ModuleTooLarge { size: u64, allowed: u64 },
 }
 
 impl std::fmt::Display for WasmValidationError {
@@ -102,6 +106,9 @@ impl std::fmt::Display for WasmValidationError {
             }
             Self::InvalidExportSection(err) => {
                 write!(f, "Wasm module has an invalid export section. {err}")
+            }
+            Self::UserInvalidExportSection(err) => {
+                write!(f, "Wasm module has an invalid export section. {}", err)
             }
             Self::InvalidDataSection(err) => {
                 write!(f, "Wasm module has an invalid data section. {err}")
@@ -135,12 +142,12 @@ impl std::fmt::Display for WasmValidationError {
                 f,
                 "Wasm module contains a function at index {index} \
                     with complexity {complexity} \
-                    which exceeds the maximum complexity allowed {allowed}",
+                    which exceeds the maximum complexity allowed {allowed}.",
             ),
             Self::UnsupportedWasmInstruction { index, instruction } => write!(
                 f,
                 "Wasm module contains a function at index {index} \
-                    with unsupported instruction {instruction}",
+                    with unsupported instruction {instruction}.",
             ),
             Self::FunctionTooLarge {
                 index,
@@ -149,12 +156,17 @@ impl std::fmt::Display for WasmValidationError {
             } => write!(
                 f,
                 "Wasm module contains a function at index {index} \
-                    of size {size} that exceeds the maximum allowed size of {allowed}",
+                    of size {size} that exceeds the maximum allowed size of {allowed}.",
             ),
             Self::CodeSectionTooLarge { size, allowed } => write!(
                 f,
                 "Wasm module code section size of {size} \
-                    exceeds the maximum allowed size of {allowed}",
+                    exceeds the maximum allowed size of {allowed}.",
+            ),
+            WasmValidationError::ModuleTooLarge { size, allowed } => write!(
+                f,
+                "Wasm module size of {size} exceeds the maximum \
+                    allowed size of {allowed}.",
             ),
         }
     }
@@ -163,21 +175,23 @@ impl std::fmt::Display for WasmValidationError {
 impl AsErrorHelp for WasmValidationError {
     fn error_help(&self) -> ErrorHelp {
         match self {
-            WasmValidationError::WasmtimeValidation(_)
+            WasmValidationError::DecodingError(_)
+            | WasmValidationError::WasmtimeValidation(_)
+            | WasmValidationError::InvalidExportSection(_)
             | WasmValidationError::InvalidFunctionSignature(_)
             | WasmValidationError::InvalidImportSection(_)
             | WasmValidationError::InvalidDataSection(_)
             | WasmValidationError::InvalidCustomSection(_)
             | WasmValidationError::InvalidGlobalSection(_)
-            | WasmValidationError::TooManyGlobals { .. }
             | WasmValidationError::UnsupportedWasmInstruction { .. }
             | WasmValidationError::TooManyCustomSections { .. } => ErrorHelp::ToolchainError,
-            WasmValidationError::DecodingError(_)
-            | WasmValidationError::InvalidExportSection(_)
+            WasmValidationError::UserInvalidExportSection(_)
             | WasmValidationError::TooManyFunctions { .. }
+            | WasmValidationError::TooManyGlobals { .. }
             | WasmValidationError::FunctionComplexityTooHigh { .. }
             | WasmValidationError::FunctionTooLarge { .. }
-            | WasmValidationError::CodeSectionTooLarge { .. } => ErrorHelp::UserError {
+            | WasmValidationError::CodeSectionTooLarge { .. }
+            | WasmValidationError::ModuleTooLarge { .. } => ErrorHelp::UserError {
                 suggestion: "".to_string(),
                 doc_link: "".to_string(),
             },

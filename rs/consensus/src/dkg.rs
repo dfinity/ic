@@ -567,7 +567,7 @@ fn bootstrap_ecdsa_summary(
         return Ok(Some(summary));
     }
 
-    match get_chain_key_config_if_enabled(subnet_id, registry_version, registry_client, logger)
+    match get_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
         .map_err(|err| format!("Failed getting the chain key config: {:?}", err))?
     {
         Some(chain_key_config) => Ok(make_bootstrap_summary(

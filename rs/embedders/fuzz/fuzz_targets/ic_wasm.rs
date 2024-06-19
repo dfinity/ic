@@ -17,8 +17,13 @@ use wasmparser::*;
 #[derive(Debug)]
 pub struct ICWasmModule {
     pub module: Module,
+    // TODO: Create a config for fuzzing
+    // for clippy to not complain.
+    #[allow(dead_code)]
     pub config: Config,
+    #[allow(dead_code)]
     pub exoported_globals: Vec<Global>,
+    #[allow(dead_code)]
     pub exported_functions: BTreeSet<WasmMethod>,
 }
 

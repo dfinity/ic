@@ -32,6 +32,7 @@ use ic_types::{
 };
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
+use tokio::sync::watch;
 
 /// Test that the batches that Consensus produces contain expected batch
 /// numbers and payloads
@@ -138,6 +139,8 @@ fn consensus_produces_expected_batches() {
             &PoolReader::new(&*consensus_pool.read().unwrap()),
         )));
 
+        let (dummy_watcher, _) = watch::channel(Height::from(0));
+
         let (consensus, consensus_gossip) = ic_consensus::consensus::setup(
             replica_config.clone(),
             Arc::clone(&registry_client) as Arc<_>,
@@ -184,6 +187,7 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&consensus_cache),
             metrics_registry.clone(),
             no_op_logger(),
+            dummy_watcher,
         );
 
         let driver = ConsensusDriver::new(

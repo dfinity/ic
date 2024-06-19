@@ -165,13 +165,13 @@ pub fn test(env: TestEnv) {
     let root_subnet_id = snapshot.root_subnet_id();
 
     let unassigned_node_ids = snapshot.unassigned_nodes().map(|n| n.node_id).collect();
-
+    let key_id = make_key(KEY_ID1);
     info!(logger, "Creating new subnet with keys.");
     block_on(create_new_subnet_with_keys(
         &governance,
         unassigned_node_ids,
         vec![EcdsaKeyRequest {
-            key_id: make_key(KEY_ID1),
+            key_id: key_id.clone(),
             subnet_id: Some(root_subnet_id.get()),
         }],
         replica_version,
@@ -193,18 +193,18 @@ pub fn test(env: TestEnv) {
     info!(logger, "Enabling signing on NNS.");
     enable_signing(&governance, root_subnet_id, &logger);
     registry_version.inc_assign();
-    let pub_key = get_ecdsa_pub_key(&nns_canister, &logger);
-    run_ecdsa_signature_test(&nns_canister, &logger, pub_key);
+    let pub_key = get_ecdsa_pub_key(&nns_canister, key_id.clone(), &logger);
+    run_ecdsa_signature_test(&nns_canister, &logger, key_id.clone(), pub_key.clone());
 
     info!(logger, "Enabling signing on App subnet.");
     enable_signing(&governance, app_subnet.subnet_id, &logger);
     registry_version.inc_assign();
     wait_until_ic_mr_version(&snapshot, registry_version.get(), &logger);
-    run_ecdsa_signature_test(&nns_canister, &logger, pub_key);
+    run_ecdsa_signature_test(&nns_canister, &logger, key_id.clone(), pub_key.clone());
 
     info!(logger, "Disabling signing on NNS.");
     disable_signing(&governance, root_subnet_id, &logger);
     registry_version.inc_assign();
     wait_until_ic_mr_version(&snapshot, registry_version.get(), &logger);
-    run_ecdsa_signature_test(&nns_canister, &logger, pub_key);
+    run_ecdsa_signature_test(&nns_canister, &logger, key_id.clone(), pub_key);
 }

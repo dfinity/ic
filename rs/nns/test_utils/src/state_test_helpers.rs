@@ -1033,6 +1033,7 @@ pub fn nns_propose_upgrade_nns_canister(
     proposer_neuron_id: NeuronId,
     target_canister_id: CanisterId,
     wasm_module: Vec<u8>,
+    module_arg: Vec<u8>,
 ) -> ProposalId {
     let action = if target_canister_id != ROOT_CANISTER_ID {
         let payload = ChangeCanisterRequest::new(
@@ -1050,8 +1051,6 @@ pub fn nns_propose_upgrade_nns_canister(
             payload,
         }))
     } else {
-        let module_arg = Encode!(&()).unwrap();
-
         let payload = UpgradeRootProposal {
             wasm_module,
             module_arg,

@@ -4,7 +4,7 @@ use crate::common::{
     default_certified_state_reader, default_get_latest_state, default_latest_certified_height,
     default_read_certified_state, get_free_localhost_socket_addr,
     test_agent::{self, wait_for_status_healthy, IngressMessage},
-    HttpEndpointBuilder,
+    HttpEndpointBuilder, MockIngressPoolThrottler,
 };
 use async_trait::async_trait;
 use axum::body::Body;
@@ -14,6 +14,7 @@ use ic_config::http_handler::Config;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_pprof::{Error, PprofCollector};
 use ic_types::{ingress::WasmResult, time::current_time};
+use rstest::rstest;
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -313,7 +314,7 @@ fn test_load_shedding_pprof() {
     });
 }
 
-/// Test concurrency limiter for `/call` endpoint and that when the load shedder kicks in
+/// Test concurrency limiter for `/v2/.../call` endpoint and that when the load shedder kicks in
 /// we return 429.
 /// Test scenario:
 /// 1. Set the concurrency limiter for the call service, `max_call_concurrent_requests`, to 1.
@@ -373,4 +374,41 @@ fn test_load_shedding_update_call() {
             load_shedded_response.status()
         );
     })
+}
+
+/// Test that the call endpoints load shed requests when the ingress pool is full.
+#[rstest]
+#[case::v2_endpoint(test_agent::Call::V2)]
+#[case::v3_endpoint(test_agent::Call::V3)]
+fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: test_agent::Call) {
+    use std::sync::RwLock;
+
+    let rt = Runtime::new().unwrap();
+
+    let mut mock_ingress_pool_throttler = MockIngressPoolThrottler::new();
+    mock_ingress_pool_throttler
+        .expect_exceeds_threshold()
+        .return_const(true);
+
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let mut _handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_ingress_pool_throttler(Arc::new(RwLock::new(mock_ingress_pool_throttler)))
+        .run();
+
+    rt.block_on(async move {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let message = Default::default();
+        let call_response = endpoint.call(addr, message).await;
+        assert_eq!(
+            call_response.status(),
+            StatusCode::TOO_MANY_REQUESTS,
+            "{:?}",
+            call_response.text().await.unwrap()
+        );
+    });
 }

@@ -231,51 +231,17 @@ impl GovernanceCanisterInitPayloadBuilder {
                 .map(|f| f.parse::<String>().expect("couldn't read column header"))
                 .collect::<Vec<String>>();
 
-            if headers.len() == 7 {
-                assert_eq!(
-                    headers,
-                    vec![
-                        "neuron_id",
-                        "owner_id",
-                        "created_ts_ns",
-                        "duration_to_dissolution_ns",
-                        "staked_icpt",
-                        "earnings",
-                        "follows",
-                    ]
-                );
-            } else if headers.len() == 8 {
-                assert_eq!(
-                    headers,
-                    vec![
-                        "neuron_id",
-                        "owner_id",
-                        "created_ts_ns",
-                        "duration_to_dissolution_ns",
-                        "staked_icpt",
-                        "earnings",
-                        "follows",
-                        "not_for_profit"
-                    ]
-                );
-            } else {
-                assert_eq!(
-                    headers,
-                    vec![
-                        "neuron_id",
-                        "owner_id",
-                        "created_ts_ns",
-                        "duration_to_dissolution_ns",
-                        "staked_icpt",
-                        "earnings",
-                        "follows",
-                        "not_for_profit",
-                        "memo",
-                        "maturity_e8s_equivalent",
-                        "kyc_verified"
-                    ]
-                );
-            }
+            assert_eq!(
+                headers,
+                vec![
+                    "neuron_id",
+                    "owner_id",
+                    "created_ts_ns",
+                    "staked_icpt",
+                    "follows",
+                    "not_for_profit"
+                ]
+            );
         }
 
         for result in reader.records() {
@@ -294,14 +260,10 @@ impl GovernanceCanisterInitPayloadBuilder {
             let creation_ts_ns = record[2]
                 .parse::<u64>()
                 .expect("couldn't read the neuron's creation time");
-            let duration_to_dissolution_ns = record[3]
-                .parse::<u64>()
-                .expect("couldn't read the neuron's duration to dissolution time");
-            let staked_icpt = record[4]
+            let staked_icpt = record[3]
                 .parse::<u64>()
                 .expect("couldn't read the neuron's staked icpt amount");
-
-            let followees: Vec<NeuronIdProto> = record[6]
+            let followees: Vec<NeuronIdProto> = record[4]
                 .split_terminator(',')
                 .map(|x| NeuronIdProto {
                     id: x.parse::<u64>().expect("could not parse followee"),
@@ -313,30 +275,26 @@ impl GovernanceCanisterInitPayloadBuilder {
 
             let neuron_id = NeuronIdProto::from(neuron_id);
 
-            let not_for_profit = if record.len() < 8 {
-                false
-            } else {
-                record[7]
-                    .parse::<bool>()
-                    .expect("couldn't read the neuron's not-for-profit flag")
-            };
+            let not_for_profit = record[5]
+                .parse::<bool>()
+                .expect("couldn't read the neuron's not-for-profit flag");
 
             let memo = if record.len() < 9 {
                 self.rng.next_u64()
             } else {
-                record[8].parse::<u64>().expect("could not parse memo")
+                record[6].parse::<u64>().expect("could not parse memo")
             };
 
             let maturity_e8s_equivalent = if record.len() < 10 {
                 0
             } else {
-                record[9].parse::<u64>().expect("could not parse maturity")
+                record[7].parse::<u64>().expect("could not parse maturity")
             };
 
             let kyc_verified = if record.len() < 11 {
                 false
             } else {
-                record[10]
+                record[8]
                     .parse::<bool>()
                     .expect("could not parse kyc_verified")
             };
@@ -352,9 +310,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 kyc_verified,
                 maturity_e8s_equivalent,
                 not_for_profit,
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                    duration_to_dissolution_ns / (1_000_000_000),
-                )), // to sec
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
                 followees: [(Topic::Unspecified as i32, Followees { followees })]
                     .iter()
                     .cloned()

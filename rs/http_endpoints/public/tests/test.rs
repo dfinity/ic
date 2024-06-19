@@ -1391,3 +1391,51 @@ fn test_call_v3_response_when_state_reader_fails(
         )
     });
 }
+
+/// Tests that the HTTP endpoint return `INTERNAL_SERVER_ERROR`
+/// if the call handler is unable to submit the ingress message to
+/// P2P.
+#[rstest]
+fn test_call_response_when_p2p_not_running(
+    #[values(test_agent::Call::V2, test_agent::Call::V3)] call_agent: test_agent::Call,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        // We set the timeout to 0, to avoid waiting for subscription.
+        ingress_message_certificate_timeout_seconds: 0,
+        ..Default::default()
+    };
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+
+    // Ingress filter mock that returns empty Ok(()) response.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(()))
+        }
+    });
+
+    // Wait for the endpoint to be healthy.
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        // Drop the P2P receiver to simulate P2P not running.
+        drop(handlers.ingress_rx);
+
+        let response = call_agent.call(addr, IngressMessage::default()).await;
+
+        assert_eq!(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            response.status(),
+            "{:?}",
+            response.text().await
+        );
+
+        assert_eq!(
+            "P2P is not running on this node.",
+            response.text().await.unwrap()
+        );
+    });
+}

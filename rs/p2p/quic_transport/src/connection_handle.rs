@@ -47,7 +47,7 @@ impl ConnectionHandle {
 
     pub(crate) async fn rpc(
         &self,
-        mut request: Request<Bytes>,
+        request: Request<Bytes>,
     ) -> Result<Response<Bytes>, anyhow::Error> {
         let _timer = self
             .metrics
@@ -62,9 +62,6 @@ impl ConnectionHandle {
             .metrics
             .connection_handle_bytes_received_total
             .with_label_values(&[request.uri().path()]);
-
-        // Propagate PeerId from this connection to lower layers.
-        request.extensions_mut().insert(self.peer_id);
 
         let (mut send_stream, recv_stream) = self.connection.open_bi().await.map_err(|err| {
             self.metrics
@@ -113,7 +110,7 @@ impl ConnectionHandle {
         Ok(response)
     }
 
-    pub(crate) async fn push(&self, mut request: Request<Bytes>) -> Result<(), anyhow::Error> {
+    pub(crate) async fn push(&self, request: Request<Bytes>) -> Result<(), anyhow::Error> {
         let _timer = self
             .metrics
             .connection_handle_duration_seconds
@@ -123,9 +120,6 @@ impl ConnectionHandle {
             .connection_handle_bytes_sent_total
             .with_label_values(&[request.uri().path()])
             .inc_by(request.body().len() as u64);
-
-        // Propagate PeerId from this connection to lower layers.
-        request.extensions_mut().insert(self.peer_id);
 
         let mut send_stream = self.connection.open_uni().await.map_err(|err| {
             self.metrics

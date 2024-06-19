@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 futures = { workspace = true }
-ic-adapter-metrics-service = { path = "../adapter_metrics_service" }
-ic-logger = { path = "../logger" }
-ic-metrics = { path = "../metrics" }
+ic-adapter-metrics-service = { path = "../service" }
+ic-logger = { path = "../../logger" }
+ic-metrics = { path = "../../metrics" }
 protobuf = "2.27.1"
 slog = { workspace = true }
 tokio = { workspace = true }

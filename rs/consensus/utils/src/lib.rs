@@ -592,8 +592,10 @@ mod tests {
 
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
-    use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
-    use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
+    use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
+    use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+        EcdsaArguments, SchnorrArguments, SignWithThresholdContext, ThresholdArguments,
+    };
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_test_utilities_types::{
@@ -602,8 +604,9 @@ mod tests {
     };
     use ic_types::{
         consensus::idkg::{
-            common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef, EcdsaKeyTranscript,
-            KeyTranscriptCreation, MaskedTranscript, PreSigId, UnmaskedTranscript,
+            common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef,
+            schnorr::PreSignatureTranscriptRef, EcdsaKeyTranscript, KeyTranscriptCreation,
+            MaskedTranscript, PreSigId, UnmaskedTranscript,
         },
         crypto::{
             canister_threshold_sig::idkg::{
@@ -779,12 +782,12 @@ mod tests {
         assert_eq!(round_robin.call_next(&calls), vec![1]);
     }
 
-    fn empty_ecdsa_payload() -> EcdsaPayload {
+    fn empty_ecdsa_payload(key_id: MasterPublicKeyId) -> EcdsaPayload {
         EcdsaPayload::empty(
             Height::new(0),
             subnet_test_id(0),
             vec![EcdsaKeyTranscript::new(
-                MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()),
+                key_id,
                 KeyTranscriptCreation::Begin,
             )],
         )
@@ -808,9 +811,9 @@ mod tests {
         IDkgTranscriptId::new(subnet_test_id(0), id, Height::from(0))
     }
 
-    // Create a fake quadruple, it will use transcripts with ids
+    // Create a fake ecdsa pre-signature, it will use transcripts with ids
     // id, id+1, id+2, and id+3.
-    fn fake_quadruple(id: u64) -> PreSignatureQuadrupleRef {
+    fn fake_ecdsa_quadruple(id: u64, key_id: EcdsaKeyId) -> PreSignatureQuadrupleRef {
         let temp_rv = RegistryVersion::from(0);
         let kappa_unmasked = fake_transcript(fake_transcript_id(id), temp_rv);
         let mut lambda_masked = kappa_unmasked.clone();
@@ -825,7 +828,7 @@ mod tests {
         key_unmasked.transcript_id = fake_transcript_id(id + 4);
         let h = Height::from(0);
         PreSignatureQuadrupleRef {
-            key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+            key_id,
             kappa_unmasked_ref: UnmaskedTranscript::try_from((h, &kappa_unmasked)).unwrap(),
             lambda_masked_ref: MaskedTranscript::try_from((h, &lambda_masked)).unwrap(),
             kappa_times_lambda_ref: MaskedTranscript::try_from((h, &kappa_times_lambda)).unwrap(),
@@ -834,20 +837,59 @@ mod tests {
         }
     }
 
-    fn fake_context(pre_signature_id: Option<PreSigId>) -> SignWithEcdsaContext {
-        SignWithEcdsaContext {
+    // Create a fake schnorr pre-signature, it will use transcripts with ids
+    // id and id+1.
+    fn fake_schnorr_transcript(id: u64, key_id: SchnorrKeyId) -> PreSignatureTranscriptRef {
+        let temp_rv = RegistryVersion::from(0);
+        let blinder_unmasked = fake_transcript(fake_transcript_id(id), temp_rv);
+        let mut key_unmasked = blinder_unmasked.clone();
+        key_unmasked.transcript_id = fake_transcript_id(id + 1);
+        let h = Height::from(0);
+        PreSignatureTranscriptRef {
+            key_id,
+            blinder_unmasked_ref: UnmaskedTranscript::try_from((h, &blinder_unmasked)).unwrap(),
+            key_unmasked_ref: UnmaskedTranscript::try_from((h, &key_unmasked)).unwrap(),
+        }
+    }
+
+    fn fake_pre_signature(id: u64, key_id: &MasterPublicKeyId) -> PreSignatureRef {
+        match key_id {
+            MasterPublicKeyId::Ecdsa(key_id) => {
+                PreSignatureRef::Ecdsa(fake_ecdsa_quadruple(id, key_id.clone()))
+            }
+            MasterPublicKeyId::Schnorr(key_id) => {
+                PreSignatureRef::Schnorr(fake_schnorr_transcript(id, key_id.clone()))
+            }
+        }
+    }
+
+    fn fake_context(
+        pre_signature_id: Option<PreSigId>,
+        key_id: &MasterPublicKeyId,
+    ) -> SignWithThresholdContext {
+        SignWithThresholdContext {
             request: RequestBuilder::new().build(),
-            key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
-            message_hash: [0; 32],
+            args: match key_id {
+                MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
+                    message_hash: [0; 32],
+                    key_id: key_id.clone(),
+                }),
+                MasterPublicKeyId::Schnorr(key_id) => {
+                    ThresholdArguments::Schnorr(SchnorrArguments {
+                        message: vec![1; 64],
+                        key_id: key_id.clone(),
+                    })
+                }
+            },
             derivation_path: vec![],
             pseudo_random_id: [0; 32],
-            matched_quadruple: pre_signature_id.map(|qid| (qid, Height::from(0))),
+            matched_pre_signature: pre_signature_id.map(|qid| (qid, Height::from(0))),
             nonce: None,
             batch_time: UNIX_EPOCH,
         }
     }
 
-    fn fake_state_with_contexts(contexts: Vec<SignWithEcdsaContext>) -> ReplicatedState {
+    fn fake_state_with_contexts(contexts: Vec<SignWithThresholdContext>) -> ReplicatedState {
         let mut state = ReplicatedStateBuilder::default().build();
         let iter = contexts
             .into_iter()
@@ -856,13 +898,20 @@ mod tests {
         state
             .metadata
             .subnet_call_context_manager
-            .sign_with_ecdsa_contexts = BTreeMap::from_iter(iter);
+            .sign_with_threshold_contexts = BTreeMap::from_iter(iter);
         state
     }
 
-    // Create an ECDSA payload with 10 quadruples, each using registry version 2, 3 or 4.
-    fn ecdsa_payload_with_quadruples() -> EcdsaPayload {
-        let mut ecdsa = empty_ecdsa_payload();
+    fn fake_key_ids() -> Vec<MasterPublicKeyId> {
+        vec![
+            MasterPublicKeyId::Ecdsa(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()),
+            MasterPublicKeyId::Schnorr(SchnorrKeyId::from_str("Ed25519:some_key").unwrap()),
+        ]
+    }
+
+    // Create an ECDSA payload with 10 pre-signatures, each using registry version 2, 3 or 4.
+    fn ecdsa_payload_with_pre_sigs(key_id: &MasterPublicKeyId) -> EcdsaPayload {
+        let mut ecdsa = empty_ecdsa_payload(key_id.clone());
         let mut rvs = [
             RegistryVersion::from(2),
             RegistryVersion::from(3),
@@ -871,58 +920,68 @@ mod tests {
         .into_iter()
         .cycle();
         for i in (0..50).step_by(5) {
-            let quadruple = fake_quadruple(i as u64);
+            let pre_sig = fake_pre_signature(i as u64, key_id);
             let rv = rvs.next().unwrap();
-            for r in quadruple.get_refs() {
+            for r in pre_sig.get_refs() {
                 ecdsa
                     .idkg_transcripts
                     .insert(r.transcript_id, fake_transcript(r.transcript_id, rv));
             }
             ecdsa
                 .available_pre_signatures
-                .insert(PreSigId(i as u64), PreSignatureRef::Ecdsa(quadruple));
+                .insert(PreSigId(i as u64), pre_sig);
         }
         ecdsa
     }
 
     #[test]
     fn test_empty_state_should_return_no_registry_version() {
-        let ecdsa = ecdsa_payload_with_quadruples();
-        let state = fake_state_with_contexts(vec![]);
-        assert_eq!(
-            None,
-            get_oldest_ecdsa_state_registry_version(&ecdsa, &state)
-        );
+        for key_id in fake_key_ids() {
+            println!("Running test for key ID {key_id}");
+            let ecdsa = ecdsa_payload_with_pre_sigs(&key_id);
+            let state = fake_state_with_contexts(vec![]);
+            assert_eq!(
+                None,
+                get_oldest_ecdsa_state_registry_version(&ecdsa, &state)
+            );
+        }
     }
 
     #[test]
     fn test_state_without_matches_should_return_no_registry_version() {
-        let ecdsa = ecdsa_payload_with_quadruples();
-        let state = fake_state_with_contexts(vec![fake_context(None)]);
-        assert_eq!(
-            None,
-            get_oldest_ecdsa_state_registry_version(&ecdsa, &state)
-        );
+        for key_id in fake_key_ids() {
+            println!("Running test for key ID {key_id}");
+            let ecdsa = ecdsa_payload_with_pre_sigs(&key_id);
+            let state = fake_state_with_contexts(vec![fake_context(None, &key_id)]);
+            assert_eq!(
+                None,
+                get_oldest_ecdsa_state_registry_version(&ecdsa, &state)
+            );
+        }
     }
 
     #[test]
-    fn test_should_return_oldest_registry_version() {
-        let ecdsa = ecdsa_payload_with_quadruples();
-        // create contexts for all quadruples, but only create a match for
-        // quadruples with registry version >= 3 (not 2!). Thus the oldest
+    fn test_should_return_oldest_registry_version_all() {
+        for key_id in fake_key_ids() {
+            println!("Running test for key ID {key_id}");
+            test_should_return_oldest_registry_version(key_id)
+        }
+    }
+
+    fn test_should_return_oldest_registry_version(key_id: MasterPublicKeyId) {
+        let ecdsa = ecdsa_payload_with_pre_sigs(&key_id);
+        // create contexts for all pre-signatures, but only create a match for
+        // pre-signatures with registry version >= 3 (not 2!). Thus the oldest
         // registry version referenced by the state should be 3.
         let contexts = ecdsa
             .available_pre_signatures
             .iter()
             .map(|(id, pre_sig)| {
-                let PreSignatureRef::Ecdsa(quad) = pre_sig else {
-                    panic!("Expected ECDSA pre-signature");
-                };
-                let t_id = quad.lambda_masked_ref.as_ref().transcript_id;
+                let t_id = pre_sig.key_unmasked().as_ref().transcript_id;
                 let transcript = ecdsa.idkg_transcripts.get(&t_id).unwrap();
                 (transcript.registry_version.get() >= 3).then_some(*id)
             })
-            .map(fake_context)
+            .map(|id| fake_context(id, &key_id))
             .collect();
         let state = fake_state_with_contexts(contexts);
         assert_eq!(
@@ -937,11 +996,11 @@ mod tests {
             get_oldest_ecdsa_state_registry_version(&ecdsa_without_transcripts, &state)
         );
 
-        let mut ecdsa_without_quadruples = ecdsa.clone();
-        ecdsa_without_quadruples.available_pre_signatures = BTreeMap::new();
+        let mut ecdsa_without_pre_sigs = ecdsa.clone();
+        ecdsa_without_pre_sigs.available_pre_signatures = BTreeMap::new();
         assert_eq!(
             None,
-            get_oldest_ecdsa_state_registry_version(&ecdsa_without_quadruples, &state)
+            get_oldest_ecdsa_state_registry_version(&ecdsa_without_pre_sigs, &state)
         );
     }
 }
