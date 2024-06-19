@@ -161,7 +161,7 @@ impl<T> Default for StreamIndexedQueue<T> {
 /// inducted message; but because most signals are `Accept`we represent that
 /// queue as a combination of `signals_end` (pointing just beyond the last
 /// signal) and a collection of `reject_signals`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct StreamHeader {
     begin: StreamIndex,
     end: StreamIndex,
@@ -182,7 +182,7 @@ pub struct StreamHeader {
 /// part of the Replicated State. Protocol buffer conversions are defined here due
 /// to Rust rules for implementing traits; round trip and compatibility tests are in
 /// 'replicated_state/metadata_state/tests.rs'.
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, EnumIter, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, EnumIter)]
 pub enum RejectReason {
     /// Message enqueuing failed to migrating canister.
     CanisterMigrating = 1,
@@ -210,7 +210,7 @@ impl TryFrom<pb_queues::RejectReason> for RejectReason {
 }
 
 /// Reject signal for messages who failed to induct.
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct RejectSignal {
     pub reason: RejectReason,
     pub index: StreamIndex,
@@ -223,7 +223,7 @@ impl RejectSignal {
 }
 
 /// Flags for `Stream`.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct StreamFlags {
     /// Indicates that the subnet expects responses only in the reverse stream.
     pub deprecated_responses_only: bool,
