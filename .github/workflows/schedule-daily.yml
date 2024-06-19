@@ -5,8 +5,6 @@ on:
     - cron: "0 1 * * *"
   workflow_dispatch:
 
-  pull_request:
-
 env:
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
@@ -53,59 +51,59 @@ jobs:
   #         RUST_BACKTRACE: "full"
   #         TARGETS: ${{ matrix.targets }}
 
-  #cut-release-candidate:
-  #  name: Cut RC
-  #  runs-on: ubuntu-latest
-  #  timeout-minutes: 30
-  #  if: ${{ vars.RUN_CI == 'true' }}
-  #  steps:
-  #    - name: Checkout
-  #      uses: actions/checkout@v4
-  #      with:
-  #        repository: ${{ github.event.pull_request.head.repo.full_name }}
-  #        ref: ${{ github.event.pull_request.head.ref }}
-  #        token: ${{ secrets.IDX_PUSH_TO_PR }}
-  #    - name: Cut Release Candidate
-  #      shell: bash
-  #      run: |
-  #        git config --global user.email "infra+github-automation@dfinity.org"
-  #        git config --global user.name "IDX GitLab Automation"
-  #
-  #        RC_BRANCH_NAME="rc--$(date '+%Y-%m-%d_%H-%M')--github"
-  #        git switch --force-create "$RC_BRANCH_NAME" HEAD
-  #        git push --force --set-upstream origin "$RC_BRANCH_NAME"
-  #
-  #bazel-test-bare-metal:
-  #  name: Bazel Test Bare Metal
-  #  runs-on:
-  #    group: dind-large
-  #  container:
-  #    image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
-  #  timeout-minutes: 120
-  #  # TODO: enable when zh1 is active again
-  #  if: ${{ vars.RUN_CI == 'true' && false }}
-  #  steps:
-  #    - name: Checkout
-  #      uses: actions/checkout@v4
-  #    - name: Run Bazel Launch Bare Metal
-  #      shell: bash
-  #      run: |
-  #        echo "$ZH2_DLL01_CSV_SECRETS" > file1
-  #        echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
-  #        # shellcheck disable=SC2046,SC2086
-  #        bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
-  #          //ic-os/setupos/envs/dev:launch_bare_metal -- \
-  #            --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
-  #            --csv_filename "$(realpath file1)" \
-  #            --file_share_ssh_key "$(realpath file2)" \
-  #            --file_share_username ci_interim \
-  #            --ci_mode
-  #        bazel clean
-  #      env:
-  #        BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
-  #        BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-  #        ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
-  #        ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
+  cut-release-candidate:
+    name: Cut RC
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ vars.RUN_CI == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.IDX_PUSH_TO_PR }}
+      - name: Cut Release Candidate
+        shell: bash
+        run: |
+          git config --global user.email "infra+github-automation@dfinity.org"
+          git config --global user.name "IDX GitLab Automation"
+
+          RC_BRANCH_NAME="rc--$(date '+%Y-%m-%d_%H-%M')--github"
+          git switch --force-create "$RC_BRANCH_NAME" HEAD
+          git push --force --set-upstream origin "$RC_BRANCH_NAME"
+
+  bazel-test-bare-metal:
+    name: Bazel Test Bare Metal
+    runs-on:
+      group: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+    timeout-minutes: 120
+    # TODO: enable when zh1 is active again
+    if: ${{ vars.RUN_CI == 'true' && false }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run Bazel Launch Bare Metal
+        shell: bash
+        run: |
+          echo "$ZH2_DLL01_CSV_SECRETS" > file1
+          echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
+          # shellcheck disable=SC2046,SC2086
+          bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
+            //ic-os/setupos/envs/dev:launch_bare_metal -- \
+              --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
+              --csv_filename "$(realpath file1)" \
+              --file_share_ssh_key "$(realpath file2)" \
+              --file_share_username ci_interim \
+              --ci_mode
+          bazel clean
+        env:
+          BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
+          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
+          ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
+          ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
 
   nns-tests-nightly:
     name: NNS Tests Nightly
