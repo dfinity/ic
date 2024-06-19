@@ -113,7 +113,9 @@ jobs:
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Run NNS Tests Nightly
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -124,6 +126,3 @@ jobs:
           BAZEL_EXTRA_ARGS: "--keep_going --verbose_failures --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      - name: After script
-        run: |
-          bazel clean
