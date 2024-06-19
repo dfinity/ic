@@ -1622,6 +1622,57 @@ fn stream_discard_signals_before_drops_all_signals() {
 }
 
 #[test]
+fn stream_pushing_signals_increments_signals_end() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 0,
+        },
+        SignalConfig { end: 30 },
+    );
+    assert!(stream.reject_signals().is_empty());
+
+    stream.push_accept_signal();
+    assert_eq!(StreamIndex::new(31), stream.signals_end());
+    stream.push_reject_signal(RejectReason::CanisterMigrating);
+    assert_eq!(
+        &VecDeque::from([RejectSignal::new(
+            RejectReason::CanisterMigrating,
+            31.into()
+        )]),
+        stream.reject_signals()
+    );
+    assert_eq!(StreamIndex::new(32), stream.signals_end());
+}
+
+#[test]
+fn stream_handle_pushing_signals_increments_signals_end() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 0,
+        },
+        SignalConfig { end: 30 },
+    );
+    assert!(stream.reject_signals().is_empty());
+
+    let mut responses_size_bytes = BTreeMap::default();
+    let mut handle = StreamHandle::new(&mut stream, &mut responses_size_bytes);
+
+    handle.push_accept_signal();
+    assert_eq!(StreamIndex::new(31), handle.signals_end());
+    handle.push_reject_signal(RejectReason::CanisterMigrating);
+    assert_eq!(
+        &VecDeque::from([RejectSignal::new(
+            RejectReason::CanisterMigrating,
+            31.into()
+        ),]),
+        handle.reject_signals()
+    );
+    assert_eq!(StreamIndex::new(32), handle.signals_end());
+}
+
+#[test]
 fn stream_roundtrip_encoding() {
     let mut messages = StreamIndexedQueue::with_begin(30.into());
     // Push a fully specified `Request`.
