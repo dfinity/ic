@@ -258,6 +258,10 @@ pub struct CanisterQueues {
     pub input_queues: ::prost::alloc::vec::Vec<QueueEntry>,
     #[prost(message, repeated, tag = "5")]
     pub output_queues: ::prost::alloc::vec::Vec<QueueEntry>,
+    #[prost(message, repeated, tag = "9")]
+    pub canister_queues: ::prost::alloc::vec::Vec<canister_queues::CanisterQueuePair>,
+    #[prost(message, optional, tag = "10")]
+    pub pool: ::core::option::Option<MessagePool>,
     #[prost(enumeration = "canister_queues::NextInputQueue", tag = "6")]
     pub next_input_queue: i32,
     #[prost(message, repeated, tag = "7")]
@@ -266,9 +270,22 @@ pub struct CanisterQueues {
     #[prost(message, repeated, tag = "8")]
     pub remote_subnet_input_schedule:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
+    #[prost(uint64, tag = "11")]
+    pub guaranteed_response_memory_reservations: u64,
 }
 /// Nested message and enum types in `CanisterQueues`.
 pub mod canister_queues {
+    /// Input queue from and output queue to `canister_id`.
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct CanisterQueuePair {
+        #[prost(message, optional, tag = "1")]
+        pub canister_id: ::core::option::Option<super::super::super::super::types::v1::CanisterId>,
+        #[prost(message, optional, tag = "2")]
+        pub input_queue: ::core::option::Option<super::CanisterQueue>,
+        #[prost(message, optional, tag = "3")]
+        pub output_queue: ::core::option::Option<super::CanisterQueue>,
+    }
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum NextInputQueue {
