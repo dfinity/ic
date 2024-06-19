@@ -9,6 +9,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, ExecutionRound, NumInstructions};
 use serde::{Deserialize, Serialize};
 
+const GIB: u64 = 1024 * 1024 * 1024;
 const M: u64 = 1_000_000;
 const B: u64 = 1_000_000_000;
 const T: u128 = 1_000_000_000_000;
@@ -87,6 +88,11 @@ const SYSTEM_SUBNET_FACTOR: u64 = 10;
 // slow subnets while maintaining the speed of fast subnets, we use the middle
 // value of 200MB.
 const MAX_HEAP_DELTA_PER_ITERATION: NumBytes = NumBytes::new(200 * M);
+
+/// The reserve represents the freely available portion of the
+/// `subnet_heap_delta_capacity` that can be used as a heap delta burst
+/// during the initial rounds following a checkpoint.
+const HEAP_DELTA_INITIAL_RESERVE: NumBytes = NumBytes::new(32 * GIB);
 
 // Log all messages that took more than this value to execute.
 pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
@@ -216,7 +222,12 @@ pub struct SchedulerConfig {
     /// the subnet goes above this limit.
     pub subnet_heap_delta_capacity: NumBytes,
 
-    /// The maximum amount of heap delta per iteration. This number if checked
+    /// The reserve represents the freely available portion of the
+    /// `subnet_heap_delta_capacity` that can be used as a heap delta burst
+    /// during the initial rounds following a checkpoint.
+    pub heap_delta_initial_reserve: NumBytes,
+
+    /// The maximum amount of heap delta per iteration. This number is checked
     /// after each iteration in an execution round to decided whether to
     /// continue iterations or not. This serves as a proxy for memory bound
     /// instructions that are more expensive and may slow down finalization.
@@ -256,6 +267,7 @@ impl SchedulerConfig {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
+            heap_delta_initial_reserve: HEAP_DELTA_INITIAL_RESERVE,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
             max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
@@ -285,6 +297,9 @@ impl SchedulerConfig {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
+            // TODO(RUN-993): Enable heap delta rate limiting for system subnets.
+            // Setting initial reserve to capacity effectively disables the rate limiting.
+            heap_delta_initial_reserve: SUBNET_HEAP_DELTA_CAPACITY,
             // Round limit is set to allow on average 2B instructions.
             // See also comment about `MAX_INSTRUCTIONS_PER_ROUND`.
             max_instructions_per_round: max_instructions_per_message_without_dts
@@ -322,6 +337,7 @@ impl SchedulerConfig {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
+            heap_delta_initial_reserve: HEAP_DELTA_INITIAL_RESERVE,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
             max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,

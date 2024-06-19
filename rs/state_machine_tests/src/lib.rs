@@ -92,8 +92,8 @@ use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{
-        Batch, BatchMessages, BlockmakerMetrics, ConsensusResponse, QueryStatsPayload,
-        TotalQueryStats, ValidationContext, XNetPayload,
+        Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse,
+        QueryStatsPayload, TotalQueryStats, ValidationContext, XNetPayload,
     },
     consensus::{
         block_maker::SubnetRecords,
@@ -598,6 +598,7 @@ pub struct StateMachine {
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     replica_logger: ReplicaLogger,
     pub nodes: Vec<StateMachineNode>,
+    pub batch_summary: Option<BatchSummary>,
 }
 
 impl Default for StateMachine {
@@ -1267,6 +1268,7 @@ impl StateMachine {
             idkg_subnet_public_keys,
             replica_logger,
             nodes,
+            batch_summary: None,
         }
     }
 
@@ -1611,7 +1613,7 @@ impl StateMachine {
 
         let batch = Batch {
             batch_number,
-            batch_summary: None,
+            batch_summary: self.batch_summary.clone(),
             requires_full_state_hash: self.checkpoints_enabled.load(Ordering::Relaxed),
             messages: BatchMessages {
                 signed_ingress_msgs: payload.ingress_messages,

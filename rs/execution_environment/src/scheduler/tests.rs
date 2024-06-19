@@ -198,6 +198,277 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
 }
 
 #[test]
+fn smooth_heap_delta_rate_limiting() {
+    let page_size = 4_096;
+    // Create scheduler test allowing one dirty page per round.
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            subnet_heap_delta_capacity: NumBytes::from(10 * page_size + 1),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            heap_delta_initial_reserve: NumBytes::from(page_size),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_round_summary(ExecutionRoundSummary {
+            next_checkpoint_round: 10.into(),
+            current_interval_length: 9.into(),
+        })
+        .build();
+
+    let canister_id = test.create_canister();
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Both messages should be executed.
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // The execution should be rate limited in this round.
+    assert_eq!(test.ingress_queue_size(canister_id), 2);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get(),
+        1
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // The previous messages should be executed in this round.
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        4
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
+}
+
+#[test]
+fn smooth_heap_delta_rate_limiting_with_initial_burst() {
+    let page_size = 4_096;
+    // Create scheduler test allowing one dirty page per round with 2 pages burst.
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            subnet_heap_delta_capacity: NumBytes::from(12 * page_size),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            heap_delta_initial_reserve: NumBytes::from(page_size),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_round_summary(ExecutionRoundSummary {
+            next_checkpoint_round: 10.into(),
+            current_interval_length: 9.into(),
+        })
+        .build();
+
+    let canister_id = test.create_canister();
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Both messages should be executed.
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Thanks to the burst, the execution should be successful again.
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get(),
+        0
+    );
+
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Now it should be rate limited
+    assert_eq!(test.ingress_queue_size(canister_id), 2);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get(),
+        1
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // The previous messages should be executed in this round.
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        6
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
+}
+
+#[test]
+fn smooth_heap_delta_rate_limiting_reaches_the_limit() {
+    let page_size = 4_096;
+    let rounds = 10;
+    // Create scheduler test allowing two dirty page per round.
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            subnet_heap_delta_capacity: NumBytes::from(rounds * page_size * 2 + 1),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            max_heap_delta_per_iteration: NumBytes::from(page_size),
+            heap_delta_initial_reserve: NumBytes::from(page_size * 2),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_round_summary(ExecutionRoundSummary {
+            next_checkpoint_round: rounds.into(),
+            current_interval_length: (rounds - 1).into(),
+        })
+        .build();
+    let canister_id = test.create_canister();
+
+    // Each message dirties 4 pages, so only half of them should be executed
+    for i in 0..rounds {
+        test.send_ingress(canister_id, ingress(10).dirty_pages(4));
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+        // The messages should be executed every second round.
+        assert_eq!(
+            test.state()
+                .metadata
+                .subnet_metrics
+                .update_transactions_total,
+            i / 2 + 1
+        );
+    }
+    // Only half of the messages should be executed.
+    assert_eq!(test.ingress_queue_size(canister_id), rounds as usize / 2);
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
+}
+
+#[test]
+fn smooth_heap_delta_rate_limiting_for_two_canisters() {
+    let page_size = 4_096;
+    // Create scheduler test allowing one dirty page per round.
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            subnet_heap_delta_capacity: NumBytes::from(10 * page_size + 1),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            heap_delta_initial_reserve: NumBytes::from(page_size),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_round_summary(ExecutionRoundSummary {
+            next_checkpoint_round: 10.into(),
+            current_interval_length: 9.into(),
+        })
+        .build();
+
+    let a_id = test.create_canister();
+    let b_id = test.create_canister();
+    test.send_ingress(a_id, ingress(10).dirty_pages(1));
+    test.send_ingress(b_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Both messages should be executed.
+    assert_eq!(test.ingress_queue_size(a_id), 0);
+    assert_eq!(test.ingress_queue_size(b_id), 0);
+
+    test.send_ingress(a_id, ingress(10).dirty_pages(1));
+    test.send_ingress(b_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // The execution should be rate limited in this round for both canisters.
+    assert_eq!(test.ingress_queue_size(a_id), 1);
+    assert_eq!(test.ingress_queue_size(b_id), 1);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get(),
+        1
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // The previous messages should be executed in this round.
+    assert_eq!(test.ingress_queue_size(a_id), 0);
+    assert_eq!(test.ingress_queue_size(b_id), 0);
+
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        4
+    );
+    assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
+}
+
+#[test]
+fn no_heap_delta_rate_limiting_for_system_subnet() {
+    const GIB: usize = 1024 * 1024 * 1024;
+    const PAGE_SIZE: usize = 4_096;
+    const SUBNET_HEAP_DELTA_CAPACITY: usize = 140 * GIB;
+    const DIRTY_2G_CHUNK: usize = 2 * GIB;
+
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .with_round_summary(ExecutionRoundSummary {
+            next_checkpoint_round: 200.into(),
+            current_interval_length: 199.into(),
+        })
+        .build();
+
+    let a_id = test.create_canister();
+    // For 140GiB subnet heap delta capacity we should be able to iterate
+    // `140 / 2 = 70` times.
+    for _ in 0..SUBNET_HEAP_DELTA_CAPACITY / DIRTY_2G_CHUNK {
+        test.send_ingress(a_id, ingress(10).dirty_pages(DIRTY_2G_CHUNK / PAGE_SIZE));
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+        // Assert the message is executed
+        assert_eq!(test.ingress_queue_size(a_id), 0);
+        // Assert there is no rate limiting.
+        assert_eq!(
+            test.scheduler()
+                .metrics
+                .round_skipped_due_to_current_heap_delta_above_limit
+                .get(),
+            0
+        );
+    }
+    // Once the subnet capacity is reached, there should be no further executions.
+    test.send_ingress(a_id, ingress(10).dirty_pages(DIRTY_2G_CHUNK / PAGE_SIZE));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.ingress_queue_size(a_id), 1);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get(),
+        1
+    );
+
+    // Assert that we reached the subnet heap delta capacity (140 GiB) in 70 rounds.
+    assert!(
+        test.scheduler().metrics.current_heap_delta.get() as usize >= SUBNET_HEAP_DELTA_CAPACITY
+    );
+
+    // After a checkpoint round, the message should be executed.
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.ingress_queue_size(a_id), 0);
+}
+
+#[test]
 fn canister_gets_heap_delta_rate_limited() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
@@ -5307,4 +5578,123 @@ fn clean_in_progress_raw_rand_request_from_subnet_call_context_manager() {
         0
     );
     assert!(test.state().subnet_queues().has_output());
+}
+
+fn scheduled_heap_delta_limit_corner_values() -> BoxedStrategy<u64> {
+    prop_oneof!(Just(0), Just(5), Just(10), Just(100), Just(u64::MAX)).boxed()
+}
+
+fn scheduled_heap_delta_limit_option_values() -> BoxedStrategy<Option<u64>> {
+    prop_oneof!(
+        Just(None),
+        Just(Some(0)),
+        Just(Some(5)),
+        Just(Some(10)),
+        Just(Some(100)),
+        Just(Some(u64::MAX))
+    )
+    .boxed()
+}
+
+#[test_strategy::proptest]
+fn scheduled_heap_delta_limit_corner_cases(
+    #[strategy(scheduled_heap_delta_limit_corner_values())] current_round: u64,
+    #[strategy(scheduled_heap_delta_limit_option_values())] next_checkpoint_round: Option<u64>,
+    #[strategy(scheduled_heap_delta_limit_option_values())] current_interval_length: Option<u64>,
+    #[strategy(scheduled_heap_delta_limit_corner_values())] subnet_heap_delta_capacity: u64,
+    #[strategy(scheduled_heap_delta_limit_corner_values())] heap_delta_initial_reserve: u64,
+) {
+    let round_summary = if next_checkpoint_round.is_none() || current_interval_length.is_none() {
+        None
+    } else {
+        Some(ExecutionRoundSummary {
+            next_checkpoint_round: next_checkpoint_round.unwrap().into(),
+            current_interval_length: current_interval_length.unwrap().into(),
+        })
+    };
+
+    let res = scheduled_heap_delta_limit(
+        current_round.into(),
+        round_summary.clone(),
+        subnet_heap_delta_capacity.into(),
+        heap_delta_initial_reserve.into(),
+    )
+    .get();
+
+    // The result should never exceed the heap delta capacity.
+    prop_assert!(res <= subnet_heap_delta_capacity);
+    // The result should be at least the initial reserve, provided the reserve is below
+    // the heap delta capacity.
+    if heap_delta_initial_reserve <= subnet_heap_delta_capacity {
+        prop_assert!(res >= heap_delta_initial_reserve);
+    }
+
+    // The result should be just the capacity if the round summary is not defined.
+    if round_summary.is_none() {
+        prop_assert!(res == subnet_heap_delta_capacity);
+    }
+
+    // Otherwise, the result should be scaled proportionally to the current round
+    // (see the test below).
+}
+
+#[test]
+fn scheduled_heap_delta_limit_scaling() {
+    fn scheduled_limit(
+        current_round: u64,
+        next_checkpoint_round: u64,
+        current_interval_length: u64,
+        subnet_heap_delta_capacity: u64,
+        heap_delta_initial_reserve: u64,
+    ) -> u64 {
+        let round_summary = ExecutionRoundSummary {
+            next_checkpoint_round: next_checkpoint_round.into(),
+            current_interval_length: current_interval_length.into(),
+        };
+
+        scheduled_heap_delta_limit(
+            current_round.into(),
+            Some(round_summary.clone()),
+            subnet_heap_delta_capacity.into(),
+            heap_delta_initial_reserve.into(),
+        )
+        .get()
+    }
+
+    // Scaling with no initial reserve.
+    assert_eq!(0, scheduled_limit(0, 10, 9, 10, 0));
+    assert_eq!(5, scheduled_limit(5, 10, 9, 10, 0));
+    assert_eq!(10, scheduled_limit(10, 10, 9, 10, 0));
+    assert_eq!(10, scheduled_limit(15, 10, 9, 10, 0));
+
+    // Scaling with 50% initial reserve.
+    assert_eq!(5, scheduled_limit(0, 10, 9, 10, 5));
+    assert_eq!(8, scheduled_limit(5, 10, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(10, 10, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(15, 10, 9, 10, 5));
+
+    // Scaling across checkpoints.
+    assert_eq!(5, scheduled_limit(0, 10, 9, 10, 5));
+    assert_eq!(8, scheduled_limit(5, 10, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(9, 10, 9, 10, 5));
+    assert_eq!(5, scheduled_limit(10, 20, 9, 10, 5));
+    assert_eq!(6, scheduled_limit(11, 20, 9, 10, 5));
+    assert_eq!(8, scheduled_limit(15, 20, 9, 10, 5));
+
+    // Scaling with invalid round summary (`next_checkpoint_round` is 5).
+    assert_eq!(8, scheduled_limit(0, 5, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(5, 5, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(10, 5, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(15, 5, 9, 10, 5));
+
+    // Scaling with invalid round summary (`next_checkpoint_round` is 50).
+    assert_eq!(5, scheduled_limit(0, 50, 9, 10, 5));
+    assert_eq!(5, scheduled_limit(5, 50, 9, 10, 5));
+    assert_eq!(5, scheduled_limit(10, 50, 9, 10, 5));
+    assert_eq!(5, scheduled_limit(15, 50, 9, 10, 5));
+    // No scaling up until the `next_checkpoint_round` - `current_interval_length`.
+    assert_eq!(5, scheduled_limit(40, 50, 9, 10, 5));
+    assert_eq!(8, scheduled_limit(45, 50, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(50, 50, 9, 10, 5));
+    assert_eq!(10, scheduled_limit(55, 50, 9, 10, 5));
 }
