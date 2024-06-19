@@ -251,7 +251,7 @@ fn install_code_validate_input_compute_allocation() {
     let result = check_ingress_status(test.ingress_status(&message_id));
     assert_eq!(
         result,
-        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested a compute allocation of 90% which cannot be satisfied because the Subnet's remaining compute capacity is 49%"))
+        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested a compute allocation of 90% which cannot be satisfied because the Subnet's remaining compute capacity is 49%."))
     );
 }
 
@@ -300,7 +300,7 @@ fn install_code_validate_input_memory_allocation() {
     let result = check_ingress_status(test.ingress_status(&message_id));
     assert_eq!(
         result,
-        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested 260.00 MiB of memory but only 250.00 MiB are available in the subnet"))
+        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested 260.00 MiB of memory but only 250.00 MiB are available in the subnet."))
     );
 }
 
@@ -784,7 +784,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         check_ingress_status(test.ingress_status(&message_id)),
         Err(UserError::new(
             ErrorCode::CanisterOutOfCycles,
-            format!("Canister installation failed with `Canister {} is out of cycles: please top up the canister with at least {} additional cycles`", canister_id, (freezing_threshold_cycles + minimum_balance) - original_balance)
+            format!("Canister installation failed with `Canister {} is out of cycles: please top up the canister with at least {} additional cycles`.", canister_id, (freezing_threshold_cycles + minimum_balance) - original_balance)
         ))
     );
 }
