@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("//bazel:defs.bzl", "rust_bench")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
@@ -11,7 +11,6 @@ DEPENDENCIES = [
     "//rs/crypto/secrets_containers",
     "//rs/crypto/sha2",
     "//rs/types/types",
-    "@crate_index//:assert_matches",
     "@crate_index//:curve25519-dalek",
     "@crate_index//:hex",
     "@crate_index//:hex-literal",
@@ -37,6 +36,7 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
+    "@crate_index//:assert_matches",
     "@crate_index//:bip32",
     "@crate_index//:ed25519-dalek",
     "@crate_index//:criterion",
@@ -69,15 +69,13 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test_suite_with_extra_srcs(
+rust_test_suite(
     name = "integration",
     srcs = glob(
         ["tests/**/*.rs"],
-        exclude = ["tests/**/test_*.rs"],
     ),
     aliases = ALIASES,
     compile_data = glob(["tests/data/*"]),
-    extra_srcs = glob(["tests/**/test_*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":tecdsa"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

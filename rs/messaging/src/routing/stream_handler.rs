@@ -24,7 +24,7 @@ use ic_types::{
         Payload, RejectContext, RequestOrResponse, Response,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
     },
-    xnet::{StreamIndex, StreamIndexedQueue, StreamSlice},
+    xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice},
     SubnetId,
 };
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
@@ -440,8 +440,8 @@ impl StreamHandlerImpl {
         stream: &mut StreamHandle,
         remote_subnet: SubnetId,
         signals_end: StreamIndex,
-        reject_signals: &VecDeque<StreamIndex>,
-    ) -> Vec<RequestOrResponse> {
+        reject_signals: &VecDeque<RejectSignal>,
+    ) -> Vec<(RejectReason, RequestOrResponse)> {
         assert_valid_signals(
             signals_end,
             reject_signals,
@@ -517,14 +517,14 @@ impl StreamHandlerImpl {
     /// a critical error counter.
     fn reroute_rejected_messages(
         &self,
-        rejected_messages: Vec<RequestOrResponse>,
+        rejected_messages: Vec<(RejectReason, RequestOrResponse)>,
         streams: &mut Streams,
         routing_table: &RoutingTable,
         remote_subnet: SubnetId,
     ) {
         for msg in rejected_messages {
             match msg {
-                RequestOrResponse::Request(request) => {
+                (_, RequestOrResponse::Request(request)) => {
                     // Critical error, honest subnets do not produce reject signals for requests.
                     // We do not want to re-route requests because this can break the message
                     // ordering guarantees once canisters start migrating.
@@ -540,7 +540,7 @@ impl StreamHandlerImpl {
                     self.metrics.critical_error_reject_signals_for_request.inc();
                 }
 
-                RequestOrResponse::Response(response) => {
+                (_, RequestOrResponse::Response(response)) => {
                     // The signal corresponds to a response a local canister sent back
                     // to a remote canister. This can only happen if the remote canister
                     // is no longer hosted by the remote subnet. So we need to get it to
@@ -922,14 +922,15 @@ fn reject_code_for_state_error(err: &StateError) -> RejectCode {
 /// `signals_end`).
 fn assert_valid_signals(
     signals_end: StreamIndex,
-    reject_signals: &VecDeque<StreamIndex>,
+    reject_signals: &VecDeque<RejectSignal>,
     stream_component: StreamComponent,
 ) {
-    use std::iter::once;
-    let shifted = reject_signals.iter().skip(1).chain(once(&signals_end));
+    let iter = reject_signals.iter().map(|signal| signal.index);
     assert!(
         // Check that signals are strictly monotonic and below signals_end.
-        reject_signals.iter().zip(shifted).all(|(x, y)| x < y),
+        iter.clone()
+            .zip(iter.skip(1).chain(std::iter::once(signals_end)))
+            .all(|(x, y)| x < y),
         "Invalid {}: signals_end {}, signals {:?}",
         stream_component,
         signals_end,

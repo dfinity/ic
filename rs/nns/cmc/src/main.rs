@@ -2443,7 +2443,6 @@ mod tests {
     use super::*;
     use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
     use rand::Rng;
-    use std::cmp::{max, min};
 
     pub(crate) fn init_test_state() {
         init(Some(CyclesCanisterInitPayload {
@@ -2941,27 +2940,21 @@ mod tests {
             .sum::<u64>() as i32)
             / (interval as i32);
 
-        let term1 = max(
-            min(10_000 * (a0 - a7) / a7, MAX_MATURITY_MODULATION_PERMYRIAD),
+        let term1 = (10_000 * (a0 - a7) / a7).clamp(
             MIN_MATURITY_MODULATION_PERMYRIAD,
+            MAX_MATURITY_MODULATION_PERMYRIAD,
         );
-        let term2 = max(
-            min(10_000 * (a7 - a14) / a14, MAX_MATURITY_MODULATION_PERMYRIAD),
+        let term2 = (10_000 * (a7 - a14) / a14).clamp(
             MIN_MATURITY_MODULATION_PERMYRIAD,
+            MAX_MATURITY_MODULATION_PERMYRIAD,
         );
-        let term3 = max(
-            min(
-                10_000 * (a14 - a21) / a21,
-                MAX_MATURITY_MODULATION_PERMYRIAD,
-            ),
+        let term3 = (10_000 * (a14 - a21) / a21).clamp(
             MIN_MATURITY_MODULATION_PERMYRIAD,
+            MAX_MATURITY_MODULATION_PERMYRIAD,
         );
-        let term4 = max(
-            min(
-                10_000 * (a21 - a28) / a28,
-                MAX_MATURITY_MODULATION_PERMYRIAD,
-            ),
+        let term4 = (10_000 * (a21 - a28) / a28).clamp(
             MIN_MATURITY_MODULATION_PERMYRIAD,
+            MAX_MATURITY_MODULATION_PERMYRIAD,
         );
 
         let maturity_modulation = (term1 + term2 + term3 + term4) / 4;

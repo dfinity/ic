@@ -1,10 +1,13 @@
 //! Types used by the Xnet component.
-use crate::{consensus::certification::Certification, messages::RequestOrResponse, CanisterId};
+use crate::ProxyDecodeError;
+use crate::{consensus::certification::Certification, messages::RequestOrResponse};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use phantom_newtype::{AmountOf, Id};
+use ic_protobuf::state::queues::v1 as pb_queues;
+use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use strum_macros::EnumIter;
 
 pub mod proto;
 
@@ -166,11 +169,57 @@ pub struct StreamHeader {
     /// Index of the next expected message.
     signals_end: StreamIndex,
 
-    /// Stream indices of rejected messages, in ascending order.
-    reject_signals: VecDeque<StreamIndex>,
+    /// Stream indices of rejected messages by reject reason, in ascending order.
+    reject_signals: VecDeque<RejectSignal>,
 
     /// Flags informing the other subnet e.g. what kinds of messages will be accepted.
     flags: StreamFlags,
+}
+
+/// Reasons for why inter canister messages may fail to be inducted into the state.
+///
+/// This type is defined here because it's used in `StreamHeader`; it is otherwise
+/// part of the Replicated State. Protocol buffer conversions are defined here due
+/// to Rust rules for implementing traits; round trip and compatibility tests are in
+/// 'replicated_state/metadata_state/tests.rs'.
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, EnumIter, Serialize, Deserialize)]
+pub enum RejectReason {
+    /// Message enqueuing failed to migrating canister.
+    CanisterMigrating = 1,
+}
+
+impl From<RejectReason> for pb_queues::RejectReason {
+    fn from(item: RejectReason) -> Self {
+        match item {
+            RejectReason::CanisterMigrating => Self::CanisterMigrating,
+        }
+    }
+}
+
+impl TryFrom<pb_queues::RejectReason> for RejectReason {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_queues::RejectReason) -> Result<Self, Self::Error> {
+        match item {
+            pb_queues::RejectReason::Unspecified => Err(ProxyDecodeError::Other(
+                "bad reject reason {} received".into(),
+            )),
+            pb_queues::RejectReason::CanisterMigrating => Ok(Self::CanisterMigrating),
+        }
+    }
+}
+
+/// Reject signal for messages who failed to induct.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct RejectSignal {
+    pub reason: RejectReason,
+    pub index: StreamIndex,
+}
+
+impl RejectSignal {
+    pub fn new(reason: RejectReason, index: StreamIndex) -> Self {
+        Self { reason, index }
+    }
 }
 
 /// Flags for `Stream`.
@@ -185,7 +234,7 @@ impl StreamHeader {
         begin: StreamIndex,
         end: StreamIndex,
         signals_end: StreamIndex,
-        reject_signals: VecDeque<StreamIndex>,
+        reject_signals: VecDeque<RejectSignal>,
         flags: StreamFlags,
     ) -> Self {
         Self {
@@ -209,7 +258,7 @@ impl StreamHeader {
         self.signals_end
     }
 
-    pub fn reject_signals(&self) -> &VecDeque<StreamIndex> {
+    pub fn reject_signals(&self) -> &VecDeque<RejectSignal> {
         &self.reject_signals
     }
 
@@ -291,20 +340,6 @@ pub struct CertifiedStreamSlice {
 
     /// The certification of the root hash.
     pub certification: Certification,
-}
-
-pub struct SessionTag {}
-/// Identifies a session between a given pair of sender,receiver canisters.
-pub type SessionId = Id<SessionTag, u64>;
-
-/// A QueueId. Identifies a message queue by destination, source and session ID.
-/// Note that the tuple order is an important consideration as it supports
-/// appropriate clustering of *outgoing* message streams.
-#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct QueueId {
-    pub dst_canister: CanisterId,
-    pub src_canister: CanisterId,
-    pub session_id: SessionId,
 }
 
 pub mod testing {

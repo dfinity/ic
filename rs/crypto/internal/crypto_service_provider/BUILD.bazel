@@ -29,7 +29,7 @@ DEPENDENCIES = [
     "//rs/crypto/standalone-sig-verifier",
     "//rs/crypto/tls_interfaces",
     "//rs/interfaces",
-    "//rs/monitoring/adapter_metrics",
+    "//rs/monitoring/adapter_metrics/client",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/protobuf",

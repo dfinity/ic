@@ -268,7 +268,7 @@ fn number_of_receivers(
         message: format!(
             "Unsupported number of receivers:\n  Num receivers: {}\n  Max: {}",
             receiver_keys.len(),
-            NodeIndex::max_value()
+            NodeIndex::MAX
         ),
     })?;
     Ok(NumberOfNodes::from(size))

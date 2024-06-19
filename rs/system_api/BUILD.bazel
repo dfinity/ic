@@ -64,6 +64,7 @@ INTEGRATION_TEST_DEPS = [
     "//rs/cycles_account_manager",
     "//rs/registry/routing_table",
     "@crate_index//:maplit",
+    "@crate_index//:more-asserts",
     "@crate_index//:strum",
 ]
 

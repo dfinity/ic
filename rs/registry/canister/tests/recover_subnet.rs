@@ -218,13 +218,6 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
         let subnet_to_recover: SubnetRecord = CreateSubnetPayload {
             node_ids: subnet_to_recover_nodes.clone(),
             unit_delay_millis: 10,
-            gossip_retransmission_request_ms: 10_000,
-            gossip_registry_poll_period_ms: 2000,
-            gossip_pfn_evaluation_period_ms: 50,
-            gossip_receive_check_cache_size: 1,
-            gossip_max_duplicity: 1,
-            gossip_max_chunk_wait_ms: 200,
-            gossip_max_artifact_streams_per_peer: 1,
             replica_version_id: ReplicaVersion::default().into(),
             ..CreateSubnetPayload::default()
         }
@@ -646,13 +639,6 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
         let subnet_to_recover_nodes = vec![node_ids.pop().unwrap()];
         let mut subnet_to_recover: SubnetRecord = CreateSubnetPayload {
             unit_delay_millis: 10,
-            gossip_retransmission_request_ms: 10_000,
-            gossip_registry_poll_period_ms: 2000,
-            gossip_pfn_evaluation_period_ms: 50,
-            gossip_receive_check_cache_size: 1,
-            gossip_max_duplicity: 1,
-            gossip_max_chunk_wait_ms: 200,
-            gossip_max_artifact_streams_per_peer: 1,
             replica_version_id: ReplicaVersion::default().into(),
             node_ids: subnet_to_recover_nodes.clone(),
             ..Default::default()

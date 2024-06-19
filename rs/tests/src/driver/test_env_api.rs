@@ -346,12 +346,10 @@ impl TopologySnapshot {
         }
         let subnets: Vec<_> = self
             .subnets()
-            .enumerate()
-            .map(|(_, s)| {
+            .map(|s| {
                 let nodes: Vec<_> = s
                     .nodes()
-                    .enumerate()
-                    .map(|(_, n)| NodeView {
+                    .map(|n| NodeView {
                         id: n.node_id,
                         ipv6: n.get_ip_addr(),
                     })
@@ -365,8 +363,7 @@ impl TopologySnapshot {
             .collect();
         let unassigned_nodes: Vec<_> = self
             .unassigned_nodes()
-            .enumerate()
-            .map(|(_, n)| NodeView {
+            .map(|n| NodeView {
                 id: n.node_id,
                 ipv6: n.get_ip_addr(),
             })
@@ -1185,7 +1182,6 @@ fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> 
     let body = response.text()?;
 
     // body should look like:
-    // eb2bd3cc9db26427dcee039b0e696a4127c2466e2e487d8628c4a7b2d3ecdbd3 *disk-img.tar.gz
     // 7348b0f4b0267da7424306efddd57e26dc5a858cd642d64afaeaa592c4974af8 *disk-img.tar.zst
 
     let lines = body
@@ -2206,16 +2202,8 @@ pub async fn install_nns_canisters(
     );
     let mut init_payloads = NnsInitPayloadsBuilder::new();
     if nns_test_neurons_present {
-        let mut ledger_balances = if let Some(ledger_balances) = ledger_balances {
-            ledger_balances
-        } else {
-            HashMap::new()
-        };
-        let neurons = if let Some(neurons) = neurons {
-            neurons
-        } else {
-            Vec::new()
-        };
+        let mut ledger_balances = ledger_balances.unwrap_or_default();
+        let neurons = neurons.unwrap_or_default();
         ledger_balances.insert(
             LIFELINE_CANISTER_ID.get().into(),
             Tokens::from_tokens(10_000).unwrap(),
@@ -2360,9 +2348,9 @@ impl FarmBaseUrl {
     }
 }
 
-impl ToString for FarmBaseUrl {
-    fn to_string(&self) -> String {
-        self.url.to_string()
+impl std::fmt::Display for FarmBaseUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.url)
     }
 }
 

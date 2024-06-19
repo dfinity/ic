@@ -75,7 +75,8 @@ fn compute_priority(
         ConsensusMessageHash::Notarization(_)
         | ConsensusMessageHash::Finalization(_)
         | ConsensusMessageHash::FinalizationShare(_)
-        | ConsensusMessageHash::BlockProposal(_) => {
+        | ConsensusMessageHash::BlockProposal(_)
+        | ConsensusMessageHash::EquivocationProof(_) => {
             // Ignore finalized
             if height <= finalized_height {
                 Drop

@@ -8,6 +8,7 @@ package(default_visibility = ["//visibility:public"])
 BASE_DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/common/test_keys",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/handlers/lifeline/impl:lifeline",
@@ -38,7 +39,6 @@ BASE_DEPENDENCIES = [
         "//rs/config",
         "//rs/crypto",
         "//rs/crypto/sha2",
-        "//rs/nervous_system/common/test_keys",
         "//rs/nervous_system/root",
         "//rs/phantom_newtype",
         "//rs/protobuf",

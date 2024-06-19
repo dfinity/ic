@@ -460,7 +460,7 @@ impl SystemStateChanges {
             if certified_data.len() > CERTIFIED_DATA_MAX_LENGTH {
                 return Err(Self::error("Certified data is too large"));
             }
-            system_state.certified_data = certified_data.clone();
+            system_state.certified_data.clone_from(certified_data);
         }
 
         // Update canister global timer
@@ -1237,7 +1237,7 @@ impl SandboxSafeSystemState {
     }
 
     /// Appends a log record to the system state changes.
-    pub fn append_canister_log(&mut self, is_enabled: bool, time: &Time, content: &[u8]) {
+    pub fn append_canister_log(&mut self, is_enabled: bool, time: &Time, content: Vec<u8>) {
         self.system_state_changes.canister_log.add_record(
             is_enabled,
             time.as_nanos_since_unix_epoch(),

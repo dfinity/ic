@@ -1,5 +1,5 @@
 [package]
-name = "ic-adapter-metrics"
+name = "ic-adapter-metrics-client"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,8 +7,8 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-adapter-metrics-service = { path = "../adapter_metrics_service" }
-ic-async-utils = { path = "../../async_utils" }
+ic-adapter-metrics-service = { path = "../service" }
+ic-async-utils = { path = "../../../async_utils" }
 prometheus = { workspace = true }
 protobuf = "2.27.1"
 slog = { workspace = true }

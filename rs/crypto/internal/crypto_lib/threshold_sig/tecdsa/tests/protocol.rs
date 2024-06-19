@@ -5,9 +5,7 @@ use ic_types::Randomness;
 use rand::{Rng, RngCore};
 use std::collections::BTreeMap;
 
-mod test_utils;
-
-use crate::test_utils::*;
+use ic_crypto_internal_threshold_sig_ecdsa_test_utils::*;
 
 fn insufficient_dealings(r: Result<ProtocolRound, CanisterThresholdError>) {
     match r {

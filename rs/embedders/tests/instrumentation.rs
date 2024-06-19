@@ -1,6 +1,7 @@
 use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
+use ic_embedders::wasm_utils;
 use ic_embedders::{
     wasm_utils::{validate_and_instrument_for_testing, validation::RESERVED_SYMBOLS, Segments},
     WasmtimeEmbedder,
@@ -279,7 +280,6 @@ fn instr_used(instance: &mut WasmtimeInstance) -> u64 {
 #[allow(clippy::field_reassign_with_default)]
 fn new_instance(wat: &str, instruction_limit: u64) -> WasmtimeInstance {
     let mut config = EmbeddersConfig::default();
-    config.metering_type = MeteringType::New;
     config.dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
     WasmtimeInstanceBuilder::new()
         .with_config(config)
@@ -977,34 +977,36 @@ fn charge_for_dirty_stable() {
 }
 
 #[test]
-fn test_metering_for_table_fill() {
-    let wat = r#"
-    (module
-        (table $table 101 funcref)
-        (elem func 0)
-        (func $test (export "canister_update test")
-          (table.fill 0 (i32.const 0) (ref.func 0) (i32.const 50))
-        )
-      )"#;
+fn table_modifications_are_unsupported() {
+    fn test(code: &str) -> String {
+        let wat = format!(
+            r#"(module
+                (table $table 101 funcref)
+                (elem func 0)
+                (func $f {code})
+            )"#
+        );
+        let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
+        let wasm = wat::parse_str(wat).expect("Failed to convert wat to wasm");
 
-    let mut instance = new_instance(wat, 1000000);
-    let _res = instance.run(func_ref("test")).unwrap();
+        wasm_utils::compile(&embedder, &BinaryEncodedWasm::new(wasm))
+            .1
+            .unwrap_err()
+            .to_string()
+    }
 
-    let param1 = instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 });
-    let param2 = instruction_to_cost(&wasmparser::Operator::RefFunc { function_index: 0 });
-    let param3 = instruction_to_cost(&wasmparser::Operator::I32Const { value: 50 });
-    let table_fill = instruction_to_cost(&wasmparser::Operator::TableFill { table: 0 });
-    // The third parameter of table.fill is the number of elements to fill
-    // and we charge dynamically 1 for each byte written.
-    let dynamic_cost_table_fill = 50;
+    let err = test("(drop (table.grow $table (ref.func 0) (i32.const 0)))");
+    assert!(err.contains("unsupported instruction table.grow"));
 
-    let instructions_used = instr_used(&mut instance);
-    assert_eq!(
-        instructions_used,
-        // Function is 1 instruction.
-        1 + param1 + param2 + param3 + table_fill + dynamic_cost_table_fill
-    );
+    let err = test("(table.set $table (i32.const 0) (ref.func 0))");
+    assert!(err.contains("unsupported instruction table.set"));
 
-    let mut instance = new_instance(wat, instructions_used);
-    instance.run(func_ref("test")).unwrap();
+    let err = test("(table.fill $table (i32.const 0) (ref.func 0) (i32.const 50))");
+    assert!(err.contains("unsupported instruction table.fill"));
+
+    let err = test("(table.copy (i32.const 0) (i32.const 0) (i32.const 0))");
+    assert!(err.contains("unsupported instruction table.copy"));
+
+    let err = test("(table.init 0 (i32.const 0) (i32.const 0) (i32.const 0))");
+    assert!(err.contains("unsupported instruction table.init"));
 }

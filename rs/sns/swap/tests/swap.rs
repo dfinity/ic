@@ -4,10 +4,10 @@ use crate::common::{
     create_generic_sns_neuron_recipes, create_successful_swap_neuron_basket_for_neurons_fund,
     create_successful_swap_neuron_basket_for_one_direct_participant,
     doubles::{
-        spy_clients, spy_clients_exploding_root, ExplodingSnsRootClient, LedgerExpect,
-        NnsGovernanceClientCall, NnsGovernanceClientReply, SnsGovernanceClientCall,
-        SnsGovernanceClientReply, SnsRootClientCall, SnsRootClientReply, SpyNnsGovernanceClient,
-        SpySnsGovernanceClient, SpySnsRootClient,
+        spy_clients, spy_clients_exploding_root, LedgerExpect, NnsGovernanceClientCall,
+        NnsGovernanceClientReply, SnsGovernanceClientCall, SnsGovernanceClientReply,
+        SnsRootClientCall, SnsRootClientReply, SpyNnsGovernanceClient, SpySnsGovernanceClient,
+        SpySnsRootClient,
     },
     get_account_balance_mock_ledger, get_snapshot_of_buyers_index_list, get_sns_balance,
     get_transfer_and_account_balance_mock_ledger, get_transfer_mock_ledger, i2principal_id_string,
@@ -443,7 +443,7 @@ fn test_min_max_icp_per_buyer() {
             .now_or_never()
             .unwrap();
         assert!(e.is_err());
-        assert!(swap.buyers.get(&TEST_USER1_PRINCIPAL.to_string()).is_none());
+        assert!(!swap.buyers.contains_key(&TEST_USER1_PRINCIPAL.to_string()));
     }
     // Try to deposit 6 ICP.
     {
@@ -1034,7 +1034,10 @@ fn test_scenario_happy() {
         let sns_governance =
             SpySnsGovernanceClient::new(expected_sns_governance_claim_swap_neurons_calls);
         CanisterClients {
-            sns_root: SpySnsRootClient::new(vec![]),
+            sns_root: SpySnsRootClient::new(vec![
+                // Add a mock reply of a successful call to SNS Root
+                SnsRootClientReply::successful_set_dapp_controllers(),
+            ]),
             sns_governance,
             nns_governance,
             icp_ledger,
@@ -1106,6 +1109,7 @@ async fn test_finalize_swap_ok_matched_funding() {
     let mut swap = SwapBuilder::new()
         .with_nns_governance_canister_id(NNS_GOVERNANCE_CANISTER_ID)
         .with_sns_governance_canister_id(SNS_GOVERNANCE_CANISTER_ID)
+        .with_sns_root_canister_id(SNS_ROOT_CANISTER_ID)
         .with_nns_proposal_id(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID)
         .with_lifecycle(Open)
         .with_swap_start_due(Some(START_TIMESTAMP_SECONDS), Some(END_TIMESTAMP_SECONDS))
@@ -1158,7 +1162,7 @@ async fn test_finalize_swap_ok_matched_funding() {
     // twice: once for when we call `finalize` and once for when we call
     // `try_auto_finalize`
     pub fn get_clients() -> CanisterClients<
-        ExplodingSnsRootClient,
+        SpySnsRootClient,
         SpySnsGovernanceClient,
         SpyLedger,
         SpyLedger,
@@ -1220,7 +1224,9 @@ async fn test_finalize_swap_ok_matched_funding() {
                     },
                 ),
             ]),
-            ..spy_clients_exploding_root()
+            sns_root: SpySnsRootClient::new(vec![
+                SnsRootClientReply::successful_set_dapp_controllers(),
+            ]),
         }
     }
 
@@ -1268,6 +1274,21 @@ async fn test_finalize_swap_ok_matched_funding() {
             "the result from finalization and auto-finalization should be the same"
         );
 
+        // Assert that finalization and auto-finalization performed the same calls
+        // to SNS Governance, NNS Governance, and SNS Root.
+        assert_eq!(
+            clients.sns_governance.calls, try_auto_finalize_clients.sns_governance.calls,
+            "the calls to SNS governance should be the same"
+        );
+        assert_eq!(
+            clients.nns_governance.calls, try_auto_finalize_clients.nns_governance.calls,
+            "the calls to NNS governance should be the same"
+        );
+        assert_eq!(
+            clients.sns_root.observed_calls, try_auto_finalize_clients.sns_root.observed_calls,
+            "the calls to SNS root should be the same"
+        );
+
         finalize_result
     };
 
@@ -1305,7 +1326,9 @@ async fn test_finalize_swap_ok_matched_funding() {
                     global_failures: 0,
                 }),
                 set_mode_call_result: Some(successful_set_mode_call_result()),
-                set_dapp_controllers_call_result: None,
+                set_dapp_controllers_call_result: Some(
+                    successful_set_dapp_controllers_call_result()
+                ),
                 settle_neurons_fund_participation_result: Some(
                     SettleNeuronsFundParticipationResult {
                         possibility: Some(
@@ -1322,6 +1345,15 @@ async fn test_finalize_swap_ok_matched_funding() {
                 // Deprecated field.
                 settle_community_fund_participation_result: None,
             },
+        );
+
+        // Check that root was told to take sole control of the dapp controllers.
+        assert_eq!(
+            clients.sns_root.observed_calls,
+            vec![SnsRootClientCall::set_dapp_controllers(
+                None,
+                vec![SNS_ROOT_CANISTER_ID.get()],
+            )]
         );
     }
 
@@ -2253,7 +2285,10 @@ fn test_finalize_swap_rejects_concurrent_calls() {
             SnsGovernanceClientReply::SetMode(SetModeResponse {}),
         ]),
         sns_ledger: SpyLedger::new(vec![LedgerReply::TransferFunds(Ok(1000))]),
-        sns_root: spy_clients().sns_root,
+        sns_root: SpySnsRootClient::new(vec![
+            // Add a mock reply of a successful call to SNS Root
+            SnsRootClientReply::successful_set_dapp_controllers(),
+        ]),
         nns_governance: SpyNnsGovernanceClient::new(vec![
             NnsGovernanceClientReply::SettleNeuronsFundParticipation(
                 SettleNeuronsFundParticipationResponse {

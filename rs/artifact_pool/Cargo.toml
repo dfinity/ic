@@ -32,7 +32,7 @@ lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "f62018b2
 nix = { workspace = true }
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = { workspace = true }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }

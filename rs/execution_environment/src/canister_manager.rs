@@ -122,6 +122,7 @@ pub(crate) struct CanisterMgrConfig {
     rate_limiting_of_heap_delta: FlagStatus,
     heap_delta_rate_limit: NumBytes,
     upload_wasm_chunk_instructions: NumInstructions,
+    wasm_chunk_store_max_size: NumBytes,
 }
 
 impl CanisterMgrConfig {
@@ -141,6 +142,7 @@ impl CanisterMgrConfig {
         rate_limiting_of_heap_delta: FlagStatus,
         heap_delta_rate_limit: NumBytes,
         upload_wasm_chunk_instructions: NumInstructions,
+        wasm_chunk_store_max_size: NumBytes,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -157,6 +159,7 @@ impl CanisterMgrConfig {
             rate_limiting_of_heap_delta,
             heap_delta_rate_limit,
             upload_wasm_chunk_instructions,
+            wasm_chunk_store_max_size,
         }
     }
 }
@@ -1380,7 +1383,7 @@ impl CanisterManager {
     ) -> Result<CanisterId, CanisterManagerError> {
         let new_canister_id = CanisterId::unchecked_from_principal(specified_id);
 
-        if state.canister_states.get(&new_canister_id).is_some() {
+        if state.canister_states.contains_key(&new_canister_id) {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_canister_id));
         }
 
@@ -1590,7 +1593,7 @@ impl CanisterManager {
         canister
             .system_state
             .wasm_chunk_store
-            .can_insert_chunk(chunk)
+            .can_insert_chunk(self.config.wasm_chunk_store_max_size, chunk)
             .map_err(|err| CanisterManagerError::WasmChunkStoreError { message: err })?;
 
         let chunk_bytes = wasm_chunk_store::chunk_size();
@@ -1742,7 +1745,7 @@ impl CanisterManager {
         let hash = canister
             .system_state
             .wasm_chunk_store
-            .insert_chunk(chunk)
+            .insert_chunk(self.config.wasm_chunk_store_max_size, chunk)
             .expect("Error: Insert chunk cannot fail after checking `can_insert_chunk`");
         Ok(UploadChunkResult {
             reply: UploadChunkReply {
@@ -2069,7 +2072,9 @@ impl CanisterManager {
         };
 
         system_state.wasm_chunk_store = snapshot.chunk_store().clone();
-        system_state.certified_data = snapshot.certified_data().clone();
+        system_state
+            .certified_data
+            .clone_from(snapshot.certified_data());
 
         let mut new_canister =
             CanisterState::new(system_state, new_execution_state, scheduler_state);

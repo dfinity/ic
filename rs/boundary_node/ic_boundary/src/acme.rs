@@ -11,17 +11,23 @@ pub struct OrderHandle(instant_acme::Order);
 
 #[derive(Debug)]
 pub struct ChallengeResponse {
+    #[allow(dead_code)]
     pub token: String,
+    #[allow(dead_code)]
     pub key_authorization: String,
 }
 
 #[async_trait]
 pub trait Order: Sync + Send {
+    // TODO: Only used in specific configurations.
+    #[allow(dead_code)]
     async fn order(&self, name: &str) -> Result<(OrderHandle, ChallengeResponse), Error>;
 }
 
 #[async_trait]
 pub trait Ready: Sync + Send {
+    // TODO: Only used in specific configurations.
+    #[allow(dead_code)]
     async fn ready(&self, order: &mut OrderHandle) -> Result<(), Error>;
 }
 

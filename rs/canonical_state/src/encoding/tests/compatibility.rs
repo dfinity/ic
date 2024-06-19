@@ -25,7 +25,7 @@ use ic_types::{
     },
     nominal_cycles::NominalCycles,
     time::CoarseTime,
-    xnet::StreamFlags,
+    xnet::{RejectReason, RejectSignal, StreamFlags},
     CryptoHashOfPartialState, Cycles, Funds, NumBytes, Time,
 };
 use serde_cbor::value::Value;
@@ -84,7 +84,11 @@ fn canonical_encoding_stream_header() {
 ///     begin: 23.into(),
 ///     end: 25.into(),
 ///     signals_end: 256.into(),
-///     reject_signals: vec![249.into(), 250.into(), 252.into()].into(),
+///     reject_signals: vec![
+///         RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+///         RejectSignal::new(RejectReason::CanisterMigrating, 250.into()),
+///         RejectSignal::new(RejectReason::CanisterMigrating, 252.into()),
+///     ].into(),
 ///     flags: StreamFlags::default(),
 /// }
 /// ```
@@ -114,7 +118,12 @@ fn canonical_encoding_stream_header_v8_plus() {
             23.into(),
             25.into(),
             256.into(),
-            vec![249.into(), 250.into(), 252.into()].into(),
+            vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 250.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 252.into()),
+            ]
+            .into(),
             StreamFlags::default(),
         );
 
@@ -132,7 +141,11 @@ fn canonical_encoding_stream_header_v8_plus() {
 ///     begin: 23.into(),
 ///     end: 25.into(),
 ///     signals_end: 256.into(),
-///     reject_signals: vec![249.into(), 250.into(), 252.into()].into(),
+///     reject_signals: vec![
+///         RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+///         RejectSignal::new(RejectReason::CanisterMigrating, 250.into()),
+///         RejectSignal::new(RejectReason::CanisterMigrating, 252.into()),
+///     ].into(),
 ///     flags: StreamFlags {
 ///        deprecated_responses_only: true,
 ///     },
@@ -167,7 +180,12 @@ fn canonical_encoding_stream_header_v17_plus() {
             23.into(),
             25.into(),
             256.into(),
-            vec![249.into(), 250.into(), 252.into()].into(),
+            vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 250.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 252.into()),
+            ]
+            .into(),
             StreamFlags {
                 deprecated_responses_only: true,
             },
@@ -1407,7 +1425,12 @@ fn stream_header(certification_version: CertificationVersion) -> StreamHeader {
         25.into(),
         256.into(),
         if certification_version >= CertificationVersion::V8 {
-            vec![249.into(), 250.into(), 252.into()].into()
+            vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 250.into()),
+                RejectSignal::new(RejectReason::CanisterMigrating, 252.into()),
+            ]
+            .into()
         } else {
             VecDeque::default()
         },

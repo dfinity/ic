@@ -907,7 +907,7 @@ fn validate_export_section(
                     func_name = parts[0];
                     let unmangled_func_name = parts[1];
                     if seen_funcs.contains(unmangled_func_name) {
-                        return Err(WasmValidationError::InvalidExportSection(format!(
+                        return Err(WasmValidationError::UserInvalidExportSection(format!(
                             "Duplicate function '{}' exported multiple times \
                              with different call types: update, query, or composite_query.",
                             unmangled_func_name
@@ -951,11 +951,11 @@ fn validate_export_section(
         }
         if number_exported_functions > max_number_exported_functions {
             let err = format!("The number of exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds {}.", max_number_exported_functions);
-            return Err(WasmValidationError::InvalidExportSection(err));
+            return Err(WasmValidationError::UserInvalidExportSection(err));
         }
         if sum_exported_function_name_lengths > max_sum_exported_function_name_lengths {
             let err = format!("The sum of `<name>` lengths in exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds {}.", max_sum_exported_function_name_lengths);
-            return Err(WasmValidationError::InvalidExportSection(err));
+            return Err(WasmValidationError::UserInvalidExportSection(err));
         }
     }
     Ok(())
@@ -1187,13 +1187,15 @@ fn validate_custom_section(
     Ok(WasmMetadata::new(validated_custom_sections))
 }
 
-fn wasm_function_complexity(body: &Body<'_>) -> Complexity {
+fn wasm_function_complexity(
+    index: usize,
+    body: &Body<'_>,
+) -> Result<Complexity, WasmValidationError> {
     use Operator::*;
 
-    let complexity = body
-        .instructions
-        .iter()
-        .map(|instruction| match instruction {
+    let mut complexity: u64 = 0;
+    for instruction in &body.instructions {
+        complexity = complexity.saturating_add(match instruction {
             Block { .. }
             | Loop { .. }
             | If { .. }
@@ -1202,41 +1204,45 @@ fn wasm_function_complexity(body: &Body<'_>) -> Complexity {
             | BrTable { .. }
             | Call { .. }
             | CallIndirect { .. }
-            // `MemoryGrow` and `TableGrow` add `Call` instructions after
-            // instrumentation.
-            | MemoryGrow { .. }
-            | TableGrow { .. } => 50,
+            | MemoryGrow { .. } => 50,
+            TableGrow { .. } => {
+                return Err(WasmValidationError::UnsupportedWasmInstruction {
+                    index,
+                    instruction: "table.grow".into(),
+                });
+            }
             TableGet { .. } => 14,
             RefFunc { .. } => 8,
-            TableSet { .. } => 7,
+            TableSet { .. } => {
+                return Err(WasmValidationError::UnsupportedWasmInstruction {
+                    index,
+                    instruction: "table.set".into(),
+                });
+            }
             RefIsNull => 6,
-            TableFill { .. }
-            | I32TruncF32S
-            | I32TruncF32U
-            | I32TruncF64S
-            | I32TruncF64U
-            | I64ExtendI32S
-            | I64ExtendI32U
-            | I64TruncF32S
-            | I64TruncF32U
-            | I64TruncF64S
-            | I64TruncF64U
-            | F32ConvertI32S
-            | F32ConvertI32U
-            | F32ConvertI64S
-            | F32ConvertI64U
-            | F32DemoteF64
-            | F64ConvertI32S
-            | F64ConvertI32U
-            | F64ConvertI64S
-            | F64ConvertI64U => 5,
-            F32Neg
-            | F32Abs
-            | F64Neg
-            | F64Abs
-            | TableCopy { .. }
-            | TableInit { .. }
-            | MemoryCopy { .. } => 4,
+            TableFill { .. } => {
+                return Err(WasmValidationError::UnsupportedWasmInstruction {
+                    index,
+                    instruction: "table.fill".into(),
+                });
+            }
+            I32TruncF32S | I32TruncF32U | I32TruncF64S | I32TruncF64U | I64ExtendI32S
+            | I64ExtendI32U | I64TruncF32S | I64TruncF32U | I64TruncF64S | I64TruncF64U
+            | F32ConvertI32S | F32ConvertI32U | F32ConvertI64S | F32ConvertI64U | F32DemoteF64
+            | F64ConvertI32S | F64ConvertI32U | F64ConvertI64S | F64ConvertI64U => 5,
+            F32Neg | F32Abs | F64Neg | F64Abs | MemoryCopy { .. } => 4,
+            TableCopy { .. } => {
+                return Err(WasmValidationError::UnsupportedWasmInstruction {
+                    index,
+                    instruction: "table.copy".into(),
+                });
+            }
+            TableInit { .. } => {
+                return Err(WasmValidationError::UnsupportedWasmInstruction {
+                    index,
+                    instruction: "table.init".into(),
+                });
+            }
             F32Copysign
             | F64Copysign
             | F64Eq
@@ -1338,9 +1344,9 @@ fn wasm_function_complexity(body: &Body<'_>) -> Complexity {
             | I64Extend32S
             | F64PromoteF32 => 2,
             _ => 1,
-        })
-        .sum();
-    Complexity(complexity)
+        });
+    }
+    Ok(Complexity(complexity))
 }
 
 fn validate_code_section(
@@ -1351,7 +1357,7 @@ fn validate_code_section(
 
     for (index, func_body) in module.code_sections.iter().enumerate() {
         let size = func_body.instructions.len();
-        let complexity = wasm_function_complexity(func_body);
+        let complexity = wasm_function_complexity(index, func_body)?;
         if complexity > WASM_FUNCTION_COMPLEXITY_LIMIT {
             return Err(WasmValidationError::FunctionComplexityTooHigh {
                 index,
@@ -1501,6 +1507,7 @@ pub(super) fn validate_wasm_binary<'a>(
         config.max_sum_exported_function_name_lengths,
     )?;
     validate_data_section(&module)?;
+    let num_tables = module.tables.len();
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;
     let (largest_function_instruction_count, max_complexity) = validate_code_section(&module)?;
@@ -1508,6 +1515,7 @@ pub(super) fn validate_wasm_binary<'a>(
     Ok((
         WasmValidationDetails {
             imports_details,
+            num_tables,
             wasm_metadata,
             largest_function_instruction_count,
             max_complexity,

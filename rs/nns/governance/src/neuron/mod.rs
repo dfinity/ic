@@ -915,61 +915,6 @@ mod tests {
     }
 
     #[test]
-    fn test_update_stake_adjust_age_for_dissolved_neuron_variant_b() {
-        let mut neuron = create_neuron_with_stake_dissolve_state_and_age(
-            10 * E8,
-            DissolveStateAndAge::LegacyDissolved {
-                aging_since_timestamp_seconds: NOW.saturating_sub(TWELVE_MONTHS_SECONDS),
-            },
-        );
-
-        let new_stake_e8s: u64 = 1_500_000_000_u64; // 15 ICP
-        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
-
-        // This is the weighted average that tells us what the age should be
-        // in seconds.
-        let expected_new_age_seconds = TWELVE_MONTHS_SECONDS.saturating_mul(10).saturating_div(15);
-        assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);
-        assert_eq!(
-            neuron.dissolve_state_and_age(),
-            DissolveStateAndAge::LegacyDissolved {
-                aging_since_timestamp_seconds: NOW.saturating_sub(expected_new_age_seconds),
-            }
-        );
-        // Decrease the age that we expect from now to get the expected timestamp
-        // since when the neurons should be aging.
-        assert_eq!(neuron.age_seconds(NOW), expected_new_age_seconds);
-    }
-
-    #[test]
-    fn test_update_stake_adjust_age_for_dissolved_neuron_variant_c() {
-        // This should mean the neuron is dissolved.
-        let mut neuron = create_neuron_with_stake_dissolve_state_and_age(
-            10 * E8,
-            DissolveStateAndAge::LegacyNoneDissolveState {
-                aging_since_timestamp_seconds: NOW.saturating_sub(TWELVE_MONTHS_SECONDS),
-            },
-        );
-
-        let new_stake_e8s = 1_500_000_000_u64; // 15 ICP
-        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
-
-        // This is the weighted average that tells us what the age should be
-        // in seconds.
-        let expected_new_age_seconds = TWELVE_MONTHS_SECONDS.saturating_mul(10).saturating_div(15);
-        assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);
-        // Decrease the age that we expect from now to get the expected timestamp
-        // since when the neurons should be aging.
-        assert_eq!(
-            neuron.dissolve_state_and_age(),
-            DissolveStateAndAge::LegacyNoneDissolveState {
-                aging_since_timestamp_seconds: NOW.saturating_sub(expected_new_age_seconds),
-            }
-        );
-        assert_eq!(neuron.age_seconds(NOW), expected_new_age_seconds);
-    }
-
-    #[test]
     fn test_update_stake_adjust_age_for_non_dissolving_neuron() {
         let mut neuron = create_neuron_with_stake_dissolve_state_and_age(
             10 * E8,
@@ -1089,23 +1034,6 @@ mod tests {
 
         #[rustfmt::skip]
         let cases = [
-            // These invalid cases ensure that the method actually transforms "now" correctly
-            DissolveStateAndAge::LegacyDissolved { aging_since_timestamp_seconds: 0 },
-            DissolveStateAndAge::LegacyDissolvingOrDissolved { when_dissolved_timestamp_seconds: NOW, aging_since_timestamp_seconds: 0 },
-            DissolveStateAndAge::LegacyDissolvingOrDissolved { when_dissolved_timestamp_seconds: NOW  -1, aging_since_timestamp_seconds: 0 },
-            DissolveStateAndAge::LegacyDissolvingOrDissolved { when_dissolved_timestamp_seconds: 0, aging_since_timestamp_seconds: 0 },
-            DissolveStateAndAge::LegacyNoneDissolveState { aging_since_timestamp_seconds: 0 },
-
-            // These are also inconsistent with what should be observed.
-            DissolveStateAndAge::LegacyDissolved { aging_since_timestamp_seconds: NOW + 100 },
-            DissolveStateAndAge::LegacyDissolvingOrDissolved { when_dissolved_timestamp_seconds: NOW, aging_since_timestamp_seconds: NOW + 100 },
-            DissolveStateAndAge::LegacyDissolvingOrDissolved { when_dissolved_timestamp_seconds: NOW - 1, aging_since_timestamp_seconds: NOW + 100 },
-            DissolveStateAndAge::LegacyDissolvingOrDissolved { when_dissolved_timestamp_seconds: 0, aging_since_timestamp_seconds: NOW + 100 },
-            DissolveStateAndAge::LegacyNoneDissolveState { aging_since_timestamp_seconds: NOW + 100 },
-
-            // Consistent with observations
-            DissolveStateAndAge::LegacyDissolved { aging_since_timestamp_seconds: NOW - 100 },
-            DissolveStateAndAge::LegacyNoneDissolveState { aging_since_timestamp_seconds: NOW - 100 },
             DissolveStateAndAge::DissolvingOrDissolved { when_dissolved_timestamp_seconds: NOW, },
             DissolveStateAndAge::DissolvingOrDissolved { when_dissolved_timestamp_seconds: NOW - 1, },
             DissolveStateAndAge::DissolvingOrDissolved { when_dissolved_timestamp_seconds: 0, },
@@ -1154,45 +1082,6 @@ mod tests {
                 test_increase_dissolve_delay_by_1_for_non_dissolving_neuron(
                     current_aging_since_timestamp_seconds,
                     current_dissolve_delay_seconds,
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn increase_dissolve_delay_set_age_to_u64_max_for_dissolving_neurons() {
-        const NOW: u64 = 1000;
-        fn test_increase_dissolve_delay_by_1_for_dissolving_neuron(
-            current_aging_since_timestamp_seconds: u64,
-            dissolved_at_timestamp_seconds: u64,
-        ) {
-            let mut neuron = create_neuron_with_dissolve_state_and_age(
-                DissolveStateAndAge::LegacyDissolvingOrDissolved {
-                    when_dissolved_timestamp_seconds: dissolved_at_timestamp_seconds,
-                    aging_since_timestamp_seconds: current_aging_since_timestamp_seconds,
-                },
-            );
-
-            // Precondition - neuron is already dissolving
-            assert_eq!(neuron.state(NOW), NeuronState::Dissolving);
-
-            neuron.increase_dissolve_delay(NOW, 1);
-
-            assert_eq!(
-                neuron.dissolve_state_and_age(),
-                DissolveStateAndAge::DissolvingOrDissolved {
-                    when_dissolved_timestamp_seconds: dissolved_at_timestamp_seconds + 1,
-                }
-            );
-        }
-
-        for current_aging_since_timestamp_seconds in [0, NOW - 1, NOW, NOW + 1, NOW + 2000] {
-            for dissolved_at_timestamp_seconds in
-                [NOW + 1, NOW + 1000, NOW + (ONE_DAY_SECONDS * 365 * 8)]
-            {
-                test_increase_dissolve_delay_by_1_for_dissolving_neuron(
-                    current_aging_since_timestamp_seconds,
-                    dissolved_at_timestamp_seconds,
                 );
             }
         }

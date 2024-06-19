@@ -3,7 +3,7 @@
 # Builds an upgrade image from individual partition images.
 #
 # Call example:
-#   build_upgrade_image -o upgrade.tar.gz -b boot.img.tzst -r root.img.tzst -v version.txt
+#   build_upgrade_image -o upgrade.tar.zst -b boot.img.tzst -r root.img.tzst -v version.txt
 #
 import argparse
 import atexit

@@ -848,18 +848,13 @@ fn test_sns_lifecycle(
             })
         };
 
-        let expected_set_dapp_controllers_call_result =
-            if swap_finalization_status == SwapFinalizationStatus::Aborted {
-                Some(SetDappControllersCallResult {
-                    possibility: Some(set_dapp_controllers_call_result::Possibility::Ok(
-                        SetDappControllersResponse {
-                            failed_updates: vec![],
-                        },
-                    )),
-                })
-            } else {
-                None
-            };
+        let expected_set_dapp_controllers_call_result = Some(SetDappControllersCallResult {
+            possibility: Some(set_dapp_controllers_call_result::Possibility::Ok(
+                SetDappControllersResponse {
+                    failed_updates: vec![],
+                },
+            )),
+        });
 
         assert_eq!(
             sns::swap::finalize_swap(&pocket_ic, swap_canister_id),
@@ -1364,7 +1359,7 @@ fn test_sns_lifecycle(
                 }
             }
 
-            if direct_participants.get(principal_id).is_none()
+            if !direct_participants.contains_key(principal_id)
                 || swap_finalization_status == SwapFinalizationStatus::Aborted
             {
                 assert_eq!(actually_swapped_direct_sns_tokens_e8s, 0);
@@ -1381,9 +1376,7 @@ fn test_sns_lifecycle(
 
             if swap_finalization_status == SwapFinalizationStatus::Aborted
                 || neurons_fund_neuron_controllers_to_neuron_portions.is_empty()
-                || nns_controller_to_neurons_fund_neurons
-                    .get(principal_id)
-                    .is_none()
+                || !nns_controller_to_neurons_fund_neurons.contains_key(principal_id)
             {
                 // ((The swap has aborted)
                 //  || (The Neuron's Fund has not participated in this swap)

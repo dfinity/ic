@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "@crate_index//:anyhow",
     "@crate_index//:tokio",
     "@crate_index//:tokio-util",
     "@crate_index//:arc-swap",
@@ -14,6 +15,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing-subscriber",
     "@crate_index//:simple_moving_average",
     "@crate_index//:rand",
+    "@crate_index//:ring",
 ]
 
 VERSION = "0.1.0"
@@ -36,8 +38,26 @@ rust_test(
 )
 
 rust_binary(
-    name = "discower-bowndary-example",
-    srcs = ["examples/main.rs"],
+    name = "basic-library-usage",
+    srcs = ["examples/basic_library_usage.rs"],
+    aliases = {},
+    proc_macro_deps = [],
+    version = VERSION,
+    deps = DEPENDENCIES + [":discower-bowndary"],
+)
+
+rust_binary(
+    name = "fetch-api-bns",
+    srcs = ["examples/fetch_api_bns.rs"],
+    aliases = {},
+    proc_macro_deps = [],
+    version = VERSION,
+    deps = DEPENDENCIES + [":discower-bowndary"],
+)
+
+rust_binary(
+    name = "api-bn-dynamic-routing",
+    srcs = ["examples/api_bn_dynamic_routing.rs"],
     aliases = {},
     proc_macro_deps = [],
     version = VERSION,
