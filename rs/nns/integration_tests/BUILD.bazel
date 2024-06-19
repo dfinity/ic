@@ -393,6 +393,7 @@ rust_ic_test(
     tags = [
         "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
         "requires-network",  # Because mainnet state is downloaded (and used).
+        "no-sandbox", # such that the test can access the file $SSH_AUTH_SOCK.
     ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
