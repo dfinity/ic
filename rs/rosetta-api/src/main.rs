@@ -49,7 +49,7 @@ struct Opt {
     /// Supported options: sqlite, sqlite-in-memory
     #[clap(long = "store-type", default_value = "sqlite")]
     store_type: String,
-    #[clap(long = "store-location", default_value = "./data")]
+    #[clap(long = "store-location", default_value = "/data")]
     store_location: PathBuf,
     #[clap(long = "store-max-blocks")]
     store_max_blocks: Option<u64>,

@@ -6,7 +6,7 @@ use ic_protobuf::{
     registry::{
         node::v1::NodeRecord,
         replica_version::v1::ReplicaVersionRecord,
-        subnet::v1::{CatchUpPackageContents, GossipConfig, SubnetListRecord, SubnetRecord},
+        subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
     },
     types::v1::SubnetId as SubnetIdProto,
 };
@@ -65,13 +65,6 @@ pub trait SubnetRegistry {
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> RegistryClientResult<IngressMessageSettings>;
-
-    /// Returns gossip config
-    fn get_gossip_config(
-        &self,
-        subnet_id: SubnetId,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<Option<GossipConfig>>;
 
     /// Returns SubnetFeatures
     fn get_features(
@@ -249,16 +242,6 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
                 }
             }),
         )
-    }
-
-    fn get_gossip_config(
-        &self,
-        subnet_id: SubnetId,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<Option<GossipConfig>> {
-        let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
-        let subnet = deserialize_registry_value::<SubnetRecord>(bytes)?;
-        Ok(subnet.map(|subnet| subnet.gossip_config))
     }
 
     fn get_features(

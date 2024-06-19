@@ -224,10 +224,10 @@ impl TryFrom<NeuronProto> for Neuron {
         let subaccount = Subaccount::try_from(account.as_slice())
             .map_err(|_| "Invalid subaccount".to_string())?;
         let controller = controller.ok_or(format!("Controller is missing for neuron {}", id.id))?;
-        let dissolve_state_and_age = DissolveStateAndAge::from(StoredDissolveStateAndAge {
+        let dissolve_state_and_age = DissolveStateAndAge::try_from(StoredDissolveStateAndAge {
             dissolve_state,
             aging_since_timestamp_seconds,
-        });
+        })?;
 
         Ok(Neuron {
             id,
@@ -417,12 +417,14 @@ impl From<DecomposedNeuron> for Neuron {
             dissolve_state,
         } = main;
 
-        let subaccount = Subaccount::try_from(account.as_slice()).unwrap();
-        let controller = controller.unwrap();
-        let dissolve_state_and_age = DissolveStateAndAge::from(StoredDissolveStateAndAge {
+        let subaccount =
+            Subaccount::try_from(account.as_slice()).expect("Neuron account is missing");
+        let controller = controller.expect("Neuron controller is missing");
+        let dissolve_state_and_age = DissolveStateAndAge::try_from(StoredDissolveStateAndAge {
             dissolve_state: dissolve_state.map(NeuronDissolveState::from),
             aging_since_timestamp_seconds,
-        });
+        })
+        .expect("Neuron dissolve state and age is invalid");
 
         Neuron {
             id,
@@ -731,67 +733,45 @@ impl From<DissolveStateAndAge> for StoredDissolveStateAndAge {
                 )),
                 aging_since_timestamp_seconds: u64::MAX,
             },
-            DissolveStateAndAge::LegacyDissolvingOrDissolved {
-                when_dissolved_timestamp_seconds,
-                aging_since_timestamp_seconds,
-            } => StoredDissolveStateAndAge {
-                dissolve_state: Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                    when_dissolved_timestamp_seconds,
-                )),
-                aging_since_timestamp_seconds,
-            },
-            DissolveStateAndAge::LegacyDissolved {
-                aging_since_timestamp_seconds,
-            } => StoredDissolveStateAndAge {
-                dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(0)),
-                aging_since_timestamp_seconds,
-            },
-            DissolveStateAndAge::LegacyNoneDissolveState {
-                aging_since_timestamp_seconds,
-            } => StoredDissolveStateAndAge {
-                dissolve_state: None,
-                aging_since_timestamp_seconds,
-            },
         }
     }
 }
 
-impl From<StoredDissolveStateAndAge> for DissolveStateAndAge {
-    fn from(stored: StoredDissolveStateAndAge) -> Self {
-        match (stored.dissolve_state, stored.aging_since_timestamp_seconds) {
-            (None, aging_since_timestamp_seconds) => DissolveStateAndAge::LegacyNoneDissolveState {
-                aging_since_timestamp_seconds,
-            },
-            (Some(NeuronDissolveState::DissolveDelaySeconds(0)), aging_since_timestamp_seconds) => {
-                DissolveStateAndAge::LegacyDissolved {
-                    aging_since_timestamp_seconds,
+impl TryFrom<StoredDissolveStateAndAge> for DissolveStateAndAge {
+    type Error = String;
+
+    fn try_from(stored: StoredDissolveStateAndAge) -> Result<Self, Self::Error> {
+        let StoredDissolveStateAndAge {
+            dissolve_state,
+            aging_since_timestamp_seconds,
+        } = stored;
+
+        let Some(dissolve_state) = dissolve_state else {
+            return Err("Dissolve state is missing".to_string());
+        };
+
+        match dissolve_state {
+            NeuronDissolveState::DissolveDelaySeconds(dissolve_delay_seconds) => {
+                if dissolve_delay_seconds > 0 {
+                    Ok(DissolveStateAndAge::NotDissolving {
+                        dissolve_delay_seconds,
+                        aging_since_timestamp_seconds,
+                    })
+                } else {
+                    Err("Dissolve delay must be greater than 0".to_string())
                 }
             }
-            (
-                Some(NeuronDissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
-                // TODO(NNS1-2951): have a stricter guarantee about the aging_since_timestamp_seconds.
-                aging_since_timestamp_seconds,
-            ) => DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds,
-                aging_since_timestamp_seconds,
-            },
-            (
-                Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                    when_dissolved_timestamp_seconds,
-                )),
-                u64::MAX,
-            ) => DissolveStateAndAge::DissolvingOrDissolved {
+            NeuronDissolveState::WhenDissolvedTimestampSeconds(
                 when_dissolved_timestamp_seconds,
-            },
-            (
-                Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                    when_dissolved_timestamp_seconds,
-                )),
-                aging_since_timestamp_seconds,
-            ) => DissolveStateAndAge::LegacyDissolvingOrDissolved {
-                when_dissolved_timestamp_seconds,
-                aging_since_timestamp_seconds,
-            },
+            ) => {
+                if aging_since_timestamp_seconds == u64::MAX {
+                    Ok(DissolveStateAndAge::DissolvingOrDissolved {
+                        when_dissolved_timestamp_seconds,
+                    })
+                } else {
+                    Err("Aging since timestamp must be u64::MAX for dissolving or dissolved neurons".to_string())
+                }
+            }
         }
     }
 }
@@ -838,34 +818,6 @@ mod tests {
                     aging_since_timestamp_seconds: u64::MAX,
                 },
             ),
-            (
-                DissolveStateAndAge::LegacyDissolvingOrDissolved {
-                    when_dissolved_timestamp_seconds: 400,
-                    aging_since_timestamp_seconds: 500,
-                },
-                StoredDissolveStateAndAge {
-                    dissolve_state: Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(400)),
-                    aging_since_timestamp_seconds: 500,
-                },
-            ),
-            (
-                DissolveStateAndAge::LegacyDissolved {
-                    aging_since_timestamp_seconds: 600,
-                },
-                StoredDissolveStateAndAge {
-                    dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(0)),
-                    aging_since_timestamp_seconds: 600,
-                },
-            ),
-            (
-                DissolveStateAndAge::LegacyNoneDissolveState {
-                    aging_since_timestamp_seconds: 700,
-                },
-                StoredDissolveStateAndAge {
-                    dissolve_state: None,
-                    aging_since_timestamp_seconds: 700,
-                },
-            ),
         ];
 
         for (dissolve_state_and_age, stored_dissolve_state_and_age) in test_cases {
@@ -874,8 +826,42 @@ mod tests {
                 stored_dissolve_state_and_age.clone()
             );
             assert_eq!(
-                DissolveStateAndAge::from(stored_dissolve_state_and_age),
-                dissolve_state_and_age
+                DissolveStateAndAge::try_from(stored_dissolve_state_and_age),
+                Ok(dissolve_state_and_age)
+            );
+        }
+    }
+
+    #[test]
+    fn test_dissolve_state_and_age_conversion_failure() {
+        let test_cases = vec![
+            (
+                StoredDissolveStateAndAge {
+                    dissolve_state: None,
+                    aging_since_timestamp_seconds: 200,
+                },
+                "Dissolve state is missing",
+            ),
+            (
+                StoredDissolveStateAndAge {
+                    dissolve_state: Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(300)),
+                    aging_since_timestamp_seconds: 200,
+                },
+                "Aging since timestamp must be u64::MAX for dissolving or dissolved neurons",
+            ),
+            (
+                StoredDissolveStateAndAge {
+                    dissolve_state: Some(NeuronDissolveState::DissolveDelaySeconds(0)),
+                    aging_since_timestamp_seconds: 200,
+                },
+                "Dissolve delay must be greater than 0",
+            ),
+        ];
+
+        for (invalid_stored_dissolve_state_and_age, error) in test_cases {
+            assert_eq!(
+                DissolveStateAndAge::try_from(invalid_stored_dissolve_state_and_age),
+                Err(error.to_string())
             );
         }
     }

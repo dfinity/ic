@@ -835,7 +835,7 @@ impl SystemState {
             initial_cycles,
             freeze_threshold,
             status,
-            WasmChunkStore::new_for_testing(wasm_chunk_store::DEFAULT_MAX_SIZE),
+            WasmChunkStore::new_for_testing(),
         )
     }
 
@@ -1153,8 +1153,8 @@ impl SystemState {
     /// Returns an iterator that loops over the canister's output queues,
     /// popping one message at a time from each in a round robin fashion. The
     /// iterator consumes all popped messages.
-    pub fn output_into_iter(&mut self, owner: CanisterId) -> CanisterOutputQueuesIterator {
-        self.queues.output_into_iter(owner)
+    pub fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator {
+        self.queues.output_into_iter()
     }
 
     /// Returns an immutable reference to the canister queues.

@@ -90,7 +90,6 @@ bazel-build-fuzzers-archives:
   artifacts:
     when: always
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit: bazel-testlogs-gitlab/**/test.xml
@@ -113,7 +112,6 @@ bazel-build-fuzzers-archives:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -155,7 +153,6 @@ bazel-test-all:
   artifacts:
     when: always
     paths:
-      - bazel-build-log*.json.gz
       - bazel-bep.pb
       - bazel-targets
     reports:
@@ -319,7 +316,6 @@ bazel-test-macos:
     reports:
       dotenv: nns.release.env
     paths:
-      - bazel-build-log*.json*
       - build-ic.tar
   script:
     - gitlab-ci/src/ci-scripts/build-ic.sh

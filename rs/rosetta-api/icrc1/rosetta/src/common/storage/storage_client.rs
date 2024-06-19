@@ -194,6 +194,22 @@ impl StorageClient {
             [],
         )?;
 
+        open_connection.execute(
+            r#"
+        CREATE INDEX IF NOT EXISTS tx_hash_index 
+        ON blocks(tx_hash)
+        "#,
+            [],
+        )?;
+
+        open_connection.execute(
+            r#"
+        CREATE INDEX IF NOT EXISTS block_hash_index 
+        ON blocks(hash)
+        "#,
+            [],
+        )?;
+
         Ok(())
     }
 
@@ -237,12 +253,6 @@ impl StorageClient {
     pub fn get_account_balance(&self, account: &Account) -> anyhow::Result<Option<Nat>> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_account_balance_at_highest_block_idx(&open_connection, account)
-    }
-
-    // Returns the number of blocks in the database.
-    pub fn get_block_count(&self) -> anyhow::Result<u64> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_block_count(&open_connection)
     }
 }
 

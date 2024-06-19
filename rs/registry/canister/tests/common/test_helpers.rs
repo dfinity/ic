@@ -47,13 +47,6 @@ pub fn get_subnet_holding_ecdsa_keys(
 ) -> SubnetRecord {
     let mut record: SubnetRecord = CreateSubnetPayload {
         unit_delay_millis: 10,
-        gossip_retransmission_request_ms: 10_000,
-        gossip_registry_poll_period_ms: 2000,
-        gossip_pfn_evaluation_period_ms: 50,
-        gossip_receive_check_cache_size: 1,
-        gossip_max_duplicity: 1,
-        gossip_max_chunk_wait_ms: 200,
-        gossip_max_artifact_streams_per_peer: 1,
         replica_version_id: ReplicaVersion::default().into(),
         node_ids,
         ..Default::default()

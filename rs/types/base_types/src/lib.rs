@@ -1,6 +1,7 @@
 //! A crate containing various basic types that are especially useful when
 //! writing Rust canisters.
 
+use ic_protobuf::proxy::try_from_option_field;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
@@ -79,6 +80,18 @@ pub fn subnet_id_try_from_protobuf(value: pb::SubnetId) -> Result<SubnetId, Prox
             .principal_id
             .ok_or(ProxyDecodeError::MissingField("SubnetId::principal_id"))?,
     )?;
+    Ok(SubnetId::from(principal_id))
+}
+
+/// From its protobuf definition convert to a SubnetId.  Normally, we would
+/// use `impl TryFrom<Option<pb::SubnetId>> for SubnetId` here however we cannot
+/// as both `Id` and `pb::SubnetId` are defined in other crates.
+pub fn subnet_id_try_from_option(
+    value: Option<pb::SubnetId>,
+) -> Result<SubnetId, ProxyDecodeError> {
+    let value: pb::SubnetId = value.ok_or(ProxyDecodeError::MissingField("SubnetId"))?;
+    let principal_id: PrincipalId =
+        try_from_option_field(value.principal_id, "SubnetId::PrincipalId")?;
     Ok(SubnetId::from(principal_id))
 }
 

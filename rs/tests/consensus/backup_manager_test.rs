@@ -28,6 +28,7 @@ use ic_backup::{
     config::{ColdStorage, Config, SubnetConfig},
 };
 use ic_base_types::SubnetId;
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
 use ic_recovery::file_sync_helper::{download_binary, write_file};
 use ic_registry_subnet_type::SubnetType;
 use ic_tests::{
@@ -164,14 +165,18 @@ pub fn test(env: TestEnv) {
         &agent,
         nns_node.effective_canister_id(),
     ));
-    let key = enable_ecdsa_on_subnet(
+    let public_keys = enable_ecdsa_on_subnet(
         &nns_node,
         &nns_canister,
         env.topology_snapshot().root_subnet_id(),
         None,
+        vec![make_key(KEY_ID1), make_key(KEY_ID2)],
         &log,
     );
-    run_ecdsa_signature_test(&nns_canister, &log, key);
+
+    for (key_id, public_key) in public_keys {
+        run_ecdsa_signature_test(&nns_canister, &log, key_id, public_key);
+    }
 
     info!(log, "Install universal canister");
     let log2 = log.clone();
@@ -513,4 +518,14 @@ fn download_binary_file(
         binaries_dir,
     ))
     .expect("error downloading binaty");
+}
+
+const KEY_ID1: &str = "secp256k1";
+const KEY_ID2: &str = "secp256k1_2";
+
+fn make_key(name: &str) -> EcdsaKeyId {
+    EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: name.to_string(),
+    }
 }

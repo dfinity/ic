@@ -294,7 +294,7 @@ impl<'a> QueryContext<'a> {
     ) -> Result<(), UserError> {
         let canister_id = canister.canister_id();
 
-        let outgoing_messages: Vec<_> = canister.output_into_iter().map(|(_, msg)| msg).collect();
+        let outgoing_messages: Vec<_> = canister.output_into_iter().collect();
         let call_context_manager = canister
             .system_state
             .call_context_manager_mut()

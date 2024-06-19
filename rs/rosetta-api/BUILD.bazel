@@ -206,8 +206,6 @@ container_image(
     directory = "/home/rosetta",
     entrypoint = [
         "/home/rosetta/ic-rosetta-api",
-        "--store-location",
-        "/data",
     ],
     files = [
         ":ic-rosetta-api",

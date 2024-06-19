@@ -505,6 +505,12 @@ impl MessagePool {
         self.messages.len()
     }
 
+    /// Returns the implicitly assigned deadlines of enqueued outbound guaranteed
+    /// response requests.
+    pub(super) fn outbound_guaranteed_request_deadlines(&self) -> &BTreeMap<Id, CoarseTime> {
+        &self.outbound_guaranteed_request_deadlines
+    }
+
     /// Returns a reference to the pool's message stats.
     pub(super) fn message_stats(&self) -> &MessageStats {
         &self.message_stats
@@ -587,16 +593,18 @@ impl MessagePool {
             ));
         }
 
-        // Validate `message_id_generator` against the largest seen `Id`.
-        let mut max_message_id = 0;
-        self.messages.keys().for_each(|id| {
-            max_message_id = max_message_id.max(id.0);
-        });
-        if max_message_id >> Id::BITMASK_LEN >= self.message_id_generator {
-            return Err(format!(
-                "Id out of bounds: max Id: {}, message_id_generator: {}",
-                max_message_id, self.message_id_generator
-            ));
+        if !self.messages.is_empty() {
+            // Validate `message_id_generator` against the largest seen `Id`.
+            let mut max_message_id = 0;
+            self.messages.keys().for_each(|id| {
+                max_message_id = max_message_id.max(id.0);
+            });
+            if max_message_id >> Id::BITMASK_LEN >= self.message_id_generator {
+                return Err(format!(
+                    "`Id` out of bounds: max `Id`: {}, message_id_generator: {}",
+                    max_message_id, self.message_id_generator
+                ));
+            }
         }
 
         Ok(())

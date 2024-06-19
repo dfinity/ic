@@ -7,7 +7,8 @@ use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
     IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
     LoadTranscriptResult, NiDkgAlgorithm, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
-    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner, ThresholdSigVerifier,
+    ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
 use ic_interfaces_registry::RegistryClient;
@@ -474,6 +475,44 @@ impl ThresholdEcdsaSigVerifier for CryptoReturningOk {
         _inputs: &ThresholdEcdsaSigInputs,
         _signature: &ThresholdEcdsaCombinedSignature,
     ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
+        Ok(())
+    }
+}
+
+impl ThresholdSchnorrSigner for CryptoReturningOk {
+    fn create_sig_share(
+        &self,
+        _inputs: &ThresholdSchnorrSigInputs,
+    ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
+        Ok(ThresholdSchnorrSigShare {
+            sig_share_raw: vec![],
+        })
+    }
+}
+
+impl ThresholdSchnorrSigVerifier for CryptoReturningOk {
+    fn verify_sig_share(
+        &self,
+        _signer: NodeId,
+        _inputs: &ThresholdSchnorrSigInputs,
+        _share: &ThresholdSchnorrSigShare,
+    ) -> Result<(), ThresholdSchnorrVerifySigShareError> {
+        Ok(())
+    }
+
+    fn combine_sig_shares(
+        &self,
+        _inputs: &ThresholdSchnorrSigInputs,
+        _shares: &BTreeMap<NodeId, ThresholdSchnorrSigShare>,
+    ) -> Result<ThresholdSchnorrCombinedSignature, ThresholdSchnorrCombineSigSharesError> {
+        Ok(ThresholdSchnorrCombinedSignature { signature: vec![] })
+    }
+
+    fn verify_combined_sig(
+        &self,
+        _inputs: &ThresholdSchnorrSigInputs,
+        _signature: &ThresholdSchnorrCombinedSignature,
+    ) -> Result<(), ThresholdSchnorrVerifyCombinedSigError> {
         Ok(())
     }
 }

@@ -1,8 +1,9 @@
 //! ECDSA specific stats.
 
 use crate::consensus::metrics::{
-    EcdsaQuadrupleMetrics, EcdsaSignatureMetrics, EcdsaTranscriptMetrics,
+    EcdsaPreSignatureMetrics, EcdsaSignatureMetrics, EcdsaTranscriptMetrics,
 };
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_types::consensus::idkg::{EcdsaBlockReader, EcdsaStats, PreSigId, RequestId};
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealingSupport, IDkgTranscriptId, IDkgTranscriptParams,
@@ -18,13 +19,13 @@ use std::time::{Duration, Instant};
 pub struct EcdsaStatsImpl {
     state: Mutex<EcdsaStatsInternal>,
     transcript_metrics: EcdsaTranscriptMetrics,
-    quadruple_metrics: EcdsaQuadrupleMetrics,
+    pre_signature_metrics: EcdsaPreSignatureMetrics,
     signature_metrics: EcdsaSignatureMetrics,
 }
 
 struct EcdsaStatsInternal {
     transcript_stats: HashMap<IDkgTranscriptId, TranscriptStats>,
-    quadruple_stats: HashMap<PreSigId, QuadrupleStats>,
+    pre_signature_stats: HashMap<PreSigId, PreSignatureStats>,
     signature_stats: HashMap<RequestId, SignatureStats>,
 }
 
@@ -36,8 +37,9 @@ struct TranscriptStats {
     create_transcript_duration: Vec<Duration>,
 }
 
-struct QuadrupleStats {
+struct PreSignatureStats {
     start_time: Instant,
+    key_id: MasterPublicKeyId,
 }
 
 struct SignatureStats {
@@ -52,11 +54,11 @@ impl EcdsaStatsImpl {
         Self {
             state: Mutex::new(EcdsaStatsInternal {
                 transcript_stats: HashMap::new(),
-                quadruple_stats: HashMap::new(),
+                pre_signature_stats: HashMap::new(),
                 signature_stats: HashMap::new(),
             }),
             transcript_metrics: EcdsaTranscriptMetrics::new(metrics_registry.clone()),
-            quadruple_metrics: EcdsaQuadrupleMetrics::new(metrics_registry.clone()),
+            pre_signature_metrics: EcdsaPreSignatureMetrics::new(metrics_registry.clone()),
             signature_metrics: EcdsaSignatureMetrics::new(metrics_registry),
         }
     }
@@ -109,10 +111,11 @@ impl EcdsaStatsImpl {
 
     /// Called when the quadruple completed building. Reports the accumulated
     /// stats.
-    fn on_quadruple_done(&self, quadruple_stats: &QuadrupleStats) {
-        self.quadruple_metrics
-            .quadruple_e2e_latency
-            .observe(quadruple_stats.start_time.elapsed().as_secs_f64());
+    fn on_pre_signature_done(&self, pre_signature_stats: &PreSignatureStats) {
+        self.pre_signature_metrics
+            .pre_signature_e2e_latency
+            .with_label_values(&[&pre_signature_stats.key_id.to_string()])
+            .observe(pre_signature_stats.start_time.elapsed().as_secs_f64());
     }
 
     /// Called when the signature is completed. Reports the accumulated
@@ -184,31 +187,32 @@ impl EcdsaStats for EcdsaStatsImpl {
             .set(state.transcript_stats.len() as i64);
     }
 
-    fn update_active_quadruples(&self, block_reader: &dyn EcdsaBlockReader) {
-        let mut active_quadruples = HashSet::new();
+    fn update_active_pre_signatures(&self, block_reader: &dyn EcdsaBlockReader) {
+        let mut active_pre_signatures = HashSet::new();
         let mut state = self.state.lock().unwrap();
-        for pre_sig_id in block_reader.pre_signatures_in_creation() {
-            active_quadruples.insert(pre_sig_id);
+        for (pre_sig_id, key_id) in block_reader.pre_signatures_in_creation() {
+            active_pre_signatures.insert(pre_sig_id);
 
             state
-                .quadruple_stats
-                .entry(*pre_sig_id)
-                .or_insert(QuadrupleStats {
+                .pre_signature_stats
+                .entry(pre_sig_id)
+                .or_insert(PreSignatureStats {
                     start_time: Instant::now(),
+                    key_id,
                 });
         }
 
         // Remove the entries that are no longer active, and finish reporting their metrics
         let mut to_remove = HashSet::new();
-        for (pre_sig_id, quadruple_stats) in &state.quadruple_stats {
-            if !active_quadruples.contains(pre_sig_id) {
+        for (pre_sig_id, pre_signature_stats) in &state.pre_signature_stats {
+            if !active_pre_signatures.contains(pre_sig_id) {
                 to_remove.insert(*pre_sig_id);
-                self.on_quadruple_done(quadruple_stats);
+                self.on_pre_signature_done(pre_signature_stats);
             }
         }
 
         for pre_sig_id in &to_remove {
-            state.quadruple_stats.remove(pre_sig_id);
+            state.pre_signature_stats.remove(pre_sig_id);
         }
     }
 
