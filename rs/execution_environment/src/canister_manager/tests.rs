@@ -871,7 +871,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
     assert_eq!(
         err.description(),
-        "Canister requested 11.00 MiB of memory but only 10.00 MiB are available in the subnet"
+        "Canister requested 11.00 MiB of memory but only 10.00 MiB are available in the subnet."
     );
     // The memory allocation is validated first before charging the fee.
     assert_eq!(
@@ -887,7 +887,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
     assert_eq!(
         err.description(),
-        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet"
+        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet."
     );
 
     assert_eq!(
@@ -2853,7 +2853,7 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
     assert_eq!(
         err.description(),
-        "Canister requested 11.00 MiB of memory but only 10.00 MiB are available in the subnet"
+        "Canister requested 11.00 MiB of memory but only 10.00 MiB are available in the subnet."
     );
 
     assert_eq!(
@@ -2869,7 +2869,7 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
     assert_eq!(
         err.description(),
-        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet"
+        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet."
     );
 
     assert_eq!(
@@ -5054,7 +5054,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
         WasmResult::Reject(
             "Canister requested a compute allocation of 10% which \
             cannot be satisfied because the Subnet's remaining \
-            compute capacity is 0%"
+            compute capacity is 0%."
                 .to_string()
         )
     );
@@ -5087,7 +5087,7 @@ fn install_code_when_compute_capacity_is_oversubscribed() {
         err.description(),
         "Canister requested a compute allocation of 61% \
         which cannot be satisfied because the Subnet's \
-        remaining compute capacity is 60%"
+        remaining compute capacity is 60%."
     );
 
     // Updating the compute allocation to the same value succeeds.
@@ -5152,7 +5152,7 @@ fn update_settings_when_compute_capacity_is_oversubscribed() {
         err.description(),
         "Canister requested a compute allocation of 61% \
         which cannot be satisfied because the Subnet's \
-        remaining compute capacity is 60%"
+        remaining compute capacity is 60%."
     );
 
     // Updating the compute allocation to the same value succeeds.
@@ -7492,7 +7492,7 @@ fn upload_chunk_fails_when_it_exceeds_chunk_size() {
     assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
     assert_eq!(
         error .description(),
-        "Error from Wasm chunk store: Wasm chunk size 1048577 exceeds the maximum chunk size of 1048576"
+        "Error from Wasm chunk store: Wasm chunk size 1048577 exceeds the maximum chunk size of 1048576."
     );
 
     assert_eq!(
@@ -7764,7 +7764,7 @@ fn upload_chunk_fails_when_heap_delta_rate_limited() {
     assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
     assert_eq!(
         error .description(),
-        "Error from Wasm chunk store: Canister is heap delta rate limited. Current delta debit: 1048576, limit: 1048576",
+        "Error from Wasm chunk store: Canister is heap delta rate limited. Current delta debit: 1048576, limit: 1048576.",
     );
 
     assert_eq!(

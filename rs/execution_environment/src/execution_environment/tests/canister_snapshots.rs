@@ -280,7 +280,7 @@ fn take_canister_snapshot_fails_invalid_replace_snapshot_id() {
             Payload::Reject(RejectContext::new(
                 RejectCode::DestinationInvalid,
                 format!(
-                    "Could not find the snapshot ID {} for canister {}",
+                    "Could not find the snapshot ID {} for canister {}.",
                     snapshot_id, canister_id
                 ),
             ))
