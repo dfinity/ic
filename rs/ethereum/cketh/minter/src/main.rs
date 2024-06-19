@@ -738,13 +738,6 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     reimbursed_amount: reimbursed.reimbursed_amount.into(),
                     transaction_hash: reimbursed.transaction_hash.map(|h| h.to_string()),
                 },
-                #[allow(deprecated)]
-                EventType::SkippedBlock(block_number) => EP::SkippedBlock {
-                    contract_address: read_state(|s| {
-                        s.eth_helper_contract_address.map(|s| s.to_string())
-                    }),
-                    block_number: block_number.into(),
-                },
                 EventType::SkippedBlockForContract {
                     contract_address,
                     block_number,

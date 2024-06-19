@@ -143,9 +143,10 @@ jobs:
           BAZEL_TARGETS: "//rs/... //publish/binaries/..."
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Purge Bazel Output
+        if: always()
         shell: bash
         run: |
-          sudo rm -rf /private/var/tmp/bazel-output/${ROOT_PIPELINE_ID}
+          sudo rm -rf /private/var/tmp/bazel-output
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     runs-on:
