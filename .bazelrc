@@ -110,7 +110,7 @@ build:dev --compilation_mode=fastbuild
 build:macos_ci --compilation_mode=fastbuild
 build:macos_ci --build_tag_filters="-system_test,-fuzz_test"
 build:macos_ci --cache_test_results=no
-build:macos_ci --local_test_jobs=2
+build:macos_ci --local_test_jobs=1
 
 # Run `bazel build ... --config=local` if you don't have access to the buildfarm infrastructure.
 build:local --remote_cache=
