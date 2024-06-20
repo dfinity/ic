@@ -48,6 +48,7 @@ pub fn generate_prost_files(def: &Path, out: &Path) {
     build_messaging_proto(def, out);
     build_state_proto(def, out);
     build_p2p_proto(def, out);
+    build_transport_proto(def, out);
     build_bitcoin_proto(def, out);
     build_determinism_test_proto(def, out);
     rustfmt(out).unwrap_or_else(|e| {
@@ -415,7 +416,7 @@ fn build_crypto_proto(def: &Path, out: &Path) {
     compile_protos(config, def, &files);
 }
 
-/// Generates Rust structs from crypto Protobuf messages.
+/// Generates Rust structs from p2p Protobuf messages.
 fn build_p2p_proto(def: &Path, out: &Path) {
     let mut config = base_config(out, "p2p");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
@@ -423,6 +424,13 @@ fn build_p2p_proto(def: &Path, out: &Path) {
         def.join("p2p/v1/state_sync_manager.proto"),
         def.join("p2p/v1/consensus_manager.proto"),
     ];
+    compile_protos(config, def, &files);
+}
+
+/// Generates Rust structs from transport Protobuf messages.
+fn build_transport_proto(def: &Path, out: &Path) {
+    let config = base_config(out, "transport");
+    let files = [def.join("transport/v1/quic.proto")];
     compile_protos(config, def, &files);
 }
 

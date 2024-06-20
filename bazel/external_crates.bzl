@@ -477,9 +477,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "http-body-util": crate.spec(
                 version = "^0.1.0",
             ),
-            "http-serde": crate.spec(
-                version = "^2.0.0",
-            ),
             "httptest": crate.spec(
                 version = "^0.15.4",
             ),
@@ -700,7 +697,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.5",
             ),
             "libc": crate.spec(
-                version = "^0.2.91",
+                version = "^0.2.155",
             ),
             "libflate": crate.spec(
                 version = "^1.1.2",
@@ -933,7 +930,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12",
             ),
             "protobuf": crate.spec(
-                version = "^2.27.1",
+                version = "^2.28.0",
             ),
             "publicsuffix": crate.spec(
                 version = "^2.2.3",
@@ -1174,7 +1171,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "slog-async": crate.spec(
-                version = "^2.5",
+                version = "^2.8.0",
                 features = [
                     "nested-values",
                 ],
@@ -1183,16 +1180,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^2.2.0",
             ),
             "slog-json": crate.spec(
-                version = "^2.3",
+                version = "^2.6.1",
                 features = [
                     "nested-values",
                 ],
             ),
             "slog-scope": crate.spec(
-                version = "^4.1.2",
+                version = "^4.4.0",
             ),
             "slog-term": crate.spec(
-                version = "^2.6.0",
+                version = "^2.9.1",
             ),
             "socket2": crate.spec(
                 version = "^0.5.7",

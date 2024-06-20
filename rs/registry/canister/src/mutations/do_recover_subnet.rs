@@ -15,12 +15,13 @@ use dfn_core::api::{call, CanisterId};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_management_canister_types::{EcdsaKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse};
-use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, EcdsaConfig, RegistryStoreUri};
+use ic_management_canister_types::{SetupInitialDKGArgs, SetupInitialDKGResponse};
+use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, RegistryStoreUri};
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_subnet_record_key,
 };
+use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig};
 use ic_registry_transport::{
     pb::v1::{registry_mutation, RegistryMutation},
     upsert,
@@ -108,31 +109,23 @@ impl Registry {
 
             // If ECDSA config is set, we must both update the subnets ecdsa_config
             // and make sure the subnet is not listed as signing_subnet for keys it no longer holds
-            if let Some(ref new_ecdsa_config) = payload.ecdsa_config {
-                // get current set of keys
-                let new_key_list: Vec<EcdsaKeyId> = new_ecdsa_config
-                    .keys
-                    .iter()
-                    .map(|key_request| key_request.key_id.clone())
-                    .collect();
-
-                mutations.append(&mut self.mutations_to_disable_subnet_signing(
-                    subnet_id,
-                    &self.get_keys_that_will_be_removed_from_subnet(subnet_id, new_key_list),
-                ));
-
-                // Update ECDSA configuration on subnet record to reflect new holdings
-                subnet_record.ecdsa_config = Some(new_ecdsa_config.clone().into());
-
-                let ecdsa_config = EcdsaConfig::from(new_ecdsa_config.clone());
+            if let Some(ref ecdsa_initial_config) = payload.ecdsa_config {
+                let ecdsa_config = EcdsaConfig::from(ecdsa_initial_config.clone());
 
                 // TODO[NNS1-2988]: Take value directly from `RecoverSubnetPayload.chain_key_config`.
-                let chain_key_config = ChainKeyConfig::from(ecdsa_config.clone());
+                let chain_key_config = ChainKeyConfig::from(ecdsa_config);
+                let new_keys = chain_key_config.key_ids();
+                let chain_key_config_pb = ChainKeyConfigPb::from(chain_key_config);
 
-                // TODO[NNS1-3006]: Stop updating the ecdsa_config field.
-                subnet_record.ecdsa_config = Some(ecdsa_config);
+                let chain_key_signing_disable =
+                    self.get_keys_that_will_be_removed_from_subnet(subnet_id, new_keys);
+                mutations.append(
+                    &mut self
+                        .mutations_to_disable_subnet_signing(subnet_id, &chain_key_signing_disable),
+                );
 
-                subnet_record.chain_key_config = Some(chain_key_config);
+                // Update chain key configuration on subnet record to reflect new holdings.
+                subnet_record.chain_key_config = Some(chain_key_config_pb);
             }
 
             // Push all of our subnet_record mutations
@@ -216,8 +209,9 @@ impl Registry {
     /// This is similar to validation in do_create_subnet except for constraints to avoid requesting
     /// keys from the subnet.
     fn validate_ecdsa_recover_subnet_payload(&self, payload: &RecoverSubnetPayload) {
-        if let Some(ecdsa_config) = payload.ecdsa_config.as_ref() {
-            match self.validate_ecdsa_initial_config(ecdsa_config, Some(payload.subnet_id)) {
+        if let Some(ecdsa_initial_config) = payload.ecdsa_config.as_ref() {
+            let own_subnet_id = Some(payload.subnet_id);
+            match self.validate_ecdsa_initial_config(ecdsa_initial_config, own_subnet_id) {
                 Ok(_) => {}
                 Err(message) => panic!(
                     "{}Cannot recover subnet '{}': {}",
@@ -299,8 +293,8 @@ mod test {
     };
     use ic_base_types::SubnetId;
     use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
-    use ic_protobuf::registry::subnet::v1::SubnetRecord;
-    use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+    use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
+    use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_registry_transport::{delete, upsert};
     use ic_test_utilities_types::ids::subnet_test_id;
 
@@ -328,16 +322,16 @@ mod test {
 
         let mut subnet_record: SubnetRecord =
             get_invariant_compliant_subnet_record(node_ids_and_dkg_pks.keys().copied().collect());
-        subnet_record.ecdsa_config = Some(
-            EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![key_id.clone()],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                signature_request_timeout_ns: None,
-                idkg_key_rotation_period_ms: None,
-            }
-            .into(),
-        );
+        let ecdsa_config = EcdsaConfig {
+            quadruples_to_create_in_advance: 1,
+            key_ids: vec![key_id.clone()],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        };
+        let chain_key_config = ChainKeyConfig::from(ecdsa_config);
+        let chain_key_config_pb = ChainKeyConfigPb::from(chain_key_config);
+        subnet_record.chain_key_config = Some(chain_key_config_pb);
 
         let fake_subnet_mutation = add_fake_subnet(
             subnet_id_holding_key,
@@ -434,7 +428,7 @@ mod test {
     #[test]
     #[should_panic(
         expected = "Cannot recover subnet 'ge6io-epiam-aaaaa-aaaap-yai': The requested ECDSA key \
-        'Secp256k1:test_key_id' was not found in any subnet."
+        'ecdsa:Secp256k1:test_key_id' was not found in any subnet."
     )]
     fn do_recover_subnet_should_panic_if_ecdsa_keys_non_existing() {
         let mut registry = invariant_compliant_registry(0);
@@ -461,7 +455,7 @@ mod test {
     #[test]
     #[should_panic(
         expected = "Cannot recover subnet 'ge6io-epiam-aaaaa-aaaap-yai': EcdsaKeyRequest for key \
-        'Secp256k1:test_key_id' did not specify subnet_id."
+        'ecdsa:Secp256k1:test_key_id' did not specify subnet_id."
     )]
     fn do_recover_subnet_should_panic_if_ecdsa_keys_subnet_not_specified() {
         let key_id = EcdsaKeyId {
@@ -493,7 +487,8 @@ mod test {
     #[test]
     #[should_panic(
         expected = "Cannot recover subnet 'ge6io-epiam-aaaaa-aaaap-yai': The requested ECDSA key \
-        'Secp256k1:test_key_id' is not available in targeted subnet '3ifty-exlam-aaaaa-aaaap-yai'."
+        'ecdsa:Secp256k1:test_key_id' is not available in targeted subnet \
+        '3ifty-exlam-aaaaa-aaaap-yai'."
     )]
     fn do_recover_subnet_should_panic_if_ecdsa_keys_non_existing_from_requested_subnet() {
         let key_id = EcdsaKeyId {
@@ -525,7 +520,7 @@ mod test {
     #[test]
     #[should_panic(
         expected = "Cannot recover subnet '337oy-l7jam-aaaaa-aaaap-yai': Attempted to recover \
-        ECDSA key 'Secp256k1:test_key_id' by requesting it from itself.  \
+        ECDSA key 'ecdsa:Secp256k1:test_key_id' by requesting it from itself. \
         Subnets cannot recover ECDSA keys from themselves."
     )]
     fn do_recover_subnet_should_panic_if_attempting_to_get_ecdsa_keys_from_itself() {

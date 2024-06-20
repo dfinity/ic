@@ -13,10 +13,10 @@ bit-vec = "0.6.3"
 ic-logger = { path = "../monitoring/logger" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
-libc = "0.2.91"
+libc = { workspace = true }
 nix = { workspace = true }
 slog = { workspace = true }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 
 [features]
 default = []

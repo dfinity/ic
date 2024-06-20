@@ -210,6 +210,10 @@ impl Transport for QuicTransport {
     }
 }
 
+/// Low-level transport interface for exchanging messages between nodes.
+///
+/// It intentionally uses http::Request and http::Response types.
+/// By using them, HTTP servers build on top of Axum + TCP can be an easily transitioned to the quic transport.
 #[async_trait]
 pub trait Transport: Send + Sync {
     async fn rpc(

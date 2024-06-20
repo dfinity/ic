@@ -14,19 +14,21 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::{
     crypto::v1::{
-        ChainKeySigningSubnetList, EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as pbEcdsaKeyId,
-        EcdsaSigningSubnetList,
+        ChainKeySigningSubnetList, EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as EcdsaKeyIdPb,
+        MasterPublicKeyId as MasterPublicKeyIdPb,
     },
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig, EcdsaConfig, KeyConfig, SubnetListRecord,
-        SubnetRecord,
+        CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
+        SubnetListRecord, SubnetRecord,
     },
 };
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
-    make_ecdsa_signing_subnet_list_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_subnet_list_record_key, make_subnet_record_key,
 };
-use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
+use ic_registry_subnet_features::{
+    ChainKeyConfig, EcdsaConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+};
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_test_utilities_types::ids::subnet_test_id;
@@ -258,29 +260,15 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                 .unwrap()
                 .unwrap(),
         );
-        // TODO(NNS1-3006): Remove this once replica no longer needs it
-        subnet_record.ecdsa_config = Some(EcdsaConfig {
-            quadruples_to_create_in_advance: 1,
-            key_ids: vec![(&key_1).into()],
-            max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        });
-        subnet_record.chain_key_config = Some(ChainKeyConfig {
+        subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
             key_configs: vec![KeyConfig {
-                key_id: Some(ic_protobuf::registry::crypto::v1::MasterPublicKeyId {
-                    key_id: Some(
-                        ic_protobuf::registry::crypto::v1::master_public_key_id::KeyId::Ecdsa(
-                            (&key_1).into(),
-                        ),
-                    ),
-                }),
-                pre_signatures_to_create_in_advance: Some(100),
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                key_id: MasterPublicKeyId::Ecdsa(key_1.clone()),
+                pre_signatures_to_create_in_advance: 100,
+                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-        });
+        }));
 
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
             mutations: vec![upsert(
@@ -384,34 +372,32 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
         assert_eq!(dealings.len(), 1);
         assert_eq!(
             dealings[0_usize].key_id,
-            Some(pbEcdsaKeyId {
+            Some(EcdsaKeyIdPb {
                 curve: pbEcdsaCurve::Secp256k1.into(),
                 name: "foo-bar".to_string(),
             })
         );
 
-        // Check EcdsaConfig is correctly updated
+        // Check ChainKeyConfig is correctly updated
         let subnet_record = get_subnet_record(&registry, subnet_to_recover_subnet_id).await;
-        let ecdsa_config = subnet_record.ecdsa_config.unwrap();
-        assert_eq!(ecdsa_config.max_queue_size, DEFAULT_ECDSA_MAX_QUEUE_SIZE);
+        let chain_key_config = subnet_record.chain_key_config.unwrap();
+
         assert_eq!(
-            ecdsa_config.signature_request_timeout_ns,
+            chain_key_config.signature_request_timeout_ns,
             signature_request_timeout_ns
         );
         assert_eq!(
-            ecdsa_config.idkg_key_rotation_period_ms,
+            chain_key_config.idkg_key_rotation_period_ms,
             idkg_key_rotation_period_ms
         );
 
-        let key_ids = ecdsa_config.key_ids;
-        assert_eq!(key_ids.len(), 1);
-
         assert_eq!(
-            key_ids[0_usize],
-            pbEcdsaKeyId {
-                curve: pbEcdsaCurve::Secp256k1.into(),
-                name: "foo-bar".to_string(),
-            }
+            chain_key_config.key_configs,
+            vec![KeyConfigPb {
+                key_id: Some(MasterPublicKeyIdPb::from(&MasterPublicKeyId::Ecdsa(key_1))),
+                pre_signatures_to_create_in_advance: Some(1),
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            }]
         );
     });
 }
@@ -473,13 +459,17 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
                 .unwrap()
                 .unwrap(),
         );
-        subnet_record.ecdsa_config = Some(EcdsaConfig {
+
+        let ecdsa_config = EcdsaConfig {
             quadruples_to_create_in_advance: 1,
-            key_ids: vec![(&key_1).into()],
-            max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+            key_ids: vec![(key_1.clone())],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-        });
+        };
+        let chain_key_config = ChainKeyConfig::from(ecdsa_config);
+        let chain_key_config_pb = ChainKeyConfigPb::from(chain_key_config);
+        subnet_record.chain_key_config = Some(chain_key_config_pb);
 
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
             mutations: vec![upsert(
@@ -524,22 +514,12 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
         // this subnet is removed from the signing subnet list.
         let ecdsa_signing_subnets_mutate = RegistryAtomicMutateRequest {
             preconditions: vec![],
-            mutations: vec![
-                insert(
-                    make_ecdsa_signing_subnet_list_key(&key_1),
-                    encode_or_panic(&EcdsaSigningSubnetList {
-                        subnets: vec![subnet_id_into_protobuf(subnet_to_recover_subnet_id)],
-                    }),
-                ),
-                insert(
-                    make_chain_key_signing_subnet_list_key(&MasterPublicKeyId::Ecdsa(
-                        key_1.clone(),
-                    )),
-                    encode_or_panic(&ChainKeySigningSubnetList {
-                        subnets: vec![subnet_id_into_protobuf(subnet_to_recover_subnet_id)],
-                    }),
-                ),
-            ],
+            mutations: vec![insert(
+                make_chain_key_signing_subnet_list_key(&MasterPublicKeyId::Ecdsa(key_1.clone())),
+                encode_or_panic(&ChainKeySigningSubnetList {
+                    subnets: vec![subnet_id_into_protobuf(subnet_to_recover_subnet_id)],
+                }),
+            )],
         };
 
         let registry = setup_registry_synced_with_fake_client(
@@ -598,27 +578,25 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
         let dealings = &cup_contents.ecdsa_initializations;
         assert_eq!(dealings.len(), 0);
 
-        // Check EcdsaConfig is correctly updated
+        // Check ChainKeyConfig is correctly updated
         let subnet_record = get_subnet_record(&registry, subnet_to_recover_subnet_id).await;
-        let ecdsa_config = subnet_record.ecdsa_config.unwrap();
-        assert_eq!(ecdsa_config.max_queue_size, DEFAULT_ECDSA_MAX_QUEUE_SIZE);
+        let chain_key_config = subnet_record.chain_key_config.unwrap();
+
         assert_eq!(
-            ecdsa_config.signature_request_timeout_ns,
+            chain_key_config.signature_request_timeout_ns,
             signature_request_timeout_ns
         );
         assert_eq!(
-            ecdsa_config.idkg_key_rotation_period_ms,
+            chain_key_config.idkg_key_rotation_period_ms,
             idkg_key_rotation_period_ms
         );
 
-        let key_ids = ecdsa_config.key_ids;
-        assert_eq!(key_ids.len(), 0);
+        assert_eq!(chain_key_config.key_configs, vec![]);
 
         // Check ecdsa_signing_subnets_list for key_1 is empty now.
-        let ecdsa_signing_subnet_list = ecdsa_signing_subnet_list(&registry, &key_1).await;
         assert_eq!(
-            ecdsa_signing_subnet_list,
-            EcdsaSigningSubnetList { subnets: vec![] }
+            chain_key_signing_subnet_list(&registry, &MasterPublicKeyId::Ecdsa(key_1)).await,
+            ChainKeySigningSubnetList { subnets: vec![] }
         )
     });
 }
@@ -731,13 +709,13 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
     });
 }
 
-pub async fn ecdsa_signing_subnet_list(
+pub async fn chain_key_signing_subnet_list(
     registry: &Canister<'_>,
-    key_id: &EcdsaKeyId,
-) -> EcdsaSigningSubnetList {
-    get_value_or_panic::<EcdsaSigningSubnetList>(
+    key_id: &MasterPublicKeyId,
+) -> ChainKeySigningSubnetList {
+    get_value_or_panic::<ChainKeySigningSubnetList>(
         registry,
-        make_ecdsa_signing_subnet_list_key(key_id).as_bytes(),
+        make_chain_key_signing_subnet_list_key(key_id).as_bytes(),
     )
     .await
 }

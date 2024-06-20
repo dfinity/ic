@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::{subnet_id_try_from_protobuf, PrincipalId, SubnetId};
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::registry::TEST_ID;
 use ic_nns_test_utils::{
@@ -12,11 +12,11 @@ use ic_nns_test_utils::{
     },
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
-use ic_protobuf::registry::{
-    crypto::v1::EcdsaSigningSubnetList,
-    subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb, SubnetRecord},
+use ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList;
+use ic_protobuf::registry::subnet::v1::{
+    ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb, SubnetRecord,
 };
-use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_key};
+use ic_registry_keys::{make_chain_key_signing_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
@@ -395,7 +395,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
     const ENABLE_BEFORE_ADDING_REJECT_MSG: &str = "Canister rejected with \
     message: IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister \
     called `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable \
-    signing for ECDSA key 'Secp256k1:key_id_1' on Subnet \
+    signing for ECDSA key 'ecdsa:Secp256k1:key_id_1' on Subnet \
     'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', but the \
     subnet does not hold the given key. A proposal to add that key to the subnet \
     must first be separately submitted.'";
@@ -404,7 +404,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
     IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
     `ic0.trap` with message: Panicked at '[Registry]  invariant check failed with \
     message: The subnet bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae \
-    does not have an ECDSA config'";
+    does not have a ChainKeyConfig'";
 
     local_test_on_nns_subnet(|runtime| async move {
         let subnet_id = SubnetId::from(
@@ -484,15 +484,20 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
             ..empty_update_subnet_payload(subnet_id)
         };
 
-        assert!(try_call_via_universal_canister(
+        let response = try_call_via_universal_canister(
             &fake_governance_canister,
             &registry,
             "update_subnet",
-            Encode!(&payload).unwrap()
+            Encode!(&payload).unwrap(),
         )
-        .await
-        .unwrap_err()
-        .starts_with(ENABLE_BEFORE_ADDING_REJECT_MSG));
+        .await;
+        let error_text = assert_matches!(response, Err(error_text) => error_text);
+        assert!(
+            error_text.starts_with(ENABLE_BEFORE_ADDING_REJECT_MSG),
+            "Unexpected error: `{}` (does not start with `{}`).",
+            error_text,
+            ENABLE_BEFORE_ADDING_REJECT_MSG,
+        );
 
         let new_subnet_record = get_value_or_panic::<SubnetRecord>(
             &registry,
@@ -510,15 +515,17 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
             ..empty_update_subnet_payload(subnet_id)
         };
 
-        assert!(try_call_via_universal_canister(
+        let response = try_call_via_universal_canister(
             &fake_governance_canister,
             &registry,
             "update_subnet",
-            Encode!(&payload).unwrap()
+            Encode!(&payload).unwrap(),
         )
-        .await
-        .unwrap_err()
-        .starts_with(NO_ECDSA_CONFIG_REJECT_MSG));
+        .await;
+
+        let err_text = assert_matches!(response, Err(err_text) => err_text);
+
+        assert!(err_text.contains(NO_ECDSA_CONFIG_REJECT_MSG));
 
         let new_subnet_record = get_value_or_panic::<SubnetRecord>(
             &registry,
@@ -557,7 +564,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
         assert_eq!(
             new_subnet_record,
             SubnetRecord {
-                ecdsa_config: ecdsa_config_pb,
+                ecdsa_config: None, // obsolete (chain_key_config is used instead now)
                 chain_key_config: chain_key_config_pb,
                 ..subnet_record
             }
@@ -570,27 +577,28 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
             ..empty_update_subnet_payload(subnet_id)
         };
 
-        assert!(try_call_via_universal_canister(
+        let response = try_call_via_universal_canister(
             &fake_governance_canister,
             &registry,
             "update_subnet",
-            Encode!(&payload).unwrap()
+            Encode!(&payload).unwrap(),
         )
-        .await
-        .is_ok());
+        .await;
+        assert_matches!(response, Ok(_));
 
         let subnet_record = get_subnet_record(&registry, subnet_id).await;
         {
-            let legacy_ecdsa_config = subnet_record.ecdsa_config.unwrap();
-            assert_eq!(
-                legacy_ecdsa_config.max_queue_size,
-                DEFAULT_ECDSA_MAX_QUEUE_SIZE
-            );
+            let chain_key_config = subnet_record.chain_key_config.unwrap();
+            let max_queue_size = chain_key_config.key_configs[0].max_queue_size.unwrap();
+            assert_eq!(max_queue_size, DEFAULT_ECDSA_MAX_QUEUE_SIZE);
         }
 
-        let new_signing_subnet_list: Vec<_> = get_value_or_panic::<EcdsaSigningSubnetList>(
+        let new_signing_subnet_list: Vec<_> = get_value_or_panic::<ChainKeySigningSubnetList>(
             &registry,
-            make_ecdsa_signing_subnet_list_key(&make_ecdsa_key("key_id_1")).as_bytes(),
+            make_chain_key_signing_subnet_list_key(&MasterPublicKeyId::Ecdsa(make_ecdsa_key(
+                "key_id_1",
+            )))
+            .as_bytes(),
         )
         .await
         .subnets
