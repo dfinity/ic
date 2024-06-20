@@ -477,9 +477,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "http-body-util": crate.spec(
                 version = "^0.1.0",
             ),
-            "http-serde": crate.spec(
-                version = "^2.0.0",
-            ),
             "httptest": crate.spec(
                 version = "^0.15.4",
             ),
