@@ -1811,9 +1811,9 @@ checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
 name = "cc"
-version = "1.0.90"
+version = "1.0.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cd6604a82acf3039f1144f54b8eb34e91ffba622051189e71b781822d5ee1f5"
+checksum = "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0"
 dependencies = [
  "jobserver",
  "libc",
@@ -5175,9 +5175,9 @@ dependencies = [
  "hyper 1.3.1",
  "hyper-rustls 0.26.0",
  "hyper-util",
- "ic-certification 2.3.0",
+ "ic-certification 2.5.0",
  "ic-transport-types",
- "ic-verify-bls-signature",
+ "ic-verify-bls-signature 0.1.0",
  "k256",
  "leb128",
  "p256",
@@ -5853,12 +5853,12 @@ dependencies = [
 
 [[package]]
 name = "ic-cbor"
-version = "2.3.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "027916ece94814fc7eebad43f91d691988ac8294121f54e8f22f4611c7d17f17"
+checksum = "07bc917070b8fc4bd88e3199746372e44d507f54c93a9b191787e1caefca1eba"
 dependencies = [
  "candid",
- "ic-certification 2.3.0",
+ "ic-certification 2.5.0",
  "leb128",
  "nom",
  "thiserror",
@@ -5955,7 +5955,7 @@ dependencies = [
  "cached 0.47.0",
  "candid",
  "ic-cbor",
- "ic-certification 2.3.0",
+ "ic-certification 2.5.0",
  "lazy_static",
  "leb128",
  "miracl_core_bls12381",
@@ -5989,9 +5989,9 @@ dependencies = [
 
 [[package]]
 name = "ic-certification"
-version = "2.3.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b79fd38f674173bd0af3c80b9dab6fedd3391b81a2fc0f87a2e393fb723fe13b"
+checksum = "20052ce9255fbe2de7041a4f6996fddd095ba1f31ae83b6c0ccdee5be6e7bbcf"
 dependencies = [
  "hex",
  "serde",
@@ -7900,7 +7900,7 @@ checksum = "1920329afced339a770ca2a56b00fb8229a63ab0dcf1bb119bdeb54b5b70dbfd"
 dependencies = [
  "candid",
  "http 0.2.12",
- "ic-certification 2.3.0",
+ "ic-certification 2.5.0",
  "ic-representation-independent-hash",
  "serde",
  "thiserror",
@@ -8177,7 +8177,7 @@ dependencies = [
  "hex",
  "ic-agent",
  "ic-base-types",
- "ic-certification 2.3.0",
+ "ic-certification 2.5.0",
  "ic-constants",
  "ic-crypto-tree-hash",
  "ic-icrc-rosetta-client",
@@ -10664,9 +10664,9 @@ dependencies = [
 
 [[package]]
 name = "ic-representation-independent-hash"
-version = "2.3.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be48db2f8b954b9b2a0f46424ddedda2728703d7b361bc65328ed17dcacd1e21"
+checksum = "b4d9c969c80e9b445255341da79772680f503ef856b95b3ddf162b41d096df1f"
 dependencies = [
  "leb128",
  "sha2 0.10.8",
@@ -10685,7 +10685,7 @@ dependencies = [
  "http 0.2.12",
  "ic-cbor",
  "ic-certificate-verification",
- "ic-certification 2.3.0",
+ "ic-certification 2.5.0",
  "ic-http-certification",
  "ic-representation-independent-hash",
  "leb128",
@@ -10804,6 +10804,27 @@ dependencies = [
  "tokio",
  "url",
  "xnet-test",
+]
+
+[[package]]
+name = "ic-signature-verification"
+version = "0.1.0"
+dependencies = [
+ "assert_matches",
+ "candid",
+ "hex",
+ "ic-cbor",
+ "ic-certification 2.5.0",
+ "ic-crypto-internal-test-vectors",
+ "ic-crypto-internal-types",
+ "ic-crypto-test-utils-canister-sigs",
+ "ic-crypto-test-utils-reproducible-rng",
+ "ic-types",
+ "ic-verify-bls-signature 0.2.0",
+ "serde",
+ "serde_bytes",
+ "serde_cbor",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -11956,7 +11977,7 @@ checksum = "c1c68959f501cfcb79319b6720fd1903a661d77b503e6128bfce31f91ad87aca"
 dependencies = [
  "candid",
  "hex",
- "ic-certification 2.3.0",
+ "ic-certification 2.5.0",
  "leb128",
  "serde",
  "serde_bytes",
@@ -12213,6 +12234,20 @@ dependencies = [
  "bls12_381",
  "lazy_static",
  "pairing",
+ "sha2 0.9.9",
+]
+
+[[package]]
+name = "ic-verify-bls-signature"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd0f1f8d75f50002970cc2136f909287bf1d59024fbc80ebffbee871afcbd237"
+dependencies = [
+ "bls12_381",
+ "hex",
+ "lazy_static",
+ "pairing",
+ "rand 0.6.5",
  "sha2 0.9.9",
 ]
 
@@ -12553,7 +12588,7 @@ dependencies = [
  "hex",
  "ic-agent",
  "ic-cbor",
- "ic-certification 2.3.0",
+ "ic-certification 2.5.0",
  "icrc-ledger-types",
 ]
 
