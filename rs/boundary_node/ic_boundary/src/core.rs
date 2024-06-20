@@ -51,7 +51,7 @@ use crate::{
         WithMetricsCheck, WithMetricsPersist, WithMetricsSnapshot, HTTP_DURATION_BUCKETS,
     },
     persist::{Persist, Persister, Routes},
-    rate_limiting::RateLimit,
+    rate_limiting::{canister, RateLimit},
     retry::{retry_request, RetryParams},
     routes::{self, ErrorCause, Health, Lookup, Proxy, ProxyRouter, RootKey},
     snapshot::{
@@ -193,12 +193,18 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         None
     };
 
+    // Canister Ratelimiter
+    let canister_limiter = Arc::new(canister::Limiter::new(
+        cli.rate_limiting.rate_limit_per_canister.clone(),
+    ));
+
     // Server / API
     let routers_https = setup_router(
         registry_snapshot.clone(),
         routing_table.clone(),
         http_client.clone(),
         bouncer,
+        Some(canister_limiter.clone()),
         &cli,
         &metrics_registry,
         cache.clone(),
@@ -327,11 +333,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
             (None, None, vec![])
         };
 
+    let canister_limiter_runner = WithThrottle(canister_limiter, ThrottleParams::new(10 * SECOND));
+
     // Runners
     let mut runners: Vec<Box<dyn Run>> = vec![
         #[cfg(feature = "tls")]
         Box::new(configuration_runner),
         Box::new(metrics_runner),
+        Box::new(canister_limiter_runner),
     ];
     runners.append(&mut registry_runners);
 
@@ -514,6 +523,7 @@ pub fn setup_router(
     routing_table: Arc<ArcSwapOption<Routes>>,
     http_client: Arc<dyn HttpClient>,
     bouncer: Option<Arc<bouncer::Bouncer>>,
+    canister_limiter: Option<Arc<canister::Limiter>>,
     cli: &Cli,
     metrics_registry: &Registry,
     cache: Option<Arc<Cache>>,
@@ -635,8 +645,10 @@ pub fn setup_router(
 
     let middlware_bouncer =
         option_layer(bouncer.map(|x| middleware::from_fn_with_state(x, bouncer::middleware)));
-
     let middleware_subnet_lookup = middleware::from_fn_with_state(lookup, routes::lookup_subnet);
+    let middleware_canister_limiter = option_layer(
+        canister_limiter.map(|x| middleware::from_fn_with_state(x, canister::middleware)),
+    );
 
     // Layers under ServiceBuilder are executed top-down (opposite to that under Router)
     // 1st layer wraps 2nd layer and so on
@@ -648,7 +660,8 @@ pub fn setup_router(
         .layer(middleware_concurrency)
         .layer(middleware_shedding)
         .layer(middleware::from_fn(routes::postprocess_response))
-        .layer(middleware::from_fn(routes::preprocess_request));
+        .layer(middleware::from_fn(routes::preprocess_request))
+        .layer(middleware_canister_limiter);
 
     let service_canister_read_call_query = ServiceBuilder::new()
         .layer(middleware::from_fn(routes::validate_request))

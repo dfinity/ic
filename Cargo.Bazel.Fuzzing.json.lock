@@ -1,5 +1,5 @@
 {
-  "checksum": "5c7061117d6dace2796144c8568e6088bed3b19be33724d2e912b2ea81e52ee1",
+  "checksum": "ebfe678ffe894d4a8b0691b5190a83d80ef8c18c25ac3df938c0055aff192d26",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17905,6 +17905,10 @@
             {
               "id": "serde_json 1.0.107",
               "target": "serde_json"
+            },
+            {
+              "id": "serde_regex 1.1.0",
+              "target": "serde_regex"
             },
             {
               "id": "serde_with 1.14.0",
@@ -56687,6 +56691,58 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "serde_regex 1.1.0": {
+      "name": "serde_regex",
+      "version": "1.1.0",
+      "package_url": "https://github.com/tailhook/serde-regex",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/serde_regex/1.1.0/download",
+          "sha256": "a8136f1a4ea815d7eac4101cfd0b16dc0cb5e1fe1b8609dfd728058656b7badf"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "serde_regex",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "serde_regex",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "regex 1.10.5",
+              "target": "regex"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.1.0"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "serde_repr 0.1.16": {
       "name": "serde_repr",
       "version": "0.1.16",
@@ -76558,6 +76614,7 @@
     "serde_bytes 0.11.14",
     "serde_cbor 0.11.2",
     "serde_json 1.0.107",
+    "serde_regex 1.1.0",
     "serde_with 1.14.0",
     "serde_yaml 0.9.34+deprecated",
     "sha2 0.9.9",

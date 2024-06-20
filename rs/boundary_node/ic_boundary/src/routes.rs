@@ -103,8 +103,9 @@ lazy_static! {
 }
 
 // Type of IC request
-#[derive(Default, Clone, Copy, Display, PartialEq, Eq, Hash, IntoStaticStr)]
+#[derive(Debug, Default, Clone, Copy, Display, PartialEq, Eq, Hash, IntoStaticStr, Deserialize)]
 #[strum(serialize_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum RequestType {
     #[default]
     Unknown,
@@ -121,6 +122,7 @@ pub enum RateLimitCause {
     Normal,
     LedgerTransfer,
     Bouncer,
+    Canister,
 }
 
 // Categorized possible causes for request processing failures
