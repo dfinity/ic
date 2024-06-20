@@ -668,6 +668,7 @@ impl ValidatedConfig {
                 feature_flags: FeatureFlags {
                     rate_limiting_of_debug_prints: FlagStatus::Disabled,
                     canister_logging: FlagStatus::Enabled,
+                    best_effort_responses: FlagStatus::Enabled,
                     ..FeatureFlags::default()
                 },
                 ..EmbeddersConfig::default()
