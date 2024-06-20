@@ -35,13 +35,17 @@ use ic_query_stats::QueryStatsPayloadBuilderParams;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
-use ic_types::{messages::CallContextId, SubnetId};
+use ic_types::{
+    messages::{CallContextId, MessageId},
+    Height, SubnetId,
+};
 pub use metrics::IngressFilterMetrics;
 pub use query_handler::InternalHttpQueryHandler;
 use query_handler::{HttpQueryHandler, QueryScheduler, QuerySchedulerFlag};
 pub use scheduler::RoundSchedule;
 use scheduler::SchedulerImpl;
 use std::sync::Arc;
+use tokio::sync::mpsc::Sender;
 
 /// When executing a wasm method of query type, this enum indicates if we are
 /// running in an replicated or non-replicated context. This information is
@@ -98,6 +102,7 @@ impl ExecutionServices {
         cycles_account_manager: Arc<CyclesAccountManager>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        completed_execution_messages_tx: Sender<(MessageId, Height)>,
     ) -> ExecutionServices {
         let hypervisor = Arc::new(Hypervisor::new(
             config.clone(),
@@ -114,6 +119,8 @@ impl ExecutionServices {
             config.clone(),
             logger.clone(),
             metrics_registry,
+            completed_execution_messages_tx,
+            Arc::clone(&state_reader),
         ));
         let ingress_history_reader =
             Box::new(IngressHistoryReaderImpl::new(Arc::clone(&state_reader)));
