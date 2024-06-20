@@ -7,9 +7,10 @@ use ic_nns_test_utils::{
     },
     registry::{invariant_compliant_mutation_as_atomic_req, INITIAL_MUTATION_ID},
 };
-use ic_protobuf::registry::{
-    crypto::v1::{EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as pbEcdsaKeyId},
-    subnet::v1::{ChainKeyConfig, EcdsaConfig, KeyConfig},
+use ic_protobuf::registry::crypto::v1::{EcdsaCurve as EcdsaCurvePb, EcdsaKeyId as EcdsaKeyIdPb};
+use ic_protobuf::registry::subnet::v1::{
+    ChainKeyConfig as ChainKeyConfigPb, SubnetListRecord as SubnetListRecordPb,
+    SubnetRecord as SubnetRecordPb,
 };
 use std::convert::TryFrom;
 
@@ -18,12 +19,11 @@ use canister_test::Runtime;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_config::Config;
 use ic_interfaces_registry::RegistryClient;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
-use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
-use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
@@ -227,7 +227,7 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
 
         // Here we discover the IC's subnet ID (from our test harness)
         // and then modify it to hold the key.
-        let subnet_list_record = decode_registry_value::<SubnetListRecord>(
+        let subnet_list_record = decode_registry_value::<SubnetListRecordPb>(
             fake_client
                 .get_value(
                     &make_subnet_list_record_key(),
@@ -245,7 +245,7 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
         let system_subnet_principal = subnet_principals.first().unwrap();
 
         let system_subnet_id = SubnetId::new(*system_subnet_principal);
-        let mut subnet_record = decode_registry_value::<SubnetRecord>(
+        let mut subnet_record = decode_registry_value::<SubnetRecordPb>(
             fake_client
                 .get_value(
                     &make_subnet_record_key(system_subnet_id),
@@ -255,29 +255,15 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
                 .unwrap(),
         );
 
-        // TODO(NNS1-3006): Remove this once replica no longer needs it
-        subnet_record.ecdsa_config = Some(EcdsaConfig {
-            quadruples_to_create_in_advance: 100,
-            key_ids: vec![(&key_1).into()],
-            max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        });
-        subnet_record.chain_key_config = Some(ChainKeyConfig {
+        subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
             key_configs: vec![KeyConfig {
-                key_id: Some(ic_protobuf::registry::crypto::v1::MasterPublicKeyId {
-                    key_id: Some(
-                        ic_protobuf::registry::crypto::v1::master_public_key_id::KeyId::Ecdsa(
-                            (&key_1).into(),
-                        ),
-                    ),
-                }),
-                pre_signatures_to_create_in_advance: Some(100),
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                key_id: MasterPublicKeyId::Ecdsa(key_1.clone()),
+                pre_signatures_to_create_in_advance: 100,
+                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-        });
+        }));
 
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
             mutations: vec![upsert(
@@ -311,7 +297,7 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
             payload.ecdsa_config = Some(EcdsaInitialConfig {
                 quadruples_to_create_in_advance: 101,
                 keys: vec![EcdsaKeyRequest {
-                    key_id: key_1,
+                    key_id: key_1.clone(),
                     subnet_id: Some(*system_subnet_principal),
                 }],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
@@ -343,33 +329,31 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
         assert_eq!(dealings.len(), 1);
         assert_eq!(
             dealings[0_usize].key_id,
-            Some(pbEcdsaKeyId {
-                curve: pbEcdsaCurve::Secp256k1.into(),
+            Some(EcdsaKeyIdPb {
+                curve: EcdsaCurvePb::Secp256k1.into(),
                 name: "foo-bar".to_string(),
             })
         );
 
-        // Check EcdsaConfig
-        let ecdsa_config = subnet_record.ecdsa_config.unwrap();
+        // Check ChainKeyConfigPb is correctly updated
+        let chain_key_config_pb = subnet_record.chain_key_config.unwrap();
+        let chain_key_config = ChainKeyConfig::try_from(chain_key_config_pb).unwrap();
 
-        assert_eq!(ecdsa_config.quadruples_to_create_in_advance, 101);
-        assert_eq!(ecdsa_config.max_queue_size, DEFAULT_ECDSA_MAX_QUEUE_SIZE);
         assert_eq!(
-            ecdsa_config.signature_request_timeout_ns,
+            chain_key_config.signature_request_timeout_ns,
             signature_request_timeout_ns
         );
         assert_eq!(
-            ecdsa_config.idkg_key_rotation_period_ms,
+            chain_key_config.idkg_key_rotation_period_ms,
             idkg_key_rotation_period_ms
         );
-        let key_ids = ecdsa_config.key_ids;
-        assert_eq!(key_ids.len(), 1);
         assert_eq!(
-            key_ids[0_usize],
-            pbEcdsaKeyId {
-                curve: pbEcdsaCurve::Secp256k1.into(),
-                name: "foo-bar".to_string(),
-            }
+            chain_key_config.key_configs,
+            vec![KeyConfig {
+                key_id: MasterPublicKeyId::Ecdsa(key_1),
+                pre_signatures_to_create_in_advance: 101,
+                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+            }],
         );
     });
 }

@@ -25,6 +25,7 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
     make_ecdsa_signing_subnet_list_key, make_subnet_list_record_key, make_subnet_record_key,
 };
+use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_transport::{
     pb::v1::{RegistryMutation, RegistryValue},
     upsert,
@@ -33,7 +34,7 @@ use on_wire::bytes;
 use prost::Message;
 use std::{
     collections::{HashMap, HashSet},
-    convert::{TryFrom, TryInto},
+    convert::TryFrom,
     iter::FromIterator,
 };
 
@@ -153,23 +154,26 @@ impl Registry {
         }
     }
 
-    /// Get a map representing EcdsaKeyId => Subnets that hold the key
+    /// Get a map representing MasterPublicKeyId => Subnets that hold the key
     /// but do not need to be enabled for signing.
-    pub fn get_ecdsa_keys_to_subnets_map(&self) -> HashMap<EcdsaKeyId, Vec<SubnetId>> {
-        let mut key_map: HashMap<EcdsaKeyId, Vec<SubnetId>> = HashMap::new();
+    pub fn get_master_public_keys_to_subnets_map(
+        &self,
+    ) -> HashMap<MasterPublicKeyId, Vec<SubnetId>> {
+        let mut key_map: HashMap<MasterPublicKeyId, Vec<SubnetId>> = HashMap::new();
 
         get_subnet_ids_from_subnet_list(self.get_subnet_list_record())
             .iter()
             .for_each(|subnet_id| {
                 let subnet_record = self.get_subnet_or_panic(*subnet_id);
-                if let Some(ref ecdsa_conf) = subnet_record.ecdsa_config {
-                    let key_ids: Vec<EcdsaKeyId> = ecdsa_conf
-                        .key_ids
-                        .clone()
-                        .into_iter()
-                        .map(|x| x.try_into().unwrap())
-                        .collect::<Vec<_>>();
-                    key_ids.iter().for_each(|key_id| {
+                if let Some(chain_key_config) = subnet_record.chain_key_config {
+                    let chain_key_config = ChainKeyConfig::try_from(chain_key_config)
+                        .unwrap_or_else(|err| {
+                            panic!(
+                                "{}Cannot interpret data as ChainKeyConfig: {}",
+                                LOG_PREFIX, err
+                            );
+                        });
+                    chain_key_config.key_ids().iter().for_each(|key_id| {
                         if !key_map.contains_key(key_id) {
                             key_map.insert(key_id.clone(), vec![]);
                         }
@@ -287,32 +291,21 @@ impl Registry {
         })
     }
 
-    /// Create the mutations that disable subnet signing for a single subnet and set of EcdsaKeyId's.
-    // TODO(NNS1-2986): Migrate the function to work over MasterPublicKeyId without replicating to EcdsaKeyId
+    /// Create the mutations that disable subnet signing for a single subnet
+    /// and set of MasterPublicKeyId's.
     pub fn mutations_to_disable_subnet_signing(
         &self,
         subnet_id: SubnetId,
-        ecdsa_key_signing_disable: &Vec<EcdsaKeyId>,
+        chain_key_signing_disable: &Vec<MasterPublicKeyId>,
     ) -> Vec<RegistryMutation> {
         let mut mutations = vec![];
-        for ecdsa_key_id in ecdsa_key_signing_disable {
-            let ck_key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
-
-            let mut ecdsa_signing_list_for_key = self
-                .get_ecdsa_signing_subnet_list(ecdsa_key_id)
-                .unwrap_or_default();
-            let mut ck_signing_list_for_key = self
-                .get_chain_key_signing_subnet_list(&ck_key_id)
+        for chain_key_id in chain_key_signing_disable {
+            let mut chain_key_signing_list_for_key = self
+                .get_chain_key_signing_subnet_list(chain_key_id)
                 .unwrap_or_default();
 
             // If this subnet does not sign for that key, do nothing.
-            if !ecdsa_signing_list_for_key
-                .subnets
-                .contains(&subnet_id_into_protobuf(subnet_id))
-            {
-                continue;
-            }
-            if !ck_signing_list_for_key
+            if !chain_key_signing_list_for_key
                 .subnets
                 .contains(&subnet_id_into_protobuf(subnet_id))
             {
@@ -321,35 +314,35 @@ impl Registry {
 
             let protobuf_subnet_id = subnet_id_into_protobuf(subnet_id);
             // Preconditions are okay, so we remove the subnet from our list of signing subnets.
-            ecdsa_signing_list_for_key
-                .subnets
-                .retain(|subnet| subnet != &protobuf_subnet_id);
-            ck_signing_list_for_key
+            chain_key_signing_list_for_key
                 .subnets
                 .retain(|subnet| subnet != &protobuf_subnet_id);
 
             mutations.push(upsert(
-                make_ecdsa_signing_subnet_list_key(ecdsa_key_id).into_bytes(),
-                encode_or_panic(&ecdsa_signing_list_for_key),
-            ));
-            mutations.push(upsert(
-                make_chain_key_signing_subnet_list_key(&ck_key_id),
-                encode_or_panic(&ck_signing_list_for_key),
+                make_chain_key_signing_subnet_list_key(chain_key_id),
+                encode_or_panic(&chain_key_signing_list_for_key),
             ));
         }
         mutations
     }
 
-    /// Get a list of all EcdsaKeyId's held by a given subnet.
-    pub fn get_ecdsa_keys_held_by_subnet(&self, subnet_id: SubnetId) -> Vec<EcdsaKeyId> {
+    /// Get a list of all MasterPublicKeyId's held by a given subnet.
+    pub fn get_master_public_keys_held_by_subnet(
+        &self,
+        subnet_id: SubnetId,
+    ) -> Vec<MasterPublicKeyId> {
         let subnet_record = self.get_subnet_or_panic(subnet_id);
         subnet_record
-            .ecdsa_config
-            .map(|c| {
-                c.key_ids
-                    .iter()
-                    .map(|k| k.clone().try_into().unwrap())
-                    .collect()
+            .chain_key_config
+            .map(|chain_key_config| {
+                let chain_key_config =
+                    ChainKeyConfig::try_from(chain_key_config).unwrap_or_else(|err| {
+                        panic!(
+                            "{}Cannot interpret data as ChainKeyConfig: {}",
+                            LOG_PREFIX, err
+                        );
+                    });
+                chain_key_config.key_ids()
             })
             .unwrap_or_default()
     }
@@ -359,9 +352,9 @@ impl Registry {
     pub(crate) fn get_keys_that_will_be_removed_from_subnet(
         &self,
         subnet_id: SubnetId,
-        updated_key_list: Vec<EcdsaKeyId>,
-    ) -> Vec<EcdsaKeyId> {
-        let current_keys = vec_to_set(self.get_ecdsa_keys_held_by_subnet(subnet_id));
+        updated_key_list: Vec<MasterPublicKeyId>,
+    ) -> Vec<MasterPublicKeyId> {
+        let current_keys = vec_to_set(self.get_master_public_keys_held_by_subnet(subnet_id));
         let requested_keys = vec_to_set(updated_key_list);
         current_keys.difference(&requested_keys).cloned().collect()
     }
@@ -371,9 +364,9 @@ impl Registry {
     pub fn get_keys_that_will_be_added_to_subnet(
         &self,
         subnet_id: SubnetId,
-        updated_key_list: Vec<EcdsaKeyId>,
-    ) -> Vec<EcdsaKeyId> {
-        let current_keys = vec_to_set(self.get_ecdsa_keys_held_by_subnet(subnet_id));
+        updated_key_list: Vec<MasterPublicKeyId>,
+    ) -> Vec<MasterPublicKeyId> {
+        let current_keys = vec_to_set(self.get_master_public_keys_held_by_subnet(subnet_id));
         let requested_keys = vec_to_set(updated_key_list);
         requested_keys.difference(&current_keys).cloned().collect()
     }
@@ -385,25 +378,26 @@ impl Registry {
         ecdsa_initial_config: &EcdsaInitialConfig,
         own_subnet_id: Option<PrincipalId>,
     ) -> Result<(), String> {
-        let ecdsa_subnet_map = self.get_ecdsa_keys_to_subnets_map();
+        let keys_to_subnets = self.get_master_public_keys_to_subnets_map();
 
         for key_request in &ecdsa_initial_config.keys {
             // Requested key must be a known key.
-            if !ecdsa_subnet_map.contains_key(&key_request.key_id) {
+            let key_id = MasterPublicKeyId::Ecdsa(key_request.key_id.clone());
+            if !keys_to_subnets.contains_key(&key_id) {
                 return Err(format!(
                     "The requested ECDSA key '{}' was not found in any subnet.",
-                    key_request.key_id
+                    key_id
                 ));
             }
 
-            let subnets_for_key = ecdsa_subnet_map.get(&key_request.key_id).unwrap();
+            let subnets_for_key = keys_to_subnets.get(&key_id).unwrap();
 
             // Require that a subnet is targeted.
             let subnet_id_principal = match key_request.subnet_id.as_ref() {
                 None => {
                     return Err(format!(
                         "EcdsaKeyRequest for key '{}' did not specify subnet_id.",
-                        key_request.key_id
+                        key_id
                     ))
                 }
                 Some(id) => id,
@@ -413,9 +407,9 @@ impl Registry {
             if let Some(own_subnet_principal) = own_subnet_id {
                 if subnet_id_principal == &own_subnet_principal {
                     return Err(format!(
-                        "Attempted to recover ECDSA key '{}' by \
-                     requesting it from itself.  Subnets cannot recover ECDSA keys from themselves.",
-                        key_request.key_id
+                        "Attempted to recover ECDSA key '{}' by requesting it from itself. \
+                         Subnets cannot recover ECDSA keys from themselves.",
+                        key_id,
                     ));
                 }
             }
@@ -424,9 +418,8 @@ impl Registry {
             let subnet_id = SubnetId::new(*subnet_id_principal);
             if !subnets_for_key.contains(&subnet_id) {
                 return Err(format!(
-                    "The requested ECDSA key '{}' \
-                     is not available in targeted subnet '{}'.",
-                    key_request.key_id, subnet_id_principal
+                    "The requested ECDSA key '{}' is not available in targeted subnet '{}'.",
+                    key_id, subnet_id_principal
                 ));
             }
         }

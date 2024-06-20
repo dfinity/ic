@@ -14,10 +14,7 @@ use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_protobuf::registry::subnet::v1::{
     SubnetFeatures as SubnetFeaturesPb, SubnetRecord as SubnetRecordPb,
 };
-use ic_registry_keys::{
-    make_chain_key_signing_subnet_list_key, make_ecdsa_signing_subnet_list_key,
-    make_subnet_record_key,
-};
+use ic_registry_keys::{make_chain_key_signing_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
@@ -30,7 +27,7 @@ impl Registry {
     pub fn do_update_subnet(&mut self, payload: UpdateSubnetPayload) {
         println!("{}do_update_subnet: {:?}", LOG_PREFIX, payload);
 
-        self.validate_update_payload_ecdsa_config(&payload);
+        self.validate_update_payload_chain_key_config(&payload);
         self.validate_update_sev_feature(&payload);
 
         let subnet_id = payload.subnet_id;
@@ -46,15 +43,25 @@ impl Registry {
         let mut mutations = vec![subnet_record_mutation];
 
         if let Some(ecdsa_key_signing_enable) = payload.ecdsa_key_signing_enable {
+            let chain_key_signing_enable = ecdsa_key_signing_enable
+                .iter()
+                .cloned()
+                .map(MasterPublicKeyId::Ecdsa)
+                .collect();
             mutations.append(
-                &mut self.mutations_to_enable_subnet_signing(subnet_id, &ecdsa_key_signing_enable),
+                &mut self.mutations_to_enable_subnet_signing(subnet_id, &chain_key_signing_enable),
             );
         }
 
         if let Some(ecdsa_key_signing_disable) = payload.ecdsa_key_signing_disable {
+            let chain_key_signing_disable = ecdsa_key_signing_disable
+                .iter()
+                .cloned()
+                .map(MasterPublicKeyId::Ecdsa)
+                .collect();
             mutations.append(
                 &mut self
-                    .mutations_to_disable_subnet_signing(subnet_id, &ecdsa_key_signing_disable),
+                    .mutations_to_disable_subnet_signing(subnet_id, &chain_key_signing_disable),
             )
         }
 
@@ -62,12 +69,14 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations);
     }
 
-    /// Validates that EcdsaKeyId's are globally unique across all subnets
-    /// Panics if they are not
-    fn validate_update_payload_ecdsa_config(&self, payload: &UpdateSubnetPayload) {
+    /// Validates that the chain key IDs are globally unique across all subnets.
+    ///
+    /// Panics if they are not.
+    fn validate_update_payload_chain_key_config(&self, payload: &UpdateSubnetPayload) {
         if payload.ecdsa_config.is_none() {
             return;
         }
+
         let subnet_id = payload.subnet_id;
         let payload_ecdsa_config = payload.ecdsa_config.as_ref().unwrap();
 
@@ -78,36 +87,41 @@ impl Registry {
             );
         }
 
+        // TODO[NNS1-2988]: Take value directly from `payload.chain_key_config`.
+        let payload_chain_config = ChainKeyConfig::from(payload_ecdsa_config.clone());
+        let payload_key_ids = payload_chain_config.key_ids();
+
         // Ensure that if keys are held by the subnet, they cannot be changed.
-        let keys_held_currently = self.get_ecdsa_keys_held_by_subnet(subnet_id);
-        if !keys_held_currently.is_empty() && payload_ecdsa_config.key_ids != keys_held_currently {
+        let keys_held_currently = self.get_master_public_keys_held_by_subnet(subnet_id);
+        if !keys_held_currently.is_empty() && payload_key_ids != keys_held_currently {
             panic!(
-                "{}ECDSA Keys cannot be changed once set for a subnet. Attempted to update ECDSA \
-                   keys for subnet: '{}'",
-                LOG_PREFIX, subnet_id
+                "{}Chain keys cannot be changed once set for a subnet. Attempted to update chain \
+                    keys for subnet: '{}'.",
+                LOG_PREFIX, subnet_id,
             );
         }
 
         // Validate that any new keys do not exist in another subnet, as that would trigger
-        // creating another key with the same EcdsaKeyId, which would break ECDSA signing.
-        let new_keys = self
-            .get_keys_that_will_be_added_to_subnet(subnet_id, payload_ecdsa_config.key_ids.clone());
+        // creating another key with the same MasterPublicKeyId, which would break chain key signing.
+        let new_keys =
+            self.get_keys_that_will_be_added_to_subnet(subnet_id, payload_key_ids.clone());
 
-        let ecdsa_subnet_map = self.get_ecdsa_keys_to_subnets_map();
+        let keys_to_subnet_map = self.get_master_public_keys_to_subnets_map();
         new_keys.iter().for_each(|key_id| {
-            if ecdsa_subnet_map.contains_key(key_id) {
+            if keys_to_subnet_map.contains_key(key_id) {
                 panic!(
-                    "{}ECDSA key with id '{}' already exists.  ID must be globally unique.",
-                    LOG_PREFIX, key_id
+                    "{}Chain key with id '{}' already exists. IDs must be globally unique.",
+                    LOG_PREFIX, key_id,
                 );
             }
         });
 
         // Signing cannot be enabled unless the key was previously held by the subnet.
         if let Some(ref ecdsa_key_signing_enable) = payload.ecdsa_key_signing_enable {
-            let current_keys = self.get_ecdsa_keys_held_by_subnet(subnet_id);
+            let current_keys = self.get_master_public_keys_held_by_subnet(subnet_id);
             for key_id in ecdsa_key_signing_enable {
-                if !current_keys.contains(key_id) {
+                let key_id = MasterPublicKeyId::Ecdsa(key_id.clone());
+                if !current_keys.contains(&key_id) {
                     panic!(
                         "{}Proposal attempts to enable signing for ECDSA key '{}' on Subnet '{}', \
                         but the subnet does not hold the given key. A proposal to add that key to \
@@ -128,9 +142,11 @@ impl Registry {
             let disable_set = ecdsa_signging_disable.iter().collect::<HashSet<_>>();
             let intersection = enable_set.intersection(&disable_set).collect::<Vec<_>>();
             if !intersection.is_empty() {
-                panic!("{}update_subnet aborted: Proposal attempts to enable and disable signing for same ECDSA keys: {:?}",
-                    LOG_PREFIX, intersection
-                    )
+                panic!(
+                    "{}update_subnet aborted: Proposal attempts to enable and disable signing for \
+                    same ECDSA keys: {:?}",
+                    LOG_PREFIX, intersection,
+                )
             }
         }
     }
@@ -159,31 +175,20 @@ impl Registry {
         );
     }
 
-    // TODO(NNS1-2986): Migrate the function to work over MasterPublicKeyId without replicating to EcdsaKeyId
+    /// Create the mutations that enable subnet signing for a single subnet and set of EcdsaKeyId's.
     fn mutations_to_enable_subnet_signing(
         &self,
         subnet_id: SubnetId,
-        ecdsa_key_signing_enable: &Vec<EcdsaKeyId>,
+        chain_key_signing_enable: &Vec<MasterPublicKeyId>,
     ) -> Vec<RegistryMutation> {
         let mut mutations = vec![];
-        for ecdsa_key_id in ecdsa_key_signing_enable {
-            let ck_key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
-
-            let mut ecdsa_signing_list_for_key = self
-                .get_ecdsa_signing_subnet_list(ecdsa_key_id)
-                .unwrap_or_default();
-            let mut ck_signing_list_for_key = self
-                .get_chain_key_signing_subnet_list(&ck_key_id)
+        for master_public_key_id in chain_key_signing_enable {
+            let mut chain_key_signing_list_for_key = self
+                .get_chain_key_signing_subnet_list(master_public_key_id)
                 .unwrap_or_default();
 
             // If this subnet already signs for this key, do nothing.
-            if ecdsa_signing_list_for_key
-                .subnets
-                .contains(&subnet_id_into_protobuf(subnet_id))
-            {
-                continue;
-            }
-            if ck_signing_list_for_key
+            if chain_key_signing_list_for_key
                 .subnets
                 .contains(&subnet_id_into_protobuf(subnet_id))
             {
@@ -191,20 +196,13 @@ impl Registry {
             }
 
             // Preconditions are okay, so we add the subnet to our list of signing subnets.
-            ecdsa_signing_list_for_key
-                .subnets
-                .push(subnet_id_into_protobuf(subnet_id));
-            ck_signing_list_for_key
+            chain_key_signing_list_for_key
                 .subnets
                 .push(subnet_id_into_protobuf(subnet_id));
 
             mutations.push(upsert(
-                make_ecdsa_signing_subnet_list_key(ecdsa_key_id).into_bytes(),
-                encode_or_panic(&ecdsa_signing_list_for_key),
-            ));
-            mutations.push(upsert(
-                make_chain_key_signing_subnet_list_key(&ck_key_id).into_bytes(),
-                encode_or_panic(&ck_signing_list_for_key),
+                make_chain_key_signing_subnet_list_key(master_public_key_id).into_bytes(),
+                encode_or_panic(&chain_key_signing_list_for_key),
             ));
         }
         mutations
@@ -364,11 +362,9 @@ fn merge_subnet_record(
 
     // TODO[NNS1-2988]: Take value directly from `UpdateSubnetPayload.chain_key_config`.
     {
-        let chain_key_config = ecdsa_config.clone().map(ChainKeyConfig::from);
+        let chain_key_config = ecdsa_config.map(ChainKeyConfig::from);
         maybe_set_option!(subnet_record, chain_key_config);
     }
-    // TODO[NNS1-3006]: Stop updating the ecdsa_config field.
-    maybe_set_option!(subnet_record, ecdsa_config);
 
     maybe_set!(subnet_record, max_number_of_canisters);
 
@@ -552,8 +548,8 @@ mod tests {
                     }
                     .into()
                 ),
-                ecdsa_config: ecdsa_config_pb,
                 chain_key_config: chain_key_config_pb,
+                ecdsa_config: None, // obsolete (chain_key_config is used instead now)
                 max_number_of_canisters: 10,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
@@ -658,9 +654,10 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "roposal attempts to enable signing for ECDSA key 'Secp256k1:existing_key_id' \
-        on Subnet 'ge6io-epiam-aaaaa-aaaap-yai', but the subnet does not hold the given key. \
-        A proposal to add that key to the subnet must first be separately submitted."
+        expected = "[Registry] Proposal attempts to enable signing for ECDSA key \
+        'ecdsa:Secp256k1:existing_key_id' on Subnet 'ge6io-epiam-aaaaa-aaaap-yai', \
+        but the subnet does not hold the given key. A proposal to add that key to the subnet \
+        must first be separately submitted."
     )]
     fn test_ecdsa_keys_cannot_be_enabled_unless_already_held() {
         let mut registry = invariant_compliant_registry(0);
@@ -747,8 +744,8 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "ECDSA key with id 'Secp256k1:existing_key_id' already exists.  \
-                    ID must be globally unique."
+        expected = "[Registry] Chain key with id 'ecdsa:Secp256k1:existing_key_id' already exists. \
+                    IDs must be globally unique."
     )]
     fn test_ecdsa_key_ids_must_be_globally_unique() {
         // We create 2 subnets. One has the key already, and the other tries to have that key id added
@@ -772,19 +769,24 @@ mod tests {
         let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks_iter
             .next()
             .expect("should contain at least one node ID");
+
         let mut subnet_holding_key_record =
             get_invariant_compliant_subnet_record(vec![*first_node_id]);
+
         // This marks the subnet as having the key.
-        subnet_holding_key_record.ecdsa_config = Some(
-            EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![existing_key_id],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                signature_request_timeout_ns: None,
-                idkg_key_rotation_period_ms: None,
-            }
-            .into(),
-        );
+        let ecdsa_config = EcdsaConfig {
+            quadruples_to_create_in_advance: 1,
+            key_ids: vec![existing_key_id],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        };
+
+        {
+            let chain_key_config = ChainKeyConfig::from(ecdsa_config.clone());
+            let chain_key_config_pb = ChainKeyConfigPb::from(chain_key_config);
+            subnet_holding_key_record.chain_key_config = Some(chain_key_config_pb);
+        }
 
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_holding_key_id,
@@ -879,6 +881,7 @@ mod tests {
             curve: EcdsaCurve::Secp256k1,
             name: "existing_key_id".to_string(),
         };
+        let master_public_key_held_by_subnet = MasterPublicKeyId::Ecdsa(key_held_by_subnet.clone());
 
         // Create first subnet that holds the ECDSA key
         let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
@@ -888,16 +891,16 @@ mod tests {
         let mut subnet_holding_key_record =
             get_invariant_compliant_subnet_record(vec![*first_node_id]);
         // This marks the subnet as having the key
-        subnet_holding_key_record.ecdsa_config = Some(
-            EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![key_held_by_subnet.clone()],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                signature_request_timeout_ns: None,
-                idkg_key_rotation_period_ms: None,
-            }
-            .into(),
-        );
+        let ecdsa_config = EcdsaConfig {
+            quadruples_to_create_in_advance: 1,
+            key_ids: vec![key_held_by_subnet.clone()],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        };
+        let chain_key_config = ChainKeyConfig::from(ecdsa_config);
+        let chain_key_config_pb = ChainKeyConfigPb::from(chain_key_config);
+        subnet_holding_key_record.chain_key_config = Some(chain_key_config_pb);
 
         let subnet_id = subnet_test_id(1000);
         registry.maybe_apply_mutation_internal(add_fake_subnet(
@@ -921,7 +924,7 @@ mod tests {
 
         // Make sure it's actually in the signing list.
         assert!(registry
-            .get_ecdsa_signing_subnet_list(&key_held_by_subnet)
+            .get_chain_key_signing_subnet_list(&master_public_key_held_by_subnet)
             .unwrap()
             .subnets
             .contains(&subnet_id_into_protobuf(subnet_id)));
@@ -929,10 +932,13 @@ mod tests {
         // Make sure config contains the key.
         assert!(registry
             .get_subnet_or_panic(subnet_id)
-            .ecdsa_config
+            .chain_key_config
             .unwrap()
-            .key_ids
-            .contains(&(&key_held_by_subnet).into()));
+            .key_configs
+            .iter()
+            .map(|key_config| key_config.key_id.clone().unwrap())
+            .collect::<Vec<_>>()
+            .contains(&(&master_public_key_held_by_subnet).into()));
 
         // The next payload to disable signing with the key.
         let mut payload = make_empty_update_payload(subnet_id);
@@ -941,23 +947,28 @@ mod tests {
 
         // Ensure it's now removed from signing list.
         assert!(!registry
-            .get_ecdsa_signing_subnet_list(&key_held_by_subnet)
+            .get_chain_key_signing_subnet_list(&master_public_key_held_by_subnet)
             .unwrap()
             .subnets
             .contains(&subnet_id_into_protobuf(subnet_id)));
         // Ensure the config still  has the key.
         assert!(registry
             .get_subnet_or_panic(subnet_id)
-            .ecdsa_config
+            .chain_key_config
             .unwrap()
-            .key_ids
-            .contains(&(&key_held_by_subnet).into()));
+            .key_configs
+            .iter()
+            .map(|key_config| key_config.key_id.clone().unwrap())
+            .collect::<Vec<_>>()
+            .contains(&(&master_public_key_held_by_subnet).into()));
     }
 
     #[test]
     #[should_panic(
-        expected = "update_subnet aborted: Proposal attempts to enable and disable signing for same \
-                    ECDSA keys: [EcdsaKeyId { curve: Secp256k1, name: \"existing_key_id\" }]"
+        expected = "[Registry] Proposal attempts to enable signing for ECDSA key \
+        'ecdsa:Secp256k1:existing_key_id' on Subnet 'ge6io-epiam-aaaaa-aaaap-yai', but the subnet \
+        does not hold the given key. A proposal to add that key to the subnet must first be \
+        separately submitted."
     )]
     fn enable_and_disable_signing_lists_should_not_have_same_keys_in_single_request() {
         let mut registry = invariant_compliant_registry(0);
@@ -1015,8 +1026,8 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "ECDSA Keys cannot be changed once set for a subnet. Attempted to update ECDSA \
-                   keys for subnet: 'ge6io-epiam-aaaaa-aaaap-yai'"
+        expected = "[Registry] Chain keys cannot be changed once set for a subnet. Attempted \
+                    to update chain keys for subnet: 'ge6io-epiam-aaaaa-aaaap-yai'."
     )]
     fn test_modify_ecdsa_keys_after_setting_fails() {
         let mut registry = invariant_compliant_registry(0);
@@ -1036,20 +1047,25 @@ mod tests {
             .iter()
             .next()
             .expect("should contain at least one node ID");
+
         let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
+
         // Give it the key.
-        subnet_record.ecdsa_config = Some(
-            EcdsaConfig {
-                quadruples_to_create_in_advance: 1,
-                key_ids: vec![key.clone()],
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                signature_request_timeout_ns: None,
-                idkg_key_rotation_period_ms: None,
-            }
-            .into(),
-        );
+        let ecdsa_config = EcdsaConfig {
+            quadruples_to_create_in_advance: 1,
+            key_ids: vec![key.clone()],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        };
+        {
+            let chain_key_config = ChainKeyConfig::from(ecdsa_config.clone());
+            let chain_key_config_pb = ChainKeyConfigPb::from(chain_key_config);
+            subnet_record.chain_key_config = Some(chain_key_config_pb);
+        }
 
         let subnet_id = subnet_test_id(1000);
+
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_id,
             &mut subnet_list_record,
@@ -1057,22 +1073,22 @@ mod tests {
             &btreemap!(*first_node_id => first_dkg_pk.clone()),
         ));
 
-        let mut payload = make_empty_update_payload(subnet_id);
-        payload.ecdsa_config = Some(EcdsaConfig {
-            quadruples_to_create_in_advance: 1,
-            key_ids: vec![key.clone()],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        });
+        let payload = UpdateSubnetPayload {
+            ecdsa_config: Some(ecdsa_config.clone()),
+            ..make_empty_update_payload(subnet_id)
+        };
 
         registry.do_update_subnet(payload.clone());
 
-        if let Some(ecdsa_config) = payload.ecdsa_config.as_mut() {
-            ecdsa_config.key_ids.clear()
-        }
+        let payload = UpdateSubnetPayload {
+            ecdsa_config: Some(EcdsaConfig {
+                key_ids: vec![],
+                ..ecdsa_config
+            }),
+            ..payload
+        };
 
         // Should panic because we are trying to modify the config
-        registry.do_update_subnet(payload)
+        registry.do_update_subnet(payload);
     }
 }
