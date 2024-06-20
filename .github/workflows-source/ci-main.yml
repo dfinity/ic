@@ -74,9 +74,6 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     <<: *dind-large-setup
-    runs-on:
-      labels: dind-runner-large
-      group: sf1
     env:
       TITLE: ${{ github.event.pull_request.title }}
     steps:
