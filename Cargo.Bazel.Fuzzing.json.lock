@@ -1,5 +1,5 @@
 {
-  "checksum": "ecdb1eebd47fa523a12eba61d410f6ac40526632d9b9fbc209c0551fad4e80b3",
+  "checksum": "f2684816cb9f6c8c20c307146279ea17435f5c580425779484adcea8f5be6694",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17295,10 +17295,6 @@
               "target": "http_body_util"
             },
             {
-              "id": "http-serde 2.0.0",
-              "target": "http_serde"
-            },
-            {
               "id": "httptest 0.15.4",
               "target": "httptest"
             },
@@ -26003,58 +25999,6 @@
         "MIT"
       ],
       "license_file": "LICENSE"
-    },
-    "http-serde 2.0.0": {
-      "name": "http-serde",
-      "version": "2.0.0",
-      "package_url": "https://gitlab.com/kornelski/http-serde",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/http-serde/2.0.0/download",
-          "sha256": "7fb7239a6d49eda628c2dfdd7e982c59b0c3f0fb99ce45c4237f02a520030688"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "http_serde",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "http_serde",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "http 1.1.0",
-              "target": "http"
-            },
-            {
-              "id": "serde 1.0.203",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "2.0.0"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
     },
     "http-types 2.12.0": {
       "name": "http-types",
@@ -76454,7 +76398,6 @@
     "http-body 0.4.6",
     "http-body 1.0.0",
     "http-body-util 0.1.0",
-    "http-serde 2.0.0",
     "httptest 0.15.4",
     "humantime 2.1.0",
     "hyper 0.14.27",
