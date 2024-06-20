@@ -313,7 +313,7 @@ macro_rules! update_context {
 #[macro_export(local_inner_macros)]
 macro_rules! log_metadata {
     ($level:expr) => {{
-        $crate::LogMetadata {
+        $crate::context_logger::LogMetadata {
             level: $level,
             module_path: std::module_path!(),
             line: std::line!(),

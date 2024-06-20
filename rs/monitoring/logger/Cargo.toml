@@ -9,7 +9,6 @@ documentation.workspace = true
 [dependencies]
 chrono = { workspace = true }
 ic-config = { path = "../../config" }
-ic-context-logger = { path = "../context_logger" }
 ic-protobuf = { path = "../../protobuf" }
 ic-utils = { path = "../../utils" }
 serde = { workspace = true }
