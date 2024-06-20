@@ -6385,13 +6385,6 @@ name = "ic-constants"
 version = "0.9.0"
 
 [[package]]
-name = "ic-context-logger"
-version = "0.9.0"
-dependencies = [
- "slog",
-]
-
-[[package]]
 name = "ic-crypto"
 version = "0.9.0"
 dependencies = [
@@ -8900,7 +8893,6 @@ version = "0.9.0"
 dependencies = [
  "chrono",
  "ic-config",
- "ic-context-logger",
  "ic-protobuf",
  "ic-utils 0.9.0",
  "serde",
