@@ -4,11 +4,18 @@ on:
   schedule:
     - cron: "0 8 * * 3"
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/schedule-weekly.yml'
+
+env:
+  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
+  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
 
 jobs:
   bazel-build-fuzzers-weekly:
     runs-on:
-      labels: dind-runner-large
+      group: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 60 # 1 hour

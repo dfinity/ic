@@ -7076,7 +7076,7 @@ fn yield_abort_does_not_modify_state() {
 }
 
 #[test]
-fn yield_for_dirty_page_copy_does_not_trigger_on_system_subnets() {
+fn yield_for_dirty_page_copy_triggers_dts_slice_with_many_pages_on_system_subnets() {
     let pages_to_touch = 100;
     let wat = generate_wat_to_touch_pages(pages_to_touch);
 
@@ -7104,7 +7104,50 @@ fn yield_for_dirty_page_copy_does_not_trigger_on_system_subnets() {
     let _result = test.ingress_raw(canister_id, "test", vec![]);
 
     // The test touches `pages_to_touch`, but the embedder is configured to yield when `pages_to_touch - 1` pages are dirty.
-    // This should not happen for system subnets.
+    // Therefore we should have two slices here.
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong
+    );
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None
+    );
+}
+
+#[test]
+fn yield_for_dirty_page_copy_does_not_trigger_dts_slice_without_enough_dirty_pages_on_system_subnets(
+) {
+    let pages_to_touch = 100;
+    let wat = generate_wat_to_touch_pages(pages_to_touch);
+
+    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .with_slice_instruction_limit(
+            SchedulerConfig::system_subnet()
+                .max_instructions_per_slice
+                .get(),
+        )
+        .with_instruction_limit(
+            SchedulerConfig::system_subnet()
+                .max_instructions_per_message
+                .get(),
+        )
+        .with_manual_execution()
+        .with_max_dirty_pages_optimization_embedder_config(pages_to_touch + 1)
+        .build();
+
+    let wasm = wat::parse_str(wat).unwrap();
+    let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
+
+    let _result = test.ingress_raw(canister_id, "test", vec![]);
+
+    // The test touches `pages_to_touch`, but the embedder is configured to yield when `pages_to_touch + 1` pages are dirty.
+    // Therefore we should have only one slice here.
     test.execute_slice(canister_id);
     assert_eq!(
         test.canister_state(canister_id).next_execution(),

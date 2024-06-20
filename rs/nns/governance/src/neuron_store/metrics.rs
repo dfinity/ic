@@ -7,7 +7,17 @@ use std::collections::HashMap;
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct NeuronMetrics {
     pub dissolving_neurons_count: u64,
-    pub dissolving_neurons_e8s_buckets: HashMap<u64, f64>,
+    // This maps floor(dissolve delay / 6 months) to total e8s.
+    //
+    // The keys used by Other fields (with names of the form `*_buckets`) are
+    // also like this.
+    //
+    // Also, notice that the value type is f64. Presumably, the reasoning there
+    // is that these are eventually turned into Prometheus metrics.
+    pub dissolving_neurons_e8s_buckets: HashMap<
+        u64, // floor(dissolve delay / 6 months)
+        f64, // total e8s
+    >,
     pub dissolving_neurons_count_buckets: HashMap<u64, u64>,
     pub not_dissolving_neurons_count: u64,
     pub not_dissolving_neurons_e8s_buckets: HashMap<u64, f64>,
@@ -39,6 +49,8 @@ pub struct NeuronMetrics {
     pub dissolving_neurons_e8s_buckets_ect: HashMap<u64, f64>,
     pub not_dissolving_neurons_e8s_buckets_seed: HashMap<u64, f64>,
     pub not_dissolving_neurons_e8s_buckets_ect: HashMap<u64, f64>,
+    pub total_voting_power_non_self_authenticating_controller: u64,
+    pub total_staked_e8s_non_self_authenticating_controller: u64,
 }
 
 impl NeuronStore {
@@ -57,6 +69,14 @@ impl NeuronStore {
         };
 
         for neuron in self.heap_neurons.values() {
+            let voting_power = neuron.voting_power(now_seconds);
+            let minted_stake_e8s = neuron.minted_stake_e8s();
+
+            if !neuron.controller().is_self_authenticating() {
+                metrics.total_voting_power_non_self_authenticating_controller += voting_power;
+                metrics.total_staked_e8s_non_self_authenticating_controller += minted_stake_e8s;
+            }
+
             metrics.total_staked_e8s += neuron.minted_stake_e8s();
             metrics.total_staked_maturity_e8s_equivalent +=
                 neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
@@ -222,11 +242,11 @@ mod tests {
         pb::v1::NeuronType,
     };
     use ic_base_types::PrincipalId;
-    use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_YEAR_SECONDS};
+    use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_YEAR_SECONDS};
     use ic_nns_common::pb::v1::NeuronId;
     use icp_ledger::Subaccount;
-    use maplit::hashmap;
-    use std::collections::BTreeMap;
+    use maplit::{btreemap, hashmap};
+    use std::{collections::BTreeMap, str::FromStr};
 
     fn create_test_neuron_builder(
         id: u64,
@@ -500,8 +520,18 @@ mod tests {
             dissolving_neurons_e8s_buckets_ect: hashmap! { 6 => 568000000.0 },
             not_dissolving_neurons_e8s_buckets_seed: hashmap! { 0 => 100000000.0 },
             not_dissolving_neurons_e8s_buckets_ect: hashmap! { 2 => 234000000.0 },
+            // Some garbage values, because this test was written before this feature.
+            total_voting_power_non_self_authenticating_controller: 42,
+            total_staked_e8s_non_self_authenticating_controller: 43,
         };
-        assert_eq!(metrics, expected_metrics);
+        assert_eq!(
+            NeuronMetrics {
+                total_voting_power_non_self_authenticating_controller: 42,
+                total_staked_e8s_non_self_authenticating_controller: 43,
+                ..metrics
+            },
+            expected_metrics,
+        );
     }
 
     #[test]
@@ -556,5 +586,96 @@ mod tests {
         let now = now + 2 * ONE_DAY_SECONDS;
         let actual_metrics = neuron_store.compute_neuron_metrics(now, 100_000_000);
         assert_eq!(actual_metrics.garbage_collectable_neurons_count, 2);
+    }
+
+    /// In this test, the NeuronStore has 3 neurons. Neurons 1 and 3 have (different)
+    /// non-self-authenticating controllers (weird). Whereas, 2 has a self-authenticating controller
+    /// (normal).
+    ///
+    /// They have radically different staked amounts, to make it clearer what
+    /// bug(s) might exist if/when this test fails.
+    #[test]
+    fn test_compute_neuron_metrics_non_self_authenticating() {
+        // Step 1: Prepare the world.
+
+        // Step 1.1: Construct controllers (per test dcostring).
+
+        let controller_of_neuron_1 = PrincipalId::new_user_test_id(0x1337_CAFE);
+        assert!(!controller_of_neuron_1.is_self_authenticating());
+
+        let controller_of_neuron_2 = PrincipalId::from_str(
+            "ubktz-haghv-fqsdh-23fhi-3urex-bykoz-pvpfd-5rs6w-qpo3t-nf2dv-oae",
+        )
+        .unwrap();
+        assert!(controller_of_neuron_2.is_self_authenticating());
+
+        let controller_of_neuron_3 = PrincipalId::from_str(
+            // This is the NNS root canister's principal (canister) ID.
+            "r7inp-6aaaa-aaaaa-aaabq-cai",
+        )
+        .unwrap();
+        assert!(!controller_of_neuron_3.is_self_authenticating());
+
+        // Step 1.1 Misc shared values.
+
+        let now_seconds = 1718213756;
+        // This gives 2x dissolve delay bonus.
+        let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 8 * ONE_YEAR_SECONDS,
+            aging_since_timestamp_seconds: now_seconds,
+        };
+
+        // Step 1.2: Finally, construct the main object, NeuronStore.
+
+        let neuron_store = NeuronStore::new(btreemap! {
+            1 => NeuronBuilder::new(
+                NeuronId { id: 1 },
+                Subaccount::try_from([1_u8; 32].as_ref()).unwrap(),
+                controller_of_neuron_1,
+                dissolve_state_and_age,
+                now_seconds,
+            )
+            .with_cached_neuron_stake_e8s(100)
+            .build(),
+
+            2 => NeuronBuilder::new(
+                NeuronId { id: 2 },
+                Subaccount::try_from([2_u8; 32].as_ref()).unwrap(),
+                controller_of_neuron_2,
+                dissolve_state_and_age,
+                now_seconds,
+            )
+            .with_cached_neuron_stake_e8s(200_000)
+            .build(),
+
+            3 => NeuronBuilder::new(
+                NeuronId { id: 3 },
+                Subaccount::try_from([3_u8; 32].as_ref()).unwrap(),
+                controller_of_neuron_3,
+                dissolve_state_and_age,
+                now_seconds,
+            )
+            .with_cached_neuron_stake_e8s(300_000_000)
+            .build(),
+        });
+
+        // Step 2: Call code under test.
+
+        let NeuronMetrics {
+            total_voting_power_non_self_authenticating_controller,
+            total_staked_e8s_non_self_authenticating_controller,
+            ..
+        } = neuron_store.compute_neuron_metrics(now_seconds, E8);
+
+        // The expected value for voting power is 2x e8s, because the dissolve
+        // delay bonus is 2x (and no age bonus).
+        assert_eq!(
+            total_voting_power_non_self_authenticating_controller,
+            600_000_200
+        );
+        assert_eq!(
+            total_staked_e8s_non_self_authenticating_controller,
+            300_000_100
+        );
     }
 }

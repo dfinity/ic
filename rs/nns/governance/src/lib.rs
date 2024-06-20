@@ -487,6 +487,8 @@ pub fn encode_metrics(
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
+            total_voting_power_non_self_authenticating_controller,
+            total_staked_e8s_non_self_authenticating_controller,
         } = metrics;
 
         w.encode_gauge(
@@ -643,6 +645,20 @@ pub fn encode_metrics(
             "governance_total_staked_maturity_e8s_equivalent_ect",
             *total_staked_maturity_e8s_equivalent_ect as f64,
             "The total amount of Neurons' staked maturity in ECT Neurons",
+        )?;
+
+        w.encode_gauge(
+            "governance_total_voting_power_non_self_authenticating_controller",
+            total_voting_power_non_self_authenticating_controller.unwrap_or_default() as f64,
+            "The total amount of voting power of all neurons with a \
+             controller that is not self-authenticating",
+        )?;
+
+        w.encode_gauge(
+            "governance_total_staked_e8s_non_self_authenticating_controller",
+            total_staked_e8s_non_self_authenticating_controller.unwrap_or_default() as f64,
+            "The total amount of staked ICP in neurons with a \
+             controller that is not self-authenticating",
         )?;
 
         encode_dissolve_delay_buckets(

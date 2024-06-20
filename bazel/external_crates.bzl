@@ -264,10 +264,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "canbench": crate.spec(
-                version = "^0.1.3",
+                version = "^0.1.4",
             ),
             "canbench-rs": crate.spec(
-                version = "^0.1.1",
+                version = "^0.1.4",
             ),
             "candid": crate.spec(
                 version = "^0.10.6",
@@ -360,7 +360,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1",
             ),
             "curve25519-dalek": crate.spec(
-                version = "^4.1.2",
+                version = "^4.1.3",
                 features = ["group", "precomputed-tables"],
             ),
             "cvt": crate.spec(

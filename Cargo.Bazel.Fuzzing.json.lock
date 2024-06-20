@@ -1,5 +1,5 @@
 {
-  "checksum": "392e801f10b34862e7c0dfc76674c3af4f16a69d9e1a199b75d3c3aafe3d1bae",
+  "checksum": "ecdb1eebd47fa523a12eba61d410f6ac40526632d9b9fbc209c0551fad4e80b3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -9581,14 +9581,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "canbench 0.1.3": {
+    "canbench 0.1.4": {
       "name": "canbench",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench/0.1.3/download",
-          "sha256": "8d8db3022e4aa2e0b00feb4b3789ab01ce6e2f392c85d46e1afa5a60f3d82e55"
+          "url": "https://static.crates.io/crates/canbench/0.1.4/download",
+          "sha256": "4d8c8fd8ae281a318392d1e724428ad9d93f0a1f06ed61a2f5e97f6c957c821c"
         }
       },
       "targets": [
@@ -9625,7 +9625,7 @@
         "deps": {
           "common": [
             {
-              "id": "canbench-rs 0.1.1",
+              "id": "canbench-rs 0.1.4",
               "target": "canbench_rs"
             },
             {
@@ -9647,6 +9647,10 @@
             {
               "id": "hex 0.4.3",
               "target": "hex"
+            },
+            {
+              "id": "pocket-ic 3.1.0",
+              "target": "pocket_ic"
             },
             {
               "id": "reqwest 0.11.27",
@@ -9680,7 +9684,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.3"
+        "version": "0.1.4"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -9688,14 +9692,14 @@
       ],
       "license_file": null
     },
-    "canbench-rs 0.1.1": {
+    "canbench-rs 0.1.4": {
       "name": "canbench-rs",
-      "version": "0.1.1",
+      "version": "0.1.4",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs/0.1.1/download",
-          "sha256": "fe5d551419a1547b5064111df7bfa6e87818750e7f6df611067a02e63a9cbb31"
+          "url": "https://static.crates.io/crates/canbench-rs/0.1.4/download",
+          "sha256": "53574f268dbe23dc83f891a4751b118a6ba927c8bc92e839ff108f3aaf151aa9"
         }
       },
       "targets": [
@@ -9738,13 +9742,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "canbench-rs-macros 0.1.0",
+              "id": "canbench-rs-macros 0.1.4",
               "target": "canbench_rs_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.1.1"
+        "version": "0.1.4"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -9752,14 +9756,14 @@
       ],
       "license_file": null
     },
-    "canbench-rs-macros 0.1.0": {
+    "canbench-rs-macros 0.1.4": {
       "name": "canbench-rs-macros",
-      "version": "0.1.0",
+      "version": "0.1.4",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs-macros/0.1.0/download",
-          "sha256": "b5acd4a41fd2e7018508f7442d7ae90957a913c6fa0e4b767e5be9a8cc5848c8"
+          "url": "https://static.crates.io/crates/canbench-rs-macros/0.1.4/download",
+          "sha256": "d454906c77138a3802a7a680259cca7c006e9b268ba6905f7f4f2b8b74293fa4"
         }
       },
       "targets": [
@@ -9799,7 +9803,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.0"
+        "version": "0.1.4"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -15029,14 +15033,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "curve25519-dalek 4.1.2": {
+    "curve25519-dalek 4.1.3": {
       "name": "curve25519-dalek",
-      "version": "4.1.2",
+      "version": "4.1.3",
       "package_url": "https://github.com/dalek-cryptography/curve25519-dalek/tree/main/curve25519-dalek",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/curve25519-dalek/4.1.2/download",
-          "sha256": "0a677b8922c94e01bdbb12126b0bc852f00447528dee1782229af9c720c3f348"
+          "url": "https://static.crates.io/crates/curve25519-dalek/4.1.3/download",
+          "sha256": "97fb8b7c4503de7d6ae7b42ab72a5a59857b4c937ec27a3d4539dba95b5ab2be"
         }
       },
       "targets": [
@@ -15089,7 +15093,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "curve25519-dalek 4.1.2",
+              "id": "curve25519-dalek 4.1.3",
               "target": "build_script_build"
             },
             {
@@ -15140,7 +15144,7 @@
             ]
           }
         },
-        "version": "4.1.2"
+        "version": "4.1.3"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -15148,10 +15152,6 @@
         ],
         "deps": {
           "common": [
-            {
-              "id": "platforms 3.3.0",
-              "target": "platforms"
-            },
             {
               "id": "rustc_version 0.4.0",
               "target": "rustc_version"
@@ -17064,11 +17064,11 @@
               "target": "cached"
             },
             {
-              "id": "canbench 0.1.3",
+              "id": "canbench 0.1.4",
               "target": "canbench"
             },
             {
-              "id": "canbench-rs 0.1.1",
+              "id": "canbench-rs 0.1.4",
               "target": "canbench_rs"
             },
             {
@@ -17161,7 +17161,7 @@
               "target": "csv"
             },
             {
-              "id": "curve25519-dalek 4.1.2",
+              "id": "curve25519-dalek 4.1.3",
               "target": "curve25519_dalek"
             },
             {
@@ -19230,7 +19230,7 @@
         "deps": {
           "common": [
             {
-              "id": "curve25519-dalek 4.1.2",
+              "id": "curve25519-dalek 4.1.3",
               "target": "curve25519_dalek"
             },
             {
@@ -44368,52 +44368,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "platforms 3.3.0": {
-      "name": "platforms",
-      "version": "3.3.0",
-      "package_url": "https://github.com/rustsec/rustsec/tree/main/platforms",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/platforms/3.3.0/download",
-          "sha256": "626dec3cac7cc0e1577a2ec3fc496277ec2baa084bebad95bb6fdbfae235f84c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "platforms",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "platforms",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "3.3.0"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "plotters 0.3.5": {
       "name": "plotters",
       "version": "0.3.5",
@@ -44571,6 +44525,106 @@
       "license": "MIT",
       "license_ids": [
         "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "pocket-ic 3.1.0": {
+      "name": "pocket-ic",
+      "version": "3.1.0",
+      "package_url": "https://github.com/dfinity/ic",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/pocket-ic/3.1.0/download",
+          "sha256": "f9765eeff77b8750cf6258eaeea237b96607cd770aa3d4003f021924192b7e4e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pocket_ic",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "pocket_ic",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "base64 0.13.1",
+              "target": "base64"
+            },
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "ic-cdk 0.13.2",
+              "target": "ic_cdk"
+            },
+            {
+              "id": "reqwest 0.12.4",
+              "target": "reqwest"
+            },
+            {
+              "id": "schemars 0.8.16",
+              "target": "schemars"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.14",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "serde_json 1.0.107",
+              "target": "serde_json"
+            },
+            {
+              "id": "tracing 0.1.40",
+              "target": "tracing"
+            },
+            {
+              "id": "tracing-appender 0.2.3",
+              "target": "tracing_appender"
+            },
+            {
+              "id": "tracing-subscriber 0.3.18",
+              "target": "tracing_subscriber"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.74",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "3.1.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
       ],
       "license_file": "LICENSE"
     },
@@ -50896,6 +50950,7 @@
             "rustls-tls",
             "rustls-tls-native-roots",
             "rustls-tls-webpki-roots",
+            "socks",
             "stream"
           ],
           "selects": {
@@ -51125,6 +51180,10 @@
               {
                 "id": "tokio-rustls 0.25.0",
                 "target": "tokio_rustls"
+              },
+              {
+                "id": "tokio-socks 0.5.1",
+                "target": "tokio_socks"
               },
               {
                 "id": "tokio-util 0.7.11",
@@ -75225,7 +75284,7 @@
     }
   },
   "binary_crates": [
-    "canbench 0.1.3",
+    "canbench 0.1.4",
     "ic-wasm 0.7.1",
     "metrics-proxy 0.1.0"
   ],
@@ -76337,8 +76396,8 @@
     "byteorder 1.5.0",
     "bytes 1.6.0",
     "cached 0.49.2",
-    "canbench 0.1.3",
-    "canbench-rs 0.1.1",
+    "canbench 0.1.4",
+    "canbench-rs 0.1.4",
     "candid 0.10.6",
     "candid_parser 0.1.2",
     "cargo_metadata 0.14.2",
@@ -76361,7 +76420,7 @@
     "crossbeam 0.8.4",
     "crossbeam-channel 0.5.11",
     "csv 1.3.0",
-    "curve25519-dalek 4.1.2",
+    "curve25519-dalek 4.1.3",
     "cvt 0.1.2",
     "dashmap 5.5.3",
     "dyn-clone 1.0.14",
