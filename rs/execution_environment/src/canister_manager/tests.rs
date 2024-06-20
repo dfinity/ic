@@ -47,6 +47,7 @@ use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
+    state_manager::FakeStateManager,
     universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM},
 };
 use ic_test_utilities_execution_environment::{
@@ -227,10 +228,14 @@ impl CanisterManagerBuilder {
     fn build(self) -> CanisterManager {
         let subnet_type = SubnetType::Application;
         let metrics_registry = MetricsRegistry::new();
+        let state_reader = Arc::new(FakeStateManager::new());
+        let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
             Config::default(),
             no_op_logger(),
             &metrics_registry,
+            completed_execution_messages_tx,
+            state_reader,
         ));
         let cycles_account_manager = Arc::new(self.cycles_account_manager);
         let hypervisor = Hypervisor::new(

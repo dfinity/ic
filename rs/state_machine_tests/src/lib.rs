@@ -1148,6 +1148,8 @@ impl StateMachine {
         //
         // The API state machine provides is blocking anyway.
         let execution_services = runtime.block_on(async {
+            #[allow(clippy::disallowed_methods)]
+            let (completed_execution_messages_tx, _) = mpsc::channel(1);
             ExecutionServices::setup_execution(
                 replica_logger.clone(),
                 &metrics_registry,
@@ -1158,6 +1160,7 @@ impl StateMachine {
                 Arc::clone(&cycles_account_manager),
                 Arc::clone(&state_manager) as Arc<_>,
                 Arc::clone(&state_manager.get_fd_factory()),
+                completed_execution_messages_tx,
             )
         });
 

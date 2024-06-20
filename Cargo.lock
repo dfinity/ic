@@ -3803,6 +3803,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-system-api",
+ "ic-test-utilities",
  "ic-test-utilities-execution-environment",
  "ic-test-utilities-state",
  "ic-test-utilities-time",
@@ -3811,6 +3812,7 @@ dependencies = [
  "ic-wasm-types",
  "lazy_static",
  "tempfile",
+ "tokio",
  "wat",
 ]
 
@@ -11820,6 +11822,7 @@ dependencies = [
  "strum 0.26.2",
  "strum_macros 0.26.2",
  "tempfile",
+ "tokio",
  "wat",
 ]
 
