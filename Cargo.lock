@@ -3776,6 +3776,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "evm-rpc-client"
+version = "0.9.0"
+dependencies = [
+ "async-trait",
+ "candid",
+ "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ic-cdk 0.13.2",
+ "mockall",
+ "serde",
+ "tokio",
+]
+
+[[package]]
 name = "exec"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

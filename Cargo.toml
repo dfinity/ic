@@ -37,6 +37,7 @@ members = [
     "rs/cross-chain/proposal-cli",
     "rs/cycles_account_manager",
     "rs/ethereum/cketh/minter",
+    "rs/ethereum/evm-rpc-client",
     "rs/ethereum/ledger-suite-orchestrator",
     "rs/https_outcalls/adapter",
     "rs/https_outcalls/client",
