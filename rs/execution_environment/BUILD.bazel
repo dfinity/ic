@@ -110,7 +110,7 @@ rust_ic_test(
     aliases = ALIASES,
     crate = ":execution_environment",
     data = DATA,
-    env = ENV,
+    env = {"RUST_TEST_THREADS": "1"},
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "test_macos",
