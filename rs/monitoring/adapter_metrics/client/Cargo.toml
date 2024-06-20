@@ -10,9 +10,9 @@ documentation.workspace = true
 ic-adapter-metrics-service = { path = "../service" }
 ic-async-utils = { path = "../../../async_utils" }
 prometheus = { workspace = true }
-protobuf = "2.27.1"
+protobuf = { workspace = true }
 slog = { workspace = true }
-slog-async = "2.7.0"
+slog-async = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }

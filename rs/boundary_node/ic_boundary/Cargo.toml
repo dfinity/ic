@@ -59,7 +59,7 @@ ic-management-canister-types = { path = "../../types/management_canister_types" 
 instant-acme = "0.3.2"
 jemallocator = "0.3"
 jemalloc-ctl = "0.3"
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 little-loadshedder = "0.1.0"
 maxminddb = "0.24"
 mockall = { workspace = true }
