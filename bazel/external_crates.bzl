@@ -1130,6 +1130,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "serde_json": crate.spec(
                 version = "^1.0.107",
             ),
+            "serde_regex": crate.spec(
+                version = "^1.1.0",
+            ),
             "serde_with": crate.spec(
                 version = "^1.14.0",
             ),

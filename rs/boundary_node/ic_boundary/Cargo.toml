@@ -32,6 +32,7 @@ futures-util = { workspace = true }
 hex = { workspace = true }
 http = "0.2.12"
 http-body = "0.4"
+humantime = "2.1"
 hyper = "0.14.18"
 hyper-rustls = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
@@ -85,6 +86,8 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+serde_regex = "1.1"
 slog = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }
@@ -112,6 +115,7 @@ zeroize = { workspace = true }
 criterion = { workspace = true }
 tempfile = { workspace = true }
 wiremock = "=0.5.19"
+indoc = "1.0"
 
 [[bench]]
 name = "perf"

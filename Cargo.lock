@@ -5422,6 +5422,7 @@ dependencies = [
  "hex",
  "http 0.2.12",
  "http-body 0.4.5",
+ "humantime",
  "hyper 0.14.26",
  "hyper-rustls 0.24.2",
  "ic-base-types",
@@ -5446,6 +5447,7 @@ dependencies = [
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-types",
+ "indoc",
  "instant-acme",
  "jemalloc-ctl",
  "jemallocator",
@@ -5468,6 +5470,8 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "serde_json",
+ "serde_regex",
+ "serde_yaml 0.9.34+deprecated",
  "slog",
  "strum 0.26.2",
  "tempfile",
@@ -17597,6 +17601,16 @@ dependencies = [
  "percent-encoding",
  "serde",
  "thiserror",
+]
+
+[[package]]
+name = "serde_regex"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8136f1a4ea815d7eac4101cfd0b16dc0cb5e1fe1b8609dfd728058656b7badf"
+dependencies = [
+ "regex",
+ "serde",
 ]
 
 [[package]]
