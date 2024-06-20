@@ -41,7 +41,7 @@ fn check_certified_data_and_get_certificate(
     // canister_sig_pk an entry for certified_data that matches signature.tree.digest.
     let cert_data_path = [
         "canister".as_bytes(),
-        &canister_sig_pk.canister_id.as_slice(),
+        canister_sig_pk.canister_id.as_slice(),
         "certified_data".as_bytes(),
     ];
     let SubtreeLookupResult::Found(cert_data_leaf) =
@@ -134,7 +134,7 @@ fn verify_delegation(
     let LookupResult::Found(subnet_public_key_der) = cert.tree.lookup_path(&public_key_path) else {
         return Err("subnet public key not found".to_string());
     };
-    extract_raw_root_pk_from_der(&subnet_public_key_der)
+    extract_raw_root_pk_from_der(subnet_public_key_der)
 }
 
 fn principal_is_within_ranges(principal: &Principal, ranges: &[(Principal, Principal)]) -> bool {
@@ -156,7 +156,7 @@ fn check_bls_signature(certificate: &Certificate, signing_pk_raw: &[u8]) -> Resu
     let mut msg = vec![];
     msg.extend_from_slice(IC_STATE_ROOT_DOMAIN_SEPARATOR);
     msg.extend_from_slice(&root_hash);
-    if verify_bls_signature(sig, &msg, &signing_pk_raw).is_err() {
+    if verify_bls_signature(sig, &msg, signing_pk_raw).is_err() {
         return Err("invalid BLS signature".to_string());
     }
     Ok(())
