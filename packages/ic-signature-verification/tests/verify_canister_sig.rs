@@ -9,7 +9,7 @@ use ic_types::crypto::Signable;
 
 fn get_root_pk_raw(root_of_trust: &IcRootOfTrust) -> Vec<u8> {
     let pk_raw: bls12_381::PublicKeyBytes =
-        (*<IcRootOfTrust as AsRef<ThresholdSigPublicKey>>::as_ref(root_of_trust.as_ref())).into();
+        (*<IcRootOfTrust as AsRef<ThresholdSigPublicKey>>::as_ref(root_of_trust)).into();
     pk_raw.as_bytes().to_vec()
 }
 
