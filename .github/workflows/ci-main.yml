@@ -33,7 +33,8 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 90
@@ -72,7 +73,8 @@ jobs:
             bazel-targets
   bazel-build-all-config-check:
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 90
@@ -150,7 +152,8 @@ jobs:
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 90
@@ -175,7 +178,8 @@ jobs:
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 90
@@ -225,7 +229,8 @@ jobs:
   build-ic:
     name: Build IC
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 90
@@ -318,7 +323,8 @@ jobs:
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 90
@@ -354,7 +360,8 @@ jobs:
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 90
