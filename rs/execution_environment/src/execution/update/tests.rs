@@ -342,10 +342,8 @@ fn hitting_page_delta_limit_fails_message() {
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
-    assert_eq!(result.code(), ErrorCode::CanisterMemoryAccessLimitExceeded);
-    assert_eq!(
-        result.description(),
-        format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
+    result.assert_contains(ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
         no_pages * (PAGE_SIZE as u64 / 1024), no_pages * (PAGE_SIZE as u64 / 1024))
     );
 }
@@ -360,10 +358,8 @@ fn hitting_page_delta_limit_fails_message_system_subnet() {
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
-    assert_eq!(result.code(), ErrorCode::CanisterMemoryAccessLimitExceeded);
-    assert_eq!(
-        result.description(),
-        format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
+    result.assert_contains(ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
         no_pages * (PAGE_SIZE as u64 / 1024), no_pages * (PAGE_SIZE as u64 / 1024))
     );
 }
@@ -377,13 +373,12 @@ fn hitting_page_delta_limit_fails_for_long_message() {
     let wat = wat_writing_to_each_stable_memory_page_long_execution(10 * PAGE_SIZE as u64 + 1);
 
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
-    let result = test.install_canister(canister_id, wat::parse_str(wat).unwrap());
-
-    assert!(result.clone().unwrap_err().code() == ErrorCode::CanisterMemoryAccessLimitExceeded);
-    assert_eq!(
-        result.unwrap_err().description(),
-        format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
-         no_pages * (PAGE_SIZE as u64 / 1024), no_pages * (PAGE_SIZE as u64 / 1024))
+    let result = test
+        .install_canister(canister_id, wat::parse_str(wat).unwrap())
+        .unwrap_err();
+    result.assert_contains(ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
+        no_pages * (PAGE_SIZE as u64 / 1024), no_pages * (PAGE_SIZE as u64 / 1024))
     );
 }
 
@@ -397,13 +392,12 @@ fn hitting_page_delta_limit_fails_for_long_message_non_native_stable() {
     let wat = wat_writing_to_each_stable_memory_page_long_execution(10 * PAGE_SIZE as u64 + 1);
 
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
-    let result = test.install_canister(canister_id, wat::parse_str(wat).unwrap());
-
-    assert!(result.clone().unwrap_err().code() == ErrorCode::CanisterMemoryAccessLimitExceeded);
-    assert_eq!(
-        result.unwrap_err().description(),
-        format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the \
-        number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
+    let result = test
+        .install_canister(canister_id, wat::parse_str(wat).unwrap())
+        .unwrap_err();
+    result.assert_contains(ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for \
+        the number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
     );
 }
 
@@ -416,11 +410,9 @@ fn hitting_page_delta_limit_fails_message_non_native_stable() {
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
-    assert_eq!(result.code(), ErrorCode::CanisterMemoryAccessLimitExceeded);
-    assert_eq!(
-        result.description(),
-        format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the \
-        number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
+    result.assert_contains(ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for \
+        the number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
     );
 }
 
@@ -434,11 +426,9 @@ fn hitting_page_delta_limit_fails_message_non_native_stable_system_subnet() {
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
-    assert_eq!(result.code(), ErrorCode::CanisterMemoryAccessLimitExceeded);
-    assert_eq!(
-        result.description(),
-        format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the \
-        number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
+    result.assert_contains(ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for \
+        the number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
     );
 }
 
@@ -486,16 +476,14 @@ fn dts_update_resume_fails_due_to_cycles_change() {
     );
 
     let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterWasmEngineError);
-
-    assert_eq!(
-        err.description(),
-        format!(
+    err.assert_contains(
+        ErrorCode::CanisterWasmEngineError,
+        &format!(
             "Error from Canister {}: Canister encountered a Wasm engine error: \
              Failed to apply system changes: Mismatch in cycles \
              balance when resuming an update call",
             a_id
-        )
+        ),
     );
 }
 
@@ -812,10 +800,8 @@ fn dts_uninstall_with_aborted_update() {
     test.execute_message(canister_id);
 
     let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterWasmModuleNotFound);
-    assert_eq!(
-        err.description(),
-        format!(
+    err.assert_contains(ErrorCode::CanisterWasmModuleNotFound,
+        &format!(
             "Error from Canister {}: Attempted to execute a message, but the canister contains no Wasm module.",
             canister_id
         )
@@ -892,14 +878,11 @@ fn stable_grow_returns_allocated_memory_on_error() {
     // Calling 32-bit stable grow should trap.
     let payload = wasm().stable_grow(1).reply().build();
     let result = test.ingress(canister_id, "update", payload).unwrap_err();
-    assert_eq!(
-        result,
-        UserError::new(
+    result.assert_contains(
             ErrorCode::CanisterTrapped,
-            format!(
+            &format!(
                 "Error from Canister {canister_id}: Canister trapped: 32 bit stable memory api used on a memory larger than 4GB"
             )
-        )
     );
 
     // Subnet and canister memory should remain unchanged

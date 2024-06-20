@@ -538,6 +538,16 @@ impl UserError {
     pub fn count_bytes(&self) -> usize {
         std::mem::size_of_val(self) + self.description.len()
     }
+
+    pub fn assert_contains(&self, code: ErrorCode, description: &str) {
+        assert_eq!(self.code, code);
+        assert!(
+            self.description.contains(description),
+            "Error description \"{}\" does not contain \"{}\"",
+            self.description,
+            description
+        );
+    }
 }
 
 impl std::error::Error for UserError {
