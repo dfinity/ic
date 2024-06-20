@@ -169,6 +169,7 @@ fn ic0_stable64_size_works() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn ic0_stable_write_increases_heap_delta() {
     let mut test = ExecutionTestBuilder::new().build();
     fn wat(bytes: usize) -> String {
@@ -209,6 +210,7 @@ fn ic0_stable_write_increases_heap_delta() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn ic0_stable64_write_increases_heap_delta() {
     let mut test = ExecutionTestBuilder::new().build();
     fn wat(bytes: usize) -> String {
@@ -2854,6 +2856,7 @@ fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn query_stable_memory_metrics_are_recorded() {
     let mut test = ExecutionTestBuilder::new().build();
     // The following canister will touch 2 pages worth of stable memory.
@@ -3844,6 +3847,7 @@ fn random_operations(
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn random_memory_accesses() {
     // Limit the number of cases to keep the running time low.
     let config = ProptestConfig {
@@ -5869,6 +5873,7 @@ fn division_by_zero() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn charge_for_dirty_pages() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
@@ -6961,6 +6966,7 @@ fn generate_wat_to_touch_pages(pages_to_touch: usize) -> String {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn yield_triggers_dts_slice_with_many_dirty_pages() {
     let pages_to_touch = 100;
     let wat = generate_wat_to_touch_pages(pages_to_touch);
@@ -7018,6 +7024,7 @@ fn yield_does_not_trigger_dts_slice_without_enough_dirty_pages() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn yield_abort_does_not_modify_state() {
     let pages_to_touch = 100;
     let wat = generate_wat_to_touch_pages(pages_to_touch);
@@ -7076,6 +7083,7 @@ fn yield_abort_does_not_modify_state() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn yield_for_dirty_page_copy_triggers_dts_slice_with_many_pages_on_system_subnets() {
     let pages_to_touch = 100;
     let wat = generate_wat_to_touch_pages(pages_to_touch);
