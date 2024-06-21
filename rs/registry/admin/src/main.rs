@@ -1472,6 +1472,7 @@ impl ProposalPayload<RecoverSubnetPayload> for ProposeToUpdateRecoveryCupCmd {
                 .clone()
                 .map(|uri| (uri, hash, registry_version)),
             ecdsa_config,
+            chain_key_config: None, // TODO[NNS1-3102]
         }
     }
 }

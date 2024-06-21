@@ -1,3 +1,4 @@
+use crate::chain_key::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
 use crate::{
     common::LOG_PREFIX,
     mutations::{
@@ -41,8 +42,6 @@ use std::{
     convert::TryFrom,
     iter::FromIterator,
 };
-
-use super::do_create_subnet::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
 
 impl Registry {
     /// Get the subnet record or panic on error with a message.
@@ -194,7 +193,7 @@ impl Registry {
 
     /// Get the initial iDKG dealings via a call to IC00 for a given InitialChainKeyConfig
     /// and a set of nodes to receive them.
-    pub async fn get_all_initial_i_dkg_dealings_from_ic00(
+    pub(crate) async fn get_all_initial_i_dkg_dealings_from_ic00(
         &self,
         initial_chain_key_config: &Option<InitialChainKeyConfigInternal>,
         receiver_nodes: Vec<NodeId>,
@@ -525,7 +524,7 @@ impl Registry {
 
     /// Validates InitialChainKeyConfig.  If own_subnet_id is supplied, this also validates that all
     /// requested keys are available on a different subnet (for the case of recovering a subnet)
-    pub fn validate_initial_chain_key_config(
+    pub(crate) fn validate_initial_chain_key_config(
         &self,
         initial_chain_key_config: &InitialChainKeyConfigInternal,
         own_subnet_id: Option<PrincipalId>,
@@ -542,7 +541,7 @@ impl Registry {
 
             let Some(subnets_for_key) = keys_to_subnets.get(key_id) else {
                 return Err(format!(
-                    "The requested master public key '{}' was not found in any subnet.",
+                    "The requested chain key '{}' was not found in any subnet.",
                     key_id
                 ));
             };
@@ -551,8 +550,8 @@ impl Registry {
             if let Some(own_subnet_id) = own_subnet_id {
                 if subnet_id == &own_subnet_id {
                     return Err(format!(
-                        "Attempted to recover master public key '{}' by requesting it from itself. \
-                         Subnets cannot recover master public keys from themselves.",
+                        "Attempted to recover chain key '{}' by requesting it from itself. \
+                         Subnets cannot recover chain keys from themselves.",
                         key_id,
                     ));
                 }
@@ -562,21 +561,17 @@ impl Registry {
             let subnet_id = SubnetId::new(*subnet_id);
             if !subnets_for_key.contains(&subnet_id) {
                 return Err(format!(
-                    "The requested master public key '{}' is not available in targeted subnet '{}'.",
+                    "The requested chain key '{}' is not available in targeted subnet '{}'.",
                     key_id, subnet_id
                 ));
             }
         }
 
-        let key_ids: Vec<_> = initial_chain_key_config
-            .key_configs
-            .iter()
-            .map(|KeyConfigRequestInternal { key_config, .. }| key_config.key_id.clone())
-            .collect();
+        let key_ids = initial_chain_key_config.key_ids();
 
         if has_duplicates(&key_ids) {
             return Err(format!(
-                "The requested master public keys {:?} have duplicates",
+                "The requested chain keys {:?} have duplicates",
                 key_ids
             ));
         }

@@ -252,6 +252,7 @@ type RecoverSubnetPayload = record {
   subnet_id : principal;
   registry_store_uri : opt record { text; text; nat64 };
   ecdsa_config : opt EcdsaInitialConfig;
+  chain_key_config : opt InitialChainKeyConfig;
   state_hash : blob;
   time_ns : nat64;
 };

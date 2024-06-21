@@ -14,14 +14,18 @@ use ic_nns_test_utils::itest_helpers::{
 use ic_nns_test_utils::registry::{get_value_or_panic, new_node_keys_and_node_id};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::routing_table::v1 as pb;
-use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord};
+use ic_protobuf::registry::subnet::v1::{
+    CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, SubnetListRecord, SubnetRecord,
+};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::RoutingTable;
-use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{
+    ChainKeyConfig, EcdsaConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::ReplicaVersion;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -65,6 +69,34 @@ pub fn get_subnet_holding_ecdsa_keys(
     record.ecdsa_config = Some(ecdsa_config.into());
 
     record
+}
+
+pub fn get_subnet_holding_chain_keys(
+    key_ids: Vec<MasterPublicKeyId>,
+    node_ids: Vec<NodeId>,
+) -> SubnetRecord {
+    let unit_delay_millis = 10;
+    let replica_version_id = String::from(ReplicaVersion::default());
+    let mut subnet_record = SubnetRecord::from(CreateSubnetPayload {
+        unit_delay_millis,
+        replica_version_id,
+        node_ids,
+        ..Default::default()
+    });
+    subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
+        key_configs: key_ids
+            .into_iter()
+            .map(|key_id| KeyConfig {
+                key_id,
+                pre_signatures_to_create_in_advance: 1,
+                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+            })
+            .collect(),
+        signature_request_timeout_ns: None,
+        idkg_key_rotation_period_ms: None,
+    }));
+
+    subnet_record
 }
 
 /// This allows us to create a registry canister that is in-sync with the FakeRegistryClient
