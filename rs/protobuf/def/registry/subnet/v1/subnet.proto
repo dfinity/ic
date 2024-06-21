@@ -1,7 +1,6 @@
 syntax = "proto3";
 package registry.subnet.v1;
 
-import "bitcoin/v1/bitcoin.proto";
 import "registry/crypto/v1/crypto.proto";
 import "types/v1/types.proto";
 
