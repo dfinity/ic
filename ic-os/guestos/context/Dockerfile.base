@@ -18,7 +18,10 @@
 # First build stage:
 # - Download 3rd party tools
 #
-FROM ubuntu:20.04 as download
+FROM ubuntu:focal-20240427 as download
+
+# Pin ubuntu snapshot
+RUN echo 'APT::Snapshot "20240507T000000Z";' | tee /etc/apt/apt.conf.d/50snapshot
 
 USER root:root
 
@@ -48,7 +51,10 @@ RUN cd /tmp/ && \
 # - Install and cache upstream packages from built-in Ubuntu repositories
 # - Copy downloaded archives from first build stage into the target image
 #
-FROM ubuntu:20.04
+FROM ubuntu:focal-20240427
+
+# Pin ubuntu snapshot
+RUN echo 'APT::Snapshot "20240507T000000Z";' | tee /etc/apt/apt.conf.d/50snapshot
 
 USER root:root
 

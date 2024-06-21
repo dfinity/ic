@@ -20,7 +20,10 @@
 # First build stage:
 # - Download 3rd party tools
 #
-FROM ubuntu:20.04 AS download
+FROM ubuntu:focal-20240427 as download
+
+# Pin ubuntu snapshot
+RUN echo 'APT::Snapshot "20240507T000000Z";' | tee /etc/apt/apt.conf.d/50snapshot
 
 USER root:root
 
@@ -48,7 +51,10 @@ RUN cd /tmp/ && \
 # Second build stage:
 # - Compile downloaded archives from first build stage
 #
-FROM ubuntu:20.04 AS build
+FROM ubuntu:focal-20240427 as build
+
+# Pin ubuntu snapshot
+RUN echo 'APT::Snapshot "20240507T000000Z";' | tee /etc/apt/apt.conf.d/50snapshot
 
 USER root:root
 
@@ -81,7 +87,10 @@ RUN cd /tmp/ && \
 # - Install and cache upstream packages from built-in Ubuntu repositories.
 # - Install compiled packages from the second stage.
 #
-FROM ubuntu:20.04
+FROM ubuntu:focal-20240427
+
+# Pin ubuntu snapshot
+RUN echo 'APT::Snapshot "20240507T000000Z";' | tee /etc/apt/apt.conf.d/50snapshot
 
 USER root:root
 

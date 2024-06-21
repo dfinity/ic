@@ -27,7 +27,10 @@ ARG NODE_EXPORTER_SHA=a550cd5c05f760b7934a2d0afad66d2e92e681482f5f57a917465b1fba
 # First build stage: download software, build and verify it (such that it
 # does not change under our noses).
 #
-FROM ubuntu:20.04 AS download
+FROM ubuntu:focal-20240427 AS download
+
+# Pin ubuntu snapshot
+RUN echo 'APT::Snapshot "20240507T000000Z";' | tee /etc/apt/apt.conf.d/50snapshot
 
 USER root:root
 
@@ -81,7 +84,10 @@ RUN \
 # - Install and cache upstream packages from built-in Ubuntu repositories
 # - Copy downloaded archives from first build stage into the target image
 #
-FROM ubuntu:20.04
+FROM ubuntu:focal-20240427
+
+# Pin ubuntu snapshot
+RUN echo 'APT::Snapshot "20240507T000000Z";' | tee /etc/apt/apt.conf.d/50snapshot
 
 USER root:root
 
