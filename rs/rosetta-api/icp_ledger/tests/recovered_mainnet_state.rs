@@ -32,6 +32,12 @@ use std::time::Instant;
 const LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(LEDGER_CANISTER_INDEX_IN_NNS_SUBNET);
 const INDEX_CANISTER_ID: CanisterId = CanisterId::from_u64(11);
 
+/// Create a state machine with the golden NNS state and perform a series of transactions and
+/// upgrades and downgrades of the ICP ledger canister suite.
+/// The approximate runtime of the individual components is as follows:
+/// - Assert parity between the ledger and index canisters: 6min
+/// - Perform transactions: Around 0.5s per transaction
+/// - Upgrade/downgrade of the canisters: Around 10s per canister
 #[test]
 fn should_create_state_machine_with_golden_nns_state() {
     let state_machine = new_state_machine_with_golden_nns_state_or_panic(
