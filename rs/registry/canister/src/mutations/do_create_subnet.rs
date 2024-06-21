@@ -1,17 +1,13 @@
-use std::{collections::HashSet, convert::TryFrom};
-
+use crate::chain_key::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
 use crate::{
     common::LOG_PREFIX,
     mutations::common::{decode_registry_value, encode_or_panic},
     registry::Registry,
 };
-
 use candid::{CandidType, Deserialize, Encode};
 use dfn_core::api::{call, CanisterId};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use serde::Serialize;
-
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_management_canister_types::{
     EcdsaKeyId, MasterPublicKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse,
@@ -20,7 +16,7 @@ use ic_protobuf::registry::{
     node::v1::NodeRecord,
     subnet::v1::{
         CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb,
-        KeyConfig as KeyConfigPb, SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
+        SubnetFeatures as SubnetFeaturesPb, SubnetRecord,
     },
 };
 use ic_registry_keys::{
@@ -32,8 +28,9 @@ use ic_registry_subnet_features::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
-
 use on_wire::bytes;
+use serde::Serialize;
+use std::{collections::HashSet, convert::TryFrom};
 
 impl Registry {
     /// Adds the new subnet to the registry.
@@ -345,13 +342,6 @@ pub struct InitialChainKeyConfig {
     pub idkg_key_rotation_period_ms: Option<u64>,
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
-pub struct InitialChainKeyConfigInternal {
-    pub key_configs: Vec<KeyConfigRequestInternal>,
-    pub signature_request_timeout_ns: Option<u64>,
-    pub idkg_key_rotation_period_ms: Option<u64>,
-}
-
 impl From<InitialChainKeyConfigInternal> for InitialChainKeyConfig {
     fn from(src: InitialChainKeyConfigInternal) -> Self {
         let InitialChainKeyConfigInternal {
@@ -415,12 +405,6 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
 pub struct KeyConfigRequest {
     pub key_config: Option<KeyConfig>,
     pub subnet_id: Option<PrincipalId>,
-}
-
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct KeyConfigRequestInternal {
-    pub key_config: KeyConfigInternal,
-    pub subnet_id: PrincipalId,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -518,27 +502,6 @@ impl TryFrom<KeyConfigRequest> for KeyConfigRequestInternal {
             key_config,
             subnet_id,
         })
-    }
-}
-
-impl From<InitialChainKeyConfigInternal> for ChainKeyConfigPb {
-    fn from(src: InitialChainKeyConfigInternal) -> Self {
-        let InitialChainKeyConfigInternal {
-            key_configs,
-            signature_request_timeout_ns,
-            idkg_key_rotation_period_ms,
-        } = src;
-
-        let key_configs = key_configs
-            .into_iter()
-            .map(|KeyConfigRequestInternal { key_config, .. }| KeyConfigPb::from(key_config))
-            .collect();
-
-        Self {
-            key_configs,
-            signature_request_timeout_ns,
-            idkg_key_rotation_period_ms,
-        }
     }
 }
 

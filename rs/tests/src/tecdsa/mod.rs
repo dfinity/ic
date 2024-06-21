@@ -27,8 +27,7 @@ use ic_types_test_utils::ids::subnet_test_id;
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
 use registry_canister::mutations::{
     do_create_subnet::{
-        CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest, InitialChainKeyConfig,
-        InitialChainKeyConfigInternal,
+        CreateSubnetPayload, EcdsaKeyRequest, InitialChainKeyConfig, KeyConfig, KeyConfigRequest,
     },
     do_update_subnet::UpdateSubnetPayload,
 };
@@ -546,16 +545,21 @@ pub(crate) async fn create_new_subnet_with_keys(
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
 
-        chain_key_config: Some(InitialChainKeyConfig::from(
-            InitialChainKeyConfigInternal::try_from(EcdsaInitialConfig {
-                quadruples_to_create_in_advance: 4,
-                keys,
-                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-                signature_request_timeout_ns: None,
-                idkg_key_rotation_period_ms: None,
-            })
-            .unwrap(),
-        )),
+        chain_key_config: Some(InitialChainKeyConfig {
+            key_configs: keys
+                .into_iter()
+                .map(|EcdsaKeyRequest { key_id, subnet_id }| KeyConfigRequest {
+                    key_config: Some(KeyConfig {
+                        key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
+                        pre_signatures_to_create_in_advance: Some(4),
+                        max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                    }),
+                    subnet_id,
+                })
+                .collect(),
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        }),
 
         // Deprecated fields
         ecdsa_config: None,
