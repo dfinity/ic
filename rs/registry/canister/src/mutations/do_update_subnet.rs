@@ -151,13 +151,20 @@ impl Registry {
 
         let subnet_id = payload.subnet_id;
 
-        // Ensure that if keys are held by the subnet, they cannot be changed.
-        let keys_held_currently = self.get_master_public_keys_held_by_subnet(subnet_id);
-        if !keys_held_currently.is_empty() && payload_key_ids != keys_held_currently {
+        // Ensure that the keys held by the subnet cannot be deleted.
+        let keys_held_currently: HashSet<MasterPublicKeyId> =
+            HashSet::from_iter(self.get_master_public_keys_held_by_subnet(subnet_id));
+        let payload_key_ids_set = HashSet::from_iter(payload_key_ids.clone());
+
+        let deleted_keys: HashSet<_> = keys_held_currently
+            .difference(&payload_key_ids_set)
+            .collect();
+
+        if !deleted_keys.is_empty() {
             panic!(
-                "{}Chain keys cannot be changed once set for a subnet. Attempted to update chain \
-                    keys for subnet: '{}'.",
-                LOG_PREFIX, subnet_id,
+                "{}Chain keys cannot be deleted. Attempted to delete chain keys {:?} \
+                for subnet: '{}'",
+                LOG_PREFIX, deleted_keys, subnet_id
             );
         }
 
@@ -614,7 +621,7 @@ mod tests {
         add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
         prepare_registry_with_nodes,
     };
-    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{
         ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb,
@@ -1269,10 +1276,12 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "[Registry] Chain keys cannot be changed once set for a subnet. Attempted \
-                    to update chain keys for subnet: 'ge6io-epiam-aaaaa-aaaap-yai'."
+        expected = "Chain keys cannot be deleted. Attempted to delete chain keys \
+        {Ecdsa(EcdsaKeyId { curve: Secp256k1, name: \"existing_key_id_2\" })} for subnet: \
+        'ge6io-epiam-aaaaa-aaaap-yai'"
     )]
-    fn test_modify_ecdsa_keys_after_setting_fails() {
+    // TODO(NNS1-3022): Delete this once ecdsa_config is obsolete
+    fn test_deleting_ecdsa_keys_fails_legacy() {
         let mut registry = invariant_compliant_registry(0);
 
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
@@ -1280,9 +1289,14 @@ mod tests {
 
         let mut subnet_list_record = registry.get_subnet_list_record();
 
-        let key = EcdsaKeyId {
+        let key_1 = EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "existing_key_id".to_string(),
+        };
+
+        let key_2 = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "existing_key_id_2".to_string(),
         };
 
         // Create the subnet we will update
@@ -1293,10 +1307,10 @@ mod tests {
 
         let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
 
-        // Give it the key.
+        // Give it the keys.
         let ecdsa_config = EcdsaConfig {
             quadruples_to_create_in_advance: 1,
-            key_ids: vec![key.clone()],
+            key_ids: vec![key_1.clone(), key_2.clone()],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
@@ -1325,13 +1339,95 @@ mod tests {
 
         let payload = UpdateSubnetPayload {
             ecdsa_config: Some(EcdsaConfig {
-                key_ids: vec![],
+                key_ids: vec![key_1.clone()],
                 ..ecdsa_config
             }),
             ..payload
         };
 
         // Should panic because we are trying to modify the config
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Chain keys cannot be deleted. Attempted to delete chain keys \
+        {Schnorr(SchnorrKeyId { algorithm: Bip340Secp256k1, name: \"existing_key_id_2\" })} for \
+        subnet: 'ge6io-epiam-aaaaa-aaaap-yai'"
+    )]
+    fn test_deleting_chain_keys_fails() {
+        let mut registry = invariant_compliant_registry(0);
+
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let mut subnet_list_record = registry.get_subnet_list_record();
+
+        let existing_key_1 = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "existing_key_id".to_string(),
+        });
+
+        let existing_key_2 = MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+            name: "existing_key_id_2".to_string(),
+        });
+
+        let new_key = MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Ed25519,
+            name: "new_key_id_3".to_string(),
+        });
+
+        // Create the subnet we will update
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+            .iter()
+            .next()
+            .expect("should contain at least one node ID");
+
+        let subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
+
+        let fake_key_config = |key_id: &MasterPublicKeyId| KeyConfig {
+            key_id: Some(key_id.clone()),
+            pre_signatures_to_create_in_advance: Some(1),
+            max_queue_size: Some(2),
+        };
+
+        // Give it the keys.
+        let chain_key_config = ChainKeyConfig {
+            key_configs: vec![
+                fake_key_config(&existing_key_1),
+                fake_key_config(&existing_key_2),
+            ],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        };
+
+        let subnet_id = subnet_test_id(1000);
+
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
+        ));
+
+        let payload = UpdateSubnetPayload {
+            chain_key_config: Some(chain_key_config.clone()),
+            ..make_empty_update_payload(subnet_id)
+        };
+
+        registry.do_update_subnet(payload.clone());
+
+        // Try to update the subnet by adding a new key and removing one of the existing keys
+        let payload = UpdateSubnetPayload {
+            chain_key_config: Some(ChainKeyConfig {
+                key_configs: vec![fake_key_config(&existing_key_1), fake_key_config(&new_key)],
+                ..chain_key_config
+            }),
+            ..payload
+        };
+
+        // Should panic because we are trying to delete an existing key
         registry.do_update_subnet(payload);
     }
 
