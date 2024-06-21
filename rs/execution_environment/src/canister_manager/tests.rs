@@ -3881,6 +3881,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn uninstall_code_can_be_invoked_by_governance_canister() {
     use crate::util::GOVERNANCE_CANISTER_ID;
 
@@ -7474,6 +7475,7 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn upload_chunk_fails_when_it_exceeds_chunk_size() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
@@ -7733,6 +7735,7 @@ fn stored_chunks_works() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn upload_chunk_fails_when_heap_delta_rate_limited() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 

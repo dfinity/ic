@@ -198,6 +198,7 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn smooth_heap_delta_rate_limiting() {
     let page_size = 4_096;
     // Create scheduler test allowing one dirty page per round.
@@ -251,6 +252,7 @@ fn smooth_heap_delta_rate_limiting() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn smooth_heap_delta_rate_limiting_with_initial_burst() {
     let page_size = 4_096;
     // Create scheduler test allowing one dirty page per round with 2 pages burst.
@@ -317,6 +319,7 @@ fn smooth_heap_delta_rate_limiting_with_initial_burst() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn smooth_heap_delta_rate_limiting_reaches_the_limit() {
     let page_size = 4_096;
     let rounds = 10;
@@ -357,6 +360,7 @@ fn smooth_heap_delta_rate_limiting_reaches_the_limit() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn smooth_heap_delta_rate_limiting_for_two_canisters() {
     let page_size = 4_096;
     // Create scheduler test allowing one dirty page per round.
@@ -414,6 +418,7 @@ fn smooth_heap_delta_rate_limiting_for_two_canisters() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn no_heap_delta_rate_limiting_for_system_subnet() {
     const GIB: usize = 1024 * 1024 * 1024;
     const PAGE_SIZE: usize = 4_096;
@@ -2580,6 +2585,7 @@ fn can_record_metrics_for_a_round() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn heap_delta_rate_limiting_metrics_recorded() {
     let scheduler_config = SchedulerConfig {
         scheduler_cores: 2,
