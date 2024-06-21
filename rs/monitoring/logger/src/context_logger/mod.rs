@@ -116,7 +116,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::context_logger::{ContextLogger, LogMetadata, Logger};
+    use crate::*;
 
     /// A context type used for testing purposes
     #[derive(Clone, Debug, Default, PartialEq)]

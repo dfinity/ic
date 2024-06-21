@@ -28,7 +28,7 @@ use ic_backup::{
     config::{ColdStorage, Config, SubnetConfig},
 };
 use ic_base_types::SubnetId;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
 use ic_recovery::file_sync_helper::{download_binary, write_file};
 use ic_registry_subnet_type::SubnetType;
 use ic_tests::{
@@ -44,7 +44,7 @@ use ic_tests::{
             generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
             wait_until_authentication_is_granted, AuthMean,
         },
-        subnet_recovery::{enable_ecdsa_on_subnet, run_ecdsa_signature_test},
+        subnet_recovery::{enable_chain_key_on_subnet, run_chain_key_signature_test},
         upgrade::{
             assert_assigned_replica_version, bless_public_replica_version,
             deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
@@ -165,17 +165,20 @@ pub fn test(env: TestEnv) {
         &agent,
         nns_node.effective_canister_id(),
     ));
-    let public_keys = enable_ecdsa_on_subnet(
+    let public_keys = enable_chain_key_on_subnet(
         &nns_node,
         &nns_canister,
         env.topology_snapshot().root_subnet_id(),
         None,
-        vec![make_key(KEY_ID1), make_key(KEY_ID2)],
+        vec![
+            MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)),
+            MasterPublicKeyId::Ecdsa(make_key(KEY_ID2)),
+        ],
         &log,
     );
 
     for (key_id, public_key) in public_keys {
-        run_ecdsa_signature_test(&nns_canister, &log, key_id, public_key);
+        run_chain_key_signature_test(&nns_canister, &log, &key_id, public_key);
     }
 
     info!(log, "Install universal canister");

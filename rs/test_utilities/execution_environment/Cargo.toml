@@ -37,4 +37,5 @@ maplit = "1.0.2"
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
+tokio = { workspace = true }
 wat = "1.0.52"

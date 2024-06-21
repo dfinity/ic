@@ -30,7 +30,7 @@ ic-nns-governance = { path = "../governance" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 libsecp256k1 = "0.7.0"
 prost = { workspace = true }

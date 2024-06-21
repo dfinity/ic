@@ -6,7 +6,7 @@ use crate::common::rest::{
     RawSubmitIngressResult, RawSubnetId, RawTime, RawVerifyCanisterSigArg, RawWasmResult, SubnetId,
     Topology,
 };
-use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
+use crate::{CallError, PocketIcBuilder, UserError, WasmResult, DEFAULT_MAX_REQUEST_TIME_MS};
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
@@ -26,8 +26,6 @@ use tracing::{debug, instrument, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 
-// how long a get/post request may retry or poll
-const MAX_REQUEST_TIME_MS: u64 = 300_000;
 // wait time between polling requests
 const POLLING_PERIOD_MS: u64 = 10;
 
@@ -57,6 +55,8 @@ const INSTALL_CODE_CHUNK_SIZE: usize = 1 << 20; // 1 MiB
 pub struct PocketIc {
     /// The unique ID of this PocketIC instance.
     pub instance_id: InstanceId,
+    // how long a get/post request may retry or poll
+    max_request_time_ms: Option<u64>,
     http_gateway: Option<HttpGatewayInfo>,
     topology: Topology,
     server_url: Url,
@@ -78,7 +78,18 @@ impl PocketIc {
     /// The server is started if it's not already running.
     pub async fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_config_and_server_url(config, server_url).await
+        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS)).await
+    }
+
+    /// Creates a new PocketIC instance with the specified subnet config and max request duration in milliseconds
+    /// (`None` means that there is no timeout).
+    /// The server is started if it's not already running.
+    pub async fn from_config_and_max_request_time(
+        config: impl Into<ExtendedSubnetConfigSet>,
+        max_request_time_ms: Option<u64>,
+    ) -> Self {
+        let server_url = crate::start_or_reuse_server();
+        Self::from_components(config, server_url, max_request_time_ms).await
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and server url.
@@ -86,6 +97,14 @@ impl PocketIc {
     pub async fn from_config_and_server_url(
         config: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
+    ) -> Self {
+        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS)).await
+    }
+
+    pub(crate) async fn from_components(
+        config: impl Into<ExtendedSubnetConfigSet>,
+        server_url: Url,
+        max_request_time_ms: Option<u64>,
     ) -> Self {
         let config = config.into();
         config.validate().unwrap();
@@ -114,6 +133,7 @@ impl PocketIc {
 
         Self {
             instance_id,
+            max_request_time_ms,
             http_gateway: None,
             topology,
             server_url,
@@ -928,8 +948,10 @@ impl PocketIc {
                     )
                 }
             }
-            if start.elapsed().unwrap() > Duration::from_millis(MAX_REQUEST_TIME_MS) {
-                panic!("'get' request to PocketIC server timed out.");
+            if let Some(max_request_time_ms) = self.max_request_time_ms {
+                if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms) {
+                    panic!("'get' request to PocketIC server timed out.");
+                }
             }
             std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
         }
@@ -993,14 +1015,19 @@ impl PocketIc {
                                 );
                             }
                         }
-                        if start.elapsed().unwrap() > Duration::from_millis(MAX_REQUEST_TIME_MS) {
-                            panic!("'post' request to PocketIC server timed out.");
+                        if let Some(max_request_time_ms) = self.max_request_time_ms {
+                            if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms)
+                            {
+                                panic!("'post' request to PocketIC server timed out.");
+                            }
                         }
                     }
                 }
             }
-            if start.elapsed().unwrap() > Duration::from_millis(MAX_REQUEST_TIME_MS) {
-                panic!("'post' request to PocketIC server timed out.");
+            if let Some(max_request_time_ms) = self.max_request_time_ms {
+                if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms) {
+                    panic!("'post' request to PocketIC server timed out.");
+                }
             }
             std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
         }

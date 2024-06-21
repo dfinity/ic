@@ -40,7 +40,7 @@ ic-utils = { path = "../utils" }
 ic-base-types = { path = "../types/base_types" }
 rand = { workspace = true }
 slog = { workspace = true }
-slog-scope = "4.1.2"
+slog-scope = { workspace = true }
 tempfile = { workspace = true }
 tonic = { workspace = true }
 tokio = { workspace = true }

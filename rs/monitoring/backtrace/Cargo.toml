@@ -7,6 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 regex = { workspace = true }
 rstack-self = "0.3"

@@ -24,7 +24,7 @@ use crate::driver::test_env_api::{
 };
 use crate::nns::remove_nodes_via_endpoint;
 use crate::tecdsa::{
-    enable_ecdsa_signing, get_public_key_with_logger, get_signature_with_logger, make_key,
+    enable_chain_key_signing, get_public_key_with_logger, get_signature_with_logger, make_key,
 };
 use crate::{
     tecdsa::{verify_signature, KEY_ID1},
@@ -76,13 +76,18 @@ pub fn test(env: TestEnv) {
         .install(nns_node, &env)
         .expect("Could not install NNS canisters");
     let message_hash = vec![0xabu8; 32];
-    let ecdsa_key_id = make_key(KEY_ID1);
-    let key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
+    let key_id = MasterPublicKeyId::Ecdsa(make_key(KEY_ID1));
     let (canister_id, public_key) = block_on(async {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         info!(log, "Enable ECDSA signing");
-        enable_ecdsa_signing(&governance, nns_subnet.subnet_id, vec![ecdsa_key_id], &log).await;
+        enable_chain_key_signing(
+            &governance,
+            nns_subnet.subnet_id,
+            vec![key_id.clone()],
+            &log,
+        )
+        .await;
         let msg_can = MessageCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
         info!(log, "Getting public key");
         let public_key = get_public_key_with_logger(&key_id, &msg_can, &log)

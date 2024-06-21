@@ -41,7 +41,7 @@ ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 maplit = "1.0.2"
 num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }

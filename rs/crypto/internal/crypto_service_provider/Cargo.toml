@@ -79,12 +79,12 @@ ic-test-utilities-compare-dirs = { path = "../../../test_utilities/compare_dirs"
 ic-test-utilities-in-memory-logger = { path = "../../../test_utilities/in_memory_logger" }
 ic-test-utilities-time = { path = "../../../test_utilities/time" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 num_cpus = "1.16"
 mockall = { workspace = true }
 proptest = "1.0"
 proptest-derive = "0.3.0"
 rsa = "0.9"
-slog-async = { version = "2.5", features = ["nested-values"] }
+slog-async = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

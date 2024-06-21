@@ -33,7 +33,9 @@ use ic_types::{
     batch::RawQueryStats,
     messages::{CallbackId, Ingress, Request, RequestMetadata, RequestOrResponse},
     nominal_cycles::NominalCycles,
-    xnet::{StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue},
+    xnet::{
+        RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
+    },
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NodeId, NumBytes,
     PrincipalId, SubnetId, Time,
 };
@@ -815,13 +817,13 @@ prop_compose! {
         sig_start in 0..10000u64,
         sigs in prop::collection::btree_set(arbitrary::stream_index(100 + max_signal_count as u64), min_signal_count..=max_signal_count),
         sig_end_delta in 0..10u64,
-    ) -> (StreamIndex, VecDeque<StreamIndex>) {
+    ) -> (StreamIndex, VecDeque<RejectSignal>) {
         let mut reject_signals = VecDeque::with_capacity(sigs.len());
         let sig_start = sig_start.into();
         for s in sigs {
-            reject_signals.push_back(s + sig_start);
+            reject_signals.push_back(RejectSignal::new(RejectReason::CanisterMigrating, s + sig_start));
         }
-        let sig_end = sig_start + reject_signals.back().unwrap_or(&0.into()).increment() + sig_end_delta.into();
+        let sig_end = sig_start + reject_signals.back().map(|s| s.index).unwrap_or(0.into()).increment() + sig_end_delta.into();
         (sig_end, reject_signals)
     }
 }
