@@ -26,7 +26,10 @@ use ic_types::ReplicaVersion;
 use ic_types_test_utils::ids::subnet_test_id;
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
 use registry_canister::mutations::{
-    do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
+    do_create_subnet::{
+        CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest, InitialChainKeyConfig,
+        InitialChainKeyConfigInternal,
+    },
     do_update_subnet::UpdateSubnetPayload,
 };
 use slog::{debug, info, Logger};
@@ -542,13 +545,20 @@ pub(crate) async fn create_new_subnet_with_keys(
         max_number_of_canisters: 4,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
-        ecdsa_config: Some(EcdsaInitialConfig {
-            quadruples_to_create_in_advance: 4,
-            keys,
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        }),
+
+        chain_key_config: Some(InitialChainKeyConfig::from(
+            InitialChainKeyConfigInternal::try_from(EcdsaInitialConfig {
+                quadruples_to_create_in_advance: 4,
+                keys,
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
+            })
+            .unwrap(),
+        )),
+
+        // Deprecated fields
+        ecdsa_config: None,
     };
     execute_create_subnet_proposal(governance, payload, logger).await;
 }
