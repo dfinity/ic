@@ -23,7 +23,7 @@ jobs:
         if: steps.get-reviewers.outputs.result != '""'
         run: |
           TEAM=${{ steps.get-reviewers.outputs.result }}
-          CHANNEL=$(jq -r ".$TEAM" .github/workflows/team-channels.json)
+          CHANNEL=$(jq -r --arg team "$TEAM" '.[$team]' .github/workflows/team-channels.json)
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
           echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
         env:

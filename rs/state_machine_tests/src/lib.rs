@@ -76,7 +76,7 @@ use ic_replicated_state::{
     canister_state::{system_state::CyclesUseCase, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES},
     metadata_state::subnet_call_context_manager::SignWithEcdsaContext,
     page_map::Buffer,
-    Memory, PageMap, ReplicatedState,
+    CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
 };
 use ic_state_layout::{CheckpointLayout, RwPolicy};
 use ic_state_manager::StateManagerImpl;
@@ -1883,11 +1883,20 @@ impl StateMachine {
             );
         }
 
+        // A `CheckpointLoadingMetrics` that panics on broken soft invariants.
+        struct StrictCheckpointLoadingMetrics;
+        impl CheckpointLoadingMetrics for StrictCheckpointLoadingMetrics {
+            fn observe_broken_soft_invariant(&self, msg: String) {
+                panic!("{}", msg);
+            }
+        }
+
         let canister_state = ic_state_manager::checkpoint::load_canister_state(
             &tip_canister_layout,
             &canister_id,
             ic_types::Height::new(0),
             self.state_manager.get_fd_factory(),
+            &StrictCheckpointLoadingMetrics,
         )
         .unwrap_or_else(|e| {
             panic!(

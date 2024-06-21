@@ -327,7 +327,7 @@ impl TryFrom<(pb_queues::CanisterQueue, Context)> for CanisterQueue {
 
         let res = Self {
             queue,
-            capacity: item.capacity as usize,
+            capacity: super::DEFAULT_QUEUE_CAPACITY,
             request_slots,
             response_slots: item.response_slots as usize,
         };

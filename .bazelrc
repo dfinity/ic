@@ -64,8 +64,6 @@ build --workspace_status_command=$(pwd)/bazel/workspace_status.sh
 
 build --experimental_repository_downloader_retries=3 # https://bazel.build/reference/command-line-reference#flag--experimental_repository_downloader_retries
 
-build --cxxopt='-std=c++17'
-
 build --flag_alias=ic_version=//bazel:ic_version
 build --flag_alias=ic_version_rc_only=//bazel:ic_version_rc_only
 build --flag_alias=s3_endpoint=//gitlab-ci/src/artifacts:s3_endpoint

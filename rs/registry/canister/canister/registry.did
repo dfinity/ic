@@ -119,8 +119,6 @@ type DataCenterRecord = record {
   owner : text;
 };
 
-type DeleteSubnetPayload = record { subnet_id : opt principal };
-
 type DeployGuestosToAllSubnetNodesPayload = record {
   subnet_id : principal;
   replica_version_id : text;

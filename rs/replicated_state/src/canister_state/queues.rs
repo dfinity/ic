@@ -6,7 +6,7 @@ mod tests;
 use self::message_pool::{Context, MessagePool};
 use self::queue::{CanisterQueue, IngressQueue};
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
-use crate::{CanisterState, InputQueueType, NextInputQueue, StateError};
+use crate::{CanisterState, CheckpointLoadingMetrics, InputQueueType, NextInputQueue, StateError};
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
 use ic_management_canister_types::IC_00;
@@ -944,7 +944,7 @@ impl CanisterQueues {
         true
     }
 
-    /// Helper function to concisely validate `CanisterQueues` input schedules
+    /// Helper function to concisely validate `CanisterQueues`' input schedules
     /// during deserialization; or in debug builds, by writing
     /// `debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters)`.
     ///
@@ -1213,9 +1213,11 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
     }
 }
 
-impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
+impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for CanisterQueues {
     type Error = ProxyDecodeError;
-    fn try_from(item: pb_queues::CanisterQueues) -> Result<Self, Self::Error> {
+    fn try_from(
+        (item, metrics): (pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics),
+    ) -> Result<Self, Self::Error> {
         let mut canister_queues = BTreeMap::new();
         let mut pool = MessagePool::default();
 
@@ -1236,7 +1238,6 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
                     item.output_queues.len()
                 )));
             }
-
             for (ie, oe) in item
                 .input_queues
                 .into_iter()
@@ -1244,7 +1245,7 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
             {
                 if ie.canister_id != oe.canister_id {
                     return Err(ProxyDecodeError::Other(format!(
-                        "Mismatched input {:?} and output {:?} queues",
+                        "CanisterQueues: Mismatched input {:?} and output {:?} queue entries",
                         ie.canister_id, oe.canister_id
                     )));
                 }
@@ -1256,7 +1257,13 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
                     try_from_option_field(oe.queue, "QueueEntry::queue")?;
                 let iq = (original_iq, &mut pool).try_into()?;
                 let oq = (original_oq, &mut pool).try_into()?;
-                canister_queues.insert(canister_id, (iq, oq));
+
+                if canister_queues.insert(canister_id, (iq, oq)).is_some() {
+                    metrics.observe_broken_soft_invariant(format!(
+                        "CanisterQueues: Duplicate queues for canister {}",
+                        canister_id
+                    ));
+                }
             }
         } else {
             pool = item.pool.unwrap_or_default().try_into()?;
@@ -1277,28 +1284,27 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
                         "CanisterQueuePair::output_queue",
                     )?;
 
-                    iq.iter().chain(oq.iter()).try_for_each(|queue_item| {
+                    iq.iter().chain(oq.iter()).for_each(|queue_item| {
                         if pool.get(queue_item.id()).is_some()
                             && !enqueued_pool_messages.insert(queue_item.id())
                         {
-                            return Err(ProxyDecodeError::Other(format!(
+                            metrics.observe_broken_soft_invariant(format!(
                                 "CanisterQueues: Message {:?} enqueued more than once",
                                 queue_item.id()
-                            )));
+                            ));
                         }
-                        Ok(())
-                    })?;
+                    });
 
                     Ok((canister_id, (iq, oq)))
                 })
                 .collect::<Result<_, Self::Error>>()?;
 
             if enqueued_pool_messages.len() != pool.len() {
-                return Err(ProxyDecodeError::Other(format!(
+                metrics.observe_broken_soft_invariant(format!(
                     "CanisterQueues: Pool holds {} messages, but only {} of them are enqueued",
                     pool.len(),
                     enqueued_pool_messages.len()
-                )));
+                ));
             }
         }
 
@@ -1332,13 +1338,14 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
 
         // Safe to call with invalid `own_canister_id` and empty `local_canisters`, as
         // the validation logic allows for deleted local canisters.
-        queues
-            .schedules_ok(
-                &CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
-                &BTreeMap::new(),
-            )
-            .map(|()| queues)
-            .map_err(ProxyDecodeError::Other)
+        if let Err(e) = queues.schedules_ok(
+            &CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
+            &BTreeMap::new(),
+        ) {
+            metrics.observe_broken_soft_invariant(e.to_string());
+        }
+
+        Ok(queues)
     }
 }
 

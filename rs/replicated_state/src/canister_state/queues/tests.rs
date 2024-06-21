@@ -16,6 +16,8 @@ use ic_types::Cycles;
 use maplit::{btreemap, btreeset};
 use message_pool::REQUEST_LIFETIME;
 use proptest::prelude::*;
+use queue::{InputQueue, OutputQueue};
+use std::cell::RefCell;
 use std::{collections::BTreeSet, convert::TryInto, time::Duration};
 
 /// Wrapper for `CanisterQueues` for tests using only one pair of
@@ -846,6 +848,20 @@ fn test_output_into_iter() {
     assert!(queues.pool.len() == 0);
 }
 
+struct StrictMetrics;
+impl CheckpointLoadingMetrics for StrictMetrics {
+    fn observe_broken_soft_invariant(&self, msg: String) {
+        panic!("{}", msg);
+    }
+}
+
+struct CountingMetrics(RefCell<usize>);
+impl CheckpointLoadingMetrics for CountingMetrics {
+    fn observe_broken_soft_invariant(&self, _: String) {
+        *self.0.borrow_mut() += 1;
+    }
+}
+
 /// Tests that an encode-decode roundtrip yields a result equal to the original
 /// (and that the stats of an organically constructed `CanisterQueues` match
 /// those of a deserialized one).
@@ -858,7 +874,7 @@ fn encode_roundtrip() {
     queues
         .push_input(
             RequestBuilder::default().sender(this).build().into(),
-            InputQueueType::RemoteSubnet,
+            InputQueueType::LocalSubnet,
         )
         .unwrap();
     queues
@@ -873,7 +889,9 @@ fn encode_roundtrip() {
     queues.push_ingress(IngressBuilder::default().receiver(this).build());
 
     let encoded: pb_queues::CanisterQueues = (&queues).into();
-    let decoded = encoded.try_into().unwrap();
+    let decoded = (encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)
+        .try_into()
+        .unwrap();
 
     assert_eq!(queues, decoded);
 }
@@ -915,14 +933,230 @@ fn encode_non_default_pool() {
 
     // And a roundtrip encode preserves the `CanisterQueues` unaltered.
     let encoded: pb_queues::CanisterQueues = (&queues).into();
-    let decoded = encoded.try_into().unwrap();
+    let decoded = (encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)
+        .try_into()
+        .unwrap();
     assert_eq!(queues, decoded);
+}
+
+/// Tests decoding a `CanisterQueues` with an invalid input schedule.
+#[test]
+fn decode_invalid_input_schedule() {
+    let mut queues = CanisterQueues::default();
+
+    let this = canister_test_id(13);
+    let other = canister_test_id(14);
+    queues
+        .push_input(
+            RequestBuilder::default().sender(this).build().into(),
+            InputQueueType::LocalSubnet,
+        )
+        .unwrap();
+    queues
+        .push_input(
+            RequestBuilder::default().sender(other).build().into(),
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
+    queues.push_ingress(IngressBuilder::default().receiver(this).build());
+
+    let mut encoded: pb_queues::CanisterQueues = (&queues).into();
+    // Wipe the input schedule.
+    encoded.local_subnet_input_schedule.clear();
+
+    // Decoding should succeed.
+    let metrics = CountingMetrics(RefCell::new(0));
+    let mut decoded =
+        CanisterQueues::try_from((encoded, &metrics as &dyn CheckpointLoadingMetrics)).unwrap();
+    // Even though the input schedules are not valid.
+    assert_matches!(
+        decoded.schedules_ok(
+            &CanisterId::unchecked_from_principal(PrincipalId::new_anonymous()),
+            &BTreeMap::new(),
+        ),
+        Err(_)
+    );
+    assert_eq!(1, *metrics.0.borrow());
+
+    // If we replace the input schedules with the original ones, the rest should be
+    // equal.
+    decoded
+        .local_subnet_input_schedule
+        .clone_from(&queues.local_subnet_input_schedule);
+    decoded
+        .remote_subnet_input_schedule
+        .clone_from(&queues.remote_subnet_input_schedule);
+    assert_eq!(queues, decoded);
+}
+
+/// Tests decoding `CanisterQueues` from `input_queues` + `output_queues`
+/// (instead of `canister_queues` + `pool`).
+#[test]
+fn decode_backward_compatibility() {
+    let local_canister = canister_test_id(13);
+    let remote_canister = canister_test_id(14);
+
+    let mut queues_proto = pb_queues::CanisterQueues::default();
+    let mut expected_queues = CanisterQueues::default();
+
+    let req = RequestBuilder::default()
+        .sender(local_canister)
+        .receiver(local_canister)
+        .build();
+    let rep = ResponseBuilder::default()
+        .originator(local_canister)
+        .respondent(local_canister)
+        .build();
+    let t1 = Time::from_secs_since_unix_epoch(12345).unwrap();
+    let t2 = t1 + Duration::from_secs(1);
+    let d1 = t1 + REQUEST_LIFETIME;
+    let d2 = t2 + REQUEST_LIFETIME;
+
+    //
+    // `local_canister`'s queues.
+    //
+
+    // An `InputQueue` with a request, a response and a reserved slot.
+    let mut iq1 = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
+    iq1.push(req.clone().into()).unwrap();
+    iq1.reserve_slot().unwrap();
+    iq1.push(rep.clone().into()).unwrap();
+    iq1.reserve_slot().unwrap();
+
+    // Expected input queue.
+    let mut expected_iq1 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
+    // Enqueue a request and a response.
+    expected_iq1.push_request(expected_queues.pool.insert_inbound(req.clone().into()));
+    expected_iq1.try_reserve_response_slot().unwrap();
+    expected_iq1.push_response(expected_queues.pool.insert_inbound(rep.clone().into()));
+    // Make an extra response reservation.
+    expected_iq1.try_reserve_response_slot().unwrap();
+
+    // An output queue with a response, a timed out request, a non-timed out request
+    // and a reserved slot.
+    let mut oq1 = OutputQueue::new(DEFAULT_QUEUE_CAPACITY);
+    oq1.reserve_slot().unwrap();
+    oq1.push_response(rep.clone().into());
+    oq1.push_request(req.clone().into(), d1).unwrap();
+    oq1.time_out_requests(d2).count();
+    oq1.push_request(req.clone().into(), d2).unwrap();
+    oq1.reserve_slot().unwrap();
+
+    // Expected output queue. The timed out request is gone.
+    let mut expected_oq1 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
+    expected_oq1.try_reserve_response_slot().unwrap();
+    expected_oq1.push_response(
+        expected_queues
+            .pool
+            .insert_outbound_response(rep.clone().into()),
+    );
+    expected_oq1.push_request(
+        expected_queues
+            .pool
+            .insert_outbound_request(req.clone().into(), t2),
+    );
+    expected_oq1.try_reserve_response_slot().unwrap();
+
+    queues_proto.input_queues.push(pb_queues::QueueEntry {
+        canister_id: Some(local_canister.into()),
+        queue: Some((&iq1).into()),
+    });
+    queues_proto.output_queues.push(pb_queues::QueueEntry {
+        canister_id: Some(local_canister.into()),
+        queue: Some((&oq1).into()),
+    });
+    queues_proto
+        .local_subnet_input_schedule
+        .push(local_canister.into());
+    queues_proto.guaranteed_response_memory_reservations += 2;
+    expected_queues
+        .canister_queues
+        .insert(local_canister, (expected_iq1, expected_oq1));
+    expected_queues
+        .local_subnet_input_schedule
+        .push_back(local_canister);
+
+    //
+    // `remote_canister`'s queues.
+    //
+
+    // Input queue with a reserved slot.
+    let mut iq2 = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
+    iq2.reserve_slot().unwrap();
+
+    // Expected input queue.
+    let mut expected_iq2 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
+    expected_iq2.try_reserve_response_slot().unwrap();
+
+    // Empty output queue.
+    let oq2 = OutputQueue::new(DEFAULT_QUEUE_CAPACITY);
+
+    queues_proto.input_queues.push(pb_queues::QueueEntry {
+        canister_id: Some(remote_canister.into()),
+        queue: Some((&iq2).into()),
+    });
+    queues_proto.output_queues.push(pb_queues::QueueEntry {
+        canister_id: Some(remote_canister.into()),
+        queue: Some((&oq2).into()),
+    });
+    queues_proto.guaranteed_response_memory_reservations += 1;
+    expected_queues.canister_queues.insert(
+        remote_canister,
+        (expected_iq2, CanisterQueue::new(DEFAULT_QUEUE_CAPACITY)),
+    );
+
+    //
+    // Adjust stats.
+    //
+
+    expected_queues.queue_stats = CanisterQueues::calculate_queue_stats(
+        &expected_queues.canister_queues,
+        queues_proto.guaranteed_response_memory_reservations as usize,
+    );
+
+    let queues = (
+        queues_proto,
+        &StrictMetrics as &dyn CheckpointLoadingMetrics,
+    )
+        .try_into()
+        .unwrap();
+    assert_eq!(expected_queues, queues);
 }
 
 fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, requests: &Vec<Request>) {
     for req in requests {
         queues.push_input(req.clone().into(), input_type).unwrap()
     }
+}
+
+fn request(deadline: CoarseTime) -> Request {
+    request_with_payload(13, deadline)
+}
+
+fn request_with_payload(payload_size: usize, deadline: CoarseTime) -> Request {
+    RequestBuilder::new()
+        .sender(canister_test_id(13))
+        .receiver(canister_test_id(13))
+        .method_payload(vec![13; payload_size])
+        .deadline(deadline)
+        .build()
+}
+
+fn response(deadline: CoarseTime) -> Response {
+    response_with_payload(13, deadline)
+}
+
+fn response_with_payload(payload_size: usize, deadline: CoarseTime) -> Response {
+    ResponseBuilder::new()
+        .respondent(canister_test_id(13))
+        .originator(canister_test_id(13))
+        .response_payload(Payload::Data(vec![13; payload_size]))
+        .deadline(deadline)
+        .build()
+}
+
+fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
+    CoarseTime::from_secs_since_unix_epoch(seconds_since_unix_epoch)
 }
 
 #[test]
@@ -1041,36 +1275,6 @@ fn test_skip_canister_input() {
             .len(),
         2
     );
-}
-
-fn request(deadline: CoarseTime) -> Request {
-    request_with_payload(13, deadline)
-}
-
-fn request_with_payload(payload_size: usize, deadline: CoarseTime) -> Request {
-    RequestBuilder::new()
-        .sender(canister_test_id(13))
-        .receiver(canister_test_id(13))
-        .method_payload(vec![13; payload_size])
-        .deadline(deadline)
-        .build()
-}
-
-fn response(deadline: CoarseTime) -> Response {
-    response_with_payload(13, deadline)
-}
-
-fn response_with_payload(payload_size: usize, deadline: CoarseTime) -> Response {
-    ResponseBuilder::new()
-        .respondent(canister_test_id(13))
-        .originator(canister_test_id(13))
-        .response_payload(Payload::Data(vec![13; payload_size]))
-        .deadline(deadline)
-        .build()
-}
-
-fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
-    CoarseTime::from_secs_since_unix_epoch(seconds_since_unix_epoch)
 }
 
 #[test]

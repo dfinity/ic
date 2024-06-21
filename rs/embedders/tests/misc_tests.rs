@@ -140,7 +140,6 @@ fn default_max_size() -> NumBytes {
 }
 
 #[test]
-#[should_panic(expected = "too large")]
 fn test_decode_large_compressed_module() {
     // Try decoding 101MB of zeros
     //
@@ -152,11 +151,12 @@ fn test_decode_large_compressed_module() {
     // dd if=/dev/zero bs=1024 count=$((500 * 1024)) | gzip -9 > zeroes.gz
     //
     // and replace the zeroes.gz file used in the test.
-    decode_wasm(
+    let err = decode_wasm(
         default_max_size(),
         Arc::new(compressed_test_contents("zeros.gz")),
     )
-    .unwrap();
+    .unwrap_err();
+    assert_matches::assert_matches!(err, WasmValidationError::ModuleTooLarge { .. });
 }
 
 #[test]
