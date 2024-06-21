@@ -95,6 +95,7 @@ type CreateSubnetPayload = record {
   max_ingress_messages_per_block : nat64;
   max_number_of_canisters : nat64;
   ecdsa_config : opt EcdsaInitialConfig;
+  chain_key_config : opt InitialChainKeyConfig;
   gossip_max_artifact_streams_per_peer : nat32;
   replica_version_id : text;
   gossip_max_duplicity : nat32;
@@ -127,6 +128,29 @@ type DeployGuestosToAllSubnetNodesPayload = record {
 type DeployGuestosToAllUnassignedNodesPayload = record {
   elected_replica_version : text;
 };
+
+type InitialChainKeyConfig = record {
+  key_configs : vec KeyConfigRequest;
+  signature_request_timeout_ns : opt nat64;
+  idkg_key_rotation_period_ms : opt nat64;
+};
+
+type KeyConfigRequest = record {
+  key_config : opt KeyConfig;
+  subnet_id : opt principal;
+};
+
+type KeyConfig = record {
+  key_id : opt MasterPublicKeyId;
+  pre_signatures_to_create_in_advance : opt nat32;
+  max_queue_size : opt nat32;
+};
+
+type MasterPublicKeyId = variant { Schnorr : SchnorrKeyId; Ecdsa : EcdsaKeyId };
+
+type SchnorrKeyId = record { algorithm : SchnorrAlgorithm; name : text };
+
+type SchnorrAlgorithm = variant { ed25519; bip340secp256k1 };
 
 type EcdsaConfig = record {
   quadruples_to_create_in_advance : nat32;
@@ -387,18 +411,6 @@ type ChainKeyConfig = record {
   signature_request_timeout_ns : opt nat64;
   idkg_key_rotation_period_ms : opt nat64;
 };
-
-type KeyConfig = record {
-  max_queue_size : opt nat32;
-  key_id : opt MasterPublicKeyId;
-  pre_signatures_to_create_in_advance : opt nat32;
-};
-
-type MasterPublicKeyId = variant { Schnorr : SchnorrKeyId; Ecdsa : EcdsaKeyId };
-
-type SchnorrKeyId = record { algorithm : SchnorrAlgorithm; name : text };
-
-type SchnorrAlgorithm = variant { ed25519; bip340secp256k1 };
 
 type UpdateUnassignedNodesConfigPayload = record {
   replica_version : opt text;

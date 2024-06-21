@@ -1288,6 +1288,7 @@ impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             ssh_backup_access: self.ssh_backup_access.clone(),
             max_number_of_canisters: self.max_number_of_canisters.unwrap_or(0),
             ecdsa_config,
+            chain_key_config: None, // TODO[NNS1-3102]
         }
     }
 }
