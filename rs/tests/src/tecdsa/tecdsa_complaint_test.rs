@@ -1,7 +1,7 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use super::{enable_ecdsa_signing, DKG_INTERVAL};
+use super::{enable_chain_key_signing, DKG_INTERVAL};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
@@ -69,9 +69,14 @@ pub fn test(env: TestEnv) {
             nns_honest_node.effective_canister_id(),
         );
         let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-        let ecdsa_key_id = make_key(KEY_ID1);
-        let key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
-        enable_ecdsa_signing(&governance, nns_subnet.subnet_id, vec![ecdsa_key_id], &log).await;
+        let key_id = MasterPublicKeyId::Ecdsa(make_key(KEY_ID1));
+        enable_chain_key_signing(
+            &governance,
+            nns_subnet.subnet_id,
+            vec![key_id.clone()],
+            &log,
+        )
+        .await;
 
         let msg_can =
             MessageCanister::new(&nns_agent, nns_honest_node.effective_canister_id()).await;
