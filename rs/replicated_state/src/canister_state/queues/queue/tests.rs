@@ -1,3 +1,5 @@
+use crate::canister_state::DEFAULT_QUEUE_CAPACITY;
+
 use super::super::message_pool::tests::*;
 use super::super::message_pool::Class;
 use super::*;
@@ -294,8 +296,7 @@ proptest! {
         ),
         reserved_slots in 0..3
     ) {
-        // Create a queue with large enough capacity.
-        let mut queue = CanisterQueue::new(23);
+        let mut queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
 
         // Push all references onto the queue.
         for reference in references.iter() {
@@ -326,7 +327,7 @@ proptest! {
 #[test]
 fn decode_inbound_message_in_output_queue_fails() {
     // Queue with an inbound request.
-    let mut queue = CanisterQueue::new(10);
+    let mut queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
     queue.push_request(new_request_message_id(13, Class::BestEffort));
     let encoded: pb_queues::CanisterQueue = (&queue).into();
 
@@ -341,9 +342,9 @@ fn decode_inbound_message_in_output_queue_fails() {
 }
 
 #[test]
-fn decode_with_invalid_response_slots_or_capacity_fails() {
+fn decode_with_invalid_response_slots_fails() {
     // Queue with two inbound responses.
-    let mut queue = CanisterQueue::new(10);
+    let mut queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
     queue.try_reserve_response_slot().unwrap();
     queue.push_response(new_response_message_id(13, Class::BestEffort));
     queue.try_reserve_response_slot().unwrap();
@@ -361,14 +362,6 @@ fn decode_with_invalid_response_slots_or_capacity_fails() {
     too_few_response_slots.response_slots = 1;
     assert_matches!(
         CanisterQueue::try_from((too_few_response_slots.clone(), Context::Inbound)),
-        Err(ProxyDecodeError::Other(_))
-    );
-
-    // Or with a too low `capacity` value.
-    let mut too_low_capacity = encoded;
-    too_low_capacity.capacity = 1;
-    assert_matches!(
-        CanisterQueue::try_from((too_low_capacity.clone(), Context::Inbound)),
         Err(ProxyDecodeError::Other(_))
     );
 }
