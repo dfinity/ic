@@ -89,6 +89,7 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
             purge!(random_tape_share, RandomTapeShare);
             purge!(catch_up_package, CatchUpPackage);
             purge!(catch_up_package_share, CatchUpPackageShare);
+            purge!(equivocation_proof, EquivocationProof);
         }
 
         purged
@@ -265,6 +266,9 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> PoolSection<T>
     fn catch_up_package_share(&self) -> &dyn HeightIndexedPool<CatchUpPackageShare> {
         self
     }
+    fn equivocation_proof(&self) -> &dyn HeightIndexedPool<EquivocationProof> {
+        self
+    }
 }
 
 impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> MutablePoolSection<T>
@@ -331,7 +335,7 @@ pub mod test {
             || {
                 let mut pool = InMemoryPoolSection::new();
                 let min = Height::from(1);
-                let max = Height::from(std::u64::MAX);
+                let max = Height::from(u64::MAX);
                 pool.insert(make_artifact(fake_random_beacon(min)));
                 pool.insert(make_artifact(fake_random_beacon(max)));
 

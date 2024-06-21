@@ -554,7 +554,7 @@ dependencies = [
  "anstyle",
  "bstr 1.8.0",
  "doc-comment",
- "predicates 3.0.4",
+ "predicates",
  "predicates-core",
  "predicates-tree",
  "wait-timeout",
@@ -1316,7 +1316,7 @@ dependencies = [
  "indoc",
  "mockall",
  "opentelemetry 0.23.0",
- "opentelemetry-prometheus",
+ "opentelemetry-prometheus 0.16.0",
  "opentelemetry_sdk 0.23.0",
  "prometheus",
  "serde",
@@ -1382,7 +1382,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "542f33a8835a0884b006a0c3df3dadd99c0c3f296ed26c2fdc8028e01ad6230c"
 dependencies = [
  "memchr",
- "regex-automata 0.4.3",
+ "regex-automata 0.4.7",
  "serde",
 ]
 
@@ -1650,9 +1650,9 @@ dependencies = [
 
 [[package]]
 name = "canbench-rs"
-version = "0.1.1"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe5d551419a1547b5064111df7bfa6e87818750e7f6df611067a02e63a9cbb31"
+checksum = "53574f268dbe23dc83f891a4751b118a6ba927c8bc92e839ff108f3aaf151aa9"
 dependencies = [
  "canbench-rs-macros",
  "candid",
@@ -1662,9 +1662,9 @@ dependencies = [
 
 [[package]]
 name = "canbench-rs-macros"
-version = "0.1.0"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5acd4a41fd2e7018508f7442d7ae90957a913c6fa0e4b767e5be9a8cc5848c8"
+checksum = "d454906c77138a3802a7a680259cca7c006e9b268ba6905f7f4f2b8b74293fa4"
 dependencies = [
  "proc-macro2 1.0.75",
  "quote 1.0.35",
@@ -1874,9 +1874,8 @@ dependencies = [
  "instant-acme",
  "leb128",
  "mockall",
- "opentelemetry 0.23.0",
- "opentelemetry-prometheus",
- "opentelemetry_sdk 0.23.0",
+ "opentelemetry 0.20.0",
+ "opentelemetry-prometheus 0.13.0",
  "pem 1.1.1",
  "prometheus",
  "rcgen",
@@ -1907,7 +1906,7 @@ dependencies = [
  "mockall",
  "nix 0.24.3",
  "opentelemetry 0.23.0",
- "opentelemetry-prometheus",
+ "opentelemetry-prometheus 0.16.0",
  "opentelemetry_sdk 0.23.0",
  "prometheus",
  "reqwest 0.12.4",
@@ -2735,9 +2734,9 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "4.1.2"
+version = "4.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a677b8922c94e01bdbb12126b0bc852f00447528dee1782229af9c720c3f348"
+checksum = "97fb8b7c4503de7d6ae7b42ab72a5a59857b4c937ec27a3d4539dba95b5ab2be"
 dependencies = [
  "cfg-if 1.0.0",
  "cpufeatures",
@@ -2745,7 +2744,6 @@ dependencies = [
  "digest 0.10.7",
  "fiat-crypto",
  "group 0.13.0",
- "platforms",
  "rand_core 0.6.4",
  "rustc_version",
  "subtle",
@@ -3045,7 +3043,7 @@ dependencies = [
  "mockall",
  "nix 0.24.3",
  "opentelemetry 0.23.0",
- "opentelemetry-prometheus",
+ "opentelemetry-prometheus 0.16.0",
  "opentelemetry_sdk 0.23.0",
  "prometheus",
  "reqwest 0.12.4",
@@ -3322,11 +3320,13 @@ dependencies = [
 name = "discower_bowndary"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "arc-swap",
  "async-trait",
  "http 1.1.0",
  "ic-agent",
  "rand 0.8.5",
+ "ring 0.17.8",
  "simple_moving_average",
  "thiserror",
  "tokio",
@@ -3775,6 +3775,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "evm-rpc-client"
+version = "0.9.0"
+dependencies = [
+ "async-trait",
+ "candid",
+ "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ic-cdk 0.13.2",
+ "mockall",
+ "serde",
+ "tokio",
+]
+
+[[package]]
 name = "exec"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3801,6 +3814,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-system-api",
+ "ic-test-utilities",
  "ic-test-utilities-execution-environment",
  "ic-test-utilities-state",
  "ic-test-utilities-time",
@@ -3809,6 +3823,7 @@ dependencies = [
  "ic-wasm-types",
  "lazy_static",
  "tempfile",
+ "tokio",
  "wat",
 ]
 
@@ -3960,9 +3975,9 @@ checksum = "d52a7e408202050813e6f1d9addadcaafef3dca7530c7ddfb005d4081cce6779"
 
 [[package]]
 name = "flate2"
-version = "1.0.28"
+version = "1.0.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46303f565772937ffe1d394a4fac6f411c6013172fadde9dcdb1e147a086940e"
+checksum = "5f54427cfd1c7829e2a139fcefea601bf088ebca651d2bf53ebc600eac295dae"
 dependencies = [
  "crc32fast",
  "miniz_oxide 0.7.1",
@@ -4736,16 +4751,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bfe8eed0a9285ef776bb792479ea3834e8b94e13d615c2f66d03dd50a435a29"
 
 [[package]]
-name = "http-serde"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fb7239a6d49eda628c2dfdd7e982c59b0c3f0fb99ce45c4237f02a520030688"
-dependencies = [
- "http 1.1.0",
- "serde",
-]
-
-[[package]]
 name = "http-types"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4925,9 +4930,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-rustls"
-version = "0.27.1"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "908bb38696d7a037a01ebcc68a00634112ac2bbf8ca74e30a2c3d2f4f021302b"
+checksum = "5ee4be2c948921a1a5320b629c4193916ed787a7f7f293fd3f7f5a6c9de74155"
 dependencies = [
  "futures-util",
  "http 1.1.0",
@@ -5041,7 +5046,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-adapter-metrics"
+name = "ic-adapter-metrics-client"
 version = "0.9.0"
 dependencies = [
  "ic-adapter-metrics-service",
@@ -5331,7 +5336,7 @@ dependencies = [
  "indoc",
  "mockall",
  "opentelemetry 0.23.0",
- "opentelemetry-prometheus",
+ "opentelemetry-prometheus 0.16.0",
  "opentelemetry_sdk 0.23.0",
  "prometheus",
  "serde",
@@ -5418,6 +5423,7 @@ dependencies = [
  "hex",
  "http 0.2.12",
  "http-body 0.4.5",
+ "humantime",
  "hyper 0.14.26",
  "hyper-rustls 0.24.2",
  "ic-base-types",
@@ -5442,6 +5448,7 @@ dependencies = [
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-types",
+ "indoc",
  "instant-acme",
  "jemalloc-ctl",
  "jemallocator",
@@ -5464,6 +5471,8 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "serde_json",
+ "serde_regex",
+ "serde_yaml 0.9.34+deprecated",
  "slog",
  "strum 0.26.2",
  "tempfile",
@@ -5531,7 +5540,7 @@ dependencies = [
 name = "ic-btc-adapter-client"
 version = "0.9.0"
 dependencies = [
- "ic-adapter-metrics",
+ "ic-adapter-metrics-client",
  "ic-async-utils",
  "ic-btc-service",
  "ic-btc-types-internal",
@@ -6290,6 +6299,7 @@ dependencies = [
  "strum 0.26.2",
  "strum_macros 0.26.2",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -6380,13 +6390,6 @@ dependencies = [
 [[package]]
 name = "ic-constants"
 version = "0.9.0"
-
-[[package]]
-name = "ic-context-logger"
-version = "0.9.0"
-dependencies = [
- "slog",
-]
 
 [[package]]
 name = "ic-crypto"
@@ -6779,7 +6782,7 @@ dependencies = [
  "educe",
  "futures",
  "hex",
- "ic-adapter-metrics",
+ "ic-adapter-metrics-client",
  "ic-config",
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
@@ -7036,8 +7039,13 @@ dependencies = [
 name = "ic-crypto-internal-threshold-sig-ecdsa-test-utils"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "ed25519-dalek",
  "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-crypto-sha2",
+ "ic-types",
+ "k256",
+ "p256",
  "rand 0.8.5",
  "schnorr_fun",
  "sha2 0.10.8",
@@ -7885,7 +7893,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-sys",
  "maplit",
- "predicates 3.0.4",
+ "predicates",
  "rand 0.8.5",
  "tempfile",
 ]
@@ -8065,7 +8073,7 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "futures",
- "ic-adapter-metrics",
+ "ic-adapter-metrics-client",
  "ic-async-utils",
  "ic-config",
  "ic-error-types",
@@ -8166,7 +8174,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc-rosetta"
-version = "1.0.2"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "axum 0.7.5",
@@ -8896,7 +8904,6 @@ version = "0.9.0"
 dependencies = [
  "chrono",
  "ic-config",
- "ic-context-logger",
  "ic-protobuf",
  "ic-utils 0.9.0",
  "serde",
@@ -9065,7 +9072,7 @@ name = "ic-metrics"
 version = "0.9.0"
 dependencies = [
  "futures",
- "ic-adapter-metrics",
+ "ic-adapter-metrics-client",
  "ic-logger",
  "libc",
  "procfs 0.9.1",
@@ -10032,12 +10039,10 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum 0.7.5",
- "bincode 1.3.3",
  "bytes",
  "criterion",
  "either",
  "futures",
- "http-serde",
  "ic-async-utils",
  "ic-base-types",
  "ic-crypto-tls-interfaces",
@@ -10046,14 +10051,14 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-p2p-test-utils",
+ "ic-protobuf",
  "ic-test-utilities-logger",
  "ic-types-test-utils",
  "phantom_newtype",
  "prometheus",
+ "prost",
  "quinn",
  "rustls 0.21.12",
- "serde",
- "serde_bytes",
  "slog",
  "socket2 0.5.7",
  "tokio",
@@ -10505,7 +10510,7 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry_sdk 0.23.0",
  "pprof",
- "predicates 3.0.4",
+ "predicates",
  "prometheus",
  "rand 0.8.5",
  "regex",
@@ -10852,6 +10857,7 @@ dependencies = [
  "ic-sns-init",
  "ic-sns-root",
  "ic-sns-wasm",
+ "itertools 0.12.0",
  "json-patch 0.2.7",
  "lazy_static",
  "pretty_assertions",
@@ -11635,6 +11641,7 @@ dependencies = [
  "ic-utils 0.9.0",
  "ic-wasm-types",
  "maplit",
+ "more-asserts",
  "prometheus",
  "serde",
  "serde_bytes",
@@ -11814,6 +11821,7 @@ dependencies = [
  "strum 0.26.2",
  "strum_macros 0.26.2",
  "tempfile",
+ "tokio",
  "wat",
 ]
 
@@ -12637,7 +12645,7 @@ dependencies = [
  "http-body-util",
  "httptest",
  "hyper 1.3.1",
- "hyper-rustls 0.27.1",
+ "hyper-rustls 0.27.2",
  "hyper-util",
  "hyperlocal-next",
  "ic-agent",
@@ -12647,9 +12655,8 @@ dependencies = [
  "itertools 0.12.0",
  "jemallocator",
  "maxminddb",
- "opentelemetry 0.23.0",
- "opentelemetry-prometheus",
- "opentelemetry_sdk 0.23.0",
+ "opentelemetry 0.20.0",
+ "opentelemetry-prometheus 0.13.0",
  "prometheus",
  "regex",
  "reqwest 0.12.4",
@@ -13476,9 +13483,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.153"
+version = "0.2.155"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c198f91728a82281a64e1f4f9eeb25d82cb32a5de251c6bd1b5154d63a8e7bd"
+checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
 
 [[package]]
 name = "libflate"
@@ -14141,29 +14148,29 @@ checksum = "d07cbe42e2a8dd41df582fb8e00fc24d920b5561cc301fcb6d14e2e0434b500f"
 
 [[package]]
 name = "mockall"
-version = "0.11.4"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c84490118f2ee2d74570d114f3d0493cbf02790df303d2707606c3e14e07c96"
+checksum = "43766c2b5203b10de348ffe19f7e54564b64f3d6018ff7648d1e2d6d3a0f0a48"
 dependencies = [
  "cfg-if 1.0.0",
  "downcast",
  "fragile",
  "lazy_static",
  "mockall_derive",
- "predicates 2.1.5",
+ "predicates",
  "predicates-tree",
 ]
 
 [[package]]
 name = "mockall_derive"
-version = "0.11.4"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22ce75669015c4f47b289fd4d4f56e894e4c96003ffdf3ac51313126f94c6cbb"
+checksum = "af7cbce79ec385a1d4f54baa90a76401eb15d9cab93685f62e7e9f942aa00ae2"
 dependencies = [
  "cfg-if 1.0.0",
  "proc-macro2 1.0.75",
  "quote 1.0.35",
- "syn 1.0.109",
+ "syn 2.0.48",
 ]
 
 [[package]]
@@ -14716,8 +14723,18 @@ version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69d6c3d7288a106c0a363e4b0e8d308058d56902adefb16f4936f417ffef086e"
 dependencies = [
- "opentelemetry_api",
+ "opentelemetry_api 0.18.0",
  "opentelemetry_sdk 0.18.0",
+]
+
+[[package]]
+name = "opentelemetry"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9591d937bc0e6d2feb6f71a559540ab300ea49955229c347a517a28d27784c54"
+dependencies = [
+ "opentelemetry_api 0.20.0",
+ "opentelemetry_sdk 0.20.0",
 ]
 
 [[package]]
@@ -14750,6 +14767,19 @@ dependencies = [
  "thiserror",
  "tokio",
  "tonic",
+]
+
+[[package]]
+name = "opentelemetry-prometheus"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7d81bc254e2d572120363a2b16cdb0d715d301b5789be0cfc26ad87e4e10e53"
+dependencies = [
+ "once_cell",
+ "opentelemetry_api 0.20.0",
+ "opentelemetry_sdk 0.20.0",
+ "prometheus",
+ "protobuf",
 ]
 
 [[package]]
@@ -14793,6 +14823,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "opentelemetry_api"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a81f725323db1b1206ca3da8bb19874bbd3f57c3bcd59471bfb04525b265b9b"
+dependencies = [
+ "futures-channel",
+ "futures-util",
+ "indexmap 1.9.2",
+ "js-sys",
+ "once_cell",
+ "pin-project-lite",
+ "thiserror",
+ "urlencoding",
+]
+
+[[package]]
 name = "opentelemetry_sdk"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14804,9 +14850,29 @@ dependencies = [
  "futures-executor",
  "futures-util",
  "once_cell",
- "opentelemetry_api",
+ "opentelemetry_api 0.18.0",
  "percent-encoding",
  "rand 0.8.5",
+ "thiserror",
+]
+
+[[package]]
+name = "opentelemetry_sdk"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa8e705a0612d48139799fcbaba0d4a90f06277153e43dd2bdc16c6f0edd8026"
+dependencies = [
+ "async-trait",
+ "crossbeam-channel",
+ "futures-channel",
+ "futures-executor",
+ "futures-util",
+ "once_cell",
+ "opentelemetry_api 0.20.0",
+ "ordered-float 3.9.2",
+ "percent-encoding",
+ "rand 0.8.5",
+ "regex",
  "thiserror",
 ]
 
@@ -14901,6 +14967,15 @@ name = "ordered-float"
 version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7940cf2ca942593318d07fcf2596cdca60a85c9e7fab408a5e21a4f9dcd40d87"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "ordered-float"
+version = "3.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1e1c390732d15f1d48471625cd92d154e66db2c56645e29a9cd26f4699f72dc"
 dependencies = [
  "num-traits",
 ]
@@ -15377,12 +15452,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
 
 [[package]]
-name = "platforms"
-version = "3.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "626dec3cac7cc0e1577a2ec3fc496277ec2baa084bebad95bb6fdbfae235f84c"
-
-[[package]]
 name = "plotters"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15438,6 +15507,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
+ "sha2 0.10.8",
  "tokio",
  "tracing",
  "tracing-appender",
@@ -15560,20 +15630,6 @@ name = "precomputed-hash"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
-
-[[package]]
-name = "predicates"
-version = "2.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59230a63c37f3e18569bdb90e4a89cbf5bf8b06fea0b84e65ea10cc4df47addd"
-dependencies = [
- "difflib",
- "float-cmp",
- "itertools 0.10.5",
- "normalize-line-endings",
- "predicates-core",
- "regex",
-]
 
 [[package]]
 name = "predicates"
@@ -16331,9 +16387,9 @@ dependencies = [
 
 [[package]]
 name = "rayon"
-version = "1.8.0"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c27db03db7734835b3f53954b534c91069375ce6ccaa2e065441e07d9b6cdb1"
+checksum = "b418a60154510ca1a002a752ca9714984e21e4241e804d32555251faf8b78ffa"
 dependencies = [
  "either",
  "rayon-core",
@@ -16341,9 +16397,9 @@ dependencies = [
 
 [[package]]
 name = "rayon-core"
-version = "1.12.0"
+version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ce3fb6ad83f861aac485e76e1985cd109d9a3713802152be56c3b1f0e0658ed"
+checksum = "1465873a3dfdaa8ae7cb14b4383657caab0b3e8a0aa9ae8e04b044854c8dfce2"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
@@ -16407,13 +16463,13 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.10.2"
+version = "1.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "380b951a9c5e80ddfd6136919eef32310721aa4aacd4889a8d39124b026ab343"
+checksum = "b91213439dad192326a0d7c6ee3955910425f441d7038e0d6933b0aec5c4517f"
 dependencies = [
  "aho-corasick",
  "memchr",
- "regex-automata 0.4.3",
+ "regex-automata 0.4.7",
  "regex-syntax 0.8.2",
 ]
 
@@ -16428,9 +16484,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.4.3"
+version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f804c7828047e88b2d32e2d7fe5a105da8ee3264f01902f796c8e067dc2483f"
+checksum = "38caf58cc5ef2fed281f89292ef23f6365465ed9a41b7a7754eb4e26496c92df"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -17624,6 +17680,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_regex"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8136f1a4ea815d7eac4101cfd0b16dc0cb5e1fe1b8609dfd728058656b7badf"
+dependencies = [
+ "regex",
+ "serde",
+]
+
+[[package]]
 name = "serde_repr"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17983,9 +18049,9 @@ dependencies = [
 
 [[package]]
 name = "slog-async"
-version = "2.7.0"
+version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "766c59b252e62a34651412870ff55d8c4e6d04df19b43eecb2703e417b097ffe"
+checksum = "72c8038f898a2c79507940990f05386455b3a317d8f18d4caea7cbc3d5096b84"
 dependencies = [
  "crossbeam-channel",
  "slog",
@@ -18045,11 +18111,11 @@ dependencies = [
 
 [[package]]
 name = "slog-term"
-version = "2.9.0"
+version = "2.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87d29185c55b7b258b4f120eab00f48557d4d9bc814f41713f449d35b0f8977c"
+checksum = "b6e022d0b998abfe5c3782c1f03551a596269450ccd677ea51c56f8b214610e8"
 dependencies = [
- "atty",
+ "is-terminal",
  "slog",
  "term 0.7.0",
  "thread_local",
@@ -18746,6 +18812,7 @@ dependencies = [
  "dfn_json",
  "dfn_protobuf",
  "discower_bowndary",
+ "ed25519-dalek",
  "flate2",
  "futures",
  "hex",
@@ -18868,11 +18935,13 @@ dependencies = [
  "rosetta-core",
  "rsa",
  "rust_decimal",
+ "schnorr_fun",
  "serde",
  "serde_bytes",
  "serde_cbor",
  "serde_json",
  "serde_yaml 0.9.34+deprecated",
+ "sha2 0.10.8",
  "slog",
  "slog-async",
  "slog-term",

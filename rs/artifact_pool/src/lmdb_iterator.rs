@@ -118,8 +118,12 @@ impl<'a, F> LMDBEcdsaIterator<'a, F> {
         let mut cursor: RoCursor<'_> =
             unsafe { std::mem::transmute(tx.open_ro_cursor(db).unwrap()) };
         let iter: Iter<'_> = match start_pos {
-            Some(id_key) => unsafe { std::mem::transmute(cursor.iter_from(id_key)) },
-            None => unsafe { std::mem::transmute(cursor.iter_start()) },
+            Some(id_key) => unsafe {
+                std::mem::transmute::<lmdb::Iter<'_>, lmdb::Iter<'_>>(cursor.iter_from(id_key))
+            },
+            None => unsafe {
+                std::mem::transmute::<lmdb::Iter<'_>, lmdb::Iter<'_>>(cursor.iter_start())
+            },
         };
         Self {
             log,

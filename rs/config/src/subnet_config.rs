@@ -9,6 +9,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, ExecutionRound, NumInstructions};
 use serde::{Deserialize, Serialize};
 
+const GIB: u64 = 1024 * 1024 * 1024;
 const M: u64 = 1_000_000;
 const B: u64 = 1_000_000_000;
 const T: u128 = 1_000_000_000_000;
@@ -87,6 +88,11 @@ const SYSTEM_SUBNET_FACTOR: u64 = 10;
 // slow subnets while maintaining the speed of fast subnets, we use the middle
 // value of 200MB.
 const MAX_HEAP_DELTA_PER_ITERATION: NumBytes = NumBytes::new(200 * M);
+
+/// The reserve represents the freely available portion of the
+/// `subnet_heap_delta_capacity` that can be used as a heap delta burst
+/// during the initial rounds following a checkpoint.
+const HEAP_DELTA_INITIAL_RESERVE: NumBytes = NumBytes::new(32 * GIB);
 
 // Log all messages that took more than this value to execute.
 pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
@@ -216,7 +222,12 @@ pub struct SchedulerConfig {
     /// the subnet goes above this limit.
     pub subnet_heap_delta_capacity: NumBytes,
 
-    /// The maximum amount of heap delta per iteration. This number if checked
+    /// The reserve represents the freely available portion of the
+    /// `subnet_heap_delta_capacity` that can be used as a heap delta burst
+    /// during the initial rounds following a checkpoint.
+    pub heap_delta_initial_reserve: NumBytes,
+
+    /// The maximum amount of heap delta per iteration. This number is checked
     /// after each iteration in an execution round to decided whether to
     /// continue iterations or not. This serves as a proxy for memory bound
     /// instructions that are more expensive and may slow down finalization.
@@ -256,6 +267,7 @@ impl SchedulerConfig {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
+            heap_delta_initial_reserve: HEAP_DELTA_INITIAL_RESERVE,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
             max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
@@ -278,26 +290,30 @@ impl SchedulerConfig {
     }
 
     pub fn system_subnet() -> Self {
-        let max_instructions_per_message_without_dts =
-            MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS * SYSTEM_SUBNET_FACTOR;
+        let max_instructions_per_message_without_dts = NumInstructions::from(50 * B);
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
+        let max_instructions_per_slice = NumInstructions::from(10 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
-            max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND * SYSTEM_SUBNET_FACTOR,
-            // Effectively disable DTS on system subnets.
+            // TODO(RUN-993): Enable heap delta rate limiting for system subnets.
+            // Setting initial reserve to capacity effectively disables the rate limiting.
+            heap_delta_initial_reserve: SUBNET_HEAP_DELTA_CAPACITY,
+            // Round limit is set to allow on average 2B instructions.
+            // See also comment about `MAX_INSTRUCTIONS_PER_ROUND`.
+            max_instructions_per_round: max_instructions_per_message_without_dts
+                .max(max_instructions_per_slice)
+                + NumInstructions::from(2 * B),
             max_instructions_per_message: max_instructions_per_message_without_dts,
             max_instructions_per_message_without_dts,
-            // Effectively disable DTS on system subnets.
-            max_instructions_per_slice: max_instructions_per_message_without_dts,
+            max_instructions_per_slice,
             instruction_overhead_per_execution: INSTRUCTION_OVERHEAD_PER_EXECUTION,
             instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code,
-            // Effectively disable DTS on system subnets.
-            max_instructions_per_install_code_slice: max_instructions_per_install_code,
+            max_instructions_per_install_code_slice: max_instructions_per_slice,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION * SYSTEM_SUBNET_FACTOR,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
@@ -321,6 +337,7 @@ impl SchedulerConfig {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
+            heap_delta_initial_reserve: HEAP_DELTA_INITIAL_RESERVE,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
             max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,

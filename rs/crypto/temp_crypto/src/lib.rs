@@ -1041,7 +1041,6 @@ impl EcdsaSubnetConfig {
                 replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 59,
                 dkg_dealings_per_block: 1,
-                gossip_config: None,
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,

@@ -47,6 +47,7 @@ use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
+    state_manager::FakeStateManager,
     universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM},
 };
 use ic_test_utilities_execution_environment::{
@@ -227,10 +228,14 @@ impl CanisterManagerBuilder {
     fn build(self) -> CanisterManager {
         let subnet_type = SubnetType::Application;
         let metrics_registry = MetricsRegistry::new();
+        let state_reader = Arc::new(FakeStateManager::new());
+        let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
             Config::default(),
             no_op_logger(),
             &metrics_registry,
+            completed_execution_messages_tx,
+            state_reader,
         ));
         let cycles_account_manager = Arc::new(self.cycles_account_manager);
         let hypervisor = Hypervisor::new(
@@ -292,6 +297,7 @@ fn canister_manager_config(
         // 10 MiB should be enough for all the tests.
         NumBytes::from(10 * 1024 * 1024),
         SchedulerConfig::application_subnet().upload_wasm_chunk_instructions,
+        ic_config::embedders::Config::default().wasm_max_size,
     )
 }
 
@@ -870,7 +876,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
     assert_eq!(
         err.description(),
-        "Canister requested 11.00 MiB of memory but only 10.00 MiB are available in the subnet"
+        "Canister requested 11.00 MiB of memory but only 10.00 MiB are available in the subnet."
     );
     // The memory allocation is validated first before charging the fee.
     assert_eq!(
@@ -886,7 +892,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
     assert_eq!(
         err.description(),
-        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet"
+        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet."
     );
 
     assert_eq!(
@@ -2852,7 +2858,7 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
     assert_eq!(
         err.description(),
-        "Canister requested 11.00 MiB of memory but only 10.00 MiB are available in the subnet"
+        "Canister requested 11.00 MiB of memory but only 10.00 MiB are available in the subnet."
     );
 
     assert_eq!(
@@ -2868,7 +2874,7 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
     assert_eq!(
         err.description(),
-        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet"
+        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet."
     );
 
     assert_eq!(
@@ -3875,6 +3881,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn uninstall_code_can_be_invoked_by_governance_canister() {
     use crate::util::GOVERNANCE_CANISTER_ID;
 
@@ -3896,7 +3903,10 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         .unwrap()
         .system_state
         .wasm_chunk_store
-        .insert_chunk(&[0x41; 200])
+        .insert_chunk(
+            canister_manager.config.wasm_chunk_store_max_size,
+            &[0x41; 200],
+        )
         .unwrap();
 
     assert!(state
@@ -5050,7 +5060,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
         WasmResult::Reject(
             "Canister requested a compute allocation of 10% which \
             cannot be satisfied because the Subnet's remaining \
-            compute capacity is 0%"
+            compute capacity is 0%."
                 .to_string()
         )
     );
@@ -5083,7 +5093,7 @@ fn install_code_when_compute_capacity_is_oversubscribed() {
         err.description(),
         "Canister requested a compute allocation of 61% \
         which cannot be satisfied because the Subnet's \
-        remaining compute capacity is 60%"
+        remaining compute capacity is 60%."
     );
 
     // Updating the compute allocation to the same value succeeds.
@@ -5148,7 +5158,7 @@ fn update_settings_when_compute_capacity_is_oversubscribed() {
         err.description(),
         "Canister requested a compute allocation of 61% \
         which cannot be satisfied because the Subnet's \
-        remaining compute capacity is 60%"
+        remaining compute capacity is 60%."
     );
 
     // Updating the compute allocation to the same value succeeds.
@@ -7465,6 +7475,7 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn upload_chunk_fails_when_it_exceeds_chunk_size() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
@@ -7488,7 +7499,7 @@ fn upload_chunk_fails_when_it_exceeds_chunk_size() {
     assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
     assert_eq!(
         error .description(),
-        "Error from Wasm chunk store: Wasm chunk size 1048577 exceeds the maximum chunk size of 1048576"
+        "Error from Wasm chunk store: Wasm chunk size 1048577 exceeds the maximum chunk size of 1048576."
     );
 
     assert_eq!(
@@ -7724,6 +7735,7 @@ fn stored_chunks_works() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn upload_chunk_fails_when_heap_delta_rate_limited() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
@@ -7760,7 +7772,7 @@ fn upload_chunk_fails_when_heap_delta_rate_limited() {
     assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
     assert_eq!(
         error .description(),
-        "Error from Wasm chunk store: Canister is heap delta rate limited. Current delta debit: 1048576, limit: 1048576",
+        "Error from Wasm chunk store: Canister is heap delta rate limited. Current delta debit: 1048576, limit: 1048576.",
     );
 
     assert_eq!(

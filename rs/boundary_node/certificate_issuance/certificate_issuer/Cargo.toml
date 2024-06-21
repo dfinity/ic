@@ -17,7 +17,7 @@ candid = { workspace = true }
 chacha20poly1305 = "0.10.0"
 clap = { workspace = true }
 cloudflare = { workspace = true }
-flate2 = "1.0.22"
+flate2 = { workspace = true }
 futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
@@ -27,9 +27,8 @@ idna = "0.3.0"
 instant-acme = "0.3.2"
 leb128 = "0.2.5"
 mockall = { workspace = true }
-opentelemetry = { workspace = true}
-opentelemetry-prometheus = { workspace = true }
-opentelemetry_sdk = { workspace = true}
+opentelemetry = { version = "0.20", features = ["metrics", "trace"] }
+opentelemetry-prometheus = { version = "0.13" }
 pem = "1.1.0"
 prometheus = { workspace = true }
 rcgen = { workspace = true }

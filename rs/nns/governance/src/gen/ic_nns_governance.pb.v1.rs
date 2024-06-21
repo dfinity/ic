@@ -2537,6 +2537,10 @@ pub mod governance {
         pub not_dissolving_neurons_e8s_buckets_seed: ::std::collections::HashMap<u64, f64>,
         #[prost(map = "uint64, double", tag = "35")]
         pub not_dissolving_neurons_e8s_buckets_ect: ::std::collections::HashMap<u64, f64>,
+        #[prost(uint64, optional, tag = "36")]
+        pub total_voting_power_non_self_authenticating_controller: ::core::option::Option<u64>,
+        #[prost(uint64, optional, tag = "37")]
+        pub total_staked_e8s_non_self_authenticating_controller: ::core::option::Option<u64>,
     }
     /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)
     /// proposal is in progress. We only want one of these to be happening at the same time,

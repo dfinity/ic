@@ -198,6 +198,7 @@ rust_ic_test_suite(
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/pocket-ic",
         "//rs/canister_client/sender",
+        "//rs/crypto/sha2",
         "//rs/nns/constants",
         "//rs/rosetta-api/icp_ledger/index:ic-icp-index",
         "//rs/rosetta-api/icp_ledger/test_utils",

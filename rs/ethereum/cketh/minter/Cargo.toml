@@ -52,7 +52,7 @@ thousands = "0.2"
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 ethers-core = "2.0.8"
-flate2 = "1.0.22"
+flate2 = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }

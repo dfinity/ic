@@ -13,7 +13,7 @@ bytes = { workspace = true }
 educe = "0.4"
 futures = { workspace = true }
 hex = { workspace = true }
-ic-adapter-metrics = { path = "../../../monitoring/adapter_metrics" }
+ic-adapter-metrics-client = { path = "../../../monitoring/adapter_metrics/client" }
 ic-config = { path = "../../../config" }
 ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "../crypto_lib/basic_sig/ecdsa_secp256k1" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../crypto_lib/basic_sig/ecdsa_secp256r1" }
@@ -42,7 +42,7 @@ parking_lot = "0.12.1"
 prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-rayon = "1.8"
+rayon = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -79,12 +79,12 @@ ic-test-utilities-compare-dirs = { path = "../../../test_utilities/compare_dirs"
 ic-test-utilities-in-memory-logger = { path = "../../../test_utilities/in_memory_logger" }
 ic-test-utilities-time = { path = "../../../test_utilities/time" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 num_cpus = "1.16"
 mockall = { workspace = true }
 proptest = "1.0"
 proptest-derive = "0.3.0"
 rsa = "0.9"
-slog-async = { version = "2.5", features = ["nested-values"] }
+slog-async = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

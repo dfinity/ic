@@ -58,7 +58,7 @@ message NodeRecord {
   optional string hostos_version_id = 17;
 
   // IPv4 interface configuration
-  optional IPv4InterfaceConfig public_ipv4_config = 18;
+  IPv4InterfaceConfig public_ipv4_config = 18;
 
   // Domain name, which resolves into Node's IPv4 and IPv6.
   // If a Node is to be converted into the ApiBoundaryNode, the domain field should be set.

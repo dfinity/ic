@@ -30,7 +30,6 @@ mod jemalloc_metrics;
 use jemallocator::Jemalloc;
 #[cfg(target_os = "linux")]
 #[global_allocator]
-#[cfg(target_os = "linux")]
 static ALLOC: Jemalloc = Jemalloc;
 
 #[cfg(feature = "profiler")]
