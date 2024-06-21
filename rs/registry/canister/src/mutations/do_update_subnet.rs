@@ -92,6 +92,8 @@ impl Registry {
     ///
     /// Panics if they are not.
     fn validate_update_payload_chain_key_config(&self, payload: &UpdateSubnetPayload) {
+        let subnet_id = payload.subnet_id;
+
         let chain_key_config_from_old_source = payload
             .ecdsa_config
             .clone()
@@ -120,13 +122,13 @@ impl Registry {
                 // Old API is used; check that nothing weird is being mixed in from the new API.
                 assert_eq!(payload.chain_key_signing_enable, None, "{}Deprecated field ecdsa_config cannot be specified with chain_key_signing_enable.", LOG_PREFIX);
                 assert_eq!(payload.chain_key_signing_disable, None, "{}Deprecated field ecdsa_config cannot be specified with chain_key_signing_disable.", LOG_PREFIX);
-                chain_key_config
+                Some(chain_key_config)
             }
             (None, Some(chain_key_config)) => {
                 // New API is used; check that nothing weird is being mixed in from the old API.
                 assert_eq!(payload.ecdsa_key_signing_enable, None, "{}Field chain_key_config cannot be specified with deprecated ecdsa_key_signing_enable.", LOG_PREFIX);
                 assert_eq!(payload.ecdsa_key_signing_disable, None, "{}Field chain_key_config cannot be specified with deprecated ecdsa_key_signing_disable.", LOG_PREFIX);
-                chain_key_config
+                Some(chain_key_config)
             }
             (None, None) => {
                 let has_ecdsa_key_signing_fields = payload.ecdsa_key_signing_enable.is_some()
@@ -136,52 +138,52 @@ impl Registry {
                 if has_ecdsa_key_signing_fields && has_chain_key_signing_fields {
                     panic!("Deprecated fields ecdsa_key_signing_{{en,dis}}able should not be used together with chain_key_signing_{{en,dis}}able.");
                 }
-                return; // Nothing else to do.
+                None
             }
         };
 
-        let payload_key_ids = payload_chain_key_config.key_ids();
+        if let Some(payload_chain_key_config) = payload_chain_key_config {
+            let payload_key_ids = payload_chain_key_config.key_ids();
 
-        if has_duplicates(&payload_key_ids) {
-            panic!(
-                "{}The requested chain key IDs {:?} have duplicates.",
-                LOG_PREFIX, payload_key_ids
-            );
-        }
-
-        let subnet_id = payload.subnet_id;
-
-        // Ensure that the keys held by the subnet cannot be deleted.
-        let keys_held_currently: HashSet<MasterPublicKeyId> =
-            HashSet::from_iter(self.get_master_public_keys_held_by_subnet(subnet_id));
-        let payload_key_ids_set = HashSet::from_iter(payload_key_ids.clone());
-
-        let deleted_keys: HashSet<_> = keys_held_currently
-            .difference(&payload_key_ids_set)
-            .collect();
-
-        if !deleted_keys.is_empty() {
-            panic!(
-                "{}Chain keys cannot be deleted. Attempted to delete chain keys {:?} \
-                for subnet: '{}'",
-                LOG_PREFIX, deleted_keys, subnet_id
-            );
-        }
-
-        // Validate that any new keys do not exist in another subnet, as that would trigger
-        // creating another key with the same MasterPublicKeyId, which would break chain key signing.
-        let new_keys =
-            self.get_keys_that_will_be_added_to_subnet(subnet_id, payload_key_ids.clone());
-
-        let keys_to_subnet_map = self.get_master_public_keys_to_subnets_map();
-        new_keys.iter().for_each(|key_id| {
-            if keys_to_subnet_map.contains_key(key_id) {
+            if has_duplicates(&payload_key_ids) {
                 panic!(
-                    "{}Chain key with id '{}' already exists. IDs must be globally unique.",
-                    LOG_PREFIX, key_id,
+                    "{}The requested chain key IDs {:?} have duplicates.",
+                    LOG_PREFIX, payload_key_ids
                 );
             }
-        });
+
+            // Ensure that the keys held by the subnet cannot be deleted.
+            let keys_held_currently: HashSet<MasterPublicKeyId> =
+                HashSet::from_iter(self.get_master_public_keys_held_by_subnet(subnet_id));
+            let payload_key_ids_set = HashSet::from_iter(payload_key_ids.clone());
+
+            let deleted_keys: HashSet<_> = keys_held_currently
+                .difference(&payload_key_ids_set)
+                .collect();
+
+            if !deleted_keys.is_empty() {
+                panic!(
+                    "{}Chain keys cannot be deleted. Attempted to delete chain keys {:?} \
+                    for subnet: '{}'",
+                    LOG_PREFIX, deleted_keys, subnet_id
+                );
+            }
+
+            // Validate that any new keys do not exist in another subnet, as that would trigger
+            // creating another key with the same MasterPublicKeyId, which would break chain key signing.
+            let new_keys =
+                self.get_keys_that_will_be_added_to_subnet(subnet_id, payload_key_ids.clone());
+
+            let keys_to_subnet_map = self.get_master_public_keys_to_subnets_map();
+            new_keys.iter().for_each(|key_id| {
+                if keys_to_subnet_map.contains_key(key_id) {
+                    panic!(
+                        "{}Chain key with id '{}' already exists. IDs must be globally unique.",
+                        LOG_PREFIX, key_id,
+                    );
+                }
+            });
+        }
 
         // Signing cannot be enabled unless the key was previously held by the subnet.
         if let Some(ref chain_key_signing_enable) = payload.chain_key_signing_enable {
@@ -243,7 +245,7 @@ impl Registry {
             if !intersection.is_empty() {
                 panic!(
                     "{}update_subnet aborted: Proposal attempts to enable and disable signing for \
-                    same ECDSA keys: {:?}",
+                    the same ECDSA keys: {:?}",
                     LOG_PREFIX, intersection,
                 )
             }
@@ -623,9 +625,12 @@ mod tests {
     };
     use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
-    use ic_protobuf::registry::subnet::v1::{
-        ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb,
-        SubnetRecord as SubnetRecordPb,
+    use ic_protobuf::registry::{
+        crypto::v1::MasterPublicKeyId as MasterPublicKeyIdPb,
+        subnet::v1::{
+            ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb,
+            KeyConfig as KeyConfigPb, SubnetRecord as SubnetRecordPb,
+        },
     };
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
@@ -1562,6 +1567,111 @@ mod tests {
         let payload = UpdateSubnetPayload {
             ecdsa_key_signing_disable: Some(vec![key_id.clone()]),
             chain_key_signing_enable: Some(vec![MasterPublicKeyId::Ecdsa(key_id)]),
+            ecdsa_config: None,
+            chain_key_config: None,
+            ..make_empty_update_payload(subnet_id)
+        };
+
+        registry.do_update_subnet(payload);
+    }
+
+    // TODO[NNS1-3022]: Remove this test.
+    #[test]
+    #[should_panic(
+        expected = "Proposal attempts to enable and disable signing for the same ECDSA keys"
+    )]
+    fn test_disallow_ecdsa_key_signing_disable_and_enable_for_same_key_legacy() {
+        let key_id = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "fake_key_id".to_string(),
+        };
+        let subnet_id = subnet_test_id(1000);
+
+        let mut registry = invariant_compliant_registry(0);
+
+        // Make sure the registry has the expected subnet record.
+        {
+            let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+            registry.maybe_apply_mutation_internal(mutate_request.mutations);
+            let mut subnet_list_record = registry.get_subnet_list_record();
+            let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+                .iter()
+                .next()
+                .expect("should contain at least one node ID");
+            let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
+            subnet_record.chain_key_config = Some(ChainKeyConfigPb {
+                key_configs: vec![KeyConfigPb {
+                    key_id: Some(MasterPublicKeyIdPb::from(&MasterPublicKeyId::Ecdsa(
+                        key_id.clone(),
+                    ))),
+                    pre_signatures_to_create_in_advance: Some(111),
+                    max_queue_size: Some(222),
+                }],
+                signature_request_timeout_ns: Some(333),
+                idkg_key_rotation_period_ms: Some(444),
+            });
+            registry.maybe_apply_mutation_internal(add_fake_subnet(
+                subnet_id,
+                &mut subnet_list_record,
+                subnet_record,
+                &btreemap!(*first_node_id => first_dkg_pk.clone()),
+            ));
+        }
+
+        let payload = UpdateSubnetPayload {
+            ecdsa_key_signing_disable: Some(vec![key_id.clone()]),
+            ecdsa_key_signing_enable: Some(vec![key_id]),
+            ecdsa_config: None,
+            chain_key_config: None,
+            ..make_empty_update_payload(subnet_id)
+        };
+
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Proposal attempts to enable and disable signing for the same chain keys"
+    )]
+    fn test_disallow_chain_key_signing_disable_and_enable_for_same_key() {
+        let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "fake_key_id".to_string(),
+        });
+        let subnet_id = subnet_test_id(1000);
+
+        let mut registry = invariant_compliant_registry(0);
+
+        // Make sure the registry has the expected subnet record.
+        {
+            let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+            registry.maybe_apply_mutation_internal(mutate_request.mutations);
+            let mut subnet_list_record = registry.get_subnet_list_record();
+            let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+                .iter()
+                .next()
+                .expect("should contain at least one node ID");
+            let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
+            subnet_record.chain_key_config = Some(ChainKeyConfigPb {
+                key_configs: vec![KeyConfigPb {
+                    key_id: Some(MasterPublicKeyIdPb::from(&key_id)),
+                    pre_signatures_to_create_in_advance: Some(111),
+                    max_queue_size: Some(222),
+                }],
+                signature_request_timeout_ns: Some(333),
+                idkg_key_rotation_period_ms: Some(444),
+            });
+            registry.maybe_apply_mutation_internal(add_fake_subnet(
+                subnet_id,
+                &mut subnet_list_record,
+                subnet_record,
+                &btreemap!(*first_node_id => first_dkg_pk.clone()),
+            ));
+        }
+
+        let payload = UpdateSubnetPayload {
+            chain_key_signing_disable: Some(vec![key_id.clone()]),
+            chain_key_signing_enable: Some(vec![key_id]),
             ecdsa_config: None,
             chain_key_config: None,
             ..make_empty_update_payload(subnet_id)
