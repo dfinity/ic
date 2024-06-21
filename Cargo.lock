@@ -9509,6 +9509,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nns-governance-api"
+version = "0.9.0"
+dependencies = [
+ "bytes",
+ "candid",
+ "comparable",
+ "ic-base-types",
+ "ic-nervous-system-clients",
+ "ic-nervous-system-proto",
+ "ic-nns-common",
+ "ic-protobuf",
+ "ic-sns-root",
+ "ic-sns-swap",
+ "ic-types",
+ "icp-ledger",
+ "itertools 0.12.0",
+ "prost",
+ "serde",
+ "serde_bytes",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
+]
+
+[[package]]
 name = "ic-nns-governance-protobuf-generator"
 version = "0.9.0"
 dependencies = [
@@ -10422,8 +10446,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
- "ic-nns-init",
+ "ic-nns-governance-api",
  "ic-protobuf",
  "ic-registry-client",
  "ic-registry-client-helpers",
