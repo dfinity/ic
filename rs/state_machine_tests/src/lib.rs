@@ -138,12 +138,12 @@ pub use slog::Level;
 use std::{
     collections::BTreeMap,
     convert::TryFrom,
-    fmt, io,
-    io::stderr,
+    fmt,
+    io::{self, stderr},
     path::Path,
     str::FromStr,
     string::ToString,
-    sync::{Arc, Mutex, RwLock},
+    sync::{atomic::AtomicU64, Arc, Mutex, RwLock},
     time::{Duration, Instant, SystemTime},
 };
 use tempfile::TempDir;
@@ -592,9 +592,10 @@ pub struct StateMachine {
         tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
     runtime: Arc<Runtime>,
     pub state_dir: TempDir,
-    checkpoints_enabled: std::sync::atomic::AtomicBool,
-    nonce: std::sync::atomic::AtomicU64,
-    time: std::sync::atomic::AtomicU64,
+    // The atomicity is required for internal mutability and sending across threads.
+    checkpoint_interval_length: AtomicU64,
+    nonce: AtomicU64,
+    time: AtomicU64,
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     replica_logger: ReplicaLogger,
     pub nodes: Vec<StateMachineNode>,
@@ -621,7 +622,8 @@ pub struct StateMachineBuilder {
     nonce: u64,
     time: Time,
     config: Option<StateMachineConfig>,
-    checkpoints_enabled: bool,
+    // The default value `None` is to use 199/499 for system/app subnets.
+    checkpoint_interval_length: Option<u64>,
     subnet_type: SubnetType,
     subnet_size: usize,
     nns_subnet_id: Option<SubnetId>,
@@ -647,7 +649,7 @@ impl StateMachineBuilder {
             nonce: 0,
             time: GENESIS,
             config: None,
-            checkpoints_enabled: false,
+            checkpoint_interval_length: None,
             subnet_type: SubnetType::System,
             enable_canister_snapshots: false,
             use_cost_scaling_flag: false,
@@ -697,8 +699,16 @@ impl StateMachineBuilder {
     }
 
     pub fn with_checkpoints_enabled(self, checkpoints_enabled: bool) -> Self {
+        let checkpoint_interval_length = if checkpoints_enabled { 0 } else { u64::MAX };
         Self {
-            checkpoints_enabled,
+            checkpoint_interval_length: Some(checkpoint_interval_length),
+            ..self
+        }
+    }
+
+    pub fn with_checkpoint_interval_length(self, checkpoint_interval_length: u64) -> Self {
+        Self {
+            checkpoint_interval_length: Some(checkpoint_interval_length),
             ..self
         }
     }
@@ -827,7 +837,7 @@ impl StateMachineBuilder {
             self.nonce,
             self.time,
             self.config,
-            self.checkpoints_enabled,
+            self.checkpoint_interval_length,
             self.subnet_type,
             self.subnet_size,
             self.subnet_id,
@@ -1056,7 +1066,7 @@ impl StateMachine {
         nonce: u64,
         time: Time,
         config: Option<StateMachineConfig>,
-        checkpoints_enabled: bool,
+        checkpoint_interval_length: Option<u64>,
         subnet_type: SubnetType,
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
@@ -1071,6 +1081,10 @@ impl StateMachine {
         seq_no: u8,
         dts: bool,
     ) -> Self {
+        let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
+            SubnetType::Application | SubnetType::VerifiedApplication => 499,
+            SubnetType::System => 199,
+        });
         let replica_logger = replica_logger();
 
         let metrics_registry = MetricsRegistry::new();
@@ -1265,9 +1279,9 @@ impl StateMachine {
             state_dir,
             // Note: state machine tests are commonly used for testing
             // canisters, such tests usually don't rely on any persistence.
-            checkpoints_enabled: std::sync::atomic::AtomicBool::new(checkpoints_enabled),
-            nonce: std::sync::atomic::AtomicU64::new(nonce),
-            time: std::sync::atomic::AtomicU64::new(time.as_nanos_since_unix_epoch()),
+            checkpoint_interval_length: checkpoint_interval_length.into(),
+            nonce: AtomicU64::new(nonce),
+            time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
             idkg_subnet_public_keys,
             replica_logger,
             nodes,
@@ -1275,12 +1289,12 @@ impl StateMachine {
         }
     }
 
-    fn into_components(self) -> (TempDir, u64, Time, bool) {
+    fn into_components(self) -> (TempDir, u64, Time, u64) {
         (
             self.state_dir,
             self.nonce.into_inner(),
             Time::from_nanos_since_unix_epoch(self.time.into_inner()),
-            self.checkpoints_enabled.into_inner(),
+            self.checkpoint_interval_length.load(Ordering::Relaxed),
         )
     }
 
@@ -1293,13 +1307,13 @@ impl StateMachine {
     pub fn restart_node(self) -> Self {
         // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
         // to the same root.
-        let (state_dir, nonce, time, checkpoints_enabled) = self.into_components();
+        let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
 
         StateMachineBuilder::new()
             .with_state_dir(state_dir)
             .with_nonce(nonce)
             .with_time(time)
-            .with_checkpoints_enabled(checkpoints_enabled)
+            .with_checkpoint_interval_length(checkpoint_interval_length)
             .build()
     }
 
@@ -1307,13 +1321,13 @@ impl StateMachine {
     pub fn restart_node_with_lsmt_override(self, lsmt_override: Option<LsmtConfig>) -> Self {
         // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
         // to the same root.
-        let (state_dir, nonce, time, checkpoints_enabled) = self.into_components();
+        let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
 
         StateMachineBuilder::new()
             .with_state_dir(state_dir)
             .with_nonce(nonce)
             .with_time(time)
-            .with_checkpoints_enabled(checkpoints_enabled)
+            .with_checkpoint_interval_length(checkpoint_interval_length)
             .with_lsmt_override(lsmt_override)
             .build()
     }
@@ -1323,14 +1337,14 @@ impl StateMachine {
     pub fn restart_node_with_config(self, config: StateMachineConfig) -> Self {
         // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
         // to the same root.
-        let (state_dir, nonce, time, checkpoints_enabled) = self.into_components();
+        let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
 
         StateMachineBuilder::new()
             .with_state_dir(state_dir)
             .with_nonce(nonce)
             .with_time(time)
             .with_config(Some(config))
-            .with_checkpoints_enabled(checkpoints_enabled)
+            .with_checkpoint_interval_length(checkpoint_interval_length)
             .build()
     }
 
@@ -1384,8 +1398,15 @@ impl StateMachine {
     /// to the state machine if you want to use [restart_node] and
     /// [await_state_hash] functions.
     pub fn set_checkpoints_enabled(&self, enabled: bool) {
-        self.checkpoints_enabled
-            .store(enabled, core::sync::atomic::Ordering::Relaxed)
+        let checkpoint_interval_length = if enabled { 0 } else { u64::MAX };
+        self.set_checkpoint_interval_length(checkpoint_interval_length);
+    }
+
+    /// Set current interval length. The typical interval length
+    /// for application subnets is 499.
+    pub fn set_checkpoint_interval_length(&self, checkpoint_interval_length: u64) {
+        self.checkpoint_interval_length
+            .store(checkpoint_interval_length, Ordering::Relaxed);
     }
 
     /// Returns the latest state.
@@ -1614,10 +1635,23 @@ impl StateMachine {
         // use the batch number to seed randomness
         seed[..8].copy_from_slice(batch_number.get().to_le_bytes().as_slice());
 
+        // Use the `batch_summary` explicitly set, or create a new one based
+        // on the `checkpoint_interval_length`.
+        let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
+        let checkpoint_interval_length_plus_one = checkpoint_interval_length.saturating_add(1);
+        let full_intervals: u64 = batch_number.get() / checkpoint_interval_length_plus_one;
+        let next_checkpoint_height = (full_intervals + 1) * checkpoint_interval_length_plus_one;
+        let batch_summary = self.batch_summary.clone().or(Some(BatchSummary {
+            next_checkpoint_height: next_checkpoint_height.into(),
+            current_interval_length: checkpoint_interval_length.into(),
+        }));
+        let requires_full_state_hash =
+            batch_number.get() % checkpoint_interval_length_plus_one == 0;
+
         let batch = Batch {
             batch_number,
-            batch_summary: self.batch_summary.clone(),
-            requires_full_state_hash: self.checkpoints_enabled.load(Ordering::Relaxed),
+            batch_summary,
+            requires_full_state_hash,
             messages: BatchMessages {
                 signed_ingress_msgs: payload.ingress_messages,
                 certified_stream_slices: payload.xnet_payload.stream_slices,
@@ -1716,7 +1750,7 @@ impl StateMachine {
             .as_nanos() as u64;
         self.consensus_time
             .set(Time::from_nanos_since_unix_epoch(t));
-        self.time.store(t, core::sync::atomic::Ordering::Relaxed);
+        self.time.store(t, Ordering::Relaxed);
     }
 
     /// Returns the current state machine time.
@@ -1951,10 +1985,10 @@ impl StateMachine {
         canister_id: CanisterId,
     ) -> Result<(), String> {
         // Enable checkpoints and make a tick to write a checkpoint.
-        let cp_enabled = self.checkpoints_enabled.load(Ordering::Relaxed);
+        let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
         self.set_checkpoints_enabled(true);
         self.tick();
-        self.set_checkpoints_enabled(cp_enabled);
+        self.set_checkpoint_interval_length(checkpoint_interval_length);
 
         let (height, mut state) = self.state_manager.take_tip();
         if state.take_canister_state(&canister_id).is_some() {
