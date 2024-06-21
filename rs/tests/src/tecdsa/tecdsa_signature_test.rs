@@ -28,6 +28,7 @@ use crate::retry_with_msg_async;
 use crate::tecdsa::{
     create_new_subnet_with_keys, empty_subnet_update, enable_ecdsa_signing,
     execute_update_subnet_proposal, get_public_key_with_retries, verify_signature, DKG_INTERVAL,
+    KEY_ID3,
 };
 use crate::util::*;
 use anyhow::bail;
@@ -369,17 +370,16 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
     let nns_node = topology_snapshot.root_subnet().nodes().next().unwrap();
     let nns_agent = nns_node.build_default_agent();
     block_on(async move {
-        let ecdsa_key_id = make_key(KEY_ID2);
-        let key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
+        let ecdsa_key_id1 = make_key(KEY_ID1);
+        let ecdsa_key_id2 = make_key(KEY_ID2);
+        let ecdsa_key_id3 = make_key(KEY_ID3);
+        let key_id1 = MasterPublicKeyId::Ecdsa(ecdsa_key_id1.clone());
+        let key_id2 = MasterPublicKeyId::Ecdsa(ecdsa_key_id2.clone());
+        let key_id3 = MasterPublicKeyId::Ecdsa(ecdsa_key_id3.clone());
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-        let initial_key_ids = vec![];
-        let initial_key_ids_as_string = String::from("[]");
-        // TODO(CON-1232): Uncomment these lines once an invariant which prevents modifying ecdsa
-        // keys is removed.
-        //let initial_key_ids = vec![make_key(KEY_ID1)];
-        //let initial_key_ids_as_string =
-        //    format!("[{}]", MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)));
+        let initial_key_ids = vec![ecdsa_key_id1.clone(), ecdsa_key_id2.clone()];
+        let initial_key_ids_as_string = format!("[{}, {}]", key_id1.clone(), key_id2.clone(),);
 
         enable_ecdsa_signing(
             &governance,
@@ -395,15 +395,12 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             log,
             "0. Verifying that signature and public key requests succeed for enabled key_ids."
         );
-        for key_id in &initial_key_ids {
-            get_public_key_and_test_signature(
-                &MasterPublicKeyId::Ecdsa(key_id.clone()),
-                &msg_can,
-                log,
-            )
+        let public_key_1 = get_public_key_and_test_signature(&key_id1, &msg_can, log)
             .await
             .expect("Should successfully create and verify the signature for the pre-existing key");
-        }
+        let public_key_2 = get_public_key_and_test_signature(&key_id2, &msg_can, log)
+            .await
+            .expect("Should successfully create and verify the signature for the pre-existing key");
 
         info!(
             log,
@@ -412,7 +409,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
 
         let message_hash = vec![0xabu8; 32];
         assert_eq!(
-            get_public_key_with_retries(&key_id, &msg_can, log, 20)
+            get_public_key_with_retries(&key_id3, &msg_can, log, 20)
                 .await
                 .unwrap_err(),
             AgentError::CertifiedReject(RejectResponse {
@@ -420,7 +417,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
                 reject_message: format!(
                     "Unable to route management canister request ecdsa_public_key: \
                     IDkgKeyError(\"Requested unknown iDKG key: {}, existing keys: {}\")",
-                    key_id, initial_key_ids_as_string,
+                    key_id3, initial_key_ids_as_string,
                 ),
                 error_code: None,
             })
@@ -429,7 +426,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             get_signature_with_logger(
                 message_hash.clone(),
                 scale_cycles(ECDSA_SIGNATURE_FEE),
-                &key_id,
+                &key_id3,
                 &msg_can,
                 log,
             )
@@ -441,7 +438,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
                     "Unable to route management canister request sign_with_ecdsa: \
                     IDkgKeyError(\"Requested unknown iDKG key: {}, \
                     existing keys with signing enabled: {}\")",
-                    key_id, initial_key_ids_as_string,
+                    key_id3, initial_key_ids_as_string,
                 ),
                 error_code: None,
             })
@@ -452,12 +449,30 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
         enable_ecdsa_signing(
             &governance,
             app_subnet.subnet_id,
-            vec![ecdsa_key_id.clone()],
+            vec![
+                ecdsa_key_id3.clone(),
+                ecdsa_key_id2.clone(),
+                ecdsa_key_id1.clone(),
+            ],
             log,
         )
         .await;
 
-        let public_key = get_public_key_and_test_signature(&key_id, &msg_can, log)
+        let public_key_1_after_enabling =
+            get_public_key_and_test_signature(&key_id1, &msg_can, log)
+                .await
+                .expect(
+                    "Should successfully create and verify the signature after enabling signing",
+                );
+        assert_eq!(public_key_1, public_key_1_after_enabling);
+        let public_key_2_after_enabling =
+            get_public_key_and_test_signature(&key_id2, &msg_can, log)
+                .await
+                .expect(
+                    "Should successfully create and verify the signature after enabling signing",
+                );
+        assert_eq!(public_key_2, public_key_2_after_enabling);
+        let public_key_3 = get_public_key_and_test_signature(&key_id3, &msg_can, log)
             .await
             .expect("Should successfully create and verify the signature after enabling signing");
 
@@ -488,7 +503,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             &governance,
             unassigned_node_ids,
             vec![EcdsaKeyRequest {
-                key_id: ecdsa_key_id.clone(),
+                key_id: ecdsa_key_id3.clone(),
                 subnet_id: Some(app_subnet.subnet_id.get()),
             }],
             replica_version,
@@ -506,7 +521,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
 
         let disable_signing_payload = UpdateSubnetPayload {
             subnet_id: app_subnet.subnet_id,
-            ecdsa_key_signing_disable: Some(vec![ecdsa_key_id.clone()]),
+            ecdsa_key_signing_disable: Some(vec![ecdsa_key_id3.clone()]),
             ..empty_subnet_update()
         };
         execute_update_subnet_proposal(
@@ -524,7 +539,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             sig_result = get_signature_with_logger(
                 message_hash.clone(),
                 scale_cycles(ECDSA_SIGNATURE_FEE),
-                &key_id,
+                &key_id3,
                 &msg_can,
                 log,
             )
@@ -538,7 +553,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
                             "Unable to route management canister request sign_with_ecdsa: \
                             IDkgKeyError(\"Requested unknown iDKG key: {}, \
                             existing keys with signing enabled: {}\")",
-                            key_id, initial_key_ids_as_string
+                            key_id3, initial_key_ids_as_string
                         ),
                         error_code: None
                     })
@@ -557,7 +572,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
 
         let proposal_payload = UpdateSubnetPayload {
             subnet_id: new_subnet_id,
-            ecdsa_key_signing_enable: Some(vec![ecdsa_key_id.clone()]),
+            ecdsa_key_signing_enable: Some(vec![ecdsa_key_id3.clone()]),
             ..empty_subnet_update()
         };
         execute_update_subnet_proposal(&governance, proposal_payload, "Enable ECDSA signing", log)
@@ -572,32 +587,43 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             .subnets()
             .find(|s| s.subnet_id == new_subnet_id)
             .expect("Could not find newly created subnet.");
-        new_subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap());
 
-        for key_id in &initial_key_ids {
-            get_public_key_and_test_signature(
-                &MasterPublicKeyId::Ecdsa(key_id.clone()),
-                &msg_can,
-                log,
-            )
+        // Note: `await_status_is_healthy` is underneath using `reqwest::blocking" which should
+        // _not_ be used in an async runtime, which is the case here. As recommended by the reqwest
+        // documentation (https://docs.rs/reqwest/latest/reqwest/blocking/index.html) we are
+        // wrapping `tokio::task::spawn_blocking` around the call that need to be blocked.
+        // TODO: Consider making `HasPublicApiUrl::status` non-blocking.
+        let _ = tokio::task::spawn_blocking(move || {
+            new_subnet
+                .nodes()
+                .for_each(|node| node.await_status_is_healthy().unwrap())
+        })
+        .await;
+
+        let public_key_1_after_move = get_public_key_and_test_signature(&key_id1, &msg_can, log)
             .await
             .expect(
                 "Should still be able to create and verify the signature \
                     for the pre-existing key",
             );
-        }
+        assert_eq!(public_key_1, public_key_1_after_move);
+        let public_key_2_after_move = get_public_key_and_test_signature(&key_id2, &msg_can, log)
+            .await
+            .expect(
+                "Should still be able to create and verify the signature \
+                    for the pre-existing key",
+            );
+        assert_eq!(public_key_2, public_key_2_after_move);
 
-        let new_public_key = get_public_key_and_test_signature(&key_id, &msg_can, log)
+        let new_public_key = get_public_key_and_test_signature(&key_id3, &msg_can, log)
             .await
             .expect("Should create and verify the signature on the new subnet");
-        assert_eq!(public_key, new_public_key);
+        assert_eq!(public_key_3, new_public_key);
 
         // Reshare agreement on original App subnet should be purged
         let metric_with_label = format!(
             "{}{{key_id=\"{}\",type=\"{}\"}}",
-            ECDSA_PAYLOAD_METRICS, key_id, XNET_RESHARE_AGREEMENTS,
+            ECDSA_PAYLOAD_METRICS, key_id3, XNET_RESHARE_AGREEMENTS,
         );
         let metrics = MetricsFetcher::new(app_subnet.nodes(), vec![metric_with_label.clone()]);
         retry_with_msg_async!(
