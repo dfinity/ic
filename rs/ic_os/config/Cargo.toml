@@ -3,5 +3,5 @@ name = "config"
 version = "1.0.0"
 edition = "2021"
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[dependencies]
 anyhow = { workspace = true }

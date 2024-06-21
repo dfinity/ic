@@ -32,6 +32,7 @@ DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
+    "@crate_index//:tokio",
     "@crate_index//:wat",
 ]
 

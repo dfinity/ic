@@ -14,12 +14,16 @@ use ic_base_types::{
     subnet_id_into_protobuf, CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
 use ic_management_canister_types::{
-    ComputeInitialEcdsaDealingsArgs, ComputeInitialEcdsaDealingsResponse, EcdsaKeyId,
+    ComputeInitialEcdsaDealingsArgs, ComputeInitialEcdsaDealingsResponse,
+    ComputeInitialIDkgDealingsArgs, ComputeInitialIDkgDealingsResponse, EcdsaKeyId,
     MasterPublicKeyId,
 };
 use ic_protobuf::registry::{
     crypto::v1::{ChainKeySigningSubnetList, EcdsaSigningSubnetList},
-    subnet::v1::{CatchUpPackageContents, EcdsaInitialization, SubnetListRecord, SubnetRecord},
+    subnet::v1::{
+        CatchUpPackageContents, ChainKeyInitialization, EcdsaInitialization, SubnetListRecord,
+        SubnetRecord,
+    },
 };
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
@@ -37,6 +41,8 @@ use std::{
     convert::TryFrom,
     iter::FromIterator,
 };
+
+use super::do_create_subnet::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
 
 impl Registry {
     /// Get the subnet record or panic on error with a message.
@@ -184,6 +190,84 @@ impl Registry {
             });
 
         key_map
+    }
+
+    /// Get the initial iDKG dealings via a call to IC00 for a given InitialChainKeyConfig
+    /// and a set of nodes to receive them.
+    pub async fn get_all_initial_i_dkg_dealings_from_ic00(
+        &self,
+        initial_chain_key_config: &Option<InitialChainKeyConfigInternal>,
+        receiver_nodes: Vec<NodeId>,
+    ) -> Vec<ChainKeyInitialization> {
+        let initial_i_dkg_dealings_futures = initial_chain_key_config
+            .as_ref()
+            .map(|initial_chain_key_config| {
+                self.get_compute_i_dkg_args_from_initial_config(
+                    initial_chain_key_config,
+                    receiver_nodes,
+                )
+                .into_iter()
+                .map(|dealing_request| self.get_i_dkg_initializations_from_ic00(dealing_request))
+                .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        futures::future::join_all(initial_i_dkg_dealings_futures).await
+    }
+
+    /// Helper function to build the request objects to send to IC00 for
+    /// `compute_initial_i_dkg_dealings`
+    fn get_compute_i_dkg_args_from_initial_config(
+        &self,
+        initial_chain_key_config: &InitialChainKeyConfigInternal,
+        receiver_nodes: Vec<NodeId>,
+    ) -> Vec<ComputeInitialIDkgDealingsArgs> {
+        let latest_version = self.latest_version();
+        let registry_version = RegistryVersion::new(latest_version);
+        initial_chain_key_config
+            .key_configs
+            .iter()
+            .map(
+                |KeyConfigRequestInternal {
+                     key_config,
+                     subnet_id,
+                     ..
+                 }| {
+                    // create requests outside of async move context to avoid ownership problems
+                    let key_id = key_config.key_id.clone();
+                    let subnet_id = SubnetId::new(*subnet_id);
+                    let nodes = receiver_nodes.iter().copied().collect();
+                    ComputeInitialIDkgDealingsArgs::new(key_id, subnet_id, nodes, registry_version)
+                },
+            )
+            .collect()
+    }
+
+    /// Helper function to make the request and decode the response for
+    /// `compute_initial_i_dkg_dealings`.
+    async fn get_i_dkg_initializations_from_ic00(
+        &self,
+        dealing_request: ComputeInitialIDkgDealingsArgs,
+    ) -> ChainKeyInitialization {
+        let response_bytes = call(
+            CanisterId::ic_00(),
+            "compute_initial_i_dkg_dealings",
+            bytes,
+            Encode!(&dealing_request).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let response = ComputeInitialIDkgDealingsResponse::decode(&response_bytes).unwrap();
+        println!(
+            "{}response from compute_initial_i_dkg_dealings successfully received",
+            LOG_PREFIX
+        );
+
+        ChainKeyInitialization {
+            key_id: Some((&dealing_request.key_id).into()),
+            dealings: Some(response.initial_dkg_dealings),
+        }
     }
 
     /// Get the initial ECDSA dealings via a call to IC00 for a given EcdsaInitialConfig and a set of
@@ -433,6 +517,67 @@ impl Registry {
             return Err(format!(
                 "The requested ECDSA key ids {:?} have duplicates",
                 ecdsa_key_ids
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Validates InitialChainKeyConfig.  If own_subnet_id is supplied, this also validates that all
+    /// requested keys are available on a different subnet (for the case of recovering a subnet)
+    pub fn validate_initial_chain_key_config(
+        &self,
+        initial_chain_key_config: &InitialChainKeyConfigInternal,
+        own_subnet_id: Option<PrincipalId>,
+    ) -> Result<(), String> {
+        let keys_to_subnets = self.get_master_public_keys_to_subnets_map();
+
+        for KeyConfigRequestInternal {
+            key_config,
+            subnet_id,
+        } in &initial_chain_key_config.key_configs
+        {
+            // Requested key must be a known key.
+            let key_id = &key_config.key_id;
+
+            let Some(subnets_for_key) = keys_to_subnets.get(key_id) else {
+                return Err(format!(
+                    "The requested master public key '{}' was not found in any subnet.",
+                    key_id
+                ));
+            };
+
+            // Ensure the subnet being targeted is not the same as the subnet being recovered.
+            if let Some(own_subnet_id) = own_subnet_id {
+                if subnet_id == &own_subnet_id {
+                    return Err(format!(
+                        "Attempted to recover master public key '{}' by requesting it from itself. \
+                         Subnets cannot recover master public keys from themselves.",
+                        key_id,
+                    ));
+                }
+            }
+
+            // Ensure that the targeted subnet actually holds the key.
+            let subnet_id = SubnetId::new(*subnet_id);
+            if !subnets_for_key.contains(&subnet_id) {
+                return Err(format!(
+                    "The requested master public key '{}' is not available in targeted subnet '{}'.",
+                    key_id, subnet_id
+                ));
+            }
+        }
+
+        let key_ids: Vec<_> = initial_chain_key_config
+            .key_configs
+            .iter()
+            .map(|KeyConfigRequestInternal { key_config, .. }| key_config.key_id.clone())
+            .collect();
+
+        if has_duplicates(&key_ids) {
+            return Err(format!(
+                "The requested master public keys {:?} have duplicates",
+                key_ids
             ));
         }
 
