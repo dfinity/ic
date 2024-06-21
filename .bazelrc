@@ -15,8 +15,6 @@ build:fmt --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
 build:fmt --output_groups=+rustfmt_checks
 build --@rules_rust//:rustfmt.toml=//:rustfmt.toml
 
-build:ci --progress_report_interval=30
-
 # Use hermetic JDK
 # See https://bazel.build/docs/bazel-and-java#hermetic-testing
 build --java_runtime_version=remotejdk_17
@@ -64,8 +62,6 @@ build --workspace_status_command=$(pwd)/bazel/workspace_status.sh
 
 build --experimental_repository_downloader_retries=3 # https://bazel.build/reference/command-line-reference#flag--experimental_repository_downloader_retries
 
-build --cxxopt='-std=c++17'
-
 build --flag_alias=ic_version=//bazel:ic_version
 build --flag_alias=ic_version_rc_only=//bazel:ic_version_rc_only
 build --flag_alias=s3_endpoint=//gitlab-ci/src/artifacts:s3_endpoint
@@ -79,7 +75,7 @@ build --build_tag_filters="-system_test,-upload,-fuzz_test"
 test --test_tag_filters="-system_test,-post_master,-fuzz_test"
 test:alltests --test_tag_filters=""
 test:paritytests --test_tag_filters="-system_test"
-test:ci --test_tag_filters="-post_master,-system_test_hourly,-system_test_nightly,-system_test_nightly_nns,-system_test_staging,-system_test_hotfix,-fuzz_test"
+test:ci --test_tag_filters="-post_master,-system_test_hourly,-system_test_nightly,-system_test_nightly_nns,-system_test_staging,-system_test_hotfix,-fuzz_test,-nns_tests_nightly"
 
 test --test_output=errors
 test --test_env=RUST_BACKTRACE=full

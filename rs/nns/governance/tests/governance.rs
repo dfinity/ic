@@ -331,6 +331,12 @@ fn test_single_neuron_proposal_new() {
                                 0.0,
                             ),
                         ]),
+                        GovernanceCachedMetricsChange::TotalVotingPowerNonSelfAuthenticatingController(
+                            comparable::OptionChange::Different(None, Some(1)),
+                        ),
+                        GovernanceCachedMetricsChange::TotalStakedE8SNonSelfAuthenticatingController(
+                            comparable::OptionChange::Different(None, Some(1)),
+                        ),
                     ]),
                 )),
                 GovernanceChange::CachedDailyMaturityModulationBasisPoints(
@@ -12897,6 +12903,9 @@ async fn test_metrics() {
         dissolving_neurons_e8s_buckets_ect: Default::default(),
         not_dissolving_neurons_e8s_buckets_seed: hashmap! {0 => 100000000.0},
         not_dissolving_neurons_e8s_buckets_ect: hashmap! {2 => 200000000.0},
+        // Garbage values, because this test was written before this feature.
+        total_voting_power_non_self_authenticating_controller: Some(0xDEAD),
+        total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
     };
 
     let driver = fake::FakeDriver::default().at(60 * 60 * 24 * 30);
@@ -12909,7 +12918,14 @@ async fn test_metrics() {
 
     let actual_metrics = gov.compute_cached_metrics(now, Tokens::new(0, 0).unwrap());
     assert_eq!(
-        expected_metrics, actual_metrics,
+        expected_metrics,
+        GovernanceCachedMetrics {
+            // Garbage values, because this test was written before this feature.
+            total_voting_power_non_self_authenticating_controller: Some(0xDEAD),
+            total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
+
+            ..actual_metrics
+        },
         "Cached metrics don't match expected metrics."
     );
 
@@ -12918,7 +12934,14 @@ async fn test_metrics() {
     // Check again after periodic task.
     let actual_metrics = gov.compute_cached_metrics(now, Tokens::new(0, 0).unwrap());
     assert_eq!(
-        expected_metrics, actual_metrics,
+        expected_metrics,
+        GovernanceCachedMetrics {
+            // Garbage values, because this test was written before this feature.
+            total_voting_power_non_self_authenticating_controller: Some(0xDEAD),
+            total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
+
+            ..actual_metrics
+        },
         "Invalid metrics after period tasks execution."
     );
 
@@ -12966,10 +12989,20 @@ async fn test_metrics() {
         dissolving_neurons_e8s_buckets_ect: Default::default(),
         not_dissolving_neurons_e8s_buckets_seed: hashmap! { 0 => 100000000.0 },
         not_dissolving_neurons_e8s_buckets_ect: hashmap! { 2 => 200000000.0 },
+        // Garbage values, because this test was written before this feature.
+        total_voting_power_non_self_authenticating_controller: Some(0xDEAD),
+        total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
     };
     let metrics = gov.get_metrics().expect("Error while querying metrics.");
     assert_eq!(
-        expected_metrics, metrics,
+        expected_metrics,
+        GovernanceCachedMetrics {
+            // Garbage values, because this test was written before this feature.
+            total_voting_power_non_self_authenticating_controller: Some(0xDEAD),
+            total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
+
+            ..metrics
+        },
         "Queried metrics don't match expected metrics."
     );
 

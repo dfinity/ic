@@ -458,15 +458,14 @@ pub(crate) fn validate_canister_settings(
     let controllers = settings.controllers();
     if let (Some(_), Some(_)) = (settings.controller(), &controllers) {
         return Err(CanisterManagerError::InvalidSettings {
-                message: "Invalid settings: 'controller' and 'controllers' fields cannot be set simultaneously".to_string(),
+                message: "Invalid settings: 'controller' and 'controllers' fields cannot be set simultaneously.".to_string(),
             });
     }
     match &controllers {
         Some(controllers) => {
             if controllers.len() > max_controllers {
                 return Err(CanisterManagerError::InvalidSettings {
-                    message: "Invalid settings: 'controllers' length exceeds maximum size allowed"
-                        .to_string(),
+                    message: format!("Invalid settings: 'controllers' length exceeds maximum size allowed of {}.", max_controllers),
                 });
             }
         }

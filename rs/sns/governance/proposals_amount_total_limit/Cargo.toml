@@ -14,4 +14,4 @@ candid = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-nervous-system-common = { path = "../../../nervous_system/common" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }

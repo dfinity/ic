@@ -1,9 +1,8 @@
 use crate::common::LOG_PREFIX;
 use crate::invariants::{
     common::{
-        get_all_ecdsa_signing_subnet_list_records, get_node_records_from_snapshot,
-        get_subnet_ids_from_snapshot, get_value_from_snapshot, InvariantCheckError,
-        RegistrySnapshot,
+        get_node_records_from_snapshot, get_subnet_ids_from_snapshot, get_value_from_snapshot,
+        InvariantCheckError, RegistrySnapshot,
     },
     subnet::get_subnet_records_map,
 };
@@ -12,7 +11,6 @@ use ic_crypto_utils_ni_dkg::extract_subnet_threshold_sig_public_key;
 use ic_protobuf::registry::crypto::v1::{MasterPublicKeyId, PublicKey, X509PublicKeyCert};
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetRecord};
 use ic_registry_keys::{
-    get_ecdsa_key_id_from_signing_subnet_list_key,
     get_master_public_key_id_from_signing_subnet_list_key, make_catch_up_package_contents_key,
     make_crypto_threshold_signing_pubkey_key, make_node_record_key, make_subnet_record_key,
     maybe_parse_crypto_node_key, maybe_parse_crypto_tls_cert_key, CRYPTO_RECORD_KEY_PREFIX,
@@ -67,7 +65,6 @@ pub(crate) fn check_node_crypto_keys_invariants(
     check_node_crypto_keys_exist_and_are_unique(snapshot)?;
     check_no_orphaned_node_crypto_records(snapshot)?;
     check_chain_key_configs(snapshot)?;
-    check_ecdsa_signing_subnet_lists(snapshot)?;
     check_chain_key_signing_subnet_lists(snapshot)?;
     check_high_threshold_public_key_matches_the_one_in_cup(snapshot)?;
     Ok(())
@@ -317,64 +314,6 @@ fn check_chain_key_configs(snapshot: &RegistrySnapshot) -> Result<(), InvariantC
         }
     }
     Ok(())
-}
-
-// TODO[NNS1-2986]: Remove this function after the migration has been performed.
-fn check_ecdsa_signing_subnet_lists(
-    snapshot: &RegistrySnapshot,
-) -> Result<(), InvariantCheckError> {
-    let subnet_records_map = get_subnet_records_map(snapshot);
-
-    get_all_ecdsa_signing_subnet_list_records(snapshot)
-        .iter()
-        .try_for_each(|(key_id, ecdsa_signing_subnet_list)| {
-            let ecdsa_key_id =  match get_ecdsa_key_id_from_signing_subnet_list_key(key_id) {
-                Ok(ecdsa_key_id) => ecdsa_key_id,
-                Err(error) => {
-                    return Err(InvariantCheckError {
-                        msg: format!(
-                            "Registry key_id {} could not be converted to an ECDSA signature key id: {:?}",
-                            key_id,
-                            error,
-                        ),
-                        source: None,
-                    });
-                }
-            };
-
-            ecdsa_signing_subnet_list
-                .subnets
-                .iter()
-                .try_for_each(|subnet_id_bytes| {
-                    let subnet_id = subnet_id_try_from_protobuf(subnet_id_bytes.clone()).unwrap();
-
-                    subnet_records_map
-                        .get(&make_subnet_record_key(subnet_id).into_bytes())
-                        .ok_or(InvariantCheckError {
-                            msg: format!(
-                                "A non-existent subnet {} was set as the holder of a key_id {}",
-                                subnet_id, key_id
-                            ),
-                            source: None,
-                        })?
-                        .ecdsa_config
-                        .as_ref()
-                        .ok_or(InvariantCheckError {
-                            msg: format!("The subnet {} does not have an ECDSA config", subnet_id),
-                            source: None,
-                        })?
-                        .key_ids
-                        .contains(&(&ecdsa_key_id).into())
-                        .then_some(())
-                        .ok_or(InvariantCheckError {
-                            msg: format!(
-                                "The subnet {} does not have the key with {} in its ecdsa configurations",
-                                subnet_id, key_id
-                            ),
-                            source: None,
-                        })
-                })
-        })
 }
 
 /// Checks that the chain key signing subnet list is consistent with the chain key configurations

@@ -45,16 +45,13 @@ ic-xnet-endpoint = { path = "../xnet/endpoint" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
 jemalloc-ctl = "0.3.3"
 jemallocator = "0.3.2"
-libc = "0.2.91"
+libc = { workspace = true }
 nix = { workspace = true }
 num_cpus = "1.13.1"
 opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 opentelemetry-otlp = { workspace = true }
-pprof = { version = "0.13", default-features = false, features = [
-    "flamegraph",
-    "prost-codec",
-], optional = true }
+pprof = { workspace = true, optional = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }

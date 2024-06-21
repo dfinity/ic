@@ -36,18 +36,10 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
-  dind-small-setup: &dind-small-setup
-    runs-on:
-      labels: dind-runner-small
-    container:
-      <<: *image
-    timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}
+    image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
   dind-large-setup: &dind-large-setup
     runs-on:
-      labels: dind-runner-large
-      group: ln1
+      group: dind-large
     container:
       <<: *image
     timeout-minutes: 90
@@ -64,7 +56,7 @@ anchors:
       fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
   python-setup: &python-setup
     name: Set up Python
-    uses: actions/setup-python@v3
+    uses: actions/setup-python@v5
     with:
       python-version: '3.10'
 
@@ -156,9 +148,10 @@ jobs:
           BAZEL_TARGETS: "//rs/... //publish/binaries/..."
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Purge Bazel Output
+        if: always()
         shell: bash
         run: |
-          sudo rm -rf /private/var/tmp/bazel-output/${ROOT_PIPELINE_ID}
+          sudo rm -rf /private/var/tmp/bazel-output
 
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers

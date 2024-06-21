@@ -33,10 +33,9 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     runs-on:
-      labels: dind-runner-large
-      group: ln1
+      group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
+      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     env:
@@ -73,10 +72,9 @@ jobs:
             bazel-targets
   bazel-build-all-config-check:
     runs-on:
-      labels: dind-runner-large
-      group: ln1
+      group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
+      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     name: Bazel Build All Config Check
@@ -145,16 +143,16 @@ jobs:
           BAZEL_TARGETS: "//rs/... //publish/binaries/..."
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Purge Bazel Output
+        if: always()
         shell: bash
         run: |
-          sudo rm -rf /private/var/tmp/bazel-output/${ROOT_PIPELINE_ID}
+          sudo rm -rf /private/var/tmp/bazel-output
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     runs-on:
-      labels: dind-runner-large
-      group: ln1
+      group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
+      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -177,10 +175,9 @@ jobs:
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     runs-on:
-      labels: dind-runner-large
-      group: ln1
+      group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
+      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -211,7 +208,7 @@ jobs:
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Set up Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       - name: Run Python CI Tests
@@ -228,10 +225,9 @@ jobs:
   build-ic:
     name: Build IC
     runs-on:
-      labels: dind-runner-large
-      group: ln1
+      group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
+      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' && github.event_name != 'merge_group' }}
     steps:
@@ -322,10 +318,9 @@ jobs:
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     runs-on:
-      labels: dind-runner-large
-      group: ln1
+      group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
+      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -359,10 +354,9 @@ jobs:
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     runs-on:
-      labels: dind-runner-large
-      group: ln1
+      group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
+      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:

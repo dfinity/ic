@@ -1156,6 +1156,64 @@ mod withdraw_erc20 {
             })
             .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending);
     }
+
+    #[test]
+    fn should_retrieve_cached_transaction_price() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+        let caller = ckerc20.caller();
+        let ckerc20_tx_fee = DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE;
+
+        let ckerc20 = ckerc20
+            .deposit_cketh_and_ckerc20(
+                EXPECTED_BALANCE,
+                TWO_USDC + CKERC20_TRANSFER_FEE,
+                ckusdc.clone(),
+                caller,
+            )
+            .expect_mint()
+            .call_cketh_ledger_approve_minter(caller, ckerc20_tx_fee, None)
+            .call_ckerc20_ledger_approve_minter(ckusdc.ledger_canister_id, caller, TWO_USDC, None)
+            .call_minter_withdraw_erc20(
+                caller,
+                TWO_USDC,
+                ckusdc.ledger_canister_id,
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_refresh_gas_fee_estimate(identity)
+            .expect_withdrawal_request_accepted()
+            .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
+            .setup;
+
+        let tx = ckerc20
+            .cketh
+            .get_all_events()
+            .into_iter()
+            .find_map(|event| match event.payload {
+                EventPayload::CreatedTransaction { transaction, .. } => Some(transaction),
+                _ => None,
+            })
+            .expect("missing CreatedTransaction event");
+
+        let price = ckerc20
+            .cketh
+            .eip_1559_transaction_price_expecting_ok(Some(ckusdc.ledger_canister_id));
+        assert_eq!(price.max_priority_fee_per_gas, tx.max_priority_fee_per_gas);
+        assert_eq!(price.max_fee_per_gas, tx.max_fee_per_gas);
+        assert_eq!(price.gas_limit, tx.gas_limit);
+
+        ckerc20.env.tick();
+        let second_price = ckerc20
+            .cketh
+            .eip_1559_transaction_price_expecting_ok(Some(ckusdc.ledger_canister_id));
+        assert_eq!(price, second_price);
+
+        // test an error case
+        let not_ledger_id = ckerc20.cketh.minter_id.into();
+        ckerc20
+            .cketh
+            .eip_1559_transaction_price_expecting_err(not_ledger_id);
+    }
 }
 
 #[test]

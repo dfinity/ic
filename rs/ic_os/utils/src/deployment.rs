@@ -65,7 +65,7 @@ mod comma_urls {
     where
         D: Deserializer<'de>,
     {
-        let s: &str = Deserialize::deserialize(d)?;
+        let s: String = Deserialize::deserialize(d)?;
 
         s.split(',')
             .map(|v| v.parse::<Url>().map_err(de::Error::custom))
@@ -77,6 +77,7 @@ mod comma_urls {
 mod test {
     use super::*;
     use once_cell::sync::Lazy;
+    use serde_json::{json, Value};
 
     const DEPLOYMENT_STR: &str = r#"{
   "deployment": {
@@ -92,6 +93,24 @@ mod test {
     "memory": "490"
   }
 }"#;
+
+    static DEPLOYMENT_VALUE: Lazy<Value> = Lazy::new(|| {
+        json!({
+              "deployment": {
+                "name": "mainnet"
+              },
+              "logging": {
+                "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
+              },
+              "nns": {
+                "url": "https://dfinity.org/"
+              },
+              "resources": {
+                "memory": "490"
+              }
+            }
+        )
+    });
 
     static DEPLOYMENT_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
         DeploymentJson {
@@ -190,6 +209,14 @@ mod test {
             { serde_json::from_str(MULTI_URL_SANS_SLASH_STR).unwrap() };
 
         assert_eq!(*MULTI_URL_STRUCT, parsed_multi_url_sans_slash_deployment);
+
+        // Exercise DeserializeOwned using serde_json::from_value.
+        // DeserializeOwned is used by serde_json::from_reader, which is the
+        // main entrypoint of this code, in practice.
+        let parsed_deployment: DeploymentJson =
+            { serde_json::from_value(DEPLOYMENT_VALUE.clone()).unwrap() };
+
+        assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
     }
 
     #[test]

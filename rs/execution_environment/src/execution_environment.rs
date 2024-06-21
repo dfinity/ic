@@ -556,22 +556,26 @@ impl ExecutionEnvironment {
                 );
             }
 
-            Ok(Ic00Method::InstallChunkedCode)
-                if self.config.wasm_chunk_store == FlagStatus::Enabled =>
-            {
-                // Tail call is needed for deterministic time slicing here to
-                // properly handle the case of a paused execution.
-                return self.execute_install_code(
-                    msg,
-                    None,
-                    None,
-                    DtsInstallCodeStatus::StartingFirstExecution,
-                    state,
-                    instruction_limits,
-                    round_limits,
-                    registry_settings.subnet_size,
-                );
+            Ok(Ic00Method::InstallChunkedCode) => {
+                if self.config.wasm_chunk_store == FlagStatus::Enabled {
+                    // Tail call is needed for deterministic time slicing here to
+                    // properly handle the case of a paused execution.
+                    return self.execute_install_code(
+                        msg,
+                        None,
+                        None,
+                        DtsInstallCodeStatus::StartingFirstExecution,
+                        state,
+                        instruction_limits,
+                        round_limits,
+                        registry_settings.subnet_size,
+                    );
+                } else {
+                    Self::reject_due_to_api_not_implemented(&mut msg)
+                }
             }
+
+            Ok(Ic00Method::DeleteChunks) => Self::reject_due_to_api_not_implemented(&mut msg),
 
             Ok(Ic00Method::SignWithECDSA) => match &msg {
                 CanisterCall::Request(request) => {
@@ -1383,10 +1387,6 @@ impl ExecutionEnvironment {
                     response: res,
                     refund: msg.take_cycles(),
                 }
-            }
-
-            Ok(Ic00Method::DeleteChunks) | Ok(Ic00Method::InstallChunkedCode) => {
-                Self::reject_due_to_api_not_implemented(&mut msg)
             }
 
             Ok(Ic00Method::NodeMetricsHistory) => {

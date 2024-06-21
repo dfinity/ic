@@ -1162,7 +1162,7 @@ pub enum ExecutionRoundType {
 }
 
 /// Execution round properties collected form the last DKG summary block.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExecutionRoundSummary {
     /// The next checkpoint round height.
     ///

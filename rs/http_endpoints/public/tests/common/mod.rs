@@ -66,7 +66,7 @@ use std::{collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc
 use tokio::{
     net::{TcpSocket, TcpStream},
     sync::{
-        mpsc::{UnboundedReceiver, UnboundedSender},
+        mpsc::{channel, unbounded_channel, Sender, UnboundedReceiver},
         watch,
     },
 };
@@ -368,7 +368,7 @@ pub struct HttpEndpointHandles {
     pub ingress_filter: IngressFilterHandle,
     pub ingress_rx: UnboundedReceiver<UnvalidatedArtifactMutation<IngressArtifact>>,
     pub query_execution: QueryExecutionHandle,
-    pub terminal_state_ingress_messages: UnboundedSender<(MessageId, Height)>,
+    pub terminal_state_ingress_messages: Sender<(MessageId, Height)>,
     pub certified_height_watcher: watch::Sender<Height>,
 }
 
@@ -457,9 +457,8 @@ impl HttpEndpointBuilder {
         let (query_exe, query_exe_handler) = setup_query_execution_mock();
         let (certified_height_watcher_tx, certified_height_watcher_rx) =
             watch::channel(self.certified_height.unwrap_or_default());
-        #[allow(clippy::disallowed_methods)]
-        let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) =
-            tokio::sync::mpsc::unbounded_channel();
+
+        let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
 
         // Run test on "nns" to avoid fetching root delegation
         let subnet_id = subnet_test_id(1);
@@ -469,10 +468,8 @@ impl HttpEndpointBuilder {
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
 
-        // It is fine to use an unbounded channel as the the consumer, [`IngressWatcher`],
-        // will be able to consume the messages at the same rate as they are produced.
         #[allow(clippy::disallowed_methods)]
-        let (ingress_tx, ingress_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (ingress_tx, ingress_rx) = unbounded_channel();
 
         let log = no_op_logger();
 
@@ -499,8 +496,8 @@ impl HttpEndpointBuilder {
             self.delegation_from_nns,
             self.pprof_collector,
             ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
-            Some(certified_height_watcher_rx),
-            Some(terminal_state_ingress_messages_rx),
+            certified_height_watcher_rx,
+            terminal_state_ingress_messages_rx,
         );
 
         HttpEndpointHandles {
