@@ -408,18 +408,20 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
 #[test]
 fn test_subnets_configuration_ecdsa_fields_are_updated_correctly_legacy() {
     const ENABLE_BEFORE_ADDING_REJECT_MSG: &str = "Canister rejected with \
-    message: IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister \
-    called `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable \
-    signing for ECDSA key 'ecdsa:Secp256k1:key_id_1' on Subnet \
-    'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', but the \
-    subnet does not hold the given key. A proposal to add that key to the subnet \
-    must first be separately submitted.'";
+        message: IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister \
+        called `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable \
+        signing for ECDSA key 'ecdsa:Secp256k1:key_id_1' on Subnet \
+        'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', but the \
+        subnet does not hold the given key. A proposal to add that key to the subnet \
+        must first be separately submitted.'";
 
-    const NO_CHAIN_KEY_CONFIG_REJECT_MSG: &str = "Canister rejected with message: \
-    IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
-    `ic0.trap` with message: Panicked at '[Registry]  invariant check failed with \
-    message: The subnet bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae \
-    does not have a ChainKeyConfig'";
+    const NO_CHAIN_KEY_CONFIG_REJECT_MSG: &str = "Canister rejected with \
+        message: IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister \
+        called `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable \
+        signing for ECDSA key 'ecdsa:Secp256k1:key_id_1' \
+        on Subnet 'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', \
+        but the subnet does not hold the given key. A proposal to add that key to the subnet \
+        must first be separately submitted.'";
 
     local_test_on_nns_subnet(|runtime| async move {
         let subnet_id = SubnetId::from(
@@ -540,7 +542,12 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly_legacy() {
 
         let err_text = assert_matches!(response, Err(err_text) => err_text);
 
-        assert!(err_text.contains(NO_CHAIN_KEY_CONFIG_REJECT_MSG));
+        assert!(
+            err_text.contains(NO_CHAIN_KEY_CONFIG_REJECT_MSG),
+            "Error `{}` does not contain expected substring\n{}",
+            err_text,
+            NO_CHAIN_KEY_CONFIG_REJECT_MSG,
+        );
 
         let new_subnet_record = get_value_or_panic::<SubnetRecord>(
             &registry,
@@ -587,7 +594,6 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly_legacy() {
 
         // This update should enable signing on our subnet for the given key.
         payload = UpdateSubnetPayload {
-            ecdsa_config: ecdsa_config.clone(),
             ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
             ..empty_update_subnet_payload(subnet_id)
         };
@@ -658,11 +664,16 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         key_id
     );
 
-    const NO_CHAIN_KEY_CONFIG_REJECT_MSG: &str = "Canister rejected with message: \
+    let no_chain_key_config_reject_msg = format!(
+        "Canister rejected with message: \
         IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
-        `ic0.trap` with message: Panicked at '[Registry]  invariant check failed with \
-        message: The subnet bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae \
-        does not have a ChainKeyConfig'";
+        `ic0.trap` with message: Panicked at '[Registry] Proposal attempts to enable signing \
+        for chain key '{}' \
+        on Subnet 'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', \
+        but the subnet does not hold the given key. A proposal to add that key to the subnet \
+        must first be separately submitted.'",
+        key_id
+    );
 
     local_test_on_nns_subnet(|runtime| async move {
         let subnet_id = SubnetId::from(
@@ -785,7 +796,12 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
 
         let err_text = assert_matches!(response, Err(err_text) => err_text);
 
-        assert!(err_text.contains(NO_CHAIN_KEY_CONFIG_REJECT_MSG));
+        assert!(
+            err_text.contains(&no_chain_key_config_reject_msg),
+            "Error `{}` does not contain expected substring\n{}",
+            err_text,
+            no_chain_key_config_reject_msg,
+        );
 
         let subnet_record = get_value_or_panic::<SubnetRecord>(
             &registry,
