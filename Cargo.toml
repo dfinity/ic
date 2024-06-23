@@ -420,11 +420,6 @@ opt-level = 3
 [profile.dev.package.p256]
 opt-level = 3
 
-[patch.crates-io]
-# Current jsonrpc version (0.12.1) does not support ipv6 addressing. When new version is
-# released this can be removed.
-jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
-
         [workspace.dependencies]
 anyhow = "1.0.80"
 arrayvec = "0.7.4"

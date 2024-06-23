@@ -1,5 +1,5 @@
 {
-  "checksum": "60b28d81bff84c8163da0806a847dff6ab8bd04b6f5bd8c197c7fe7383f6c312",
+  "checksum": "3a7c789b1360408ca304dd9d20d24412e2499f8b6721b28367ce4cbe7540975a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5585,6 +5585,54 @@
         "version": "0.22.0"
       },
       "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "base64-compat 1.0.0": {
+      "name": "base64-compat",
+      "version": "1.0.0",
+      "package_url": "https://github.com/stevenroose/rust-base64-compat",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/base64-compat/1.0.0/download",
+          "sha256": "5a8d4d2746f89841e49230dd26917df1876050f95abafafbe34f47cb534b88d7"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "base64",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "base64",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "byteorder 1.5.0",
+              "target": "byteorder"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "1.0.0"
+      },
+      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -32002,11 +32050,9 @@
       "version": "0.12.1",
       "package_url": "https://github.com/apoelstra/rust-jsonrpc/",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/apoelstra/rust-jsonrpc",
-          "commitish": {
-            "Rev": "e42044d8e0896317488dfbd65eb5563d76e937fe"
-          }
+        "Http": {
+          "url": "https://static.crates.io/crates/jsonrpc/0.12.1/download",
+          "sha256": "7f8423b78fc94d12ef1a4a9d13c348c9a78766dda0cc18817adf0faf77e670c8"
         }
       },
       "targets": [
@@ -32030,7 +32076,7 @@
         ],
         "crate_features": {
           "common": [
-            "base64",
+            "base64-compat",
             "default",
             "simple_http",
             "simple_tcp"
@@ -32040,7 +32086,7 @@
         "deps": {
           "common": [
             {
-              "id": "base64 0.13.1",
+              "id": "base64-compat 1.0.0",
               "target": "base64"
             },
             {
@@ -32054,7 +32100,16 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
+        "edition": "2015",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "serde_derive 1.0.203",
+              "target": "serde_derive"
+            }
+          ],
+          "selects": {}
+        },
         "version": "0.12.1"
       },
       "license": "CC0-1.0",
@@ -35012,30 +35067,38 @@
         ],
         "crate_features": {
           "common": [
-            "elf",
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "aarch64-unknown-nixos-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "arm-unknown-linux-gnueabi": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "armv7-unknown-linux-gnueabi": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "i686-unknown-linux-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
@@ -35048,10 +35111,14 @@
               "system"
             ],
             "x86_64-unknown-linux-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "x86_64-unknown-nixos-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ]

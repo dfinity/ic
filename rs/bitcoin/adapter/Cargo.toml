@@ -36,7 +36,7 @@ tower = { workspace = true, optional = true }
 
 [dev-dependencies]
 bitcoind = "0.32.0"
-bitcoincore-rpc = "0.15.0"
+bitcoincore-rpc = "0.19.0"
 criterion = { workspace = true }
 ic-btc-adapter-test-utils = { path = "./test_utils" }
 ic-btc-adapter-client = { path = "../client" }
