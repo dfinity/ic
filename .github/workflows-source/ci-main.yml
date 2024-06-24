@@ -89,7 +89,6 @@ jobs:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           # check if PR title contains release and set timeout filters accordingly
           BAZEL_EXTRA_ARGS_RULES: ${{ env.BAZEL_EXTRA_ARGS_RULES || '' }}
-          BAZEL_EXTRA_ARGS: "--keep_going"
           # run on diff only if it is a pull request, otherwise run all targets
           RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
@@ -177,7 +176,6 @@ jobs:
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
-          BAZEL_CI_CONFIG: "--config=ci"
           BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
 
   bazel-build-fuzzers-afl:
@@ -192,7 +190,6 @@ jobs:
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
-          BAZEL_CI_CONFIG: "--config=ci"
           BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
 
   python-ci-tests:
@@ -358,8 +355,6 @@ jobs:
   bazel-system-test-hotfix:
     name: Bazel Test All
     <<: *dind-large-setup
-    env:
-      TITLE: ${{ github.event.pull_request.title }}
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -370,7 +365,4 @@ jobs:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//... --deleted_packages=gitlab-ci/src/gitlab_config"
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          # check if PR title contains release and set timeout filters accordingly
           BAZEL_EXTRA_ARGS_RULES: "--test_tag_filters=system_test_hotfix"
-          BAZEL_EXTRA_ARGS: "--keep_going --verbose_failures"
-          # run on diff only if it is a pull request, otherwise run all targets
