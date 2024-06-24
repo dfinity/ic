@@ -50,8 +50,8 @@ use ic_replicated_state::{
     canister_state::system_state::PausedExecutionId,
     canister_state::{system_state::CyclesUseCase, NextExecution},
     metadata_state::subnet_call_context_manager::{
-        EcdsaDealingsContext, IDkgDealingsContext, InstallCodeCall, InstallCodeCallId,
-        SchnorrArguments, SetupInitialDkgContext, SignWithEcdsaContext, SignWithThresholdContext,
+        EcdsaArguments, EcdsaDealingsContext, IDkgDealingsContext, InstallCodeCall,
+        InstallCodeCallId, SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext,
         StopCanisterCall, SubnetCallContext, ThresholdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
@@ -494,7 +494,10 @@ impl ExecutionEnvironment {
 
                         if matches!(
                             (&context, &response.response_payload),
-                            (&SubnetCallContext::SignWithEcdsa(_), &Payload::Data(_))
+                            (
+                                SubnetCallContext::SignWithThreshold(threshold_context),
+                                Payload::Data(_)
+                            ) if threshold_context.is_ecdsa()
                         ) {
                             state.metadata.subnet_metrics.ecdsa_signature_agreements += 1;
                         }
@@ -2664,33 +2667,31 @@ impl ExecutionEnvironment {
             }
         }
 
-        let key = MasterPublicKeyId::Ecdsa(key_id.clone());
+        let threshold_key = MasterPublicKeyId::Ecdsa(key_id.clone());
         if !topology
-            .idkg_signing_subnets(&key)
+            .idkg_signing_subnets(&threshold_key)
             .contains(&state.metadata.own_subnet_id)
         {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
                     "{} request failed: invalid or disabled key {}.",
-                    request.method_name, key
+                    request.method_name, threshold_key
                 ),
             ));
         }
 
-        // TODO(EXC-1645): migrate to using `.sign_with_threshold_contexts`.
         if state
             .metadata
             .subnet_call_context_manager
-            .sign_with_ecdsa_contexts
-            .len()
+            .sign_with_threshold_contexts_count(&threshold_key)
             >= max_queue_size as usize
         {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request failed: the ECDSA signature queue is full.",
-                    request.method_name
+                    "{} request failed: signature queue for key {} is full.",
+                    request.method_name, threshold_key
                 ),
             ));
         }
@@ -2705,19 +2706,20 @@ impl ExecutionEnvironment {
             request.sender()
         );
 
-        state
-            .metadata
-            .subnet_call_context_manager
-            .push_context(SubnetCallContext::SignWithEcdsa(SignWithEcdsaContext {
+        state.metadata.subnet_call_context_manager.push_context(
+            SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
                 request,
-                key_id,
-                message_hash,
+                args: ThresholdArguments::Ecdsa(EcdsaArguments {
+                    key_id,
+                    message_hash,
+                }),
                 derivation_path,
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
-                matched_quadruple: None,
+                matched_pre_signature: None,
                 nonce: None,
-            }));
+            }),
+        );
         Ok(())
     }
 
