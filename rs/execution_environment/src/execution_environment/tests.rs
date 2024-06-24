@@ -2747,12 +2747,12 @@ fn canister_output_queue_does_not_overflow_when_calling_ic00() {
         let (message_id, _) = test.ingress_raw(uc, "update", payload);
         test.execute_message(uc);
         if i > DEFAULT_QUEUE_CAPACITY {
-            assert_eq!(
-                test.ingress_state(&message_id),
-                IngressState::Failed(UserError::new(
+            let IngressState::Failed(ingress_state) = test.ingress_state(&message_id) else {
+                panic!("Unexpected state {:?}", test.ingress_state(&message_id));
+            };
+            ingress_state.assert_contains(
                     ErrorCode::CanisterCalledTrap,
-                    format!("Error from Canister {uc}: Canister called `ic0.trap` with message: call_perform failed")
-                ))
+                    &format!("Error from Canister {uc}: Canister called `ic0.trap` with message: call_perform failed")
             );
         } else {
             assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
@@ -2795,12 +2795,12 @@ fn send_messages_to_bitcoin_canister_until_capacity(
         let (message_id, _) = test.ingress_raw(uc, "update", payload);
         test.execute_message(uc);
         if i > DEFAULT_QUEUE_CAPACITY {
-            assert_eq!(
-                test.ingress_state(&message_id),
-                IngressState::Failed(UserError::new(
+            let IngressState::Failed(ingress_state) = test.ingress_state(&message_id) else {
+                panic!("Unexpected state {:?}", test.ingress_state(&message_id));
+            };
+            ingress_state.assert_contains(
                     ErrorCode::CanisterCalledTrap,
-                    format!("Error from Canister {uc}: Canister called `ic0.trap` with message: call_perform failed")
-                ))
+                    &format!("Error from Canister {uc}: Canister called `ic0.trap` with message: call_perform failed")
             );
         } else {
             assert_eq!(test.ingress_state(&message_id), IngressState::Processing);

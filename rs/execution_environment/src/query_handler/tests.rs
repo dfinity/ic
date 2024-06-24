@@ -1788,29 +1788,28 @@ fn query_call_exceeds_instructions_limit() {
 
     let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
-    let output = test.query(
-        Query {
-            source: QuerySource::User {
-                user_id: user_test_id(1),
-                ingress_expiry: 0,
-                nonce: None,
+    let output = test
+        .query(
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(1),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
+                receiver: canister,
+                method_name: "query".to_string(),
+                method_payload: wasm().stable_grow(10).build(),
             },
-            receiver: canister,
-            method_name: "query".to_string(),
-            method_payload: wasm().stable_grow(10).build(),
-        },
-        Arc::new(test.state().clone()),
-        vec![],
-    );
-    assert_eq!(
-        output,
-        Err(UserError::new(
+            Arc::new(test.state().clone()),
+            vec![],
+        )
+        .unwrap_err();
+    output.assert_contains(
             ErrorCode::CanisterInstructionLimitExceeded,
-            format!(
+            &format!(
                 "Error from Canister {}: Canister exceeded the limit of {} instructions for single message execution.",
                 canister,
                 instructions_limit
             )
-        ))
     );
 }

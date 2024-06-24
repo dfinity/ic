@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;

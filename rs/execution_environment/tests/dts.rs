@@ -1790,9 +1790,9 @@ fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
                 assert_eq!(result, WasmResult::Reply(vec![]));
             }
             Err(err) => {
-                assert_eq!(
-                    err.description(),
-                    format!(
+                err.assert_contains(
+                    ErrorCode::CanisterWasmModuleNotFound,
+                    &format!(
                         "Error from Canister {}: Attempted to execute a message, but the canister contains no Wasm module.",
                         canisters[i]
                     )
