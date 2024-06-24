@@ -51,7 +51,8 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
-      - name: check Trigger type
+      - name: check trigger type
+        shell: bash
         run: "if [[ \"${{ github.event.pull_request.labels.*.name }}\" == *\"merge-train\"* ]]; then\n  echo \"BAZEL_EXTRA_ARGS_RULES=--test_timeout_filters=short,moderate --flaky_test_attempts=3\" >> $GITHUB_ENV\nfi\nBRANCH_NAME=${GITHUB_REF#refs/heads/}\nif [[ $BRANCH_NAME =~ /\\bhotfix\\ ]]; then\n  echo \"BAZEL_EXTRA_ARGS_RULES=--test_timeout_filters=short,moderate\" >> $GITHUB_ENV\nfi \n"
       - name: Run Bazel Test All
         id: bazel-test-all
