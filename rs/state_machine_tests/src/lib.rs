@@ -74,7 +74,7 @@ use ic_registry_subnet_features::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{system_state::CyclesUseCase, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES},
-    metadata_state::subnet_call_context_manager::SignWithEcdsaContext,
+    metadata_state::subnet_call_context_manager::SignWithThresholdContext,
     page_map::Buffer,
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
 };
@@ -1011,8 +1011,7 @@ impl StateMachine {
         let sign_with_ecdsa_contexts = state
             .metadata
             .subnet_call_context_manager
-            .sign_with_ecdsa_contexts
-            .clone();
+            .sign_with_ecdsa_contexts();
         for (callback, ecdsa_context) in sign_with_ecdsa_contexts {
             // The chain code is an additional input used during the key derivation process
             // to ensure deterministic generation of child keys from the master key.
@@ -1025,7 +1024,7 @@ impl StateMachine {
             );
             let signature = sign_prehashed_message_with_derived_key(
                 &self.ecdsa_secret_key,
-                &ecdsa_context.message_hash,
+                &ecdsa_context.ecdsa_args().message_hash,
                 derivation_path,
             );
 
@@ -1532,8 +1531,7 @@ impl StateMachine {
         let sign_with_ecdsa_contexts = state
             .metadata
             .subnet_call_context_manager
-            .sign_with_ecdsa_contexts
-            .clone();
+            .sign_with_ecdsa_contexts();
         for (callback, ecdsa_context) in sign_with_ecdsa_contexts {
             // The chain code is an additional input used during the key derivation process
             // to ensure deterministic generation of child keys from the master key.
@@ -1547,7 +1545,7 @@ impl StateMachine {
             );
             let signature = sign_prehashed_message_with_derived_key(
                 &self.ecdsa_secret_key,
-                &ecdsa_context.message_hash,
+                &ecdsa_context.ecdsa_args().message_hash,
                 derivation_path,
             );
 
@@ -2693,14 +2691,22 @@ impl StateMachine {
         balance
     }
 
-    /// Returns sign with ECDSA contexts from internal subnet call context manager.
-    pub fn sign_with_ecdsa_contexts(&self) -> BTreeMap<CallbackId, SignWithEcdsaContext> {
+    /// Returns `sign_with_ecdsa` contexts from internal subnet call context manager.
+    pub fn sign_with_ecdsa_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
         let state = self.state_manager.get_latest_state().take();
         state
             .metadata
             .subnet_call_context_manager
-            .sign_with_ecdsa_contexts
-            .clone()
+            .sign_with_ecdsa_contexts()
+    }
+
+    /// Returns `sign_with_schnorr` contexts from internal subnet call context manager.
+    pub fn sign_with_schnorr_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        let state = self.state_manager.get_latest_state().take();
+        state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_schnorr_contexts()
     }
 
     /// Returns canister HTTP request contexts from internal subnet call context manager.
