@@ -1846,7 +1846,7 @@ cargo-clippy-linux:
 commit-lint:
   needs: []
   rules:
-    - allow_failure: true
+    - allow_failure: false
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - "./gitlab-ci/src/ci-scripts/commit-lint.sh"
