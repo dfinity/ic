@@ -3,9 +3,6 @@ on:
   schedule:
     - cron: "0 1 * * *"
   workflow_dispatch:
-  pull_request:
-    paths:
-      - '.github/workflows/schedule-daily.yml'
 env:
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
