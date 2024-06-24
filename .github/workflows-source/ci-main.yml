@@ -362,6 +362,7 @@ jobs:
  #   if: ${{ inputs.rosetta-api-release == 'true' }}
     steps:
       - <<: *checkout
+      - <<: *before-script
       - name: Build rosetta-api image
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/rosetta-api-docker-image.sh
