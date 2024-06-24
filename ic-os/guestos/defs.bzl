@@ -81,17 +81,9 @@ def image_deps(mode, malicious = False):
             "build_args": dev_build_args,
             "file_build_arg": dev_file_build_arg,
         },
-        "local-base-dev": {
-            "build_args": dev_build_args,
-            "file_build_arg": dev_file_build_arg,
-        },
         "dev-malicious": {
             "build_args": dev_build_args,
             "file_build_arg": dev_file_build_arg,
-        },
-        "local-base-prod": {
-            "build_args": prod_build_args,
-            "file_build_arg": prod_file_build_arg,
         },
         "prod": {
             "build_args": prod_build_args,
@@ -104,9 +96,6 @@ def image_deps(mode, malicious = False):
     # Add extra files depending on image variant
     extra_rootfs_deps = {
         "dev": {
-            "//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644",
-        },
-        "local-base-dev": {
             "//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644",
         },
     }

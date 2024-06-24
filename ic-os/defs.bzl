@@ -20,7 +20,6 @@ def icos_build(
         vuln_scan = True,
         visibility = None,
         tags = None,
-        build_local_base_image = False,
         ic_version = "//bazel:version.txt"):
     """
     Generic ICOS build tooling.
@@ -35,7 +34,6 @@ def icos_build(
       vuln_scan: if True, create targets for vulnerability scanning
       visibility: See Bazel documentation
       tags: See Bazel documentation
-      build_local_base_image: if True, build the base images from scratch. Do not download the docker.io base image.
       ic_version: the label pointing to the target that returns IC version
     """
 
@@ -70,45 +68,35 @@ def icos_build(
 
     # -------------------- Build the container image --------------------
 
-    if build_local_base_image:
-        base_image_tag = "base-image-" + name  # Reuse for build_container_filesystem_tar
-        package_files_arg = "PACKAGE_FILES=packages.common"
-        if "dev" in mode:
-            package_files_arg += " packages.dev"
+    # Reused in rootfs-tree.tar
+    base_image_tag = "base-image-" + name
 
-        build_container_base_image(
-            name = "base_image.tar",
-            context_files = [image_deps["container_context_files"]],
-            image_tag = base_image_tag,
-            dockerfile = image_deps["base_dockerfile"],
-            build_args = [package_files_arg],
-            target_compatible_with = ["@platforms//os:linux"],
-            tags = ["manual"],
-        )
+    package_files_arg = "PACKAGE_FILES=packages.common"
+    if "dev" in mode:
+        package_files_arg += " packages.dev"
 
-        build_container_filesystem(
-            name = "rootfs-tree.tar",
-            context_files = [image_deps["container_context_files"]],
-            component_files = image_deps["component_files"],
-            dockerfile = image_deps["dockerfile"],
-            build_args = image_deps["build_args"],
-            file_build_arg = image_deps["file_build_arg"],
-            base_image_tar_file = ":base_image.tar",
-            base_image_tar_file_tag = base_image_tag,
-            target_compatible_with = ["@platforms//os:linux"],
-            tags = ["manual"],
-        )
-    else:
-        build_container_filesystem(
-            name = "rootfs-tree.tar",
-            context_files = [image_deps["container_context_files"]],
-            component_files = image_deps["component_files"],
-            dockerfile = image_deps["dockerfile"],
-            build_args = image_deps["build_args"],
-            file_build_arg = image_deps["file_build_arg"],
-            target_compatible_with = ["@platforms//os:linux"],
-            tags = ["manual"],
-        )
+    build_container_base_image(
+        name = "base_image.tar",
+        context_files = [image_deps["container_context_files"]],
+        image_tag = base_image_tag,
+        dockerfile = image_deps["base_dockerfile"],
+        build_args = [package_files_arg],
+        target_compatible_with = ["@platforms//os:linux"],
+        tags = ["manual"],
+    )
+
+    build_container_filesystem(
+        name = "rootfs-tree.tar",
+        context_files = [image_deps["container_context_files"]],
+        component_files = image_deps["component_files"],
+        dockerfile = image_deps["dockerfile"],
+        build_args = image_deps["build_args"],
+        file_build_arg = image_deps["file_build_arg"],
+        base_image_tar_file = ":base_image.tar",
+        base_image_tar_file_tag = base_image_tag,
+        target_compatible_with = ["@platforms//os:linux"],
+        tags = ["manual"],
+    )
 
     # Extract SElinux file_contexts to use later when building ext4 filesystems
     tar_extract(
