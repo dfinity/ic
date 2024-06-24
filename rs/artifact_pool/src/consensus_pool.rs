@@ -1814,7 +1814,7 @@ mod tests {
                 path.join("2").join("random_tape.bin").exists(),
                 "random tape at height 2 was backed up"
             );
-            // notarization at height 2 was not backed up becasue this is height is not
+            // notarization at height 2 was not backed up because this is height is not
             // finalized
             assert!(!notarization_path.exists());
             assert_eq!(
