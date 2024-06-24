@@ -28,7 +28,7 @@ use ic_management_canister_types::{
     DerivationPath, MasterPublicKeyId, Payload, SignWithECDSAArgs, SignWithECDSAReply,
 };
 use ic_message::ForwardParams;
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::{error, info};
@@ -84,10 +84,12 @@ pub fn setup(env: TestEnv) {
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(vm_resources)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .with_ecdsa_config(EcdsaConfig {
-                    quadruples_to_create_in_advance: QUADRUPLES_TO_CREATE,
-                    key_ids: vec![make_key(KEY_ID1)],
-                    max_queue_size: Some(MAX_QUEUE_SIZE),
+                .with_chain_key_config(ChainKeyConfig {
+                    key_configs: vec![KeyConfig {
+                        max_queue_size: MAX_QUEUE_SIZE,
+                        pre_signatures_to_create_in_advance: QUADRUPLES_TO_CREATE,
+                        key_id: MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)),
+                    }],
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
                 })

@@ -7,6 +7,8 @@ use canister_test::{Canister, Cycles};
 use ic_agent::AgentError;
 use ic_base_types::{NodeId, SubnetId};
 use ic_canister_client::Sender;
+use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
     MasterPublicKeyId, Payload, SchnorrAlgorithm, SchnorrKeyId, SchnorrPublicKeyArgs,
@@ -47,11 +49,44 @@ pub(crate) const KEY_ID3: &str = "yet_another_key";
 /// passed to execution.
 pub(crate) const DKG_INTERVAL: u64 = 19;
 
+/// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
+const USE_COST_SCALING_FLAG: bool = true;
+pub(crate) const NUMBER_OF_NODES: usize = 4;
+
 pub(crate) fn make_key(name: &str) -> EcdsaKeyId {
     EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
         name: name.to_string(),
     }
+}
+
+pub(crate) fn make_ecdsa_key_id() -> MasterPublicKeyId {
+    MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "some_ecdsa_key".to_string(),
+    })
+}
+
+pub(crate) fn make_eddsa_key_id() -> MasterPublicKeyId {
+    MasterPublicKeyId::Schnorr(SchnorrKeyId {
+        algorithm: SchnorrAlgorithm::Ed25519,
+        name: "some_eddsa_key".to_string(),
+    })
+}
+
+pub(crate) fn make_bip340_key_id() -> MasterPublicKeyId {
+    MasterPublicKeyId::Schnorr(SchnorrKeyId {
+        algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+        name: "some_bip340_key".to_string(),
+    })
+}
+
+pub(crate) fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
+    vec![
+        make_ecdsa_key_id(),
+        make_bip340_key_id(),
+        make_eddsa_key_id(),
+    ]
 }
 
 pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
@@ -91,6 +126,50 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
         ssh_readonly_access: None,
         ssh_backup_access: None,
     }
+}
+
+// TODO(EXC-1168): cleanup after cost scaling is fully implemented.
+pub(crate) fn scale_cycles(cycles: Cycles) -> Cycles {
+    match USE_COST_SCALING_FLAG {
+        false => cycles,
+        true => {
+            // Subnet is constructed with `NUMBER_OF_NODES`, see `config()` and `config_without_ecdsa_on_nns()`.
+            (cycles * NUMBER_OF_NODES) / SMALL_APP_SUBNET_MAX_SIZE
+        }
+    }
+}
+
+pub(crate) async fn get_public_key_and_test_signature(
+    key_id: &MasterPublicKeyId,
+    message_canister: &MessageCanister<'_>,
+    zero_cycles: bool,
+    logger: &Logger,
+) -> Result<Vec<u8>, AgentError> {
+    let cycles = if zero_cycles {
+        Cycles::zero()
+    } else {
+        scale_cycles(ECDSA_SIGNATURE_FEE)
+    };
+
+    let message_hash = vec![0xabu8; 32];
+
+    info!(logger, "Getting the public key for {}", key_id);
+    let public_key = get_public_key_with_logger(key_id, message_canister, logger).await?;
+
+    info!(logger, "Getting signature for {}", key_id);
+    let signature = get_signature_with_logger(
+        message_hash.clone(),
+        cycles,
+        key_id,
+        message_canister,
+        logger,
+    )
+    .await?;
+
+    info!(logger, "Verifying signature for {}", key_id);
+    verify_signature(key_id, &message_hash, &public_key, &signature);
+
+    Ok(public_key)
 }
 
 pub(crate) async fn get_public_key_with_retries(
@@ -145,9 +224,9 @@ pub(crate) async fn get_ecdsa_public_key_with_retries(
                 if count < retries {
                     debug!(
                         logger,
-                        "ecdsa_public_key returns `{}`. Trying again in 3 seconds...", err
+                        "ecdsa_public_key returns `{}`. Trying again in 2 seconds...", err
                     );
-                    tokio::time::sleep(Duration::from_secs(3)).await;
+                    tokio::time::sleep(Duration::from_secs(2)).await;
                 } else {
                     return Err(err);
                 }
@@ -196,9 +275,9 @@ pub(crate) async fn get_schnorr_public_key_with_retries(
                 if count < retries {
                     debug!(
                         logger,
-                        "schnorr_public_key returns `{}`. Trying again...", err
+                        "schnorr_public_key returns `{}`. Trying again in 2 seconds...", err
                     );
-                    tokio::time::sleep(Duration::from_millis(1000)).await;
+                    tokio::time::sleep(Duration::from_secs(2)).await;
                 } else {
                     return Err(err);
                 }
@@ -355,9 +434,9 @@ pub(crate) async fn get_ecdsa_signature_with_logger(
                 if count < 5 {
                     debug!(
                         logger,
-                        "sign_with_ecdsa returns `{}`. Trying again in 3 seconds...", err
+                        "sign_with_ecdsa returns `{}`. Trying again in 2 seconds...", err
                     );
-                    tokio::time::sleep(Duration::from_secs(3)).await;
+                    tokio::time::sleep(Duration::from_secs(2)).await;
                 } else {
                     return Err(err);
                 }
@@ -406,12 +485,12 @@ pub(crate) async fn get_schnorr_signature_with_logger(
             }
             Err(err) => {
                 count += 1;
-                if count < 20 {
+                if count < 5 {
                     debug!(
                         logger,
-                        "sign_with_schnorr returns `{}`. Trying again...", err
+                        "sign_with_schnorr returns `{}`. Trying again in 2 seconds...", err
                     );
-                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    tokio::time::sleep(Duration::from_secs(2)).await;
                 } else {
                     return Err(err);
                 }
