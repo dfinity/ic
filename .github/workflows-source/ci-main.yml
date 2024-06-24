@@ -71,7 +71,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
-      - name: check Trigger type
+      - name: check trigger type
         shell: bash
         run: |
           if [[ "${{ github.event.pull_request.labels.*.name }}" == *"merge-train"* ]]; then
