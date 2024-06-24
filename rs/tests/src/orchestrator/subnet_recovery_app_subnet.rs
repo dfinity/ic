@@ -44,11 +44,12 @@ use ic_management_canister_types::MasterPublicKeyId;
 use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
 use ic_recovery::RecoveryArgs;
 use ic_recovery::{file_sync_helper, get_node_metrics};
-use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use std::convert::TryFrom;
+use std::time::Duration;
 
 const DKG_INTERVAL: u64 = 9;
 const APP_NODES: usize = 3;
@@ -57,6 +58,8 @@ const UNASSIGNED_NODES: usize = 3;
 const DKG_INTERVAL_LARGE: u64 = 99;
 const NNS_NODES_LARGE: usize = 40;
 const APP_NODES_LARGE: usize = 34;
+
+pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
@@ -75,10 +78,17 @@ pub fn setup(
         Subnet::fast_single_node(SubnetType::System)
             .with_dkg_interval_length(Height::from(dkg_interval))
     };
-    nns = nns.with_ecdsa_config(EcdsaConfig {
-        quadruples_to_create_in_advance: 3,
-        key_ids: vec![make_key(KEY_ID1), make_key(KEY_ID2), make_key(KEY_ID3)],
-        max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+    let key_ids = vec![make_key(KEY_ID1), make_key(KEY_ID2), make_key(KEY_ID3)];
+    let key_configs = key_ids
+        .into_iter()
+        .map(|key_id| KeyConfig {
+            key_id: MasterPublicKeyId::Ecdsa(key_id),
+            max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+            pre_signatures_to_create_in_advance: 3,
+        })
+        .collect();
+    nns = nns.with_chain_key_config(ChainKeyConfig {
+        key_configs,
         signature_request_timeout_ns: None,
         idkg_key_rotation_period_ms: None,
     });

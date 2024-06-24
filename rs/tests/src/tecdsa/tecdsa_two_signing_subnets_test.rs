@@ -37,7 +37,7 @@ use anyhow::bail;
 use canister_test::Canister;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, SubnetId};
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
@@ -55,10 +55,12 @@ pub fn config(env: TestEnv) {
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(NODES_COUNT)
-                .with_ecdsa_config(EcdsaConfig {
-                    quadruples_to_create_in_advance: 5,
-                    key_ids: vec![make_key(KEY_ID1)],
-                    max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                .with_chain_key_config(ChainKeyConfig {
+                    key_configs: vec![KeyConfig {
+                        max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+                        pre_signatures_to_create_in_advance: 5,
+                        key_id: MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)),
+                    }],
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
                 }),
