@@ -69,7 +69,7 @@ jobs:
           git push --force --set-upstream origin "$RC_BRANCH_NAME"
 
   rust-benchmarks:
-    name: Bazel Run Benchmarks
+    name: Bazel Run Rust Benchmarks
     <<: *dind-large-setup
     timeout-minutes: 720 # 12 hours
     # TODO: disable in GitLab before enabling here
@@ -123,7 +123,7 @@ jobs:
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
 
   nns-tests-nightly:
-    name: NNS Tests Nightly
+    name: Bazel Test NNS Nightly
     <<: *dind-large-setup
     timeout-minutes: 20
     if: ${{ vars.RUN_CI == 'true' }}
@@ -142,14 +142,14 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
 
   system-tests-benchmarks-nightly:
-    name: System Test Benchmarks
+    name: Bazel System Test Benchmarks
     <<: *dind-large-setup
     timeout-minutes: 480
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - <<: *checkout
       - <<: *before-script
-      - name: Run System Test Benchmarks
+      - name: Test System Test Benchmarks
         id: bazel-system-test-benchmarks
         uses: ./.github/actions/bazel-test-all/
         with:
