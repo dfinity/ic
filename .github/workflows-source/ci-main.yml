@@ -72,6 +72,7 @@ jobs:
       - <<: *checkout
       - <<: *before-script
       - name: check Trigger type
+        shell: bash
         run: |
           if [[ "${{ github.event.pull_request.labels.*.name }}" == *"merge-train"* ]]; then
             echo "BAZEL_EXTRA_ARGS_RULES=--test_timeout_filters=short,moderate --flaky_test_attempts=3" >> $GITHUB_ENV
