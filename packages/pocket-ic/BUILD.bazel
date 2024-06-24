@@ -40,8 +40,8 @@ rust_library(
 
 rust_test_suite(
     name = "test",
-    size = "medium",
-    srcs = glob(["tests/**/*.rs"]),
+    size = "small",
+    srcs = ["tests/tests.rs"],
     data = [
         "tests/counter.wasm",
         "tests/icp_ledger.wasm",
@@ -51,6 +51,21 @@ rust_test_suite(
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "COUNTER_WASM": "packages/pocket-ic/tests/counter.wasm",
         "LEDGER_WASM": "packages/pocket-ic/tests/icp_ledger.wasm",
+    },
+    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "slow",
+    size = "medium",
+    srcs = ["tests/slow.rs"],
+    data = [
+        "//rs/pocket_ic_server:pocket-ic-server",
+    ],
+    env = {
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,

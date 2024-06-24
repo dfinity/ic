@@ -1763,7 +1763,7 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     current_key_transcript.unmasked_transcript(),
                 ),
-                deprecated_key_id: Some(fake_ecdsa_key_id()),
+                deprecated_key_id: None,
                 master_key_id: key_id.clone(),
             };
 
@@ -1801,7 +1801,7 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     next_key_transcript.unmasked_transcript(),
                 ),
-                deprecated_key_id: Some(fake_ecdsa_key_id()),
+                deprecated_key_id: None,
                 master_key_id: key_id.clone(),
             };
 
@@ -1817,7 +1817,7 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     next_key_transcript.unmasked_transcript(),
                 ),
-                deprecated_key_id: Some(fake_ecdsa_key_id()),
+                deprecated_key_id: None,
                 master_key_id: key_id.clone(),
             };
 
@@ -1899,7 +1899,7 @@ mod tests {
                 next_in_creation: idkg::KeyTranscriptCreation::Created(
                     current_key_transcript.unmasked_transcript(),
                 ),
-                deprecated_key_id: Some(fake_ecdsa_key_id()),
+                deprecated_key_id: None,
                 master_key_id: key_id.clone(),
             };
 

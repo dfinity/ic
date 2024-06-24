@@ -21,7 +21,7 @@ use ic_icrc_rosetta::{
 use ic_sys::fs::write_string_using_tmp_file;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use lazy_static::lazy_static;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::{path::PathBuf, process};
 use tokio::{net::TcpListener, sync::Mutex as AsyncMutex};
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
@@ -320,6 +320,7 @@ async fn main() -> Result<()> {
     let shared_state = Arc::new(AppState {
         icrc1_agent: icrc1_agent.clone(),
         ledger_id: args.ledger_id,
+        synched: Arc::new(Mutex::new(None)),
         storage: storage.clone(),
         archive_canister_ids: Arc::new(AsyncMutex::new(vec![])),
         metadata,
@@ -343,6 +344,7 @@ async fn main() -> Result<()> {
     }
 
     let app = Router::new()
+        .route("/ready", get(ready))
         .route("/health", get(health))
         .route("/network/list", post(network_list))
         .route("/network/options", post(network_options))

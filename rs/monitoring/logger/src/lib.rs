@@ -5,14 +5,13 @@ use slog_scope::GlobalLoggerGuard;
 use std::io;
 use std::sync::{Arc, Mutex};
 
+pub mod context_logger;
 pub mod replica_logger;
-pub use ic_context_logger::{
-    debug, error, fatal, info, info_sample, log, log_metadata, new_logger, trace, warn,
-};
-use replica_logger::LogEntryLogger;
-pub use replica_logger::ReplicaLogger;
+
+pub use crate::replica_logger::{no_op_logger, ReplicaLogger};
 
 pub fn new_replica_logger(log: slog::Logger, config: &LoggerConfig) -> ReplicaLogger {
+    use crate::replica_logger::LogEntryLogger;
     let log_entry_logger = LogEntryLogger::new(
         log,
         config.level,

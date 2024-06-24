@@ -391,7 +391,8 @@ rust_ic_test(
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
-        "manual",  # CI should not be downloading nns_state.tar.zst.
+        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,

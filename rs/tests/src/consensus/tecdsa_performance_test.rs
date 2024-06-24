@@ -16,7 +16,7 @@ use crate::generic_workload_engine::metrics::{LoadTestMetricsProvider, RequestOu
 use crate::nns_dapp::set_authorized_subnets;
 use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use crate::orchestrator::utils::subnet_recovery::{
-    enable_ecdsa_signing_on_subnet, run_ecdsa_signature_test,
+    enable_chain_key_signing_on_subnet, run_chain_key_signature_test,
 };
 use crate::tecdsa::{make_key, KEY_ID1};
 use crate::util::{block_on, get_app_subnet_and_node, get_nns_node, MessageCanister};
@@ -25,10 +25,10 @@ use candid::{Encode, Principal};
 use futures::future::join_all;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_management_canister_types::{
-    DerivationPath, Payload, SignWithECDSAArgs, SignWithECDSAReply,
+    DerivationPath, MasterPublicKeyId, Payload, SignWithECDSAArgs, SignWithECDSAReply,
 };
 use ic_message::ForwardParams;
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::{error, info};
@@ -84,10 +84,12 @@ pub fn setup(env: TestEnv) {
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(vm_resources)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .with_ecdsa_config(EcdsaConfig {
-                    quadruples_to_create_in_advance: QUADRUPLES_TO_CREATE,
-                    key_ids: vec![make_key(KEY_ID1)],
-                    max_queue_size: Some(MAX_QUEUE_SIZE),
+                .with_chain_key_config(ChainKeyConfig {
+                    key_configs: vec![KeyConfig {
+                        max_queue_size: MAX_QUEUE_SIZE,
+                        pre_signatures_to_create_in_advance: QUADRUPLES_TO_CREATE,
+                        key_id: MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)),
+                    }],
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
                 })
@@ -176,9 +178,9 @@ pub fn tecdsa_performance_test(
     let (app_subnet, app_node) = get_app_subnet_and_node(&topology_snapshot);
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
 
-    let key_ids = vec![make_key(KEY_ID1)];
+    let key_ids = vec![MasterPublicKeyId::Ecdsa(make_key(KEY_ID1))];
     info!(log, "Step 1: Enabling tECDSA signing and ensuring it works");
-    let keys = enable_ecdsa_signing_on_subnet(
+    let keys = enable_chain_key_signing_on_subnet(
         &nns_node,
         &nns_canister,
         app_subnet.subnet_id,
@@ -187,7 +189,7 @@ pub fn tecdsa_performance_test(
     );
 
     for (key_id, public_key) in keys {
-        run_ecdsa_signature_test(&nns_canister, &log, key_id, public_key);
+        run_chain_key_signature_test(&nns_canister, &log, &key_id, public_key);
     }
 
     info!(log, "Step 2: Installing Message canisters");

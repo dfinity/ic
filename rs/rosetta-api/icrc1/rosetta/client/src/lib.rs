@@ -103,6 +103,15 @@ impl RosettaClient {
             .await
     }
 
+    pub async fn ready(&self) -> reqwest::StatusCode {
+        self.http_client
+            .get(self.url("/ready"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+    }
+
     pub async fn make_submit_and_wait_for_transaction<T: RosettaSupportedKeyPair>(
         &self,
         signer_keypair: &T,

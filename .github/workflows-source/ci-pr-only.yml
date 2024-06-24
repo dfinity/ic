@@ -21,9 +21,9 @@ env:
 anchors:
   image: &image
     image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
-  bazel-small-setup: &bazel-small-setup
+  dind-small-setup: &dind-small-setup
     runs-on:
-      labels: bazel-runner-small
+      labels: dind-runner-small
     container:
       <<: *image
     timeout-minutes: 30
@@ -71,9 +71,10 @@ jobs:
 
   lock-generate:
     name: Lock Generate
-    <<: *bazel-small-setup
+    <<: *dind-small-setup
     steps:
       - <<: *checkout
+      - <<: *before-script
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
@@ -95,7 +96,7 @@ jobs:
 
   pre-commit:
     name: Pre Commit Test
-    <<: *bazel-small-setup
+    <<: *dind-small-setup
     steps:
       - <<: *checkout
         with:
@@ -112,7 +113,7 @@ jobs:
     steps:
       - <<: *checkout
       - name: Set up Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       - name: Run script

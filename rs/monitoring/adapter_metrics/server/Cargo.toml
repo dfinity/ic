@@ -8,7 +8,7 @@ futures = { workspace = true }
 ic-adapter-metrics-service = { path = "../service" }
 ic-logger = { path = "../../logger" }
 ic-metrics = { path = "../../metrics" }
-protobuf = "2.27.1"
+protobuf = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }

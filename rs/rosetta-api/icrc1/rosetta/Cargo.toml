@@ -35,7 +35,7 @@ ic-sys = { path = "../../../sys" }
 icrc-ledger-agent = { path = "../../../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 indicatif = "0.17.3"
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 num-bigint = "0.4.4"
 num-traits = { workspace = true }
 proptest = "1.0"

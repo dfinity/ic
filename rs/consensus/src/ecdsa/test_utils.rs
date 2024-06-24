@@ -1618,13 +1618,7 @@ pub(crate) fn empty_ecdsa_payload_with_key_ids(
                 current: None,
                 next_in_creation: KeyTranscriptCreation::Begin,
                 master_key_id: key_id.clone(),
-                deprecated_key_id: if let MasterPublicKeyId::Ecdsa(ecdsa_key_id) = key_id {
-                    Some(ecdsa_key_id)
-                } else {
-                    // Schnorr key transcripts still need a dummy ECDSA key Id,
-                    // until the field is no longer mandatory.
-                    Some(fake_ecdsa_key_id())
-                },
+                deprecated_key_id: None,
             })
             .collect(),
     )

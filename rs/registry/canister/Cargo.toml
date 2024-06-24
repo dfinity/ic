@@ -39,7 +39,7 @@ ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 leb128 = "0.2.4"
 ipnet = "2.5.0"
 on_wire = { path = "../../rust_canisters/on_wire" }
@@ -64,7 +64,7 @@ ic-registry-proto-data-provider = { path = "../proto_data_provider" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 maplit = "1.0"
 rand = { workspace = true }
 rand_distr = "0.4.0"

@@ -378,11 +378,13 @@ async fn blocks_test() {
         };
         let msg = BlockRequest::new(req_handler.network_id(), partial_block_id);
         let resp = req_handler.block(msg).await.unwrap();
-        let transactions = vec![ic_rosetta_api::convert::block_to_transaction(
-            &block,
-            ic_rosetta_api::DEFAULT_TOKEN_SYMBOL,
-        )
-        .unwrap()];
+        let transactions = vec![
+            ic_rosetta_api::convert::hashed_block_to_rosetta_core_transaction(
+                &block,
+                ic_rosetta_api::DEFAULT_TOKEN_SYMBOL,
+            )
+            .unwrap(),
+        ];
         assert_eq!(resp.clone().block.unwrap().transactions, transactions);
         let transaction = resp.block.unwrap().transactions[0].clone();
         let block_id = BlockIdentifier {
