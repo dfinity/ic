@@ -388,6 +388,7 @@ fn hitting_page_delta_limit_fails_for_long_message() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn hitting_page_delta_limit_fails_for_long_message_non_native_stable() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
@@ -408,6 +409,7 @@ fn hitting_page_delta_limit_fails_for_long_message_non_native_stable() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn hitting_page_delta_limit_fails_message_non_native_stable() {
     let mut test = ExecutionTestBuilder::new()
         .with_stable_memory_dirty_page_limit(NumOsPages::from(10), NumOsPages::from(10))
@@ -425,6 +427,7 @@ fn hitting_page_delta_limit_fails_message_non_native_stable() {
 }
 
 #[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn hitting_page_delta_limit_fails_message_non_native_stable_system_subnet() {
     let mut test = ExecutionTestBuilder::new()
         .with_stable_memory_dirty_page_limit(NumOsPages::from(10), NumOsPages::from(10))

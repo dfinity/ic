@@ -17,10 +17,7 @@ use ic_state_machine_tests::{
 };
 use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities_metrics::fetch_int_counter;
-use ic_types::{
-    batch::BatchSummary, ingress::WasmResult, messages::NO_DEADLINE, CanisterId, Cycles, NumBytes,
-    Time,
-};
+use ic_types::{ingress::WasmResult, messages::NO_DEADLINE, CanisterId, Cycles, NumBytes, Time};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::{assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
@@ -1613,22 +1610,13 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
         subnet_config.scheduler_config.heap_delta_initial_reserve =
             heap_delta_initial_reserve.into();
 
-        let mut env = StateMachineBuilder::new()
-            // Disable checkpointing so the heap delta is accumulated across rounds.
-            .with_checkpoints_enabled(false)
+        StateMachineBuilder::new()
+            .with_checkpoint_interval_length(9)
             .with_config(Some(StateMachineConfig::new(
                 subnet_config,
                 HypervisorConfig::default(),
             )))
-            .build();
-
-        // Set the batch summary for 10 rounds.
-        env.batch_summary = Some(BatchSummary {
-            next_checkpoint_height: 10.into(),
-            current_interval_length: 9.into(),
-        });
-
-        env
+            .build()
     }
 
     fn install_canister(env: &StateMachine) -> Result<CanisterId, UserError> {
@@ -1649,11 +1637,13 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
 
     // With minimal subnet heap delta capacity we should start
     // the round execution anyway, so the canister installation should succeed.
+    // Round 1 and 2.
     let canister_id = install_canister(&env).unwrap();
     // Assert the canister install does not touch the heap.
     assert_eq!(env.heap_delta_estimate_bytes(), 0);
 
     // The heap delta estimate is still zero, so the ingress execution should succeed.
+    // Round 3.
     let msg_id = send_ingress(&env, &canister_id);
     let status = env.ingress_status(&msg_id);
     assert_matches!(
@@ -1669,7 +1659,9 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
 
     // As the subnet capacity is at minimum, any other message execution
     // should be postponed after the next checkpoint.
+    // Round 4.
     let msg_id = send_ingress(&env, &canister_id);
+    // Round 5.
     env.tick();
     let status = env.ingress_status(&msg_id);
     assert_matches!(
@@ -1682,9 +1674,22 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
     );
 
     // The ingress should be executed after the checkpoint.
-    env.set_checkpoints_enabled(true);
-    env.tick();
-    env.set_checkpoints_enabled(false);
+    // Round 6-10.
+    for _ in 6..=10 {
+        env.tick();
+    }
+    let status = env.ingress_status(&msg_id);
+    assert_matches!(
+        status,
+        IngressStatus::Known {
+            // Received, but not completed.
+            state: IngressState::Received,
+            ..
+        }
+    );
+    // The `heap_delta_estimate` is reset after the checkpoint round, so the message
+    // will be executed in round 11.
+    // Round 11.
     env.tick();
     let status = env.ingress_status(&msg_id);
     assert_matches!(
@@ -1762,6 +1767,55 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
             ..
         }
     );
+}
+
+const DIRTY_PAGE_CANISTER: &str = r#"
+    (module
+        (func $dirty (i32.store (i32.const 1) (i32.const 2)))
+        (start $dirty)
+        (memory $memory 1)
+    )"#;
+
+#[test]
+fn current_interval_length_works_on_app_subnets() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let wasm = wat::parse_str(DIRTY_PAGE_CANISTER).unwrap();
+    let _canister_id = env
+        .install_canister_with_cycles(wasm, vec![], None, Cycles::new(100_000_000_000))
+        .unwrap();
+
+    // Canister install takes 2 rounds.
+    for _ in 2..500 {
+        // Assert there is a dirty page.
+        assert!(env.heap_delta_estimate_bytes() > 0);
+        env.tick();
+    }
+    // Assert there are no dirty pages after the checkpoint.
+    assert_eq!(env.heap_delta_estimate_bytes(), 0);
+}
+
+#[test]
+fn current_interval_length_works_on_system_subnets() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .build();
+
+    let wasm = wat::parse_str(DIRTY_PAGE_CANISTER).unwrap();
+    let _canister_id = env
+        .install_canister_with_cycles(wasm, vec![], None, Cycles::new(100_000_000_000))
+        .unwrap();
+
+    // Canister install takes 2 rounds.
+    for _ in 2..200 {
+        // Assert there is a dirty page.
+        assert!(env.heap_delta_estimate_bytes() > 0);
+        env.tick();
+    }
+    // Assert there are no dirty pages after the checkpoint.
+    assert_eq!(env.heap_delta_estimate_bytes(), 0);
 }
 
 // To run the test:

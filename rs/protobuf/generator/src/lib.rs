@@ -115,23 +115,6 @@ fn build_log_proto(def: &Path, out: &Path) {
 
     add_log_proto_derives!(
         config,
-        P2PLogEntry,
-        "log.p2p_log_entry.v1",
-        p2p,
-        event,
-        src,
-        dest,
-        artifact_id,
-        chunk_id,
-        advert,
-        request,
-        artifact,
-        height,
-        disconnect_elapsed
-    );
-
-    add_log_proto_derives!(
-        config,
         MessagingLogEntry,
         "log.messaging_log_entry.v1",
         messaging,
@@ -174,14 +157,6 @@ fn build_log_proto(def: &Path, out: &Path) {
         rank,
         registry_version,
         time
-    );
-
-    add_log_proto_derives!(
-        config,
-        ExecutionLogEntry,
-        "log.execution_log_entry.v1",
-        execution,
-        canister_id
     );
 
     add_log_proto_derives!(
@@ -418,8 +393,7 @@ fn build_crypto_proto(def: &Path, out: &Path) {
 
 /// Generates Rust structs from p2p Protobuf messages.
 fn build_p2p_proto(def: &Path, out: &Path) {
-    let mut config = base_config(out, "p2p");
-    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
+    let config = base_config(out, "p2p");
     let files = [
         def.join("p2p/v1/state_sync_manager.proto"),
         def.join("p2p/v1/consensus_manager.proto"),

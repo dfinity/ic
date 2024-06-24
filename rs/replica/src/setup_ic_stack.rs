@@ -36,7 +36,14 @@ use ic_types::{
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
-use tokio::sync::{mpsc::UnboundedSender, watch};
+use tokio::sync::{
+    mpsc::{channel, UnboundedSender},
+    watch,
+};
+
+/// The buffer size for the channel that [`IngressHistoryWriterImpl`] uses to send
+/// the message id and height of messages that complete execution.
+const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
@@ -178,6 +185,9 @@ pub fn construct_ic_stack(
         subnet_config.cycles_account_manager_config,
     ));
 
+    let (completed_execution_messages_tx, finalized_ingress_height_rx) =
+        channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
+
     let execution_services = ExecutionServices::setup_execution(
         log.clone(),
         metrics_registry,
@@ -188,6 +198,7 @@ pub fn construct_ic_stack(
         cycles_account_manager.clone(),
         state_manager.clone(),
         state_manager.get_fd_factory(),
+        completed_execution_messages_tx,
     );
     // ---------- MESSAGE ROUTING DEPS FOLLOW ----------
     let certified_stream_store: Arc<dyn CertifiedStreamStore> =
@@ -333,9 +344,8 @@ pub fn construct_ic_stack(
         None,
         Arc::new(Pprof),
         tracing_handle,
-        // TODO(NET-1620): Remove optional arguments to enable the sync call endpoint.
-        Some(max_certified_height_rx),
-        None,
+        max_certified_height_rx,
+        finalized_ingress_height_rx,
     );
 
     Ok((

@@ -14,7 +14,7 @@ path = "src/main.rs"
 dfn_core = { path = "../dfn_core" }
 dfn_json = { path = "../dfn_json" }
 dfn_macro = { path = "../dfn_macro" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 rand = { workspace = true }

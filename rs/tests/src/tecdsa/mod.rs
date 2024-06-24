@@ -20,14 +20,16 @@ use ic_nns_governance::{
     pb::v1::{NnsFunction, ProposalStatus},
 };
 use ic_nns_test_utils::governance::submit_external_update_proposal;
-use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::ReplicaVersion;
+use ic_types::{PrincipalId, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
 use registry_canister::mutations::{
-    do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
-    do_update_subnet::UpdateSubnetPayload,
+    do_create_subnet::{
+        CreateSubnetPayload, InitialChainKeyConfig, KeyConfig as KeyConfigCreate, KeyConfigRequest,
+    },
+    do_update_subnet::{ChainKeyConfig, KeyConfig as KeyConfigUpdate, UpdateSubnetPayload},
 };
 use slog::{debug, info, Logger};
 
@@ -82,6 +84,9 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
         ecdsa_config: None,
         ecdsa_key_signing_enable: None,
         ecdsa_key_signing_disable: None,
+        chain_key_config: None,
+        chain_key_signing_enable: None,
+        chain_key_signing_disable: None,
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
@@ -418,65 +423,70 @@ pub(crate) async fn get_schnorr_signature_with_logger(
     Ok(signature)
 }
 
-pub(crate) async fn enable_ecdsa_signing(
+pub(crate) async fn enable_chain_key_signing(
     governance: &Canister<'_>,
     subnet_id: SubnetId,
-    key_ids: Vec<EcdsaKeyId>,
+    key_ids: Vec<MasterPublicKeyId>,
     logger: &Logger,
 ) {
-    enable_ecdsa_signing_with_timeout(
+    enable_chain_key_signing_with_timeout(
         governance, subnet_id, key_ids, /*timeout=*/ None, logger,
     )
     .await
 }
 
-pub(crate) async fn enable_ecdsa_signing_with_timeout(
+pub(crate) async fn enable_chain_key_signing_with_timeout(
     governance: &Canister<'_>,
     subnet_id: SubnetId,
-    key_ids: Vec<EcdsaKeyId>,
+    key_ids: Vec<MasterPublicKeyId>,
     timeout: Option<Duration>,
     logger: &Logger,
 ) {
-    enable_ecdsa_signing_with_timeout_and_rotation_period(
+    enable_chain_key_signing_with_timeout_and_rotation_period(
         governance, subnet_id, key_ids, timeout, /*period=*/ None, logger,
     )
     .await
 }
 
-pub(crate) async fn add_ecdsa_keys_with_timeout_and_rotation_period(
+pub(crate) async fn add_chain_keys_with_timeout_and_rotation_period(
     governance: &Canister<'_>,
     subnet_id: SubnetId,
-    key_ids: Vec<EcdsaKeyId>,
+    key_ids: Vec<MasterPublicKeyId>,
     timeout: Option<Duration>,
     period: Option<Duration>,
     logger: &Logger,
 ) {
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
-        ecdsa_config: Some(EcdsaConfig {
-            quadruples_to_create_in_advance: 5,
-            key_ids,
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+        chain_key_config: Some(ChainKeyConfig {
+            key_configs: key_ids
+                .into_iter()
+                .map(|key_id| KeyConfigUpdate {
+                    key_id: Some(key_id.clone()),
+                    pre_signatures_to_create_in_advance: Some(5),
+                    max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                })
+                .collect(),
             signature_request_timeout_ns: timeout.map(|t| t.as_nanos() as u64),
             idkg_key_rotation_period_ms: period.map(|t| t.as_millis() as u64),
         }),
         ..empty_subnet_update()
     };
-    execute_update_subnet_proposal(governance, proposal_payload, "Add ECDSA keys", logger).await;
+    execute_update_subnet_proposal(governance, proposal_payload, "Add Chain keys", logger).await;
 }
 
-pub(crate) async fn enable_ecdsa_signing_with_timeout_and_rotation_period(
+pub(crate) async fn enable_chain_key_signing_with_timeout_and_rotation_period(
     governance: &Canister<'_>,
     subnet_id: SubnetId,
-    key_ids: Vec<EcdsaKeyId>,
+    key_ids: Vec<MasterPublicKeyId>,
     timeout: Option<Duration>,
     period: Option<Duration>,
     logger: &Logger,
 ) {
-    // The ECDSA key sharing process requires that a key first be added to a
+    // The Chain key sharing process requires that a key first be added to a
     // subnet, and then enabling signing with that key must happen in a separate
     // proposal.
-    add_ecdsa_keys_with_timeout_and_rotation_period(
+    add_chain_keys_with_timeout_and_rotation_period(
         governance,
         subnet_id,
         key_ids.clone(),
@@ -488,20 +498,40 @@ pub(crate) async fn enable_ecdsa_signing_with_timeout_and_rotation_period(
 
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
-        ecdsa_key_signing_enable: Some(key_ids),
+        chain_key_signing_enable: Some(key_ids),
         ..empty_subnet_update()
     };
-    execute_update_subnet_proposal(governance, proposal_payload, "Enable ECDSA signing", logger)
-        .await;
+    execute_update_subnet_proposal(
+        governance,
+        proposal_payload,
+        "Enable Chain key signing",
+        logger,
+    )
+    .await;
 }
 
 pub(crate) async fn create_new_subnet_with_keys(
     governance: &Canister<'_>,
     node_ids: Vec<NodeId>,
-    keys: Vec<EcdsaKeyRequest>,
+    keys: Vec<(MasterPublicKeyId, PrincipalId)>,
     replica_version: ReplicaVersion,
     logger: &Logger,
 ) {
+    let chain_key_config = InitialChainKeyConfig {
+        key_configs: keys
+            .into_iter()
+            .map(|(key_id, subnet_id)| KeyConfigRequest {
+                key_config: Some(KeyConfigCreate {
+                    key_id: Some(key_id),
+                    pre_signatures_to_create_in_advance: Some(4),
+                    max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                }),
+                subnet_id: Some(subnet_id),
+            })
+            .collect(),
+        signature_request_timeout_ns: None,
+        idkg_key_rotation_period_ms: None,
+    };
     let config = ic_prep_lib::subnet_configuration::get_default_config_params(
         SubnetType::Application,
         node_ids.len(),
@@ -539,13 +569,10 @@ pub(crate) async fn create_new_subnet_with_keys(
         max_number_of_canisters: 4,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
-        ecdsa_config: Some(EcdsaInitialConfig {
-            quadruples_to_create_in_advance: 4,
-            keys,
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        }),
+        chain_key_config: Some(chain_key_config),
+
+        // Deprecated fields
+        ecdsa_config: None,
     };
     execute_create_subnet_proposal(governance, payload, logger).await;
 }

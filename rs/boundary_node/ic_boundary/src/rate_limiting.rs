@@ -130,5 +130,7 @@ impl RateLimit {
     }
 }
 
+pub mod canister;
+
 #[cfg(test)]
 pub mod test;

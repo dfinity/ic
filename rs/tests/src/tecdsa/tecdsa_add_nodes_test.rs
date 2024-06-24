@@ -26,7 +26,7 @@ use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
 use crate::tecdsa::{
-    enable_ecdsa_signing, get_public_key_with_logger, get_signature_with_logger, make_key,
+    enable_chain_key_signing, get_public_key_with_logger, get_signature_with_logger, make_key,
 };
 use crate::{
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
@@ -91,10 +91,15 @@ pub fn test(env: TestEnv) {
     info!(log, "Enabling ECDSA signatures.");
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-    let ecdsa_key_id = make_key(KEY_ID1);
-    let key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
+    let key_id = MasterPublicKeyId::Ecdsa(make_key(KEY_ID1));
     block_on(async {
-        enable_ecdsa_signing(&governance, nns_subnet.subnet_id, vec![ecdsa_key_id], &log).await;
+        enable_chain_key_signing(
+            &governance,
+            nns_subnet.subnet_id,
+            vec![key_id.clone()],
+            &log,
+        )
+        .await;
     });
     info!(log, "Initial run to get public key.");
     let agent = nns_node.with_default_agent(|agent| async move { agent });
