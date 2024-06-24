@@ -1,5 +1,5 @@
 [Unit]
-Description=IPv4 connectivity timer
+Description=nft counter export timer
 
 [Timer]
 OnBootSec=60s

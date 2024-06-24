@@ -6,5 +6,5 @@ WantedBy=multi-user.target
 
 [Service]
 Type=oneshot
-ExecStart=/opt/ic/bin/nft-exporter
 User=ic-replica
+ExecStart=/opt/ic/bin/nft-exporter
