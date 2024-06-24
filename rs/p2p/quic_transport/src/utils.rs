@@ -15,6 +15,8 @@
 use std::{
     cmp::Reverse,
     collections::{BTreeMap, BinaryHeap, HashMap},
+    sync::Arc,
+    time::Instant,
 };
 
 use anyhow::Context;
@@ -26,7 +28,7 @@ use axum::{
 };
 use bincode::Options;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use quinn::{Chunk, RecvStream, SendStream};
+use quinn::{Chunk, RecvStream, SendStream, VarInt, WriteError};
 use reed_solomon_erasure::ReedSolomon;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
@@ -63,7 +65,6 @@ async fn assemble(mut recv_stream: RecvStream) -> Result<Bytes, anyhow::Error> {
         .read_chunk(MAX_MESSAGE_SIZE_BYTES, false)
         .await?
     {
-        println!("read chunk at {offset} size {}", bytes.len());
         let mut pos = offset as usize;
         while !bytes.is_empty() {
             let ec_idx = pos / tot_ec_size;
@@ -96,9 +97,6 @@ async fn assemble(mut recv_stream: RecvStream) -> Result<Bytes, anyhow::Error> {
             e.push((Reverse(pos), c));
 
             let sum = e.iter().map(|c| c.1.len()).sum::<usize>();
-            if sum > tot_ec_size {
-                println!("ahh {decoded_map:?} {sum}");
-            }
             assert!(sum <= tot_ec_size);
             if sum == tot_ec_size {
                 let mut bm = BytesMut::new();
@@ -113,31 +111,34 @@ async fn assemble(mut recv_stream: RecvStream) -> Result<Bytes, anyhow::Error> {
                         scheme: (ec_header.get_u32(), ec_header.get_u32()),
                         padding: ec_header.get_u32(),
                     });
-                    println!("{header:?} recvd");
                 }
                 decoded_map.insert(ec_idx, bm.freeze());
             }
         }
-        println!("decopdec map {}", decoded_map.len());
 
         let h1 = header.clone();
         if h1.is_some_and(|h| h.scheme.0 <= decoded_map.len() as u32) {
             let header = h1.unwrap();
-            println!("assembling {header:?}");
             let shards: (Vec<(usize, Bytes)>, Vec<(usize, Bytes)>) =
                 decoded_map
                     .into_iter()
                     .fold((Vec::new(), Vec::new()), |mut acc, x| {
+                        assert!(x.1.len() == chunk_size);
                         if x.0 < header.scheme.0 as usize {
                             acc.0.push(x);
                         } else {
-                            acc.1.push((x.0 - header.scheme.1 as usize, x.1));
+                            println!(" header {header:?}");
+                            println!(" d {} {}", x.0, x.0 - header.scheme.0 as usize);
+                            acc.1.push((x.0 - header.scheme.0 as usize, x.1));
                         }
                         acc
                     });
+            println!("shards 0 {} shards 1 {}", shards.0.len(), shards.1.len());
+            let now = Instant::now();
             let mut v: Vec<_> = if shards.0.len() == header.scheme.0 as usize {
                 shards.0.into_iter().map(|(i, b)| (i, b.to_vec())).collect()
             } else {
+                println!("reconstructing");
                 reed_solomon_simd::decode(
                     header.scheme.0 as usize,
                     header.scheme.1 as usize,
@@ -148,16 +149,19 @@ async fn assemble(mut recv_stream: RecvStream) -> Result<Bytes, anyhow::Error> {
                 .into_iter()
                 .collect()
             };
+            println!("after decode{:?}", now.elapsed());
             v.sort_unstable();
+            println!("after sort {:?}", now.elapsed());
             let data: Vec<u8> = v.into_iter().map(|x| x.1).flatten().collect();
             let mut data = Bytes::from(data);
+            println!("after asse {:?}", now.elapsed());
             let a = data.split_to(data.len() - header.padding as usize);
+            println!("raw send {a:?}");
+            assert!(a.len() == header.len as usize);
+
+            recv_stream.stop(VarInt::from_u32(1)).unwrap();
             return Ok(a);
         }
-    }
-    for (k, v) in decoded_map {
-        println!("k {k}");
-        assert!(v.len() <= 1280);
     }
     panic!("ah")
 }
@@ -166,6 +170,7 @@ async fn disassemble(
     send_stream: &mut SendStream,
     mut bytes: Vec<u8>,
 ) -> Result<(), anyhow::Error> {
+    println!("raw send {bytes:?}");
     let len_bytes = bytes.len();
     let chunk_size = 1280;
     let padding = chunk_size - bytes.len() % chunk_size;
@@ -173,7 +178,6 @@ async fn disassemble(
     assert!(bytes.len() % chunk_size == 0);
     let data_shards = std::cmp::max(1, bytes.len() / chunk_size);
     let parity_shards = std::cmp::max(1, data_shards / 2);
-    println!("data len {} {data_shards}:{parity_shards}", bytes.len(),);
     bytes.resize(data_shards * chunk_size, 0);
     let shards: Vec<_> = bytes.chunks(chunk_size).collect();
     let parity = reed_solomon_simd::encode(data_shards, parity_shards, &shards).unwrap();
@@ -190,8 +194,18 @@ async fn disassemble(
             b.freeze()
         })
         .collect();
-    send_stream.write_chunks(&mut ecs).await?;
-    Ok(())
+    let write_result = send_stream.write_all_chunks(&mut ecs).await;
+    match write_result {
+        Ok(()) => {}
+        Err(WriteError::Stopped(int)) if int == VarInt::from_u32(1) => {}
+        Err(e) => return Err(e.into()),
+    };
+    let finish_result = send_stream.finish().await;
+    match finish_result {
+        Ok(()) => Ok(()),
+        Err(WriteError::Stopped(int)) if int == VarInt::from_u32(1) => Ok(()),
+        Err(e) => Err(e.into()),
+    }
 }
 
 pub(crate) async fn read_request(recv_stream: RecvStream) -> Result<Request<Body>, anyhow::Error> {
@@ -225,7 +239,7 @@ pub(crate) async fn read_response(
 }
 
 pub(crate) async fn write_request(
-    send_stream: &mut SendStream,
+    mut send_stream: SendStream,
     request: Request<Bytes>,
 ) -> Result<(), anyhow::Error> {
     let (parts, body) = request.into_parts();
@@ -238,11 +252,12 @@ pub(crate) async fn write_request(
     let res = bincode_config()
         .serialize(&msg)
         .with_context(|| "Failed to serialize request.")?;
-    disassemble(send_stream, res).await
+    let r = disassemble(&mut send_stream, res).await;
+    r
 }
 
 pub(crate) async fn write_response(
-    send_stream: &mut SendStream,
+    mut send_stream: &mut SendStream,
     response: Response<Body>,
 ) -> Result<(), anyhow::Error> {
     let (parts, body) = response.into_parts();
@@ -258,7 +273,9 @@ pub(crate) async fn write_response(
     let res = bincode_config()
         .serialize(&msg)
         .with_context(|| "Failed to serialize response.")?;
-    disassemble(send_stream, res).await
+
+    let r = disassemble(&mut send_stream, res).await;
+    r
 }
 
 #[derive(Serialize, Deserialize)]

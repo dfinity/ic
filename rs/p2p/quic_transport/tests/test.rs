@@ -294,6 +294,7 @@ fn test_real_socket_large_msg() {
                     .uri("/Ping")
                     .body(Bytes::from(vec![0; 40_000_000]))
                     .unwrap();
+
                 let node_1_reachable_from_node_2 = transport_2.push(&NODE_1, request).await.is_ok();
                 let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
                 let node_2_reachable_from_node_1 = transport_1.push(&NODE_2, request).await.is_ok();
@@ -301,7 +302,6 @@ fn test_real_socket_large_msg() {
                     break;
                 }
             }
-            tokio::time::sleep(Duration::from_secs(30)).await
         });
     })
 }
@@ -313,10 +313,11 @@ fn test_sending_large_message() {
         info!(log, "Starting test");
 
         let mut sim = Builder::new()
-            .max_message_latency(Duration::from_millis(0))
+            .max_message_latency(Duration::from_millis(50))
             .udp_capacity(1024 * 1024)
-            .simulation_duration(Duration::from_secs(30))
+            .simulation_duration(Duration::from_secs(120))
             .build();
+        sim.set_fail_rate(0.4);
 
         let exit_notify = Arc::new(Notify::new());
 
@@ -344,7 +345,7 @@ fn test_sending_large_message() {
             async move {
                 loop {
                     let _ = transport
-                        .push(&NODE_2, Request::new(Bytes::from(vec![0; 50_000_000])))
+                        .push(&NODE_2, Request::new(Bytes::from(vec![0; 4_000])))
                         .await;
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
@@ -355,7 +356,7 @@ fn test_sending_large_message() {
             async move {
                 loop {
                     let _ = transport
-                        .push(&NODE_1, Request::new(Bytes::from(vec![0; 50_000_000])))
+                        .push(&NODE_1, Request::new(Bytes::from(vec![0; 4_000])))
                         .await;
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }

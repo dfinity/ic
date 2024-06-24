@@ -66,7 +66,7 @@ impl ConnectionHandle {
         // Propagate PeerId from this connection to lower layers.
         request.extensions_mut().insert(self.peer_id);
 
-        let (mut send_stream, recv_stream) = self.connection.open_bi().await.map_err(|err| {
+        let (send_stream, recv_stream) = self.connection.open_bi().await.map_err(|err| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
@@ -80,20 +80,10 @@ impl ConnectionHandle {
             .unwrap_or_default();
         let _ = send_stream.set_priority(priority.into());
 
-        write_request(&mut send_stream, request)
-            .await
-            .map_err(|err| {
-                self.metrics
-                    .connection_handle_errors_total
-                    .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE])
-                    .inc();
-                err
-            })?;
-
-        send_stream.finish().await.map_err(|err| {
+        write_request(send_stream, request).await.map_err(|err| {
             self.metrics
                 .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_FINISH])
+                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE])
                 .inc();
             err
         })?;
@@ -127,7 +117,7 @@ impl ConnectionHandle {
         // Propagate PeerId from this connection to lower layers.
         request.extensions_mut().insert(self.peer_id);
 
-        let mut send_stream = self.connection.open_uni().await.map_err(|err| {
+        let send_stream = self.connection.open_uni().await.map_err(|err| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_OPEN]);
@@ -141,20 +131,10 @@ impl ConnectionHandle {
             .unwrap_or_default();
         let _ = send_stream.set_priority(priority.into());
 
-        write_request(&mut send_stream, request)
-            .await
-            .map_err(|err| {
-                self.metrics
-                    .connection_handle_errors_total
-                    .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_WRITE])
-                    .inc();
-                err
-            })?;
-
-        send_stream.finish().await.map_err(|err| {
+        write_request(send_stream, request).await.map_err(|err| {
             self.metrics
                 .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_FINISH])
+                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_WRITE])
                 .inc();
             err
         })?;
