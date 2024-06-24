@@ -100,7 +100,7 @@ jobs:
     name: Bazel Test Darwin x86-64
     timeout-minutes: 120
     # TODO: enable once we have more macos runners
-    if: ${{ vars.RUN_CI == 'true' && github.event_name == 'schedule' }}
+    # if: ${{ vars.RUN_CI == 'true' && github.event_name == 'schedule' }}
     runs-on:
       labels: macOS
     steps:
@@ -134,6 +134,7 @@ jobs:
       - name: Run Bazel Test Darwin x86-64
         # TODO: remove '//rs/execution_environment:execution_environment_test' once flakiness is resolved
         id: bazel-test-darwin-x86-64
+        # if: steps.filter.outputs.bazel-test-darwin-x86-64 != 'false' || github.event_name == 'schedule'
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_CI_CONFIG: "--config=ci --config macos_ci"
