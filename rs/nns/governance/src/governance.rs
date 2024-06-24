@@ -1928,15 +1928,21 @@ impl Governance {
     ///
     /// Preconditions:
     /// - the given `neuron` already exists in `self.neuron_store.neurons`
-    /// - the controller principal is self-authenticating
     #[cfg(feature = "test")]
     pub fn update_neuron(&mut self, neuron: NeuronProto) -> Result<(), GovernanceError> {
-        let neuron_id = neuron.id.expect("Neuron must have a NeuronId");
-        // Must clobber an existing neuron.
-        self.with_neuron_mut(&neuron_id, |old_neuron| {
-            // Converting from API type to internal type.
-            *old_neuron = Neuron::try_from(neuron).unwrap();
-        })
+        // Converting from API type to internal type.
+        let new_neuron = Neuron::try_from(neuron).expect("Neuron must be valid");
+
+        self.with_neuron_mut(&new_neuron.id(), |old_neuron| {
+            if new_neuron.subaccount() != old_neuron.subaccount() {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Cannot change the subaccount of a neuron".to_string(),
+                ));
+            }
+            *old_neuron = new_neuron;
+            Ok(())
+        })?
     }
 
     /// Add a neuron to the list of neurons.

@@ -16,7 +16,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
 use ic_nns_common::registry::encode_or_panic;
-use ic_protobuf::registry::subnet::v1::{EcdsaConfig, InitialNiDkgTranscriptRecord};
+use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, InitialNiDkgTranscriptRecord};
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, NodeRecord},
@@ -127,7 +127,9 @@ pub async fn get_value<T: Message + Default>(registry: &Canister<'_>, key: &[u8]
 ///
 /// Panics if there is no T
 pub async fn get_value_or_panic<T: Message + Default>(registry: &Canister<'_>, key: &[u8]) -> T {
-    get_value::<T>(registry, key).await.unwrap()
+    get_value::<T>(registry, key).await.unwrap_or_else(|| {
+        panic!("Registry does not have a record under the key {:?}.", key);
+    })
 }
 
 pub async fn get_node_record(registry: &Canister<'_>, node_id: NodeId) -> Option<NodeRecord> {
@@ -242,7 +244,7 @@ pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
 pub fn invariant_compliant_mutation_with_subnet_id(
     mutation_id: u8,
     subnet_pid: SubnetId,
-    ecdsa_config: Option<EcdsaConfig>,
+    chain_key_config: Option<ChainKeyConfig>,
 ) -> Vec<RegistryMutation> {
     let node_operator_pid = user_test_id(TEST_ID);
 
@@ -291,7 +293,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
         subnet_type: i32::from(SubnetType::System),
         replica_version_id: replica_version_id.clone(),
         unit_delay_millis: 600,
-        ecdsa_config,
+        chain_key_config,
         ..Default::default()
     };
 

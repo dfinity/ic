@@ -1064,8 +1064,6 @@ bazel-test-all-rebuild:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
     - dfinity-ic
-    - bazel
-    - zh
   timeout: 2h
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
@@ -1172,7 +1170,6 @@ bazel-test-coverage:
       genhtml --output cov_html cov_report.dat
   tags:
     - dfinity-ic
-    - bazel
   timeout: 80 minutes
   variables:
     BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"

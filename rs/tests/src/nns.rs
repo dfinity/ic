@@ -605,6 +605,7 @@ pub async fn submit_create_application_subnet_proposal(
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         ecdsa_config: None,
+        chain_key_config: None,
     };
 
     submit_external_proposal_with_test_id(governance, NnsFunction::CreateSubnet, payload).await

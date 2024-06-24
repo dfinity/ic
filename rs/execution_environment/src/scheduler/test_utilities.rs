@@ -42,6 +42,7 @@ use ic_system_api::{
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
     ApiType, ExecutionParameters,
 };
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::{generate_subnets, test_registry_settings};
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::{
@@ -862,10 +863,18 @@ impl SchedulerTestBuilder {
             SchedulerConfig::application_subnet().dirty_page_overhead,
         );
         let hypervisor = Arc::new(hypervisor);
-        let ingress_history_writer =
-            IngressHistoryWriterImpl::new(config.clone(), self.log.clone(), &self.metrics_registry);
+        let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
+        let state_reader = Arc::new(FakeStateManager::new());
+        let ingress_history_writer = IngressHistoryWriterImpl::new(
+            config.clone(),
+            self.log.clone(),
+            &self.metrics_registry,
+            completed_execution_messages_tx,
+            state_reader,
+        );
         let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
             Arc::new(ingress_history_writer);
+
         let exec_env = ExecutionEnvironment::new(
             self.log.clone(),
             hypervisor,

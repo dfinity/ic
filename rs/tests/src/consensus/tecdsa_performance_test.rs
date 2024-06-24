@@ -16,7 +16,7 @@ use crate::generic_workload_engine::metrics::{LoadTestMetricsProvider, RequestOu
 use crate::nns_dapp::set_authorized_subnets;
 use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use crate::orchestrator::utils::subnet_recovery::{
-    enable_ecdsa_signing_on_subnet, run_ecdsa_signature_test,
+    enable_chain_key_signing_on_subnet, run_chain_key_signature_test,
 };
 use crate::tecdsa::{make_key, KEY_ID1};
 use crate::util::{block_on, get_app_subnet_and_node, get_nns_node, MessageCanister};
@@ -25,7 +25,7 @@ use candid::{Encode, Principal};
 use futures::future::join_all;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_management_canister_types::{
-    DerivationPath, Payload, SignWithECDSAArgs, SignWithECDSAReply,
+    DerivationPath, MasterPublicKeyId, Payload, SignWithECDSAArgs, SignWithECDSAReply,
 };
 use ic_message::ForwardParams;
 use ic_registry_subnet_features::EcdsaConfig;
@@ -176,9 +176,9 @@ pub fn tecdsa_performance_test(
     let (app_subnet, app_node) = get_app_subnet_and_node(&topology_snapshot);
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
 
-    let key_ids = vec![make_key(KEY_ID1)];
+    let key_ids = vec![MasterPublicKeyId::Ecdsa(make_key(KEY_ID1))];
     info!(log, "Step 1: Enabling tECDSA signing and ensuring it works");
-    let keys = enable_ecdsa_signing_on_subnet(
+    let keys = enable_chain_key_signing_on_subnet(
         &nns_node,
         &nns_canister,
         app_subnet.subnet_id,
@@ -187,7 +187,7 @@ pub fn tecdsa_performance_test(
     );
 
     for (key_id, public_key) in keys {
-        run_ecdsa_signature_test(&nns_canister, &log, key_id, public_key);
+        run_chain_key_signature_test(&nns_canister, &log, &key_id, public_key);
     }
 
     info!(log, "Step 2: Installing Message canisters");

@@ -20,7 +20,7 @@ ic-ledger-core = { path = "../../ledger_core" }
 ic-metrics-encoder = "1"
 ic-nns-constants = { path = "../../../nns/constants" }
 icp-ledger = { path = "../" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]

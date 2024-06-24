@@ -7,7 +7,7 @@ edition = "2021"
 name = "ic_neurons_fund"
 
 [dependencies]
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"
 serde = { workspace = true }
