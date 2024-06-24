@@ -520,7 +520,22 @@ pub(crate) fn validate_canister_settings(
     }
 
     let reservation_cycles = if new_memory_bytes <= old_memory_bytes {
-        Cycles::zero()
+        let reservation_cycles = Cycles::zero();
+        let reserved_balance_limit = settings
+            .reserved_cycles_limit()
+            .or(canister_reserved_balance_limit);
+        if let Some(limit) = reserved_balance_limit {
+            if canister_reserved_balance + reservation_cycles > limit {
+                return Err(
+                    CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation {
+                        memory_allocation: new_memory_allocation,
+                        requested: canister_reserved_balance + reservation_cycles,
+                        limit,
+                    },
+                );
+            }
+        }
+        reservation_cycles
     } else {
         let allocated_bytes = new_memory_bytes - old_memory_bytes;
         let reservation_cycles = cycles_account_manager.storage_reservation_cycles(
