@@ -1,25 +1,25 @@
 /* tag::catalog[]
 
-Title:: Rotate ECDSA iDKG keys
+Title:: Rotate iDKG encryption keys
 
 Goal:: Ensure that we can rotate iDKG keys in the registry and timing assumptions hold.
 
 Description::
-We deploy an IC NNS without ECDSA keys. Then we enable ECDSA signing and key rotations. We wait until
+We deploy an IC NNS without chain keys. Then we enable chain key signing and key rotations. We wait until
 key timestamps are updated for the first time. Wait until keys are rotated once for each node.
 
 Runbook::
-. We deploy an IC NNS without ECDSA keys.
-. Enable ECDSA signing with key rotations and get the ECDSA verifying key.
+. We deploy an IC NNS without chain keys.
+. Enable chain key signing with key rotations and get the public verifying key.
 . Wait until key timestamps are updated for the first time.
 . Wait until keys are rotated once for each node, and verify timestamps.
-. Run through ECDSA signature test
+. Run through chain key signature test
 
 Success::
 . Key timestamps are correctly initialized for all nodes
 . Keys are correctly rotated once for each node
 . Timing assumptions (delta, gamma) are kept at all times
-. ECDSA signing still works
+. chain key signing still works
 
 end::catalog[] */
 
@@ -32,12 +32,11 @@ use crate::orchestrator::utils::subnet_recovery::{
     enable_chain_key_on_subnet, run_chain_key_signature_test,
 };
 use crate::retry_with_msg;
-use crate::tecdsa::{make_key, KEY_ID1};
+use crate::tecdsa::make_key_ids_for_all_schemes;
 use crate::util::{block_on, get_nns_node, MessageCanister};
 use anyhow::bail;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_interfaces_registry::RegistryValue;
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -86,7 +85,7 @@ pub fn test(env: TestEnv) {
     let delta = Duration::from_secs(180);
     let gamma = delta.div_f64(SUBNET_SIZE as f64).mul_f64(0.85);
 
-    // Timestamps should be none before ECDSA is turned on
+    // Timestamps should be none before feature is enabled
     topology_snapshot.root_subnet().nodes().for_each(|n| {
         let r = block_on(get_public_key(&registry_canister, n.node_id));
         match r {
@@ -106,7 +105,7 @@ pub fn test(env: TestEnv) {
         &nns_canister,
         root_subnet_id,
         Some(delta),
-        vec![MasterPublicKeyId::Ecdsa(make_key(KEY_ID1))],
+        make_key_ids_for_all_schemes(),
         &logger,
     );
 
@@ -245,7 +244,7 @@ pub fn test(env: TestEnv) {
         .duration_since(first_rotation)
         .map_or(false, |d| d + gamma <= delta));
 
-    // Ensure ECDSA signing still works
+    // Ensure signing still works
     for (key_id, public_key) in public_keys {
         run_chain_key_signature_test(&nns_canister, &logger, &key_id, public_key);
     }
