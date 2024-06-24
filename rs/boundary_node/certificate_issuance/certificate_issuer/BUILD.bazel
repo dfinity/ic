@@ -20,8 +20,8 @@ DEPENDENCIES = [
     "@crate_index//:instant-acme",
     "@crate_index//:leb128",
     "@crate_index//:mockall",
-    "@crate_index//:opentelemetry",
-    "@crate_index//:opentelemetry-prometheus",
+    "@crate_index//:opentelemetry_0_20_0",
+    "@crate_index//:opentelemetry_prometheus_0_13_0",
     "@crate_index//:pem",
     "@crate_index//:prometheus",
     "@crate_index//:rcgen",
@@ -36,6 +36,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing",
     "@crate_index//:trust-dns-resolver",
+    "@crate_index//:zeroize",
 ]
 
 MACRO_DEPENDENCIES = [

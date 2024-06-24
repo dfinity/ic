@@ -20,14 +20,19 @@ impl FromStr for ParsedSnsNeuron {
 pub struct NeuronIdToCandidSubaccountArgs {
     pub neuron_id: ParsedSnsNeuron,
 
-    /// If true, we will print the "escaaaped" version of the candid string,
-    /// useful for pasting into a bash script for example. Default is false.
+    /// If true, print an escaped version of the candid, useful for pasting into
+    /// bash for example. Default is false.
     #[clap(long)]
     pub escaped: bool,
 }
 
-fn neuron_id_to_subaccount(args: NeuronIdToCandidSubaccountArgs) -> String {
-    let subaccount = args.neuron_id.0.subaccount().unwrap().to_vec();
+pub fn neuron_id_to_subaccount(args: NeuronIdToCandidSubaccountArgs) -> Result<String, String> {
+    let subaccount = args
+        .neuron_id
+        .0
+        .subaccount()
+        .map_err(|e| e.error_message)?
+        .to_vec();
 
     // We'll convert it to a candid string.
     let idl = IDLValue::try_from_candid_type(&subaccount)
@@ -35,14 +40,14 @@ fn neuron_id_to_subaccount(args: NeuronIdToCandidSubaccountArgs) -> String {
         .to_string();
 
     if args.escaped {
-        idl.replace('\\', "\\\\").replace('\"', "\\\"")
+        Ok(idl.replace('\\', "\\\\").replace('\"', "\\\""))
     } else {
-        idl
+        Ok(idl)
     }
 }
 
 pub fn exec(args: NeuronIdToCandidSubaccountArgs) {
-    println!("{}", neuron_id_to_subaccount(args));
+    println!("{}", neuron_id_to_subaccount(args).unwrap());
 }
 
 #[test]
@@ -58,7 +63,7 @@ fn test_neuron_id_to_subaccount() {
         neuron_id: ParsedSnsNeuron(neuron_id),
         escaped: false,
     };
-    let observed_subaccount = neuron_id_to_subaccount(args);
+    let observed_subaccount = neuron_id_to_subaccount(args).unwrap();
 
     assert_eq!(observed_subaccount, expected_candid);
 }
@@ -76,7 +81,24 @@ fn test_neuron_id_to_subaccount_escaped() {
         neuron_id: ParsedSnsNeuron(neuron_id),
         escaped: true,
     };
-    let observed_subaccount = neuron_id_to_subaccount(args);
+    let observed_subaccount = neuron_id_to_subaccount(args).unwrap();
 
     assert_eq!(observed_subaccount, expected_candid);
+}
+
+#[test]
+fn test_neuron_id_to_subaccount_fail() {
+    let neuron_id = ParsedSnsNeuron::from_str(
+        "9f5f9fda77a03e7177126d0be8c99e931a5381731d00da53ede363140e1be5", // two characters too short
+    )
+    .unwrap()
+    .0;
+
+    let args = NeuronIdToCandidSubaccountArgs {
+        neuron_id: ParsedSnsNeuron(neuron_id),
+        escaped: false,
+    };
+    let error = neuron_id_to_subaccount(args).unwrap_err();
+
+    assert!(error.contains("could not convert slice to array"));
 }

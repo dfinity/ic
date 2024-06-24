@@ -57,14 +57,15 @@ use ic_types::{
     consensus::HasHeight,
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
-    NodeId, SubnetId,
+    Height, NodeId, SubnetId,
 };
 use std::{
     net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
 };
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{mpsc::UnboundedSender, watch};
+use tower_http::trace::TraceLayer;
 
 pub const MAX_ADVERT_BUFFER: usize = 100_000;
 
@@ -115,6 +116,7 @@ pub fn setup_consensus_and_p2p(
     cycles_account_manager: Arc<CyclesAccountManager>,
     canister_http_adapter_client: CanisterHttpAdapterClient,
     registry_poll_delay_duration_ms: u64,
+    max_certified_height_tx: watch::Sender<Height>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
     UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
@@ -123,7 +125,7 @@ pub fn setup_consensus_and_p2p(
     let time_source = Arc::new(SysTimeSource::new());
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
 
-    let (ingress_pool, ingress_sender, join_handles, mut new_p2p_consensus) = start_consensus(
+    let (ingress_pool, ingress_sender, join_handles, mut p2p_consensus) = start_consensus(
         log,
         metrics_registry,
         rt_handle,
@@ -148,14 +150,7 @@ pub fn setup_consensus_and_p2p(
         registry_poll_delay_duration_ms,
         canister_http_adapter_client,
         time_source.clone(),
-    );
-
-    let mut p2p_router = None;
-
-    p2p_router = Some(
-        new_p2p_consensus
-            .router()
-            .merge(p2p_router.unwrap_or_default()),
+        max_certified_height_tx,
     );
 
     // StateSync
@@ -164,7 +159,6 @@ pub fn setup_consensus_and_p2p(
         log.clone(),
         metrics_registry,
     );
-    p2p_router = Some(state_sync_router.merge(p2p_router.unwrap_or_default()));
 
     // Quic transport
     let (_, topology_watcher) = ic_peer_manager::start_peer_manager(
@@ -181,6 +175,9 @@ pub fn setup_consensus_and_p2p(
         transport_config.listening_port,
     )
         .into();
+    let p2p_router = state_sync_router
+        .merge(p2p_consensus.router())
+        .layer(TraceLayer::new_for_http());
     let quic_transport = Arc::new(ic_quic_transport::QuicTransport::start(
         log,
         metrics_registry,
@@ -190,7 +187,7 @@ pub fn setup_consensus_and_p2p(
         node_id,
         topology_watcher.clone(),
         Either::<_, DummyUdpSocket>::Left(transport_addr),
-        p2p_router.unwrap_or_default(),
+        p2p_router,
     ));
 
     let _state_sync_manager = ic_state_sync_manager::start_state_sync_manager(
@@ -202,7 +199,7 @@ pub fn setup_consensus_and_p2p(
         state_sync_manager_rx,
     );
 
-    let _cancellation_token = new_p2p_consensus.run(quic_transport, topology_watcher);
+    let _cancellation_token = p2p_consensus.run(quic_transport, topology_watcher);
 
     (ingress_pool, ingress_sender, join_handles)
 }
@@ -237,6 +234,7 @@ fn start_consensus(
     registry_poll_delay_duration_ms: u64,
     canister_http_adapter_client: CanisterHttpAdapterClient,
     time_source: Arc<dyn TimeSource>,
+    max_certified_height_tx: watch::Sender<Height>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
     UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
@@ -384,6 +382,7 @@ fn start_consensus(
             Arc::clone(&consensus_pool_cache) as Arc<_>,
             metrics_registry.clone(),
             log.clone(),
+            max_certified_height_tx,
         );
 
         let certifier_gossip = Arc::new(certifier_gossip);

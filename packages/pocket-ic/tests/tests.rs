@@ -775,7 +775,7 @@ fn test_get_set_cycle_balance() {
 #[test]
 fn test_create_and_drop_instances() {
     let pic = PocketIc::new();
-    let id = pic.instance_id;
+    let id = pic.instance_id();
     assert_eq!(PocketIc::list_instances()[id], "Available".to_string());
     drop(pic);
     assert_eq!(PocketIc::list_instances()[id], "Deleted".to_string());
@@ -1013,4 +1013,97 @@ fn test_too_large_call() {
         vec![42; 16_000_000],
     )
     .unwrap_err();
+}
+
+#[tokio::test]
+async fn test_create_and_drop_instances_async() {
+    let pic = pocket_ic::nonblocking::PocketIc::new().await;
+    let id = pic.instance_id;
+    assert_eq!(
+        pocket_ic::nonblocking::PocketIc::list_instances().await[id],
+        "Available".to_string()
+    );
+    pic.drop().await;
+    assert_eq!(
+        pocket_ic::nonblocking::PocketIc::list_instances().await[id],
+        "Deleted".to_string()
+    );
+}
+
+#[tokio::test]
+async fn test_counter_canister_async() {
+    let pic = pocket_ic::nonblocking::PocketIc::new().await;
+
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister().await;
+    pic.add_cycles(can_id, INIT_CYCLES).await;
+
+    // Install the counter canister wasm file on the canister.
+    let counter_wasm = counter_wasm();
+    pic.install_canister(can_id, counter_wasm, vec![], None)
+        .await;
+
+    // Make some calls to the canister.
+    let reply = pic
+        .update_call(
+            can_id,
+            Principal::anonymous(),
+            "read",
+            encode_one(()).unwrap(),
+        )
+        .await
+        .expect("Failed to call counter canister");
+    assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 0]));
+
+    // Drop the PocketIc instance.
+    pic.drop().await;
+}
+
+// Canister code with a very large WASM.
+fn very_large_wasm(n: usize) -> Vec<u8> {
+    const WASM_PAGE_SIZE: usize = 1 << 16;
+    let wat = format!(
+        r#"
+    (module
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+        (func $read
+            (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+            (call $msg_reply))
+        (memory $memory {})
+        (export "canister_update read" (func $read))
+        (data (i32.const 0) "{}")
+    )
+"#,
+        n / WASM_PAGE_SIZE + 42,
+        String::from_utf8(vec![b'X'; n]).unwrap()
+    );
+    wat::parse_str(wat).unwrap()
+}
+
+#[test]
+fn install_very_large_wasm() {
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+
+    // Create a canister.
+    let can_id = pic.create_canister();
+
+    // Charge the canister with 2T cycles.
+    pic.add_cycles(can_id, 100 * INIT_CYCLES);
+
+    // Install the very large canister wasm on the canister.
+    let wasm_module = very_large_wasm(5_000_000);
+    assert!(wasm_module.len() >= 5_000_000);
+    pic.install_canister(can_id, wasm_module, vec![], None);
+
+    // Update call on the newly installed canister should succeed
+    // and return 4 bytes of the large data section.
+    let res = pic
+        .update_call(can_id, Principal::anonymous(), "read", vec![])
+        .unwrap();
+    match res {
+        WasmResult::Reply(data) => assert_eq!(data, vec![b'X'; 4]),
+        _ => panic!("Unexpected update call response: {:?}", res),
+    };
 }

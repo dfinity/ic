@@ -1,7 +1,7 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use super::{enable_ecdsa_signing, DKG_INTERVAL};
+use super::{enable_chain_key_signing, DKG_INTERVAL};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
@@ -12,6 +12,7 @@ use crate::tecdsa::{
 };
 use crate::util::{assert_malicious_from_topo, runtime_from_url, MessageCanister};
 use canister_test::{Canister, Cycles};
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
@@ -68,30 +69,31 @@ pub fn test(env: TestEnv) {
             nns_honest_node.effective_canister_id(),
         );
         let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-        enable_ecdsa_signing(
+        let key_id = MasterPublicKeyId::Ecdsa(make_key(KEY_ID1));
+        enable_chain_key_signing(
             &governance,
             nns_subnet.subnet_id,
-            vec![make_key(KEY_ID1)],
+            vec![key_id.clone()],
             &log,
         )
         .await;
 
         let msg_can =
             MessageCanister::new(&nns_agent, nns_honest_node.effective_canister_id()).await;
-        let message_hash = [0xabu8; 32];
-        let public_key = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &log)
+        let message_hash = vec![0xabu8; 32];
+        let public_key = get_public_key_with_logger(&key_id, &msg_can, &log)
             .await
             .unwrap();
         let signature = get_signature_with_logger(
-            &message_hash,
+            message_hash.clone(),
             Cycles::zero(),
-            make_key(KEY_ID1),
+            &key_id,
             &msg_can,
             &log,
         )
         .await
         .unwrap();
-        verify_signature(&message_hash, &public_key, &signature);
+        verify_signature(&key_id, &message_hash, &public_key, &signature);
     });
 
     info!(logger, "Checking for malicious logs...");

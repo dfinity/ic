@@ -38,7 +38,7 @@ impl RosettaClient {
         Ok(Self::from_url(url))
     }
 
-    fn url(&self, path: &str) -> Url {
+    pub fn url(&self, path: &str) -> Url {
         self.url
             .join(path)
             .unwrap_or_else(|e| panic!("Failed to join {} with path {}: {}", self.url, path, e))
@@ -101,6 +101,15 @@ impl RosettaClient {
             .await?
             .json()
             .await
+    }
+
+    pub async fn ready(&self) -> reqwest::StatusCode {
+        self.http_client
+            .get(self.url("/ready"))
+            .send()
+            .await
+            .unwrap()
+            .status()
     }
 
     pub async fn make_submit_and_wait_for_transaction<T: RosettaSupportedKeyPair>(

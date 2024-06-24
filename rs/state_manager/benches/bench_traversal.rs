@@ -41,7 +41,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
             let mut stream = Stream::default();
 
             for i in 0..NUM_STREAM_MESSAGES {
-                stream.increment_signals_end();
+                stream.push_accept_signal();
                 let msg = if i % 2 == 0 {
                     RequestBuilder::new()
                         .receiver(canister_test_id(i))

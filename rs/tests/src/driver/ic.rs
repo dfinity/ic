@@ -103,8 +103,10 @@ impl InternetComputer {
     pub fn add_fast_single_node_subnet(mut self, subnet_type: SubnetType) -> Self {
         let mut subnet = Subnet::fast_single_node(subnet_type);
         subnet.default_vm_resources = self.default_vm_resources;
-        subnet.vm_allocation = self.vm_allocation.clone();
-        subnet.required_host_features = self.required_host_features.clone();
+        subnet.vm_allocation.clone_from(&self.vm_allocation);
+        subnet
+            .required_host_features
+            .clone_from(&self.required_host_features);
         self.subnets.push(subnet);
         self
     }

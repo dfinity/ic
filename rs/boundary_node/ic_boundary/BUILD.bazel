@@ -41,6 +41,7 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:http_0_2_12",
     "@crate_index//:http_body_0_4_6",
+    "@crate_index//:humantime",
     "@crate_index//:hyper_0_14_27",
     "@crate_index//:hyper-rustls",
     "@crate_index//:ic-btc-interface",
@@ -66,6 +67,8 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
+    "@crate_index//:serde_regex",
+    "@crate_index//:serde_yaml",
     "@crate_index//:slog",
     "@crate_index//:strum",
     "@crate_index//:thiserror",
@@ -82,6 +85,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing",
     "@crate_index//:url",
     "@crate_index//:x509-parser",
+    "@crate_index//:zeroize",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -94,7 +98,9 @@ DEV_DEPENDENCIES = [
     "@crate_index//:wiremock",
 ]
 
-MACRO_DEV_DEPENDENCIES = []
+MACRO_DEV_DEPENDENCIES = [
+    "@crate_index//:indoc",
+]
 
 ALIASES = {}
 

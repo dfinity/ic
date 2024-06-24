@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:either",
     "@crate_index//:slog",
+    "@crate_index//:tower-http",
     "@crate_index//:tokio",
 ]
 

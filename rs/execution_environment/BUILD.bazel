@@ -163,6 +163,7 @@ BENCH_DEPENDENCIES = [
     "@crate_index//:criterion",
     "@crate_index//:lazy_static",
     "@crate_index//:tempfile",
+    "@crate_index//:tokio",
     "@crate_index//:wat",
 ]
 

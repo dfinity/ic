@@ -17,6 +17,10 @@ use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::{approvals::Approvals, timestamp::TimeStamp};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc21::{
+    errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
+    requests::ConsentMessageRequest, responses::ConsentInfo,
+};
 use icrc_ledger_types::icrc3::blocks::DataCertificate;
 #[cfg(not(feature = "get-blocks-disabled"))]
 use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
@@ -175,6 +179,13 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             ledger.blockchain().num_archived_blocks as f64,
             "Total number of transactions sent to the archive.",
         )?;
+        // The sum of the two gauges above. It is necessary to have this metric explicitly exported
+        // in order to be able to accurately calculate the total transaction rate.
+        w.encode_gauge(
+            "ledger_total_transactions",
+            ledger.blockchain().num_archived_blocks.saturating_add(ledger.blockchain().blocks.len() as u64) as f64,
+            "Total number of transactions stored in the main memory, plus total number of transactions sent to the archive.",
+        )?;
         let token_pool: Nat = ledger.balances().token_pool.into();
         w.encode_gauge(
             "ledger_balances_token_pool",
@@ -201,6 +212,23 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                 / 1_000_000_000) as f64,
             "IC timestamp of the most recent block.",
         )?;
+        match ledger.blockchain().archive.read() {
+            Ok(archive_guard) => {
+                let num_archives = archive_guard
+                    .as_ref()
+                    .iter()
+                    .fold(0, |sum, archive| sum + archive.nodes().iter().len());
+                w.encode_counter(
+                    "ledger_num_archives",
+                    num_archives as f64,
+                    "Total number of archives.",
+                )?;
+            }
+            Err(err) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to read number of archives: {}", err),
+            ))?,
+        }
         w.encode_gauge(
             "ledger_num_approvals",
             ledger.approvals().get_num_approvals() as f64,
@@ -498,6 +526,10 @@ fn supported_standards() -> Vec<StandardRecord> {
             name: "ICRC-3".to_string(),
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3".to_string(),
         },
+        StandardRecord {
+            name: "ICRC-21".to_string(),
+            url: "https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md".to_string(),
+        },
     ];
     standards
 }
@@ -678,6 +710,29 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
 #[candid_method(query)]
 fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
     Access::with_ledger(|ledger| ledger.icrc3_get_blocks(args))
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc10_supported_standards() -> Vec<StandardRecord> {
+    supported_standards()
+}
+
+#[update]
+#[candid_method(update)]
+fn icrc21_canister_call_consent_message(
+    consent_msg_request: ConsentMessageRequest,
+) -> Result<ConsentInfo, Icrc21Error> {
+    let caller_principal = ic_cdk::api::caller();
+    let ledger_fee = icrc1_fee();
+    let token_symbol = icrc1_symbol();
+
+    build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
+        consent_msg_request,
+        caller_principal,
+        ledger_fee,
+        token_symbol,
+    )
 }
 
 candid::export_service!();

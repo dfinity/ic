@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use ic_base_types::{CanisterId, NumBytes, SubnetId};
+use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
 use ic_config::{
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
@@ -20,9 +20,9 @@ use ic_embedders::{
 };
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{
-    ChainKeySettings, ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter,
-    InstanceStats, RegistryExecutionSettings, Scheduler, SystemApiCallCounters,
-    WasmExecutionOutput,
+    ChainKeySettings, ExecutionRoundSummary, ExecutionRoundType, HypervisorError, HypervisorResult,
+    IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler,
+    SystemApiCallCounters, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
@@ -42,6 +42,7 @@ use ic_system_api::{
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
     ApiType, ExecutionParameters,
 };
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::{generate_subnets, test_registry_settings};
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::{
@@ -96,6 +97,8 @@ pub(crate) struct SchedulerTest {
     next_canister_id: u64,
     // Monotonically increasing counter that specifies the current round.
     round: ExecutionRound,
+    /// Round summary collected form the last DKG summary block.
+    round_summary: Option<ExecutionRoundSummary>,
     // The amount of cycles that new canisters have by default.
     initial_canister_cycles: Cycles,
     // The id of the user that sends ingress messages.
@@ -198,7 +201,7 @@ impl SchedulerTest {
     /// heartbeat by passing `Some(SystemMethod::CanisterHeartbeat)`.
     /// In that case the heartbeat execution must be specified before each
     /// round using `expect_heartbeat()`.
-    pub fn create_canister_with(
+    pub fn create_canister_with_controller(
         &mut self,
         cycles: Cycles,
         compute_allocation: ComputeAllocation,
@@ -206,6 +209,7 @@ impl SchedulerTest {
         system_task: Option<SystemMethod>,
         time_of_last_allocation_charge: Option<Time>,
         status: Option<CanisterStatusType>,
+        controller: Option<PrincipalId>,
     ) -> CanisterId {
         let canister_id = self.next_canister_id();
         let wasm_source = system_task
@@ -213,10 +217,11 @@ impl SchedulerTest {
             .unwrap_or_default();
         let time_of_last_allocation_charge =
             time_of_last_allocation_charge.map_or(UNIX_EPOCH, |time| time);
+        let controller = controller.unwrap_or(self.user_id.get());
         let mut canister_state = CanisterStateBuilder::new()
             .with_canister_id(canister_id)
             .with_cycles(cycles)
-            .with_controller(self.user_id.get())
+            .with_controller(controller)
             .with_compute_allocation(compute_allocation)
             .with_memory_allocation(memory_allocation.bytes())
             .with_wasm(wasm_source.clone())
@@ -240,6 +245,31 @@ impl SchedulerTest {
             .unwrap()
             .put_canister_state(canister_state);
         canister_id
+    }
+
+    /// Creates a canister with the given balance and allocations.
+    /// The `system_task` parameter can be used to optionally enable the
+    /// heartbeat by passing `Some(SystemMethod::CanisterHeartbeat)`.
+    /// In that case the heartbeat execution must be specified before each
+    /// round using `expect_heartbeat()`.
+    pub fn create_canister_with(
+        &mut self,
+        cycles: Cycles,
+        compute_allocation: ComputeAllocation,
+        memory_allocation: MemoryAllocation,
+        system_task: Option<SystemMethod>,
+        time_of_last_allocation_charge: Option<Time>,
+        status: Option<CanisterStatusType>,
+    ) -> CanisterId {
+        self.create_canister_with_controller(
+            cycles,
+            compute_allocation,
+            memory_allocation,
+            system_task,
+            time_of_last_allocation_charge,
+            status,
+            None,
+        )
     }
 
     pub fn send_ingress(&mut self, canister_id: CanisterId, message: TestMessage) -> MessageId {
@@ -476,7 +506,7 @@ impl SchedulerTest {
             self.idkg_subnet_public_keys.clone(),
             self.idkg_pre_signature_ids.clone(),
             self.round,
-            None,
+            self.round_summary.clone(),
             round_type,
             self.registry_settings(),
         );
@@ -620,6 +650,8 @@ pub(crate) struct SchedulerTestBuilder {
     log: ReplicaLogger,
     ecdsa_keys: Vec<EcdsaKeyId>,
     metrics_registry: MetricsRegistry,
+    round_summary: Option<ExecutionRoundSummary>,
+    canister_snapshot_flag: bool,
 }
 
 impl Default for SchedulerTestBuilder {
@@ -643,6 +675,8 @@ impl Default for SchedulerTestBuilder {
             log: no_op_logger(),
             ecdsa_keys: vec![],
             metrics_registry: MetricsRegistry::new(),
+            round_summary: None,
+            canister_snapshot_flag: false,
         }
     }
 }
@@ -702,6 +736,20 @@ impl SchedulerTestBuilder {
 
     pub fn with_batch_time(self, batch_time: Time) -> Self {
         Self { batch_time, ..self }
+    }
+
+    pub fn with_round_summary(self, round_summary: ExecutionRoundSummary) -> Self {
+        Self {
+            round_summary: Some(round_summary),
+            ..self
+        }
+    }
+
+    pub fn with_canister_snapshots(self, canister_snapshot_flag: bool) -> Self {
+        Self {
+            canister_snapshot_flag,
+            ..self
+        }
     }
 
     pub fn build(self) -> SchedulerTest {
@@ -785,12 +833,18 @@ impl SchedulerTestBuilder {
         } else {
             FlagStatus::Disabled
         };
+        let canister_snapshots = if self.canister_snapshot_flag {
+            FlagStatus::Enabled
+        } else {
+            FlagStatus::Disabled
+        };
         let config = ic_config::execution_environment::Config {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory),
             rate_limiting_of_instructions,
             rate_limiting_of_heap_delta,
             deterministic_time_slicing,
+            canister_snapshots,
             ..ic_config::execution_environment::Config::default()
         };
         let wasm_executor = Arc::new(TestWasmExecutor::new(
@@ -809,10 +863,18 @@ impl SchedulerTestBuilder {
             SchedulerConfig::application_subnet().dirty_page_overhead,
         );
         let hypervisor = Arc::new(hypervisor);
-        let ingress_history_writer =
-            IngressHistoryWriterImpl::new(config.clone(), self.log.clone(), &self.metrics_registry);
+        let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
+        let state_reader = Arc::new(FakeStateManager::new());
+        let ingress_history_writer = IngressHistoryWriterImpl::new(
+            config.clone(),
+            self.log.clone(),
+            &self.metrics_registry,
+            completed_execution_messages_tx,
+            state_reader,
+        );
         let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
             Arc::new(ingress_history_writer);
+
         let exec_env = ExecutionEnvironment::new(
             self.log.clone(),
             hypervisor,
@@ -845,6 +907,7 @@ impl SchedulerTestBuilder {
             state: Some(state),
             next_canister_id: 0,
             round: ExecutionRound::new(0),
+            round_summary: self.round_summary,
             initial_canister_cycles: self.initial_canister_cycles,
             user_id: user_test_id(1),
             xnet_canister_id: canister_test_id(first_xnet_canister),

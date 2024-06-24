@@ -321,7 +321,7 @@ mod tests {
             UNIX_EPOCH,
             0,
             vec![],
-            WasmChunkStore::new_for_testing(NumBytes::from(20)),
+            WasmChunkStore::new_for_testing(),
             Some(execution_snapshot),
             NumBytes::from(0),
         );

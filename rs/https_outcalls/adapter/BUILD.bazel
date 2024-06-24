@@ -6,7 +6,7 @@ DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/config",
     "//rs/https_outcalls/service",
-    "//rs/monitoring/adapter_metrics_server",
+    "//rs/monitoring/adapter_metrics/server",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "@crate_index//:async-stream",

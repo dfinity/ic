@@ -46,7 +46,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 0,
                 dkg_dealings_per_block: 1,
-                gossip_config: None,
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
@@ -113,6 +112,9 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 max_number_of_canisters: Some(200),
                 ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
                 ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
+                chain_key_config: None,
+                chain_key_signing_enable: None,
+                chain_key_signing_disable: None,
             };
 
             let proposal_id: ProposalId = submit_external_update_proposal(
@@ -170,7 +172,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     replica_version_id: ReplicaVersion::default().into(),
                     dkg_interval_length: 10,
                     dkg_dealings_per_block: 1,
-                    gossip_config: None,
                     start_as_nns: false,
                     subnet_type: SubnetType::Application.into(),
                     is_halted: true,

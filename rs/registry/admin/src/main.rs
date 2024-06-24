@@ -264,15 +264,6 @@ impl ProposeToCreateSubnetCmd {
             .get_or_insert(subnet_config.dkg_dealings_per_block as u64);
         self.dkg_interval_length
             .get_or_insert(subnet_config.dkg_interval_length.get());
-        // set gossip params
-        self.gossip_max_artifact_streams_per_peer.get_or_insert(0);
-        self.gossip_max_chunk_wait_ms.get_or_insert(0);
-        self.gossip_max_duplicity.get_or_insert(0);
-        self.gossip_max_chunk_size.get_or_insert(0);
-        self.gossip_receive_check_cache_size.get_or_insert(0);
-        self.gossip_pfn_evaluation_period_ms.get_or_insert(0);
-        self.gossip_registry_poll_period_ms.get_or_insert(0);
-        self.gossip_retransmission_request_ms.get_or_insert(0);
     }
 }
 
@@ -1079,39 +1070,6 @@ struct ProposeToCreateSubnetCmd {
     /// The upper bound for the number of allowed DKG dealings in a block.
     pub dkg_dealings_per_block: Option<u64>,
 
-    // These are for the GossipConfig sub-struct
-    #[clap(long)]
-    /// max outstanding request per peer MIN/DEFAULT/MAX.
-    pub gossip_max_artifact_streams_per_peer: Option<u32>,
-
-    #[clap(long)]
-    /// timeout for a outstanding request.
-    pub gossip_max_chunk_wait_ms: Option<u32>,
-
-    #[clap(long)]
-    /// max duplicate requests in underutilized networks.
-    pub gossip_max_duplicity: Option<u32>,
-
-    #[clap(long)]
-    /// maximum chunk size supported on this subnet.
-    pub gossip_max_chunk_size: Option<u32>,
-
-    #[clap(long)]
-    /// history size for receive check.
-    pub gossip_receive_check_cache_size: Option<u32>,
-
-    #[clap(long)]
-    /// period for re evaluating the priority function.
-    pub gossip_pfn_evaluation_period_ms: Option<u32>,
-
-    #[clap(long)]
-    /// period for polling the registry for updates.
-    pub gossip_registry_poll_period_ms: Option<u32>,
-
-    #[clap(long)]
-    /// period for sending retransmission request.
-    pub gossip_retransmission_request_ms: Option<u32>,
-
     #[clap(long)]
     /// if set, the subnet will start as (new) NNS.
     pub start_as_nns: bool,
@@ -1305,16 +1263,14 @@ impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             initial_notary_delay_millis: self.initial_notary_delay_millis.unwrap(),
             dkg_interval_length: self.dkg_interval_length.unwrap(),
             dkg_dealings_per_block: self.dkg_dealings_per_block.unwrap(),
-            gossip_max_artifact_streams_per_peer: self
-                .gossip_max_artifact_streams_per_peer
-                .unwrap(),
-            gossip_max_chunk_wait_ms: self.gossip_max_chunk_wait_ms.unwrap(),
-            gossip_max_duplicity: self.gossip_max_duplicity.unwrap(),
-            gossip_max_chunk_size: self.gossip_max_chunk_size.unwrap(),
-            gossip_receive_check_cache_size: self.gossip_receive_check_cache_size.unwrap(),
-            gossip_pfn_evaluation_period_ms: self.gossip_pfn_evaluation_period_ms.unwrap(),
-            gossip_registry_poll_period_ms: self.gossip_registry_poll_period_ms.unwrap(),
-            gossip_retransmission_request_ms: self.gossip_retransmission_request_ms.unwrap(),
+            gossip_max_artifact_streams_per_peer: 0,
+            gossip_max_chunk_wait_ms: 0,
+            gossip_max_duplicity: 0,
+            gossip_max_chunk_size: 0,
+            gossip_receive_check_cache_size: 0,
+            gossip_pfn_evaluation_period_ms: 0,
+            gossip_registry_poll_period_ms: 0,
+            gossip_retransmission_request_ms: 0,
             start_as_nns: self.start_as_nns,
             subnet_type: self.subnet_type,
             is_halted: self.is_halted,
@@ -1332,6 +1288,7 @@ impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             ssh_backup_access: self.ssh_backup_access.clone(),
             max_number_of_canisters: self.max_number_of_canisters.unwrap_or(0),
             ecdsa_config,
+            chain_key_config: None, // TODO[NNS1-3102]
         }
     }
 }
@@ -1515,6 +1472,7 @@ impl ProposalPayload<RecoverSubnetPayload> for ProposeToUpdateRecoveryCupCmd {
                 .clone()
                 .map(|uri| (uri, hash, registry_version)),
             ecdsa_config,
+            chain_key_config: None, // TODO[NNS1-3102]
         }
     }
 }
@@ -1568,60 +1526,6 @@ struct ProposeToUpdateSubnetCmd {
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
     /// of this field.
     pub dkg_dealings_per_block: Option<u64>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_max_artifact_streams_per_peer: Option<u32>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_max_chunk_wait_ms: Option<u32>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_max_duplicity: Option<u32>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_max_chunk_size: Option<u32>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_receive_check_cache_size: Option<u32>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_pfn_evaluation_period_ms: Option<u32>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_registry_poll_period_ms: Option<u32>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_retransmission_request_ms: Option<u32>,
-
-    #[clap(long)]
-    /// If set, it will set a default value for the entire gossip config. Useful
-    /// when you want to only set some fields for the gossip config and there's
-    /// currently none set.
-    pub set_gossip_config_to_default: bool,
 
     #[clap(long)]
     /// If set, the created proposal will contain a desired override of that
@@ -1855,15 +1759,15 @@ impl ProposalPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
             initial_notary_delay_millis: self.initial_notary_delay_millis,
             dkg_interval_length: self.dkg_interval_length,
             dkg_dealings_per_block: self.dkg_dealings_per_block,
-            max_artifact_streams_per_peer: self.gossip_max_artifact_streams_per_peer,
-            max_chunk_wait_ms: self.gossip_max_chunk_wait_ms,
-            max_duplicity: self.gossip_max_duplicity,
-            max_chunk_size: self.gossip_max_chunk_size,
-            receive_check_cache_size: self.gossip_receive_check_cache_size,
-            pfn_evaluation_period_ms: self.gossip_pfn_evaluation_period_ms,
-            registry_poll_period_ms: self.gossip_registry_poll_period_ms,
-            retransmission_request_ms: self.gossip_retransmission_request_ms,
-            set_gossip_config_to_default: self.set_gossip_config_to_default,
+            max_artifact_streams_per_peer: None,
+            max_chunk_wait_ms: None,
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: None,
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            set_gossip_config_to_default: false,
             start_as_nns: self.start_as_nns,
 
             // See EXC-408: changing the subnet type is disabled.
@@ -1881,6 +1785,11 @@ impl ProposalPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             ssh_backup_access: self.ssh_backup_access.clone(),
             max_number_of_canisters: self.max_number_of_canisters,
+
+            // TODO[NNS1-3102]
+            chain_key_config: None,
+            chain_key_signing_enable: None,
+            chain_key_signing_disable: None,
         }
     }
 }

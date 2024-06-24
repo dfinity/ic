@@ -82,7 +82,9 @@ jobs:
           file: gitlab-ci/container/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/ic-build:${{ env.IMAGE_TAG }}
-          build-args: "RUST_VERSION=${{ env.RUST_VERSION }}"
+          build-args: |
+            RUST_VERSION=${{ env.RUST_VERSION }}
+            CI_USER=1001
 
       - name: Update Image References
         shell: bash

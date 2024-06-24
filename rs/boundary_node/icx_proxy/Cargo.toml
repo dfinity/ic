@@ -34,7 +34,13 @@ http = { workspace = true }
 http-body = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
-hyper-rustls = { version = "0.27.1", default_features = false, features = ["http1", "http2", "native-tokio", "ring", "tls12"] }
+hyper-rustls = { version = "0.27.1", default_features = false, features = [
+    "http1",
+    "http2",
+    "native-tokio",
+    "ring",
+    "tls12",
+] }
 hyper-util = { version = "0.1.3", features = ["client"] }
 hyperlocal-next = "0.9.0"
 itertools = { workspace = true }
@@ -42,10 +48,10 @@ ic-agent = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
 jemallocator = "0.3"
 maxminddb = "0.24"
-opentelemetry = { version = "0.20", features = ["metrics"] }
-opentelemetry-prometheus = "0.13.0"
+opentelemetry = { version = "0.20", features = ["metrics", "trace"] }
+opentelemetry-prometheus = { version = "0.13" }
 prometheus = { workspace = true }
-regex = "1.3.9"
+regex = { workspace = true }
 reqwest = { workspace = true }
 rustls = { workspace = true }
 rustls-native-certs = "0.7.0"

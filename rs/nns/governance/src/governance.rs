@@ -1928,24 +1928,21 @@ impl Governance {
     ///
     /// Preconditions:
     /// - the given `neuron` already exists in `self.neuron_store.neurons`
-    /// - the controller principal is self-authenticating
     #[cfg(feature = "test")]
     pub fn update_neuron(&mut self, neuron: NeuronProto) -> Result<(), GovernanceError> {
-        // The controller principal is self-authenticating.
-        if !neuron.controller.unwrap().is_self_authenticating() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Cannot update neuron, controller PrincipalId must be self-authenticating"
-                    .to_string(),
-            ));
-        }
+        // Converting from API type to internal type.
+        let new_neuron = Neuron::try_from(neuron).expect("Neuron must be valid");
 
-        let neuron_id = neuron.id.expect("Neuron must have a NeuronId");
-        // Must clobber an existing neuron.
-        self.with_neuron_mut(&neuron_id, |old_neuron| {
-            // Converting from API type to internal type.
-            *old_neuron = Neuron::try_from(neuron).unwrap();
-        })
+        self.with_neuron_mut(&new_neuron.id(), |old_neuron| {
+            if new_neuron.subaccount() != old_neuron.subaccount() {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Cannot change the subaccount of a neuron".to_string(),
+                ));
+            }
+            *old_neuron = new_neuron;
+            Ok(())
+        })?
     }
 
     /// Add a neuron to the list of neurons.
@@ -1990,13 +1987,6 @@ impl Governance {
                     "Cannot add neuron. There is already a neuron with id: {:?}",
                     neuron_id
                 ),
-            ));
-        }
-
-        if !neuron.controller().is_self_authenticating() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Cannot add neuron, controller PrincipalId must be self-authenticating".to_string(),
             ));
         }
 
@@ -3171,13 +3161,6 @@ impl Governance {
                 )
             })?
             .clone();
-
-        if !child_controller.is_self_authenticating() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "Child neuron controller for disburse neuron must be self-authenticating",
-            ));
-        }
 
         let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
         let from_subaccount = parent_neuron.subaccount();
@@ -4390,7 +4373,9 @@ impl Governance {
                     self.set_proposal_execution_status(pid, validate_result);
                     return;
                 }
-                self.heap_data.default_followees = proposal.default_followees.clone();
+                self.heap_data
+                    .default_followees
+                    .clone_from(&proposal.default_followees);
                 self.set_proposal_execution_status(pid, Ok(()));
             }
             Action::RewardNodeProviders(proposal) => {
@@ -6932,7 +6917,7 @@ impl Governance {
                     "Error while loading previously computed `initial_neurons_fund_participation` \
                     for proposal {:?}: {}",
                     request.nns_proposal_id,
-                    err.to_string(),
+                    err,
                 ),
                 )
             })?;
@@ -6949,8 +6934,7 @@ impl Governance {
                     format!(
                         "Error while loading previously computed `neurons_fund_refunds` \
                         for proposal {:?}: {}",
-                        request.nns_proposal_id,
-                        err.to_string(),
+                        request.nns_proposal_id, err,
                     ),
                 )
             })?;
@@ -6969,7 +6953,7 @@ impl Governance {
                         "Error while loading previously computed `final_neurons_fund_participation` \
                         for proposal {:?}: {}",
                         request.nns_proposal_id,
-                        err.to_string(),
+                        err,
                     ),
                 )
             })?;
@@ -7564,9 +7548,16 @@ impl Governance {
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
+            total_voting_power_non_self_authenticating_controller,
+            total_staked_e8s_non_self_authenticating_controller,
         } = self
             .neuron_store
             .compute_neuron_metrics(now, self.economics().neuron_minimum_stake_e8s);
+
+        let total_voting_power_non_self_authenticating_controller =
+            Some(total_voting_power_non_self_authenticating_controller);
+        let total_staked_e8s_non_self_authenticating_controller =
+            Some(total_staked_e8s_non_self_authenticating_controller);
 
         GovernanceCachedMetrics {
             timestamp_seconds: now,
@@ -7604,6 +7595,8 @@ impl Governance {
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
+            total_voting_power_non_self_authenticating_controller,
+            total_staked_e8s_non_self_authenticating_controller,
         }
     }
 

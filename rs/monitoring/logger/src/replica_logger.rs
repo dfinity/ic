@@ -1,9 +1,13 @@
-use ic_context_logger::{ContextLogger, LogMetadata, Logger};
+use std::{
+    collections::HashMap,
+    sync::Mutex,
+    time::{Duration, Instant},
+};
+
 use ic_protobuf::log::log_entry::v1::LogEntry;
 use ic_utils::str::StrEllipsize;
-use std::collections::HashMap;
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
+
+use crate::context_logger::{ContextLogger, LogMetadata, Logger};
 
 /// A logger that logs `LogEntry`s using a `LogEntryLogger`
 pub type ReplicaLogger = ContextLogger<LogEntry, LogEntryLogger>;
@@ -99,9 +103,9 @@ impl Logger<LogEntry> for LogEntryLogger {
 
         log_entry.level = metadata.level.as_str().to_string();
         log_entry.utc_time = get_utc_time();
-        log_entry.crate_ = crate_.clone();
-        log_entry.module = module.clone();
-        log_entry.message = message.clone();
+        log_entry.crate_.clone_from(&crate_);
+        log_entry.module.clone_from(&module);
+        log_entry.message.clone_from(&message);
         log_entry.line = metadata.line;
 
         let net_context = format!("s:{}/n:{}/", log_entry.subnet_id, log_entry.node_id);

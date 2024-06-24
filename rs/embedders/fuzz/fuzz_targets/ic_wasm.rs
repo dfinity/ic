@@ -17,8 +17,13 @@ use wasmparser::*;
 #[derive(Debug)]
 pub struct ICWasmModule {
     pub module: Module,
+    // TODO: Create a config for fuzzing
+    // for clippy to not complain.
+    #[allow(dead_code)]
     pub config: Config,
+    #[allow(dead_code)]
     pub exoported_globals: Vec<Global>,
+    #[allow(dead_code)]
     pub exported_functions: BTreeSet<WasmMethod>,
 }
 
@@ -282,7 +287,7 @@ fn export_name(
             .filter(|index| !visited.contains(index))
             .collect();
         let choice = u.choose(&index_choice)?;
-        name = export_func_once[*choice].clone();
+        name.clone_from(&export_func_once[*choice]);
         visited.insert(*choice);
         return Ok(name);
     }

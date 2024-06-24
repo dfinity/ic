@@ -33,11 +33,11 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType, ClearChunkStoreArgs,
-    ComputeInitialEcdsaDealingsArgs, ComputeInitialIDkgDealingsArgs, CreateCanisterArgs,
-    DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, ComputeInitialEcdsaDealingsArgs,
+    ComputeInitialIDkgDealingsArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs,
+    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
+    Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
     ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrKeyId,
     SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
     SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
@@ -394,6 +394,7 @@ impl ExecutionEnvironment {
             config.rate_limiting_of_heap_delta,
             heap_delta_rate_limit,
             upload_wasm_chunk_instructions,
+            config.embedders_config.wasm_max_size,
         );
         let metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
         let canister_manager = CanisterManager::new(
@@ -555,22 +556,26 @@ impl ExecutionEnvironment {
                 );
             }
 
-            Ok(Ic00Method::InstallChunkedCode)
-                if self.config.wasm_chunk_store == FlagStatus::Enabled =>
-            {
-                // Tail call is needed for deterministic time slicing here to
-                // properly handle the case of a paused execution.
-                return self.execute_install_code(
-                    msg,
-                    None,
-                    None,
-                    DtsInstallCodeStatus::StartingFirstExecution,
-                    state,
-                    instruction_limits,
-                    round_limits,
-                    registry_settings.subnet_size,
-                );
+            Ok(Ic00Method::InstallChunkedCode) => {
+                if self.config.wasm_chunk_store == FlagStatus::Enabled {
+                    // Tail call is needed for deterministic time slicing here to
+                    // properly handle the case of a paused execution.
+                    return self.execute_install_code(
+                        msg,
+                        None,
+                        None,
+                        DtsInstallCodeStatus::StartingFirstExecution,
+                        state,
+                        instruction_limits,
+                        round_limits,
+                        registry_settings.subnet_size,
+                    );
+                } else {
+                    Self::reject_due_to_api_not_implemented(&mut msg)
+                }
             }
+
+            Ok(Ic00Method::DeleteChunks) => Self::reject_due_to_api_not_implemented(&mut msg),
 
             Ok(Ic00Method::SignWithECDSA) => match &msg {
                 CanisterCall::Request(request) => {
@@ -666,10 +671,7 @@ impl ExecutionEnvironment {
 
                                 let sender_canister_version = args.get_sender_canister_version();
 
-                                let settings = match args.settings {
-                                    None => CanisterSettingsArgs::default(),
-                                    Some(settings) => settings,
-                                };
+                                let settings = args.settings.unwrap_or_default();
                                 let result = match CanisterSettings::try_from(settings) {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
                                         response: Err(err.into()),
@@ -1385,10 +1387,6 @@ impl ExecutionEnvironment {
                     response: res,
                     refund: msg.take_cycles(),
                 }
-            }
-
-            Ok(Ic00Method::DeleteChunks) | Ok(Ic00Method::InstallChunkedCode) => {
-                Self::reject_due_to_api_not_implemented(&mut msg)
             }
 
             Ok(Ic00Method::NodeMetricsHistory) => {
@@ -2674,12 +2672,13 @@ impl ExecutionEnvironment {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request could not be handled, invalid or disabled key {}.",
+                    "{} request failed: invalid or disabled key {}.",
                     request.method_name, key
                 ),
             ));
         }
 
+        // TODO(EXC-1645): migrate to using `.sign_with_threshold_contexts`.
         if state
             .metadata
             .subnet_call_context_manager
@@ -2690,7 +2689,7 @@ impl ExecutionEnvironment {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request could not be handled, the ECDSA signature queue is full.",
+                    "{} request failed: the ECDSA signature queue is full.",
                     request.method_name
                 ),
             ));
@@ -2738,8 +2737,9 @@ impl ExecutionEnvironment {
         // If the request isn't from the NNS, then we need to charge for it.
         let source_subnet = topology.routing_table.route(request.sender.get());
         if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
-            // TODO(EXC-1629): implement schnorr fee.
-            let signature_fee = self.cycles_account_manager.ecdsa_signature_fee(subnet_size);
+            let signature_fee = self
+                .cycles_account_manager
+                .schnorr_signature_fee(subnet_size);
             if request.payment < signature_fee {
                 return Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
@@ -2760,16 +2760,16 @@ impl ExecutionEnvironment {
             }
         }
 
-        let key = MasterPublicKeyId::Schnorr(key_id.clone());
+        let threshold_key = MasterPublicKeyId::Schnorr(key_id.clone());
         if !topology
-            .idkg_signing_subnets(&key)
+            .idkg_signing_subnets(&threshold_key)
             .contains(&state.metadata.own_subnet_id)
         {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request could not be handled, invalid or disabled key {}.",
-                    request.method_name, key
+                    "{} request failed: invalid or disabled key {}.",
+                    request.method_name, threshold_key
                 ),
             ));
         }
@@ -2777,14 +2777,14 @@ impl ExecutionEnvironment {
         if state
             .metadata
             .subnet_call_context_manager
-            .sign_with_schnorr_contexts_count()
+            .sign_with_threshold_contexts_count(&threshold_key)
             >= max_queue_size as usize
         {
             return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} request could not be handled, the Schnorr signature queue is full.",
-                    request.method_name
+                    "{} request failed: signature queue for key {} is full.",
+                    request.method_name, threshold_key
                 ),
             ));
         }

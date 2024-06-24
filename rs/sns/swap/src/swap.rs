@@ -5,8 +5,8 @@ use crate::{
     logs::{ERROR, INFO},
     memory,
     pb::v1::{
-        get_open_ticket_response, new_sale_ticket_response, restore_dapp_controllers_response,
-        set_dapp_controllers_call_result, set_mode_call_result,
+        get_open_ticket_response, new_sale_ticket_response, set_dapp_controllers_call_result,
+        set_mode_call_result,
         set_mode_call_result::SetModeResult,
         settle_neurons_fund_participation_request, settle_neurons_fund_participation_response,
         sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
@@ -21,11 +21,11 @@ use crate::{
         ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
         NeuronBasketConstructionParameters, NeuronId as SaleNeuronId, NewSaleTicketRequest,
         NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest, OpenResponse,
-        Participant, RefreshBuyerTokensResponse, RestoreDappControllersResponse,
-        SetDappControllersCallResult, SetDappControllersRequest, SetDappControllersResponse,
-        SetModeCallResult, SettleNeuronsFundParticipationRequest,
-        SettleNeuronsFundParticipationResponse, SettleNeuronsFundParticipationResult,
-        SnsNeuronRecipe, Swap, SweepResult, Ticket, TransferableAmount,
+        Participant, RefreshBuyerTokensResponse, SetDappControllersCallResult,
+        SetDappControllersRequest, SetDappControllersResponse, SetModeCallResult,
+        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+        SettleNeuronsFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, Ticket,
+        TransferableAmount,
     },
     types::{NeuronsFundNeuron, ScheduledVestingEvent, TransferResult},
 };
@@ -118,20 +118,6 @@ impl From<Result<SetModeResponse, CanisterCallError>> for SetModeCallResult {
 impl From<Result<SetDappControllersResponse, CanisterCallError>> for SetDappControllersCallResult {
     fn from(native_result: Result<SetDappControllersResponse, CanisterCallError>) -> Self {
         use set_dapp_controllers_call_result::Possibility as P;
-        let possibility = Some(match native_result {
-            Ok(response) => P::Ok(response),
-            Err(err) => P::Err(err),
-        });
-
-        Self { possibility }
-    }
-}
-
-impl From<Result<SetDappControllersResponse, CanisterCallError>>
-    for RestoreDappControllersResponse
-{
-    fn from(native_result: Result<SetDappControllersResponse, CanisterCallError>) -> Self {
-        use restore_dapp_controllers_response::Possibility as P;
         let possibility = Some(match native_result {
             Ok(response) => P::Ok(response),
             Err(err) => P::Err(err),
@@ -1295,45 +1281,6 @@ impl Swap {
 
      */
 
-    /// Restores all dapp(s) canisters to te fallback controllers as specified
-    /// in the SNS initialization process. `restore_dapp_controllers` is only
-    /// callable by NNS Governance.
-    pub async fn restore_dapp_controllers(
-        &mut self,
-        sns_root_client: &mut impl SnsRootClient,
-        caller: PrincipalId,
-    ) -> RestoreDappControllersResponse {
-        // Require authorization.
-        let nns_governance = self.init_or_panic().nns_governance_or_panic();
-        if caller != nns_governance.get() {
-            panic!(
-                "This method can only be called by NNS Governance({}). Current caller is {}",
-                nns_governance, caller,
-            );
-        }
-
-        // With the restoration of the dapp(s) to the fallback controllers, the Sale
-        // is now aborted.
-        self.set_lifecycle(Lifecycle::Aborted);
-
-        let set_dapp_controllers_result = self.set_dapp_controllers(sns_root_client).await;
-        match set_dapp_controllers_result {
-            Ok(set_dapp_controllers_response) => set_dapp_controllers_response.into(),
-            // `restore_dapp_controllers` is called by NNS Governance which expects a
-            // RestoreDappControllersResponse. Since this is after the The error response in that Response
-            // object is a CanisterCallError, so transform the error_message to a
-            // CanisterCallError even though this is not technically a CanisterCallError.
-            //
-            // TODO IC-1448: In the Single Proposal SNS Initialization, a more robust
-            // response object can include errors that are not limited to CanisterCallError.
-            Err(error_message) => Err(CanisterCallError {
-                description: error_message,
-                ..Default::default()
-            })
-            .into(),
-        }
-    }
-
     // Returns the ticket if a ticket was found for the caller and the ticket
     // was removed successfully. Returns None if no ticket was found for the caller.
     // Only the owner of a ticket can remove it.
@@ -1366,11 +1313,9 @@ impl Swap {
         self.lifecycle() == Lifecycle::Aborted
     }
 
-    /// Calls SNS Root with the Swap canister's configured
-    /// `fallback_controller_principal_ids`. set_dapp_controllers is generic and
-    /// used for the various Swap APIs that need to return control of the dapp(s)
-    /// back to the devs.
-    pub async fn set_dapp_controllers(
+    /// Calls SNS Root's set_dapp_controllers with the Swap canister's configured
+    /// `fallback_controller_principal_ids`.
+    pub async fn restore_dapp_controllers(
         &self,
         sns_root_client: &mut impl SnsRootClient,
     ) -> Result<Result<SetDappControllersResponse, CanisterCallError>, String> {
@@ -1400,12 +1345,45 @@ impl Swap {
             .await)
     }
 
-    /// Calls set_dapp_controllers() and handles errors for finalize
-    async fn set_dapp_controllers_for_finalize(
+    /// Calls SNS Root's set_dapp_controllers with SNS Root's principal id,
+    /// giving SNS Root sole control.
+    pub async fn take_sole_control_of_dapp_controllers(
+        &self,
+        sns_root_client: &mut impl SnsRootClient,
+    ) -> Result<Result<SetDappControllersResponse, CanisterCallError>, String> {
+        let sns_root_principal_id = self.init()?.sns_root()?.get();
+        Ok(sns_root_client
+            .set_dapp_controllers(SetDappControllersRequest {
+                canister_ids: None,
+                controller_principal_ids: vec![sns_root_principal_id],
+            })
+            .await)
+    }
+
+    /// Calls restore_dapp_controllers() and handles errors for finalize
+    async fn restore_dapp_controllers_for_finalize(
         &self,
         sns_root_client: &mut impl SnsRootClient,
     ) -> SetDappControllersCallResult {
-        let result = self.set_dapp_controllers(sns_root_client).await;
+        let result = self.restore_dapp_controllers(sns_root_client).await;
+
+        match result {
+            Ok(result) => result.into(),
+            Err(err_message) => {
+                log!(ERROR, "Halting set_dapp_controllers(), {:?}", err_message);
+                SetDappControllersCallResult { possibility: None }
+            }
+        }
+    }
+
+    /// Calls take_sole_control_of_dapp_controllers() and handles errors for finalize
+    async fn take_sole_control_of_dapp_controllers_for_finalize(
+        &self,
+        sns_root_client: &mut impl SnsRootClient,
+    ) -> SetDappControllersCallResult {
+        let result = self
+            .take_sole_control_of_dapp_controllers(sns_root_client)
+            .await;
 
         match result {
             Ok(result) => result.into(),
@@ -1549,7 +1527,7 @@ impl Swap {
             // Restore controllers of dapp canisters to their original
             // owners (i.e. self.init.fallback_controller_principal_ids).
             finalize_swap_response.set_set_dapp_controllers_result(
-                self.set_dapp_controllers_for_finalize(environment.sns_root_mut())
+                self.restore_dapp_controllers_for_finalize(environment.sns_root_mut())
                     .await,
             );
 
@@ -1586,6 +1564,15 @@ impl Swap {
         finalize_swap_response.set_set_mode_call_result(
             Self::set_sns_governance_to_normal_mode(environment.sns_governance_mut()).await,
         );
+
+        // The following step is non-critical, so we'll do it after we set
+        // governance to normal mode, but only if there were no errors.
+        if !finalize_swap_response.has_error_message() {
+            finalize_swap_response.set_set_dapp_controllers_result(
+                self.take_sole_control_of_dapp_controllers_for_finalize(environment.sns_root_mut())
+                    .await,
+            );
+        }
 
         finalize_swap_response
     }

@@ -556,6 +556,7 @@ EOF
         """,
         executable = True,
         tags = ["manual"],
+        testonly = True,
     )
 
     native.genrule(

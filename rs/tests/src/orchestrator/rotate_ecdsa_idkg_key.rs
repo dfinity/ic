@@ -29,13 +29,15 @@ use std::time::{Duration, SystemTime};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::subnet_recovery::{
-    enable_ecdsa_on_subnet, run_ecdsa_signature_test,
+    enable_chain_key_on_subnet, run_chain_key_signature_test,
 };
 use crate::retry_with_msg;
+use crate::tecdsa::{make_key, KEY_ID1};
 use crate::util::{block_on, get_nns_node, MessageCanister};
 use anyhow::bail;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_interfaces_registry::RegistryValue;
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
@@ -99,11 +101,12 @@ pub fn test(env: TestEnv) {
     let mut init_keys: HashMap<NodeId, PublicKey> = HashMap::new();
     let mut rotated_keys: HashMap<NodeId, PublicKey> = HashMap::new();
 
-    let pub_key = enable_ecdsa_on_subnet(
+    let public_keys = enable_chain_key_on_subnet(
         &nns_node,
         &nns_canister,
         root_subnet_id,
         Some(delta),
+        vec![MasterPublicKeyId::Ecdsa(make_key(KEY_ID1))],
         &logger,
     );
 
@@ -243,7 +246,9 @@ pub fn test(env: TestEnv) {
         .map_or(false, |d| d + gamma <= delta));
 
     // Ensure ECDSA signing still works
-    run_ecdsa_signature_test(&nns_canister, &logger, pub_key);
+    for (key_id, public_key) in public_keys {
+        run_chain_key_signature_test(&nns_canister, &logger, &key_id, public_key);
+    }
 }
 
 fn print_key(logger: &Logger, node_id: NodeId, pk: &PublicKey, version: u64) {

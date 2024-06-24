@@ -38,15 +38,19 @@ pub enum FiatCurrency {
     GBP,
 }
 
-impl ToString for FiatCurrency {
-    fn to_string(&self) -> String {
-        match self {
-            FiatCurrency::USD => "USD".to_string(),
-            FiatCurrency::EUR => "EUR".to_string(),
-            FiatCurrency::CNY => "CNY".to_string(),
-            FiatCurrency::JPY => "JPY".to_string(),
-            FiatCurrency::GBP => "GBP".to_string(),
-        }
+impl std::fmt::Display for FiatCurrency {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                FiatCurrency::USD => "USD",
+                FiatCurrency::EUR => "EUR",
+                FiatCurrency::CNY => "CNY",
+                FiatCurrency::JPY => "JPY",
+                FiatCurrency::GBP => "GBP",
+            }
+        )
     }
 }
 
@@ -146,7 +150,7 @@ pub async fn get_tvl(req: Option<TvlRequest>) -> Result<TvlResult, TvlResultErro
             }
             None => {
                 return Err(TvlResultError {
-                    message: format!("No {} entry yet.", currency.to_string()),
+                    message: format!("No {} entry yet.", currency),
                 });
             }
         }

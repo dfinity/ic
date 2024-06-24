@@ -5,6 +5,7 @@
 # [Misc]
 /.devcontainer/           @dfinity-lab/teams/idx
 /.github/                 @dfinity-lab/teams/idx
+/.github/CODEOWNERS       @dfinity-lab/teams/owners-owners
 /buf.yaml                 @dfinity-lab/teams/message-routing-owners
 /cpp/                     @dfinity-lab/teams/node-team
 /hs/                      @dfinity-lab/teams/utopia
@@ -81,7 +82,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /testnet/env/                                              @dfinity-lab/teams/platform-operations
 /testnet/release/                                          @dfinity-lab/teams/DRE
 /testnet/tools/nns-tools/                                  @dfinity-lab/teams/nns-team
-/testnet/mainnet_revisions.json                            @dfinity-lab/teams/consensus-owners
+/testnet/mainnet_revisions.json                            @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/DRE
 
 # [Rust]
 /rs/                                                    @dfinity-lab/teams/interface-owners
@@ -89,7 +90,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/artifact_pool/                                      @dfinity-lab/teams/consensus-owners
 /rs/async_utils/                                        @dfinity-lab/teams/networking-team
 /rs/backup/                                             @dfinity-lab/teams/consensus-owners
-/rs/bazelifier/                                         @dfinity-lab/teams/idx
 /rs/bitcoin/adapter/                                    @dfinity-lab/teams/networking-team
 /rs/bitcoin/ckbtc/                                      @dfinity-lab/teams/cross-chain-team
 /rs/bitcoin/mock/                                       @dfinity-lab/teams/financial-integrations
@@ -151,8 +151,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/memory_tracker/                                     @dfinity-lab/teams/runtime-owners
 /rs/messaging/                                          @dfinity-lab/teams/message-routing-owners
 /rs/monitoring/adapter_metrics/                         @dfinity-lab/teams/networking-team
-/rs/monitoring/adapter_metrics_server/                  @dfinity-lab/teams/networking-team
-/rs/monitoring/adapter_metrics_service/                 @dfinity-lab/teams/networking-team
 /rs/monitoring/backtrace/                               @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/networking-team
 /rs/nervous_system/                                     @dfinity-lab/teams/nns-team
 /rs/nns/                                                @dfinity-lab/teams/nns-team
@@ -194,6 +192,8 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/replica/                                            @dfinity-lab/teams/networking-team
 /rs/replica_tests/                                      @dfinity-lab/teams/execution-owners
 /rs/replicated_state/                                   @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
+/rs/replicated_state/src/canister_state/queues.rs       @dfinity-lab/teams/message-routing-owners
+/rs/replicated_state/src/canister_state/queues          @dfinity-lab/teams/message-routing-owners
 /rs/replicated_state/src/page_map.rs                    @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/runtime-owners
 /rs/replicated_state/src/page_map/                      @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/runtime-owners
 /rs/rosetta-api/                                        @dfinity-lab/teams/financial-integrations
@@ -214,6 +214,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/state_machine_tests/                                @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/utopia
 /rs/state_manager/                                      @dfinity-lab/teams/message-routing-owners
 /rs/state_tool/                                         @dfinity-lab/teams/message-routing-owners
+/rs/sys/                                                @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/runtime-owners
 /rs/system_api/                                         @dfinity-lab/teams/execution-owners
 /rs/test_utilities/artifact_pool/                       @dfinity-lab/teams/consensus-owners
 /rs/test_utilities/consensus/                           @dfinity-lab/teams/consensus-owners

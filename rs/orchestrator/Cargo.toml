@@ -36,7 +36,6 @@ ic-nns-constants = { path = "../nns/constants" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-local-store = { path = "../registry/local_store" }
-ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-replicator = { path = "./registry_replicator" }
 ic-sys = { path = "../sys" }
@@ -50,7 +49,7 @@ registry-canister = { path = "../registry/canister" }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
-slog-async = { version = "2.5", features = ["nested-values"] }
+slog-async = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
@@ -63,6 +62,7 @@ ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/ca
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-test-utils-tls = { path = "../crypto/test_utils/tls" }
 ic-registry-client-fake = { path = "../registry/fake" }
+ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }

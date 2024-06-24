@@ -12,7 +12,6 @@ use ic_test_utilities_types::{
 use ic_types::{
     messages::{CallbackId, Request, RequestOrResponse, NO_DEADLINE},
     time::{CoarseTime, UNIX_EPOCH},
-    xnet::QueueId,
     Time,
 };
 use std::sync::Arc;
@@ -105,7 +104,7 @@ impl CanisterFixture {
             .push_output_request(request.into(), UNIX_EPOCH)
     }
 
-    fn pop_output(&mut self) -> Option<(QueueId, RequestOrResponse)> {
+    fn pop_output(&mut self) -> Option<RequestOrResponse> {
         let mut iter = self.canister_state.output_into_iter();
         iter.pop()
     }

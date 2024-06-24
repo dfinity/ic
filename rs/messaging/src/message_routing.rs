@@ -34,9 +34,8 @@ use ic_replicated_state::{
     metadata_state::ApiBoundaryNodeEntry, NetworkTopology, ReplicatedState, SubnetTopology,
 };
 use ic_types::{
-    batch::Batch,
-    crypto::threshold_sig::ThresholdSigPublicKey,
-    crypto::KeyPurpose,
+    batch::{Batch, BatchSummary},
+    crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
     malicious_flags::MaliciousFlags,
     registry::RegistryClientError,
     xnet::{StreamHeader, StreamIndex},
@@ -1106,10 +1105,14 @@ impl BatchProcessor for BatchProcessorImpl {
             ),
         };
 
-        if let Some(next_checkpoint) = batch.next_checkpoint_height {
+        if let Some(BatchSummary {
+            next_checkpoint_height,
+            ..
+        }) = batch.batch_summary
+        {
             self.metrics
                 .next_checkpoint_height
-                .set(next_checkpoint.get() as i64);
+                .set(next_checkpoint_height.get() as i64);
         }
 
         // If the subnet is starting up after a split, execute splitting phase 2.

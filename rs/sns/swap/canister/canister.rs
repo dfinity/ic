@@ -18,7 +18,6 @@ use ic_nervous_system_common::{
 };
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_sns_swap::{
-    clients::RealSnsRootClient,
     logs::{ERROR, INFO},
     memory::UPGRADES_MEMORY,
     pb::v1::{
@@ -33,8 +32,7 @@ use ic_sns_swap::{
         ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
         NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureRequest,
         NotifyPaymentFailureResponse, OpenRequest, OpenResponse, RefreshBuyerTokensRequest,
-        RefreshBuyerTokensResponse, RestoreDappControllersRequest, RestoreDappControllersResponse,
-        Swap,
+        RefreshBuyerTokensResponse, Swap,
     },
 };
 use ic_stable_structures::{writer::Writer, Memory};
@@ -251,28 +249,6 @@ fn get_buyers_total() {
 #[candid_method(update, rename = "get_buyers_total")]
 async fn get_buyers_total_(_request: GetBuyersTotalRequest) -> GetBuyersTotalResponse {
     swap().get_buyers_total()
-}
-
-/// Restores all dapp canisters to the fallback controllers as specified
-/// in the SNS initialization process, marking the Swap as aborted in the
-/// process. `restore_dapp_controllers` is only callable by NNS Governance.
-#[export_name = "canister_update restore_dapp_controllers"]
-fn restore_dapp_controllers() {
-    over_async(candid_one, restore_dapp_controllers_)
-}
-
-/// Restores all dapp canisters to the fallback controllers as specified
-/// in the SNS initialization process, marking the Swap as aborted in the
-/// process. `restore_dapp_controllers` is only callable by NNS Governance.
-#[candid_method(update, rename = "restore_dapp_controllers")]
-async fn restore_dapp_controllers_(
-    _request: RestoreDappControllersRequest,
-) -> RestoreDappControllersResponse {
-    log!(INFO, "restore_dapp_controllers");
-    let mut sns_root_client = RealSnsRootClient::new(swap().init_or_panic().sns_root_or_panic());
-    swap_mut()
-        .restore_dapp_controllers(&mut sns_root_client, caller())
-        .await
 }
 
 /// Return the current lifecycle stage (e.g. Open, Committed, etc)

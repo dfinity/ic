@@ -122,6 +122,7 @@ pub(crate) struct CanisterMgrConfig {
     rate_limiting_of_heap_delta: FlagStatus,
     heap_delta_rate_limit: NumBytes,
     upload_wasm_chunk_instructions: NumInstructions,
+    wasm_chunk_store_max_size: NumBytes,
 }
 
 impl CanisterMgrConfig {
@@ -141,6 +142,7 @@ impl CanisterMgrConfig {
         rate_limiting_of_heap_delta: FlagStatus,
         heap_delta_rate_limit: NumBytes,
         upload_wasm_chunk_instructions: NumInstructions,
+        wasm_chunk_store_max_size: NumBytes,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -157,6 +159,7 @@ impl CanisterMgrConfig {
             rate_limiting_of_heap_delta,
             heap_delta_rate_limit,
             upload_wasm_chunk_instructions,
+            wasm_chunk_store_max_size,
         }
     }
 }
@@ -1274,7 +1277,7 @@ impl CanisterManager {
             + canister_to_delete
                 .system_state
                 .canister_metrics
-                .consumed_cycles_since_replica_started;
+                .consumed_cycles;
 
         state
             .metadata
@@ -1292,7 +1295,7 @@ impl CanisterManager {
         for (use_case, cycles) in canister_to_delete
             .system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .iter()
         {
             state
@@ -1380,7 +1383,7 @@ impl CanisterManager {
     ) -> Result<CanisterId, CanisterManagerError> {
         let new_canister_id = CanisterId::unchecked_from_principal(specified_id);
 
-        if state.canister_states.get(&new_canister_id).is_some() {
+        if state.canister_states.contains_key(&new_canister_id) {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_canister_id));
         }
 
@@ -1590,7 +1593,7 @@ impl CanisterManager {
         canister
             .system_state
             .wasm_chunk_store
-            .can_insert_chunk(chunk)
+            .can_insert_chunk(self.config.wasm_chunk_store_max_size, chunk)
             .map_err(|err| CanisterManagerError::WasmChunkStoreError { message: err })?;
 
         let chunk_bytes = wasm_chunk_store::chunk_size();
@@ -1742,7 +1745,7 @@ impl CanisterManager {
         let hash = canister
             .system_state
             .wasm_chunk_store
-            .insert_chunk(chunk)
+            .insert_chunk(self.config.wasm_chunk_store_max_size, chunk)
             .expect("Error: Insert chunk cannot fail after checking `can_insert_chunk`");
         Ok(UploadChunkResult {
             reply: UploadChunkReply {
@@ -2069,7 +2072,9 @@ impl CanisterManager {
         };
 
         system_state.wasm_chunk_store = snapshot.chunk_store().clone();
-        system_state.certified_data = snapshot.certified_data().clone();
+        system_state
+            .certified_data
+            .clone_from(snapshot.certified_data());
 
         let mut new_canister =
             CanisterState::new(system_state, new_execution_state, scheduler_state);
@@ -2329,13 +2334,13 @@ impl From<CanisterManagerError> for UserError {
             CanisterAlreadyExists(canister_id) => {
                 Self::new(
                     ErrorCode::CanisterAlreadyInstalled,
-                    format!("Canister {} is already installed{additional_help}", canister_id))
+                    format!("Canister {} is already installed.{additional_help}", canister_id))
             },
             SubnetComputeCapacityOverSubscribed {requested , available } => {
                 Self::new(
                     ErrorCode::SubnetOversubscribed,
                     format!(
-                        "Canister requested a compute allocation of {} which cannot be satisfied because the Subnet's remaining compute capacity is {}%{additional_help}",
+                        "Canister requested a compute allocation of {} which cannot be satisfied because the Subnet's remaining compute capacity is {}%.{additional_help}",
                         requested,
                         available
                     ))
@@ -2349,7 +2354,7 @@ impl From<CanisterManagerError> for UserError {
             CanisterIdAlreadyExists(canister_id) => {
                 Self::new(
                     ErrorCode::CanisterIdAlreadyExists,
-                        format!("Unsuccessful canister creation: canister id already exists {}{additional_help}", canister_id)
+                        format!("Unsuccessful canister creation: canister id {} already exists.{additional_help}", canister_id)
                 )
             }
             Hypervisor(canister_id, err) => err.into_user_error(&canister_id),
@@ -2357,7 +2362,7 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::SubnetOversubscribed,
                     format!(
-                        "Canister requested {} of memory but only {} are available in the subnet{additional_help}",
+                        "Canister requested {} of memory but only {} are available in the subnet.{additional_help}",
                         requested.display(),
                         available.display(),
                     )
@@ -2367,7 +2372,7 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::SubnetOversubscribed,
                     format!(
-                        "Canister requested {} of Wasm custom sections memory but only {} are available in the subnet{additional_help}",
+                        "Canister requested {} of Wasm custom sections memory but only {} are available in the subnet.{additional_help}",
                         requested.display(),
                         available.display(),
                     )
@@ -2409,7 +2414,7 @@ impl From<CanisterManagerError> for UserError {
                     ErrorCode::CanisterQueueNotEmpty,
                     format!(
                         "Canister {} has messages in its queues and cannot be \
-                        deleted now. Please retry after some time{additional_help}",
+                        deleted now. Please retry after some time.{additional_help}",
                         canister_id,
                     )
                 )
@@ -2459,7 +2464,7 @@ impl From<CanisterManagerError> for UserError {
             InstallCodeNotEnoughCycles(err) => {
                 Self::new(
                 ErrorCode::CanisterOutOfCycles,
-                    format!("Canister installation failed with `{}`{additional_help}", err),
+                    format!("Canister installation failed with `{}`.{additional_help}", err),
                 )
             }
             InstallCodeRateLimited(canister_id) => {
@@ -2551,7 +2556,7 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::CanisterContractViolation,
                     format!(
-                        "Error from Wasm chunk store: {}{additional_help}", message
+                        "Error from Wasm chunk store: {}.{additional_help}", message
                     )
                 )
             }
@@ -2559,21 +2564,21 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::CanisterSnapshotNotFound,
                     format!(
-                        "Could not find the snapshot ID {} for canister {}{additional_help}", snapshot_id, canister_id,
+                        "Could not find the snapshot ID {} for canister {}.{additional_help}", snapshot_id, canister_id,
                     )
                 )
             }
             CanisterHeapDeltaRateLimited { canister_id, value, limit } => {
                 Self::new(
                     ErrorCode::CanisterHeapDeltaRateLimited,
-                    format!("Canister {} is heap delta rate limited: current delta debit {}, limit {}{additional_help}", canister_id, value, limit)
+                    format!("Canister {} is heap delta rate limited: current delta debit is {}, but limit is {}.{additional_help}", canister_id, value, limit)
                 )
             }
             CanisterSnapshotInvalidOwnership { canister_id, snapshot_id } => {
                 Self::new(
                     ErrorCode::CanisterRejectedMessage,
                     format!(
-                        "The snapshot {} does not belong to canister {}{additional_help}", snapshot_id, canister_id,
+                        "The snapshot {} does not belong to canister {}.{additional_help}", snapshot_id, canister_id,
                     )
                 )
             }
@@ -2581,7 +2586,7 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::CanisterRejectedMessage,
                     format!(
-                        "The canister {} already executes a long-running message.", canister_id, 
+                        "The canister {} is currently executing a long-running message.", canister_id,
                     )
                 )
             }

@@ -1,3 +1,4 @@
+#[cfg(test)]
 mod framework;
 
 use crate::framework::{
@@ -211,6 +212,22 @@ fn minority_maliciouly_ecdsa_dealers_would_pass() -> Result<(), String> {
                 malicious.push(malicious::with_malicious_flags(malicious_flags));
             }
             assert!(run_n_rounds_and_check_pubkey(config, malicious, true))
+        })
+}
+
+#[test]
+fn stalled_clocks_with_f_malicious_would_pass() -> Result<(), String> {
+    ConsensusRunnerConfig::new_from_env(4, 0)
+        .and_then(|config| config.parse_extra_config())
+        .map(|mut config| {
+            config.stall_clocks = true;
+            let f = (config.num_nodes - 1) / 3;
+            assert!(f > 0, "This test requires NUM_NODES >= 4");
+            let mut malicious: Vec<ComponentModifier> = Vec::new();
+            for _ in 0..f {
+                malicious.push(malicious::absent_notary_share())
+            }
+            run_n_rounds_and_collect_hashes(config, malicious, true);
         })
 }
 

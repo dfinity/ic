@@ -187,7 +187,9 @@ impl NnsInitPayloadsBuilder {
             .get_gtc_neurons()
             .into_iter()
             .map(|mut neuron| {
-                neuron.followees = self.governance.proto.default_followees.clone();
+                neuron
+                    .followees
+                    .clone_from(&self.governance.proto.default_followees);
                 neuron
             })
             .collect();
@@ -234,13 +236,12 @@ impl NnsInitPayloadsBuilder {
     }
 
     pub fn build(&mut self) -> NnsInitPayloads {
-        assert!(self
+        assert!(!self
             .ledger
             .init_args()
             .unwrap()
             .initial_values
-            .get(&GOVERNANCE_CANISTER_ID.get().into())
-            .is_none());
+            .contains_key(&GOVERNANCE_CANISTER_ID.get().into()));
         for n in self.governance.proto.neurons.values() {
             let sub = Subaccount(n.account.as_slice().try_into().unwrap_or_else(|e| {
                 panic!(

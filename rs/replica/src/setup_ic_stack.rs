@@ -31,12 +31,19 @@ use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
     consensus::{CatchUpPackage, HasHeight},
-    NodeId, SubnetId,
+    Height, NodeId, SubnetId,
 };
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::{
+    mpsc::{channel, UnboundedSender},
+    watch,
+};
+
+/// The buffer size for the channel that [`IngressHistoryWriterImpl`] uses to send
+/// the message id and height of messages that complete execution.
+const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
@@ -178,6 +185,9 @@ pub fn construct_ic_stack(
         subnet_config.cycles_account_manager_config,
     ));
 
+    let (completed_execution_messages_tx, finalized_ingress_height_rx) =
+        channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
+
     let execution_services = ExecutionServices::setup_execution(
         log.clone(),
         metrics_registry,
@@ -188,6 +198,7 @@ pub fn construct_ic_stack(
         cycles_account_manager.clone(),
         state_manager.clone(),
         state_manager.get_fd_factory(),
+        completed_execution_messages_tx,
     );
     // ---------- MESSAGE ROUTING DEPS FOLLOW ----------
     let certified_stream_store: Arc<dyn CertifiedStreamStore> =
@@ -277,6 +288,8 @@ pub fn construct_ic_stack(
         .into_payload_builder(state_manager.clone(), node_id, log.clone());
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
+    let (max_certified_height_tx, max_certified_height_rx) = watch::channel(Height::from(0));
+
     let (ingress_throttler, ingress_tx, p2p_runner) = setup_consensus_and_p2p(
         log,
         metrics_registry,
@@ -305,6 +318,7 @@ pub fn construct_ic_stack(
         cycles_account_manager,
         canister_http_adapter_client,
         config.nns_registry_replicator.poll_delay_duration_ms,
+        max_certified_height_tx,
     );
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------
     ic_http_endpoints_public::start_server(
@@ -330,6 +344,8 @@ pub fn construct_ic_stack(
         None,
         Arc::new(Pprof),
         tracing_handle,
+        max_certified_height_rx,
+        finalized_ingress_height_rx,
     );
 
     Ok((

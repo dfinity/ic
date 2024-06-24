@@ -14,7 +14,7 @@ use rusqlite::params;
 use std::path::Path;
 
 pub(crate) fn sqlite_on_disk_store(path: &Path) -> Blocks {
-    Blocks::new_persistent(path).unwrap()
+    Blocks::new_persistent(path, false).unwrap()
 }
 
 type Approvals = AllowanceTable<ApprovalKey, AccountIdentifier, Tokens>;

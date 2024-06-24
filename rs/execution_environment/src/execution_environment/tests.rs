@@ -2286,6 +2286,7 @@ fn test_sign_with_threshold_key_fee_charged() {
             .with_own_subnet_id(subnet_test_id(1))
             .with_nns_subnet_id(subnet_test_id(2))
             .with_ecdsa_signature_fee(fee)
+            .with_schnorr_signature_fee(fee)
             .with_idkg_key(key_id.clone())
             .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
             .build();
@@ -2376,6 +2377,7 @@ fn test_sign_with_threshold_key_rejected_without_fee() {
             .with_own_subnet_id(subnet_test_id(1))
             .with_nns_subnet_id(subnet_test_id(2))
             .with_ecdsa_signature_fee(fee)
+            .with_schnorr_signature_fee(fee)
             .with_idkg_key(key_id.clone())
             .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
             .build();
@@ -2585,11 +2587,13 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
         ),
     ];
     for (method, key_id, cycles_use_case) in test_cases {
+        let fee = 1_000_000;
         let mut test = ExecutionTestBuilder::new()
             .with_subnet_type(SubnetType::System)
             .with_own_subnet_id(subnet_test_id(1))
             .with_nns_subnet_id(subnet_test_id(1))
-            .with_ecdsa_signature_fee(1_000_000)
+            .with_ecdsa_signature_fee(fee)
+            .with_schnorr_signature_fee(fee)
             .with_idkg_key(key_id.clone())
             .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
             .build();
@@ -2674,6 +2678,7 @@ fn test_sign_with_threshold_key_queue_fills_up() {
             .with_own_subnet_id(subnet_test_id(1))
             .with_nns_subnet_id(subnet_test_id(2))
             .with_ecdsa_signature_fee(fee)
+            .with_schnorr_signature_fee(fee)
             .with_idkg_key(key_id.clone())
             .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
             .build();
@@ -2683,7 +2688,7 @@ fn test_sign_with_threshold_key_queue_fills_up() {
                 ic00::IC_00,
                 method,
                 call_args()
-                    .other_side(sign_with_threshold_key_payload(method, key_id))
+                    .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
                     .on_reject(wasm().reject_message().reject()),
                 Cycles::from(payment),
             )
@@ -2694,18 +2699,19 @@ fn test_sign_with_threshold_key_queue_fills_up() {
         }
         let result = test.ingress(canister_id, "update", run).unwrap();
 
-        let algorithm = match method {
-            Method::SignWithECDSA => "ECDSA",
-            Method::SignWithSchnorr => "Schnorr",
+        // TODO(EXC-1645): fix error message to follow the same pattern for all `sign_with_*` methods.
+        let message = match method {
+            Method::SignWithECDSA => format!(
+                "{} request failed: the ECDSA signature queue is full.",
+                method,
+            ),
+            Method::SignWithSchnorr => format!(
+                "{} request failed: signature queue for key {} is full.",
+                method, key_id,
+            ),
             _ => panic!("Unexpected method"),
         };
-        assert_eq!(
-            result,
-            WasmResult::Reject(format!(
-                "{} request could not be handled, the {} signature queue is full.",
-                method, algorithm,
-            ))
-        );
+        assert_eq!(result, WasmResult::Reject(message));
     }
 }
 
@@ -3264,14 +3270,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         .canister_state(a_id)
         .system_state
         .canister_metrics
-        .get_consumed_cycles_since_replica_started_by_use_cases()
+        .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
         .unwrap();
     let instruction_consumption_before_response = *test
         .canister_state(a_id)
         .system_state
         .canister_metrics
-        .get_consumed_cycles_since_replica_started_by_use_cases()
+        .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
         .unwrap();
 
@@ -3317,7 +3323,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         test.canister_state(a_id)
             .system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .len(),
         2
     );
@@ -3326,14 +3332,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         .canister_state(a_id)
         .system_state
         .canister_metrics
-        .get_consumed_cycles_since_replica_started_by_use_cases()
+        .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
         .unwrap();
     let instruction_consumption_after_response = *test
         .canister_state(a_id)
         .system_state
         .canister_metrics
-        .get_consumed_cycles_since_replica_started_by_use_cases()
+        .get_consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
         .unwrap();
 
@@ -3364,7 +3370,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         test.canister_state(b_id)
             .system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .len(),
         1
     );
@@ -3374,7 +3380,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(b_id)
             .system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
         NominalCycles::from(test.canister_execution_cost(b_id))
@@ -3526,94 +3532,117 @@ fn test_fetch_canister_logs_should_accept_ingress_message_enabled() {
 }
 
 #[test]
-fn test_compute_initial_idkg_dealings_api_by_default_is_disabled() {
-    let key_id = make_schnorr_key("correct_key");
-    let own_subnet = subnet_test_id(1);
-    let nns_subnet = subnet_test_id(2);
-    let nns_canister = canister_test_id(0x10);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_nns_subnet_id(nns_subnet)
-        .with_caller(nns_subnet, nns_canister)
-        .with_idkg_key(key_id.clone())
-        .build();
-    test.inject_call_to_ic00(
-        Method::ComputeInitialIDkgDealings,
-        ic00::ComputeInitialIDkgDealingsArgs::new(
-            key_id,
-            own_subnet,
-            Default::default(),
-            RegistryVersion::from(100),
-        )
-        .encode(),
-        Cycles::new(0),
-    );
-    test.execute_all();
-    let response = test.xnet_messages()[0].clone();
-    assert_eq!(
-        get_reject_message(response),
-        "compute_initial_i_dkg_dealings API is not yet implemented.",
-    )
+fn test_compute_initial_idkg_dealings_api_flag() {
+    for flag in [FlagStatus::Disabled, FlagStatus::Enabled] {
+        let key_id = make_schnorr_key("correct_key");
+        let own_subnet = subnet_test_id(1);
+        let nns_subnet = subnet_test_id(2);
+        let nns_canister = canister_test_id(0x10);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_nns_subnet_id(nns_subnet)
+            .with_caller(nns_subnet, nns_canister)
+            .with_idkg_key(key_id.clone())
+            .with_ic00_compute_initial_i_dkg_dealings(flag)
+            .build();
+        test.inject_call_to_ic00(
+            Method::ComputeInitialIDkgDealings,
+            ic00::ComputeInitialIDkgDealingsArgs::new(
+                key_id,
+                own_subnet,
+                Default::default(),
+                RegistryVersion::from(100),
+            )
+            .encode(),
+            Cycles::new(0),
+        );
+        test.execute_all();
+        if flag == FlagStatus::Enabled {
+            assert_eq!(test.xnet_messages().len(), 0)
+        } else {
+            assert_eq!(
+                get_reject_message(test.xnet_messages()[0].clone()),
+                "compute_initial_i_dkg_dealings API is not yet implemented.",
+            )
+        }
+    }
 }
 
 #[test]
-fn test_schnorr_public_key_api_by_default_is_disabled() {
-    let key_id = make_schnorr_key("correct_key");
-    let own_subnet = subnet_test_id(1);
-    let nns_subnet = subnet_test_id(2);
-    let nns_canister = canister_test_id(0x10);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_nns_subnet_id(nns_subnet)
-        .with_caller(nns_subnet, nns_canister)
-        .with_idkg_key(key_id.clone())
-        .build();
-    test.inject_call_to_ic00(
-        Method::SchnorrPublicKey,
-        ic00::SchnorrPublicKeyArgs {
-            canister_id: None,
-            derivation_path: DerivationPath::new(vec![]),
-            key_id: into_inner_schnorr(key_id),
+fn test_schnorr_public_key_api_flag() {
+    for flag in [FlagStatus::Disabled, FlagStatus::Enabled] {
+        let key_id = make_schnorr_key("correct_key");
+        let own_subnet = subnet_test_id(1);
+        let nns_subnet = subnet_test_id(2);
+        let nns_canister = canister_test_id(0x10);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_nns_subnet_id(nns_subnet)
+            .with_caller(nns_subnet, nns_canister)
+            .with_idkg_key(key_id.clone())
+            .with_ic00_schnorr_public_key(flag)
+            .build();
+        test.inject_call_to_ic00(
+            Method::SchnorrPublicKey,
+            ic00::SchnorrPublicKeyArgs {
+                canister_id: None,
+                derivation_path: DerivationPath::new(vec![]),
+                key_id: into_inner_schnorr(key_id),
+            }
+            .encode(),
+            Cycles::new(0),
+        );
+        test.execute_all();
+        if flag == FlagStatus::Enabled {
+            // Note this fails with internal error as the test environment doesn't hold a valid key.
+            // However, this is enough to assert that the correct endpoint is reached.
+            assert_eq!(
+                get_reject_message(test.xnet_messages()[0].clone()),
+                "InternalError(\"InvalidPoint\")",
+            )
+        } else {
+            assert_eq!(
+                get_reject_message(test.xnet_messages()[0].clone()),
+                "schnorr_public_key API is not yet implemented."
+            )
         }
-        .encode(),
-        Cycles::new(0),
-    );
-    test.execute_all();
-    let response = test.xnet_messages()[0].clone();
-    assert_eq!(
-        get_reject_message(response),
-        "schnorr_public_key API is not yet implemented.",
-    )
+    }
 }
 
 #[test]
-fn test_sign_with_schnorr_api_by_default_is_disabled() {
-    let key_id = make_schnorr_key("correct_key");
-    let own_subnet = subnet_test_id(1);
-    let nns_subnet = subnet_test_id(2);
-    let nns_canister = canister_test_id(0x10);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_nns_subnet_id(nns_subnet)
-        .with_caller(nns_subnet, nns_canister)
-        .with_idkg_key(key_id.clone())
-        .build();
-    test.inject_call_to_ic00(
-        Method::SignWithSchnorr,
-        ic00::SignWithSchnorrArgs {
-            message: vec![],
-            derivation_path: DerivationPath::new(vec![]),
-            key_id: into_inner_schnorr(key_id),
+fn test_sign_with_schnorr_api_flag() {
+    for flag in [FlagStatus::Disabled, FlagStatus::Enabled] {
+        let key_id = make_schnorr_key("correct_key");
+        let own_subnet = subnet_test_id(1);
+        let nns_subnet = subnet_test_id(2);
+        let nns_canister = canister_test_id(0x10);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_nns_subnet_id(nns_subnet)
+            .with_caller(nns_subnet, nns_canister)
+            .with_idkg_key(key_id.clone())
+            .with_ic00_sign_with_schnorr(flag)
+            .build();
+        test.inject_call_to_ic00(
+            Method::SignWithSchnorr,
+            ic00::SignWithSchnorrArgs {
+                message: vec![],
+                derivation_path: DerivationPath::new(vec![]),
+                key_id: into_inner_schnorr(key_id),
+            }
+            .encode(),
+            Cycles::new(0),
+        );
+        test.execute_all();
+        if flag == FlagStatus::Enabled {
+            assert_eq!(test.xnet_messages().len(), 0)
+        } else {
+            assert_eq!(
+                get_reject_message(test.xnet_messages()[0].clone()),
+                "sign_with_schnorr API is not yet implemented.",
+            )
         }
-        .encode(),
-        Cycles::new(0),
-    );
-    test.execute_all();
-    let response = test.xnet_messages()[0].clone();
-    assert_eq!(
-        get_reject_message(response),
-        "sign_with_schnorr API is not yet implemented.",
-    )
+    }
 }
 
 #[test]
@@ -3639,24 +3668,18 @@ fn test_sign_with_schnorr_api_is_enabled() {
         test.state()
             .metadata
             .subnet_call_context_manager
-            .sign_with_schnorr_contexts_count(),
+            .sign_with_threshold_contexts_count(&key_id),
         0
     );
 
     // Act.
+    let method = Method::SignWithSchnorr;
     let run = wasm()
         .call_with_cycles(
             ic00::IC_00,
-            Method::SignWithSchnorr,
+            method,
             call_args()
-                .other_side(
-                    ic00::SignWithSchnorrArgs {
-                        message: vec![],
-                        derivation_path: DerivationPath::new(vec![]),
-                        key_id: into_inner_schnorr(key_id),
-                    }
-                    .encode(),
-                )
+                .other_side(sign_with_threshold_key_payload(method, key_id.clone()))
                 .on_reject(wasm().reject_message().reject()),
             Cycles::from(100_000_000_000u128),
         )
@@ -3679,7 +3702,7 @@ fn test_sign_with_schnorr_api_is_enabled() {
         test.state()
             .metadata
             .subnet_call_context_manager
-            .sign_with_schnorr_contexts_count(),
+            .sign_with_threshold_contexts_count(&key_id),
         1
     );
 }

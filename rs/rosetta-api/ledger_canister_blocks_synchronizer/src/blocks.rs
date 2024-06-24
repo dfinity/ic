@@ -4,17 +4,17 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{AccountIdentifier, Block, TimeStamp, Tokens};
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Mutex;
 
 mod database_access {
-    use super::vec_into_array;
+    use super::{sql_bytes_to_block, vec_into_array};
     use crate::{
         blocks::{BlockStoreError, HashedBlock},
-        iso8601_to_timestamp, timestamp_to_iso8601,
+        timestamp_to_iso8601,
     };
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::{
@@ -240,14 +240,9 @@ mod database_access {
             .unwrap();
         let mut transactions = stmt
             .query_map(params![block_idx], |row| {
-                Ok(row
-                    .get(0)
-                    .map(|b| {
-                        Block::decode(EncodedBlock::from_vec(b))
-                            .unwrap()
-                            .transaction
-                    })
-                    .unwrap())
+                row.get(0)
+                    .and_then(sql_bytes_to_block)
+                    .map(|b| b.transaction)
             })
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         match transactions.next() {
@@ -255,15 +250,23 @@ mod database_access {
             None => Err(BlockStoreError::NotFound(*block_idx)),
         }
     }
+
     pub fn get_hashed_block(
         con: &mut Connection,
         block_idx: &u64,
     ) -> Result<HashedBlock, BlockStoreError> {
-        let command = format!(
-            "SELECT  hash, block, parent_hash, idx, timestamp from blocks where idx = {}",
-            block_idx
-        );
-        let mut blocks = read_hashed_block(con, command.as_str())?.into_iter();
+        let mut statement = con
+            .prepare_cached(
+                r#"SELECT hash, block, parent_hash, idx, timestamp
+                   FROM blocks
+                   WHERE idx = :idx"#,
+            )
+            .map_err(|e| format!("Unable to prepare statement: {e:?}"))?;
+        let mut blocks = statement
+            .query_map(named_params! { ":idx": block_idx }, |row| {
+                HashedBlock::try_from(row)
+            })
+            .map_err(|e| format!("Unable to query hashed block {block_idx}: {e:?}"))?;
         match blocks.next() {
             Some(block) => block.map_err(|e| BlockStoreError::Other(e.to_string())),
             None => Err(BlockStoreError::NotFound(*block_idx)),
@@ -274,23 +277,10 @@ mod database_access {
         con: &mut Connection,
         command: &str,
     ) -> Result<Vec<Result<HashedBlock, Error>>, BlockStoreError> {
-        let mut stmt = con
-            .prepare(command)
-            .map_err(|e| BlockStoreError::Other(e.to_string()))
-            .unwrap();
+        let mut stmt = con.prepare(command).map_err(|e| e.to_string())?;
         let block = stmt
-            .query_map(params![], |row| {
-                Ok(HashedBlock {
-                    hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
-                    block: row.get(1).map(EncodedBlock::from_vec)?,
-                    parent_hash: row.get(2).map(|opt_bytes: Option<Vec<u8>>| {
-                        opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
-                    })?,
-                    index: row.get(3)?,
-                    timestamp: iso8601_to_timestamp(row.get(4)?),
-                })
-            })
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            .query_map(params![], |row| HashedBlock::try_from(row))
+            .map_err(|e| e.to_string())?;
         Ok(block.collect())
     }
 
@@ -706,11 +696,33 @@ impl HashedBlock {
     }
 }
 
+impl TryFrom<&Row<'_>> for HashedBlock {
+    type Error = rusqlite::Error;
+
+    fn try_from(row: &Row) -> Result<HashedBlock, Self::Error> {
+        Ok(HashedBlock {
+            hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
+            block: row.get(1).map(EncodedBlock::from_vec)?,
+            parent_hash: row.get(2).map(|opt_bytes: Option<Vec<u8>>| {
+                opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
+            })?,
+            index: row.get(3)?,
+            timestamp: iso8601_to_timestamp(row.get(4)?),
+        })
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum BlockStoreError {
     NotFound(BlockIndex),
     NotAvailable(BlockIndex),
     Other(String),
+}
+
+impl From<String> for BlockStoreError {
+    fn from(error: String) -> Self {
+        Self::Other(error)
+    }
 }
 
 fn vec_into_array(v: Vec<u8>) -> [u8; 32] {
@@ -721,30 +733,44 @@ fn vec_into_array(v: Vec<u8>) -> [u8; 32] {
     *ba
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub enum RosettaBlocksMode {
+    Disabled,
+    Enabled { first_rosetta_block_index: u64 },
+}
+
 pub struct Blocks {
     connection: Mutex<rusqlite::Connection>,
+    pub rosetta_blocks_mode: RosettaBlocksMode,
 }
 
 impl Blocks {
-    pub fn new_persistent(location: &Path) -> Result<Self, BlockStoreError> {
+    pub fn new_persistent(
+        location: &Path,
+        enable_rosetta_blocks: bool,
+    ) -> Result<Self, BlockStoreError> {
         std::fs::create_dir_all(location)
             .expect("Unable to create directory for SQLite on-disk store.");
         let path = location.join("db.sqlite");
         let connection =
             rusqlite::Connection::open(path).expect("Unable to open SQLite database connection");
-        Self::new(connection)
+        Self::new(connection, enable_rosetta_blocks)
     }
 
     /// Constructs a new SQLite in-memory store.
-    pub fn new_in_memory() -> Result<Self, BlockStoreError> {
+    pub fn new_in_memory(enable_rosetta_blocks: bool) -> Result<Self, BlockStoreError> {
         let connection = rusqlite::Connection::open_in_memory()
             .expect("Unable to open SQLite in-memory database connection");
-        Self::new(connection)
+        Self::new(connection, enable_rosetta_blocks)
     }
 
-    fn new(connection: rusqlite::Connection) -> Result<Self, BlockStoreError> {
-        let store = Self {
+    fn new(
+        connection: rusqlite::Connection,
+        enable_rosetta_blocks: bool,
+    ) -> Result<Self, BlockStoreError> {
+        let mut store = Self {
             connection: Mutex::new(connection),
+            rosetta_blocks_mode: RosettaBlocksMode::Disabled,
         };
         store
             .connection
@@ -752,17 +778,24 @@ impl Blocks {
             .unwrap()
             .execute("PRAGMA foreign_keys = 1", [])
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        store.create_tables().map_err(|e| {
+        store.create_tables(enable_rosetta_blocks).map_err(|e| {
             BlockStoreError::Other(format!("Failed to initialize SQLite database: {}", e))
+        })?;
+        store.cache_rosetta_blocks_mode().map_err(|e| {
+            BlockStoreError::Other(format!(
+                "Failed to determine the Rosetta Blocks Mode: {}",
+                e
+            ))
         })?;
 
         store.check_table_coherence()?;
         Ok(store)
     }
 
-    fn create_tables(&self) -> Result<(), rusqlite::Error> {
-        let connection = self.connection.lock().unwrap();
-        connection.execute(
+    fn create_tables(&self, enable_rosetta_blocks: bool) -> Result<(), rusqlite::Error> {
+        let mut connection = self.connection.lock().unwrap();
+        let tx = connection.transaction()?;
+        tx.execute(
             r#"
             CREATE TABLE IF NOT EXISTS blocks (
                 hash BLOB NOT NULL,
@@ -775,7 +808,7 @@ impl Blocks {
             "#,
             [],
         )?;
-        connection.execute(
+        tx.execute(
             r#"
             CREATE TABLE IF NOT EXISTS transactions (
                 block_idx INTEGER NOT NULL,
@@ -798,7 +831,7 @@ impl Blocks {
             "#,
             [],
         )?;
-        connection.execute(
+        tx.execute(
             r#"
             CREATE TABLE IF NOT EXISTS account_balances (
                 block_idx INTEGER NOT NULL,
@@ -809,7 +842,84 @@ impl Blocks {
             "#,
             [],
         )?;
+        if enable_rosetta_blocks {
+            // Use two tables for Rosetta Blocks. The first one contains
+            // the metadata of the block while second one contains the
+            // mapping Rosetta Block Index <-> Block Index
+            tx.execute(
+                r#"
+                CREATE TABLE IF NOT EXISTS rosetta_blocks (
+                    idx INTEGER NOT NULL PRIMARY KEY,
+                    hash BLOB NOT NULL,
+                    timestamp TEXT
+                )
+                "#,
+                [],
+            )?;
+            tx.execute(
+                r#"
+                CREATE TABLE IF NOT EXISTS rosetta_blocks_transactions (
+                    idx INTEGER NOT NULL REFERENCES rosetta_blocks(idx),
+                    block_idx INTEGER NOT NULL REFERENCES blocks(idx),
+                    PRIMARY KEY(idx, block_idx)
+                )
+                "#,
+                [],
+            )?;
+        }
 
+        tx.commit()
+    }
+
+    fn cache_rosetta_blocks_mode(&mut self) -> Result<(), rusqlite::Error> {
+        // The Rosetta Blocks Mode is enabled if the rosetta_blocks table
+        // exists.
+        // See https://www.sqlite.org/fileformat2.html#storage_of_the_sql_database_schema/
+        let connection = self.connection.lock().unwrap();
+
+        // The query returns a single row if the table exists, no rows otherwise.
+        // .optional() converts Err(QueryReturnedNoRows) to Ok(None)
+        let is_rosetta_blocks_mode_enabled = connection
+            .query_row(
+                r#"SELECT 1
+                   FROM sqlite_master
+                   WHERE type='table'
+                     AND name='rosetta_blocks'"#,
+                [],
+                |_| Ok(()),
+            )
+            .optional()
+            .map(|opt| opt.is_some())?;
+        if !is_rosetta_blocks_mode_enabled {
+            self.rosetta_blocks_mode = RosettaBlocksMode::Disabled;
+            return Ok(());
+        }
+
+        // From this point we know the table rosetta_blocks exists.
+        // There are three potential states:
+        //  1. if the table rosetta_blocks has at least one row then
+        //     the first rosetta block index is the smallest index
+        //     in that table
+        //  2. else if the table blocks has at least one row then
+        //     the first rosetta block index will be the highest index
+        //     in the blocks table + 1, i.e. the next incoming block.
+        //  3. else the first rosetta block index will be
+        //     the lowest possible block index, i.e. 0.
+        let first_rosetta_block_index =
+            connection.query_row("SELECT min(idx) FROM rosetta_blocks", [], |row| {
+                row.get::<_, Option<u64>>(0)
+            })?;
+        let first_rosetta_block_index = match first_rosetta_block_index {
+            Some(first_rosetta_block_index) => first_rosetta_block_index,
+            None => connection
+                .query_row("SELECT max(idx) + 1 FROM blocks", [], |row| {
+                    row.get::<_, Option<u64>>(0)
+                })?
+                .unwrap_or(0),
+        };
+        self.rosetta_blocks_mode = RosettaBlocksMode::Enabled {
+            first_rosetta_block_index,
+        };
         Ok(())
     }
 
@@ -1233,4 +1343,15 @@ impl Blocks {
             }
         }
     }
+}
+
+fn sql_bytes_to_block(cell: Vec<u8>) -> Result<Block, rusqlite::Error> {
+    let encoded_block = EncodedBlock::from(cell);
+    Block::decode(encoded_block).map_err(|e| {
+        rusqlite::Error::FromSqlConversionFailure(
+            0,
+            rusqlite::types::Type::Blob,
+            format!("Unable to decode block: {e:?}").into(),
+        )
+    })
 }

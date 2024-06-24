@@ -81,8 +81,8 @@ rust_register_toolchains(
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
-        "1.77.1",
-        "nightly/2024-02-06",
+        "1.79.0",
+        "nightly/2024-04-25",
     ],
 )
 
@@ -345,9 +345,9 @@ cc_binary(
     deps = [":zopfli"],
     visibility = ["//visibility:public"],
 )""",
-    sha256 = "d4396b58bc2875daf8dc3ae9a657be945c2c2697944894fea8a72634eded93ab",
-    strip_prefix = "pigz-2.7",
-    url = "https://github.com/madler/pigz/archive/refs/tags/v2.7.zip",
+    sha256 = "688fe1d805b33a4ae8cbf86ba56aa1a5d647e959219c7d3aeb7d041c228af1ef",
+    strip_prefix = "pigz-2.8",
+    url = "https://github.com/madler/pigz/archive/refs/tags/v2.8.zip",
 )
 
 http_archive(

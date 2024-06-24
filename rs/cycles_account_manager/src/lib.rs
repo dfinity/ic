@@ -634,6 +634,11 @@ impl CyclesAccountManager {
         self.scale_cost(self.config.ecdsa_signature_fee, subnet_size)
     }
 
+    /// Amount to charge for a Schnorr signature.
+    pub fn schnorr_signature_fee(&self, subnet_size: usize) -> Cycles {
+        self.scale_cost(self.config.schnorr_signature_fee, subnet_size)
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     //
     // Storage
@@ -1195,8 +1200,8 @@ mod tests {
 
         // Check overflow case.
         assert_eq!(
-            cam.scale_cost(Cycles::new(std::u128::MAX), 1_000_000),
-            Cycles::new(std::u128::MAX) / reference_subnet_size
+            cam.scale_cost(Cycles::new(u128::MAX), 1_000_000),
+            Cycles::new(u128::MAX) / reference_subnet_size
         );
     }
 

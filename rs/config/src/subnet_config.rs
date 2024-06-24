@@ -9,6 +9,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, ExecutionRound, NumInstructions};
 use serde::{Deserialize, Serialize};
 
+const GIB: u64 = 1024 * 1024 * 1024;
 const M: u64 = 1_000_000;
 const B: u64 = 1_000_000_000;
 const T: u128 = 1_000_000_000_000;
@@ -34,7 +35,7 @@ const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2 * B);
 
 // We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes about 1ms
 // to enter and exit the Wasm engine.
-const INSTRUCTION_OVERHEAD_PER_MESSAGE: NumInstructions = NumInstructions::new(2 * M);
+const INSTRUCTION_OVERHEAD_PER_EXECUTION: NumInstructions = NumInstructions::new(2 * M);
 
 // We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes about 4ms
 // to prepare execution of a canister.
@@ -88,6 +89,11 @@ const SYSTEM_SUBNET_FACTOR: u64 = 10;
 // value of 200MB.
 const MAX_HEAP_DELTA_PER_ITERATION: NumBytes = NumBytes::new(200 * M);
 
+/// The reserve represents the freely available portion of the
+/// `subnet_heap_delta_capacity` that can be used as a heap delta burst
+/// during the initial rounds following a checkpoint.
+const HEAP_DELTA_INITIAL_RESERVE: NumBytes = NumBytes::new(32 * GIB);
+
 // Log all messages that took more than this value to execute.
 pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
 
@@ -119,6 +125,12 @@ const MAX_PAUSED_EXECUTIONS: usize = 4;
 /// creating signatures. At 13 nodes and 2k SDR per node per month this would
 /// cover the cost of the subnet.
 pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
+
+/// 10B cycles corresponds to 1 SDR cent. Assuming we can create 1 signature per
+/// second, that would come to  26k SDR per month if we spent the whole time
+/// creating signatures. At 13 nodes and 2k SDR per node per month this would
+/// cover the cost of the subnet.
+pub const SCHNORR_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 
 /// Default subnet size which is used to scale cycles cost according to a subnet replication factor.
 ///
@@ -179,10 +191,10 @@ pub struct SchedulerConfig {
     /// This should not exceed `max_instructions_per_round`.
     pub max_instructions_per_slice: NumInstructions,
 
-    /// The overhead of entering and exiting the Wasm engine to execute a
-    /// message. The overhead is measured in instructions that are counted
+    /// The overhead of entering and exiting the Wasm engine for a single
+    /// execution. The overhead is measured in instructions that are counted
     /// towards the round limit.
-    pub instruction_overhead_per_message: NumInstructions,
+    pub instruction_overhead_per_execution: NumInstructions,
 
     /// The overhead of preparing execution of a canister. The overhead is
     /// measured in instructions that are counted towards the round limit.
@@ -210,7 +222,12 @@ pub struct SchedulerConfig {
     /// the subnet goes above this limit.
     pub subnet_heap_delta_capacity: NumBytes,
 
-    /// The maximum amount of heap delta per iteration. This number if checked
+    /// The reserve represents the freely available portion of the
+    /// `subnet_heap_delta_capacity` that can be used as a heap delta burst
+    /// during the initial rounds following a checkpoint.
+    pub heap_delta_initial_reserve: NumBytes,
+
+    /// The maximum amount of heap delta per iteration. This number is checked
     /// after each iteration in an execution round to decided whether to
     /// continue iterations or not. This serves as a proxy for memory bound
     /// instructions that are more expensive and may slow down finalization.
@@ -250,11 +267,12 @@ impl SchedulerConfig {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
+            heap_delta_initial_reserve: HEAP_DELTA_INITIAL_RESERVE,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
             max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
             max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE,
-            instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
+            instruction_overhead_per_execution: INSTRUCTION_OVERHEAD_PER_EXECUTION,
             instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
@@ -272,26 +290,30 @@ impl SchedulerConfig {
     }
 
     pub fn system_subnet() -> Self {
-        let max_instructions_per_message_without_dts =
-            MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS * SYSTEM_SUBNET_FACTOR;
+        let max_instructions_per_message_without_dts = NumInstructions::from(50 * B);
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
+        let max_instructions_per_slice = NumInstructions::from(10 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
-            max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND * SYSTEM_SUBNET_FACTOR,
-            // Effectively disable DTS on system subnets.
+            // TODO(RUN-993): Enable heap delta rate limiting for system subnets.
+            // Setting initial reserve to capacity effectively disables the rate limiting.
+            heap_delta_initial_reserve: SUBNET_HEAP_DELTA_CAPACITY,
+            // Round limit is set to allow on average 2B instructions.
+            // See also comment about `MAX_INSTRUCTIONS_PER_ROUND`.
+            max_instructions_per_round: max_instructions_per_message_without_dts
+                .max(max_instructions_per_slice)
+                + NumInstructions::from(2 * B),
             max_instructions_per_message: max_instructions_per_message_without_dts,
             max_instructions_per_message_without_dts,
-            // Effectively disable DTS on system subnets.
-            max_instructions_per_slice: max_instructions_per_message_without_dts,
-            instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
+            max_instructions_per_slice,
+            instruction_overhead_per_execution: INSTRUCTION_OVERHEAD_PER_EXECUTION,
             instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code,
-            // Effectively disable DTS on system subnets.
-            max_instructions_per_install_code_slice: max_instructions_per_install_code,
+            max_instructions_per_install_code_slice: max_instructions_per_slice,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION * SYSTEM_SUBNET_FACTOR,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
@@ -315,11 +337,12 @@ impl SchedulerConfig {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
+            heap_delta_initial_reserve: HEAP_DELTA_INITIAL_RESERVE,
             max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
             max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
             max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
             max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE,
-            instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
+            instruction_overhead_per_execution: INSTRUCTION_OVERHEAD_PER_EXECUTION,
             instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
@@ -390,6 +413,9 @@ pub struct CyclesAccountManagerConfig {
     /// Amount to charge for an ECDSA signature.
     pub ecdsa_signature_fee: Cycles,
 
+    /// Amount to charge for a Schnorr signature.
+    pub schnorr_signature_fee: Cycles,
+
     /// A linear factor of the baseline cost to be charged for HTTP requests per node.
     /// The cost of an HTTP request is represented by a quadratic function due to the communication complexity of the subnet.
     pub http_request_linear_baseline_fee: Cycles,
@@ -439,6 +465,7 @@ impl CyclesAccountManagerConfig {
             gib_storage_per_second_fee: Cycles::new(127_000),
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
+            schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
             http_request_linear_baseline_fee: Cycles::new(3_000_000),
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),
@@ -464,7 +491,7 @@ impl CyclesAccountManagerConfig {
             ingress_byte_reception_fee: Cycles::new(0),
             gib_storage_per_second_fee: Cycles::new(0),
             duration_between_allocation_charges: Duration::from_secs(10),
-            // The ECDSA signature fee is the fee charged when creating a
+            // ECDSA and Schnorr signature fees are the fees charged when creating a
             // signature on this subnet. The request likely came from a
             // different subnet which is not a system subnet. There is an
             // explicit exception for requests originating from the NNS when the
@@ -473,6 +500,7 @@ impl CyclesAccountManagerConfig {
             // - zero cost if called from NNS subnet
             // - non-zero cost if called from any other subnet which is not NNS subnet
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
+            schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
             http_request_linear_baseline_fee: Cycles::new(0),
             http_request_quadratic_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),

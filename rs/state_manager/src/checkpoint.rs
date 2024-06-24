@@ -16,7 +16,7 @@ use ic_replicated_state::{
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{CanisterLayout, CanisterStateBits, CheckpointLayout, ReadOnly, ReadPolicy};
 use ic_types::batch::RawQueryStats;
-use ic_types::{CanisterTimer, Height, LongExecutionMode, Time};
+use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::parallel_map;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -28,7 +28,6 @@ mod tests;
 
 impl CheckpointLoadingMetrics for CheckpointMetrics {
     fn observe_broken_soft_invariant(&self, msg: String) {
-        debug_assert!(false);
         self.load_checkpoint_soft_invariant_broken.inc();
         error!(
             self.log,
@@ -36,6 +35,7 @@ impl CheckpointLoadingMetrics for CheckpointMetrics {
             CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
             msg
         );
+        debug_assert!(false);
     }
 }
 
@@ -204,9 +204,10 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
             .with_label_values(&["subnet_queues"])
             .start_timer();
 
-        ic_replicated_state::CanisterQueues::try_from(
+        ic_replicated_state::CanisterQueues::try_from((
             checkpoint_layout.subnet_queues().deserialize()?,
-        )
+            metrics as &dyn CheckpointLoadingMetrics,
+        ))
         .map_err(|err| into_checkpoint_error("CanisterQueues".into(), err))?
     };
 
@@ -233,6 +234,7 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
                         checkpoint_layout,
                         canister_id,
                         Arc::clone(&fd_factory),
+                        metrics,
                     )
                 });
 
@@ -250,6 +252,7 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
                         checkpoint_layout,
                         canister_id,
                         Arc::clone(&fd_factory),
+                        metrics,
                     )?;
                     canister_states
                         .insert(canister_state.system_state.canister_id(), canister_state);
@@ -296,6 +299,7 @@ pub fn load_canister_state<P: ReadPolicy>(
     canister_id: &CanisterId,
     height: Height,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    metrics: &dyn CheckpointLoadingMetrics,
 ) -> Result<(CanisterState, LoadCanisterMetrics), CheckpointError> {
     let mut durations = BTreeMap::<&str, Duration>::default();
 
@@ -365,14 +369,16 @@ pub fn load_canister_state<P: ReadPolicy>(
     };
 
     let starting_time = Instant::now();
-    let queues =
-        ic_replicated_state::CanisterQueues::try_from(canister_layout.queues().deserialize()?)
-            .map_err(|err| {
-                into_checkpoint_error(
-                    format!("canister_states[{}]::system_state::queues", canister_id),
-                    err,
-                )
-            })?;
+    let queues = ic_replicated_state::CanisterQueues::try_from((
+        canister_layout.queues().deserialize()?,
+        metrics,
+    ))
+    .map_err(|err| {
+        into_checkpoint_error(
+            format!("canister_states[{}]::system_state::queues", canister_id),
+            err,
+        )
+    })?;
     durations.insert("canister_queues", starting_time.elapsed());
 
     let canister_metrics = CanisterMetrics::new(
@@ -380,8 +386,8 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.skipped_round_due_to_no_messages,
         canister_state_bits.executed,
         canister_state_bits.interrupted_during_execution,
-        canister_state_bits.consumed_cycles_since_replica_started,
-        canister_state_bits.consumed_cycles_since_replica_started_by_use_cases,
+        canister_state_bits.consumed_cycles,
+        canister_state_bits.consumed_cycles_by_use_cases,
     );
 
     let starting_time = Instant::now();
@@ -422,10 +428,8 @@ pub fn load_canister_state<P: ReadPolicy>(
             last_full_execution_round: canister_state_bits.last_full_execution_round,
             compute_allocation: canister_state_bits.compute_allocation,
             accumulated_priority: canister_state_bits.accumulated_priority,
-            // Longs executions get aborted at the checkpoint,
-            // so both the credit and the execution mode below are set to their defaults.
-            priority_credit: Default::default(),
-            long_execution_mode: LongExecutionMode::default(),
+            priority_credit: canister_state_bits.priority_credit,
+            long_execution_mode: canister_state_bits.long_execution_mode,
             heap_delta_debit: canister_state_bits.heap_delta_debit,
             install_code_debit: canister_state_bits.install_code_debit,
             time_of_last_allocation_charge: Time::from_nanos_since_unix_epoch(
@@ -444,6 +448,7 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
     checkpoint_layout: &CheckpointLayout<P>,
     canister_id: &CanisterId,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    metrics: &CheckpointMetrics,
 ) -> Result<(CanisterState, LoadCanisterMetrics), CheckpointError> {
     let canister_layout = checkpoint_layout.canister(canister_id)?;
     load_canister_state::<P>(
@@ -451,5 +456,6 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
         canister_id,
         checkpoint_layout.height(),
         Arc::clone(&fd_factory),
+        metrics,
     )
 }
