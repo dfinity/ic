@@ -1250,7 +1250,6 @@ impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
         CreateSubnetPayload {
             node_ids,
             subnet_id_override: self.subnet_id_override,
-            ingress_bytes_per_block_soft_cap: Default::default(),
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap(),
             max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap(),
             max_block_payload_size: self.max_block_payload_size.unwrap(),
@@ -1263,14 +1262,6 @@ impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             initial_notary_delay_millis: self.initial_notary_delay_millis.unwrap(),
             dkg_interval_length: self.dkg_interval_length.unwrap(),
             dkg_dealings_per_block: self.dkg_dealings_per_block.unwrap(),
-            gossip_max_artifact_streams_per_peer: 0,
-            gossip_max_chunk_wait_ms: 0,
-            gossip_max_duplicity: 0,
-            gossip_max_chunk_size: 0,
-            gossip_receive_check_cache_size: 0,
-            gossip_pfn_evaluation_period_ms: 0,
-            gossip_registry_poll_period_ms: 0,
-            gossip_retransmission_request_ms: 0,
             start_as_nns: self.start_as_nns,
             subnet_type: self.subnet_type,
             is_halted: self.is_halted,
@@ -1289,6 +1280,16 @@ impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             max_number_of_canisters: self.max_number_of_canisters.unwrap_or(0),
             ecdsa_config,
             chain_key_config: None, // TODO[NNS1-3102]
+            // Unused section follows
+            ingress_bytes_per_block_soft_cap: Default::default(),
+            gossip_max_artifact_streams_per_peer: Default::default(),
+            gossip_max_chunk_wait_ms: Default::default(),
+            gossip_max_duplicity: Default::default(),
+            gossip_max_chunk_size: Default::default(),
+            gossip_receive_check_cache_size: Default::default(),
+            gossip_pfn_evaluation_period_ms: Default::default(),
+            gossip_registry_poll_period_ms: Default::default(),
+            gossip_retransmission_request_ms: Default::default(),
         }
     }
 }
@@ -1759,15 +1760,6 @@ impl ProposalPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
             initial_notary_delay_millis: self.initial_notary_delay_millis,
             dkg_interval_length: self.dkg_interval_length,
             dkg_dealings_per_block: self.dkg_dealings_per_block,
-            max_artifact_streams_per_peer: None,
-            max_chunk_wait_ms: None,
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: None,
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            set_gossip_config_to_default: false,
             start_as_nns: self.start_as_nns,
 
             // See EXC-408: changing the subnet type is disabled.
@@ -1785,11 +1777,20 @@ impl ProposalPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             ssh_backup_access: self.ssh_backup_access.clone(),
             max_number_of_canisters: self.max_number_of_canisters,
-
             // TODO[NNS1-3102]
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
+            // Deprecated/unused values follow
+            max_artifact_streams_per_peer: None,
+            max_chunk_wait_ms: None,
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: None,
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            set_gossip_config_to_default: Default::default(),
         }
     }
 }

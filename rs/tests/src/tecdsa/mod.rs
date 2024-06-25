@@ -99,15 +99,6 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
         initial_notary_delay_millis: None,
         dkg_interval_length: None,
         dkg_dealings_per_block: None,
-        max_artifact_streams_per_peer: None,
-        max_chunk_wait_ms: None,
-        max_duplicity: None,
-        max_chunk_size: None,
-        receive_check_cache_size: None,
-        pfn_evaluation_period_ms: None,
-        registry_poll_period_ms: None,
-        retransmission_request_ms: None,
-        set_gossip_config_to_default: false,
         start_as_nns: None,
         subnet_type: None,
         is_halted: None,
@@ -125,6 +116,16 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
+        // Deprecated/unused values follow
+        max_artifact_streams_per_peer: None,
+        max_chunk_wait_ms: None,
+        max_duplicity: None,
+        max_chunk_size: None,
+        receive_check_cache_size: None,
+        pfn_evaluation_period_ms: None,
+        registry_poll_period_ms: None,
+        retransmission_request_ms: None,
+        set_gossip_config_to_default: Default::default(),
     }
 }
 
@@ -619,7 +620,6 @@ pub(crate) async fn create_new_subnet_with_keys(
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
-        ingress_bytes_per_block_soft_cap: Default::default(),
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,
         max_block_payload_size: config.max_block_payload_size,
@@ -630,14 +630,6 @@ pub(crate) async fn create_new_subnet_with_keys(
         ),
         dkg_interval_length: DKG_INTERVAL,
         dkg_dealings_per_block: config.dkg_dealings_per_block as u64,
-        gossip_max_artifact_streams_per_peer: 0,
-        gossip_max_chunk_wait_ms: 0,
-        gossip_max_duplicity: 0,
-        gossip_max_chunk_size: 0,
-        gossip_receive_check_cache_size: 0,
-        gossip_pfn_evaluation_period_ms: 0,
-        gossip_registry_poll_period_ms: 0,
-        gossip_retransmission_request_ms: 0,
         start_as_nns: false,
         subnet_type: SubnetType::Application,
         is_halted: false,
@@ -649,9 +641,17 @@ pub(crate) async fn create_new_subnet_with_keys(
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: Some(chain_key_config),
-
-        // Deprecated fields
+        // Unused section follows
         ecdsa_config: None,
+        ingress_bytes_per_block_soft_cap: Default::default(),
+        gossip_max_artifact_streams_per_peer: Default::default(),
+        gossip_max_chunk_wait_ms: Default::default(),
+        gossip_max_duplicity: Default::default(),
+        gossip_max_chunk_size: Default::default(),
+        gossip_receive_check_cache_size: Default::default(),
+        gossip_pfn_evaluation_period_ms: Default::default(),
+        gossip_registry_poll_period_ms: Default::default(),
+        gossip_retransmission_request_ms: Default::default(),
     };
     execute_create_subnet_proposal(governance, payload, logger).await;
 }

@@ -529,7 +529,6 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
     CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
-        ingress_bytes_per_block_soft_cap: Default::default(),
         max_ingress_bytes_per_message: 60 * 1024 * 1024,
         max_ingress_messages_per_block: 1000,
         max_block_payload_size: 4 * 1024 * 1024,
@@ -538,14 +537,6 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
         replica_version_id: ReplicaVersion::default().into(),
         dkg_interval_length: 0,
         dkg_dealings_per_block: 1,
-        gossip_max_artifact_streams_per_peer: 0,
-        gossip_max_chunk_wait_ms: 0,
-        gossip_max_duplicity: 0,
-        gossip_max_chunk_size: 0,
-        gossip_receive_check_cache_size: 0,
-        gossip_pfn_evaluation_period_ms: 0,
-        gossip_registry_poll_period_ms: 0,
-        gossip_retransmission_request_ms: 0,
         start_as_nns: false,
         subnet_type: SubnetType::Application,
         is_halted: false,
@@ -558,5 +549,15 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
         ssh_backup_access: vec![],
         ecdsa_config: None,
         chain_key_config: None,
+        // Unused section follows
+        ingress_bytes_per_block_soft_cap: Default::default(),
+        gossip_max_artifact_streams_per_peer: Default::default(),
+        gossip_max_chunk_wait_ms: Default::default(),
+        gossip_max_duplicity: Default::default(),
+        gossip_max_chunk_size: Default::default(),
+        gossip_receive_check_cache_size: Default::default(),
+        gossip_pfn_evaluation_period_ms: Default::default(),
+        gossip_registry_poll_period_ms: Default::default(),
+        gossip_retransmission_request_ms: Default::default(),
     }
 }

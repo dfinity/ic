@@ -69,7 +69,7 @@ def _run_system_test(ctx):
         ),
         RunEnvironmentInfo(
             environment = env,
-            inherited_environment = ctx.attr.env_inherit,
+            inherited_environment = ctx.attr.env_inherit + ["KUBECONFIG"],
         ),
     ]
 

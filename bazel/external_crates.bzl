@@ -191,7 +191,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.9.0",
             ),
             "bincode": crate.spec(
-                version = "^1.2.1",
+                version = "^1.3.3",
             ),
             "bindgen": crate.spec(
                 version = "^0.65.1",

@@ -291,8 +291,6 @@ pub struct CreateSubnetPayload {
 
     pub subnet_id_override: Option<PrincipalId>,
 
-    // Unused.
-    pub ingress_bytes_per_block_soft_cap: u64,
     pub max_ingress_bytes_per_message: u64,
     pub max_ingress_messages_per_block: u64,
     pub max_block_payload_size: u64,
@@ -301,15 +299,6 @@ pub struct CreateSubnetPayload {
     pub replica_version_id: std::string::String,
     pub dkg_interval_length: u64,
     pub dkg_dealings_per_block: u64,
-
-    pub gossip_max_artifact_streams_per_peer: u32,
-    pub gossip_max_chunk_wait_ms: u32,
-    pub gossip_max_duplicity: u32,
-    pub gossip_max_chunk_size: u32,
-    pub gossip_receive_check_cache_size: u32,
-    pub gossip_pfn_evaluation_period_ms: u32,
-    pub gossip_registry_poll_period_ms: u32,
-    pub gossip_retransmission_request_ms: u32,
 
     pub start_as_nns: bool,
 
@@ -333,6 +322,17 @@ pub struct CreateSubnetPayload {
     pub ecdsa_config: Option<EcdsaInitialConfig>,
 
     pub chain_key_config: Option<InitialChainKeyConfig>,
+
+    // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
+    pub ingress_bytes_per_block_soft_cap: u64,
+    pub gossip_max_artifact_streams_per_peer: u32,
+    pub gossip_max_chunk_wait_ms: u32,
+    pub gossip_max_duplicity: u32,
+    pub gossip_max_chunk_size: u32,
+    pub gossip_receive_check_cache_size: u32,
+    pub gossip_pfn_evaluation_period_ms: u32,
+    pub gossip_registry_poll_period_ms: u32,
+    pub gossip_retransmission_request_ms: u32,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
