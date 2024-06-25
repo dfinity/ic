@@ -11,9 +11,7 @@ use ic_ledger_test_utils::{
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_CANISTER_INDEX_IN_NNS_SUBNET,
 };
-use ic_nns_test_utils_golden_nns_state::{
-    new_state_machine_with_golden_nns_state_or_panic, GoldenStateLocation,
-};
+use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{Archives, FeatureFlags, LedgerCanisterUpgradePayload};
 use icrc_ledger_types::icrc1::account::Account;
@@ -33,11 +31,7 @@ const INDEX_CANISTER_ID: CanisterId = CanisterId::from_u64(11);
 /// - Upgrade/downgrade of the canisters: Around 10s per canister
 #[test]
 fn should_create_state_machine_with_golden_nns_state() {
-    let state_machine = new_state_machine_with_golden_nns_state_or_panic(
-        GoldenStateLocation::Remote, // GoldenStateLocation::Local(
-                                     //     std::path::PathBuf::from("/ic/rs/rosetta-api/icp_ledger/test_resources/nns_state.tar.zst"),
-                                     // )
-    );
+    let state_machine = new_state_machine_with_golden_nns_state_or_panic();
 
     let start = Instant::now();
     // This takes almost 6min to run
