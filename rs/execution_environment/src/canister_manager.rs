@@ -2097,6 +2097,7 @@ impl CanisterManager {
             origin,
             CanisterChangeDetails::load_snapshot(
                 new_canister.system_state.canister_version,
+                snapshot_id.to_vec(),
                 snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
             ),
         );
