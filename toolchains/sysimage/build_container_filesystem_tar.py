@@ -3,6 +3,7 @@
 # Build a container image and extract the single flattened filesystem into a tar file.
 from __future__ import annotations
 
+import argparse
 import atexit
 import os
 import shutil
@@ -14,7 +15,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Optional, TypeVar
 
-import configargparse
 import invoke
 from container_utils import (
     generate_container_command,
@@ -190,7 +190,7 @@ def build_and_export(container_cmd: str,
 
 
 def get_args():
-    parser = configargparse.ArgumentParser()
+    parser = argparse.ArgumentParser()
 
     parser.add_argument(
         "-d",
@@ -241,12 +241,6 @@ def get_args():
         action="append",
         help="Files to include in rootfs; expects list of sourcefile:targetfile",
         required=True
-    )
-
-    parser.add_argument(
-        "--config-file",
-        is_config_file=True,
-        help='Config file path'
     )
 
     parser.add_argument(
