@@ -539,14 +539,13 @@ impl UserError {
         std::mem::size_of_val(self) + self.description.len()
     }
 
-    /// Panic if the error does not have the given error code and contain the
-    /// given description in its error message. For use in tests so that they
-    /// don't need to match the exact error message.
+    /// Panics if the error doesn't have the expected code and description.
+    /// Useful for tests to avoid matching exact error messages.
     pub fn assert_contains(&self, code: ErrorCode, description: &str) {
         assert_eq!(self.code, code);
         assert!(
             self.description.contains(description),
-            "Error description \"{}\" does not contain \"{}\"",
+            "Error matching description \"{}\" with \"{}\"",
             self.description,
             description
         );
