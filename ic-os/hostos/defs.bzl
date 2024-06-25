@@ -23,6 +23,7 @@ def image_deps(mode, _malicious = False):
 
     deps = {
         "base_dockerfile": "//ic-os/hostos/context:Dockerfile.base",
+        "dockerfile": "//ic-os/hostos/context:Dockerfile",
 
         # Extra files to be added to rootfs and bootfs
         "bootfs": {},
@@ -50,24 +51,31 @@ def image_deps(mode, _malicious = False):
         "custom_partitions": _custom_partitions,
     }
 
-    extra_deps = {
+    dev_build_args = ["BUILD_TYPE=dev", "ROOT_PASSWORD=root"]
+    prod_build_args = ["BUILD_TYPE=prod"]
+    dev_file_build_arg = "BASE_IMAGE=docker-base.dev"
+    prod_file_build_arg = "BASE_IMAGE=docker-base.prod"
+
+    image_variants = {
         "dev": {
-            "build_container_filesystem_config_file": "//ic-os/hostos/envs/dev:build_container_filesystem_config.txt",
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
         },
         "local-base-dev": {
-            # Use the non-local-base file
-            "build_container_filesystem_config_file": "//ic-os/hostos/envs/dev:build_container_filesystem_config.txt",
+            "build_args": dev_build_args,
+            "file_build_arg": dev_file_build_arg,
         },
         "local-base-prod": {
-            # Use the non-local-base file
-            "build_container_filesystem_config_file": "//ic-os/hostos/envs/prod:build_container_filesystem_config.txt",
+            "build_args": prod_build_args,
+            "file_build_arg": prod_file_build_arg,
         },
         "prod": {
-            "build_container_filesystem_config_file": "//ic-os/hostos/envs/prod:build_container_filesystem_config.txt",
+            "build_args": prod_build_args,
+            "file_build_arg": prod_file_build_arg,
         },
     }
 
-    deps.update(extra_deps[mode])
+    deps.update(image_variants[mode])
 
     return deps
 
