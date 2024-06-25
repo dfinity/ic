@@ -793,8 +793,9 @@ fn cannot_run_method_on_empty_canister() {
         match test.ingress(canister, "hello", vec![]) {
             Err(err) => {
                 err.assert_contains(
-                ErrorCode::CanisterWasmModuleNotFound,
-                    "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Attempted to execute a message, but the canister contains no Wasm module."
+                    ErrorCode::CanisterWasmModuleNotFound,
+                    "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Attempted \
+                    to execute a message, but the canister contains no Wasm module.",
                 );
             }
             rest => panic!("Unexpected behaviour {:?}", rest),

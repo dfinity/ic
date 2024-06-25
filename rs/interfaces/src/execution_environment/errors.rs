@@ -354,19 +354,27 @@ impl AsErrorHelp for HypervisorError {
             | Self::ToolchainContractViolation { .. }
             | Self::InvalidPrincipalId(_) => ErrorHelp::ToolchainError,
             Self::MethodNotFound(_) => ErrorHelp::UserError {
-                suggestion: "Check that the method being called is exported by the target canister.".to_string(),
+                suggestion: "Check that the method being called is exported by \
+                the target canister."
+                    .to_string(),
                 doc_link: doc_ref("method-not-found"),
             },
             Self::InstructionLimitExceeded(_) => ErrorHelp::UserError {
-                suggestion: "Try optimizing this method to consume fewer instructions or split the work across multiple messages.".to_string(),
+                suggestion: "Try optimizing this method to consume fewer \
+                instructions or split the work across multiple messages."
+                    .to_string(),
                 doc_link: doc_ref("instruction-limit-exceeded"),
             },
             Self::Trapped(_) => ErrorHelp::UserError {
-                suggestion: "Consider gracefully handling failures from this canister or altering the canister to handle exceptions.".to_string(),
+                suggestion: "Consider gracefully handling failures from this canister \
+                or altering the canister to handle exceptions."
+                    .to_string(),
                 doc_link: doc_ref("trapped"),
             },
             Self::CalledTrap(_) => ErrorHelp::UserError {
-                suggestion: "Consider gracefully handling failures from this canister or altering the canister to handle exceptions.".to_string(),
+                suggestion: "Consider gracefully handling failures from this canister \
+                or altering the canister to handle exceptions."
+                    .to_string(),
                 doc_link: doc_ref("trapped-explicitly"),
             },
             Self::WasmModuleNotFound => ErrorHelp::UserError {
@@ -374,7 +382,10 @@ impl AsErrorHelp for HypervisorError {
                 doc_link: doc_ref("wasm-module-not-found"),
             },
             Self::OutOfMemory => ErrorHelp::UserError {
-                suggestion: "Check the canister's memory usage against its allocation and the system wide limits to determine why more memory cannot be allocated.".to_string(),
+                suggestion: "Check the canister's memory usage against its allocation \
+                and the system wide limits to determine why more memory cannot be \
+                allocated."
+                    .to_string(),
                 doc_link: doc_ref("out-of-memory"),
             },
             Self::MessageRejected => ErrorHelp::UserError {
@@ -402,11 +413,15 @@ impl AsErrorHelp for HypervisorError {
                 doc_link: "".to_string(),
             },
             Self::SliceOverrun { .. } => ErrorHelp::UserError {
-                suggestion: "Try breaking up large copies within the canister code into smaller chunks.".to_string(),
+                suggestion: "Try breaking up large copies within the canister code \
+                into smaller chunks."
+                    .to_string(),
                 doc_link: doc_ref("slice-overrun"),
             },
             Self::MemoryAccessLimitExceeded(_) => ErrorHelp::UserError {
-                suggestion: "Try optimizing the use of stable memory so that individual messages don't need to access as much stable memory.".to_string(),
+                suggestion: "Try optimizing the use of stable memory so that individual \
+                messages don't need to access as much stable memory."
+                    .to_string(),
                 doc_link: doc_ref("memory-access-limit-exceeded"),
             },
             Self::InsufficientCyclesInMemoryGrow { .. } => ErrorHelp::UserError {
@@ -422,7 +437,9 @@ impl AsErrorHelp for HypervisorError {
                 doc_link: doc_ref("insufficient-cycles-in-message-memory-grow"),
             },
             Self::WasmMemoryLimitExceeded { .. } => ErrorHelp::UserError {
-                suggestion: "Try checking the canister for a possible memory leak or modifying it to use more stable memory instead of Wasm memory.".to_string(),
+                suggestion: "Try checking the canister for a possible memory leak \
+                or modifying it to use more stable memory instead of Wasm memory."
+                    .to_string(),
                 doc_link: doc_ref("wasm-memory-limit-exceeded"),
             },
             Self::UserContractViolation {

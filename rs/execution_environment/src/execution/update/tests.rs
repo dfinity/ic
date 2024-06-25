@@ -342,9 +342,16 @@ fn hitting_page_delta_limit_fails_message() {
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
-    result.assert_contains(ErrorCode::CanisterMemoryAccessLimitExceeded,
-        &format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
-        no_pages * (PAGE_SIZE as u64 / 1024), no_pages * (PAGE_SIZE as u64 / 1024))
+    result.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!(
+            "Error from Canister {canister_id}: Canister exceeded memory access \
+        limits: Exceeded the limit for the number of modified pages in the stable \
+        memory in a single execution: limit {} KB for regular messages and {} KB for \
+        upgrade messages.",
+            no_pages * (PAGE_SIZE as u64 / 1024),
+            no_pages * (PAGE_SIZE as u64 / 1024)
+        ),
     );
 }
 
@@ -358,9 +365,16 @@ fn hitting_page_delta_limit_fails_message_system_subnet() {
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
-    result.assert_contains(ErrorCode::CanisterMemoryAccessLimitExceeded,
-        &format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
-        no_pages * (PAGE_SIZE as u64 / 1024), no_pages * (PAGE_SIZE as u64 / 1024))
+    result.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!(
+            "Error from Canister {canister_id}: Canister exceeded memory access \
+        limits: Exceeded the limit for the number of modified pages in the stable memory \
+        in a single execution: limit {} KB for regular messages and {} KB for upgrade \
+        messages.",
+            no_pages * (PAGE_SIZE as u64 / 1024),
+            no_pages * (PAGE_SIZE as u64 / 1024)
+        ),
     );
 }
 
@@ -376,9 +390,16 @@ fn hitting_page_delta_limit_fails_for_long_message() {
     let result = test
         .install_canister(canister_id, wat::parse_str(wat).unwrap())
         .unwrap_err();
-    result.assert_contains(ErrorCode::CanisterMemoryAccessLimitExceeded,
-        &format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages and {} KB for upgrade messages.",
-        no_pages * (PAGE_SIZE as u64 / 1024), no_pages * (PAGE_SIZE as u64 / 1024))
+    result.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!(
+            "Error from Canister {canister_id}: Canister exceeded memory access \
+        limits: Exceeded the limit for the number of modified pages in the stable memory \
+        in a single execution: limit {} KB for regular messages and {} KB for upgrade \
+        messages.",
+            no_pages * (PAGE_SIZE as u64 / 1024),
+            no_pages * (PAGE_SIZE as u64 / 1024)
+        ),
     );
 }
 
@@ -396,9 +417,13 @@ fn hitting_page_delta_limit_fails_for_long_message_non_native_stable() {
     let result = test
         .install_canister(canister_id, wat::parse_str(wat).unwrap())
         .unwrap_err();
-    result.assert_contains(ErrorCode::CanisterMemoryAccessLimitExceeded,
-        &format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for \
-        the number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
+    result.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!(
+            "Error from Canister {canister_id}: Canister exceeded memory access \
+        limits: Exceeded the limit for the number of modified pages in the stable \
+        memory in a single message execution: limit: 40 KB."
+        ),
     );
 }
 
@@ -412,9 +437,13 @@ fn hitting_page_delta_limit_fails_message_non_native_stable() {
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
-    result.assert_contains(ErrorCode::CanisterMemoryAccessLimitExceeded,
-        &format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for \
-        the number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
+    result.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!(
+            "Error from Canister {canister_id}: Canister exceeded memory access \
+        limits: Exceeded the limit for the number of modified pages in the stable memory \
+        in a single message execution: limit: 40 KB."
+        ),
     );
 }
 
@@ -429,9 +458,13 @@ fn hitting_page_delta_limit_fails_message_non_native_stable_system_subnet() {
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
-    result.assert_contains(ErrorCode::CanisterMemoryAccessLimitExceeded,
-        &format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for \
-        the number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
+    result.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!(
+            "Error from Canister {canister_id}: Canister exceeded memory access \
+        limits: Exceeded the limit for the number of modified pages in the stable memory \
+        in a single message execution: limit: 40 KB."
+        ),
     );
 }
 

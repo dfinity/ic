@@ -2363,7 +2363,10 @@ fn ic0_trap_works() {
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     err.assert_contains(
         ErrorCode::CanisterCalledTrap,
-        &format!("Error from Canister {canister_id}: Canister called `ic0.trap` with message: Hi!"),
+        &format!(
+            "Error from Canister {canister_id}: Canister called `ic0.trap` \
+        with message: Hi!"
+        ),
     );
 }
 

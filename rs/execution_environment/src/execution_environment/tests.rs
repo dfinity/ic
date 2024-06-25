@@ -2736,8 +2736,11 @@ fn canister_output_queue_does_not_overflow_when_calling_ic00() {
                 panic!("Unexpected state {:?}", test.ingress_state(&message_id));
             };
             ingress_state.assert_contains(
-                    ErrorCode::CanisterCalledTrap,
-                    &format!("Error from Canister {uc}: Canister called `ic0.trap` with message: call_perform failed")
+                ErrorCode::CanisterCalledTrap,
+                &format!(
+                    "Error from Canister {uc}: Canister called `ic0.trap` \
+                    with message: call_perform failed"
+                ),
             );
         } else {
             assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
@@ -2784,8 +2787,11 @@ fn send_messages_to_bitcoin_canister_until_capacity(
                 panic!("Unexpected state {:?}", test.ingress_state(&message_id));
             };
             ingress_state.assert_contains(
-                    ErrorCode::CanisterCalledTrap,
-                    &format!("Error from Canister {uc}: Canister called `ic0.trap` with message: call_perform failed")
+                ErrorCode::CanisterCalledTrap,
+                &format!(
+                    "Error from Canister {uc}: Canister called `ic0.trap` \
+                    with message: call_perform failed"
+                ),
             );
         } else {
             assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
