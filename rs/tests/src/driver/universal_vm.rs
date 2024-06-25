@@ -16,6 +16,7 @@ use crate::driver::test_env_api::{
     SshSession, RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
 };
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
+use crate::k8s::datavolume::DataVolumeContentType;
 use crate::k8s::images::upload_image;
 use crate::k8s::tnet::TNet;
 use crate::retry_with_msg;
@@ -203,9 +204,13 @@ impl UniversalVm {
                         CONF_IMG_FNAME
                     ),
                 ))?;
-                block_on(tnet_node.deploy_config_image(CONF_IMG_FNAME))
-                    .expect("deploying config image failed");
-                block_on(tnet_node.start()).expect("starting vm failed");
+                block_on(tnet_node.deploy_config_image(
+                    CONF_IMG_FNAME,
+                    "config",
+                    DataVolumeContentType::Kubevirt,
+                ))
+                .expect("deploying config image failed");
+                block_on(tnet_node.add_volume("config")).expect("deploying config image failed");
             }
         }
 
@@ -217,6 +222,10 @@ impl UniversalVm {
                 image_ids,
             )?;
             farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
+        } else if InfraProvider::read_attribute(env) == InfraProvider::K8s {
+            let tnet = TNet::read_attribute(env);
+            let tnet_node = tnet.nodes.last().expect("no nodes");
+            block_on(tnet_node.start()).expect("starting vm failed");
         }
 
         Ok(())

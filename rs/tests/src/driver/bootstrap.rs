@@ -14,6 +14,7 @@ use crate::driver::{
     },
     test_setup::InfraProvider,
 };
+use crate::k8s::datavolume::DataVolumeContentType;
 use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
@@ -297,8 +298,12 @@ pub fn setup_and_start_vms(
                     );
                     block_on(upload_image(conf_img_path.as_path(), &url))
                         .expect("Failed to upload config image");
-                    block_on(tnet_node.deploy_config_image(CONF_IMG_FNAME))
-                        .expect("deploying config image failed");
+                    block_on(tnet_node.deploy_config_image(
+                        CONF_IMG_FNAME,
+                        "config",
+                        DataVolumeContentType::Kubevirt,
+                    ))
+                    .expect("deploying config image failed");
                     block_on(tnet_node.start()).expect("starting vm failed");
                 }
                 InfraProvider::Farm => {

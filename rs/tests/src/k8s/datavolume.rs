@@ -3,6 +3,7 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use kube::api::DynamicObject;
 use kube::api::{Patch, PatchParams};
 use kube::Api;
+use strum_macros::AsRefStr;
 use tracing::*;
 
 static DV_URL_TEMPLATE: &str = r#"
@@ -46,6 +47,13 @@ spec:
       namespace: {pvc_namespace}
 "#;
 
+#[derive(Debug, AsRefStr)]
+#[strum(serialize_all = "lowercase")]
+pub enum DataVolumeContentType {
+    Kubevirt,
+    Archive,
+}
+
 #[derive(Clone, Debug)]
 pub enum DvSource {
     URL(String),
@@ -64,16 +72,21 @@ impl DvSource {
 pub struct DvInfo {
     name: String,
     source: DvSource,
-    content_type: String,
+    content_type: DataVolumeContentType,
     quantity: String,
 }
 
 impl DvInfo {
-    pub fn new(name: &str, source: DvSource, content_type: &str, quantity: &str) -> DvInfo {
+    pub fn new(
+        name: &str,
+        source: DvSource,
+        content_type: DataVolumeContentType,
+        quantity: &str,
+    ) -> DvInfo {
         DvInfo {
             name: name.to_string(),
             source,
-            content_type: content_type.to_string(),
+            content_type,
             quantity: quantity.to_string(),
         }
     }
@@ -100,7 +113,7 @@ pub async fn create_datavolume(
     };
     let yaml = yaml
         .replace("{name}", name)
-        .replace("{type}", content_type)
+        .replace("{type}", content_type.as_ref())
         .replace("{quantity}", quantity);
 
     let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
