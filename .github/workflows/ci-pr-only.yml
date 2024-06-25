@@ -51,7 +51,7 @@ jobs:
   lock-generate:
     name: Lock Generate
     runs-on:
-      labels: dind-runner-small
+      labels: dind-small
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 30
@@ -84,7 +84,7 @@ jobs:
   pre-commit:
     name: Pre Commit Test
     runs-on:
-      labels: dind-runner-small
+      labels: dind-small
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 30
