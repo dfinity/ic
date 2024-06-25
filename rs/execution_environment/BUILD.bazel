@@ -66,7 +66,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/logger",
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/state",
-    "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "//rs/types/types_test_utils",
     "//rs/universal_canister/lib",

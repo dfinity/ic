@@ -32,8 +32,6 @@ rust_library(
         "//rs/registry/proto_data_provider",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
-        "//rs/test_utilities/logger",
-        "//rs/test_utilities/registry",
         "//rs/test_utilities/types",
         "//rs/types/types",
         "//rs/types/types_test_utils",
@@ -59,6 +57,8 @@ rust_test(
     crate = ":test_utilities",
     deps = [
         "//rs/artifact_pool",
+        "//rs/test_utilities/logger",
+        "//rs/test_utilities/registry",
         "@crate_index//:rusty-fork",
         "@crate_index//:wasmprinter",
     ],
