@@ -51,7 +51,7 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
-      - name: check trigger type
+      - name: Check Trigger type
         shell: bash
         run: |
           set -xeuo pipefail
