@@ -51,7 +51,7 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
-      - name: Check Trigger type
+      - name: Set BAZEL_EXTRA_ARGS_RULES
         shell: bash
         run: |
           set -xeuo pipefail
