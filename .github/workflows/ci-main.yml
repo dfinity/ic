@@ -58,8 +58,7 @@ jobs:
           if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
             echo "BAZEL_EXTRA_ARGS_RULES=--test_timeout_filters=short,moderate --flaky_test_attempts=3" >> $GITHUB_ENV
           fi
-          echo $BRANCH_NAME
-          if [[ $BRANCH_NAME =~ hotfix ]]; then
+          if [[ $BRANCH_NAME =~ hotfix-.*-rc--.* ]]; then
             echo "BAZEL_EXTRA_ARGS_RULES=--test_timeout_filters=short,moderate" >> $GITHUB_ENV
           fi
         env:
