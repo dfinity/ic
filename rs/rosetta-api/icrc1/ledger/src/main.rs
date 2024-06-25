@@ -1,19 +1,26 @@
+#[cfg(feature = "canbench-rs")]
+mod benches;
+
 use candid::candid_method;
 use candid::types::number::Nat;
 use ic_canister_log::{declare_log_buffer, export};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::{StableReader, StableWriter};
-use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
+
+#[cfg(not(feature = "canbench-rs"))]
+use ic_cdk_macros::init;
+use ic_cdk_macros::{post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::{
     endpoints::{convert_transfer_error, StandardRecord},
     Operation, Transaction,
 };
-use ic_icrc1_ledger::{Ledger, LedgerArgument};
+use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument};
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
 };
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
+use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::{approvals::Approvals, timestamp::TimeStamp};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -88,16 +95,12 @@ impl LedgerAccess for Access {
     }
 }
 
+#[cfg(not(feature = "canbench-rs"))]
 #[candid_method(init)]
 #[init]
 fn init(args: LedgerArgument) {
     match args {
-        LedgerArgument::Init(init_args) => {
-            let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
-            LEDGER.with(|cell| {
-                *cell.borrow_mut() = Some(Ledger::<Tokens>::from_init_args(&LOG, init_args, now))
-            })
-        }
+        LedgerArgument::Init(init_args) => init_state(init_args),
         LedgerArgument::Upgrade(_) => {
             panic!("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
         }
@@ -105,14 +108,27 @@ fn init(args: LedgerArgument) {
     ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
 }
 
+fn init_state(init_args: InitArgs) {
+    let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+    LEDGER.with(|cell| {
+        *cell.borrow_mut() = Some(Ledger::<Tokens>::from_init_args(&LOG, init_args, now))
+    })
+}
+
 #[pre_upgrade]
 fn pre_upgrade() {
+    #[cfg(feature = "canbench-rs")]
+    let _p = canbench_rs::bench_scope("pre_upgrade");
+
     Access::with_ledger(|ledger| ciborium::ser::into_writer(ledger, StableWriter::default()))
         .expect("failed to encode ledger state");
 }
 
 #[post_upgrade]
 fn post_upgrade(args: Option<LedgerArgument>) {
+    #[cfg(feature = "canbench-rs")]
+    let _p = canbench_rs::bench_scope("post_upgrade");
+
     LEDGER.with(|cell| {
         *cell.borrow_mut() = Some(
             ciborium::de::from_reader(StableReader::default())
@@ -331,7 +347,34 @@ async fn execute_transfer(
     memo: Option<Memo>,
     created_at_time: Option<u64>,
 ) -> Result<Nat, CoreTransferError<Tokens>> {
-    let block_idx = Access::with_ledger_mut(|ledger| {
+    let block_idx = execute_transfer_not_async(
+        from_account,
+        to,
+        spender,
+        fee,
+        amount,
+        memo,
+        created_at_time,
+    )?;
+
+    // NB. we need to set the certified data before the first async call to make sure that the
+    // blockchain state agrees with the certificate while archiving is in progress.
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+fn execute_transfer_not_async(
+    from_account: Account,
+    to: Account,
+    spender: Option<Account>,
+    fee: Option<Nat>,
+    amount: Nat,
+    memo: Option<Memo>,
+    created_at_time: Option<u64>,
+) -> Result<BlockIndex, ic_ledger_canister_core::ledger::TransferError<Tokens>> {
+    Access::with_ledger_mut(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
         let created_at_time = created_at_time.map(TimeStamp::from_nanos_since_unix_epoch);
 
@@ -422,14 +465,7 @@ async fn execute_transfer(
 
         let (block_idx, _) = apply_transaction(ledger, tx, now, effective_fee)?;
         Ok(block_idx)
-    })?;
-
-    // NB. we need to set the certified data before the first async call to make sure that the
-    // blockchain state agrees with the certificate while archiving is in progress.
-    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
-
-    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
-    Ok(Nat::from(block_idx))
+    })
 }
 
 #[update]
