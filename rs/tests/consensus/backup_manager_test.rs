@@ -170,10 +170,7 @@ pub fn test(env: TestEnv) {
         &nns_canister,
         env.topology_snapshot().root_subnet_id(),
         None,
-        vec![
-            MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)),
-            MasterPublicKeyId::Ecdsa(make_key(KEY_ID2)),
-        ],
+        make_key_ids_for_all_schemes(),
         &log,
     );
 
@@ -523,12 +520,19 @@ fn download_binary_file(
     .expect("error downloading binaty");
 }
 
-const KEY_ID1: &str = "secp256k1";
-const KEY_ID2: &str = "secp256k1_2";
-
-fn make_key(name: &str) -> EcdsaKeyId {
-    EcdsaKeyId {
-        curve: EcdsaCurve::Secp256k1,
-        name: name.to_string(),
-    }
+fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
+    vec![
+        MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "some_ecdsa_key".to_string(),
+        }),
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Ed25519,
+            name: "some_eddsa_key".to_string(),
+        }),
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+            name: "some_bip340_key".to_string(),
+        }),
+    ]
 }
