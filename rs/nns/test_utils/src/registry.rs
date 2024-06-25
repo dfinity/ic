@@ -822,11 +822,12 @@ pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePu
         idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
         xnet_endpoint: format!("128.0.{mutation_id}.1:1234"),
         http_endpoint: format!("128.0.{mutation_id}.1:4321"),
-        p2p_flow_endpoints: vec![],
-        prometheus_metrics_endpoint: "".to_string(),
         chip_id: None,
         public_ipv4_config: None,
         domain: None,
+        // Unused section follows
+        p2p_flow_endpoints: Default::default(),
+        prometheus_metrics_endpoint: Default::default(),
     };
 
     (payload, node_public_keys)
