@@ -44,7 +44,7 @@ const MIB: usize = 1024 * KIB;
 //      a) Support modifying the ic.json5 in system test setups
 //      b) Write our own test canister that generates the signature request itself and sends
 //         it to the management canister.
-const LOCAL_LIMIT: usize = 10 * MIB;
+const LOCAL_LIMIT: usize = 5 * MIB;
 const XNET_LIMIT: usize = 2 * MIB;
 
 fn make_schnorr_key_ids_for_all_algorithms() -> Vec<MasterPublicKeyId> {
