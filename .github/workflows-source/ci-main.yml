@@ -71,7 +71,7 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
-      - name: check trigger type
+      - name: Check Trigger type
         shell: bash
         run: |
           set -xeuo pipefail
