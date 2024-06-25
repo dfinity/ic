@@ -3298,7 +3298,8 @@ impl ExecutionEnvironment {
                     ExecutionTask::AbortedExecution { .. }
                     | ExecutionTask::AbortedInstallCode { .. }
                     | ExecutionTask::Heartbeat
-                    | ExecutionTask::GlobalTimer => task,
+                    | ExecutionTask::GlobalTimer
+                    | ExecutionTask::OnLowWasmMemory => task,
                     ExecutionTask::PausedExecution { id, .. } => {
                         let paused = self.take_paused_execution(id).unwrap();
                         let (input, prepaid_execution_cycles) = paused.abort(log);
