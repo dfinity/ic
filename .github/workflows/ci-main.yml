@@ -19,7 +19,8 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
   cancel-in-progress: true
-permissions: read-all
+permissions:
+  packages: write
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
@@ -400,8 +401,6 @@ jobs:
   rosetta-api-docker-image:
     name: Rosetta API Docker Image
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:8e2a751388f3ea684757a506fe9bb03536bca4e83908f16b4e844614d7166ccd
     timeout-minutes: 30
     needs: [bazel-test-all]
     #   if: ${{ inputs.rosetta-api-release == 'true' }}
@@ -410,10 +409,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Before script
-        id: before-script
-        shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+      - name: Login to GHCR
+        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
+        if: ${{ steps.check.outputs.build == 'true' }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build rosetta-api image
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/rosetta-api-docker-image.sh
