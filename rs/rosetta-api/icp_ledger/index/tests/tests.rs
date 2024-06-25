@@ -27,7 +27,6 @@ use num_traits::cast::ToPrimitive;
 use on_wire::FromWire;
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 

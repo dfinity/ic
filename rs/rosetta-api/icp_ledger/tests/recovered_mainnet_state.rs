@@ -158,7 +158,7 @@ fn perform_transactions(
     for _ in 0..NUM_REPETITIONS_PER_TRANSACTION {
         //  1.1. Mint
         let block_index = ic_icrc1_ledger_sm_tests::transfer(
-            &state_machine,
+            state_machine,
             LEDGER_CANISTER_ID,
             minter.0,
             user1.0,
@@ -171,7 +171,7 @@ fn perform_transactions(
         // TODO: The below uses the ICRC1 'icrc1_transfer' method to transfer tokens. Consider also
         //  using the ICP 'transfer' method.
         let block_index = ic_icrc1_ledger_sm_tests::transfer(
-            &state_machine,
+            state_machine,
             LEDGER_CANISTER_ID,
             user1.0,
             user2.0,
@@ -182,7 +182,7 @@ fn perform_transactions(
 
         //  1.3. Burn
         let block_index = ic_icrc1_ledger_sm_tests::transfer(
-            &state_machine,
+            state_machine,
             LEDGER_CANISTER_ID,
             user1.0,
             minter.0,
@@ -203,7 +203,7 @@ fn perform_transactions(
             created_at_time: None,
         };
         let block_index = ic_icrc1_ledger_sm_tests::send_approval(
-            &state_machine,
+            state_machine,
             LEDGER_CANISTER_ID,
             user1.0,
             &approve_args,
@@ -222,7 +222,7 @@ fn perform_transactions(
             created_at_time: None,
         };
         let block_index = ic_icrc1_ledger_sm_tests::send_transfer_from(
-            &state_machine,
+            state_machine,
             LEDGER_CANISTER_ID,
             user2.0,
             &transfer_from_args,
@@ -238,7 +238,7 @@ fn perform_transactions(
         start.elapsed()
     );
     let start = Instant::now();
-    wait_until_sync_is_completed(&state_machine, INDEX_CANISTER_ID, LEDGER_CANISTER_ID);
+    wait_until_sync_is_completed(state_machine, INDEX_CANISTER_ID, LEDGER_CANISTER_ID);
     println!("Time taken for index to sync: {:?}", start.elapsed());
 }
 
@@ -271,7 +271,7 @@ fn upgrade_archive_canisters_and_perform_transactions(
     const MAX_ITERATIONS: u8 = 10;
     for _ in 0..MAX_ITERATIONS {
         // loop {
-        let archives = list_archives(&state_machine).archives;
+        let archives = list_archives(state_machine).archives;
         println!("all archives: {:?}", archives);
         println!("upgraded archives: {:?}", upgraded_archives);
         let mut all_upgraded = true;
@@ -280,13 +280,13 @@ fn upgrade_archive_canisters_and_perform_transactions(
                 println!("upgrading archive: {}", archive_info.canister_id);
                 all_upgraded = false;
                 upgrade_archive(
-                    &state_machine,
+                    state_machine,
                     archive_info.canister_id,
                     archive_wasm_bytes.clone(),
                 );
                 upgraded_archives.insert(archive_info.canister_id);
                 //  5.1. Perform steps 1 and 2 again
-                perform_transactions(&state_machine, &minter, &user1, &user2);
+                perform_transactions(state_machine, minter, user1, user2);
                 // The above may have triggered a new archive to be spawned, so continue with the
                 //  next iteration of the loop, and list the archives again.
                 break;
