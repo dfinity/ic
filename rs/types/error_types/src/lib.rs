@@ -539,6 +539,9 @@ impl UserError {
         std::mem::size_of_val(self) + self.description.len()
     }
 
+    /// Panic if the error does not have the given error code and contain the
+    /// given description in its error message. For use in tests so that they
+    /// don't need to match the exact error message.
     pub fn assert_contains(&self, code: ErrorCode, description: &str) {
         assert_eq!(self.code, code);
         assert!(

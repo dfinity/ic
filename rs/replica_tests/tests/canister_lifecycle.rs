@@ -792,9 +792,8 @@ fn cannot_run_method_on_empty_canister() {
         let canister = test.create_canister().unwrap();
         match test.ingress(canister, "hello", vec![]) {
             Err(err) => {
-                assert_eq!(err.code(), ErrorCode::CanisterWasmModuleNotFound);
-                assert_eq!(
-                    err.description(),
+                err.assert_contains(
+                ErrorCode::CanisterWasmModuleNotFound,
                     "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Attempted to execute a message, but the canister contains no Wasm module."
                 );
             }

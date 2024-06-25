@@ -314,8 +314,7 @@ fn check_memo() {
     }
 
     for memo_size_bytes in 33..40 {
-        assert_eq!(Err(UserError::new(ErrorCode::CanisterCalledTrap, "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called `ic0.trap` with message: the memo field is too large")),
-            mint_with_memo(memo_size_bytes));
+        mint_with_memo(memo_size_bytes).unwrap_err().assert_contains( ErrorCode::CanisterCalledTrap, & "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called `ic0.trap` with message: the memo field is too large");
     }
 }
 
