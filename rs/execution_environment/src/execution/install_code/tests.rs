@@ -830,12 +830,14 @@ fn install_code_running_out_of_instructions() {
     );
 
     let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
-    err.assert_contains(ErrorCode::CanisterInstructionLimitExceeded, &format!(
+    err.assert_contains(
+        ErrorCode::CanisterInstructionLimitExceeded,
+        &format!(
             "Error from Canister {}: \
             Canister exceeded the limit of {} instructions for single message execution.",
             canister_id,
             test.install_code_instructions_limit(),
-        )
+        ),
     );
 }
 
