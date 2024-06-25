@@ -151,6 +151,9 @@ system_test(
 
 system_test(
     name = "tecdsa_performance",
+    additional_colocate_flags = [
+        "system_test_benchmark",
+    ],
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
@@ -162,7 +165,6 @@ system_test(
     tags = [
         "experimental_system_test_colocation",
         "manual",
-        "system_test_benchmark",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
