@@ -20,7 +20,6 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use std::collections::BTreeSet;
-use std::path::PathBuf;
 use std::time::Instant;
 
 const LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(LEDGER_CANISTER_INDEX_IN_NNS_SUBNET);
@@ -35,11 +34,9 @@ const INDEX_CANISTER_ID: CanisterId = CanisterId::from_u64(11);
 #[test]
 fn should_create_state_machine_with_golden_nns_state() {
     let state_machine = new_state_machine_with_golden_nns_state_or_panic(
-        GoldenStateLocation::Local(PathBuf::from(
-            // "/Users/mathias/projects/crypto/workspaces/ic-FI-1301-golden-mainnet-nns-state-icp-ledger-suite-upgrade-test/rs/rosetta-api/icp_ledger/test_resources/nns_state.tar.zst"
-            // "/tmp/nns_state.tar.zst",
-            "/home/mathias/projects/crypto/workspaces/ic/rs/rosetta-api/icp_ledger/test_resources/nns_state.tar.zst",
-        )),
+        GoldenStateLocation::Remote, // GoldenStateLocation::Local(
+                                     //     std::path::PathBuf::from("/ic/rs/rosetta-api/icp_ledger/test_resources/nns_state.tar.zst"),
+                                     // )
     );
 
     let start = Instant::now();
