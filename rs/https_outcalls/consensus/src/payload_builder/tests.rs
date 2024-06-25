@@ -971,7 +971,6 @@ pub(crate) fn test_config_with_http_feature<T>(
         let Dependencies {
             crypto,
             registry,
-            membership,
             pool,
             canister_http_pool,
             state_manager,
@@ -987,7 +986,6 @@ pub(crate) fn test_config_with_http_feature<T>(
             pool.get_cache(),
             crypto,
             state_manager,
-            membership,
             subnet_test_id(0),
             registry,
             &MetricsRegistry::new(),
