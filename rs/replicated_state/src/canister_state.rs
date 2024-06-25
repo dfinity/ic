@@ -538,7 +538,7 @@ impl CanisterState {
             ExecutionTask::AbortedInstallCode { .. } => false,
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | Some(ExecutionTask::OnLowWasmMemory)
+            | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_)
             | ExecutionTask::AbortedExecution { .. } => true,
