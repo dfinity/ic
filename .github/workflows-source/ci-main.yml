@@ -356,8 +356,8 @@ jobs:
 
   rosetta-api-docker-image:
     name: Rosetta API Docker Image
+    <<: *dind-large-setup
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     needs: [bazel-test-all]
  #   if: ${{ inputs.rosetta-api-release == 'true' }}
     steps:
