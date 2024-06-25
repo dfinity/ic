@@ -160,12 +160,13 @@ pub struct AddNodePayload {
     pub http_endpoint: String,
 
     pub chip_id: Option<Vec<u8>>,
-    // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
-    pub p2p_flow_endpoints: Vec<String>,
-    pub prometheus_metrics_endpoint: String,
 
     pub public_ipv4_config: Option<IPv4Config>,
     pub domain: Option<String>,
+
+    // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
+    pub p2p_flow_endpoints: Vec<String>,
+    pub prometheus_metrics_endpoint: String,
 }
 
 /// Parses the ConnectionEndpoint string
@@ -331,11 +332,12 @@ mod tests {
             idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
             xnet_endpoint: format!("128.0.{mutation_id}.1:1234"),
             http_endpoint: format!("128.0.{mutation_id}.1:4321"),
-            p2p_flow_endpoints: vec![],
-            prometheus_metrics_endpoint: "".to_string(),
             chip_id: None,
             public_ipv4_config: None,
             domain: Some("api-example.com".to_string()),
+            // Unused section follows
+            p2p_flow_endpoints: Default::default(),
+            prometheus_metrics_endpoint: Default::default(),
         };
 
         (payload, node_public_keys)
@@ -368,11 +370,12 @@ mod tests {
             idkg_dealing_encryption_pk: Some(vec![]),
             xnet_endpoint: "127.0.0.1:1234".to_string(),
             http_endpoint: "127.0.0.1:8123".to_string(),
-            p2p_flow_endpoints: vec![],
-            prometheus_metrics_endpoint: "".to_string(),
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
+            // Unused section follows
+            p2p_flow_endpoints: Default::default(),
+            prometheus_metrics_endpoint: Default::default(),
         };
     }
 
