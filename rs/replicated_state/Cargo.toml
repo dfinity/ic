@@ -16,7 +16,6 @@ ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-crypto-test-utils-keys = { path = "../crypto/test_utils/keys" }
 ic-error-types = { path = "../types/error_types" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
@@ -52,6 +51,7 @@ criterion = { workspace = true }
 criterion-time = { path = "../criterion_time" }
 ic-btc-test-utils = { workspace = true }
 ic-crypto-ed25519 = { path = "../crypto/ed25519" }
+ic-crypto-test-utils-keys = { path = "../crypto/test_utils/keys" }
 ic-test-utilities-io = { path = "../test_utilities/io" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-state = { path = "../test_utilities/state" }

@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-bincode = "1.2.1"
+bincode = { workspace = true }
 candid = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../base_types" }
