@@ -1,19 +1,26 @@
-use candid::{Encode, Nat, Principal};
+use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_agent::identity::BasicIdentity;
-use ic_agent::{Agent, Identity};
+use ic_agent::Identity;
 use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
+use ic_rosetta_api::convert;
 use ic_rosetta_api::models::{
     NetworkIdentifier, NetworkListResponse, NetworkStatusResponse, PartialBlockIdentifier,
 };
 use ic_rosetta_api::request_types::{RosettaBlocksMode, RosettaStatus};
-use icp_ledger::{AccountIdentifier, Subaccount};
+use icp_ledger::{
+    AccountIdentifier, GetBlocksArgs, Memo, Operation, QueryBlocksResponse, Subaccount, TimeStamp,
+    Tokens, Transaction,
+};
 use icp_rosetta_integration_tests::{start_rosetta, RosettaContext};
-use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg};
+use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
+use pocket_ic::common::rest::RawMessageId;
+use pocket_ic::nonblocking::query_candid;
+use pocket_ic::WasmResult;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use serde::Deserialize;
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
@@ -150,40 +157,16 @@ impl RosettaTestingClient {
     }
 }
 
-struct LedgerAgent {
-    ledger_agent: Icrc1Agent,
-}
-
-impl LedgerAgent {
-    async fn transfer_or_panic<N>(&self, to: Principal, amount: N) -> BlockIndex
-    where
-        Nat: From<N>,
-    {
-        self.ledger_agent
-            .transfer(TransferArg {
-                from_subaccount: None,
-                to: Account::from(to),
-                fee: None,
-                created_at_time: None,
-                memo: None,
-                amount: Nat::from(amount),
-            })
-            .await
-            .expect("Unable to send transfer")
-            .expect("Unable to transfer")
-    }
-}
-
 // Environment with a PocketIc instance, an ICP Ledger instance and a
 // ICP Rosetta node instance.
 // Note that because of how Rosetta works, the Ledger is setup with one
 // initial block so that Rosetta doesn't panic.
 struct TestEnv {
-    tmp_dir: TempDir,
+    _tmp_dir: TempDir,
     pocket_ic: PocketIc,
     rosetta_context: Option<RosettaContext>,
     pub rosetta: RosettaTestingClient,
-    pub ledger: LedgerAgent,
+    ledger_id: Principal,
 }
 
 impl TestEnv {
@@ -192,23 +175,23 @@ impl TestEnv {
         pocket_ic: PocketIc,
         rosetta_context: RosettaContext,
         rosetta_client: RosettaClient,
-        ledger_agent: Icrc1Agent,
+        ledger_id: Principal,
     ) -> Self {
         Self {
-            tmp_dir,
+            _tmp_dir: tmp_dir,
             pocket_ic,
             rosetta_context: Some(rosetta_context),
             rosetta: RosettaTestingClient { rosetta_client },
-            ledger: LedgerAgent { ledger_agent },
+            ledger_id,
         }
     }
 
-    async fn setup_rosetta_and_ledger_agent(
+    async fn setup_rosetta(
         replica_url: Url,
         ledger_canister_id: Principal,
         rosetta_state_directory: PathBuf,
         enable_rosetta_blocks: bool,
-    ) -> (RosettaClient, RosettaContext, Icrc1Agent) {
+    ) -> (RosettaClient, RosettaContext) {
         let (rosetta_client, rosetta_context) = start_rosetta(
             &get_rosetta_path(),
             replica_url.clone(),
@@ -254,21 +237,7 @@ impl TestEnv {
             }
         }
 
-        let agent = Agent::builder()
-            .with_identity(test_identity())
-            .with_url(replica_url)
-            .build()
-            .expect("Unable to create the agent");
-        agent
-            .fetch_root_key()
-            .await
-            .expect("Unable to fetch the root key");
-        let ledger_agent = Icrc1Agent {
-            agent,
-            ledger_canister_id,
-        };
-
-        (rosetta_client, rosetta_context, ledger_agent)
+        (rosetta_client, rosetta_context)
     }
 
     async fn setup_or_panic(enable_rosetta_blocks: bool) -> Self {
@@ -299,7 +268,7 @@ impl TestEnv {
         let rosetta_state_directory =
             TempDir::new().expect("failed to create a temporary directory");
 
-        let (rosetta_client, rosetta_context, ledger_agent) = Self::setup_rosetta_and_ledger_agent(
+        let (rosetta_client, rosetta_context) = Self::setup_rosetta(
             replica_url,
             ledger_canister_id,
             rosetta_state_directory.path().to_owned(),
@@ -312,7 +281,7 @@ impl TestEnv {
             pocket_ic,
             rosetta_context,
             rosetta_client,
-            ledger_agent,
+            ledger_canister_id,
         );
 
         // block 0 always exists in this setup
@@ -336,7 +305,7 @@ impl TestEnv {
             .url()
             .expect("The PocketIC gateway should be set!");
         let ledger_canister_id = Principal::from(LEDGER_CANISTER_ID);
-        let (rosetta_client, rosetta_context, ledger_agent) = Self::setup_rosetta_and_ledger_agent(
+        let (rosetta_client, rosetta_context) = Self::setup_rosetta(
             replica_url,
             ledger_canister_id,
             rosetta_state_directory,
@@ -345,10 +314,45 @@ impl TestEnv {
         .await;
         self.rosetta = RosettaTestingClient { rosetta_client };
         self.rosetta_context = Some(rosetta_context);
-        self.ledger = LedgerAgent { ledger_agent };
 
         // block 0 always exists in this setup
         self.rosetta.wait_or_panic_until_synced_up_to(0).await;
+    }
+
+    pub async fn submit_transfer_or_panic<N>(
+        &self,
+        from: Principal,
+        to: Principal,
+        amount: N,
+    ) -> RawMessageId
+    where
+        Nat: From<N>,
+    {
+        let payload = Encode!(&TransferArg {
+            from_subaccount: None,
+            to: Account::from(to),
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(amount),
+        })
+        .expect("Unable to encode TransferArg");
+        self.pocket_ic
+            .submit_call(self.ledger_id, from, "icrc1_transfer", payload)
+            .await
+            .expect("Unable to submit icrc1_transfer call")
+    }
+
+    pub async fn query_blocks_or_panic(&self, start: u64, length: usize) -> QueryBlocksResponse {
+        let (blocks,): (QueryBlocksResponse,) = query_candid(
+            &self.pocket_ic,
+            self.ledger_id,
+            "query_blocks",
+            (GetBlocksArgs { start, length },),
+        )
+        .await
+        .expect("Unable to query_blocks");
+        blocks
     }
 }
 
@@ -412,6 +416,23 @@ async fn test_rosetta_blocks_mode_enabled() {
     );
 }
 
+// a simple trait to simplify unwrapping and decoding a WasmResult
+trait UnwrapCandid {
+    fn unwrap(&self) -> &[u8];
+    fn unwrap_as<T: CandidType + for<'a> Deserialize<'a>>(&self) -> T {
+        Decode!(self.unwrap(), T).expect("Unable to decode")
+    }
+}
+
+impl UnwrapCandid for WasmResult {
+    fn unwrap(&self) -> &[u8] {
+        match self {
+            WasmResult::Reply(bytes) => bytes,
+            WasmResult::Reject(err) => panic!("Cannot unwrap Reject: {err}"),
+        }
+    }
+}
+
 #[tokio::test]
 async fn test_rosetta_blocks_enabled_after_first_block() {
     let mut env = TestEnv::setup_or_panic(false).await;
@@ -422,13 +443,36 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
     env.pocket_ic.stop_progress().await;
 
     // create block 1 and Rosetta Block 1
-    env.ledger
-        .transfer_or_panic(Principal::anonymous(), 1u64)
+    let from = test_identity()
+        .sender()
+        .expect("Unable to create the test sender");
+    let id1 = env
+        .submit_transfer_or_panic(from, Principal::anonymous(), 1u64)
         .await;
     // create block 2 which will go inside Rosetta Block 1
-    env.ledger
-        .transfer_or_panic(Principal::anonymous(), 2u64)
+    let id2 = env
+        .submit_transfer_or_panic(from, Principal::anonymous(), 2u64)
         .await;
+
+    env.pocket_ic
+        .await_call(id1)
+        .await
+        .unwrap()
+        .unwrap_as::<Result<BlockIndex, TransferError>>()
+        .expect("Unable to mint");
+    env.pocket_ic
+        .await_call(id2)
+        .await
+        .unwrap()
+        .unwrap_as::<Result<BlockIndex, TransferError>>()
+        .expect("Unable to mind");
+
+    let rosetta_block1_expected_time_ts = TimeStamp::from(env.pocket_ic.get_time().await);
+    let rosetta_block1_expected_time_millis =
+        rosetta_block1_expected_time_ts.as_nanos_since_unix_epoch() / 1_000_000;
+
+    let blocks = env.query_blocks_or_panic(1, 2).await;
+    assert_eq!(blocks.blocks.len(), 2);
 
     env.pocket_ic.auto_progress().await;
 
@@ -441,8 +485,51 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
     let block0 = env.rosetta.block_by_index_or_panic(0).await;
     assert_eq!(old_block0, block0);
 
-    // Block 1 must be a Rosetta block
+    // Block 1 must be a Rosetta block with 2 transactions
     let block1 = env.rosetta.block_by_index_or_panic(1).await;
+    assert_eq!(block1.block_identifier.index, 1);
     assert_eq!(block1.parent_block_identifier, block0.block_identifier);
+    assert_eq!(block1.timestamp, rosetta_block1_expected_time_millis);
+    assert_eq!(block1.metadata, None);
     assert_eq!(block1.transactions.len(), 2);
+
+    // Check the first transaction of the first Rossetta Block
+    assert_eq!(
+        block1.transactions.get(0).unwrap(),
+        &convert::to_rosetta_core_transaction(
+            /* block_index: */ 1,
+            Transaction {
+                operation: Operation::Mint {
+                    to: AccountIdentifier::new(Principal::anonymous().into(), None),
+                    amount: Tokens::from_e8s(1u64),
+                },
+                memo: Memo(0),
+                created_at_time: None,
+                icrc1_memo: None,
+            },
+            rosetta_block1_expected_time_ts,
+            "ICP"
+        )
+        .unwrap(),
+    );
+
+    // Check the second transaction of the firsst Rosetta Block
+    assert_eq!(
+        block1.transactions.get(1).unwrap(),
+        &convert::to_rosetta_core_transaction(
+            /* block_index: */ 2,
+            Transaction {
+                operation: Operation::Mint {
+                    to: AccountIdentifier::new(Principal::anonymous().into(), None),
+                    amount: Tokens::from_e8s(2u64),
+                },
+                memo: Memo(0),
+                created_at_time: None,
+                icrc1_memo: None,
+            },
+            rosetta_block1_expected_time_ts,
+            "ICP"
+        )
+        .unwrap(),
+    );
 }

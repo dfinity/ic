@@ -23,6 +23,7 @@ pocket-ic = { path = "../../../../packages/pocket-ic" }
 reqwest = { workspace = true }
 rosetta-core = { path = "../../rosetta_core" }
 serde = { workspace = true }
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = "2.2.1"

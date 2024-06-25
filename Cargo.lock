@@ -12543,6 +12543,7 @@ dependencies = [
  "reqwest 0.12.4",
  "rosetta-core",
  "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "url",

@@ -1562,6 +1562,7 @@ impl Blocks {
             .prepare_cached(
                 r#"SELECT blocks.idx, block
                    FROM rosetta_blocks_transactions JOIN blocks
+                   ON rosetta_blocks_transactions.block_idx = blocks.idx
                    WHERE rosetta_blocks_transactions.idx=:idx"#,
             )
             .map_err(|e| format!("Unable to select block: {e:?}"))?;
@@ -1599,6 +1600,7 @@ struct RosettaBlockIndices {
     pub first_block_index: BlockIndex,
 }
 
+#[derive(Debug)]
 pub struct RosettaBlock {
     pub index: BlockIndex,
     pub parent_hash: Option<[u8; 32]>,
