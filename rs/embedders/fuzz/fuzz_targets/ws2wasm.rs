@@ -59,7 +59,8 @@ fn main() -> io::Result<()> {
     let instrumentation = CommandLineArgs::parse().inst;
     if instrumentation {
         let config = EmbeddersConfig::default();
-        let decoded = decode_wasm(Arc::new(wasm)).expect("failed to decode canister module");
+        let decoded = decode_wasm(config.wasm_max_size, Arc::new(wasm))
+            .expect("failed to decode canister module");
         let embedder = WasmtimeEmbedder::new(config, no_op_logger());
         match validate_and_instrument_for_testing(&embedder, &decoded) {
             Ok((_, output)) => {

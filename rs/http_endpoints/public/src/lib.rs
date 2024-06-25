@@ -38,7 +38,7 @@ use crate::{
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
     metrics::{
-        HttpHandlerMetrics, LABEL_INSECURE, LABEL_IO_ERROR, LABEL_SECURE, LABEL_STATUS,
+        HttpHandlerMetrics, LABEL_HTTP_STATUS_CODE, LABEL_INSECURE, LABEL_IO_ERROR, LABEL_SECURE,
         LABEL_TIMEOUT_ERROR, LABEL_TLS_ERROR, LABEL_UNKNOWN, REQUESTS_LABEL_NAMES, STATUS_ERROR,
         STATUS_SUCCESS,
     },
@@ -111,7 +111,7 @@ use tempfile::NamedTempFile;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
-    sync::mpsc::UnboundedSender,
+    sync::mpsc::{Receiver, UnboundedSender},
     sync::watch,
     time::{sleep, timeout, Instant},
 };
@@ -298,11 +298,8 @@ pub fn start_server(
     delegation_from_nns: Option<CertificateDelegation>,
     pprof_collector: Arc<dyn PprofCollector>,
     tracing_handle: ReloadHandles,
-    // TODO(NET-1620): Remove optional arguments to enable the sync call endpoint.
-    certified_height_watcher: Option<watch::Receiver<Height>>,
-    terminal_state_ingress_messages: Option<
-        tokio::sync::mpsc::UnboundedReceiver<(MessageId, Height)>,
-    >,
+    certified_height_watcher: watch::Receiver<Height>,
+    completed_execution_messages_rx: Receiver<(MessageId, Height)>,
 ) {
     let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
@@ -339,28 +336,23 @@ pub fn start_server(
     .build();
 
     let call_router = call::CallServiceV2::new_router(call_handler.clone());
+    let (ingress_watcher_handle, _) = IngressWatcher::start(
+        rt_handle.clone(),
+        log.clone(),
+        metrics.clone(),
+        certified_height_watcher,
+        completed_execution_messages_rx,
+        CancellationToken::new(),
+    );
 
-    let call_v3_router = match (certified_height_watcher, terminal_state_ingress_messages) {
-        (Some(certified_height_watcher), Some(terminal_state_ingress_messages)) => {
-            let (ingress_watcher_handle, _) = IngressWatcher::start(
-                rt_handle.clone(),
-                log.clone(),
-                metrics.clone(),
-                certified_height_watcher,
-                terminal_state_ingress_messages,
-                CancellationToken::new(),
-            );
-
-            call::CallServiceV3::new_router(
-                call_handler,
-                ingress_watcher_handle,
-                config.ingress_message_certificate_timeout_seconds,
-                delegation_from_nns.clone(),
-                state_reader.clone(),
-            )
-        }
-        _ => Router::new(),
-    };
+    let call_v3_router = call::CallServiceV3::new_router(
+        call_handler,
+        ingress_watcher_handle,
+        metrics.clone(),
+        config.ingress_message_certificate_timeout_seconds,
+        delegation_from_nns.clone(),
+        state_reader.clone(),
+    );
 
     let query_router = QueryServiceBuilder::builder(
         node_id,
@@ -776,7 +768,7 @@ async fn collect_timer_metric(
     // This is a workaround for `StatusCode::as_str()` not returning a `&'static
     // str`. It ensures `request_timer` is dropped before `status`.
     let mut timer = request_timer;
-    timer.set_label(LABEL_STATUS, status.as_str());
+    timer.set_label(LABEL_HTTP_STATUS_CODE, status.as_str());
 
     metrics
         .response_body_size_bytes

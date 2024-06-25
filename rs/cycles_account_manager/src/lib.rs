@@ -1200,8 +1200,8 @@ mod tests {
 
         // Check overflow case.
         assert_eq!(
-            cam.scale_cost(Cycles::new(std::u128::MAX), 1_000_000),
-            Cycles::new(std::u128::MAX) / reference_subnet_size
+            cam.scale_cost(Cycles::new(u128::MAX), 1_000_000),
+            Cycles::new(u128::MAX) / reference_subnet_size
         );
     }
 

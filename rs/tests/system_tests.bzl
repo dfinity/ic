@@ -69,7 +69,7 @@ def _run_system_test(ctx):
         ),
         RunEnvironmentInfo(
             environment = env,
-            inherited_environment = ctx.attr.env_inherit,
+            inherited_environment = ctx.attr.env_inherit + ["KUBECONFIG"],
         ),
     ]
 
@@ -138,7 +138,8 @@ def system_test(
       uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
       uses_setupos_dev: the test uses ic-os/setupos/envs/dev (will be also automatically added as dependency).
       uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
-      env_inherit: specifies additional environment variables to inherit from the external environment when the test is executed by bazel test.
+      env_inherit: specifies additional environment variables to inherit from
+      the external environment when the test is executed by bazel test.
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
 

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::str::FromStr;
 use std::time::Duration;
 use std::time::Instant;
@@ -1420,11 +1420,16 @@ impl<'a> DappCanister<'a> {
         assert_eq!(
             dapp_canister_summary
                 .status
-                .as_ref()
+                .clone()
                 .unwrap()
                 .settings
-                .controllers,
-            vec![sns_client.sns_canisters.root.unwrap()]
+                .controllers
+                .into_iter()
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([
+                sns_client.sns_canisters.root.unwrap(),
+                ROOT_CANISTER_ID.get()
+            ])
         );
 
         info!(

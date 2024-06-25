@@ -3,9 +3,7 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{CryptoRng, Rng};
 use std::collections::BTreeMap;
 
-mod test_utils;
-
-use crate::test_utils::*;
+use ic_crypto_internal_threshold_sig_ecdsa_test_utils::*;
 
 fn verify_data(tag: String, expected_hash: &str, serialized: &[u8]) {
     /*

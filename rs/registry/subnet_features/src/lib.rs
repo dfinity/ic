@@ -178,6 +178,15 @@ pub struct ChainKeyConfig {
     pub idkg_key_rotation_period_ms: Option<u64>,
 }
 
+impl ChainKeyConfig {
+    pub fn key_ids(&self) -> Vec<MasterPublicKeyId> {
+        self.key_configs
+            .iter()
+            .map(|key_config| key_config.key_id.clone())
+            .collect()
+    }
+}
+
 impl From<ChainKeyConfig> for pb::ChainKeyConfig {
     fn from(src: ChainKeyConfig) -> Self {
         let ChainKeyConfig {

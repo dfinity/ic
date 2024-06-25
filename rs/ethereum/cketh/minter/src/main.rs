@@ -11,9 +11,9 @@ use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, Eip1559TransactionPrice, Erc20Balance, GasFeeEstimate, MinterInfo,
-    RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError,
-    WithdrawalSearchParameter,
+    AddCkErc20Token, Eip1559TransactionPrice, Eip1559TransactionPriceArg, Erc20Balance,
+    GasFeeEstimate, MinterInfo, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg,
+    WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
@@ -146,12 +146,30 @@ async fn smart_contract_address() -> String {
 /// Estimate price of EIP-1559 transaction based on the
 /// `base_fee_per_gas` included in the last finalized block.
 #[query]
-async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
+async fn eip_1559_transaction_price(
+    token: Option<Eip1559TransactionPriceArg>,
+) -> Eip1559TransactionPrice {
+    let gas_limit = match token {
+        None => CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+        Some(Eip1559TransactionPriceArg { ckerc20_ledger_id }) => {
+            match read_state(|s| s.find_ck_erc20_token_by_ledger_id(&ckerc20_ledger_id)) {
+                Some(_) => CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+                None => {
+                    if ckerc20_ledger_id == read_state(|s| s.cketh_ledger_id) {
+                        CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT
+                    } else {
+                        ic_cdk::trap(&format!(
+                            "ERROR: Unsupported ckERC20 token ledger {}",
+                            ckerc20_ledger_id
+                        ))
+                    }
+                }
+            }
+        }
+    };
     match read_state(|s| s.last_transaction_price_estimate.clone()) {
         Some((ts, estimate)) => {
-            let mut result = Eip1559TransactionPrice::from(
-                estimate.to_price(CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT),
-            );
+            let mut result = Eip1559TransactionPrice::from(estimate.to_price(gas_limit));
             result.timestamp = Some(ts);
             result
         }
@@ -719,13 +737,6 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     reimbursed_in_block: reimbursed.reimbursed_in_block.get().into(),
                     reimbursed_amount: reimbursed.reimbursed_amount.into(),
                     transaction_hash: reimbursed.transaction_hash.map(|h| h.to_string()),
-                },
-                #[allow(deprecated)]
-                EventType::SkippedBlock(block_number) => EP::SkippedBlock {
-                    contract_address: read_state(|s| {
-                        s.eth_helper_contract_address.map(|s| s.to_string())
-                    }),
-                    block_number: block_number.into(),
                 },
                 EventType::SkippedBlockForContract {
                     contract_address,

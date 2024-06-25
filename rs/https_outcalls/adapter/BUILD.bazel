@@ -6,10 +6,9 @@ DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/config",
     "//rs/https_outcalls/service",
-    "//rs/monitoring/adapter_metrics_server",
+    "//rs/monitoring/adapter_metrics/server",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "@crate_index//:async-stream",
     "@crate_index//:byte-unit",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:futures",
@@ -30,6 +29,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    "@crate_index//:async-stream",
     "@crate_index//:once_cell",
     "@crate_index//:rand",
     "@crate_index//:tempfile",

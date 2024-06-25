@@ -13,7 +13,8 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance::{
     governance::{Environment, Governance},
     pb::v1::{
-        manage_neuron::Disburse, neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
+        manage_neuron::Disburse, neuron::DissolveState,
+        neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
         settle_neurons_fund_participation_request, CreateServiceNervousSystem,
         IdealMatchedParticipationFunction, NetworkEconomics, NeuronsFundData,
         NeuronsFundParticipation, NeuronsFundSnapshot, Proposal, ProposalData,
@@ -55,7 +56,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     let nns = NNSBuilder::new()
         .add_neuron(
             NeuronBuilder::new(neuron_id_u64, 10, owner)
-                .set_dissolve_state(None)
+                .set_dissolve_state(Some(DissolveState::WhenDissolvedTimestampSeconds(0)))
                 .set_kyc_verified(true),
         )
         .add_ledger_transform(Box::new(move |l| {
@@ -235,6 +236,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
         })
         .add_neuron(
             NeuronBuilder::new(nf_neuron_id_u64, 100, nf_neurons_controller)
+                .set_dissolve_state(Some(DissolveState::WhenDissolvedTimestampSeconds(0)))
                 .set_maturity(nf_neuron_maturity)
                 .set_joined_community_fund(100),
         )

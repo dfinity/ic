@@ -1472,11 +1472,13 @@ impl SystemApiImpl {
         self.sandbox_safe_system_state.append_canister_log(
             is_enabled,
             self.api_type.time(),
-            valid_subslice("save_log_message", src, size, heap).unwrap_or(
-                // Do not trap here!
-                // If the specified memory range is invalid, ignore it and log the error message.
-                b"(debug_print message out of memory bounds)",
-            ),
+            valid_subslice("save_log_message", src, size, heap)
+                .unwrap_or(
+                    // Do not trap here!
+                    // If the specified memory range is invalid, ignore it and log the error message.
+                    b"(debug_print message out of memory bounds)",
+                )
+                .to_vec(),
         );
     }
 
@@ -2611,7 +2613,9 @@ impl SystemApi for SystemApiImpl {
             {
                 let wasm_memory_usage =
                     NumBytes::new(new_bytes.get().saturating_add(old_bytes.get()));
-                if wasm_memory_usage > wasm_memory_limit {
+
+                // A Wasm memory limit of 0 means unlimited.
+                if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
                     return Err(HypervisorError::WasmMemoryLimitExceeded {
                         bytes: wasm_memory_usage,
                         limit: wasm_memory_limit,

@@ -90,7 +90,6 @@ bazel-build-fuzzers-archives:
   artifacts:
     when: always
     paths:
-      - bazel-build-log*.json*
       - bazel-bep.pb
     reports:
       junit: bazel-testlogs-gitlab/**/test.xml
@@ -113,7 +112,6 @@ bazel-build-fuzzers-archives:
       echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
-    - gzip bazel-build-log*.json
     - |
       echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
       bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
@@ -136,6 +134,8 @@ bazel-test-coverage:
       - cov_targets.txt
       - cov_report.dat
       - cov_html
+  tags:
+    - dfinity-ic
   variables:
     BAZEL_COMMAND: "coverage"
     BAZEL_EXTRA_ARGS: "--combined_report=lcov"
@@ -155,7 +155,6 @@ bazel-test-all:
   artifacts:
     when: always
     paths:
-      - bazel-build-log*.json.gz
       - bazel-bep.pb
       - bazel-targets
     reports:
@@ -176,7 +175,7 @@ bazel-system-tests-k8s:
     - .bazel-test-all
   tags:
     - dfinity-ic
-    - sf
+    - ln
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
       when: manual
@@ -188,7 +187,7 @@ bazel-system-tests-k8s:
   variables:
     RUST_LOG: info
     KUBECONFIG: "$KUBECONFIG_TNET_CREATOR"
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --jobs=7 --test_tag_filters=k8s,-manual --k8s"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --jobs=10 --test_tag_filters=k8s,-manual --k8s"
   timeout: 150 minutes
 
 bazel-system-test-hourly:
@@ -287,8 +286,6 @@ bazel-test-all-rebuild:
       allow_failure: true
   tags:
     - dfinity-ic
-    - bazel
-    - zh
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: "build"
@@ -319,7 +316,6 @@ bazel-test-macos:
     reports:
       dotenv: nns.release.env
     paths:
-      - bazel-build-log*.json*
       - build-ic.tar
   script:
     - gitlab-ci/src/ci-scripts/build-ic.sh
@@ -543,7 +539,7 @@ commit-lint:
   needs: []
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      allow_failure: true
+      allow_failure: false
   script:
     - ./gitlab-ci/src/ci-scripts/commit-lint.sh
 

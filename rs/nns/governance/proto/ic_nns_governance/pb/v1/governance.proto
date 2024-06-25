@@ -2165,6 +2165,8 @@ message Governance {
     map<uint64, double> dissolving_neurons_e8s_buckets_ect = 33;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_seed = 34;
     map<uint64, double> not_dissolving_neurons_e8s_buckets_ect = 35;
+    optional uint64 total_voting_power_non_self_authenticating_controller = 36;
+    optional uint64 total_staked_e8s_non_self_authenticating_controller = 37;
   }
 
   GovernanceCachedMetrics metrics = 15;
@@ -2338,6 +2340,13 @@ message ListNeurons {
   // If true, the "requested list" also contains the neuron ID of the
   // neurons that the calling principal is authorized to read.
   bool include_neurons_readable_by_caller = 2 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+  // Whether to also include empty neurons readable by the caller. This field only has an effect
+  // when `include_neurons_readable_by_caller` is true. If a neuron's id already exists in the
+  // `neuron_ids` field, then the neuron will be included in the response regardless of the value of
+  // this field. Since the previous behavior was to always include empty neurons readable by caller,
+  // if this field is not provided, it defaults to true, in order to maintain backwards
+  // compatibility. Here, being "empty" means 0 stake, 0 maturity and 0 staked maturity.
+  optional bool include_empty_neurons_readable_by_caller = 3;
 }
 
 // A response to a `ListNeurons` request.

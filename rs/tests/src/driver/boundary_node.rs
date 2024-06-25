@@ -25,6 +25,7 @@ use crate::{
         },
         test_setup::{GroupSetup, InfraProvider},
     },
+    k8s::datavolume::DataVolumeContentType,
     k8s::images::upload_image,
     k8s::tnet::TNet,
     retry_with_msg,
@@ -319,8 +320,12 @@ impl BoundaryNodeWithVm {
                     &mk_compressed_img_path()
                 ),
             ))?;
-            block_on(tnet_node.deploy_config_image(&mk_compressed_img_path()))
-                .expect("deploying config image failed");
+            block_on(tnet_node.deploy_config_image(
+                &mk_compressed_img_path(),
+                "config",
+                DataVolumeContentType::Kubevirt,
+            ))
+            .expect("deploying config image failed");
             block_on(tnet_node.start()).expect("starting vm failed");
         }
 

@@ -6,7 +6,7 @@ use crate::common::rest::{
     RawSubmitIngressResult, RawSubnetId, RawTime, RawVerifyCanisterSigArg, RawWasmResult, SubnetId,
     Topology,
 };
-use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
+use crate::{CallError, PocketIcBuilder, UserError, WasmResult, DEFAULT_MAX_REQUEST_TIME_MS};
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
@@ -14,18 +14,18 @@ use candid::{
 };
 use ic_cdk::api::management_canister::main::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterSettings, CanisterStatusResponse,
-    InstallCodeArgument, SkipPreUpgrade, UpdateSettingsArgument,
+    ChunkHash, ClearChunkStoreArgument, InstallChunkedCodeArgument, InstallCodeArgument,
+    SkipPreUpgrade, UpdateSettingsArgument, UploadChunkArgument,
 };
 use reqwest::Url;
 use serde::{de::DeserializeOwned, Serialize};
+use sha2::{Digest, Sha256};
 use std::future::Future;
 use std::time::{Duration, SystemTime};
 use tracing::{debug, instrument, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 
-// how long a get/post request may retry or poll
-const MAX_REQUEST_TIME_MS: u64 = 300_000;
 // wait time between polling requests
 const POLLING_PERIOD_MS: u64 = 10;
 
@@ -34,10 +34,29 @@ const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 const LOCALHOST: &str = "127.0.0.1";
 
+// The minimum joint size of a canister's WASM
+// and its initial argument blob for which
+// we install the canister WASM as a sequence of chunks.
+// The size is chosen to be smaller than the maximum
+// ingress message size of 2 MiB (2,097,152 B)
+// on application subnet (which have the tighest
+// ingress message size limit)
+// to account for a few additional constant-size fields
+// in the management canister payload to install code
+// and the overhead of candid encoding.
+const INSTALL_CHUNKED_CODE_THRESHOLD: usize = 2_000_000; // 2 MB
+
+// The maximum size of one WASM chunk when installing a canister WASM
+// as a sequence of chunks. This constant is specified
+// in the IC protocol.
+const INSTALL_CODE_CHUNK_SIZE: usize = 1 << 20; // 1 MiB
+
 /// Main entry point for interacting with PocketIC.
 pub struct PocketIc {
     /// The unique ID of this PocketIC instance.
     pub instance_id: InstanceId,
+    // how long a get/post request may retry or poll
+    max_request_time_ms: Option<u64>,
     http_gateway: Option<HttpGatewayInfo>,
     topology: Topology,
     server_url: Url,
@@ -59,7 +78,18 @@ impl PocketIc {
     /// The server is started if it's not already running.
     pub async fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_config_and_server_url(config, server_url).await
+        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS)).await
+    }
+
+    /// Creates a new PocketIC instance with the specified subnet config and max request duration in milliseconds
+    /// (`None` means that there is no timeout).
+    /// The server is started if it's not already running.
+    pub async fn from_config_and_max_request_time(
+        config: impl Into<ExtendedSubnetConfigSet>,
+        max_request_time_ms: Option<u64>,
+    ) -> Self {
+        let server_url = crate::start_or_reuse_server();
+        Self::from_components(config, server_url, max_request_time_ms).await
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and server url.
@@ -67,6 +97,14 @@ impl PocketIc {
     pub async fn from_config_and_server_url(
         config: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
+    ) -> Self {
+        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS)).await
+    }
+
+    pub(crate) async fn from_components(
+        config: impl Into<ExtendedSubnetConfigSet>,
+        server_url: Url,
+        max_request_time_ms: Option<u64>,
     ) -> Self {
         let config = config.into();
         config.validate().unwrap();
@@ -95,6 +133,7 @@ impl PocketIc {
 
         Self {
             instance_id,
+            max_request_time_ms,
             http_gateway: None,
             topology,
             server_url,
@@ -624,6 +663,88 @@ impl PocketIc {
         canister_id
     }
 
+    async fn install_canister_helper(
+        &self,
+        mode: CanisterInstallMode,
+        canister_id: CanisterId,
+        wasm_module: Vec<u8>,
+        arg: Vec<u8>,
+        sender: Option<Principal>,
+    ) -> Result<(), CallError> {
+        if wasm_module.len() + arg.len() < INSTALL_CHUNKED_CODE_THRESHOLD {
+            call_candid_as::<(InstallCodeArgument,), ()>(
+                self,
+                Principal::management_canister(),
+                RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+                sender.unwrap_or(Principal::anonymous()),
+                "install_code",
+                (InstallCodeArgument {
+                    mode,
+                    canister_id,
+                    wasm_module,
+                    arg,
+                },),
+            )
+            .await
+        } else {
+            let chunks: Vec<_> = wasm_module.chunks(INSTALL_CODE_CHUNK_SIZE).collect();
+            let hashes: Vec<_> = chunks
+                .iter()
+                .map(|c| {
+                    let mut hasher = Sha256::new();
+                    hasher.update(c);
+                    ChunkHash {
+                        hash: hasher.finalize().to_vec(),
+                    }
+                })
+                .collect();
+            call_candid_as::<_, ()>(
+                self,
+                Principal::management_canister(),
+                RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+                sender.unwrap_or(Principal::anonymous()),
+                "clear_chunk_store",
+                (ClearChunkStoreArgument { canister_id },),
+            )
+            .await
+            .unwrap();
+            for chunk in chunks {
+                call_candid_as::<_, ()>(
+                    self,
+                    Principal::management_canister(),
+                    RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+                    sender.unwrap_or(Principal::anonymous()),
+                    "upload_chunk",
+                    (UploadChunkArgument {
+                        canister_id,
+                        chunk: chunk.to_vec(),
+                    },),
+                )
+                .await
+                .unwrap();
+            }
+            let mut hasher = Sha256::new();
+            hasher.update(wasm_module);
+            let wasm_module_hash = hasher.finalize().to_vec();
+            call_candid_as::<_, ()>(
+                self,
+                Principal::management_canister(),
+                RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+                sender.unwrap_or(Principal::anonymous()),
+                "install_chunked_code",
+                (InstallChunkedCodeArgument {
+                    mode,
+                    target_canister: canister_id,
+                    store_canister: None,
+                    chunk_hashes_list: hashes,
+                    wasm_module_hash,
+                    arg,
+                },),
+            )
+            .await
+        }
+    }
+
     /// Install a WASM module on an existing canister.
     #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub async fn install_canister(
@@ -633,21 +754,15 @@ impl PocketIc {
         arg: Vec<u8>,
         sender: Option<Principal>,
     ) {
-        call_candid_as::<(InstallCodeArgument,), ()>(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-            sender.unwrap_or(Principal::anonymous()),
-            "install_code",
-            (InstallCodeArgument {
-                mode: CanisterInstallMode::Install,
-                canister_id,
-                wasm_module,
-                arg,
-            },),
+        self.install_canister_helper(
+            CanisterInstallMode::Install,
+            canister_id,
+            wasm_module,
+            arg,
+            sender,
         )
         .await
-        .unwrap();
+        .unwrap()
     }
 
     /// Upgrade a canister with a new WASM module.
@@ -659,18 +774,12 @@ impl PocketIc {
         arg: Vec<u8>,
         sender: Option<Principal>,
     ) -> Result<(), CallError> {
-        call_candid_as::<(InstallCodeArgument,), ()>(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-            sender.unwrap_or(Principal::anonymous()),
-            "install_code",
-            (InstallCodeArgument {
-                mode: CanisterInstallMode::Upgrade(Some(SkipPreUpgrade(Some(false)))),
-                canister_id,
-                wasm_module,
-                arg,
-            },),
+        self.install_canister_helper(
+            CanisterInstallMode::Upgrade(Some(SkipPreUpgrade(Some(false)))),
+            canister_id,
+            wasm_module,
+            arg,
+            sender,
         )
         .await
     }
@@ -684,18 +793,12 @@ impl PocketIc {
         arg: Vec<u8>,
         sender: Option<Principal>,
     ) -> Result<(), CallError> {
-        call_candid_as::<(InstallCodeArgument,), ()>(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-            sender.unwrap_or(Principal::anonymous()),
-            "install_code",
-            (InstallCodeArgument {
-                mode: CanisterInstallMode::Reinstall,
-                canister_id,
-                wasm_module,
-                arg,
-            },),
+        self.install_canister_helper(
+            CanisterInstallMode::Reinstall,
+            canister_id,
+            wasm_module,
+            arg,
+            sender,
         )
         .await
     }
@@ -845,8 +948,10 @@ impl PocketIc {
                     )
                 }
             }
-            if start.elapsed().unwrap() > Duration::from_millis(MAX_REQUEST_TIME_MS) {
-                panic!("'get' request to PocketIC server timed out.");
+            if let Some(max_request_time_ms) = self.max_request_time_ms {
+                if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms) {
+                    panic!("'get' request to PocketIC server timed out.");
+                }
             }
             std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
         }
@@ -910,14 +1015,19 @@ impl PocketIc {
                                 );
                             }
                         }
-                        if start.elapsed().unwrap() > Duration::from_millis(MAX_REQUEST_TIME_MS) {
-                            panic!("'post' request to PocketIC server timed out.");
+                        if let Some(max_request_time_ms) = self.max_request_time_ms {
+                            if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms)
+                            {
+                                panic!("'post' request to PocketIC server timed out.");
+                            }
                         }
                     }
                 }
             }
-            if start.elapsed().unwrap() > Duration::from_millis(MAX_REQUEST_TIME_MS) {
-                panic!("'post' request to PocketIC server timed out.");
+            if let Some(max_request_time_ms) = self.max_request_time_ms {
+                if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms) {
+                    panic!("'post' request to PocketIC server timed out.");
+                }
             }
             std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
         }

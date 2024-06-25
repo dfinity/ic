@@ -44,7 +44,7 @@ use ic_replicated_state::{
     PageIndex, ReplicatedState, SubnetTopology,
 };
 use ic_system_api::InstructionLimits;
-use ic_test_utilities::crypto::mock_random_number_generator;
+use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::{
     batch::QueryStats,
@@ -2160,8 +2160,15 @@ impl ExecutionTestBuilder {
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
         let hypervisor = Arc::new(hypervisor);
-        let ingress_history_writer =
-            IngressHistoryWriterImpl::new(config.clone(), self.log.clone(), &metrics_registry);
+        let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
+        let state_reader = Arc::new(FakeStateManager::new());
+        let ingress_history_writer = IngressHistoryWriterImpl::new(
+            config.clone(),
+            self.log.clone(),
+            &metrics_registry,
+            completed_execution_messages_tx,
+            state_reader,
+        );
         let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
             Arc::new(ingress_history_writer);
         let exec_env = ExecutionEnvironment::new(
@@ -2293,9 +2300,8 @@ pub fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, Requ
     let mut output: Vec<(CanisterId, RequestOrResponse)> = vec![];
     let output_iter = state.output_into_iter();
 
-    for (queue_id, msg) in output_iter {
-        let canister_id = CanisterId::try_from(queue_id.dst_canister.get()).unwrap();
-        output.push((canister_id, msg));
+    for msg in output_iter {
+        output.push((msg.receiver(), msg));
     }
     output
 }

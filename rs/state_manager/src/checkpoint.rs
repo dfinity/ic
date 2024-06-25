@@ -28,7 +28,6 @@ mod tests;
 
 impl CheckpointLoadingMetrics for CheckpointMetrics {
     fn observe_broken_soft_invariant(&self, msg: String) {
-        debug_assert!(false);
         self.load_checkpoint_soft_invariant_broken.inc();
         error!(
             self.log,
@@ -36,6 +35,7 @@ impl CheckpointLoadingMetrics for CheckpointMetrics {
             CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
             msg
         );
+        debug_assert!(false);
     }
 }
 
@@ -204,9 +204,10 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
             .with_label_values(&["subnet_queues"])
             .start_timer();
 
-        ic_replicated_state::CanisterQueues::try_from(
+        ic_replicated_state::CanisterQueues::try_from((
             checkpoint_layout.subnet_queues().deserialize()?,
-        )
+            metrics as &dyn CheckpointLoadingMetrics,
+        ))
         .map_err(|err| into_checkpoint_error("CanisterQueues".into(), err))?
     };
 
@@ -233,6 +234,7 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
                         checkpoint_layout,
                         canister_id,
                         Arc::clone(&fd_factory),
+                        metrics,
                     )
                 });
 
@@ -250,6 +252,7 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
                         checkpoint_layout,
                         canister_id,
                         Arc::clone(&fd_factory),
+                        metrics,
                     )?;
                     canister_states
                         .insert(canister_state.system_state.canister_id(), canister_state);
@@ -296,6 +299,7 @@ pub fn load_canister_state<P: ReadPolicy>(
     canister_id: &CanisterId,
     height: Height,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    metrics: &dyn CheckpointLoadingMetrics,
 ) -> Result<(CanisterState, LoadCanisterMetrics), CheckpointError> {
     let mut durations = BTreeMap::<&str, Duration>::default();
 
@@ -365,14 +369,16 @@ pub fn load_canister_state<P: ReadPolicy>(
     };
 
     let starting_time = Instant::now();
-    let queues =
-        ic_replicated_state::CanisterQueues::try_from(canister_layout.queues().deserialize()?)
-            .map_err(|err| {
-                into_checkpoint_error(
-                    format!("canister_states[{}]::system_state::queues", canister_id),
-                    err,
-                )
-            })?;
+    let queues = ic_replicated_state::CanisterQueues::try_from((
+        canister_layout.queues().deserialize()?,
+        metrics,
+    ))
+    .map_err(|err| {
+        into_checkpoint_error(
+            format!("canister_states[{}]::system_state::queues", canister_id),
+            err,
+        )
+    })?;
     durations.insert("canister_queues", starting_time.elapsed());
 
     let canister_metrics = CanisterMetrics::new(
@@ -442,6 +448,7 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
     checkpoint_layout: &CheckpointLayout<P>,
     canister_id: &CanisterId,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    metrics: &CheckpointMetrics,
 ) -> Result<(CanisterState, LoadCanisterMetrics), CheckpointError> {
     let canister_layout = checkpoint_layout.canister(canister_id)?;
     load_canister_state::<P>(
@@ -449,5 +456,6 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
         canister_id,
         checkpoint_layout.height(),
         Arc::clone(&fd_factory),
+        metrics,
     )
 }

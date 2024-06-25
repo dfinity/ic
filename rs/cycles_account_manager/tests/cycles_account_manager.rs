@@ -320,7 +320,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
         let mut canister = new_canister_state(
             canister_test_id(1),
             canister_test_id(11).get(),
-            Cycles::from(std::u128::MAX),
+            Cycles::from(u128::MAX),
             NumSeconds::from(0),
         );
         canister.scheduler_state.compute_allocation = ComputeAllocation::try_from(50).unwrap();
@@ -538,7 +538,7 @@ fn cycles_withdraw_for_execution() {
     let message_memory_usage = NumBytes::from(8 * 1024 * 1024);
     let compute_allocation = ComputeAllocation::try_from(90).unwrap();
 
-    let initial_amount = std::u128::MAX;
+    let initial_amount = u128::MAX;
     let initial_cycles = Cycles::from(initial_amount);
     let freeze_threshold = NumSeconds::from(10);
     let canister_id = canister_test_id(1);

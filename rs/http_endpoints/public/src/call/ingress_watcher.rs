@@ -1,5 +1,4 @@
 use crate::metrics::HttpHandlerMetrics;
-use futures::{Future, FutureExt};
 use ic_async_utils::JoinMap;
 use ic_logger::{error, ReplicaLogger};
 use ic_types::{messages::MessageId, Height};
@@ -12,7 +11,7 @@ use tokio::{
     runtime::Handle,
     select,
     sync::{
-        mpsc::{channel, Receiver, Sender, UnboundedReceiver},
+        mpsc::{channel, Receiver, Sender},
         oneshot, watch, Notify,
     },
     task::JoinHandle,
@@ -43,6 +42,7 @@ struct IngressWatcherSubscription {
 #[derive(Clone)]
 pub(crate) struct IngressWatcherHandle {
     subscriber_registration_tx: Sender<IngressWatcherSubscription>,
+    metrics: HttpHandlerMetrics,
 }
 
 impl IngressWatcherHandle {
@@ -52,6 +52,10 @@ impl IngressWatcherHandle {
         self,
         message: MessageId,
     ) -> Result<IngressCertificationSubscriber, SubscriptionError> {
+        let _timer = self
+            .metrics
+            .ingress_watcher_subscription_latency_duration_seconds
+            .start_timer();
         // Cancel the subscription if the handle is dropped.
         let cancellation_token = CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
@@ -78,6 +82,7 @@ impl IngressWatcherHandle {
 
         Ok(IngressCertificationSubscriber {
             certification_notifier,
+            metrics: self.metrics,
             _drop_guard: drop_guard,
         })
     }
@@ -85,21 +90,18 @@ impl IngressWatcherHandle {
 
 pub(crate) struct IngressCertificationSubscriber {
     certification_notifier: Arc<Notify>,
+    metrics: HttpHandlerMetrics,
     /// Cancels the subscription if the subscriber is dropped.
     _drop_guard: DropGuard,
 }
 
-impl Future for IngressCertificationSubscriber {
-    type Output = ();
-
-    fn poll(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<()> {
-        self.certification_notifier
-            .notified()
-            .boxed()
-            .poll_unpin(cx)
+impl IngressCertificationSubscriber {
+    pub(crate) async fn wait_for_certification(self) {
+        let _timer = self
+            .metrics
+            .ingress_watcher_wait_for_certification_duration_seconds
+            .start_timer();
+        self.certification_notifier.notified().await;
     }
 }
 
@@ -115,7 +117,7 @@ enum MessageExecutionStatus {
 /// - 1:1 mapping of keys in `message_statuses` with execution status as completed and `completed_execution_heights`.
 pub(crate) struct IngressWatcher {
     log: ReplicaLogger,
-    _metrics: HttpHandlerMetrics,
+    metrics: HttpHandlerMetrics,
     rt_handle: Handle,
     cancellation_token: CancellationToken,
     /// Keeps track of the certified height.
@@ -135,7 +137,7 @@ impl IngressWatcher {
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,
         certified_height_watcher: watch::Receiver<Height>,
-        completed_execution_messages_rx: UnboundedReceiver<(MessageId, Height)>,
+        completed_execution_messages_rx: Receiver<(MessageId, Height)>,
         cancellation_token: CancellationToken,
     ) -> (IngressWatcherHandle, JoinHandle<()>) {
         #[allow(clippy::disallowed_methods)]
@@ -144,7 +146,7 @@ impl IngressWatcher {
 
         let ingress_watcher = Self {
             log,
-            _metrics: metrics,
+            metrics: metrics.clone(),
             rt_handle: rt_handle.clone(),
             cancellation_token,
             certified_height: *certified_height_watcher.borrow(),
@@ -162,6 +164,7 @@ impl IngressWatcher {
         (
             IngressWatcherHandle {
                 subscriber_registration_tx,
+                metrics,
             },
             join_handle,
         )
@@ -171,7 +174,7 @@ impl IngressWatcher {
         mut self,
         mut certified_height: watch::Receiver<Height>,
         mut ingress_message_rx: Receiver<IngressWatcherSubscription>,
-        mut completed_execution_messages_rx: UnboundedReceiver<(MessageId, Height)>,
+        mut completed_execution_messages_rx: Receiver<(MessageId, Height)>,
     ) {
         loop {
             // - 1:1 mapping of keys in `message_statuses` and `cancellations`.
@@ -215,9 +218,7 @@ impl IngressWatcher {
 
                 debug_assert_eq!(
                     messages_with_completed_execution.len(),
-                    self.completed_execution_heights
-                        .iter()
-                        .map(|(_, messages)| messages.len())
+                    self.completed_execution_heights.values().map(|messages| messages.len())
                         .sum::<usize>(),
                     "The number of messages in `self.message_statuses` with completed
                     execution status should be equal to the number of messages in `self.completed_execution_heights`."
@@ -227,6 +228,7 @@ impl IngressWatcher {
             select! {
                 // A new ingress message that needs to be tracked.
                 Some(ingress_subscription) = ingress_message_rx.recv() => {
+                    self.metrics.ingress_watcher_subscriptions_total.inc();
                     self.handle_ingress_message(ingress_subscription);
                 }
                 // Ingress message completed execution at `height`.
@@ -240,6 +242,7 @@ impl IngressWatcher {
                 // Cancel the tracking of an ingress message.
                 // TODO: Handle Some(Err(_)) case?
                 Some(Ok((_, message_id))) = self.cancellations.join_next() => {
+                    self.metrics.ingress_watcher_cancelled_subscriptions_total.inc();
                     self.handle_cancellation(&message_id);
                 }
 
@@ -251,6 +254,14 @@ impl IngressWatcher {
                     break;
                 }
             }
+
+            self.metrics
+                .ingress_watcher_heights_waiting_for_certification
+                .set(self.completed_execution_heights.len() as i64);
+
+            self.metrics
+                .ingress_watcher_tracked_messages
+                .set(self.message_statuses.len() as i64);
         }
     }
 
@@ -281,7 +292,10 @@ impl IngressWatcher {
                 Ok(certification_notifier)
             }
             // Seen message, return the existing notifier. This can happen if the replica gets two or more requests for the same message.
-            Entry::Occupied(_) => Err(SubscriptionError::DuplicateSubscriptionError),
+            Entry::Occupied(_) => {
+                self.metrics.ingress_watcher_duplicate_requests_total.inc();
+                Err(SubscriptionError::DuplicateSubscriptionError)
+            }
         };
 
         let _ = certification_notifier_tx.send(certification_notifier);
@@ -306,7 +320,7 @@ impl IngressWatcher {
                             "Message should be in the inverted index`self.completed_execution_heights`."
                         );
 
-                        // Prune the height if there are no more messages at that height.
+                        // Prune the height if there are no more messages that completed execution at that height.
                         if messages_at_height.is_empty() {
                             entry.remove();
                         }
@@ -329,9 +343,9 @@ impl IngressWatcher {
         };
     }
 
-    /// Notifies the subscribers of all messages that are certified and have completed execution.
+    /// Notifies the subscribers of messages that completed execution at some state height that is now certified.
     ///
-    /// A message is certified if its completed execution height is less than or equal to `certified_height`.
+    ///  A state height `H` is certified, if `H` >= to `certified_height`.
     fn handle_certification(&mut self, certified_height: Height) {
         self.certified_height = max(self.certified_height, certified_height);
 
@@ -371,10 +385,6 @@ impl IngressWatcher {
 
     /// Handles an ingress message that has completes execution at the given [`Height`].
     fn handle_message_completed_execution(&mut self, message_id: MessageId, height: Height) {
-        // IngressHistory writer sends a height, H, where H is the height of the
-        // replicated state when the message completes its execution.
-        // This means the message will first be included in the replicated state at the next height, i.e. H + 1.
-        let height = height + 1.into();
         if let Entry::Occupied(mut entry) = self.message_statuses.entry(message_id.clone()) {
             let (status, _) = entry.get_mut();
             match status {
@@ -385,8 +395,8 @@ impl IngressWatcher {
                         .or_default()
                         .insert(message_id);
 
-                    // Optimization to avoid waiting for certification of H+1 if the message is already certified.
-                    // This should happen rarely in practice.
+                    // Optimization to avoid waiting for a new certification if the
+                    // height of the state which the message completed execution is already certified.
                     self.handle_certification(self.certified_height);
                 }
                 MessageExecutionStatus::Completed(_) => {}
@@ -413,7 +423,7 @@ mod tests {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         IngressWatcher {
             log,
-            _metrics: metrics,
+            metrics,
             rt_handle: runtime.handle().clone(),
             cancellation_token,
             message_statuses: HashMap::new(),
@@ -442,7 +452,7 @@ mod tests {
         assert_eq!(ingress_watcher.cancellations.len(), 1);
         assert_eq!(ingress_watcher.completed_execution_heights.len(), 0);
 
-        ingress_watcher.handle_message_completed_execution(message, Height::from(0));
+        ingress_watcher.handle_message_completed_execution(message, Height::from(1));
 
         assert!(
             certification_notifier.notified().now_or_never().is_none(),
@@ -493,7 +503,7 @@ mod tests {
         assert_eq!(ingress_watcher.cancellations.len(), 1);
         assert_eq!(ingress_watcher.completed_execution_heights.len(), 0);
 
-        ingress_watcher.handle_message_completed_execution(message, Height::from(0));
+        ingress_watcher.handle_message_completed_execution(message, Height::from(1));
 
         assert!(
             certification_notifier_1.notified().now_or_never().is_none(),
@@ -530,6 +540,7 @@ mod tests {
     #[rstest]
     fn test_ingress_watcher_ignores_lower_certification_heights(
         mut ingress_watcher: IngressWatcher,
+        #[values(Height::from(1), Height::from(2))] height: Height,
     ) {
         ingress_watcher.handle_certification(Height::from(2));
         // A lower certified height should be ignored.
@@ -547,7 +558,7 @@ mod tests {
 
         let certification_notifier = certification_notifier_rx.try_recv().unwrap().unwrap();
 
-        ingress_watcher.handle_message_completed_execution(message, Height::from(1));
+        ingress_watcher.handle_message_completed_execution(message, height);
 
         certification_notifier
             .notified()
@@ -558,11 +569,9 @@ mod tests {
     /// Test that the IngressWatcher correctly handles the cancellation of messages,
     /// by removing it from the internal state.
     #[rstest]
-    #[case::not_completed_execution(false)]
-    #[case::completed_execution(true)]
     fn test_cancellation_of_messages(
         mut ingress_watcher: IngressWatcher,
-        #[case] completed_execution: bool,
+        #[values(false, true)] completed_execution: bool,
     ) {
         let message = MessageId::from([0; EXPECTED_MESSAGE_ID_LENGTH]);
         let (certification_notifier_tx, mut certification_notifier_rx) = oneshot::channel();
@@ -580,7 +589,7 @@ mod tests {
         assert_eq!(ingress_watcher.completed_execution_heights.len(), 0);
 
         if completed_execution {
-            ingress_watcher.handle_message_completed_execution(message.clone(), Height::from(0));
+            ingress_watcher.handle_message_completed_execution(message.clone(), Height::from(1));
             assert_eq!(ingress_watcher.completed_execution_heights.len(), 1);
         }
 

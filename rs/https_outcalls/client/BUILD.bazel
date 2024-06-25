@@ -11,7 +11,7 @@ DEPENDENCIES = [
     "//rs/https_outcalls/service",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
-    "//rs/monitoring/adapter_metrics",
+    "//rs/monitoring/adapter_metrics/client",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/registry/subnet_type",

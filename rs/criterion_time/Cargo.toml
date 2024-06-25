@@ -7,5 +7,5 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-criterion = "0.5"
-libc = "0.2.91"
+criterion = { workspace = true }
+libc = { workspace = true }

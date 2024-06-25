@@ -89,9 +89,14 @@ pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
     // TODO, remove when this is the value set in the normal IC build
     // This is to uncover issues in testing that might affect performance in production
     const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2_000_000_000); // 2 Billion is the value used in app subnets
+    const MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE: NumInstructions =
+        NumInstructions::new(2_000_000_000);
 
     let mut subnet_config = SubnetConfig::new(SubnetType::System);
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
+    subnet_config
+        .scheduler_config
+        .max_instructions_per_install_code_slice = MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE;
 
     StateMachineBuilder::new()
         .with_current_time()
@@ -1028,6 +1033,7 @@ pub fn nns_propose_upgrade_nns_canister(
     proposer_neuron_id: NeuronId,
     target_canister_id: CanisterId,
     wasm_module: Vec<u8>,
+    module_arg: Vec<u8>,
 ) -> ProposalId {
     let action = if target_canister_id != ROOT_CANISTER_ID {
         let payload = ChangeCanisterRequest::new(
@@ -1045,8 +1051,6 @@ pub fn nns_propose_upgrade_nns_canister(
             payload,
         }))
     } else {
-        let module_arg = Encode!(&()).unwrap();
-
         let payload = UpgradeRootProposal {
             wasm_module,
             module_arg,
@@ -1441,6 +1445,7 @@ pub fn list_neurons(state_machine: &StateMachine, sender: PrincipalId) -> ListNe
             Encode!(&ListNeurons {
                 neuron_ids: vec![],
                 include_neurons_readable_by_caller: true,
+                include_empty_neurons_readable_by_caller: None,
             })
             .unwrap(),
         )

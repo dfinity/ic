@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = { workspace = true }
 arc-swap = "1"
 async-trait = { workspace = true }
 ic-agent = { workspace = true }
@@ -16,6 +17,19 @@ http = { workspace = true }
 url = "2.4.0"
 simple_moving_average = "1.0.2"
 rand = { workspace = true }
+ring = { version = "0.17.7", features = ["std"] }
 
 [lib]
 name = "discower_bowndary"
+
+[[bin]]
+path = "examples/fetch_api_bns.rs"
+name = "fetch_api_bns"
+
+[[bin]]
+path = "examples/api_bn_dynamic_routing.rs"
+name = "api_bn_dynamic_routing"
+
+[[bin]]
+path = "examples/basic_library_usage.rs"
+name = "basic_library_usage"

@@ -422,8 +422,8 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
 
         // Call instructions are of cost 20. Validated in benchmarks.
         // The cost is adjusted to 5 and 10 after benchmarking with real canisters.
-        Operator::Call { .. } => 5,
-        Operator::CallIndirect { .. } => 10,
+        Operator::Call { .. } | Operator::ReturnCall { .. } => 5,
+        Operator::CallIndirect { .. } | Operator::ReturnCallIndirect { .. } => 10,
 
         // Return, drop, unreachable and nop instructions are of cost 1.
         Operator::Return { .. } | Operator::Drop | Operator::Unreachable | Operator::Nop => 1,
