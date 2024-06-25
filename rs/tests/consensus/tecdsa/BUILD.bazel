@@ -151,7 +151,7 @@ system_test(
 
 system_test(
     name = "tecdsa_performance",
-    additional_colocate_flags = [
+    additional_colocate_tags = [
         "system_test_benchmark",
     ],
     colocated_test_driver_vm_required_host_features = ["performance"],
