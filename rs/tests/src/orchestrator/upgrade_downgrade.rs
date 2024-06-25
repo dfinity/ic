@@ -40,7 +40,7 @@ use candid::Principal;
 use futures::future::join_all;
 use ic_agent::Agent;
 use ic_management_canister_types::MasterPublicKeyId;
-use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, SubnetId};
 use slog::{info, Logger};
@@ -71,10 +71,12 @@ pub fn config(env: TestEnv, subnet_type: SubnetType, mainnet_version: bool) {
     // Activate ecdsa if we are testing the app subnet
     if subnet_type == SubnetType::Application {
         ic = ic.add_subnet(Subnet::fast_single_node(SubnetType::System));
-        subnet_under_test = subnet_under_test.with_ecdsa_config(EcdsaConfig {
-            quadruples_to_create_in_advance: 5,
-            key_ids: vec![make_key(KEY_ID1)],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+        subnet_under_test = subnet_under_test.with_chain_key_config(ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+                pre_signatures_to_create_in_advance: 5,
+                key_id: MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)),
+            }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         });

@@ -41,10 +41,6 @@ spec:
             - name: disk0
               disk:
                 bus: virtio
-            - name: disk1
-              disk:
-                bus: scsi
-              serial: "config"
             - name: cloudinitdisk
               disk:
                 bus: virtio
@@ -55,6 +51,7 @@ spec:
             - port: 22
             - port: 8332
             - port: 18444
+            - port: 20443
         resources:
           requests:
             memory: {memory}Ki
@@ -65,9 +62,6 @@ spec:
         - dataVolume:
             name: "{name}-guestos"
           name: disk0
-        - dataVolume:
-            name: "{name}-config"
-          name: disk1
         - name: cloudinitdisk
           cloudInitNoCloud:
             userData: |
@@ -213,42 +207,40 @@ pub async fn create_vm(
 }
 
 #[derive(Debug, AsRefStr)]
+#[strum(serialize_all = "lowercase")]
 enum Action {
-    #[strum(serialize = "start")]
     Start,
-    #[strum(serialize = "restart")]
     Restart,
-    #[strum(serialize = "stop")]
     Stop,
     Delete,
     #[strum(serialize = "stop")]
     Destroy,
 }
 
-pub async fn start_vm(name: &str) -> Result<String> {
+pub async fn start_vm(name: &str) -> Result<()> {
     action_vm(name, Action::Start).await
 }
 
-pub async fn restart_vm(name: &str) -> Result<String> {
+pub async fn restart_vm(name: &str) -> Result<()> {
     action_vm(name, Action::Restart).await
 }
 
-pub async fn stop_vm(name: &str) -> Result<String> {
+pub async fn stop_vm(name: &str) -> Result<()> {
     action_vm(name, Action::Stop).await
 }
 
-pub async fn delete_vm(name: &str) -> Result<String> {
+pub async fn delete_vm(name: &str) -> Result<()> {
     action_vm(name, Action::Delete).await
 }
 
-pub async fn destroy_vm(name: &str) -> Result<String> {
+pub async fn destroy_vm(name: &str) -> Result<()> {
     action_vm(name, Action::Destroy).await
 }
 
-async fn action_vm(name: &str, action: Action) -> Result<String> {
+async fn action_vm(name: &str, action: Action) -> Result<()> {
     let client = Client::try_default().await?;
 
-    Ok((|| async {
+    (|| async {
         client
             .request_text(match action {
                 Action::Start | Action::Stop | Action::Restart | Action::Destroy => {
@@ -289,5 +281,47 @@ async fn action_vm(name: &str, action: Action) -> Result<String> {
             })
     })
     .retry(&ExponentialBuilder::default())
-    .await?)
+    .await?;
+    Ok(())
+}
+
+pub async fn add_volume(name: &str, volume_name: &str) -> Result<()> {
+    let client = Client::try_default().await?;
+
+    (|| async {
+        client
+            .request_text(
+                http::Request::builder()
+                        .method("PUT")
+                        .uri(format!(
+                            "/apis/subresources.kubevirt.io/v1/namespaces/{}/virtualmachines/{}/addvolume",
+                            *TNET_NAMESPACE,
+                            name,
+                        ))
+                        .body(serde_json::to_vec(&serde_json::json!({
+                          "disk": {
+                            "disk": {
+                              "bus": "scsi"
+                            },
+                            "serial": volume_name,
+                          },
+                          "name": format!("disk-{volume_name}"),
+                          "volumeSource": {
+                            "dataVolume": {
+                              "name": format!("{name}-{volume_name}")
+                            },
+                          }
+                        })).unwrap()).unwrap(),
+                        )
+            .await
+            .or_else(|e| match e {
+                kube::Error::Api(error_response) if error_response.reason == "Conflict" => {
+                    kube::Result::Ok(Default::default())
+                }
+                _ => kube::Result::Err(e),
+            })
+    })
+    .retry(&ExponentialBuilder::default())
+    .await?;
+    Ok(())
 }

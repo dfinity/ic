@@ -3519,7 +3519,7 @@ fn ecdsa_signature_agreements_metric_is_updated() {
         .state()
         .metadata
         .subnet_call_context_manager
-        .sign_with_ecdsa_contexts;
+        .sign_with_ecdsa_contexts();
     assert_eq!(sign_with_ecdsa_contexts.len(), 2);
 
     // reject the first one
@@ -3559,7 +3559,7 @@ fn ecdsa_signature_agreements_metric_is_updated() {
         .state()
         .metadata
         .subnet_call_context_manager
-        .sign_with_ecdsa_contexts;
+        .sign_with_ecdsa_contexts();
     assert_eq!(sign_with_ecdsa_contexts.len(), 1);
 
     // send a reply to the second request
@@ -3607,7 +3607,7 @@ fn ecdsa_signature_agreements_metric_is_updated() {
         .state()
         .metadata
         .subnet_call_context_manager
-        .sign_with_ecdsa_contexts;
+        .sign_with_ecdsa_contexts();
     assert!(sign_with_ecdsa_contexts.is_empty());
 }
 
@@ -3662,7 +3662,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         .state()
         .metadata
         .subnet_call_context_manager
-        .sign_with_ecdsa_contexts;
+        .sign_with_ecdsa_contexts();
     assert_eq!(sign_with_ecdsa_contexts.len(), 1);
 
     observe_replicated_state_metrics(
@@ -5369,16 +5369,12 @@ fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
     for _ in 0..2 {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        let sign_with_ecdsa_context = &test
-            .state()
-            .sign_with_ecdsa_contexts()
-            .values()
-            .next()
-            .expect("Context should exist");
+        let contexts = test.state().sign_with_ecdsa_contexts();
+        let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
         // Check that quadruple and nonce are none
         assert!(sign_with_ecdsa_context.nonce.is_none());
-        assert!(sign_with_ecdsa_context.matched_quadruple.is_none());
+        assert!(sign_with_ecdsa_context.matched_pre_signature.is_none());
     }
 }
 
@@ -5398,34 +5394,26 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     )]));
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let sign_with_ecdsa_context = &test
-        .state()
-        .sign_with_ecdsa_contexts()
-        .values()
-        .next()
-        .expect("Context should exist");
+    let contexts = test.state().sign_with_ecdsa_contexts();
+    let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
     let expected_height = Height::from(test.last_round().get());
 
     // Check that quadruple was matched
     assert_eq!(
-        sign_with_ecdsa_context.matched_quadruple,
+        sign_with_ecdsa_context.matched_pre_signature,
         Some((pre_sig_id, expected_height))
     );
     // Check that nonce is still none
     assert!(sign_with_ecdsa_context.nonce.is_none());
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let sign_with_ecdsa_context = &test
-        .state()
-        .sign_with_ecdsa_contexts()
-        .values()
-        .next()
-        .expect("Context should exist");
+    let contexts = test.state().sign_with_ecdsa_contexts();
+    let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
     // Check that quadruple is still matched
     assert_eq!(
-        sign_with_ecdsa_context.matched_quadruple,
+        sign_with_ecdsa_context.matched_pre_signature,
         Some((pre_sig_id, expected_height))
     );
     // Check that nonce is set
@@ -5433,12 +5421,8 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     assert!(nonce.is_some());
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    let sign_with_ecdsa_context = &test
-        .state()
-        .sign_with_ecdsa_contexts()
-        .values()
-        .next()
-        .expect("Context should exist");
+    let contexts = test.state().sign_with_ecdsa_contexts();
+    let sign_with_ecdsa_context = contexts.values().next().expect("Context should exist");
 
     // Check that nonce wasn't changed
     let nonce = sign_with_ecdsa_context.nonce;
@@ -5482,21 +5466,21 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     // First context (requesting key 3) should be unmatched
     let context0 = sign_with_ecdsa_contexts.get(&CallbackId::from(0)).unwrap();
     assert!(context0.nonce.is_none());
-    assert!(context0.matched_quadruple.is_none());
+    assert!(context0.matched_pre_signature.is_none());
 
     // Remaining contexts should have been matched
     let expected_height = Height::from(test.last_round().get() - 1);
     let context1 = sign_with_ecdsa_contexts.get(&CallbackId::from(1)).unwrap();
     assert!(context1.nonce.is_some());
     assert_eq!(
-        context1.matched_quadruple,
+        context1.matched_pre_signature,
         Some((*pre_sig_ids1.first().unwrap(), expected_height))
     );
 
     let context2 = sign_with_ecdsa_contexts.get(&CallbackId::from(2)).unwrap();
     assert!(context2.nonce.is_some());
     assert_eq!(
-        context2.matched_quadruple,
+        context2.matched_pre_signature,
         Some((*pre_sig_ids0.first().unwrap(), expected_height))
     );
 }

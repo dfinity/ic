@@ -422,6 +422,7 @@ pub struct Subnet {
     pub max_number_of_canisters: Option<u64>,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
+    // TODO: remove this field
     pub ecdsa_config: Option<EcdsaConfig>,
     pub chain_key_config: Option<ChainKeyConfig>,
     pub running_state: SubnetRunningState,
@@ -594,9 +595,8 @@ impl Subnet {
         self
     }
 
-    pub fn with_ecdsa_config(mut self, ecdsa_config: EcdsaConfig) -> Self {
-        self.ecdsa_config = Some(ecdsa_config.clone());
-        self.chain_key_config = Some(ecdsa_config.into());
+    pub fn with_chain_key_config(mut self, chain_key_config: ChainKeyConfig) -> Self {
+        self.chain_key_config = Some(chain_key_config);
         self
     }
 
