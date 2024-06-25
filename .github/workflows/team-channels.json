@@ -1,6 +1,6 @@
 {
     "boundary-node": "eng-boundary-nodes",
-    "consensus": "eng-consensus",
+    "Consensus": "eng-consensus",
     "dept-crypto-library": "eng-crypto-mr",
     "dre": "eng-release-bots",
     "execution": "eng-execution-mrs",
