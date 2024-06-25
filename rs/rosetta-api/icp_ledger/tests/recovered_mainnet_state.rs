@@ -1,11 +1,6 @@
 use candid::types::number::Nat;
-use candid::Encode;
-use candid::{Decode, Principal};
-use canister_test::WasmResult;
+use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ledger_core::block::BlockIndex;
-use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_core::Tokens;
 use ic_ledger_test_utils::statemachine_helpers::{
     assert_ledger_index_parity_query_blocks_and_query_encoded_blocks, wait_until_sync_is_completed,
 };
@@ -13,15 +8,14 @@ use ic_ledger_test_utils::{
     build_ledger_archive_wasm, build_ledger_index_wasm, build_ledger_wasm,
     build_mainnet_ledger_archive_wasm, build_mainnet_ledger_index_wasm, build_mainnet_ledger_wasm,
 };
-use ic_nns_constants::LEDGER_CANISTER_INDEX_IN_NNS_SUBNET;
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_CANISTER_INDEX_IN_NNS_SUBNET,
+};
 use ic_nns_test_utils_golden_nns_state::{
     new_state_machine_with_golden_nns_state_or_panic, GoldenStateLocation,
 };
 use ic_state_machine_tests::StateMachine;
-use icp_ledger::{
-    AccountIdentifier, Archives, FeatureFlags, LedgerCanisterUpgradePayload, Memo, TransferArgs,
-    TransferError,
-};
+use icp_ledger::{Archives, FeatureFlags, LedgerCanisterUpgradePayload};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
@@ -50,39 +44,34 @@ fn should_create_state_machine_with_golden_nns_state() {
 
     let start = Instant::now();
     // This takes almost 6min to run
-    assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
-        &state_machine,
-        LEDGER_CANISTER_ID,
-        INDEX_CANISTER_ID,
-    );
+    // assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
+    //     &state_machine,
+    //     LEDGER_CANISTER_ID,
+    //     INDEX_CANISTER_ID,
+    // );
     println!(
         "Time taken for index-ledger parity check: {:?}",
         start.elapsed()
     );
 
-    let minting_principal = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
-    let governance_canister_id = CanisterId::from_u64(1);
-    let governance_canister_principal_id = governance_canister_id.get();
-    assert_eq!(minting_principal, governance_canister_principal_id.0);
-    // let minter = PrincipalId(minting_principal);
-    let minter = governance_canister_principal_id;
+    let minter = CanisterId::from_u64(GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET).get();
     let user1 = PrincipalId::new_user_test_id(101);
     let user2 = PrincipalId::new_user_test_id(102);
 
     // 1. Create a bunch of transactions
     perform_transactions(&state_machine, &minter, &user1, &user2);
 
-    // 2. Verify that the ledger, archives, and index have the same blocks (start from before step 1.)
-    // let start = Instant::now();
+    // 2. Verify that the ledger, archives, and index have the same blocks
+    let start = Instant::now();
     // assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
     //     &state_machine,
     //     LEDGER_CANISTER_ID,
     //     INDEX_CANISTER_ID,
     // );
-    // println!(
-    //     "Time taken for index-ledger parity check: {:?}",
-    //     start.elapsed()
-    // );
+    println!(
+        "Time taken for index-ledger parity check: {:?}",
+        start.elapsed()
+    );
 
     // 3. Upgrade the index canister
     // This takes a bit less than 1 second
@@ -109,11 +98,16 @@ fn should_create_state_machine_with_golden_nns_state() {
         build_ledger_archive_wasm().bytes(),
     );
 
+    let start = Instant::now();
     // assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
     //     &state_machine,
     //     LEDGER_CANISTER_ID,
     //     INDEX_CANISTER_ID,
     // );
+    println!(
+        "Time taken for index-ledger parity check: {:?}",
+        start.elapsed()
+    );
 
     // 6. Downgrade the archive canisters and perform transactions
     upgrade_archive_canisters_and_perform_transactions(
@@ -136,16 +130,16 @@ fn should_create_state_machine_with_golden_nns_state() {
     //  8.1. Perform steps 1 and 2 again
     perform_transactions(&state_machine, &minter, &user1, &user2);
 
-    // let start = Instant::now();
-    // assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
-    //     &state_machine,
-    //     LEDGER_CANISTER_ID,
-    //     INDEX_CANISTER_ID,
-    // );
-    // println!(
-    //     "Time taken for index-ledger parity check: {:?}",
-    //     start.elapsed()
-    // );
+    let start = Instant::now();
+    assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
+        &state_machine,
+        LEDGER_CANISTER_ID,
+        INDEX_CANISTER_ID,
+    );
+    println!(
+        "Time taken for index-ledger parity check: {:?}",
+        start.elapsed()
+    );
 }
 
 fn list_archives(state_machine: &StateMachine) -> Archives {
@@ -172,30 +166,14 @@ fn perform_transactions(
     //  5 types of transactions, 10 of each takes around 25s total (0.5s per transaction)
     for _ in 0..NUM_REPETITIONS_PER_TRANSACTION {
         //  1.1. Mint
-        // TODO: The below uses the ICP 'transfer' method to mint tokens. Consider using the
-        //  'icrc1_transfer' method instead.
-        let amount = 1_000_000_000u64;
-        let transfer_args = TransferArgs {
-            memo: Memo(121u64),
-            amount: Tokens::from_e8s(amount),
-            fee: Tokens::ZERO,
-            from_subaccount: None,
-            to: AccountIdentifier::from(*user1).to_address(),
-            created_at_time: Some(TimeStamp::from(state_machine.time())),
-        };
-        let arg = Encode!(&transfer_args).unwrap();
-        let res = state_machine
-            .execute_ingress_as(*minter, LEDGER_CANISTER_ID, "transfer", arg)
-            .expect("failed to mint tokens");
-        let reply = match res {
-            WasmResult::Reply(v) => v,
-            WasmResult::Reject(s) => {
-                panic!("should successfully make icp transfer call to mint: {}", s)
-            }
-        };
-        let block_index = Decode!(&reply, Result<BlockIndex, TransferError>)
-            .expect("should successfully decode Result<BlockIndex, TransferError>")
-            .expect("should successfully make icp transfer call to mint");
+        let block_index = ic_icrc1_ledger_sm_tests::transfer(
+            &state_machine,
+            LEDGER_CANISTER_ID,
+            minter.0,
+            user1.0,
+            1_000_000_000u64,
+        )
+        .expect("should successfully mint to user1 using icrc1_transfer");
         println!("mint succeeded with block_index {}", block_index);
 
         //  1.2. Transfer

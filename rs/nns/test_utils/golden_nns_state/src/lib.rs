@@ -140,21 +140,18 @@ fn download_golden_nns_state_or_panic(destination: &Path) {
 fn untar_state_archive_or_panic(source: &Path, destination: &Path) {
     println!("Unpacking {:?} to {:?}...", source, destination);
 
-    let mut command = Command::new("tar");
-    command.arg("--extract").arg("--file").arg(source);
-
+    // TODO: Mathias reports having problems with this (or something similar) on Mac.
     let unpack_destination = bazel_test_compatible_temp_dir_or_panic();
     let unpack_destination = unpack_destination
         .path()
         .to_str()
         .expect("Was trying to convert a Path to a string.");
-    command.arg("--directory").arg(unpack_destination);
-
-    if cfg!(target_os = "macos") {
-        command.arg("--use-compress-program=/opt/homebrew/bin/zstd -d -q");
-    }
-
-    let tar_out = command
+    let tar_out = Command::new("tar")
+        .arg("--extract")
+        .arg("--file")
+        .arg(source)
+        .arg("--directory")
+        .arg(unpack_destination)
         .output()
         .unwrap_or_else(|err| panic!("Could not unpack {:?}: {}", source, err));
 
