@@ -290,12 +290,16 @@ impl RosettaRequestHandler {
         &self,
         block_index: BlockIndex,
     ) -> Result<BlockIdentifier, ApiError> {
+        // For the first block, we return the block itself as its parent
+        let parent_block_index = block_index.saturating_sub(1);
         let blocks = self.ledger.read_blocks().await;
-        if self.is_a_rosetta_block_index(block_index).await {
-            todo!("Rosetta Block index parent id not supported yet")
+        if self.is_a_rosetta_block_index(parent_block_index).await {
+            let parent_block = blocks.get_rosetta_block(parent_block_index)?;
+            Ok(BlockIdentifier {
+                index: parent_block_index,
+                hash: hex::encode(parent_block.hash()),
+            })
         } else {
-            // For the first block, we return the block itself as its parent
-            let parent_block_index = block_index.saturating_sub(1);
             if blocks.is_verified_by_idx(&parent_block_index)? {
                 let parent_block = &blocks.get_hashed_block(&parent_block_index)?;
                 convert::block_id(parent_block)

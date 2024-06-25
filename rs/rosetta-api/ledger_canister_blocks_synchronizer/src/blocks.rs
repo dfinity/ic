@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Mutex;
+use tracing::info;
 
 mod database_access {
     use super::{sql_bytes_to_block, vec_into_array};
@@ -921,6 +922,9 @@ impl Blocks {
                 })?
                 .unwrap_or(0),
         };
+        info!(
+            "Rosetta blocks mode enabled, first rosetta block index is {first_rosetta_block_index}"
+        );
         self.rosetta_blocks_mode = RosettaBlocksMode::Enabled {
             first_rosetta_block_index,
         };
@@ -1394,6 +1398,7 @@ impl Blocks {
                 }),
         };
 
+        let mut num_rosetta_blocks_created = 0;
         let mut block_indices = next_block_indices.first_block_index..=certified_tip_index;
         let block_index = match block_indices.next() {
             None => return Ok(()),
@@ -1414,11 +1419,15 @@ impl Blocks {
         for block_index in block_indices {
             let block = self.get_hashed_block(&block_index)?;
             let transaction = Block::decode(block.block)?.transaction;
+            // TODO: check for duplicates too and create new rosetta block if there are
+            info!("rosetta_block.timestamp: {:?}", rosetta_block.timestamp);
+            info!("        block.timestamp: {:?}", block.timestamp);
             if block.timestamp == rosetta_block.timestamp {
                 rosetta_block.transactions.insert(block_index, transaction);
             } else {
                 let next_rosetta_block_index = rosetta_block.index + 1;
                 let parent_hash = rosetta_block.hash();
+                num_rosetta_blocks_created += 1;
                 self.store_rosetta_block(rosetta_block)?;
                 rosetta_block = RosettaBlock {
                     index: next_rosetta_block_index,
@@ -1428,7 +1437,19 @@ impl Blocks {
                 }
             }
         }
+        num_rosetta_blocks_created += 1;
+        let last_rosetta_block_index = rosetta_block.index;
         self.store_rosetta_block(rosetta_block)?;
+
+        info!(
+            "Created {num_rosetta_blocks_created} Rosetta Block{}. Ledger blocks indices {:?} added to Rosetta Blocks. Last Rosetta Block was at index {last_rosetta_block_index}",
+            if num_rosetta_blocks_created > 1 {
+                "s"
+            } else {
+                ""
+            },
+            next_block_indices.first_block_index..=certified_tip_index,
+        );
 
         Ok(())
     }
@@ -1455,7 +1476,7 @@ impl Blocks {
                 .execute(named_params! {
                     ":idx": rosetta_block.index,
                     ":hash": rosetta_block.hash(),
-                    ":timestmap": timestamp_to_iso8601(rosetta_block.timestamp)
+                    ":timestamp": timestamp_to_iso8601(rosetta_block.timestamp)
                 })
                 .map_err(|e| format!("Unable to insert into rosetta_blocks table: {e:?}"))?;
         }
@@ -1511,20 +1532,22 @@ impl Blocks {
             .connection
             .lock()
             .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
-
-        connection
-            .query_row(
-                "SELECT parent_hash, timestamp FROM rosetta_blocks WHERE idx=:idx",
-                named_params! { ":idx": rosetta_block_index },
-                |row| {
-                    let parent_hash = row.get(0)?;
-                    let timestamp = row.get(1).map(iso8601_to_timestamp)?;
-                    Ok((parent_hash, timestamp))
-                },
-            )
+        let mut statement = connection
+            .prepare_cached("SELECT parent_hash, timestamp FROM rosetta_blocks WHERE idx=:idx")
+            .map_err(|e| format!("Unable to prepare query: {e:?}"))?;
+        let mut blocks = statement
+            .query_map(named_params! { ":idx": rosetta_block_index }, |row| {
+                let parent_hash = row.get(0)?;
+                let timestamp = row.get(1).map(iso8601_to_timestamp)?;
+                Ok((parent_hash, timestamp))
+            })
             .map_err(|e| {
                 BlockStoreError::from(format!("Unable to select from rosetta_blocks: {e:?}"))
-            })
+            })?;
+        match blocks.next() {
+            Some(block) => block.map_err(|e| BlockStoreError::Other(e.to_string())),
+            None => Err(BlockStoreError::NotFound(rosetta_block_index)),
+        }
     }
 
     fn get_rosetta_block_transactions(
