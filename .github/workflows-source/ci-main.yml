@@ -362,9 +362,10 @@ jobs:
  #   if: ${{ inputs.rosetta-api-release == 'true' }}
     steps:
       - <<: *checkout
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3
       - name: Login to GHCR
         uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
-        if: ${{ steps.check.outputs.build == 'true' }}
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
