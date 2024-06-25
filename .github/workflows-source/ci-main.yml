@@ -8,7 +8,7 @@ on:
     - cron: "0 * * * *"
   pull_request:
   push:
-      branches:
+    branches:
       - 'hotfix-*-rc--*'
       - 'rc--*'
 
