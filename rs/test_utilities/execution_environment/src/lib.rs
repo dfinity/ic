@@ -998,6 +998,12 @@ impl ExecutionTest {
                     .task_queue
                     .push_front(ExecutionTask::GlobalTimer);
             }
+            CanisterTask::OnLowWasmMemory => {
+                canister
+                    .system_state
+                    .task_queue
+                    .push_front(ExecutionTask::OnLowWasmMemory);
+            }
         }
         let result = execute_canister(
             &self.exec_env,

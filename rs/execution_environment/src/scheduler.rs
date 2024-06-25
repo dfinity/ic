@@ -815,12 +815,14 @@ impl SchedulerImpl {
                 .metrics
                 .round_inner_heartbeat_overhead_duration
                 .start_timer();
-            // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
+            // Remove all remaining `Heartbeat`, `GlobalTimer`, and `OnLowWasmMemory` tasks
             // because they will be added again in the next round.
             for canister_id in &heartbeat_and_timer_canister_ids {
                 let canister = state.canister_state_mut(canister_id).unwrap();
                 canister.system_state.task_queue.retain(|task| match task {
-                    ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
+                    ExecutionTask::Heartbeat
+                    | ExecutionTask::GlobalTimer
+                    | ExecutionTask::OnLowWasmMemory => false,
                     ExecutionTask::PausedExecution { .. }
                     | ExecutionTask::PausedInstallCode(..)
                     | ExecutionTask::AbortedExecution { .. }
@@ -1357,7 +1359,7 @@ impl SchedulerImpl {
             .iter()
             .filter(|(_, canister)| !canister.system_state.task_queue.is_empty());
 
-        // 1. Heartbeat and GlobalTimer tasks exist only during the round
+        // 1. Heartbeat, GlobalTimer, and OnLowWasmMemory tasks exist only during the round
         //    and must not exist after the round.
         // 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
         // 3. If deterministic time slicing is disabled, then there are no paused tasks.
@@ -1376,6 +1378,12 @@ impl SchedulerImpl {
                     ExecutionTask::GlobalTimer => {
                         panic!(
                             "Unexpected global timer task after a round in canister {:?}",
+                            id
+                        );
+                    }
+                    ExecutionTask::OnLowWasmMemory => {
+                        panic!(
+                            "Unexpected on low wasm memory task after a round in canister {:?}",
                             id
                         );
                     }
@@ -2154,7 +2162,10 @@ fn observe_replicated_state_metrics(
             Some(&ExecutionTask::AbortedInstallCode { .. }) => {
                 num_aborted_install += 1;
             }
-            Some(&ExecutionTask::Heartbeat) | Some(&ExecutionTask::GlobalTimer) | None => {}
+            Some(&ExecutionTask::Heartbeat)
+            | Some(&ExecutionTask::GlobalTimer)
+            | Some(&ExecutionTask::OnLowWasmMemory)
+            | None => {}
         }
         consumed_cycles_total += canister.system_state.canister_metrics.consumed_cycles;
         join_consumed_cycles_by_use_case(

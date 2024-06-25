@@ -217,6 +217,7 @@ impl CanisterState {
             (None, true) => NextExecution::StartNew,
             (Some(ExecutionTask::Heartbeat), _) => NextExecution::StartNew,
             (Some(ExecutionTask::GlobalTimer), _) => NextExecution::StartNew,
+            (Some(ExecutionTask::OnLowWasmMemory), _) => NextExecution::StartNew,
             (Some(ExecutionTask::AbortedExecution { .. }), _)
             | (Some(ExecutionTask::PausedExecution { .. }), _) => NextExecution::ContinueLong,
             (Some(ExecutionTask::AbortedInstallCode { .. }), _)
@@ -236,6 +237,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
+            | Some(ExecutionTask::OnLowWasmMemory)
             | Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
@@ -249,6 +251,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
+            | Some(ExecutionTask::OnLowWasmMemory)
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedExecution { .. })
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
@@ -262,6 +265,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
+            | Some(ExecutionTask::OnLowWasmMemory)
             | Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::AbortedExecution { .. })
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
@@ -275,6 +279,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
+            | Some(ExecutionTask::OnLowWasmMemory)
             | Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedExecution { .. }) => false,
@@ -461,6 +466,12 @@ impl CanisterState {
         self.exports_method(&WasmMethod::System(SystemMethod::CanisterGlobalTimer))
     }
 
+    /// Returns true if the canister exports the `canister_on_low_wasm_memory`
+    /// system method.
+    pub fn exports_on_low_wasm_memory(&self) -> bool {
+        self.exports_method(&WasmMethod::System(SystemMethod::CanisterOnLowWasmMemory))
+    }
+
     /// Returns true if the canister exports the given Wasm method.
     pub fn exports_method(&self, method: &WasmMethod) -> bool {
         match &self.execution_state {
@@ -527,6 +538,7 @@ impl CanisterState {
             ExecutionTask::AbortedInstallCode { .. } => false,
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
+            | Some(ExecutionTask::OnLowWasmMemory)
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_)
             | ExecutionTask::AbortedExecution { .. } => true,

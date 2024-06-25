@@ -157,6 +157,9 @@ pub struct ExportedFunctions {
 
     /// Cached info about exporting a global timer method to skip expensive BTreeSet lookup.
     exports_global_timer: bool,
+
+    /// Cached info about exporting a on low Wasm memory to skip expensive BTreeSet lookup.
+    exports_on_low_wasm_memory: bool,
 }
 
 impl ExportedFunctions {
@@ -165,10 +168,13 @@ impl ExportedFunctions {
             exported_functions.contains(&WasmMethod::System(SystemMethod::CanisterHeartbeat));
         let exports_global_timer =
             exported_functions.contains(&WasmMethod::System(SystemMethod::CanisterGlobalTimer));
+        let exports_on_low_wasm_memory =
+            exported_functions.contains(&WasmMethod::System(SystemMethod::CanisterOnLowWasmMemory));
         Self {
             exported_functions: Arc::new(exported_functions),
             exports_heartbeat,
             exports_global_timer,
+            exports_on_low_wasm_memory,
         }
     }
 
@@ -177,6 +183,9 @@ impl ExportedFunctions {
             // Cached values.
             WasmMethod::System(SystemMethod::CanisterHeartbeat) => self.exports_heartbeat,
             WasmMethod::System(SystemMethod::CanisterGlobalTimer) => self.exports_global_timer,
+            WasmMethod::System(SystemMethod::CanisterOnLowWasmMemory) => {
+                self.exports_on_low_wasm_memory
+            }
             // Expensive lookup.
             _ => self.exported_functions.contains(method),
         }

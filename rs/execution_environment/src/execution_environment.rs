@@ -3201,6 +3201,7 @@ impl ExecutionEnvironment {
         match task {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
+            | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::AbortedExecution { .. } => {
                 panic!(
@@ -3851,6 +3852,10 @@ pub fn execute_canister(
             }
             ExecutionTask::GlobalTimer => {
                 let task = CanisterMessageOrTask::Task(CanisterTask::GlobalTimer);
+                (task, None)
+            }
+            ExecutionTask::OnLowWasmMemory => {
+                let task = CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory);
                 (task, None)
             }
             ExecutionTask::AbortedExecution {
