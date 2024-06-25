@@ -19,4 +19,4 @@ base64 = { workspace = true }
 flate2 = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
-sha2 = "0.10.6"
+sha2 = { workspace = true }

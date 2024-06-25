@@ -158,7 +158,7 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
-sha2 = "0.10"
+sha2 = { workspace = true }
 slog = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }
