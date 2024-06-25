@@ -17,13 +17,11 @@ Success::
 
 end::catalog[] */
 
-use std::collections::BTreeMap;
-
 use super::DKG_INTERVAL;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder, SubnetSnapshot,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot,
 };
 use crate::tecdsa::{
     get_public_key_with_logger, get_signature_with_logger, make_bip340_key_id, make_eddsa_key_id,
@@ -35,20 +33,19 @@ use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
-use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use slog::{info, Logger};
 
-const KB: usize = 1024;
-const MB: usize = 1024 * KB;
+const KIB: usize = 1024;
+const MIB: usize = 1024 * KIB;
 
 // Note that local subnets should actually support signature requests for messages of
-// up to 10 MB in size. However, the current ic.json5 enforces a 5 MB limit on HTTP requests.
-// In order to raise the limit below, we need to either:
+// up to 10 MiB in size. However, the current ic.json5 enforces a 5 MiB limit on HTTP requests.
+// In order to raise the local limit below, we need to either:
 //      a) Support modifying the ic.json5 in system test setups
 //      b) Write our own test canister that generates the signature request itself and sends
 //         it to the management canister.
-const LOCAL_LIMIT: usize = 5 * MB;
-const XNET_LIMIT: usize = 2 * MB;
+const LOCAL_LIMIT: usize = 10 * MIB;
+const XNET_LIMIT: usize = 2 * MIB;
 
 fn make_schnorr_key_ids_for_all_algorithms() -> Vec<MasterPublicKeyId> {
     vec![make_eddsa_key_id(), make_bip340_key_id()]
@@ -130,8 +127,8 @@ fn test_message_sizes(subnet: SubnetSnapshot, limit: usize, log: &Logger) {
         info!(log, "Verifying signature of empty message for {}", key_id);
         verify_signature(key_id, &empty_message, &public_key, &signature);
 
-        // Subtract 1 KB to account for message overhead in addition to payload
-        let max_message = vec![0xabu8; limit - KB];
+        // Subtract 1 KIB to account for message overhead in addition to payload
+        let max_message = vec![0xabu8; limit - KIB];
         info!(
             log,
             "Getting signature of message with size {} for {}",
