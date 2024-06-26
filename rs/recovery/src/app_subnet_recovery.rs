@@ -38,7 +38,7 @@ pub enum StepType {
     BlessVersion,
     /// This step issues an ic-admin command that will create an upgrade proposal for the troubled subnet. Note that the subnet nodes will only upgrade after we proposed the corresponding recovery CUP referencing the new registry version.
     UpgradeVersion,
-    /// Now we are ready to restart the subnet's computation. In order to do that, we need to instruct the subnet to start the computation from a specific height and state with a specific hash. We can only do this by writing a special message for the subnet into the registry. This step generates an ic-admin command creating a proposal with such an instruction for the subnet containing the hash of the state we obtained in the previous step and with a height strictly higher that the latest finalized height. Potentially, if we want to recover the subnet on a new set of nodes, their IDs can be specified as well. If the subnet has an ECDSA key, we also need to specify a backup subnet to reshare the key from.
+    /// Now we are ready to restart the subnet's computation. In order to do that, we need to instruct the subnet to start the computation from a specific height and state with a specific hash. We can only do this by writing a special message for the subnet into the registry. This step generates an ic-admin command creating a proposal with such an instruction for the subnet containing the hash of the state we obtained in the previous step and with a height strictly higher that the latest finalized height. Potentially, if we want to recover the subnet on a new set of nodes, their IDs can be specified as well. If the subnet has any Chain keys, we also need to specify a backup subnet to reshare the key from.
     ProposeCup,
     /// Our subnet should know by now that it's supposed to restart the computation from a state with the hash which we have written into the registry in the previous step. But the state with this hash only exists on our current machine. By uploading this state to any valid subnet node, we allow all other nodes to find and sync this state to their local disks. Pick a node where you have the admin access via SSH.
     UploadState,
@@ -93,9 +93,9 @@ pub struct AppSubnetRecoveryArgs {
     #[clap(long)]
     pub upload_node: Option<IpAddr>,
 
-    /// Id of the ecdsa subnet used for resharing ecdsa key of subnet to be recovered
+    /// Id of the chain key subnet used for resharing chain keys to the subnet to be recovered
     #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
-    pub ecdsa_subnet_id: Option<SubnetId>,
+    pub chain_key_subnet_id: Option<SubnetId>,
 
     /// If present the tool will start execution for the provided step, skipping the initial ones
     #[clap(long = "resume")]
@@ -219,10 +219,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         "Enter space separated list of replacement nodes: ",
                     );
                 }
-                if self.params.ecdsa_subnet_id.is_none() {
-                    self.params.ecdsa_subnet_id = read_optional_subnet_id(
+                if self.params.chain_key_subnet_id.is_none() {
+                    self.params.chain_key_subnet_id = read_optional_subnet_id(
                         &self.logger,
-                        "Enter ID of subnet to reshare ECDSA key from: ",
+                        "Enter ID of subnet to reshare Chain keys from: ",
                     );
                 }
             }
@@ -345,7 +345,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     state_params.hash,
                     self.params.replacement_nodes.as_ref().unwrap_or(&default),
                     None,
-                    self.params.ecdsa_subnet_id,
+                    self.params.chain_key_subnet_id,
                 )?))
             }
 
