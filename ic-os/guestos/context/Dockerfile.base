@@ -87,3 +87,17 @@ RUN cd /tmp/ && \
     mkdir -p /etc/node_exporter && \
     tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.3.1.linux-amd64.tar.gz node_exporter-1.3.1.linux-amd64/node_exporter && \
     rm /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
+
+RUN rm -rf \
+    /var/cache/fontconfig/* \
+    /etc/ssh/ssh*key* \
+    /var/lib/dbus/machine-id \
+    /var/log/* \
+    /var/lib/apt/lists/* \
+    /var/cache/ldconfig/aux-cache && \
+    truncate --size 0 /etc/machine-id && \
+    find /usr/lib/python3.8 -name "*.pyc" | xargs rm -f && \
+    find /usr/lib/python3 -name "*.pyc" | xargs rm -f && \
+    find /usr/share/python3 -name "*.pyc" | xargs rm -f && \
+    find /usr/local/share/fonts -name .uuid | xargs rm -f && \
+    find /usr/share/fonts -name .uuid | xargs rm -f

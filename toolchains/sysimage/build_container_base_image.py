@@ -15,10 +15,8 @@ from typing import List, Optional
 import invoke
 from container_utils import (
     generate_container_command,
-    path_owned_by_root,
     process_temp_sys_dir_args,
     remove_image,
-    take_ownership_of_file,
 )
 from loguru import logger as log
 from simple_parsing import ArgumentParser, field, flag
@@ -60,24 +58,23 @@ def build_image(container_cmd: str, image_tag: str, dockerfile: str, context_dir
     build_arg_strings_joined = ' '.join(build_arg_strings)
 
     log.info("Building image...")
-    cmd = f"{container_cmd} build --squash-all --no-cache --tag {image_tag} {build_arg_strings_joined} --file {dockerfile} {context_dir}"
+    cmd = f"{container_cmd} build --timestamp 0 --squash-all --no-cache --tag {image_tag} {build_arg_strings_joined} --file {dockerfile} {context_dir}"
     invoke.run(cmd)
     log.info("Image built successfully")
 
 
 def save_image(container_cmd: str, image_tag: str, output_file: str):
+    oci_dir = tempfile.mkdtemp(prefix="icosbuild")
+    atexit.register(lambda: subprocess.run(["rm", "-rf", oci_dir], check=True))
     log.info("Saving image to tar file")
-    cmd = f"{container_cmd} image save --output {output_file} {image_tag}"
+    cmd = f"{container_cmd} image save --format oci-dir --output {oci_dir} {image_tag}"
     invoke.run(cmd)
+    cmd = f"tar cf {output_file} --sort=name --owner=root:0 --group=root:0 --mtime=\"UTC 1970-01-01 00:00:00\" --sparse --hole-detection=raw -C {oci_dir} ."
+    invoke.run(cmd)
+
     invoke.run("sync") # For determinism (?)
 
-    # Using sudo w/ podman requires changing permissions on the output tar file (not the tar contents)
-    output_path = Path(output_file)
-    assert path_owned_by_root(output_path), \
-        f"'{output_path}' not owned by root. Remove this and the next line."
-    take_ownership_of_file(output_path)
-
-    assert output_path.exists()
+    assert Path(output_file).exists()
     log.info("Image saved successfully")
 
 

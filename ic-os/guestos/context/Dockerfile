@@ -39,9 +39,9 @@ RUN sed -e 's/ *systemd//' -i /etc/nsswitch.conf
 
 # Clear files that may lead to indeterministic build.
 RUN apt-get clean && \
-    find /usr/lib/python3.8 -name "*.pyc" | xargs rm && \
-    find /usr/lib/python3 -name "*.pyc" | xargs rm && \
-    find /usr/share/python3 -name "*.pyc" | xargs rm && \
+    find /usr/lib/python3.8 -name "*.pyc" | xargs rm -f && \
+    find /usr/lib/python3 -name "*.pyc" | xargs rm -f && \
+    find /usr/share/python3 -name "*.pyc" | xargs rm -f && \
     truncate --size 0 /etc/machine-id
 
 # ------ NEAR-COMMON ICOS WORK ----------------------------------------
@@ -81,7 +81,7 @@ RUN mkdir -p /root/.ssh && chmod 0700 /root/.ssh
 
 # Delete generated ssh keys, otherwise every host will have the same key pair.
 # They will be generated on first boot.
-RUN rm /etc/ssh/ssh*key*
+RUN rm -f /etc/ssh/ssh*key*
 # Allow root login only via keys. In prod deployments there are never any
 # keys set up for root, but in dev deployments there may be.
 # Actually, prohibit-password is the default config, so would not be
@@ -112,8 +112,8 @@ RUN systemctl disable \
     fstrim.timer
 
 # Clear additional files that may lead to indeterministic build.
-RUN find /usr/local/share/fonts -name .uuid | xargs rm && \
-    find /usr/share/fonts -name .uuid | xargs rm
+RUN find /usr/local/share/fonts -name .uuid | xargs rm -f && \
+    find /usr/share/fonts -name .uuid | xargs rm -f
 
 # ------ GUESTOS WORK --------------------------------------------
 
