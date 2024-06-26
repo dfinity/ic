@@ -24,9 +24,11 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+ic-icrc1-ledger-sm-tests = { path = "ledger/sm-tests" }
 ic-icrc1-test-utils = { path = "test_utils" }
 ic-icrc1-tokens-u256 = { path = "tokens_u256" }
 ic-icrc1-tokens-u64 = { path = "tokens_u64" }
+ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_state" }
 leb128 = "0.2.4"
 proptest = "1.0"
 rand = { workspace = true }

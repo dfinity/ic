@@ -150,7 +150,7 @@ fn parse_metric(env: &StateMachine, canister_id: CanisterId, metric: &str) -> u6
     panic!("metric '{}' not found in metrics: {:?}", metric, metrics);
 }
 
-fn retrieve_metrics(env: &StateMachine, canister_id: CanisterId) -> Vec<String> {
+pub fn retrieve_metrics(env: &StateMachine, canister_id: CanisterId) -> Vec<String> {
     let request = HttpRequest {
         method: "GET".to_string(),
         url: "/metrics".to_string(),
