@@ -43,7 +43,6 @@ use crate::{
     firewall::{FirewallGenerator, SystemdReloader},
     geoip,
     http::{HttpClient, ReqwestClient},
-    management,
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsCheck,
         MetricParamsPersist, MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetrics,
@@ -632,14 +631,6 @@ pub fn setup_router(
             ))
     }));
 
-    let middleware_ledger_rate_limiting =
-        option_layer(cli.rate_limiting.rate_limit_ledger_transfer.map(|x| {
-            middleware::from_fn_with_state(
-                Arc::new(management::LedgerRatelimitState::new(x)),
-                management::ledger_ratelimit_transfer_mw,
-            )
-        }));
-
     let middlware_bouncer =
         option_layer(bouncer.map(|x| middleware::from_fn_with_state(x, bouncer::middleware)));
     let middleware_subnet_lookup = middleware::from_fn_with_state(lookup, routes::lookup_subnet);
@@ -664,7 +655,6 @@ pub fn setup_router(
         .layer(middleware::from_fn(routes::validate_request))
         .layer(middleware::from_fn(routes::validate_canister_request))
         .layer(common_service_layers.clone())
-        .layer(middleware_ledger_rate_limiting)
         .layer(middleware_subnet_lookup.clone())
         .layer(middleware_retry.clone());
 

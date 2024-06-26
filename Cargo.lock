@@ -5438,7 +5438,6 @@ dependencies = [
  "hyper 0.14.26",
  "hyper-rustls 0.24.2",
  "ic-base-types",
- "ic-btc-interface",
  "ic-certification-test-utils",
  "ic-config",
  "ic-crypto-ed25519",
