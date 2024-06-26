@@ -13,7 +13,7 @@ use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
 use ic_regedit;
-use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
+use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::{Height, NodeId, PrincipalId};
@@ -422,8 +422,6 @@ pub struct Subnet {
     pub max_number_of_canisters: Option<u64>,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
-    // TODO: remove this field
-    pub ecdsa_config: Option<EcdsaConfig>,
     pub chain_key_config: Option<ChainKeyConfig>,
     pub running_state: SubnetRunningState,
     pub query_stats_epoch_length: Option<u64>,
@@ -452,7 +450,6 @@ impl Subnet {
             subnet_type,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
-            ecdsa_config: None,
             chain_key_config: None,
             running_state: SubnetRunningState::Active,
             query_stats_epoch_length: None,
@@ -684,7 +681,6 @@ impl Default for Subnet {
             max_number_of_canisters: None,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
-            ecdsa_config: None,
             chain_key_config: None,
             running_state: SubnetRunningState::Active,
             query_stats_epoch_length: None,

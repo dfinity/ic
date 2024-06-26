@@ -136,7 +136,6 @@ fn main() -> Result<()> {
                 None,
                 None,
                 Some(config.subnet_features),
-                None,
                 chain_key_config,
                 None,
                 vec![],
