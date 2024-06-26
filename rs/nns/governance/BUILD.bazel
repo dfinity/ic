@@ -251,6 +251,7 @@ generated_files_check(
         ":protos",
         "//rs/nervous_system/proto:protos",
         "//rs/nns/common:protos",
+        "//rs/nns/governance/api:src",
         "//rs/rosetta-api/icp_ledger:protos",
         "//rs/sns/root:protos",
         "//rs/sns/swap:protos",
