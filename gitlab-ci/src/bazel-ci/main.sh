@@ -80,7 +80,9 @@ if [ -n "${GITHUB_OUTPUT:-}" ]; then
 fi
 
 if [ -z "${KUBECONFIG:-}" ]; then
-    export KUBECONFIG=KUBECONFIG_TNET_CREATOR_LN1
+    export KUBECONFIG=$(mktemp -t kubeconfig-XXXXXX)
+    echo $KUBECONFIG_TNET_CREATOR_LN1 >$KUBECONFIG
+    trap 'rm -f -- "$KUBECONFIG"' EXIT
 fi
 
 # shellcheck disable=SC2086
