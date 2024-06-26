@@ -9,7 +9,31 @@ use tempfile::TempDir;
 
 // TODO: Add support for PocketIc.
 
+pub fn new_state_machine_with_golden_fiduciary_state_or_panic() -> StateMachine {
+    let fiduciary_subnet_id = SubnetId::new(
+        PrincipalId::from_str("pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae")
+            .unwrap(),
+    );
+    new_state_machine_with_golden_state_or_panic(
+        fiduciary_subnet_id,
+        FIDUCIARY_STATE_SOURCE,
+        "fiduciary_state",
+    )
+}
+
 pub fn new_state_machine_with_golden_nns_state_or_panic() -> StateMachine {
+    let nns_subnet_id = SubnetId::new(
+        PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
+            .unwrap(),
+    );
+    new_state_machine_with_golden_state_or_panic(nns_subnet_id, NNS_STATE_SOURCE, "nns_state")
+}
+
+fn new_state_machine_with_golden_state_or_panic(
+    subnet_id: SubnetId,
+    scp_location: ScpLocation,
+    archive_state_dir_name: &str,
+) -> StateMachine {
     // TODO, remove when this is the value set in the normal IC build This is to
     // uncover issues in testing that might affect performance in production.
     // Application subnets have this set to 2 billion.
@@ -33,17 +57,14 @@ pub fn new_state_machine_with_golden_nns_state_or_panic() -> StateMachine {
         Config::default(),
     )));
 
-    let nns_subnet_id = SubnetId::new(
-        PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
-            .unwrap(),
-    );
-    let state_dir = download_and_untar_golden_nns_state_or_panic();
+    let state_dir =
+        download_and_untar_golden_nns_state_or_panic(scp_location, archive_state_dir_name);
     let state_machine_builder = state_machine_builder
         .with_state_dir(state_dir)
         // Patch StateMachine. This is a bit of a hack that we need because we
         // are initializing from a state_dir.
-        .with_nns_subnet_id(nns_subnet_id)
-        .with_subnet_id(nns_subnet_id);
+        .with_nns_subnet_id(subnet_id)
+        .with_subnet_id(subnet_id);
 
     println!("Building StateMachine...");
     let state_machine = state_machine_builder.build();
@@ -52,13 +73,20 @@ pub fn new_state_machine_with_golden_nns_state_or_panic() -> StateMachine {
     state_machine
 }
 
-pub fn download_and_untar_golden_nns_state_or_panic() -> TempDir {
+fn download_and_untar_golden_nns_state_or_panic(
+    scp_location: ScpLocation,
+    archive_state_dir_name: &str,
+) -> TempDir {
     let download_destination = bazel_test_compatible_temp_dir_or_panic();
     let download_destination = download_destination.path().join("nns_state.tar.zst");
-    download_golden_nns_state_or_panic(&download_destination);
+    download_golden_nns_state_or_panic(scp_location, &download_destination);
 
     let state_dir = bazel_test_compatible_temp_dir_or_panic();
-    untar_state_archive_or_panic(&download_destination, state_dir.path());
+    untar_state_archive_or_panic(
+        &download_destination,
+        state_dir.path(),
+        archive_state_dir_name,
+    );
     state_dir
 }
 
@@ -68,6 +96,12 @@ const NNS_STATE_SOURCE: ScpLocation = ScpLocation {
     user: "dev",
     host: "zh1-pyr07.zh1.dfinity.network",
     path: "/home/dev/nns_state.tar.zst",
+};
+
+const FIDUCIARY_STATE_SOURCE: ScpLocation = ScpLocation {
+    user: "dev",
+    host: "zh1-pyr07.zh1.dfinity.network",
+    path: "/home/dev/fiduciary_state.tar.zst",
 };
 
 /// A place that you can download from or upload to using the `scp` command.
@@ -86,8 +120,8 @@ impl ScpLocation {
     }
 }
 
-fn download_golden_nns_state_or_panic(destination: &Path) {
-    let source = NNS_STATE_SOURCE.to_argument();
+fn download_golden_nns_state_or_panic(scp_location: ScpLocation, destination: &Path) {
+    let source = scp_location.to_argument();
     println!("Downloading {} to {:?} ...", source, destination,);
 
     // Actually download.
@@ -98,12 +132,7 @@ fn download_golden_nns_state_or_panic(destination: &Path) {
         .arg(source.clone())
         .arg(destination)
         .output()
-        .unwrap_or_else(|err| {
-            panic!(
-                "Could not scp from {:?} because: {:?}!",
-                NNS_STATE_SOURCE, err
-            )
-        });
+        .unwrap_or_else(|err| panic!("Could not scp from {:?} because: {:?}!", scp_location, err));
 
     // Inspect result.
     if !scp_out.status.success() {
@@ -122,8 +151,11 @@ fn download_golden_nns_state_or_panic(destination: &Path) {
     println!("Downloaded {} to {}. size = {}", source, destination, size);
 }
 
-fn untar_state_archive_or_panic(source: &Path, destination: &Path) {
-    println!("Unpacking {:?} to {:?}...", source, destination);
+fn untar_state_archive_or_panic(source: &Path, destination: &Path, state_dir: &str) {
+    println!(
+        "Unpacking {} from {:?} to {:?}...",
+        state_dir, source, destination
+    );
 
     // TODO: Mathias reports having problems with this (or something similar) on Mac.
     let unpack_destination = bazel_test_compatible_temp_dir_or_panic();
@@ -147,7 +179,7 @@ fn untar_state_archive_or_panic(source: &Path, destination: &Path) {
     // Move $UNTAR_DESTINATION/nns_state/ic_state to final output dir path, StateMachine's so-called
     // state_dir.
     std::fs::rename(
-        format!("{}/nns_state/ic_state", unpack_destination),
+        format!("{}/{}/ic_state", state_dir, unpack_destination),
         destination,
     )
     .unwrap();
