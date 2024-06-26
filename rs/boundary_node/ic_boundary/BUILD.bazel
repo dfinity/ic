@@ -24,7 +24,6 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/types/base_types",
     "//rs/types/types",
-    "//rs/types/management_canister_types",
     "@crate_index//:anyhow",
     "@crate_index//:arc-swap",
     "@crate_index//:async-scoped",
