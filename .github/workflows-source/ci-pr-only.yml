@@ -23,7 +23,7 @@ anchors:
     image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
   dind-small-setup: &dind-small-setup
     runs-on:
-      labels: dind-runner-small
+      group: dind-small
     container:
       <<: *image
     timeout-minutes: 30
