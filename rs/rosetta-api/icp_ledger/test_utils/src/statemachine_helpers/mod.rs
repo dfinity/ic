@@ -27,7 +27,7 @@ pub fn assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
         "retrieved {} blocks from the ledger using get_blocks",
         ledger_blocks.len()
     );
-    let index_blocks = index_get_blocks(env, index_id);
+    let index_blocks = index_get_all_blocks(env, index_id);
     println!(
         "retrieved {} blocks from the index using get_blocks",
         index_blocks.len()
@@ -78,33 +78,6 @@ pub fn assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
             }
         }
     }
-}
-
-pub fn call_index_get_blocks(
-    query_or_update: &dyn Fn(Vec<u8>) -> Vec<u8>,
-) -> Vec<icp_ledger::Block> {
-    let mut blocks = vec![];
-    let mut start = 0u64;
-    loop {
-        let req = GetBlocksRequest {
-            start: icrc_ledger_types::icrc1::transfer::BlockIndex::from(start),
-            length: Nat::from(MAX_BLOCKS_PER_REQUEST),
-        };
-        let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
-        let res = query_or_update(req);
-        let res = Decode!(&res, ic_icp_index::GetBlocksResponse)
-            .expect("Failed to decode ic_icp_index::GetBlocksResponse");
-        start += res.blocks.len() as u64;
-        blocks.extend(res.blocks);
-        if res.chain_length == blocks.len() as u64 {
-            break;
-        }
-    }
-    blocks
-        .into_iter()
-        .map(icp_ledger::Block::decode)
-        .collect::<Result<Vec<icp_ledger::Block>, String>>()
-        .unwrap()
 }
 
 pub fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
@@ -203,13 +176,32 @@ fn icp_query_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger
     blocks
 }
 
-pub fn index_get_blocks(env: &StateMachine, index_id: CanisterId) -> Vec<icp_ledger::Block> {
-    let query = |req: Vec<u8>| {
-        env.query(index_id, "get_blocks", req)
+fn index_get_all_blocks(env: &StateMachine, index_id: CanisterId) -> Vec<icp_ledger::Block> {
+    let mut blocks = vec![];
+    let mut start = 0u64;
+    loop {
+        let req = GetBlocksRequest {
+            start: icrc_ledger_types::icrc1::transfer::BlockIndex::from(start),
+            length: Nat::from(MAX_BLOCKS_PER_REQUEST),
+        };
+        let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
+        let res = env
+            .query(index_id, "get_blocks", req)
             .expect("Failed to send get_blocks request")
-            .bytes()
-    };
-    call_index_get_blocks(&query)
+            .bytes();
+        let res = Decode!(&res, ic_icp_index::GetBlocksResponse)
+            .expect("Failed to decode ic_icp_index::GetBlocksResponse");
+        start += res.blocks.len() as u64;
+        blocks.extend(res.blocks);
+        if res.chain_length == blocks.len() as u64 {
+            break;
+        }
+    }
+    blocks
+        .into_iter()
+        .map(icp_ledger::Block::decode)
+        .collect::<Result<Vec<icp_ledger::Block>, String>>()
+        .unwrap()
 }
 
 const SYNC_STEP_SECONDS: Duration = Duration::from_secs(60);

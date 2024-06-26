@@ -10,8 +10,7 @@ use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
 use ic_ledger_test_utils::statemachine_helpers::{
-    assert_ledger_index_parity_query_blocks_and_query_encoded_blocks, call_index_get_blocks,
-    icp_get_blocks, index_get_blocks,
+    assert_ledger_index_parity_query_blocks_and_query_encoded_blocks, icp_get_blocks,
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
@@ -23,6 +22,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, NumTokens, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use num_traits::cast::ToPrimitive;
 use on_wire::FromWire;
 use serde_bytes::ByteBuf;
@@ -198,6 +198,15 @@ fn icp_ledger_tip(env: &StateMachine, ledger_id: CanisterId) -> u64 {
     tip.tip_index
 }
 
+fn index_get_blocks(env: &StateMachine, index_id: CanisterId) -> Vec<icp_ledger::Block> {
+    let query = |req: Vec<u8>| {
+        env.query(index_id, "get_blocks", req)
+            .expect("Failed to send get_blocks request")
+            .bytes()
+    };
+    call_index_get_blocks(&query)
+}
+
 fn index_get_blocks_update(
     env: &StateMachine,
     index_id: CanisterId,
@@ -209,6 +218,22 @@ fn index_get_blocks_update(
             .bytes()
     };
     call_index_get_blocks(&update)
+}
+
+fn call_index_get_blocks(query_or_update: &dyn Fn(Vec<u8>) -> Vec<u8>) -> Vec<icp_ledger::Block> {
+    let req = GetBlocksRequest {
+        start: 0u8.into(),
+        length: u64::MAX.into(),
+    };
+    let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
+    let res = query_or_update(req);
+    Decode!(&res, ic_icp_index::GetBlocksResponse)
+        .expect("Failed to decode ic_icp_index::GetBlocksResponse")
+        .blocks
+        .into_iter()
+        .map(icp_ledger::Block::decode)
+        .collect::<Result<Vec<icp_ledger::Block>, String>>()
+        .unwrap()
 }
 
 fn get_account_id_transactions_len(
