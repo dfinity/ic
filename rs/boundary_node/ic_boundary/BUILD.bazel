@@ -43,7 +43,6 @@ DEPENDENCIES = [
     "@crate_index//:humantime",
     "@crate_index//:hyper_0_14_27",
     "@crate_index//:hyper-rustls",
-    "@crate_index//:ic-btc-interface",
     "@crate_index//:instant-acme",
     "@crate_index//:jemallocator",
     "@crate_index//:jemalloc-ctl",
