@@ -6442,7 +6442,6 @@ dependencies = [
  "ic-crypto-node-key-validation",
  "ic-crypto-sha2",
  "ic-crypto-standalone-sig-verifier",
- "ic-crypto-tecdsa",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-canister-sigs",
@@ -6460,6 +6459,7 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-basic-sig",
+ "ic-crypto-utils-canister-threshold-sig",
  "ic-crypto-utils-tls",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -7221,14 +7221,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-crypto-tecdsa"
-version = "0.9.0"
-dependencies = [
- "ic-crypto-internal-threshold-sig-ecdsa",
- "ic-types",
-]
-
-[[package]]
 name = "ic-crypto-temp-crypto"
 version = "0.9.0"
 dependencies = [
@@ -7556,6 +7548,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-utils-canister-threshold-sig"
+version = "0.9.0"
+dependencies = [
+ "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-types",
+]
+
+[[package]]
 name = "ic-crypto-utils-ni-dkg"
 version = "0.8.0"
 dependencies = [
@@ -7822,8 +7822,8 @@ dependencies = [
  "ic-constants",
  "ic-crypto-prng",
  "ic-crypto-sha2",
- "ic-crypto-tecdsa",
  "ic-crypto-tree-hash",
+ "ic-crypto-utils-canister-threshold-sig",
  "ic-cycles-account-manager",
  "ic-embedders",
  "ic-error-types",
@@ -11421,9 +11421,9 @@ dependencies = [
  "ic-crypto-extended-bip32",
  "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
- "ic-crypto-tecdsa",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-tree-hash",
+ "ic-crypto-utils-canister-threshold-sig",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
  "ic-error-types",
