@@ -183,6 +183,11 @@ pub fn test_subnet(
         peer_subnet_type,
         vec![test_subnet.subnet_id],
     );
+    let httpbin_proto = if http_requests {
+        Some("https://".to_string())
+    } else {
+        None
+    };
     let httpbin = if http_requests {
         let webserver_ipv6 = get_universal_vm_address(&env);
         Some(format!("[{webserver_ipv6}]:20443"))
@@ -201,6 +206,7 @@ pub fn test_subnet(
         test_subnet,
         peer_subnet,
         use_bn,
+        httpbin_proto,
         httpbin,
         ic_ref_test_path,
         log,
@@ -242,6 +248,7 @@ fn subnet_config(subnet: &SubnetSnapshot) -> String {
 }
 
 pub fn run_ic_ref_test(
+    httpbin_proto: Option<String>,
     httpbin: Option<String>,
     ic_ref_test_path: String,
     ic_test_data_path: PathBuf,
@@ -265,6 +272,9 @@ pub fn run_ic_ref_test(
         .arg(peer_subnet_config)
         .arg("--allow-self-signed-certs")
         .arg("True");
+    if let Some(httpbin_proto) = httpbin_proto {
+        cmd.arg("--httpbin-proto").arg(&httpbin_proto);
+    }
     if let Some(httpbin) = httpbin {
         cmd.arg("--httpbin").arg(&httpbin);
     }
@@ -281,6 +291,7 @@ pub fn with_endpoint(
     test_subnet: SubnetSnapshot,
     peer_subnet: SubnetSnapshot,
     use_bn: bool,
+    httpbin_proto: Option<String>,
     httpbin: Option<String>,
     ic_ref_test_path: String,
     log: Logger,
@@ -307,6 +318,7 @@ pub fn with_endpoint(
     info!(log, "test-subnet-config: {}", test_subnet_config);
     info!(log, "peer-subnet-config: {}", peer_subnet_config);
     run_ic_ref_test(
+        httpbin_proto,
         httpbin,
         ic_ref_test_path,
         env.get_dependency_path("rs/tests/ic-hs/test-data"),
