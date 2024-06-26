@@ -45,3 +45,6 @@ rust_library(
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
+
+# needed for check_generated_files test
+exports_files(["src"])
