@@ -123,6 +123,7 @@ use indexmap::IndexMap;
 use itertools::izip;
 use maplit::hashmap;
 use prost::Message;
+use recover_subnet::ProposeToUpdateRecoveryCupCmd;
 use registry_canister::mutations::{
     common::decode_registry_value,
     complete_canister_migration::CompleteCanisterMigrationPayload,
@@ -133,7 +134,6 @@ use registry_canister::mutations::{
     do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
-    do_recover_subnet::RecoverSubnetPayload,
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
@@ -179,6 +179,7 @@ extern crate ic_admin_derive;
 extern crate chrono;
 
 mod helpers;
+mod recover_subnet;
 mod types;
 mod update_subnet;
 
@@ -1276,142 +1277,6 @@ impl ProposalPayload<AddNodesToSubnetPayload> for ProposeToAddNodesToSubnetCmd {
         AddNodesToSubnetPayload {
             subnet_id: self.subnet.get_id(&registry_canister).await.get(),
             node_ids,
-        }
-    }
-}
-
-/// Sub-command to submit a proposal to update the recovery CUP of a subnet.
-#[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateRecoveryCupCmd {
-    #[clap(long, required = true, alias = "subnet-index")]
-    /// The targeted subnet.
-    subnet: SubnetDescriptor,
-
-    #[clap(long, required = true)]
-    /// The height of the CUP
-    pub height: u64,
-
-    #[clap(long, required = true)]
-    /// The block time to start from (nanoseconds from Epoch)
-    pub time_ns: u64,
-
-    #[clap(long, required = true)]
-    /// The hash of the state
-    pub state_hash: String,
-
-    #[clap(long, multiple_values(true))]
-    /// Replace the members of the given subnet with these nodes
-    pub replacement_nodes: Option<Vec<PrincipalId>>,
-
-    /// A uri from which data to replace the registry local store should be
-    /// downloaded
-    #[clap(long)]
-    pub registry_store_uri: Option<String>,
-
-    /// The hash of the data that is to be retrieved at the registry store URI
-    #[clap(long)]
-    pub registry_store_hash: Option<String>,
-
-    /// The registry version that should be used for the recovery cup
-    #[clap(long)]
-    pub registry_version: Option<u64>,
-
-    /// Configuration for ECDSA: the number of quadruples to create in advance.
-    /// This controls how many signatures the subnet can make rapidly as quadruples are used in the
-    /// signing process and are expensive to compute.  Having a store of them allows the subnet
-    /// to quickly sign bursts of requests before needing to regenerate them.
-    /// Defaults to 1, must be at least 1.
-    #[clap(long)]
-    pub ecdsa_quadruples_to_create_in_advance: Option<u32>,
-
-    /// Configuration for ECDSA:
-    /// A list of existing ECDSA keys as json objects to be requested from other subnets for this
-    /// subnet, and (optionally) the subnet to request each key from.
-    ///
-    /// Keys must be given in AlgorithmID:KeyName format, like `Secp256k1:some_key_name`.
-    ///
-    /// Example:
-    /// '[
-    ///     {
-    ///         "key_id": "Secp256k1:key_id_1",
-    ///         "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
-    ///     }
-    /// ]'
-    /// For keys with no subnet specified:
-    ///'[
-    ///     {
-    ///         "key_id": "Secp256k1:key_id_1"
-    ///     }
-    /// ]'
-    #[clap(long)]
-    pub ecdsa_keys_to_request: Option<String>,
-
-    /// Configuration for ECDSA:
-    /// The maximum number of signature requests that can be enqueued at any one
-    /// time. Requests will be rejected if the queue is full.
-    #[clap(long)]
-    pub max_ecdsa_queue_size: Option<u32>,
-
-    /// The number of nanoseconds that an ECDSA signature request will time out.
-    /// If none is specified, no request will time out.
-    #[clap(long)]
-    pub signature_request_timeout_ns: Option<u64>,
-
-    /// Configuration for ECDSA:
-    /// idkg key rotation period of a single node in milliseconds.
-    /// If none is specified key rotation is disabled.
-    #[clap(long)]
-    pub idkg_key_rotation_period_ms: Option<u64>,
-}
-
-impl ProposalTitle for ProposeToUpdateRecoveryCupCmd {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => format!(
-                "Update recovery cup of subnet: {} to height: {}",
-                shortened_subnet_string(&self.subnet),
-                self.height
-            ),
-        }
-    }
-}
-
-#[async_trait]
-impl ProposalPayload<RecoverSubnetPayload> for ProposeToUpdateRecoveryCupCmd {
-    async fn payload(&self, agent: &Agent) -> RecoverSubnetPayload {
-        let registry_canister = RegistryCanister::new_with_agent(agent.clone());
-        let subnet_id = self.subnet.get_id(&registry_canister).await.get();
-        let node_ids = self
-            .replacement_nodes
-            .clone()
-            .map(|nodes| nodes.into_iter().map(NodeId::from).collect());
-
-        let hash = self.registry_store_hash.clone().unwrap_or_default();
-
-        let registry_version = self.registry_version.unwrap_or(0);
-
-        let ecdsa_config = parse_initial_ecdsa_config_options(
-            &self.ecdsa_quadruples_to_create_in_advance,
-            &self.ecdsa_keys_to_request,
-            &self.max_ecdsa_queue_size,
-            &self.signature_request_timeout_ns,
-            &self.idkg_key_rotation_period_ms,
-        );
-        RecoverSubnetPayload {
-            subnet_id,
-            height: self.height,
-            time_ns: self.time_ns,
-            state_hash: hex::decode(self.state_hash.clone())
-                .expect("The provided state hash was invalid"),
-            replacement_nodes: node_ids,
-            registry_store_uri: self
-                .registry_store_uri
-                .clone()
-                .map(|uri| (uri, hash, registry_version)),
-            ecdsa_config,
-            chain_key_config: None, // TODO[NNS1-3102]
         }
     }
 }
