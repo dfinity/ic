@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "//rs/boundary_node/discower_bowndary:discower-bowndary",
     "//rs/canister_client",
     "//rs/canister_client/sender",
+    "//rs/rosetta-api/icrc1/test_utils",
     "//rs/certification",
     "//rs/config",
     "//rs/constants",

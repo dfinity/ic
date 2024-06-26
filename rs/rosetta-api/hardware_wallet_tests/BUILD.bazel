@@ -35,6 +35,7 @@ ALIASES = {}
 
 rust_binary(
     name = "hardware_wallet_tests",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "hardware_wallet_tests",
