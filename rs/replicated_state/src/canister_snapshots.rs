@@ -164,7 +164,7 @@ impl CanisterSnapshots {
         // enforce an explicit decision whenever new fields are added.
         let CanisterSnapshots {
             ref mut snapshots,
-            ref mut unflushed_changes,
+            unflushed_changes: _,
             ref mut snapshot_ids,
         } = self;
 
@@ -174,7 +174,8 @@ impl CanisterSnapshots {
             let snapshot = snapshots.get(&snapshot_id).unwrap();
             if !is_local_canister(snapshot.canister_id) {
                 snapshots.remove(&snapshot_id);
-                unflushed_changes.push(SnapshotOperation::Delete(snapshot_id));
+                // TODO: Enable after checkpointing logic is implemented.
+                // unflushed_changes.push(SnapshotOperation::Delete(snapshot_id));
             }
         }
         snapshot_ids.retain(|canister_id, _| is_local_canister(*canister_id));
