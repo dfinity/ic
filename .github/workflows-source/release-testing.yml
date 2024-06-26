@@ -82,7 +82,7 @@ jobs:
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
 
   bazel-system-test-hotfix:
-    name: Bazel Test All
+    name: Bazel System Test Hotfix
     <<: *dind-large-setup
     timeout-minutes: 90
     steps:
