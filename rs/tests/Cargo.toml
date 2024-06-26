@@ -206,6 +206,10 @@ name = "ic-systest-tecdsa-add-nodes"
 path = "consensus/tecdsa/tecdsa_add_nodes_test.rs"
 
 [[bin]]
+name = "ic-systest-tschnorr-message-sizes"
+path = "consensus/tecdsa/tschnorr_message_sizes_test.rs"
+
+[[bin]]
 name = "ic-systest-tecdsa-key-rotation"
 path = "consensus/tecdsa/tecdsa_key_rotation_test.rs"
 

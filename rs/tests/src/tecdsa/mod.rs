@@ -40,10 +40,9 @@ pub mod tecdsa_complaint_test;
 pub mod tecdsa_remove_nodes_test;
 pub mod tecdsa_signature_test;
 pub mod tecdsa_two_signing_subnets_test;
+pub mod tschnorr_message_sizes_test;
 
 pub(crate) const KEY_ID1: &str = "secp256k1";
-pub(crate) const KEY_ID2: &str = "some_other_key";
-pub(crate) const KEY_ID3: &str = "yet_another_key";
 
 /// The default DKG interval takes too long before the keys are created and
 /// passed to execution.
@@ -463,7 +462,9 @@ pub(crate) async fn get_schnorr_signature_with_logger(
     };
     info!(
         logger,
-        "Sending a Schnorr signing request: {:?}", signature_request
+        "Sending a {} signing request of size: {}",
+        key_id,
+        signature_request.message.len(),
     );
 
     let mut count = 0;

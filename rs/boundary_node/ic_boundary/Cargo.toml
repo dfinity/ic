@@ -36,7 +36,6 @@ humantime = "2.1"
 hyper = "0.14.18"
 hyper-rustls = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-btc-interface = { workspace = true }
 ic-config = { path = "../../config" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
