@@ -1027,7 +1027,7 @@ impl ReplicatedState {
         // TODO: Validate that canisters are split across no more than 2 subnets.
         canister_states
             .retain(|canister_id, _| routing_table.route(canister_id.get()) == Some(subnet_id));
-        
+
         // Retain only the canister snapshots belonging to the local canisters.
         canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
 

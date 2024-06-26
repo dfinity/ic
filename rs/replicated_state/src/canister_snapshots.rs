@@ -140,13 +140,10 @@ impl CanisterSnapshots {
         self.unflushed_changes.is_empty()
     }
 
-    pub(crate) fn split<F>(
-        &mut self,
-        is_local_canister: F,
-    ) where
+    pub(crate) fn split<F>(&mut self, is_local_canister: F)
+    where
         F: Fn(CanisterId) -> bool,
     {
-
         // Destructure `self` and put it back together, in order for the compiler to
         // enforce an explicit decision whenever new fields are added.
         let Self {
