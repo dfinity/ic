@@ -31,9 +31,12 @@ use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use prost::Message;
 use std::cell::RefCell;
 
+type CanisterRuntime = CdkRuntime;
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
-type CanisterRuntime = CdkRuntime;
+thread_local! {
+    static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
+}
 
 struct CanisterEnvironment {}
 
@@ -83,10 +86,6 @@ fn create_ledger_client() -> RealLedgerCanisterClient {
         .expect("Expected the ledger_canister_id to be convertible to a CanisterId");
 
     RealLedgerCanisterClient::new(ledger_canister_id)
-}
-
-thread_local! {
-    static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
 }
 
 #[candid_method(init)]
