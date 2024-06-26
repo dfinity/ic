@@ -170,14 +170,22 @@ fn test_message_sizes(subnet: SubnetSnapshot, limit: usize, log: &Logger) {
     }
 }
 
-pub fn test(env: TestEnv) {
+pub fn test_xnet_limit(env: TestEnv) {
     let log = env.logger();
     let topology_snapshot = env.topology_snapshot();
-    let mut subnets = topology_snapshot.subnets().skip(1);
-    let (schnorr_subnet, app_subnet) = (subnets.next().unwrap(), subnets.next().unwrap());
+    let mut subnets = topology_snapshot.subnets().skip(2);
+    let app_subnet = subnets.next().unwrap();
 
     info!(log, "Testing tSchnorr message sizes using XNet");
     test_message_sizes(app_subnet, XNET_LIMIT, &log);
+}
+
+pub fn test_local_limit(env: TestEnv) {
+    let log = env.logger();
+    let topology_snapshot = env.topology_snapshot();
+    let mut subnets = topology_snapshot.subnets().skip(1);
+    let schnorr_subnet = subnets.next().unwrap();
+
     info!(log, "Testing tSchnorr message sizes using local subnet");
     test_message_sizes(schnorr_subnet, LOCAL_LIMIT, &log);
 }

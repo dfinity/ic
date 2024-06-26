@@ -464,8 +464,9 @@ pub(crate) async fn get_schnorr_signature_with_logger(
     };
     info!(
         logger,
-        "Sending a Schnorr signing request of size: {}",
-        signature_request.message.len()
+        "Sending a {} signing request of size: {}",
+        key_id,
+        signature_request.message.len(),
     );
 
     let mut count = 0;
