@@ -76,6 +76,11 @@ impl CanisterSnapshots {
                 debug_assert!(snapshot_ids.contains(&snapshot_id));
                 snapshot_ids.remove(&snapshot_id);
 
+                // Remove the snapshot ID set associated with the specified `canister_id` if it's empty.
+                if snapshot_ids.is_empty() {
+                    self.snapshot_ids.remove(&canister_id);
+                }
+
                 Some(snapshot)
             }
             None => {
@@ -140,26 +145,39 @@ impl CanisterSnapshots {
         self.unflushed_changes.is_empty()
     }
 
+    /// Splits the `CanisterSnapshots` as part of subnet splitting phase 1.
+    ///
+    /// A subnet split starts with a subnet A and results in two subnets, A' and B.
+    /// For the sake of clarity, comments refer to the two resulting subnets as
+    /// *subnet A'* and *subnet B*. And to the original subnet as *subnet A*.
+    ///
+    /// Splitting the canister snapshot is decided based on the new canister list
+    /// hosted by the *subnet A'* or *subnet B*.
+    /// A snapshot associated with a canister not hosted by the local subnet
+    /// will be discarded. A delete `SnapshotOperation` will also be triggered to
+    /// apply the changes during checkpoint time.
     pub(crate) fn split<F>(&mut self, is_local_canister: F)
     where
         F: Fn(CanisterId) -> bool,
     {
         // Destructure `self` and put it back together, in order for the compiler to
         // enforce an explicit decision whenever new fields are added.
-        let Self {
-            next_snapshot_id,
-            mut snapshots,
-            mut unflushed_changes,
+        let CanisterSnapshots {
+            ref mut snapshots,
+            ref mut unflushed_changes,
+            ref mut snapshot_ids,
         } = self;
 
         let old_snapshot_ids = snapshots.keys().cloned().collect::<Vec<_>>();
         for snapshot_id in old_snapshot_ids {
             // Unwrapping is safe here because `snapshot_id` is part of the keys collection.
-            let snapshot = self.snapshots.get(&snapshot_id).unwrap();
+            let snapshot = snapshots.get(&snapshot_id).unwrap();
             if !is_local_canister(snapshot.canister_id) {
-                self.remove(snapshot_id);
+                snapshots.remove(&snapshot_id);
+                unflushed_changes.push(SnapshotOperation::Delete(snapshot_id));
             }
         }
+        snapshot_ids.retain(|canister_id, _| is_local_canister(*canister_id));
     }
 }
 
@@ -379,14 +397,7 @@ mod tests {
         let unflushed_changes = snapshot_manager.take_unflushed_changes();
         assert_eq!(snapshot_manager.unflushed_changes.len(), 0);
         assert_eq!(unflushed_changes.len(), 1);
-        assert_eq!(snapshot_manager.snapshot_ids.len(), 1);
-        assert_eq!(
-            snapshot_manager
-                .snapshot_ids
-                .get(&canister_id)
-                .unwrap()
-                .len(),
-            0
-        );
+        assert_eq!(snapshot_manager.snapshot_ids.len(), 0);
+        assert_eq!(snapshot_manager.snapshot_ids.get(&canister_id), None);
     }
 }
