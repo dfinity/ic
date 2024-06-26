@@ -15,7 +15,6 @@ use file_sync_helper::{create_dir, download_binary, read_dir};
 use futures::future::join_all;
 use ic_base_types::{CanisterId, NodeId};
 use ic_cup_explorer::get_catchup_content;
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replay::{
     cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand},
@@ -24,7 +23,7 @@ use ic_replay::{
 use ic_types::{messages::HttpStatusResponse, Height, ReplicaVersion, SubnetId};
 use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
-use slog::{error, info, warn, Logger};
+use slog::{info, warn, Logger};
 use ssh_helper::SshHelper;
 use std::{
     net::IpAddr,
@@ -578,34 +577,21 @@ impl Recovery {
         state_hash: String,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
-        ecdsa_subnet_id: Option<SubnetId>,
+        chain_key_subnet_id: Option<SubnetId>,
     ) -> RecoveryResult<impl Step> {
-        let key_ids = ecdsa_subnet_id
+        let chain_key_config = chain_key_subnet_id
             .map(|id| match self.registry_helper.get_chain_key_config(id) {
-                Ok((_registry_version, Some(config))) => config
-                    .key_configs
-                    .iter()
-                    .filter_map(|key_config| match &key_config.key_id {
-                        MasterPublicKeyId::Ecdsa(key_id) => Some(key_id.clone()),
-                        MasterPublicKeyId::Schnorr(key_id) => {
-                            error!(
-                                self.logger,
-                                "Found Schnorr key {}. Schnorr keys are not yet supported", key_id
-                            );
-                            None
-                        }
-                    })
-                    .collect(),
+                Ok((_registry_version, Some(config))) => Some((config, id)),
                 Ok((registry_version, None)) => {
                     info!(
                         self.logger,
-                        "No ECDSA config at registry version {}", registry_version
+                        "No Chain key config at registry version {}", registry_version
                     );
-                    vec![]
+                    None
                 }
                 Err(err) => {
-                    warn!(self.logger, "Failed to get ECDSA config: {}", err);
-                    vec![]
+                    warn!(self.logger, "Failed to get Chain Key config: {}", err);
+                    None
                 }
             })
             .unwrap_or_default();
@@ -618,10 +604,9 @@ impl Recovery {
                     subnet_id,
                     checkpoint_height,
                     state_hash,
-                    key_ids,
+                    chain_key_config,
                     replacement_nodes,
                     registry_params,
-                    ecdsa_subnet_id,
                     SystemTime::now(),
                 ),
         })
