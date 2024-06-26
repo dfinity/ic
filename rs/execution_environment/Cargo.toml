@@ -16,8 +16,8 @@ ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-crypto-prng = { path = "../crypto/prng" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-crypto-tecdsa = { path = "../crypto/tecdsa" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
+ic-crypto-utils-canister-threshold-sig = { path = "../crypto/utils/canister_threshold_sig" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-embedders = { path = "../embedders" }
 ic-error-types = { path = "../types/error_types" }

@@ -71,6 +71,6 @@ tower = { workspace = true }
 [dev-dependencies]
 proptest = "1.0"
 ic-base-types = { path = "../types/base_types" }
-ic-crypto-tecdsa = { path = "../crypto/tecdsa" }
+ic-crypto-utils-canister-threshold-sig = { path = "../crypto/utils/canister_threshold_sig" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-universal-canister = { path = "../universal_canister/lib" }
