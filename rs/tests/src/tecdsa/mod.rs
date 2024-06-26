@@ -42,8 +42,6 @@ pub mod tecdsa_signature_test;
 pub mod tecdsa_two_signing_subnets_test;
 
 pub(crate) const KEY_ID1: &str = "secp256k1";
-pub(crate) const KEY_ID2: &str = "some_other_key";
-pub(crate) const KEY_ID3: &str = "yet_another_key";
 
 /// The default DKG interval takes too long before the keys are created and
 /// passed to execution.
