@@ -84,7 +84,8 @@ pub(crate) struct ProposeToUpdateRecoveryCupCmd {
     #[clap(long)]
     pub initial_chain_key_configs_to_request: Option<String>,
 
-    /// The number of nanoseconds that an ECDSA signature request will time out.
+    /// Configuration for chain key:
+    /// The number of nanoseconds that a chain key signature request will time out.
     /// If none is specified, no request will time out.
     #[clap(long)]
     pub signature_request_timeout_ns: Option<u64>,
