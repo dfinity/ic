@@ -339,6 +339,7 @@ impl Recovery {
         subnet_id: SubnetId,
         subcmd: Option<ReplaySubCmd>,
         canister_caller_id: Option<CanisterId>,
+        replay_until_height: Option<u64>,
     ) -> impl Step {
         ReplayStep {
             logger: self.logger.clone(),
@@ -347,6 +348,7 @@ impl Recovery {
             config: self.work_dir.join("ic.json5"),
             subcmd,
             canister_caller_id,
+            replay_until_height,
             result: self.work_dir.join(replay_helper::OUTPUT_FILE_NAME),
         }
     }
@@ -359,6 +361,7 @@ impl Recovery {
         upgrade_version: ReplicaVersion,
         upgrade_url: Url,
         sha256: String,
+        replay_until_height: Option<u64>,
     ) -> RecoveryResult<impl Step> {
         let version_record = format!(
             r#"{{ "release_package_sha256_hex": "{}", "release_package_urls": ["{}"] }}"#,
@@ -378,6 +381,7 @@ impl Recovery {
                 ),
             }),
             None,
+            replay_until_height,
         ))
     }
 
@@ -388,6 +392,7 @@ impl Recovery {
         subnet_id: SubnetId,
         new_registry_local_store: PathBuf,
         canister_caller_id: &str,
+        replay_until_height: Option<u64>,
     ) -> RecoveryResult<impl Step> {
         let canister_id = CanisterId::from_str(canister_caller_id).map_err(|e| {
             RecoveryError::invalid_output_error(format!("Failed to parse canister id: {}", e))
@@ -409,6 +414,7 @@ impl Recovery {
                 ),
             }),
             Some(canister_id),
+            replay_until_height,
         ))
     }
 
