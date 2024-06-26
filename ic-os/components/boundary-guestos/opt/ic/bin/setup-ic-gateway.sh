@@ -63,11 +63,13 @@ function read_variables() {
     API_DOMAINS+=("rosetta.dfinity.network")
 
     # TODO move this later to bn_vars or somewhere else
+    MAX_CONCURRENCY=""
+    SHED_EWMA_PARAM=""
     if [ -f "${IC_BOUNDARY_CONFIG}" ]; then
         while IFS="=" read -r key value; do
             case "${key}" in
-                "max_concurrency") MAX_CONCURRENCY+=("${value}") ;;
-                "shed_ewma_param") SHED_EWMA_PARAM+=("${value}") ;;
+                "max_concurrency") MAX_CONCURRENCY="${value}" ;;
+                "shed_ewma_param") SHED_EWMA_PARAM="${value}" ;;
             esac
         done <"${IC_BOUNDARY_CONFIG}"
     fi
