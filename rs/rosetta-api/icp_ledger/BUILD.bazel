@@ -94,7 +94,7 @@ rust_ic_test_suite(
     size = "enormous",
     timeout = "eternal",
     srcs = [
-        "tests/recovered_mainnet_state.rs",
+        "tests/golden_nns_state.rs",
     ],
     data = [
         "ledger.did",
