@@ -77,7 +77,7 @@ if [ -n "${GITHUB_OUTPUT:-}" ]; then
     echo "upload_artifacts=true" >>"$GITHUB_OUTPUT"
 fi
 
-if [ -z "${KUBECONFIG:-}" ]; then
+if [ -z "${KUBECONFIG:-}" ] && [ ! -z "$KUBECONFIG_TNET_CREATOR_LN1" ]; then
     export KUBECONFIG=$(mktemp -t kubeconfig-XXXXXX)
     echo $KUBECONFIG_TNET_CREATOR_LN1 >$KUBECONFIG
     trap 'rm -f -- "$KUBECONFIG"' EXIT
