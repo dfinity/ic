@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-bincode = "1.2"
+bincode = { workspace = true }
 bytes = { workspace = true }
 educe = "0.4"
 futures = { workspace = true }

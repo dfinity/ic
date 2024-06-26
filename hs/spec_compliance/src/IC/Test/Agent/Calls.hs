@@ -26,6 +26,9 @@ import IC.Id.Forms
 import IC.Management
 import IC.Test.Agent
 
+httpbin_proto :: (HasAgentConfig) => String
+httpbin_proto = tc_httpbin_proto agentConfig
+
 httpbin :: (HasAgentConfig) => String
 httpbin = tc_httpbin agentConfig
 

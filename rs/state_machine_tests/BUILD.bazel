@@ -129,7 +129,7 @@ rust_ic_test(
         "STATE_MACHINE_BIN": "$(rootpath //rs/state_machine_tests:ic-test-state-machine)",
     },
     deps = [
-        "//rs/crypto/tecdsa",
+        "//rs/crypto/utils/canister_threshold_sig",
         "@crate_index//:ciborium",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
@@ -140,7 +140,7 @@ rust_test(
     name = "state_machine_unit_test",
     crate = ":state_machine_tests",
     deps = [
-        "//rs/crypto/tecdsa",
+        "//rs/crypto/utils/canister_threshold_sig",
         "@crate_index//:proptest",
     ],
 )

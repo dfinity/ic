@@ -82,13 +82,16 @@ def _build_container_filesystem_impl(ctx):
         args.extend(["--component-file", input_target.files.to_list()[0].path + ":" + install_target])
         inputs += input_target.files.to_list()
 
-    config_file = ctx.file.config_file
-    inputs.append(config_file)
-    args.extend(["--config-file", config_file.path])
-
     if ctx.file.dockerfile:
         inputs.append(ctx.file.dockerfile)
         args.extend(["--dockerfile", ctx.file.dockerfile.path])
+
+    build_args = ctx.attr.build_args
+    for build_arg in build_args:
+        args.extend(["--build-arg", build_arg])
+
+    if ctx.attr.file_build_arg:
+        args.extend(["--file-build-arg", ctx.attr.file_build_arg])
 
     if ctx.file.base_image_tar_file:
         inputs.append(ctx.file.base_image_tar_file)
@@ -123,12 +126,11 @@ build_container_filesystem = rule(
         "component_files": attr.label_keyed_string_dict(
             allow_files = True,
         ),
-        "config_file": attr.label(
-            allow_single_file = True,
-        ),
         "dockerfile": attr.label(
             allow_single_file = True,
         ),
+        "build_args": attr.string_list(),
+        "file_build_arg": attr.string(),
         "base_image_tar_file": attr.label(
             allow_single_file = True,
         ),

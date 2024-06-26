@@ -648,9 +648,9 @@ dependencies = [
 
 [[package]]
 name = "async-stream"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad445822218ce64be7a341abfb0b1ea43b5c23aa83902542a4542e78309d8e5e"
+checksum = "cd56dd203fef61ac097dd65721a419ddccb106b2d2b70ba60a6b529f03961a51"
 dependencies = [
  "async-stream-impl",
  "futures-core",
@@ -659,13 +659,13 @@ dependencies = [
 
 [[package]]
 name = "async-stream-impl"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4655ae1a7b0cdf149156f780c5bf3f1352bc53cbd9e0a361a7ef7b22947e965"
+checksum = "16e62a023e7c117e27523144c5d2459f4397fcc3cab0085af8e2224f643a0193"
 dependencies = [
  "proc-macro2 1.0.75",
  "quote 1.0.35",
- "syn 1.0.109",
+ "syn 2.0.48",
 ]
 
 [[package]]
@@ -3830,7 +3830,6 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-execution-environment",
  "ic-test-utilities-state",
- "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
  "ic-wasm-types",
@@ -5067,7 +5066,6 @@ dependencies = [
  "prometheus",
  "protobuf",
  "slog",
- "slog-async",
  "tokio",
  "tonic",
  "tower",
@@ -6444,7 +6442,6 @@ dependencies = [
  "ic-crypto-node-key-validation",
  "ic-crypto-sha2",
  "ic-crypto-standalone-sig-verifier",
- "ic-crypto-tecdsa",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-canister-sigs",
@@ -6462,6 +6459,7 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-basic-sig",
+ "ic-crypto-utils-canister-threshold-sig",
  "ic-crypto-utils-tls",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -7223,14 +7221,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-crypto-tecdsa"
-version = "0.9.0"
-dependencies = [
- "ic-crypto-internal-threshold-sig-ecdsa",
- "ic-types",
-]
-
-[[package]]
 name = "ic-crypto-temp-crypto"
 version = "0.9.0"
 dependencies = [
@@ -7558,6 +7548,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-utils-canister-threshold-sig"
+version = "0.9.0"
+dependencies = [
+ "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-types",
+]
+
+[[package]]
 name = "ic-crypto-utils-ni-dkg"
 version = "0.8.0"
 dependencies = [
@@ -7824,8 +7822,8 @@ dependencies = [
  "ic-constants",
  "ic-crypto-prng",
  "ic-crypto-sha2",
- "ic-crypto-tecdsa",
  "ic-crypto-tree-hash",
+ "ic-crypto-utils-canister-threshold-sig",
  "ic-cycles-account-manager",
  "ic-embedders",
  "ic-error-types",
@@ -7851,7 +7849,6 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-test-utilities-metrics",
  "ic-test-utilities-state",
- "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
@@ -8474,7 +8471,9 @@ dependencies = [
 name = "ic-icrc1-ledger"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "async-trait",
+ "canbench-rs",
  "candid",
  "candid_parser",
  "cddl",
@@ -11422,9 +11421,9 @@ dependencies = [
  "ic-crypto-extended-bip32",
  "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
- "ic-crypto-tecdsa",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-tree-hash",
+ "ic-crypto-utils-canister-threshold-sig",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
  "ic-error-types",
@@ -11842,7 +11841,6 @@ dependencies = [
  "ic-replicated-state",
  "ic-system-api",
  "ic-test-utilities",
- "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
