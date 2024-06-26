@@ -4,6 +4,7 @@ set -euox pipefail
 source '/opt/ic/bin/helpers.shlib'
 
 readonly BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
+readonly IC_BOUNDARY_CONFIG="${BOOT_DIR}/ic_boundary.conf"
 
 readonly RUN_DIR='/run/ic-node/etc/ic-gateway'
 readonly ENV_FILE="${RUN_DIR}/env"
@@ -43,6 +44,9 @@ function read_variables() {
             "application_domains") APPLICATION_DOMAINS+=("${value}") ;;
             "api_domains") API_DOMAINS+=("${value}") ;;
             "denylist_url") DENYLIST_URL="${value}" ;;
+            "logging_url") LOGGING_URL="${value}" ;;
+            "logging_user") LOGGING_USER="${value}" ;;
+            "logging_password") LOGGING_PASSWORD="${value}" ;;
         esac
     done <"${BN_CONFIG}"
 
@@ -57,6 +61,16 @@ function read_variables() {
     fi
 
     API_DOMAINS+=("rosetta.dfinity.network")
+
+    # TODO move this later to bn_vars or somewhere else
+    if [ -f "${IC_BOUNDARY_CONFIG}" ]; then
+        while IFS="=" read -r key value; do
+            case "${key}" in
+                "max_concurrency") MAX_CONCURRENCY+=("${value}") ;;
+                "shed_ewma_param") SHED_EWMA_PARAM+=("${value}") ;;
+            esac
+        done <"${IC_BOUNDARY_CONFIG}"
+    fi
 
     check_nns_pem
 }
@@ -126,6 +140,20 @@ EOF
 
     if [ ! -z "${DENYLIST_URL}" ]; then
         echo "POLICY_DENYLIST_URL=\"${DENYLIST_URL}\"" >>"${ENV_FILE}"
+    fi
+
+    if [ ! -z "${LOGGING_URL}" ]; then
+        echo "LOG_VECTOR_URL=\"${LOGGING_URL}\"" >>"${ENV_FILE}"
+        echo "LOG_VECTOR_USER=\"${LOGGING_USER}\"" >>"${ENV_FILE}"
+        echo "LOG_VECTOR_PASS=\"${LOGGING_PASSWORD}\"" >>"${ENV_FILE}"
+    fi
+
+    if [ ! -z "${MAX_CONCURRENCY}" ]; then
+        echo "LOAD_MAX_CONCURRENCY=\"${MAX_CONCURRENCY}\"" >>"${ENV_FILE}"
+    fi
+
+    if [ ! -z "${SHED_EWMA_PARAM}" ]; then
+        echo "LOAD_SHED_EWMA_PARAM=\"${SHED_EWMA_PARAM}\"" >>"${ENV_FILE}"
     fi
 }
 
