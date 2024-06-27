@@ -57,7 +57,7 @@ pub(crate) const WASM_HEAP_BYTEMAP_MEMORY_NAME: &str = "bytemap_memory";
 pub(crate) const STABLE_MEMORY_NAME: &str = "stable_memory";
 pub(crate) const STABLE_BYTEMAP_MEMORY_NAME: &str = "stable_bytemap_memory";
 
-pub(crate) const MAX_STORE_TABLES: usize = 10;
+pub(crate) const MAX_STORE_TABLES: usize = 1;
 pub(crate) const MAX_STORE_TABLE_ELEMENTS: u32 = 1_000_000;
 
 fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
