@@ -19,7 +19,7 @@ pub enum LevelDef {
     Trace,
 }
 
-/// The format of emitted log lines
+/// Possible formatting for log lines
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LogFormat {
@@ -27,19 +27,13 @@ pub enum LogFormat {
     Json,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum LogTarget {
+/// Possible destitations where emitted logs can be written
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum LogDestination {
+    #[default]
     Stdout,
     Stderr,
     File(PathBuf),
-}
-
-//Because serde is particular with its options and we want
-//to be retrocompatible, we'll keep Stdout as the default
-//log target, but it has to be through a function that gets
-//passed to serde(default ...) below.
-pub fn default_logtarget() -> LogTarget {
-    LogTarget::Stdout
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,19 +42,23 @@ pub struct Config {
     pub node_id: u64,
     #[serde(with = "LevelDef")]
     pub level: Level,
-    pub format: LogFormat,
+
     pub debug_overrides: Vec<String>,
-    #[serde(default = "default_logtarget")]
-    pub target: LogTarget,
-    /// If set to `false`, the logging thread will _not_ block even if the queue
-    /// is full.
+
+    /// The format of emitted log lines
+    pub format: LogFormat,
+
+    /// The destination where logs should be written.
+    pub log_destination: LogDestination,
+
+    /// If set to `false`, the logging thread will _not_ block even if the queue/buffer full.
+    ///
+    /// Messages are logged asynchronously.
+    /// The default behavior is to block when the async-(queue/buffer) is full.
     #[serde(default = "default_block_on_overflow")]
     pub block_on_overflow: bool,
 }
 
-/// Messages are logged asynchronously. That is, log messages are sent over an
-/// MPSC-channel to the log drain which writes out the log messages. The default
-/// behavior is to block when the async-queue is full.
 fn default_block_on_overflow() -> bool {
     true
 }
@@ -72,7 +70,7 @@ impl Default for Config {
             level: Level::Debug,
             format: LogFormat::TextFull,
             debug_overrides: vec![],
-            target: default_logtarget(),
+            log_destination: LogDestination::default(),
             block_on_overflow: true,
         }
     }

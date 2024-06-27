@@ -1,4 +1,4 @@
-use ic_config::logger::{Config as LoggerConfig, LogFormat, LogTarget};
+use ic_config::logger::{Config as LoggerConfig, LogDestination, LogFormat};
 use slog::{o, Drain, Logger};
 use slog_async::{AsyncGuard, OverflowStrategy};
 use slog_scope::GlobalLoggerGuard;
@@ -32,10 +32,10 @@ pub struct LoggerImpl {
 
 impl LoggerImpl {
     pub fn new(config: &LoggerConfig, thread_name: String) -> Self {
-        match config.target.clone() {
-            LogTarget::Stdout => Self::new_internal(std::io::stdout(), config, thread_name),
-            LogTarget::Stderr => Self::new_internal(std::io::stderr(), config, thread_name),
-            LogTarget::File(f) => Self::new_internal(
+        match config.log_destination.clone() {
+            LogDestination::Stdout => Self::new_internal(std::io::stdout(), config, thread_name),
+            LogDestination::Stderr => Self::new_internal(std::io::stderr(), config, thread_name),
+            LogDestination::File(f) => Self::new_internal(
                 std::fs::File::create(f).expect("Couldn't open/create log file"),
                 config,
                 thread_name,
