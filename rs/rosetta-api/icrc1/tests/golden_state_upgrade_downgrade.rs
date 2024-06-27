@@ -119,8 +119,8 @@ fn upgrade_canister_and_print_balances_and_approvals(
 ) {
     let canister_id =
         CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
-    upgrade_ledger(&state_machine, ledger_wasm, canister_id);
-    let metrics = retrieve_metrics(&state_machine, canister_id);
+    upgrade_ledger(state_machine, ledger_wasm, canister_id);
+    let metrics = retrieve_metrics(state_machine, canister_id);
     println!("{} '{}':", canister_name, canister_id_str);
     for metric in &metrics {
         if metric.starts_with("ledger_num_approvals")
@@ -148,7 +148,6 @@ fn ledger_wasm_u256() -> Vec<u8> {
 }
 
 fn upgrade_ledger(state_machine: &StateMachine, wasm_bytes: Vec<u8>, canister_id: CanisterId) {
-    let start = Instant::now();
     let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
     let args = Encode!(&args).unwrap();
     state_machine
