@@ -16,6 +16,7 @@ URL = "https://github.com/stedolan/jq/releases/download/{version}/jq-{platform}"
 
 def _jq_impl(repository_ctx):
     os_name = repository_ctx.os.name
+    print(repository_ctx.read(repository_ctx.workspace_root.get_child("Cargo.toml")))
     if os_name == "linux":
         platform = "linux64"
     elif os_name == "mac os x":
