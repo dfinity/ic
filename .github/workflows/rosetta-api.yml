@@ -1,0 +1,69 @@
+name: Rosetta API release
+
+on:
+  workflow_dispatch:
+    inputs:
+      rosetta-api-release:
+        description: 'Is this for a Rosetta-API release?'
+        required: true
+        default: false
+        type: choice # use choice instead of boolean because the UI is not intuitive
+        options:
+        - true
+        - false
+
+jobs:
+  bazel-build-rosetta-api:
+    name: Bazel Build Rosetta API
+    runs-on:
+      group: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+    timeout-minutes: 30
+    if: ${{ vars.RUN_CI == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - name: Before script
+        id: before-script
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+      - name: Run Bazel Test All
+        id: bazel-test-all
+        uses: ./.github/actions/bazel-test-all/
+        with:
+          BAZEL_COMMAND: "test"
+          BAZEL_TARGETS: "//rs/tests/rosetta-api/..."
+          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
+      - name: Upload bazel-targets
+        uses: actions/upload-artifact@v4
+        with:
+          name: bazel-targets
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            bazel-targets
+
+  rosetta-api-docker-image:
+    name: Rosetta API Docker Image
+    runs-on: ubuntu-latest
+    needs: [bazel-test-all]
+    #   if: ${{ inputs.rosetta-api-release == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3
+      - name: Login to GHCR
+        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build rosetta-api image
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/rosetta-api-docker-image.sh
