@@ -1,4 +1,5 @@
 use crate::{pb::v1::NodeProvidersMonthlyXdrRewards, registry::Registry};
+use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_nns_common::registry::decode_or_panic;
@@ -11,6 +12,7 @@ use ic_registry_keys::{
     make_data_center_record_key, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
 use ic_types::PrincipalId;
+use serde::Serialize;
 use std::{collections::HashMap, convert::TryFrom, str::from_utf8};
 
 impl Registry {
@@ -19,11 +21,17 @@ impl Registry {
     /// Computer for the month.
     pub fn get_node_providers_monthly_xdr_rewards(
         &self,
+        request: Option<GetNodeProvidersMonthlyXdrRewardsRequest>,
     ) -> Result<NodeProvidersMonthlyXdrRewards, String> {
         let mut rewards = NodeProvidersMonthlyXdrRewards::default();
 
+        let version_to_use = request
+            .map(|req| req.registry_version)
+            .flatten()
+            .unwrap_or_else(|| self.latest_version());
+
         let rewards_table_bytes = self
-            .get(NODE_REWARDS_TABLE_KEY.as_bytes(), self.latest_version())
+            .get(NODE_REWARDS_TABLE_KEY.as_bytes(), version_to_use)
             .ok_or_else(|| "Node Rewards Table was not found in the Registry".to_string())?
             .value
             .clone();
@@ -68,7 +76,7 @@ impl Registry {
                 let dc_id = &node_operator.dc_id;
                 let dc_key = make_data_center_record_key(dc_id);
                 let dc_record_bytes = self
-                    .get(dc_key.as_bytes(), self.latest_version())
+                    .get(dc_key.as_bytes(), version_to_use)
                     .ok_or_else(|| {
                         format!(
                             "Node Operator with key '{}' has data center ID '{}' \
@@ -186,10 +194,15 @@ impl Registry {
             }
         }
 
-        rewards.registry_version = Some(self.latest_version());
+        rewards.registry_version = Some(version_to_use);
 
         Ok(rewards)
     }
+}
+
+#[derive(Debug, CandidType, Serialize, Deserialize)]
+pub struct GetNodeProvidersMonthlyXdrRewardsRequest {
+    registry_version: Option<u64>,
 }
 
 #[cfg(test)]
@@ -246,7 +259,7 @@ mod tests {
         registry.maybe_apply_mutation_internal(mutations);
 
         assert!(registry
-            .get_node_providers_monthly_xdr_rewards()
+            .get_node_providers_monthly_xdr_rewards(None)
             .unwrap()
             .rewards
             .is_empty());
@@ -259,7 +272,7 @@ mod tests {
         // Assert get_node_providers_monthly_xdr_rewards fails because no rewards table
         // exists in the Registry
         let err = registry
-            .get_node_providers_monthly_xdr_rewards()
+            .get_node_providers_monthly_xdr_rewards(None)
             .unwrap_err();
         assert_eq!(&err, "Node Rewards Table was not found in the Registry");
 
@@ -278,7 +291,7 @@ mod tests {
     ) -> Registry {
         // Assert get_node_providers_monthly_xdr_rewards fails because the DC is not yet in the Registry
         let err = registry
-            .get_node_providers_monthly_xdr_rewards()
+            .get_node_providers_monthly_xdr_rewards(None)
             .unwrap_err();
         assert!(err.contains(&format!(
             "has data center ID '{}' not found in the Registry",
@@ -335,7 +348,9 @@ mod tests {
 
         // Assert get_node_providers_monthly_xdr_rewards defaults to 1 XDR per month per node
         // because there rewards table does not have an entry for the DC's region
-        let monthly_rewards = registry.get_node_providers_monthly_xdr_rewards().unwrap();
+        let monthly_rewards = registry
+            .get_node_providers_monthly_xdr_rewards(None)
+            .unwrap();
         let np_monthly_rewards = monthly_rewards
             .rewards
             .get(&np_principal.to_string())
@@ -394,7 +409,9 @@ mod tests {
         ///////////////////////////////
         // Assert get_node_providers_monthly_xdr_rewards still provides default values
         ///////////////////////////////
-        let monthly_rewards = registry.get_node_providers_monthly_xdr_rewards().unwrap();
+        let monthly_rewards = registry
+            .get_node_providers_monthly_xdr_rewards(None)
+            .unwrap();
         let np1 = TEST_USER1_PRINCIPAL.to_string();
         let np1_rewards = monthly_rewards.rewards.get(&np1).unwrap();
         assert_eq!(*np1_rewards, 5); // 5 nodes at 1 XDR/month/node
@@ -418,7 +435,9 @@ mod tests {
         let node_rewards_payload = UpdateNodeRewardsTableProposalPayload::from(map);
         registry.do_update_node_rewards_table(node_rewards_payload);
 
-        let monthly_rewards = registry.get_node_providers_monthly_xdr_rewards().unwrap();
+        let monthly_rewards = registry
+            .get_node_providers_monthly_xdr_rewards(None)
+            .unwrap();
 
         // NP1: 4 'type0' nodes in 'North America,US,NY' + 1 'type2' node in 'North America,US'
         assert_eq!(
@@ -447,7 +466,9 @@ mod tests {
         let node_rewards_payload = UpdateNodeRewardsTableProposalPayload::from(map);
         registry.do_update_node_rewards_table(node_rewards_payload);
 
-        let monthly_rewards = registry.get_node_providers_monthly_xdr_rewards().unwrap();
+        let monthly_rewards = registry
+            .get_node_providers_monthly_xdr_rewards(None)
+            .unwrap();
 
         // NP1: 4 'type0' nodes in 'North America,US,NY' + 1 'type2' node in 'North America,US'
         assert_eq!(
@@ -509,7 +530,9 @@ mod tests {
         let node_rewards_payload = UpdateNodeRewardsTableProposalPayload::from(map);
         registry.do_update_node_rewards_table(node_rewards_payload);
 
-        let monthly_rewards = registry.get_node_providers_monthly_xdr_rewards().unwrap();
+        let monthly_rewards = registry
+            .get_node_providers_monthly_xdr_rewards(None)
+            .unwrap();
 
         assert_eq!(
             monthly_rewards.registry_version,
@@ -557,7 +580,9 @@ mod tests {
             node_reward_de *= 0.7;
         }
 
-        let monthly_rewards = registry.get_node_providers_monthly_xdr_rewards().unwrap();
+        let monthly_rewards = registry
+            .get_node_providers_monthly_xdr_rewards(None)
+            .unwrap();
         assert_eq!(
             *monthly_rewards.rewards.get(&np2.to_string()).unwrap(),
             np2_expected_reward_ch + np2_expected_reward_de
@@ -583,7 +608,9 @@ mod tests {
             node_reward_ch *= 0.7;
         }
 
-        let monthly_rewards = registry.get_node_providers_monthly_xdr_rewards().unwrap();
+        let monthly_rewards = registry
+            .get_node_providers_monthly_xdr_rewards(None)
+            .unwrap();
         assert_eq!(
             *monthly_rewards.rewards.get(&np2.to_string()).unwrap(),
             np2_expected_reward_ch + np2_expected_reward_de

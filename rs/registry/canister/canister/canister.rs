@@ -28,6 +28,7 @@ use prost::Message;
 use registry_canister::{
     certification::{current_version_tree, hash_tree_to_proto},
     common::LOG_PREFIX,
+    get_node_providers_monthly_xdr_rewards::GetNodeProvidersMonthlyXdrRewardsRequest,
     init::RegistryCanisterInitPayload,
     mutations::{
         complete_canister_migration::CompleteCanisterMigrationPayload,
@@ -868,15 +869,17 @@ fn get_node_providers_monthly_xdr_rewards() {
     check_caller_is_governance_and_log("get_node_providers_monthly_xdr_rewards");
     over(
         candid_one,
-        |()| -> Result<NodeProvidersMonthlyXdrRewards, String> {
-            get_node_providers_monthly_xdr_rewards_()
+        |req| -> Result<NodeProvidersMonthlyXdrRewards, String> {
+            get_node_providers_monthly_xdr_rewards_(req)
         },
     )
 }
 
 #[candid_method(query, rename = "get_node_providers_monthly_xdr_rewards")]
-fn get_node_providers_monthly_xdr_rewards_() -> Result<NodeProvidersMonthlyXdrRewards, String> {
-    registry().get_node_providers_monthly_xdr_rewards()
+fn get_node_providers_monthly_xdr_rewards_(
+    request: Option<GetNodeProvidersMonthlyXdrRewardsRequest>,
+) -> Result<NodeProvidersMonthlyXdrRewards, String> {
+    registry().get_node_providers_monthly_xdr_rewards(None)
 }
 
 #[export_name = "canister_query get_node_operators_and_dcs_of_node_provider"]

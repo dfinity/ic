@@ -200,6 +200,10 @@ type GetNodeOperatorsAndDcsOfNodeProviderResponse = variant {
   Err : text;
 };
 
+type GetNodeProvidersMonthlyXdrRewardsRequest = record {
+  registry_version : opt nat64;
+};
+
 type GetNodeProvidersMonthlyXdrRewardsResponse = variant {
   Ok : NodeProvidersMonthlyXdrRewards;
   Err : text;
@@ -439,7 +443,7 @@ service : {
     ) -> ();
   get_build_metadata : () -> (text) query;
   get_node_operators_and_dcs_of_node_provider : (principal) -> (GetNodeOperatorsAndDcsOfNodeProviderResponse) query;
-  get_node_providers_monthly_xdr_rewards : () -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
+  get_node_providers_monthly_xdr_rewards : (opt GetNodeProvidersMonthlyXdrRewardsRequest) -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
   get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (GetSubnetForCanisterResponse) query;
   prepare_canister_migration : (PrepareCanisterMigrationPayload) -> ();
   recover_subnet : (RecoverSubnetPayload) -> ();
