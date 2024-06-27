@@ -23,6 +23,7 @@ package(default_visibility = ["//visibility:public"])
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/rosetta-api/icrc1",
             "//rs/rosetta-api/icrc1/ledger",
+            "//rs/rosetta-api/icrc1/test_utils",
             "//rs/rosetta-api/ledger_canister_core",
             "//rs/rosetta-api/ledger_core",
             "//rs/rust_canisters/http_types",
