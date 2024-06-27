@@ -87,9 +87,13 @@ rust_ic_test(
         "tests/golden_state_upgrade_downgrade.rs",
     ],
     data = [
+        "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm",
+        "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister.wasm)",
+        "IC_ICRC1_LEDGER_U256_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm)",
     },
     tags = [
         "manual",  # CI should not be downloading nns_state.tar.zst.
@@ -97,7 +101,11 @@ rust_ic_test(
     ],
     deps = [
         "//rs/nns/test_utils/golden_nns_state",
+        "//rs/rosetta-api/icrc1/ledger",
         "//rs/rosetta-api/icrc1/ledger/sm-tests",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
+        "@crate_index//:candid",
     ],
 )
