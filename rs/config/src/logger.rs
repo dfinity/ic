@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use slog::Level;
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Represents the required log level defined in the `LoggerConfig`.
@@ -47,13 +46,10 @@ pub fn default_logtarget() -> LogTarget {
 #[serde(default)]
 pub struct Config {
     pub node_id: u64,
-    pub dc_id: u64,
     #[serde(with = "LevelDef")]
     pub level: Level,
     pub format: LogFormat,
     pub debug_overrides: Vec<String>,
-    pub sampling_rates: HashMap<String, u32>,
-    pub enabled_tags: Vec<String>,
     #[serde(default = "default_logtarget")]
     pub target: LogTarget,
     /// If set to `false`, the logging thread will _not_ block even if the queue
@@ -73,12 +69,9 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             node_id: 100,
-            dc_id: 200,
             level: Level::Debug,
             format: LogFormat::TextFull,
             debug_overrides: vec![],
-            sampling_rates: HashMap::new(),
-            enabled_tags: vec![],
             target: default_logtarget(),
             block_on_overflow: true,
         }

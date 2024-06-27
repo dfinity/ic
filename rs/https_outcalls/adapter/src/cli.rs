@@ -253,10 +253,8 @@ pub mod test {
             "http_request_timeout_secs": 20,
             "incoming_source": "Systemd",
             "logger": {
-                "dc_id": 200,
                 "format": "text_full",
-                "debug_overrides": [],
-                "block_on_overflow": false
+                "debug_overrides": []
             }        
         }       
         "#;
@@ -275,10 +273,8 @@ pub mod test {
             http_request_timeout_secs: 20,
             incoming_source: IncomingSource::Systemd,
             logger: ic_config::logger::Config {
-                dc_id: 200,
                 format: ic_config::logger::LogFormat::TextFull,
                 debug_overrides: Vec::new(),
-                block_on_overflow: false,
                 ..Default::default()
             },
             ..Default::default()
@@ -299,12 +295,9 @@ pub mod test {
             },
             "logger": {
                 "node_id": 0,
-                "dc_id": 200,
                 "level": "info",
                 "format": "json",
-                "debug_overrides": [],
-                "enabled_tags": [],
-                "block_on_overflow": true
+                "debug_overrides": []
             },
             "socks_proxy": "socks5://notaproxy.com:1080"        
         }       
@@ -326,7 +319,6 @@ pub mod test {
             incoming_source: IncomingSource::Path(PathBuf::from("/tmp/path.socket")),
             logger: ic_config::logger::Config {
                 node_id: 0,
-                dc_id: 200,
                 level: slog::Level::Info,
                 format: ic_config::logger::LogFormat::Json,
                 debug_overrides: Vec::new(),
