@@ -28,7 +28,6 @@ jobs:
     name: Build Base Container Image
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    if: ${{ vars.RUN_CI == 'true' }}
     strategy:
       matrix:
         include:

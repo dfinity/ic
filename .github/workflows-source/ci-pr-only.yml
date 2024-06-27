@@ -27,14 +27,12 @@ anchors:
     container:
       <<: *image
     timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}
   dind-large-setup: &dind-large-setup
     runs-on:
       group: dind-large
     container:
       <<: *image
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }}
   before-script: &before-script
     name: Before script
     id: before-script

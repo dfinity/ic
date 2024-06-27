@@ -47,7 +47,6 @@ anchors:
     container:
       <<: *image
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }}
   before-script: &before-script
     name: Before script
     id: before-script
@@ -198,7 +197,6 @@ jobs:
     name: Python CI Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - <<: *checkout
       - <<: *python-setup
@@ -248,7 +246,6 @@ jobs:
     name: Build Determinism
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}
     needs: [build-ic, bazel-test-all]
     strategy:
       matrix:
