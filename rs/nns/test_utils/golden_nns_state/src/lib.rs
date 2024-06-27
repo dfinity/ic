@@ -29,6 +29,14 @@ pub fn new_state_machine_with_golden_nns_state_or_panic() -> StateMachine {
     new_state_machine_with_golden_state_or_panic(nns_subnet_id, NNS_STATE_SOURCE, "nns_state")
 }
 
+pub fn new_state_machine_with_golden_sns_state_or_panic() -> StateMachine {
+    let sns_subnet_id = SubnetId::new(
+        PrincipalId::from_str("x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae")
+            .unwrap(),
+    );
+    new_state_machine_with_golden_state_or_panic(sns_subnet_id, SNS_STATE_SOURCE, "sns_state")
+}
+
 fn new_state_machine_with_golden_state_or_panic(
     subnet_id: SubnetId,
     scp_location: ScpLocation,
@@ -48,9 +56,13 @@ fn new_state_machine_with_golden_state_or_panic(
         .with_extra_canister_range(RangeInclusive::new(
             CanisterId::from_u64(0x2100000),
             CanisterId::from_u64(0x21FFFFE),
+        ))
+        .with_extra_canister_range(RangeInclusive::new(
+            CanisterId::from_u64(0x2300000),
+            CanisterId::from_u64(0x23FFFFE),
         ));
 
-    let mut subnet_config = SubnetConfig::new(SubnetType::System);
+    let mut subnet_config = SubnetConfig::new(SubnetType::Application);
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
     let state_machine_builder = state_machine_builder.with_config(Some(StateMachineConfig::new(
         subnet_config,
@@ -78,7 +90,9 @@ fn download_and_untar_golden_nns_state_or_panic(
     archive_state_dir_name: &str,
 ) -> TempDir {
     let download_destination = bazel_test_compatible_temp_dir_or_panic();
-    let download_destination = download_destination.path().join("nns_state.tar.zst");
+    let download_destination = download_destination
+        .path()
+        .join(format!("{}.tar.zst", archive_state_dir_name));
     download_golden_nns_state_or_panic(scp_location, &download_destination);
 
     let state_dir = bazel_test_compatible_temp_dir_or_panic();
@@ -92,16 +106,22 @@ fn download_and_untar_golden_nns_state_or_panic(
 
 // Privates
 
+const FIDUCIARY_STATE_SOURCE: ScpLocation = ScpLocation {
+    user: "dev",
+    host: "zh1-pyr07.zh1.dfinity.network",
+    path: "/home/dev/fiduciary_state.tar.zst",
+};
+
 const NNS_STATE_SOURCE: ScpLocation = ScpLocation {
     user: "dev",
     host: "zh1-pyr07.zh1.dfinity.network",
     path: "/home/dev/nns_state.tar.zst",
 };
 
-const FIDUCIARY_STATE_SOURCE: ScpLocation = ScpLocation {
+const SNS_STATE_SOURCE: ScpLocation = ScpLocation {
     user: "dev",
     host: "zh1-pyr07.zh1.dfinity.network",
-    path: "/home/dev/fiduciary_state.tar.zst",
+    path: "/home/dev/sns_state.tar.zst",
 };
 
 /// A place that you can download from or upload to using the `scp` command.
@@ -179,7 +199,7 @@ fn untar_state_archive_or_panic(source: &Path, destination: &Path, state_dir: &s
     // Move $UNTAR_DESTINATION/nns_state/ic_state to final output dir path, StateMachine's so-called
     // state_dir.
     std::fs::rename(
-        format!("{}/{}/ic_state", state_dir, unpack_destination),
+        format!("{}/{}/ic_state", unpack_destination, state_dir),
         destination,
     )
     .unwrap();
