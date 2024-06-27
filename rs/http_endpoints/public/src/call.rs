@@ -7,7 +7,7 @@ pub use call_v2::CallServiceV2;
 pub use call_v3::CallServiceV3;
 
 use crate::{
-    common::{build_validator, validation_error_to_http_error, Cbor},
+    common::{build_validator, validation_error_to_http_error},
     HttpError, IngressFilterService,
 };
 use hyper::StatusCode;
@@ -183,7 +183,7 @@ impl IngressValidator {
     /// - The canister is willing to accept it.
     pub(crate) async fn validate_ingress_message(
         self,
-        Cbor(request): Cbor<HttpRequestEnvelope<HttpCallContent>>,
+        request: HttpRequestEnvelope<HttpCallContent>,
         effective_canister_id: CanisterId,
     ) -> Result<IngressMessageSubmitter, IngressError> {
         let Self {
