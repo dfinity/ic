@@ -4,9 +4,6 @@ on:
   schedule:
     - cron: "0 8 * * 3"
   workflow_dispatch:
-  pull_request:
-    paths:
-      - '.github/workflows/schedule-weekly.yml'
 
 env:
   DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
