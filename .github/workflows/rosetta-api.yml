@@ -57,7 +57,7 @@ jobs:
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//rs/tests/rosetta-api/..."
+          BAZEL_TARGETS: "//rs/rosetta-api/"
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
       - name: Upload bazel-targets
         uses: actions/upload-artifact@v4
