@@ -3,12 +3,11 @@
 //!
 //! Some tests are run over a range of subnet configurations to check for corner cases.
 
+use super::{parse, CanisterHttpPayloadBuilderImpl};
 use crate::payload_builder::{
     divergence_response_into_reject,
     parse::{bytes_to_payload, payload_to_bytes},
 };
-
-use super::CanisterHttpPayloadBuilderImpl;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_error_types::RejectCode;
@@ -33,7 +32,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     artifact_kind::CanisterHttpArtifact,
-    batch::{CanisterHttpPayload, ValidationContext},
+    batch::{CanisterHttpPayload, ValidationContext, MAX_CANISTER_HTTP_PAYLOAD_SIZE},
     canister_http::{
         CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponse,
         CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
@@ -59,6 +58,15 @@ use std::{
 
 /// The maximum subnet size up to which we will check the functionality of the canister http feature.
 const MAX_SUBNET_SIZE: usize = 40;
+
+#[test]
+fn default_payload_serializes_to_empty_vec() {
+    assert!(parse::payload_to_bytes(
+        &CanisterHttpPayload::default(),
+        NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64)
+    )
+    .is_empty());
+}
 
 /// Check that a single well formed request with shares makes it through the block maker
 #[test]
