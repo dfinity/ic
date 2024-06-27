@@ -163,20 +163,24 @@ mod tests {
             let expected_batch_height = Height::from(1);
             let priority = get_priority_function(&pool, expected_batch_height);
 
-            // Artifacts at the next height exceed the validator-CUP gap.
-            // We should stash them, but not fetch them.
+            // Artifacts at the next height are within look-ahead, but exceed
+            // the validator-CUP gap. We should stash them, but not fetch them.
             let beacon = pool.make_next_beacon();
             let block = pool.make_next_block();
             let notarization = Notarization::fake(NotarizationContent::new(
                 block.height(),
                 block.content.get_hash().clone(),
             ));
-            let equivocation_proof =
-                pool.make_equivocation_proof(replica_config.subnet_id, &membership, &committee);
+            let equivocation_proof_id = ConsensusMessageId {
+                hash: ConsensusMessageHash::EquivocationProof(CryptoHashOf::new(CryptoHash(
+                    vec![],
+                ))),
+                height: block.height(),
+            };
             assert_eq!(priority(&beacon.get_id(), &()), Stash);
             assert_eq!(priority(&block.get_id(), &()), Stash);
             assert_eq!(priority(&notarization.get_id(), &()), Stash);
-            assert_eq!(priority(&equivocation_proof.get_id(), &()), Stash);
+            assert_eq!(priority(&equivocation_proof_id, &()), Stash);
 
             // Regardless of bounds, we should always fetch CUPs.
             let cup_id = ConsensusMessageId {
@@ -194,7 +198,7 @@ mod tests {
             assert_eq!(priority(&beacon.get_id(), &()), FetchNow);
             assert_eq!(priority(&block.get_id(), &()), FetchNow);
             assert_eq!(priority(&notarization.get_id(), &()), FetchNow);
-            assert_eq!(priority(&equivocation_proof.get_id(), &()), FetchNow);
+            assert_eq!(priority(&equivocation_proof_id, &()), FetchNow);
         })
     }
 

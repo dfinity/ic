@@ -299,52 +299,6 @@ impl TestConsensusPool {
         }
     }
 
-    pub fn make_equivocation_proof(
-        &self,
-        subnet_id: SubnetId,
-        membership: &Membership,
-        subnet_members: &[NodeId],
-    ) -> EquivocationProof {
-        let pool_reader = PoolReader::new(self);
-        let mut first = self.make_next_block();
-        let height = first.content.height();
-        first.signature.signer = *subnet_members
-            .iter()
-            .find(|node| {
-                let prev_beacon = pool_reader.get_random_beacon(height.decrement()).unwrap();
-                membership.get_block_maker_rank(height, &prev_beacon, **node) == Ok(Some(Rank(0)))
-            })
-            .unwrap();
-        let mut second = first.clone();
-        let ingress = IngressPayload::from(vec![SignedIngressBuilder::new()
-            .method_payload(vec![0; 64])
-            .nonce(0)
-            .expiry_time(Time::from_nanos_since_unix_epoch(0))
-            .build()]);
-        second.content.as_mut().payload = Payload::new(
-            ic_types::crypto::crypto_hash,
-            BlockPayload::Data(DataPayload {
-                batch: BatchPayload {
-                    ingress,
-                    ..BatchPayload::default()
-                },
-                dealings: dkg::Dealings::new_empty(Height::new(0)),
-                ecdsa: None,
-            }),
-        );
-        second.update_content();
-        EquivocationProof {
-            signer: first.signature.signer,
-            version: first.content.as_ref().version.clone(),
-            height: first.content.as_ref().height,
-            subnet_id,
-            hash1: first.content.get_hash().clone(),
-            signature1: BasicSigOf::new(BasicSig(vec![])),
-            hash2: second.content.get_hash().clone(),
-            signature2: BasicSigOf::new(BasicSig(vec![])),
-        }
-    }
-
     pub fn latest_notarized_blocks(&self) -> Box<dyn Iterator<Item = Block>> {
         if let Some(h) = self
             .validated()
