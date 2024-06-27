@@ -18,14 +18,6 @@ pub trait Logger<T>: Clone {
     /// false otherwise
     fn is_enabled_at(&self, level: slog::Level, module_path: &'static str) -> bool;
 
-    /// Return true if a `sample!` log with the given key and value should be
-    /// logged, false otherwise
-    fn should_sample<V: Into<u32>>(&self, key: String, value: V) -> bool;
-
-    /// Return true if a log with the given tag should be logged, false
-    /// otherwise
-    fn is_tag_enabled(&self, tag: String) -> bool;
-
     /// Return true if this is the first log in n seconds, false otherwise
     fn is_n_seconds<V: Into<i32>>(&self, seconds: V, metadata: LogMetadata) -> bool;
 }
@@ -101,14 +93,6 @@ where
         self.inner_logger.is_enabled_at(level, module_path)
     }
 
-    pub fn should_sample<T: Into<u32>>(&self, key: String, value: T) -> bool {
-        self.inner_logger.should_sample(key, value)
-    }
-
-    pub fn is_tag_enabled(&self, tag: String) -> bool {
-        self.inner_logger.is_tag_enabled(tag)
-    }
-
     pub fn is_n_seconds<T: Into<i32>>(&self, seconds: T, metadata: LogMetadata) -> bool {
         self.inner_logger.is_n_seconds(seconds, metadata)
     }
@@ -146,7 +130,6 @@ mod tests {
         expected_context: TestContext,
         expected_message: String,
         expected_level: slog::Level,
-        enabled_tags: Vec<String>,
     }
 
     impl ExpectationLogger {
@@ -156,7 +139,6 @@ mod tests {
                 expected_context: Default::default(),
                 expected_message: Default::default(),
                 expected_level: level,
-                enabled_tags: vec![],
             }
         }
     }
@@ -170,14 +152,6 @@ mod tests {
 
         fn is_enabled_at(&self, _: slog::Level, _: &'static str) -> bool {
             true
-        }
-
-        fn should_sample<T: Into<u32>>(&self, _key: String, _value: T) -> bool {
-            false
-        }
-
-        fn is_tag_enabled(&self, _tag: String) -> bool {
-            false
         }
 
         fn is_n_seconds<T: Into<i32>>(&self, _: T, _: LogMetadata) -> bool {
@@ -197,43 +171,8 @@ mod tests {
             false
         }
 
-        fn should_sample<T: Into<u32>>(&self, _key: String, _value: T) -> bool {
-            false
-        }
-
-        fn is_tag_enabled(&self, _tag: String) -> bool {
-            false
-        }
-
         fn is_n_seconds<T: Into<i32>>(&self, _: T, _: LogMetadata) -> bool {
             false
-        }
-    }
-
-    #[derive(Clone, Default)]
-    struct TagLogger {
-        enabled_tags: Vec<String>,
-    }
-
-    impl Logger<TestContext> for TagLogger {
-        fn log(&self, _: String, _: TestContext, _: LogMetadata) {
-            panic!("Expected call to log()!");
-        }
-
-        fn is_enabled_at(&self, _: slog::Level, _: &'static str) -> bool {
-            true
-        }
-
-        fn should_sample<T: Into<u32>>(&self, _key: String, _value: T) -> bool {
-            false
-        }
-
-        fn is_tag_enabled(&self, tag: String) -> bool {
-            self.enabled_tags.contains(&tag)
-        }
-
-        fn is_n_seconds<T: Into<i32>>(&self, seconds: T, _: LogMetadata) -> bool {
-            seconds.into() <= 0
         }
     }
 
@@ -249,14 +188,6 @@ mod tests {
 
         fn is_enabled_at(&self, _: slog::Level, _: &'static str) -> bool {
             true
-        }
-
-        fn should_sample<T: Into<u32>>(&self, _key: String, _value: T) -> bool {
-            false
-        }
-
-        fn is_tag_enabled(&self, _tag: String) -> bool {
-            false
         }
 
         fn is_n_seconds<T: Into<i32>>(&self, seconds: T, _: LogMetadata) -> bool {
@@ -341,31 +272,6 @@ mod tests {
         });
 
         fatal!(logger, "Fatal error"; sub_context1.field_opt_i32 => 1);
-    }
-
-    /// If we log a tag that is enabled, a log call should be made. Calling
-    /// TagLogger's log method causes a panic, so we should expect the below
-    /// panic.
-    #[test]
-    #[should_panic(expected = "Expected call to log()!")]
-    fn test_enabled_tag_is_logged() {
-        let inner_logger = TagLogger::default();
-        let mut logger = ContextLogger::<TestContext, TagLogger>::new(inner_logger);
-        logger.inner_logger.enabled_tags = vec!["my_tag".to_string()];
-        info!(tag => "my_tag", logger, "Hello {} #{}{}", "world", 4, "!");
-    }
-
-    /// If we log a tag that is not enabled, a log call should not be made.
-    /// Calling TagLogger's log method causes a panic, so we should not
-    /// expect any panics.
-    #[test]
-    fn test_enabled_tag_is_not_logged() {
-        let inner_logger = TagLogger::default();
-        let logger = ContextLogger::<TestContext, TagLogger>::new(inner_logger);
-        info!(tag => "my_tag", logger, "Hello {} #{}{}", "world", 4, "!");
-        debug!(tag => "my_tag", logger, "Hello {} #{}{}", "world", 4, "!");
-        info!(tag => "my_tag", logger, "message");
-        debug!(tag => "my_tag", logger, "message");
     }
 
     /// Test the every_n_seconds `info!` calls don't log if the `is_n_seconds`
