@@ -2,6 +2,8 @@ set -exuo pipefail
 
 pip3 install --ignore-installed -r requirements.txt
 
+apt -yqq install rclone
+
 "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --git-rev "$CI_COMMIT_SHA" \
     --remote-path=release --out="artifacts/release"
 

@@ -366,7 +366,6 @@ jobs:
 
   rosetta-api-docker-image:
     name: Rosetta API Docker Image
-    <<: *dind-large-setup
     runs-on: ubuntu-latest
     needs: [bazel-test-all]
  #   if: ${{ inputs.rosetta-api-release == 'true' }}
