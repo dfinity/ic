@@ -8,7 +8,6 @@ use ic_nns_test_utils_golden_nns_state::{
 use ic_state_machine_tests::StateMachine;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::time::Instant;
 
 // u64 ledgers
 const CK_BTC_LEDGER: (&str, &str) = ("mxzaz-hqaaa-aaaar-qaada-cai", "ckBTC");
