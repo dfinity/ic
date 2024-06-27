@@ -52,10 +52,12 @@ go_deps.bzl               @dfinity/idx
 /packages/ic-vetkd-utils/            @dfinity/dept-crypto-library
 
 # [IC-OS]
-/ic-os/                                          @dfinity/node
-/ic-os/boundary-guestos/                         @dfinity/boundary-node @dfinity/node
-/ic-os/components/boundary-guestos/              @dfinity/boundary-node @dfinity/node
-/toolchains/                                     @dfinity/node
+/ic-os/                                                                 @dfinity/node
+/ic-os/boundary-guestos/                                                @dfinity/boundary-node @dfinity/node
+/ic-os/components/boundary-guestos/                                     @dfinity/boundary-node @dfinity/node
+/ic-os/components/boundary-guestos.bzl                                  @dfinity/boundary-node @dfinity/node
+/ic-os/components/init/bootstrap-ic-node/boundary-guestos/              @dfinity/boundary-node @dfinity/node
+/toolchains/                                                            @dfinity/node
 
 # [metrics-proxy]
 /ic-os/components/monitoring/metrics-proxy/      @dfinity/dre
