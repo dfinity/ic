@@ -39,7 +39,7 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -87,7 +87,7 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     name: Bazel Build All Config Check
@@ -165,7 +165,7 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -189,7 +189,7 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -238,7 +238,7 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' && github.event_name != 'merge_group' }}
     steps:
@@ -331,7 +331,7 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -367,7 +367,7 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
