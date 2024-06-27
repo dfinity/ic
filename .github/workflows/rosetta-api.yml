@@ -15,6 +15,7 @@ on:
   pull_request:
 
 env:
+  CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
   DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
   DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
 
