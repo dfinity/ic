@@ -195,7 +195,7 @@ pub fn run_canister_sandbox(
     // TODO(RUN-204): Get the logger config from the replica instead of
     // hardcoding the parameters.
     let logger_config = ic_config::logger::Config {
-        target: ic_config::logger::LogTarget::Stderr,
+        log_destination: ic_config::logger::LogDestination::Stderr,
         level: slog::Level::Warning,
         ..Default::default()
     };
