@@ -2200,7 +2200,12 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_call_cycles_add128_up_to(&mut self, amount: Cycles, dst: usize, heap: &mut [u8]) -> HypervisorResult<()> {
+    fn ic0_call_cycles_add128_up_to(
+        &mut self,
+        amount: Cycles,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
         let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }
@@ -2229,7 +2234,7 @@ impl SystemApi for SystemApiImpl {
 
                 match outgoing_request {
                     None => Err(HypervisorError::ToolchainContractViolation {
-                        error: 
+                        error:
                             "ic0_call_cycles_add128_up_to called when no call is under construction.".to_string()
                         ,
                     }),
