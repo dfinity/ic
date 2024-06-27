@@ -6,9 +6,6 @@ on:
       - 'hotfix-*-rc--*'
       - 'rc--*'
   workflow_dispatch:
-  pull_request:
-    paths:
-      - '.github/workflows/release-testing.yml'
 
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
