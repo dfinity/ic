@@ -4,6 +4,20 @@ use serde::{Deserialize, Serialize};
 /// Canister ID is Principal.
 pub type CanisterId = Principal;
 
+/// todo
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Default,
+)]
+pub enum LogVisibility {
+    #[default]
+    #[serde(rename = "controllers")]
+    /// Only controllers of the canister can access the logs.
+    Controllers,
+    #[serde(rename = "public")]
+    /// Everyone is allowed to access the canister's logs.
+    Public,
+}
+
 /// Canister settings.
 ///
 /// The settings are optional. If they are not explicitly set, the default values will be applied automatically.
@@ -52,6 +66,10 @@ pub struct CanisterSettings {
     ///
     /// Default value: 5_000_000_000_000 (5 trillion cycles).
     pub reserved_cycles_limit: Option<Nat>,
+    /// Defines who is allowed to read the canister's logs.
+    ///
+    /// Default value: Controllers
+    pub log_visibility: Option<LogVisibility>,
     /// Must be a number between 0 and 2<sup>48</sup>-1 (i.e 256TB), inclusively.
     ///
     /// It indicates the upper limit on the WASM heap memory consumption of the canister.
@@ -317,6 +335,8 @@ pub struct DefiniteCanisterSettings {
     pub freezing_threshold: Nat,
     /// Reserved cycles limit.
     pub reserved_cycles_limit: Nat,
+    /// Visibility of canister logs.
+    pub log_visibility: LogVisibility,
     /// The Wasm memory limit.
     pub wasm_memory_limit: Nat,
 }
