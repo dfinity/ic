@@ -879,7 +879,7 @@ fn get_node_providers_monthly_xdr_rewards() {
 fn get_node_providers_monthly_xdr_rewards_(
     request: Option<GetNodeProvidersMonthlyXdrRewardsRequest>,
 ) -> Result<NodeProvidersMonthlyXdrRewards, String> {
-    registry().get_node_providers_monthly_xdr_rewards(None)
+    registry().get_node_providers_monthly_xdr_rewards(request)
 }
 
 #[export_name = "canister_query get_node_operators_and_dcs_of_node_provider"]

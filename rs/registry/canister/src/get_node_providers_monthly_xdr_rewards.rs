@@ -26,8 +26,7 @@ impl Registry {
         let mut rewards = NodeProvidersMonthlyXdrRewards::default();
 
         let version_to_use = request
-            .map(|req| req.registry_version)
-            .flatten()
+            .and_then(|req| req.registry_version)
             .unwrap_or_else(|| self.latest_version());
 
         let rewards_table_bytes = self
@@ -614,6 +613,98 @@ mod tests {
         assert_eq!(
             *monthly_rewards.rewards.get(&np2.to_string()).unwrap(),
             np2_expected_reward_ch + np2_expected_reward_de
+        );
+    }
+
+    #[test]
+    fn test_get_node_providers_monthly_xdr_rewards_type3_registry_version_arg() {
+        let registry = registry_init_empty();
+
+        ///////////////////////////////
+        // Adding two Node Providers and no reward table yet
+        ///////////////////////////////
+        let np1 = *TEST_USER1_PRINCIPAL;
+        let registry = registry_add_node_operator(
+            registry,
+            np1,
+            np1,
+            "ZH3".to_string(),
+            "Europe,CH,Zurich".into(),
+            28,
+            btreemap! { "type0".to_string() => 14, "type2".to_string() => 11 },
+        );
+
+        let np2 = *TEST_USER2_PRINCIPAL;
+        let mut registry = registry_add_node_operator(
+            registry,
+            np2,
+            np2,
+            "ZH4".to_string(),
+            "Europe,CH,Zurich".into(),
+            28,
+            btreemap! { "type3".to_string() => 14 },
+        );
+
+        ///////////////////////////////
+        // Now add the reward table for type0/2/3 nodes and check that the values are properly used
+        ///////////////////////////////
+        let json = r#"{
+            "North America,US":            { "type0": [100000, null],  "type2": [200000, null],  "type3": [300000, 70] },
+            "North America,CA":            { "type0": [400000, null],  "type2": [500000, null],  "type3": [600000, 70] },
+            "North America,US,California": { "type0": [700000, null],                            "type3": [800000, 70] },
+            "North America,US,Florida":    { "type0": [900000, null],                            "type3": [1000000, 70] },
+            "North America,US,Georgia":    { "type0": [1100000, null],                           "type3": [1200000, null] },
+            "Asia,SG":                     { "type0": [10000000, 100],  "type2": [11000000, 100],  "type3": [12000000, 70] },
+            "Asia":                        { "type0": [13000000, 100],  "type2": [14000000, 100],  "type3": [15000000, 70] },
+            "Europe":                      { "type0": [20000000, null], "type2": [21000000, null], "type3": [22000000, 70] }
+        }"#;
+
+        let map: BTreeMap<String, BTreeMap<String, NodeRewardRate>> =
+            serde_json::from_str(json).unwrap();
+        let node_rewards_payload = UpdateNodeRewardsTableProposalPayload::from(map);
+        registry.do_update_node_rewards_table(node_rewards_payload);
+
+        let json = r#"{
+            "North America,US":            { "type0": [90000, null],  "type2": [200000, null],  "type3": [200000, 70] },
+            "North America,CA":            { "type0": [300000, null],  "type2": [500000, null],  "type3": [500000, 70] },
+            "North America,US,California": { "type0": [600000, null],                            "type3": [700000, 70] },
+            "North America,US,Florida":    { "type0": [800000, null],                            "type3": [900000, 70] },
+            "North America,US,Georgia":    { "type0": [1000000, null],                           "type3": [1100000, null] },
+            "Asia,SG":                     { "type0": [9000000, 100],  "type2": [11000000, 100],  "type3": [11000000, 70] },
+            "Asia":                        { "type0": [12000000, 100],  "type2": [14000000, 100],  "type3": [14000000, 70] },
+            "Europe":                      { "type0": [19000000, null], "type2": [21000000, null], "type3": [21000000, 70] }
+        }"#;
+
+        let map: BTreeMap<String, BTreeMap<String, NodeRewardRate>> =
+            serde_json::from_str(json).unwrap();
+        let node_rewards_payload = UpdateNodeRewardsTableProposalPayload::from(map);
+        registry.do_update_node_rewards_table(node_rewards_payload);
+
+        let monthly_rewards = registry
+            .get_node_providers_monthly_xdr_rewards(None)
+            .unwrap();
+
+        let latest_version = registry.latest_version();
+        assert_eq!(monthly_rewards.registry_version, Some(latest_version));
+
+        // NP1: the existence of type3 nodes should not impact the type0/type2 rewards
+        assert_ne!(
+            *monthly_rewards.rewards.get(&np1.to_string()).unwrap(),
+            14 * 20000000 + 11 * 21000000
+        );
+
+        let monthly_rewards = registry
+            .get_node_providers_monthly_xdr_rewards(Some(
+                GetNodeProvidersMonthlyXdrRewardsRequest {
+                    registry_version: Some(latest_version - 1),
+                },
+            ))
+            .unwrap();
+
+        // We now asser that the rewards are what IS expected when getting the penultimate version
+        assert_eq!(
+            *monthly_rewards.rewards.get(&np1.to_string()).unwrap(),
+            14 * 20000000 + 11 * 21000000
         );
     }
 }
