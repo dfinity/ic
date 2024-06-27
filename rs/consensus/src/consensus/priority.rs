@@ -139,12 +139,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval = ACCEPTABLE_VALIDATION_CUP_GAP + 29;
             let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
-            let Dependencies {
-                mut pool,
-                membership,
-                replica_config,
-                ..
-            } = dependencies_with_subnet_params(
+            let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
                 pool_config,
                 subnet_test_id(0),
                 vec![(
