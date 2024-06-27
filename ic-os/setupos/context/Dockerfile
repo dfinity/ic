@@ -39,9 +39,9 @@ RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
 
 # Clear files that may lead to indeterministic build.
 RUN apt-get clean && \
-    find /usr/lib/python3.8 -name "*.pyc" | xargs rm && \
-    find /usr/lib/python3 -name "*.pyc" | xargs rm && \
-    find /usr/share/python3 -name "*.pyc" | xargs rm && \
+    find /usr/lib/python3.8 -name "*.pyc" | xargs rm -f && \
+    find /usr/lib/python3 -name "*.pyc" | xargs rm -f && \
+    find /usr/share/python3 -name "*.pyc" | xargs rm -f && \
     truncate --size 0 /etc/machine-id
 
 # ------ NEAR-COMMON ICOS WORK ----------------------------------------
