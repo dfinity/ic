@@ -192,9 +192,7 @@ pub struct CanisterSnapshot {
     certified_data: Vec<u8>,
     /// Snapshot of chunked store.
     chunk_store: WasmChunkStore,
-    /// May not exist depending on whether or not the canister has
-    /// an actual `ExecutionState`.
-    execution_snapshot: Option<ExecutionStateSnapshot>,
+    execution_snapshot: ExecutionStateSnapshot,
 }
 
 impl CanisterSnapshot {
@@ -204,7 +202,7 @@ impl CanisterSnapshot {
         canister_version: u64,
         certified_data: Vec<u8>,
         chunk_store: WasmChunkStore,
-        execution_snapshot: Option<ExecutionStateSnapshot>,
+        execution_snapshot: ExecutionStateSnapshot,
         size: NumBytes,
     ) -> CanisterSnapshot {
         Self {
@@ -256,26 +254,20 @@ impl CanisterSnapshot {
         self.size
     }
 
-    pub fn execution_snapshot(&self) -> Option<&ExecutionStateSnapshot> {
-        self.execution_snapshot.as_ref()
+    pub fn execution_snapshot(&self) -> &ExecutionStateSnapshot {
+        &self.execution_snapshot
     }
 
-    pub fn stable_memory(&self) -> Option<&PageMemory> {
-        self.execution_snapshot
-            .as_ref()
-            .map(|exec| &exec.stable_memory)
+    pub fn stable_memory(&self) -> &PageMemory {
+        &self.execution_snapshot.stable_memory
     }
 
-    pub fn wasm_memory(&self) -> Option<&PageMemory> {
-        self.execution_snapshot
-            .as_ref()
-            .map(|exec| &exec.wasm_memory)
+    pub fn wasm_memory(&self) -> &PageMemory {
+        &self.execution_snapshot.wasm_memory
     }
 
-    pub fn canister_module(&self) -> Option<&CanisterModule> {
-        self.execution_snapshot
-            .as_ref()
-            .map(|exec| &exec.wasm_binary)
+    pub fn canister_module(&self) -> &CanisterModule {
+        &self.execution_snapshot.wasm_binary
     }
 
     pub fn chunk_store(&self) -> &WasmChunkStore {
@@ -284,6 +276,41 @@ impl CanisterSnapshot {
 
     pub fn certified_data(&self) -> &Vec<u8> {
         &self.certified_data
+    }
+}
+
+/// Errors that can occur when converting from (sender, [`InstallCodeArgsV2`]) to
+/// an [`InstallCodeContext`].
+#[derive(Debug)]
+pub enum InstallCodeContextError {
+    ComputeAllocation(InvalidComputeAllocationError),
+    MemoryAllocation(InvalidMemoryAllocationError),
+    InvalidHash(String),
+}
+
+impl From<InstallCodeContextError> for UserError {
+    fn from(err: InstallCodeContextError) -> Self {
+        match err {
+            InstallCodeContextError::ComputeAllocation(err) => UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!(
+                    "ComputeAllocation expected to be in the range [{}..{}], got {}",
+                    err.min(),
+                    err.max(),
+                    err.given()
+                ),
+            ),
+            InstallCodeContextError::MemoryAllocation(err) => UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!(
+                    "MemoryAllocation expected to be in the range [{}..{}], got {}",
+                    err.min, err.max, err.given
+                ),
+            ),
+            InstallCodeContextError::InvalidHash(err) => {
+                UserError::new(ErrorCode::CanisterContractViolation, err)
+            }
+        }
     }
 }
 
