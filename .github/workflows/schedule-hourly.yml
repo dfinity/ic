@@ -28,7 +28,6 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 120
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,7 +48,6 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 120
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,7 +71,6 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 120
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
