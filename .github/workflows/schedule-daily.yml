@@ -49,7 +49,7 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 720 # 12 hours
     # TODO: disable in GitLab before enabling here
-    if: ${{ vars.RUN_CI == 'true' && false }}
+    if: ${{ && false }}
     strategy:
       matrix:
         targets: ["//rs/crypto/...", "//rs/state_manager/..."]
@@ -80,7 +80,7 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 120
     # TODO: enable when zh1 is active again
-    if: ${{ vars.RUN_CI == 'true' && false }}
+    if: ${{ false }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
