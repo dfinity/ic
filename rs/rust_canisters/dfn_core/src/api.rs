@@ -57,7 +57,7 @@ pub mod ic0 {
         pub fn call_on_cleanup(fun: usize, env: u32);
         pub fn call_cycles_add(amount: u64);
         pub fn call_cycles_add128(amount_high: u64, amount_low: u64);
-        pub fn call_cycles_add128(amount_high: u64, amount_low: u64, dst: i32);
+        pub fn call_cycles_add128_up_to(amount_high: u64, amount_low: u64, dst: i32);
         pub fn call_perform() -> i32;
         pub fn stable_size() -> u32;
         pub fn stable_grow(additional_pages: u32) -> i32;
