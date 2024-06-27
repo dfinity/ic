@@ -116,7 +116,7 @@ fn public_derivation_path() {
         .expect("couldn't derive ecdsa public key");
 
     assert_eq!(
-        ic_crypto_tecdsa::derive_threshold_public_key(
+        ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key(
             &master_public_key,
             &extended_derivation_path
         )

@@ -130,15 +130,6 @@ pub fn get_updatesubnetpayload_with_keys(
         initial_notary_delay_millis: None,
         dkg_interval_length: None,
         dkg_dealings_per_block: None,
-        max_artifact_streams_per_peer: None,
-        max_chunk_wait_ms: None,
-        max_duplicity: None,
-        max_chunk_size: None,
-        receive_check_cache_size: None,
-        pfn_evaluation_period_ms: None,
-        registry_poll_period_ms: None,
-        retransmission_request_ms: None,
-        set_gossip_config_to_default: false,
         start_as_nns: None,
         subnet_type: None,
         is_halted: None,
@@ -156,6 +147,16 @@ pub fn get_updatesubnetpayload_with_keys(
         max_number_of_canisters: None,
         ssh_readonly_access: readonly_keys,
         ssh_backup_access: backup_keys,
+        // Deprecated/unused values follow
+        max_artifact_streams_per_peer: None,
+        max_chunk_wait_ms: None,
+        max_duplicity: None,
+        max_chunk_size: None,
+        receive_check_cache_size: None,
+        pfn_evaluation_period_ms: None,
+        registry_poll_period_ms: None,
+        retransmission_request_ms: None,
+        set_gossip_config_to_default: Default::default(),
     }
 }
 

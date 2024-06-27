@@ -30,7 +30,7 @@ pub enum StepType {
     MergeCertificationPools,
     /// In this step we will download the latest persisted subnet state and all finalized consensus artifacts. For that we should use a node, that is up to date with the highest certification and finalization height because this node should contain all we need for the recovery.
     DownloadState,
-    /// In this step we will take the latest persisted subnet state downloaded in the previous step and apply the finalized consensus artifacts on it via the deterministic state machine part of the replica to hopefully obtain the exact state which existed in the memory of all subnet nodes at the moment when a subnet issue has occurred.
+    /// In this step we will take the latest persisted subnet state downloaded in the previous step and apply the finalized consensus artifacts on it via the deterministic state machine part of the replica to hopefully obtain the exact state which existed in the memory of all subnet nodes at the moment when a subnet issue has occurred. Note that if the cause of this recovery is a panic in the deterministic state machine when executing a certain height, we can specify a "target replay height" in this step. This target height should be chosen such that it is below the height causing the panic, but above or equal to the height of the last certification (share). Specifying this parameter will instruct ic-replay to stop at the given height and create a checkpoint, which will then be used to propose the recovery CUP.
     ICReplay,
     /// Now we want to verify that the height of the locally obtained execution state matches the highest finalized height, which was agreed upon by the subnet.
     ValidateReplayOutput,
@@ -72,6 +72,10 @@ pub struct AppSubnetRecoveryArgs {
     #[clap(long, multiple_values(true), parse(try_from_str=crate::util::node_id_from_str))]
     /// Replace the members of the given subnet with these nodes
     pub replacement_nodes: Option<Vec<NodeId>>,
+
+    #[clap(long)]
+    /// The replay will stop at this height and make a checkpoint.
+    pub replay_until_height: Option<u64>,
 
     /// Public ssh key to be deployed to the subnet for read only access
     #[clap(long)]
@@ -194,6 +198,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 ));
             }
 
+            StepType::ICReplay => {
+                if self.params.replay_until_height.is_none() {
+                    self.params.replay_until_height =
+                        read_optional(&self.logger, "Replay until height: ");
+                }
+            }
+
             StepType::BlessVersion => {
                 if self.params.upgrade_version.is_none() {
                     self.params.upgrade_version =
@@ -278,6 +289,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 self.params.subnet_id,
                 None,
                 None,
+                self.params.replay_until_height,
             ))),
 
             StepType::ValidateReplayOutput => Ok(Box::new(

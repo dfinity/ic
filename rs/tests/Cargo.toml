@@ -14,7 +14,7 @@ async-recursion = { workspace = true }
 async-trait = { workspace = true }
 backon = "0.4.1"
 base64 = { workspace = true }
-bincode = "1.3.3"
+bincode = { workspace = true }
 bitcoincore-rpc = "0.15.0"
 candid = { workspace = true }
 chacha20poly1305 = "0.10.0"
@@ -43,6 +43,7 @@ ic-artifact-pool = { path = "../artifact_pool" }
 ic-backup = { path = "../backup" }
 ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
+ic-icrc1-test-utils = { path = "../rosetta-api/icrc1/test_utils" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-cdk = { workspace = true }
 ic-certification = { path = "../certification" }
@@ -204,6 +205,10 @@ path = "consensus/orchestrator/rotate_ecdsa_idkg_key_test.rs"
 [[bin]]
 name = "ic-systest-tecdsa-add-nodes"
 path = "consensus/tecdsa/tecdsa_add_nodes_test.rs"
+
+[[bin]]
+name = "ic-systest-tschnorr-message-sizes"
+path = "consensus/tecdsa/tschnorr_message_sizes_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-key-rotation"

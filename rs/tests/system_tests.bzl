@@ -69,7 +69,7 @@ def _run_system_test(ctx):
         ),
         RunEnvironmentInfo(
             environment = env,
-            inherited_environment = ctx.attr.env_inherit,
+            inherited_environment = ctx.attr.env_inherit + ["KUBECONFIG"],
         ),
     ]
 
@@ -111,6 +111,7 @@ def system_test(
         uses_setupos_dev = False,
         uses_hostos_dev_test = False,
         env_inherit = [],
+        additional_colocate_tags = [],
         **kwargs):
     """Declares a system-test.
 
@@ -140,6 +141,7 @@ def system_test(
       uses_hostos_dev_test: the test uses ic-os/hostos/envs/dev:update-img-test (will be also automatically added as dependency).
       env_inherit: specifies additional environment variables to inherit from
       the external environment when the test is executed by bazel test.
+      additional_colocate_tags: additional tags to pass to the colocated test.
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
 
@@ -240,7 +242,7 @@ def system_test(
         env_inherit = env_inherit,
         env = env,
         tags = tags + ["requires-network", "system_test"] +
-               ([] if "experimental_system_test_colocation" in tags else ["manual"]),
+               ([] if "experimental_system_test_colocation" in tags else ["manual"]) + additional_colocate_tags,
         timeout = test_timeout,
         flaky = flaky,
     )

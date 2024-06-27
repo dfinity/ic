@@ -750,7 +750,7 @@ fn get_canister_status_from_another_canister_when_memory_low() {
     let controller = test.universal_canister().unwrap();
     let binary = wat::parse_str("(module)").unwrap();
     let canister = test.create_canister(Cycles::new(1_000_000_000_000));
-    let memory_allocation = NumBytes::from(150);
+    let memory_allocation = NumBytes::from(158);
     test.install_canister_with_allocation(canister, binary, None, Some(memory_allocation.get()))
         .unwrap();
     let canister_status_args = Encode!(&CanisterIdRecord::from(canister)).unwrap();

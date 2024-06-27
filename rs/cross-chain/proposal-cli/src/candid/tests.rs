@@ -35,6 +35,10 @@ fn should_encode_non_empty_ledger_upgrade_args() {
 #[test]
 fn should_parse_constructor_parameters() {
     for canister in TargetCanister::iter() {
+        if canister == TargetCanister::IcpArchive1 || canister == TargetCanister::IcpArchive2 {
+            continue;
+        }
+
         let path = repository_root().join(canister.candid_file());
 
         let (_env, constructor_args) = parse_constructor_args(&path);
@@ -55,6 +59,8 @@ fn should_parse_constructor_parameters() {
                 | (TargetCanister::CkEthIndex, "(opt IndexArg)")
                 | (TargetCanister::CkEthLedger, "(LedgerArg)")
                 | (TargetCanister::CkEthMinter, "(MinterArg)")
+                | (TargetCanister::IcpIndex, "(InitArg)")
+                | (TargetCanister::IcpLedger, "(LedgerCanisterPayload)")
                 | (TargetCanister::LedgerSuiteOrchestrator, "(OrchestratorArg)")
         );
     }

@@ -89,15 +89,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 initial_notary_delay_millis: None,
                 dkg_interval_length: Some(10),
                 dkg_dealings_per_block: Some(1),
-                max_artifact_streams_per_peer: None,
-                max_chunk_wait_ms: None,
-                max_duplicity: None,
-                max_chunk_size: None,
-                receive_check_cache_size: None,
-                pfn_evaluation_period_ms: None,
-                registry_poll_period_ms: None,
-                retransmission_request_ms: None,
-                set_gossip_config_to_default: false,
                 start_as_nns: None,
                 subnet_type: None,
                 is_halted: Some(true),
@@ -115,6 +106,16 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 chain_key_config: None,
                 chain_key_signing_enable: None,
                 chain_key_signing_disable: None,
+                // Deprecated section follows
+                max_artifact_streams_per_peer: None,
+                max_chunk_wait_ms: None,
+                max_duplicity: None,
+                max_chunk_size: None,
+                receive_check_cache_size: None,
+                pfn_evaluation_period_ms: None,
+                registry_poll_period_ms: None,
+                retransmission_request_ms: None,
+                set_gossip_config_to_default: Default::default(),
             };
 
             let proposal_id: ProposalId = submit_external_update_proposal(

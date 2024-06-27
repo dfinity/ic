@@ -1950,6 +1950,14 @@ impl StateMachine {
             .commit_and_certify(state, h.increment(), CertificationScope::Metadata);
     }
 
+    // Enable checkpoints and make a tick to write a checkpoint.
+    fn checkpointed_tick(&self) {
+        let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
+        self.set_checkpoints_enabled(true);
+        self.tick();
+        self.set_checkpoint_interval_length(checkpoint_interval_length);
+    }
+
     /// Replaces the canister state in this state machine with the canister
     /// state in given source replicated state.
     ///
@@ -1959,6 +1967,7 @@ impl StateMachine {
         source_state: Arc<ReplicatedState>,
         canister_id: CanisterId,
     ) {
+        self.checkpointed_tick();
         let (h, mut state) = self.state_manager.take_tip();
         state.put_canister_state(source_state.canister_state(&canister_id).unwrap().clone());
         self.state_manager
@@ -1982,11 +1991,7 @@ impl StateMachine {
         other_env: &StateMachine,
         canister_id: CanisterId,
     ) -> Result<(), String> {
-        // Enable checkpoints and make a tick to write a checkpoint.
-        let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
-        self.set_checkpoints_enabled(true);
-        self.tick();
-        self.set_checkpoint_interval_length(checkpoint_interval_length);
+        self.checkpointed_tick();
 
         let (height, mut state) = self.state_manager.take_tip();
         if state.take_canister_state(&canister_id).is_some() {
