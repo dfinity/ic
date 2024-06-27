@@ -1,7 +1,7 @@
 //! Common utils for the ECDSA implementation.
 
-use crate::consensus::metrics::EcdsaPayloadMetrics;
 use crate::ecdsa::complaints::{EcdsaTranscriptLoader, TranscriptLoadStatus};
+use crate::ecdsa::metrics::EcdsaPayloadMetrics;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::consensus_pool::ConsensusBlockChain;

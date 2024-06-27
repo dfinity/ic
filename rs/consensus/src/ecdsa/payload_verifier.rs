@@ -28,7 +28,7 @@ use super::utils::{
     block_chain_cache, get_chain_key_config_if_enabled, BuildSignatureInputsError,
     EcdsaBlockReaderImpl, InvalidChainCacheError,
 };
-use crate::consensus::metrics::timed_call;
+use crate::ecdsa::metrics::timed_call;
 use crate::ecdsa::payload_builder::{create_data_payload_helper, create_summary_payload};
 use crate::ecdsa::utils::build_signature_inputs;
 use ic_consensus_utils::crypto::ConsensusCrypto;
