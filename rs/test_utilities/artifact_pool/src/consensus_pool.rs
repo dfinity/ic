@@ -1,7 +1,7 @@
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
+use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
@@ -20,8 +20,6 @@ use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_consensus::fake::*;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-use ic_test_utilities_types::messages::SignedIngressBuilder;
-use ic_types::batch::{BatchPayload, IngressPayload};
 use ic_types::signature::*;
 use ic_types::{artifact::ConsensusMessageId, batch::ValidationContext};
 use ic_types::{
