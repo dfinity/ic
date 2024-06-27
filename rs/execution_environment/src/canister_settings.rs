@@ -519,42 +519,46 @@ pub(crate) fn validate_canister_settings(
         }
     }
 
-    let reservation_cycles = if new_memory_bytes <= old_memory_bytes {
-        Cycles::zero()
+    let allocated_bytes = if new_memory_bytes > old_memory_bytes {
+        new_memory_bytes - old_memory_bytes
     } else {
-        let allocated_bytes = new_memory_bytes - old_memory_bytes;
-        let reservation_cycles = cycles_account_manager.storage_reservation_cycles(
-            allocated_bytes,
-            subnet_memory_saturation,
-            subnet_size,
-        );
-        let reserved_balance_limit = settings
-            .reserved_cycles_limit()
-            .or(canister_reserved_balance_limit);
-        if let Some(limit) = reserved_balance_limit {
-            if canister_reserved_balance + reservation_cycles > limit {
-                return Err(
-                    CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation {
-                        memory_allocation: new_memory_allocation,
-                        requested: canister_reserved_balance + reservation_cycles,
-                        limit,
-                    },
-                );
-            }
-        }
-        // Note that this check does not include the freezing threshold to be
-        // consistent with the `reserve_cycles()` function, which moves
-        // cycles between the main and reserved balances without checking
-        // the freezing threshold.
-        if canister_cycles_balance < reservation_cycles {
-            return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
-                memory_allocation: new_memory_allocation,
-                available: canister_cycles_balance,
-                threshold: reservation_cycles,
-            });
-        }
-        reservation_cycles
+        NumBytes::new(0)
     };
+
+    let reservation_cycles = cycles_account_manager.storage_reservation_cycles(
+        allocated_bytes,
+        subnet_memory_saturation,
+        subnet_size,
+    );
+    let reserved_balance_limit = settings
+        .reserved_cycles_limit()
+        .or(canister_reserved_balance_limit);
+
+    if let Some(limit) = reserved_balance_limit {
+        // TODO(RUN-1001): return `ReservedCyclesLimitIsTooLow` once
+        // the replica with that error type rolls out successfully.
+        if canister_reserved_balance + reservation_cycles > limit {
+            return Err(
+                CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation {
+                    memory_allocation: new_memory_allocation,
+                    requested: canister_reserved_balance + reservation_cycles,
+                    limit,
+                },
+            );
+        }
+    }
+
+    // Note that this check does not include the freezing threshold to be
+    // consistent with the `reserve_cycles()` function, which moves
+    // cycles between the main and reserved balances without checking
+    // the freezing threshold.
+    if canister_cycles_balance < reservation_cycles {
+        return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
+            memory_allocation: new_memory_allocation,
+            available: canister_cycles_balance,
+            threshold: reservation_cycles,
+        });
+    }
 
     Ok(ValidatedCanisterSettings {
         controller: settings.controller(),

@@ -15,7 +15,6 @@ mod firewall;
 mod geoip;
 mod http;
 mod log;
-mod management;
 mod metrics;
 mod persist;
 mod rate_limiting;
