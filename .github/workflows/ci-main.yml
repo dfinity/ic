@@ -41,7 +41,6 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -89,7 +88,6 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }}
     name: Bazel Build All Config Check
     steps:
       - name: Checkout
@@ -113,7 +111,7 @@ jobs:
     name: Bazel Test Darwin x86-64
     timeout-minutes: 120
     # TODO: enable once we have more macos runners
-    if: ${{ vars.RUN_CI == 'true' && github.event_name == 'schedule' }}
+    if: ${{ github.event_name == 'schedule' }}
     runs-on:
       labels: macOS
     steps:
@@ -167,7 +165,6 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -191,7 +188,6 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -212,7 +208,6 @@ jobs:
     name: Python CI Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -240,7 +235,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' && github.event_name != 'merge_group' }}
+    if: ${{ github.event_name != 'merge_group' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -276,7 +271,6 @@ jobs:
     name: Build Determinism
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}
     needs: [build-ic, bazel-test-all]
     strategy:
       matrix:
@@ -333,7 +327,6 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -369,7 +362,6 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
