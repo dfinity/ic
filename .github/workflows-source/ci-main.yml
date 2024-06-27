@@ -116,7 +116,7 @@ jobs:
         with:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
-          BAZEL_CI_CONFIG: "--config=check"
+          BAZEL_CI_CONFIG: "--config=check --config=ci --keep_going"
           # run on diff only if it is a pull request, otherwise run all targets
           RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
 

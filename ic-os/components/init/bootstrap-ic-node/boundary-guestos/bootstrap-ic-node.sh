@@ -66,6 +66,7 @@ function process_bootstrap() {
         certificate_issuer.conf
         denylist.json
         ic_boundary.conf
+        canister-ratelimit.yml
         network.conf
         nns_public_key.pem
         nns.conf

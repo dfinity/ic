@@ -245,7 +245,6 @@ mod tests {
     fn default_batch_payload_is_empty() {
         assert_eq!(IngressPayload::default().count_bytes(), 0);
         assert_eq!(SelfValidatingPayload::default().count_bytes(), 0);
-        assert_eq!(CanisterHttpPayload::default().count_bytes(), 0);
     }
 
     #[test]

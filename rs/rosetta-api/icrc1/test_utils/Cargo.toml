@@ -25,3 +25,6 @@ ring = { version = "0.17.7", features = ["std"] }
 serde_json = { workspace = true }
 rosetta-core = { path = "../../rosetta_core" }
 serde_bytes = { workspace = true }
+ic-crypto-ecdsa-secp256k1 = { path = "../../../crypto/ecdsa_secp256k1" }
+ic-crypto-ed25519 = { path = "../../../crypto/ed25519" }
+ic-types = { path = "../../../types/types" }

@@ -154,3 +154,22 @@ pub(crate) fn extract_subnet_ids(subnet_list_record: &SubnetListRecordPb) -> Vec
         })
         .collect()
 }
+
+/// Shortens the provided `PrincipalId`s to make them easier to display.
+pub(crate) fn shortened_pids_string(pids: &[PrincipalId]) -> String {
+    let mut pids_string = "[".to_string();
+    pids_string.push_str(
+        &pids
+            .to_vec()
+            .iter()
+            .map(PrincipalId::to_string)
+            .map(|mut s| {
+                s.truncate(5);
+                s
+            })
+            .collect::<Vec<String>>()
+            .join(", "),
+    );
+    pids_string.push(']');
+    pids_string
+}

@@ -92,7 +92,7 @@ members = [
     "rs/crypto/getrandom_for_wasm",
     "rs/crypto/prng",
     "rs/crypto/sha2",
-    "rs/crypto/tecdsa",
+    "rs/crypto/utils/canister_threshold_sig",
     "rs/crypto/temp_crypto",
     "rs/crypto/test_utils",
     "rs/crypto/test_utils/canister_sigs",

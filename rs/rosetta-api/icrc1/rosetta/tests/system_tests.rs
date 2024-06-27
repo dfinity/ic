@@ -9,6 +9,7 @@ use ic_agent::Identity;
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder};
+use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_icrc1_test_utils::{
     minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
     DEFAULT_TRANSFER_FEE,
@@ -701,7 +702,7 @@ fn test_construction_derive() {
         let env = RosettaTestingEnvironmentBuilder::new(&setup).build().await;
         wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0).await;
 
-        let key_pair = EdKeypair::generate_from_u64(10);
+        let key_pair = EdKeypair::generate(10);
         let principal_id = key_pair.generate_principal_id().unwrap();
         let public_key = ic_rosetta_test_utils::to_public_key(&key_pair);
         let account = Account {
@@ -1094,8 +1095,8 @@ fn test_construction_submit() {
 
 #[test]
 fn test_rosetta_client_construction_api_flow() {
-    let sender_keypair = EdKeypair::generate_from_u64(0);
-    let receiver_keypair = EdKeypair::generate_from_u64(1);
+    let sender_keypair = EdKeypair::generate(0);
+    let receiver_keypair = EdKeypair::generate(1);
     let rt = Runtime::new().unwrap();
     let setup = Setup::builder()
         .with_initial_balance(
@@ -1213,8 +1214,8 @@ fn test_rosetta_client_construction_api_flow() {
 
 #[test]
 fn test_rosetta_client_binary() {
-    let sender_keypair = EdKeypair::generate_from_u64(0);
-    let receiver_keypair = EdKeypair::generate_from_u64(1);
+    let sender_keypair = EdKeypair::generate(0);
+    let receiver_keypair = EdKeypair::generate(1);
 
     let sender_account = Account {
         owner: sender_keypair.generate_principal_id().unwrap().0,
@@ -1304,9 +1305,9 @@ fn test_rosetta_client_binary() {
 
 #[test]
 fn test_rosetta_transfer_from() {
-    let from_keypair = EdKeypair::generate_from_u64(0);
-    let to_keypair = EdKeypair::generate_from_u64(1);
-    let spender_keypair = EdKeypair::generate_from_u64(2);
+    let from_keypair = EdKeypair::generate(0);
+    let to_keypair = EdKeypair::generate(1);
+    let spender_keypair = EdKeypair::generate(2);
 
     let spender_account = Account {
         owner: spender_keypair.generate_principal_id().unwrap().0,
@@ -1586,7 +1587,7 @@ fn test_cli_construction() {
                     // Fund the accounts from rosetta-cli_construction_test.json
                     // The accounts are created from seed 1-7.
                     for seed in 1..NUM_ACCOUNTS + 1 {
-                        let key_pair = EdKeypair::generate_from_u64(seed);
+                        let key_pair = EdKeypair::generate(seed);
                         let account: Account = key_pair
                             .generate_principal_id()
                             .expect("failed to get principal")

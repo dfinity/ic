@@ -5438,7 +5438,6 @@ dependencies = [
  "hyper 0.14.26",
  "hyper-rustls 0.24.2",
  "ic-base-types",
- "ic-btc-interface",
  "ic-certification-test-utils",
  "ic-config",
  "ic-crypto-ed25519",
@@ -5447,7 +5446,6 @@ dependencies = [
  "ic-crypto-utils-tls",
  "ic-interfaces-registry",
  "ic-logger",
- "ic-management-canister-types",
  "ic-protobuf",
  "ic-registry-client",
  "ic-registry-client-fake",
@@ -6442,7 +6440,6 @@ dependencies = [
  "ic-crypto-node-key-validation",
  "ic-crypto-sha2",
  "ic-crypto-standalone-sig-verifier",
- "ic-crypto-tecdsa",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-canister-sigs",
@@ -6460,6 +6457,7 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-basic-sig",
+ "ic-crypto-utils-canister-threshold-sig",
  "ic-crypto-utils-tls",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -7221,14 +7219,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-crypto-tecdsa"
-version = "0.9.0"
-dependencies = [
- "ic-crypto-internal-threshold-sig-ecdsa",
- "ic-types",
-]
-
-[[package]]
 name = "ic-crypto-temp-crypto"
 version = "0.9.0"
 dependencies = [
@@ -7556,6 +7546,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-utils-canister-threshold-sig"
+version = "0.9.0"
+dependencies = [
+ "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-types",
+]
+
+[[package]]
 name = "ic-crypto-utils-ni-dkg"
 version = "0.8.0"
 dependencies = [
@@ -7822,8 +7820,8 @@ dependencies = [
  "ic-constants",
  "ic-crypto-prng",
  "ic-crypto-sha2",
- "ic-crypto-tecdsa",
  "ic-crypto-tree-hash",
+ "ic-crypto-utils-canister-threshold-sig",
  "ic-cycles-account-manager",
  "ic-embedders",
  "ic-error-types",
@@ -8544,11 +8542,14 @@ dependencies = [
  "ed25519-consensus",
  "ic-agent",
  "ic-constants",
+ "ic-crypto-ecdsa-secp256k1",
+ "ic-crypto-ed25519",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-icrc1",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
+ "ic-types",
  "icrc-ledger-types",
  "num-traits",
  "proptest",
@@ -10796,6 +10797,7 @@ version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "hex",
+ "ic-icrc1-test-utils",
  "ic-rosetta-api",
  "ic-types",
  "icp-ledger",
@@ -11421,9 +11423,9 @@ dependencies = [
  "ic-crypto-extended-bip32",
  "ic-crypto-iccsa",
  "ic-crypto-interfaces-sig-verification",
- "ic-crypto-tecdsa",
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-tree-hash",
+ "ic-crypto-utils-canister-threshold-sig",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
  "ic-error-types",
@@ -16906,7 +16908,6 @@ dependencies = [
  "icrc-ledger-types",
  "num-bigint 0.4.4",
  "proptest",
- "rand 0.8.5",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -18885,6 +18886,7 @@ dependencies = [
  "ic-icrc1",
  "ic-icrc1-index-ng",
  "ic-icrc1-ledger",
+ "ic-icrc1-test-utils",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-ledger-canister-blocks-synchronizer-test-utils",

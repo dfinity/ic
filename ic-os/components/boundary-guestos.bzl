@@ -98,6 +98,7 @@ component_files = {
     Label("networking/hosts"): "/etc/hosts",
     Label("early-boot/locale"): "/etc/default/locale",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
+    Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("early-boot/initramfs-tools/boundary-guestos/hooks/veritysetup"): "/etc/initramfs-tools/hooks/veritysetup",
     Label("early-boot/initramfs-tools/boundary-guestos/initramfs.conf"): "/etc/initramfs-tools/initramfs.conf",
     Label("early-boot/initramfs-tools/boundary-guestos/modules"): "/etc/initramfs-tools/modules",
