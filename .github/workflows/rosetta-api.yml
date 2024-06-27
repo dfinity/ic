@@ -14,6 +14,10 @@ on:
   # test
   pull_request:
 
+env:
+  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
+  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+
 jobs:
   bazel-build-rosetta-api:
     name: Bazel Build Rosetta API
