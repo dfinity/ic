@@ -11,6 +11,8 @@ on:
         options:
         - true
         - false
+  # test
+  pull_request:
 
 jobs:
   bazel-build-rosetta-api:
