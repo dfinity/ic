@@ -43,6 +43,7 @@ ic-artifact-pool = { path = "../artifact_pool" }
 ic-backup = { path = "../backup" }
 ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
+ic-icrc1-test-utils = { path = "../rosetta-api/icrc1/test_utils" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-cdk = { workspace = true }
 ic-certification = { path = "../certification" }
