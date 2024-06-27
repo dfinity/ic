@@ -52,21 +52,14 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
-      - name: Run Bazel Test All
+      - name: Bazel Build Rosetta API
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//rs/rosetta-api/"
+          BAZEL_TARGETS: "//rs/rosetta-api/..."
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-      - name: Upload bazel-targets
-        uses: actions/upload-artifact@v4
-        with:
-          name: bazel-targets
-          retention-days: 1
-          if-no-files-found: error
-          path: |
-            bazel-targets
+          S3_UPLOAD: "true"
 
   rosetta-api-docker-image:
     name: Rosetta API Docker Image

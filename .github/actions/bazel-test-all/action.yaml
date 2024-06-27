@@ -26,6 +26,9 @@ inputs:
     required: false
   SSH_PRIVATE_KEY:
     required: false
+  S3_UPLOAD:
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
@@ -62,3 +65,4 @@ runs:
           RUN_ON_DIFF_ONLY: ${{ inputs.RUN_ON_DIFF_ONLY }}
           HONEYCOMB_API_TOKEN: ${{ inputs.HONEYCOMB_API_TOKEN }}
           SSH_PRIVATE_KEY: ${{ inputs.SSH_PRIVATE_KEY }}
+          s3_upload: ${{ inputs.S3_UPLOAD }}
