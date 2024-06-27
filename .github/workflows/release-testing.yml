@@ -33,7 +33,6 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 180 # 3 hours
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,7 +57,6 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
     timeout-minutes: 180 # 3 hours
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -81,7 +79,6 @@ jobs:
       group: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
-    if: ${{ vars.RUN_CI == 'true' }}
     timeout-minutes: 90
     steps:
       - name: Checkout
