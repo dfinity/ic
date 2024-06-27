@@ -361,6 +361,13 @@ impl PayloadBuilder {
     pub fn call_cycles_add128(mut self, high_amount: u64, low_amount: u64) -> Self {
         self = self.push_int64(high_amount);
         self = self.push_int64(low_amount);
+        self.0.push(Ops::CallCyclesAdd128UpTo as u8);
+        self
+    }
+
+    pub fn call_cycles_add128_up_to(mut self, high_amount: u64, low_amount: u64) -> Self {
+        self = self.push_int64(high_amount);
+        self = self.push_int64(low_amount);
         self.0.push(Ops::CallCyclesAdd128 as u8);
         self
     }

@@ -957,6 +957,30 @@ impl SandboxSafeSystemState {
         result
     }
 
+    pub(super) fn withdraw_up_to_cycles_for_transfer(
+        &mut self,
+        canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
+        amount: Cycles,
+    ) -> Cycles {
+        let mut new_balance = self.cycles_balance();
+        let result = self
+            .cycles_account_manager
+            .withdraw_up_to_cycles_for_transfer(
+                self.freeze_threshold,
+                self.memory_allocation,
+                canister_current_memory_usage,
+                canister_current_message_memory_usage,
+                self.compute_allocation,
+                &mut new_balance,
+                amount,
+                self.subnet_size,
+                self.reserved_balance(),
+            );
+        self.update_balance_change(new_balance);
+        result
+    }
+
     #[allow(clippy::result_large_err)]
     pub fn push_output_request(
         &mut self,

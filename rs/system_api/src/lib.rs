@@ -2200,6 +2200,57 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
+    fn ic0_call_cycles_add128_up_to(&mut self, amount: Cycles, dst: usize, heap: &mut [u8]) -> HypervisorResult<()> {
+        let result = match &mut self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_cycles_add128_up_to")),
+            ApiType::Update {
+                outgoing_request, ..
+            }
+            | ApiType::SystemTask {
+                outgoing_request, ..
+            }
+            | ApiType::ReplyCallback {
+                outgoing_request, ..
+            }
+            | ApiType::RejectCallback {
+                outgoing_request, ..
+            } => {
+                // Reply and reject callbacks can be executed in non-replicated mode
+                // iff from within a composite query call. Always disallow in that case.
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    return Err(self.error_for("ic0_call_cycles_add128_up_to"));
+                }
+
+                match outgoing_request {
+                    None => Err(HypervisorError::ToolchainContractViolation {
+                        error: 
+                            "ic0_call_cycles_add128_up_to called when no call is under construction.".to_string()
+                        ,
+                    }),
+                    Some(request) => {
+                        let withdrawn_cycles = self.sandbox_safe_system_state
+                            .withdraw_up_to_cycles_for_transfer(
+                                self.memory_usage.current_usage,
+                                self.memory_usage.current_message_usage,
+                                amount,
+                            );
+                        request.add_cycles(withdrawn_cycles);
+                        copy_cycles_to_heap(withdrawn_cycles, dst, heap, "ic0_call_cycles_add128_up_to")?;
+                        Ok(())
+                    }
+                }
+            }
+        };
+        trace_syscall!(self, CallCyclesAdd128UpTo, result, amount);
+        result
+    }
+
     // Note that if this function returns an error, then the canister will be
     // trapped and the state will be rolled back. Hence, we do not have to worry
     // about rolling back any modifications that previous calls like

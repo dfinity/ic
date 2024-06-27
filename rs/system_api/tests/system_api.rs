@@ -269,6 +269,7 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::CallDataAppend => vec!["U", "CQ", "Ry", "Rt", "CRy", "CRt", "T"],
         SystemApiCallId::CallCyclesAdd => vec!["U", "Ry", "Rt", "T"],
         SystemApiCallId::CallCyclesAdd128 => vec!["U", "Ry", "Rt", "T"],
+        SystemApiCallId::CallCyclesAdd128UpTo => vec!["U", "Ry", "Rt", "T"],
         SystemApiCallId::CallPerform => vec!["U", "CQ", "Ry", "Rt", "CRy", "CRt", "T"],
         SystemApiCallId::CallWithBestEffortResponse => vec!["U", "CQ", "Ry", "Rt", "CRy", "CRt", "T"],
         SystemApiCallId::StableSize => vec!["*", "s"],
@@ -546,6 +547,19 @@ fn api_availability_test(
                 |mut api| {
                     let _ = api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[42; 128]);
                     api.ic0_call_cycles_add128(Cycles::new(0))
+                },
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
+        SystemApiCallId::CallCyclesAdd128UpTo => {
+            assert_api_availability(
+                |mut api| {
+                    let _ = api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[42; 128]);
+                    api.ic0_call_cycles_add128_up_to(Cycles::new(0), 0, &mut [42; 128])
                 },
                 api_type,
                 &system_state,
@@ -972,6 +986,63 @@ fn test_fail_adding_more_cycles_when_not_enough_balance() {
     assert_eq!(
         api.ic0_canister_cycle_balance().unwrap() as u128,
         cycles_amount - amount
+    );
+}
+
+fn call_cycles_add128_up_to_helper(
+    api: &mut SystemApiImpl,
+    amount: Cycles,
+) -> Result<Cycles, HypervisorError> {
+    let size = 16;
+    let mut buf = vec![0u8; size];
+    api.ic0_call_cycles_add128_up_to(amount, 0, &mut buf)?;
+    let attached_cycles = u128::from_le_bytes(buf.try_into().unwrap());
+    Ok(Cycles::from(attached_cycles))
+}
+
+#[test]
+fn test_call_cycles_add_up_to() {
+    let cycles_amount = Cycles::from(1_000_000_000_000u128);
+    let max_num_instructions = NumInstructions::from(1 << 30);
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_max_num_instructions(max_num_instructions)
+        .build();
+    let mut api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &get_system_state_with_cycles(cycles_amount),
+        cycles_account_manager,
+    );
+
+    // Check ic0_canister_cycle_balance after first ic0_call_new.
+    assert_eq!(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]), Ok(()));
+    // Check cycles balance.
+    assert_eq!(
+        Cycles::from(api.ic0_canister_cycle_balance().unwrap()),
+        cycles_amount
+    );
+
+    // Add an avialable amount of cycles to call.
+    let amount1 = Cycles::new(49);
+    assert_eq!(
+        call_cycles_add128_up_to_helper(&mut api, amount1),
+        Ok(amount1)
+    );
+    // Check cycles balance
+    assert_eq!(
+        Cycles::from(api.ic0_canister_cycle_balance().unwrap()),
+        cycles_amount - amount1
+    );
+
+    // Adding more cycles than available to call means the rest of the available balance gets added
+    let amount2 = Cycles::new(u128::MAX);
+    assert_eq!(
+        call_cycles_add128_up_to_helper(&mut api, amount2),
+        Ok(cycles_amount - amount1)
+    );
+    // Check cycles balance
+    assert_eq!(
+        Cycles::from(api.ic0_canister_cycle_balance().unwrap()),
+        Cycles::zero()
     );
 }
 

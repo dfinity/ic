@@ -57,6 +57,7 @@ pub mod ic0 {
         pub fn call_on_cleanup(fun: usize, env: u32);
         pub fn call_cycles_add(amount: u64);
         pub fn call_cycles_add128(amount_high: u64, amount_low: u64);
+        pub fn call_cycles_add128(amount_high: u64, amount_low: u64, dst: i32);
         pub fn call_perform() -> i32;
         pub fn stable_size() -> u32;
         pub fn stable_grow(additional_pages: u32) -> i32;
@@ -178,6 +179,10 @@ pub mod ic0 {
 
     pub unsafe fn call_cycles_add128(_amount_high: u64, _amount_low: u64) {
         wrong_arch("call_cycles_add128")
+    }
+
+    pub unsafe fn call_cycles_add128_up_to(_amount_high: u64, _amount_low: u64, _dst: i32) {
+        wrong_arch("call_cycles_add128_up_to")
     }
 
     pub unsafe fn call_perform() -> i32 {
@@ -641,6 +646,15 @@ pub fn call_cycles_add128(amount_high: u64, amount_low: u64) {
     unsafe {
         ic0::call_cycles_add128(amount_high, amount_low);
     }
+}
+
+pub fn call_cycles_add128_up_to(amount_high: u64, amount_low: u64) -> u128 {
+    let size = 16;
+    let mut buf = vec![0u8; size];
+    unsafe {
+        ic0::call_cycles_add128_up_to(amount_high, amount_low, buf.as_mut_ptr() as i32);
+    }
+    u128::from_le_bytes(buf.try_into().unwrap())
 }
 
 /// Safe wrapper around an unsafe function

@@ -392,6 +392,33 @@ impl CyclesAccountManager {
             reveal_top_up,
         )
     }
+    #[allow(clippy::too_many_arguments)]
+    pub fn withdraw_up_to_cycles_for_transfer(
+        &self,
+        freeze_threshold: NumSeconds,
+        memory_allocation: MemoryAllocation,
+        canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
+        canister_compute_allocation: ComputeAllocation,
+        cycles_balance: &mut Cycles,
+        cycles: Cycles,
+        subnet_size: usize,
+        reserved_balance: Cycles,
+    ) -> Cycles {
+        let threshold = self.freeze_threshold_cycles(
+            freeze_threshold,
+            memory_allocation,
+            canister_current_memory_usage,
+            canister_current_message_memory_usage,
+            canister_compute_allocation,
+            subnet_size,
+            reserved_balance,
+        );
+        let available_for_withdrawal = *cycles_balance - threshold;
+        let withdrawn_cycles = Cycles::min(available_for_withdrawal, cycles);
+        *cycles_balance -= withdrawn_cycles;
+        withdrawn_cycles
+    }
 
     /// Charges the canister for ingress induction cost.
     ///
