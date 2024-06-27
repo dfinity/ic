@@ -1,4 +1,4 @@
-use crate::ecdsa::metrics::{
+use crate::consensus::metrics::{
     PayloadBuilderMetrics, CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_VALIDATION_NOT_PASSED,
 };
 use ic_consensus_utils::pool_reader::filter_past_payloads;

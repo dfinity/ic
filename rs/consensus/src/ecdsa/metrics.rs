@@ -5,8 +5,11 @@ use ic_metrics::{
     buckets::{decimal_buckets, linear_buckets},
     MetricsRegistry,
 };
-use ic_types::consensus::idkg::EcdsaPayload;
+use ic_types::consensus::idkg::{EcdsaPayload, HasMasterPublicKeyId};
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
+use std::collections::BTreeMap;
+
+pub const ECDSA_KEY_ID_LABEL: &str = "key_id";
 
 pub(crate) const CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING: &str = "ecdsa_key_transcript_missing";
 pub(crate) const CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS: &str =
@@ -329,10 +332,6 @@ impl EcdsaComplaintMetrics {
     }
 }
 
-fn expected_keys(payload: &EcdsaPayload) -> Vec<MasterPublicKeyId> {
-    payload.key_transcripts.keys().cloned().collect()
-}
-
 #[derive(Clone)]
 pub struct EcdsaTranscriptMetrics {
     pub active_transcripts: IntGauge,
@@ -456,4 +455,34 @@ impl EcdsaSignatureMetrics {
             ),
         }
     }
+}
+
+/// Returns the key id corresponding to the [`MasterPublicKeyId`]
+pub fn key_id_label(key_id: Option<&MasterPublicKeyId>) -> String {
+    key_id.map(ToString::to_string).unwrap_or_default()
+}
+
+pub fn expected_keys(payload: &EcdsaPayload) -> Vec<MasterPublicKeyId> {
+    payload.key_transcripts.keys().cloned().collect()
+}
+
+pub type CounterPerMasterPublicKeyId = BTreeMap<MasterPublicKeyId, usize>;
+
+pub fn count_by_master_public_key_id<T: HasMasterPublicKeyId>(
+    collection: impl Iterator<Item = T>,
+    expected_keys: &[MasterPublicKeyId],
+) -> CounterPerMasterPublicKeyId {
+    let mut counter_per_key_id = CounterPerMasterPublicKeyId::new();
+
+    // To properly report `0` for ecdsa keys which do not appear in the `collection`, we insert the
+    // default values for all the ecdsa keys which we expect to see in the payload.
+    for key in expected_keys {
+        counter_per_key_id.insert(key.clone(), 0);
+    }
+
+    for item in collection {
+        *counter_per_key_id.entry(item.key_id().clone()).or_default() += 1;
+    }
+
+    counter_per_key_id
 }

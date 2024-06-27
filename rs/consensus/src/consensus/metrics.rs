@@ -1,7 +1,6 @@
 use ic_consensus_utils::{get_block_hash_string, pool_reader::PoolReader};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
 use ic_interfaces::ingress_manager::IngressSelector;
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
@@ -9,10 +8,7 @@ use ic_metrics::{
 use ic_types::{
     batch::BatchPayload,
     consensus::{
-        idkg::{
-            CompletedReshareRequest, CompletedSignature, EcdsaPayload, HasMasterPublicKeyId,
-            KeyTranscriptCreation,
-        },
+        idkg::{CompletedReshareRequest, CompletedSignature, EcdsaPayload, KeyTranscriptCreation},
         Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank,
     },
     CountBytes, Height,
@@ -20,7 +16,12 @@ use ic_types::{
 use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
 };
-use std::{collections::BTreeMap, sync::RwLock};
+use std::sync::RwLock;
+
+use crate::ecdsa::metrics::{
+    count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
+    ECDSA_KEY_ID_LABEL,
+};
 
 // For certain metrics, we record metrics based on block's rank.
 // Since we can only record limited number of them, the follow is
@@ -156,8 +157,6 @@ impl BatchStats {
     }
 }
 
-type CounterPerMasterPublicKeyId = BTreeMap<MasterPublicKeyId, usize>;
-
 // Ecdsa payload stats
 pub struct EcdsaStats {
     pub signature_agreements: usize,
@@ -219,25 +218,6 @@ impl From<&EcdsaPayload> for EcdsaStats {
     }
 }
 
-fn count_by_master_public_key_id<T: HasMasterPublicKeyId>(
-    collection: impl Iterator<Item = T>,
-    expected_keys: &[MasterPublicKeyId],
-) -> CounterPerMasterPublicKeyId {
-    let mut counter_per_key_id = CounterPerMasterPublicKeyId::new();
-
-    // To properly report `0` for ecdsa keys which do not appear in the `collection`, we insert the
-    // default values for all the ecdsa keys which we expect to see in the payload.
-    for key in expected_keys {
-        counter_per_key_id.insert(key.clone(), 0);
-    }
-
-    for item in collection {
-        *counter_per_key_id.entry(item.key_id().clone()).or_default() += 1;
-    }
-
-    counter_per_key_id
-}
-
 pub struct FinalizerMetrics {
     pub batches_delivered: IntCounterVec,
     pub batch_height: IntGauge,
@@ -257,8 +237,6 @@ pub struct FinalizerMetrics {
     pub canister_http_timeouts_delivered: IntCounter,
     pub canister_http_divergences_delivered: IntCounter,
 }
-
-const ECDSA_KEY_ID_LABEL: &str = "key_id";
 
 impl FinalizerMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
@@ -400,10 +378,6 @@ impl FinalizerMetrics {
             );
         }
     }
-}
-
-fn key_id_label(key_id: Option<&MasterPublicKeyId>) -> String {
-    key_id.map(ToString::to_string).unwrap_or_default()
 }
 
 pub struct NotaryMetrics {

@@ -23,7 +23,7 @@
 //! * A node must not issue new notarization share for any round older than the
 //!   latest round, which would break security if it has already finality-signed
 //!   for that round.
-use crate::ecdsa::metrics::NotaryMetrics;
+use crate::consensus::metrics::NotaryMetrics;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
     find_lowest_ranked_proposals, get_adjusted_notary_delay,
