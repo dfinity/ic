@@ -159,8 +159,6 @@
     logger: {
         // The node id to append to log lines.
         node_id: {{ node_index }},
-        // The datacenter id to append to log lines.
-        dc_id: 200,
         // The log level to use.
         level: "info",
         // The format of emitted log lines
