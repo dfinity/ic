@@ -171,13 +171,13 @@ pub fn get_adjusted_notary_delay(
         }
         NotaryDelay::ReachedMaxNotarizationCUPGap {
             notarized_height,
-            next_cup_height,
+            cup_height,
         } => {
             warn!(
                 every_n_seconds => 5,
                 log,
                 "The gap between the notarization height ({notarized_height}) and \
-                the next CUP height ({next_cup_height}) exceeds hard bound of \
+                the CUP height ({cup_height}) exceeds hard bound of \
                 {ACCEPTABLE_NOTARIZATION_CUP_GAP}"
             );
             None
@@ -199,7 +199,7 @@ pub enum NotaryDelay {
     /// hard limit on this gap, the notary cannot progress for now.
     ReachedMaxNotarizationCUPGap {
         notarized_height: Height,
-        next_cup_height: Height,
+        cup_height: Height,
     },
 }
 
@@ -257,15 +257,24 @@ pub fn get_adjusted_notary_delay_from_settings(
     let certified_adjusted_delay =
         finality_adjusted_delay + unit_delay.as_millis() as u64 * certified_gap;
 
-    // We bound the gap between the next CUP height and the current notarization
-    // height by ACCEPTABLE_NOTARIZATION_CUP_GAP.
-    let next_cup_height = pool.get_next_cup_height();
-    if notarized_height.get().saturating_sub(next_cup_height.get())
-        >= ACCEPTABLE_NOTARIZATION_CUP_GAP
-    {
+    // We measure the gap between our current CUP height and the current notarized
+    // height. If the notarized height is in a DKG interval for which we don't yet have
+    // the CUP, we limit the notarization-CUP gap to ACCEPTABLE_NOTARIZATION_CUP_GAP.
+    let last_cup = pool.get_highest_catch_up_package();
+    let last_cup_dkg_info = &last_cup
+        .content
+        .block
+        .as_ref()
+        .payload
+        .as_ref()
+        .as_summary()
+        .dkg;
+    let cup_height = last_cup.height();
+    let cup_gap = notarized_height.get().saturating_sub(cup_height.get());
+    if cup_gap >= last_cup_dkg_info.interval_length.get() + ACCEPTABLE_NOTARIZATION_CUP_GAP {
         return NotaryDelay::ReachedMaxNotarizationCUPGap {
             notarized_height,
-            next_cup_height,
+            cup_height,
         };
     }
 
