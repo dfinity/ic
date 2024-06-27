@@ -123,7 +123,7 @@ jobs:
     name: Bazel Test Darwin x86-64
     timeout-minutes: 120
     # TODO: enable once we have more macos runners
-    if: ${{ vars.RUN_CI == 'true' && github.event_name == 'schedule' }}
+    if: ${{ github.event_name == 'schedule' }}
     runs-on:
       labels: macOS
     steps:
@@ -215,7 +215,7 @@ jobs:
   build-ic:
     name: Build IC
     <<: *dind-large-setup
-    if: ${{ vars.RUN_CI == 'true' && github.event_name != 'merge_group' }}
+    if: ${{ github.event_name != 'merge_group' }}
     steps:
       - <<: *checkout
       - <<: *before-script
