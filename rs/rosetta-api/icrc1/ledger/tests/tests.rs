@@ -124,7 +124,7 @@ fn encode_init_args_with_small_sized_archive(
     }
 }
 
-fn encode_upgrade_args() -> LedgerArgument {
+fn encode_upgrade_downgrade_args() -> LedgerArgument {
     LedgerArgument::Upgrade(None)
 }
 
@@ -135,9 +135,7 @@ fn test_install_mainnet_ledger_then_upgrade_then_downgrade() {
         ledger_mainnet_wasm(),
         encode_init_args,
         ledger_wasm(),
-        encode_upgrade_args,
-        ledger_mainnet_wasm(),
-        encode_upgrade_args,
+        encode_upgrade_downgrade_args,
     );
 }
 
