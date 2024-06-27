@@ -19,8 +19,8 @@ use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{trace, Resource};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::Layer;
+use tracing::Level;
+use tracing_subscriber::{fmt, fmt::writer::MakeWriterExt, layer::SubscriberExt, Layer};
 
 #[cfg(target_os = "linux")]
 mod jemalloc_metrics;
@@ -235,8 +235,31 @@ fn main() -> io::Result<()> {
     context.subnet_id = format!("{}", subnet_id.get());
     let logger = logger.with_new_context(context);
 
-    // Set up tracing
-    let mut tracing_layers = vec![];
+    // Setup the tracing subscriber
+    //   1. Log to stdout
+    //   2. Layers for generating flamegraphs
+    //   3. Jeager exporter if enabled
+
+    let (non_blocking_log_writer, _log_writer_guard) =
+        tracing_appender::non_blocking(std::io::stdout());
+    let non_blocking_log_writer = non_blocking_log_writer.with_max_level(Level::INFO);
+
+    let fmt_layer = fmt::Layer::new()
+        .with_filter()
+        .with_timer(fmt::time::UtcTime::rfc_3339())
+        .with_span_events(fmt::format::FmtSpan::NONE)
+        .with_level(true)
+        .with_file(true)
+        .with_line_number(true)
+        .with_writer(non_blocking_log_writer)
+        .json()
+        .boxed();
+
+    let mut tracing_layers = vec![fmt_layer];
+
+    let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);
+    let tracing_handle = ReloadHandles::new(reload_handle);
+    tracing_layers.push(reload_layer.boxed());
 
     // TODO: the replica config has empty string instead of a None value for the 'jaeger_addr'. It needs to be fixed.
     match config.tracing.jaeger_addr.as_ref() {
@@ -273,11 +296,7 @@ fn main() -> io::Result<()> {
         _ => {}
     }
 
-    let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);
-    let tracing_handle = ReloadHandles::new(reload_handle);
-    tracing_layers.push(reload_layer.boxed());
-
-    let subscriber = tracing_subscriber::Registry::default().with(tracing_layers);
+    let subscriber = tracing_subscriber::registry().with(tracing_layers);
 
     if let Err(err) = tracing::subscriber::set_global_default(subscriber) {
         tracing::warn!("Failed to set global subscriber: {:#?}", err);

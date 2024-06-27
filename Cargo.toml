@@ -598,6 +598,7 @@ tracing-subscriber = { version = "0.3.18", features = [
     "env-filter",
     "fmt",
     "json",
+    "time",
 ] }
 turmoil = "0.6.2"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }

@@ -59,6 +59,7 @@ slog = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+tracing-appender = { workspace = true }
 tracing-flame = "0.2.0"
 tracing-subscriber = { workspace = true }
 tracing-opentelemetry = { workspace = true }

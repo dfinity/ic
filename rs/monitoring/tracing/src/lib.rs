@@ -4,7 +4,7 @@ pub mod utils;
 
 // We use dynamic dispatch here to make the ReloadHandles struct work with different
 // layers.
-type BoxedRegistryLayer = Box<dyn Layer<Registry> + Send + Sync>;
+pub type BoxedRegistryLayer = Box<dyn Layer<Registry> + Send + Sync>;
 
 /// Queue of tracing reload handles.
 #[derive(Clone)]
