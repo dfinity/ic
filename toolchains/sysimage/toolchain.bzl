@@ -162,7 +162,7 @@ def _vfat_image_impl(ctx):
         ctx.attr.partition_size,
         "-p",
         ctx.attr.subdir,
-        "-d",
+        "--dflate",
         dflate.path,
     ]
 
@@ -226,7 +226,7 @@ def _fat32_image_impl(ctx):
         ctx.attr.partition_size,
         "-p",
         ctx.attr.subdir,
-        "-d",
+        "--dflate",
         dflate.path,
     ]
 
@@ -297,7 +297,7 @@ def _ext4_image_impl(ctx):
         ctx.attr.subdir,
         "--diroid",
         diroid.path,
-        "-d",
+        "--dflate",
         dflate.path,
     ]
     if len(ctx.files.file_contexts) > 0:
@@ -362,7 +362,7 @@ def _inject_files_impl(ctx):
         ctx.files.base[0].path,
         "--output",
         out.path,
-        "-d",
+        "--dflate",
         dflate.path,
     ]
 
@@ -429,7 +429,7 @@ def _disk_image_impl(ctx):
     for p in partitions:
         partition_files.append(p.path)
 
-    args = ["-p", in_layout.path, "-o", out.path, "-d", dflate.path]
+    args = ["-p", in_layout.path, "-o", out.path, "--dflate", dflate.path]
 
     if expanded_size:
         args += ["-s", expanded_size]
@@ -483,7 +483,7 @@ def _lvm_image_impl(ctx):
     for p in partitions:
         partition_files.append(p.path)
 
-    args = ["-v", in_layout.path, "-n", vg_name, "-u", vg_uuid, "-p", pv_uuid, "-o", out.path, "-d", dflate.path]
+    args = ["-v", in_layout.path, "-n", vg_name, "-u", vg_uuid, "-p", pv_uuid, "-o", out.path, "--dflate", dflate.path]
 
     args += partition_files
 
@@ -533,7 +533,7 @@ def _upgrade_image_impl(ctx):
     ctx.actions.run_shell(
         inputs = [in_boot_partition, in_root_partition, in_version_file],
         outputs = [out],
-        command = "python3 %s -b %s -r %s -v %s -o %s -d %s" % (
+        command = "python3 %s -b %s -r %s -v %s -o %s --dflate %s" % (
             tool_file.path,
             in_boot_partition.path,
             in_root_partition.path,
