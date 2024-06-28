@@ -86,6 +86,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "zstd 0.12.4",
 ]
 
 [[package]]
@@ -8721,7 +8722,6 @@ name = "ic-ledger-canister-blocks-synchronizer"
 version = "0.1.0"
 dependencies = [
  "actix-rt",
- "actix-web",
  "async-trait",
  "candid",
  "chrono",
@@ -8739,7 +8739,6 @@ dependencies = [
  "proptest",
  "rusqlite",
  "serde",
- "serde_bytes",
  "tokio",
  "tracing",
  "url",
