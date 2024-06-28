@@ -186,7 +186,7 @@ mod tests {
                 download_node: None,
                 keep_downloaded_state: Some(false),
                 upload_node: None,
-                ecdsa_subnet_id: Some(fake_subnet_id()),
+                chain_key_subnet_id: Some(fake_subnet_id()),
                 next_step: None,
                 upgrade_image_url: None,
                 upgrade_image_hash: None,
