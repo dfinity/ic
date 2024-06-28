@@ -186,7 +186,6 @@ bazel-system-tests-k8s:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "system-tests-k8s-nightly"
   variables:
     RUST_LOG: info
-    KUBECONFIG: "$KUBECONFIG_TNET_CREATOR"
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --jobs=10 --test_tag_filters=k8s,-manual --k8s"
   timeout: 150 minutes
 
