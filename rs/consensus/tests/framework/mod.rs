@@ -59,7 +59,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     let data_provider = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&data_provider) as Arc<_>));
 
-    let threshold_keys_ids = vec![
+    let threshold_key_ids = vec![
         MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "ecdsa_test_key".to_string(),
@@ -77,7 +77,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     let subnet_record = SubnetRecordBuilder::from(node_ids)
         .with_dkg_interval_length(19)
         .with_chain_key_config(ChainKeyConfig {
-            key_configs: threshold_keys
+            key_configs: threshold_key_ids
                 .iter()
                 .map(|key_id| KeyConfig {
                     key_id: key_id.clone(),
@@ -194,14 +194,16 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
         .expect("Could not add node record.");
 
     // Add threshold signing subnet to registry
-    for key_id in threshold_keys {
+    for key_id in threshold_key_ids {
         data_provider
             .add(
                 &ic_registry_keys::make_chain_key_signing_subnet_list_key(&key_id),
                 registry_version,
-                Some(ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList {
-                    subnets: vec![subnet_id_into_protobuf(subnet_id)],
-                }),
+                Some(
+                    ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList {
+                        subnets: vec![subnet_id_into_protobuf(subnet_id)],
+                    },
+                ),
             )
             .expect("Could not add chain key signing subnet list");
     }
