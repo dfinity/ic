@@ -441,7 +441,7 @@ impl ApiState {
         }
 
         let port = http_gateway_config.listen_at.unwrap_or_default();
-        let addr = format!("0.0.0.0:{}", port);
+        let addr = format!("[::]:{}", port);
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
             .unwrap_or_else(|_| panic!("Failed to start HTTP gateway on port {}", port));
