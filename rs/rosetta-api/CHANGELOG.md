@@ -4,18 +4,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## Unreleased 
 ### Fixes
-- Prohibit Rosetta from spamming the ledger in case of errors at the ledger client. 
-- Handle Errors that may occur while deserializing objects using serde_json
+- Enable store-location option to be set by a user
 - Replacing internal crypto library `ic_canister_client_sender` with `ic_crypto_ed25519` 
   and `ic_crypto_ecdsa_secp256k1`.
 - Return the correct `signature_type` in the `payloads` returned by the `construction_payloads` endpoint.
-- Enable store-location option to be set by a user
+- Handle Errors that may occur while deserializing objects using serde_json
+### Added
+### Changed
+
+## [2.0.0] - 2024-01-18
+### Fixes
+- Prohibit Rosetta from spamming the ledger in case of errors at the ledger client. 
 ### Added
 - Add `timestamp` to the `blocks` table
-- Add support for `list_neurons`. Let's a user query a list of all they neurons a user has created.
-- Add support for `list_known_neurons`. Let's a user query a list of all publicly known neurons.
+- Add support for `list_neurons`. Lets a user query a list of all the neurons a user has created.
+- Add support for `list_known_neurons`. Lets a user query a list of all publicly known neurons.
 
 ## [1.9.0] - 2023-11-16
 ### Fixes

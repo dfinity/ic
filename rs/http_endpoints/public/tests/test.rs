@@ -1089,7 +1089,7 @@ fn test_duplicate_requests_are_handled() {
             first_request_submitted_to_ingress_clone.notify_one();
             handlers
                 .terminal_state_ingress_messages
-                .send((message_id, Height::from(0)))
+                .try_send((message_id, Height::from(1)))
                 .unwrap();
         }
     });
@@ -1140,11 +1140,10 @@ fn test_duplicate_requests_are_handled() {
 /// to the synchronous call.
 #[rstest]
 /// The message is certified after certified state transition.
-#[case(Height::from(0), Some(Height::from(2)), Height::from(1))]
-#[case(Height::from(0), Some(Height::from(1)), Height::from(0))]
+#[case(Height::from(0), Some(Height::from(1)), Height::from(1))]
 /// The message is already certified.
-#[case(Height::from(1), None, Height::from(0))]
-#[case(Height::from(1), Some(Height::from(0)), Height::from(0))]
+#[case(Height::from(1), None, Height::from(1))]
+#[case(Height::from(1), Some(Height::from(0)), Height::from(1))]
 fn test_sync_call_endpoint_responds_with_certificate(
     #[case] initial_certified_height: Height,
     #[case] transitioned_certified_height: Option<Height>,
@@ -1180,7 +1179,7 @@ fn test_sync_call_endpoint_responds_with_certificate(
         let message_id = message.id();
         handlers
             .terminal_state_ingress_messages
-            .send((message_id, message_finalization_height))
+            .try_send((message_id, message_finalization_height))
             .unwrap();
 
         if let Some(transitioned_certified_height) = transitioned_certified_height {
@@ -1231,15 +1230,10 @@ fn test_sync_call_endpoint_responds_with_certificate(
 }
 
 /// Tests that the /v3/.../call endpoint responds with `202 ACCEPTED` for
-/// ingress messages that complete execution, but their height never
+/// ingress messages that complete execution, but its height never
 /// gets certified.
-#[rstest]
-#[case::certification_timeout(Height::from(0), Height::from(1))]
-#[case::certification_timeout(Height::from(0), Height::from(0))]
-fn test_synchronous_call_endpoint_no_certification(
-    #[case] initial_certified_height: Height,
-    #[case] message_finalization_height: Height,
-) {
+#[test]
+fn test_synchronous_call_endpoint_no_certification() {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -1249,7 +1243,7 @@ fn test_synchronous_call_endpoint_no_certification(
     };
 
     let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
-        .with_certified_height(initial_certified_height)
+        .with_certified_height(Height::from(0))
         .run();
 
     let message = IngressMessage::default();
@@ -1271,7 +1265,7 @@ fn test_synchronous_call_endpoint_no_certification(
 
         handlers
             .terminal_state_ingress_messages
-            .send((message_id, message_finalization_height))
+            .try_send((message_id, Height::from(1)))
             .unwrap();
     });
 
@@ -1310,8 +1304,8 @@ impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
 }
 
 /// Tests that the /v3/.../call endpoint responds with `202 ACCEPTED` for
-/// ingress messages that complete execution, but the state reader fails to
-/// read the certified state.
+/// ingress messages that complete execution and certification
+/// but the state reader fails to read the certified state.
 #[rstest]
 #[case::certified_state_snapshot_unavailable(None)]
 #[case::reading_certified_state_fails(Some(Box::new(FakeCertifiedStateSnapshot) as _))]
@@ -1370,7 +1364,7 @@ fn test_call_v3_response_when_state_reader_fails(
         // Execute the ingress and certify it.
         handlers
             .terminal_state_ingress_messages
-            .send((message_id, Height::from(0)))
+            .try_send((message_id, Height::from(1)))
             .unwrap();
         handlers
             .certified_height_watcher
@@ -1389,5 +1383,53 @@ fn test_call_v3_response_when_state_reader_fails(
             "Certified state is not available. Please try /read_state.",
             text.unwrap()
         )
+    });
+}
+
+/// Tests that the HTTP endpoint return `INTERNAL_SERVER_ERROR`
+/// if the call handler is unable to submit the ingress message to
+/// P2P.
+#[rstest]
+fn test_call_response_when_p2p_not_running(
+    #[values(test_agent::Call::V2, test_agent::Call::V3)] call_agent: test_agent::Call,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        // We set the timeout to 0, to avoid waiting for subscription.
+        ingress_message_certificate_timeout_seconds: 0,
+        ..Default::default()
+    };
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+
+    // Ingress filter mock that returns empty Ok(()) response.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(()))
+        }
+    });
+
+    // Wait for the endpoint to be healthy.
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        // Drop the P2P receiver to simulate P2P not running.
+        drop(handlers.ingress_rx);
+
+        let response = call_agent.call(addr, IngressMessage::default()).await;
+
+        assert_eq!(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            response.status(),
+            "{:?}",
+            response.text().await
+        );
+
+        assert_eq!(
+            "P2P is not running on this node.",
+            response.text().await.unwrap()
+        );
     });
 }

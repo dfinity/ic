@@ -1,5 +1,6 @@
 //! Data types used for encoding/decoding the Candid payloads of ic:00.
 mod bounded_vec;
+mod data_size;
 mod http;
 mod provisional;
 
@@ -7,6 +8,7 @@ mod provisional;
 use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
 pub use bounded_vec::*;
 use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode};
+pub use data_size::*;
 pub use http::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader,
     HttpMethod, TransformArgs, TransformContext, TransformFunc,
@@ -293,19 +295,23 @@ impl CanisterControllersChangeRecord {
 /// ```text
 /// record {
 ///    canister_version : nat64;
+///    snapshot_id : blob;
 ///    taken_at_timestamp : nat64;
 /// }
 /// ```
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct CanisterLoadSnapshotRecord {
     canister_version: u64,
+    #[serde(with = "serde_bytes")]
+    snapshot_id: Vec<u8>,
     taken_at_timestamp: u64,
 }
 
 impl CanisterLoadSnapshotRecord {
-    pub fn new(canister_version: u64, taken_at_timestamp: u64) -> Self {
+    pub fn new(canister_version: u64, snapshot_id: SnapshotId, taken_at_timestamp: u64) -> Self {
         Self {
             canister_version,
+            snapshot_id: snapshot_id.to_vec(),
             taken_at_timestamp,
         }
     }
@@ -316,6 +322,12 @@ impl CanisterLoadSnapshotRecord {
 
     pub fn taken_at_timestamp(&self) -> u64 {
         self.taken_at_timestamp
+    }
+
+    pub fn snapshot_id(&self) -> SnapshotId {
+        // Safe to unwrap:
+        // `CanisterLoadSnapshotRecord` contains only valid snapshot IDs.
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
     }
 }
 
@@ -335,6 +347,7 @@ impl CanisterLoadSnapshotRecord {
 ///   };
 ///   load_snapshot : record {
 ///     canister_version: nat64;
+///     snapshot_id: blob;
 ///     taken_at_timestamp: nat64;
 ///   };
 /// }
@@ -374,9 +387,14 @@ impl CanisterChangeDetails {
         })
     }
 
-    pub fn load_snapshot(canister_version: u64, taken_at_timestamp: u64) -> CanisterChangeDetails {
+    pub fn load_snapshot(
+        canister_version: u64,
+        snapshot_id: Vec<u8>,
+        taken_at_timestamp: u64,
+    ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterLoadSnapshot(CanisterLoadSnapshotRecord {
             canister_version,
+            snapshot_id,
             taken_at_timestamp,
         })
     }
@@ -628,6 +646,7 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                 pb_canister_state_bits::canister_change::ChangeDetails::CanisterLoadSnapshot(
                     pb_canister_state_bits::CanisterLoadSnapshot {
                         canister_version: canister_load_snapshot.canister_version,
+                        snapshot_id: canister_load_snapshot.snapshot_id.clone(),
                         taken_at_timestamp: canister_load_snapshot.taken_at_timestamp,
                     },
                 )
@@ -693,6 +712,7 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                 canister_load_snapshot,
             ) => Ok(CanisterChangeDetails::load_snapshot(
                 canister_load_snapshot.canister_version,
+                canister_load_snapshot.snapshot_id,
                 canister_load_snapshot.taken_at_timestamp,
             )),
         }
@@ -2597,8 +2617,6 @@ impl Payload<'_> for BitcoinSendTransactionInternalArgs {}
 #[derive(Debug, EnumString, EnumIter, Display, Copy, Clone, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum QueryMethod {
-    BitcoinGetUtxosQuery,
-    BitcoinGetBalanceQuery,
     FetchCanisterLogs,
 }
 
@@ -2694,10 +2712,18 @@ impl Payload<'_> for CanisterLogRecord {}
 
 impl DataSize for CanisterLogRecord {
     fn data_size(&self) -> usize {
-        self.idx.data_size()
-            + self.timestamp_nanos.data_size()
-            + self.content.as_slice().data_size()
+        std::mem::size_of::<Self>() + self.content.as_slice().data_size()
     }
+}
+
+#[test]
+fn test_canister_log_record_data_size() {
+    let record = CanisterLogRecord {
+        idx: 100,
+        timestamp_nanos: 200,
+        content: vec![1, 2, 3],
+    };
+    assert_eq!(record.data_size(), 8 + 8 + 24 + 3);
 }
 
 impl From<&CanisterLogRecord> for pb_canister_state_bits::CanisterLogRecord {

@@ -8,8 +8,8 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, MinterInfo, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail,
-    WithdrawalSearchParameter,
+    AddCkErc20Token, Eip1559TransactionPriceArg, MinterInfo, RetrieveEthStatus, WithdrawalArg,
+    WithdrawalDetail, WithdrawalSearchParameter,
 };
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::logs::Log;
@@ -225,20 +225,37 @@ impl CkEthSetup {
 
     pub fn eip_1559_transaction_price(
         &self,
+        ledger_id: Option<Principal>,
     ) -> Result<WasmResult, ic_state_machine_tests::UserError> {
-        self.env.query(
-            self.minter_id,
-            "eip_1559_transaction_price",
-            Encode!().unwrap(),
-        )
+        let arg = match ledger_id {
+            None => Encode!().unwrap(),
+            Some(ckerc20_ledger_id) => {
+                Encode!(&Some(Eip1559TransactionPriceArg { ckerc20_ledger_id })).unwrap()
+            }
+        };
+        self.env
+            .query(self.minter_id, "eip_1559_transaction_price", arg)
     }
 
-    pub fn eip_1559_transaction_price_expecting_ok(&self) -> Eip1559TransactionPrice {
+    pub fn eip_1559_transaction_price_expecting_ok(
+        &self,
+        ledger_id: Option<Principal>,
+    ) -> Eip1559TransactionPrice {
         Decode!(
-            &assert_reply(self.eip_1559_transaction_price().unwrap()),
+            &assert_reply(self.eip_1559_transaction_price(ledger_id).unwrap()),
             Eip1559TransactionPrice
         )
         .unwrap()
+    }
+
+    pub fn eip_1559_transaction_price_expecting_err(&self, principal_id: Principal) {
+        let error = self
+            .eip_1559_transaction_price(Some(principal_id))
+            .expect_err("Expecting Err but got Ok");
+        assert!(error.description().contains(&format!(
+            "ERROR: Unsupported ckERC20 token ledger {}",
+            principal_id
+        )));
     }
 
     pub fn add_ckerc20_token(

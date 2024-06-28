@@ -4,17 +4,17 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{AccountIdentifier, Block, TimeStamp, Tokens};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Mutex;
 
 mod database_access {
-    use super::vec_into_array;
+    use super::{sql_bytes_to_block, vec_into_array};
     use crate::{
         blocks::{BlockStoreError, HashedBlock},
-        iso8601_to_timestamp, timestamp_to_iso8601,
+        timestamp_to_iso8601,
     };
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::{
@@ -240,14 +240,9 @@ mod database_access {
             .unwrap();
         let mut transactions = stmt
             .query_map(params![block_idx], |row| {
-                Ok(row
-                    .get(0)
-                    .map(|b| {
-                        Block::decode(EncodedBlock::from_vec(b))
-                            .unwrap()
-                            .transaction
-                    })
-                    .unwrap())
+                row.get(0)
+                    .and_then(sql_bytes_to_block)
+                    .map(|b| b.transaction)
             })
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         match transactions.next() {
@@ -255,15 +250,23 @@ mod database_access {
             None => Err(BlockStoreError::NotFound(*block_idx)),
         }
     }
+
     pub fn get_hashed_block(
         con: &mut Connection,
         block_idx: &u64,
     ) -> Result<HashedBlock, BlockStoreError> {
-        let command = format!(
-            "SELECT  hash, block, parent_hash, idx, timestamp from blocks where idx = {}",
-            block_idx
-        );
-        let mut blocks = read_hashed_block(con, command.as_str())?.into_iter();
+        let mut statement = con
+            .prepare_cached(
+                r#"SELECT hash, block, parent_hash, idx, timestamp
+                   FROM blocks
+                   WHERE idx = :idx"#,
+            )
+            .map_err(|e| format!("Unable to prepare statement: {e:?}"))?;
+        let mut blocks = statement
+            .query_map(named_params! { ":idx": block_idx }, |row| {
+                HashedBlock::try_from(row)
+            })
+            .map_err(|e| format!("Unable to query hashed block {block_idx}: {e:?}"))?;
         match blocks.next() {
             Some(block) => block.map_err(|e| BlockStoreError::Other(e.to_string())),
             None => Err(BlockStoreError::NotFound(*block_idx)),
@@ -274,23 +277,10 @@ mod database_access {
         con: &mut Connection,
         command: &str,
     ) -> Result<Vec<Result<HashedBlock, Error>>, BlockStoreError> {
-        let mut stmt = con
-            .prepare(command)
-            .map_err(|e| BlockStoreError::Other(e.to_string()))
-            .unwrap();
+        let mut stmt = con.prepare(command).map_err(|e| e.to_string())?;
         let block = stmt
-            .query_map(params![], |row| {
-                Ok(HashedBlock {
-                    hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
-                    block: row.get(1).map(EncodedBlock::from_vec)?,
-                    parent_hash: row.get(2).map(|opt_bytes: Option<Vec<u8>>| {
-                        opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
-                    })?,
-                    index: row.get(3)?,
-                    timestamp: iso8601_to_timestamp(row.get(4)?),
-                })
-            })
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            .query_map(params![], |row| HashedBlock::try_from(row))
+            .map_err(|e| e.to_string())?;
         Ok(block.collect())
     }
 
@@ -706,11 +696,33 @@ impl HashedBlock {
     }
 }
 
+impl TryFrom<&Row<'_>> for HashedBlock {
+    type Error = rusqlite::Error;
+
+    fn try_from(row: &Row) -> Result<HashedBlock, Self::Error> {
+        Ok(HashedBlock {
+            hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
+            block: row.get(1).map(EncodedBlock::from_vec)?,
+            parent_hash: row.get(2).map(|opt_bytes: Option<Vec<u8>>| {
+                opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
+            })?,
+            index: row.get(3)?,
+            timestamp: iso8601_to_timestamp(row.get(4)?),
+        })
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum BlockStoreError {
     NotFound(BlockIndex),
     NotAvailable(BlockIndex),
     Other(String),
+}
+
+impl From<String> for BlockStoreError {
+    fn from(error: String) -> Self {
+        Self::Other(error)
+    }
 }
 
 fn vec_into_array(v: Vec<u8>) -> [u8; 32] {
@@ -1331,4 +1343,15 @@ impl Blocks {
             }
         }
     }
+}
+
+fn sql_bytes_to_block(cell: Vec<u8>) -> Result<Block, rusqlite::Error> {
+    let encoded_block = EncodedBlock::from(cell);
+    Block::decode(encoded_block).map_err(|e| {
+        rusqlite::Error::FromSqlConversionFailure(
+            0,
+            rusqlite::types::Type::Blob,
+            format!("Unable to decode block: {e:?}").into(),
+        )
+    })
 }

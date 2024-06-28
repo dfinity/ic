@@ -137,14 +137,15 @@ pub fn fake_completed_signature_request_context(
     key_id: MasterPublicKeyId,
     pre_signature_id: PreSigId,
 ) -> (CallbackId, SignWithThresholdContext) {
-    fake_signature_request_context_from_id(
+    let (_, context) = fake_signature_request_context_from_id(
         key_id,
         &RequestId {
             pre_signature_id,
             pseudo_random_id: [id; 32],
             height: Height::from(1),
         },
-    )
+    );
+    (CallbackId::from(id as u64), context)
 }
 
 pub fn fake_signature_request_context_from_id(
@@ -478,7 +479,9 @@ impl EcdsaBlockReader for TestEcdsaBlockReader {
         Box::new(self.requested_transcripts.iter())
     }
 
-    fn pre_signatures_in_creation(&self) -> Box<dyn Iterator<Item = &PreSigId> + '_> {
+    fn pre_signatures_in_creation(
+        &self,
+    ) -> Box<dyn Iterator<Item = (PreSigId, MasterPublicKeyId)> + '_> {
         Box::new(std::iter::empty())
     }
 
@@ -1615,13 +1618,7 @@ pub(crate) fn empty_ecdsa_payload_with_key_ids(
                 current: None,
                 next_in_creation: KeyTranscriptCreation::Begin,
                 master_key_id: key_id.clone(),
-                deprecated_key_id: if let MasterPublicKeyId::Ecdsa(ecdsa_key_id) = key_id {
-                    Some(ecdsa_key_id)
-                } else {
-                    // Schnorr key transcripts still need a dummy ECDSA key Id,
-                    // until the field is no longer mandatory.
-                    Some(fake_ecdsa_key_id())
-                },
+                deprecated_key_id: None,
             })
             .collect(),
     )

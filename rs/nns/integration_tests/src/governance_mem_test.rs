@@ -78,6 +78,7 @@ fn governance_mem_test() {
     assert_eq!(decoded.proposal_info.len(), 1);
 
     let wasm_hash = real_gov_wasm.sha256_hash();
+    let module_arg = Encode!(&()).unwrap();
     let proposal_id = nns_propose_upgrade_nns_canister(
         &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
@@ -86,6 +87,7 @@ fn governance_mem_test() {
         },
         GOVERNANCE_CANISTER_ID,
         real_gov_wasm.bytes(),
+        module_arg,
     );
 
     state_machine.tick();

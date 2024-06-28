@@ -31,7 +31,7 @@ phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-rayon = "1.5.1"
+rayon = { workspace = true }
 slog = { workspace = true }
 strum_macros = { workspace = true }
 tokio = { workspace = true }
@@ -70,9 +70,9 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 prost = { workspace = true }
 serde_cbor = { workspace = true }
 strum = { workspace = true }
-slog-async = "2.5.0"
+slog-async = { workspace = true }
 slog-envlogger = "2.2.0"
-slog-term = "2.6.0"
+slog-term = { workspace = true }
 tempfile = { workspace = true }
 
 [[bench]]

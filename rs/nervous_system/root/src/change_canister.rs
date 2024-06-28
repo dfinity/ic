@@ -194,7 +194,7 @@ pub struct StopOrStartCanisterRequest {
     pub action: CanisterAction,
 }
 
-pub async fn change_canister<Rt>(request: ChangeCanisterRequest)
+pub async fn change_canister<Rt>(request: ChangeCanisterRequest) -> Result<(), String>
 where
     Rt: Runtime,
 {
@@ -208,13 +208,15 @@ where
                 "{}change_canister: Failed to stop canister, trying to restart...",
                 LOG_PREFIX
             );
-            match start_canister::<Rt>(canister_id).await {
-                Ok(_) => {}
+            return match start_canister::<Rt>(canister_id).await {
+                Ok(_) => {
+                    Err(format!("Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and succeeded in that."))
+                }
                 Err(_) => {
                     println!("{}change_canister: Failed to restart canister.", LOG_PREFIX);
+                    Err(format!("Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and failed in that."))
                 }
             };
-            return;
         }
     }
 
@@ -225,7 +227,7 @@ where
     // because there could be a concurrent request to restart it. This could be
     // guaranteed with a "stopped precondition" in the management canister, or
     // with some locking here.
-    let res = install_code(request).await;
+    let res = install_code(request.clone()).await;
     // For once, we don't want to unwrap the result here. The reason is that, if the
     // installation failed (e.g., the wasm was rejected because it's invalid),
     // then we want to restart the canister. So we just keep the res to be
@@ -237,7 +239,7 @@ where
     }
 
     // Check the result of the install_code
-    res.unwrap();
+    res.map_err(|(rejection_code, message)| format!("Attempt to call install_code with request {request:?} failed with code {rejection_code:?}: {message}"))
 }
 
 /// Calls the "install_code" method of the management canister.

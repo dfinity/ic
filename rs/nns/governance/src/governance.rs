@@ -1928,24 +1928,21 @@ impl Governance {
     ///
     /// Preconditions:
     /// - the given `neuron` already exists in `self.neuron_store.neurons`
-    /// - the controller principal is self-authenticating
     #[cfg(feature = "test")]
     pub fn update_neuron(&mut self, neuron: NeuronProto) -> Result<(), GovernanceError> {
-        // The controller principal is self-authenticating.
-        if !neuron.controller.unwrap().is_self_authenticating() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Cannot update neuron, controller PrincipalId must be self-authenticating"
-                    .to_string(),
-            ));
-        }
+        // Converting from API type to internal type.
+        let new_neuron = Neuron::try_from(neuron).expect("Neuron must be valid");
 
-        let neuron_id = neuron.id.expect("Neuron must have a NeuronId");
-        // Must clobber an existing neuron.
-        self.with_neuron_mut(&neuron_id, |old_neuron| {
-            // Converting from API type to internal type.
-            *old_neuron = Neuron::try_from(neuron).unwrap();
-        })
+        self.with_neuron_mut(&new_neuron.id(), |old_neuron| {
+            if new_neuron.subaccount() != old_neuron.subaccount() {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Cannot change the subaccount of a neuron".to_string(),
+                ));
+            }
+            *old_neuron = new_neuron;
+            Ok(())
+        })?
     }
 
     /// Add a neuron to the list of neurons.
@@ -1990,13 +1987,6 @@ impl Governance {
                     "Cannot add neuron. There is already a neuron with id: {:?}",
                     neuron_id
                 ),
-            ));
-        }
-
-        if !neuron.controller().is_self_authenticating() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Cannot add neuron, controller PrincipalId must be self-authenticating".to_string(),
             ));
         }
 
@@ -3172,13 +3162,6 @@ impl Governance {
             })?
             .clone();
 
-        if !child_controller.is_self_authenticating() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "Child neuron controller for disburse neuron must be self-authenticating",
-            ));
-        }
-
         let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
         let from_subaccount = parent_neuron.subaccount();
 
@@ -3379,28 +3362,8 @@ impl Governance {
         by: &NeuronIdOrSubaccount,
         caller: &PrincipalId,
     ) -> Result<NeuronProto, GovernanceError> {
-        let neuron_clone =
-            self.with_neuron_by_neuron_id_or_subaccount(by, |neuron| neuron.clone())?;
-        // Check that the caller is authorized for the requested
-        // neuron (controller or hot key).
-        if !neuron_clone.is_authorized_to_vote(caller) {
-            // If not, check if the caller is authorized for any of
-            // the followees of the requested neuron.
-            let followee_neuron_ids = neuron_clone.neuron_managers();
-
-            let caller_can_vote_with_followee =
-                followee_neuron_ids.iter().any(|followee_neuron_id| {
-                    self.with_neuron(followee_neuron_id, |followee| {
-                        followee.is_authorized_to_vote(caller)
-                    })
-                    .unwrap_or_default()
-                });
-
-            if !caller_can_vote_with_followee {
-                return Err(GovernanceError::new(ErrorType::NotAuthorized));
-            }
-        }
-        Ok(neuron_clone.into())
+        let neuron_id = self.find_neuron_id(by)?;
+        self.get_full_neuron(&neuron_id, caller)
     }
 
     /// Returns the complete neuron data for a given neuron `id` after
@@ -3413,7 +3376,10 @@ impl Governance {
         id: &NeuronId,
         caller: &PrincipalId,
     ) -> Result<NeuronProto, GovernanceError> {
-        self.get_full_neuron_by_id_or_subaccount(&NeuronIdOrSubaccount::NeuronId(*id), caller)
+        self.neuron_store
+            .get_full_neuron(*id, *caller)
+            .map(NeuronProto::from)
+            .map_err(GovernanceError::from)
     }
 
     // Returns the set of currently registered node providers.
@@ -7565,9 +7531,16 @@ impl Governance {
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
+            total_voting_power_non_self_authenticating_controller,
+            total_staked_e8s_non_self_authenticating_controller,
         } = self
             .neuron_store
             .compute_neuron_metrics(now, self.economics().neuron_minimum_stake_e8s);
+
+        let total_voting_power_non_self_authenticating_controller =
+            Some(total_voting_power_non_self_authenticating_controller);
+        let total_staked_e8s_non_self_authenticating_controller =
+            Some(total_staked_e8s_non_self_authenticating_controller);
 
         GovernanceCachedMetrics {
             timestamp_seconds: now,
@@ -7605,6 +7578,8 @@ impl Governance {
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
+            total_voting_power_non_self_authenticating_controller,
+            total_staked_e8s_non_self_authenticating_controller,
         }
     }
 

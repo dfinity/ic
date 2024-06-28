@@ -101,7 +101,7 @@ pub fn spawn_canister_sandbox_process_with_factory(
                 controller_service,
                 out.make_sink::<protocol::ctlsvc::Reply>(),
             )),
-            reply_handler,
+            reply_handler.clone(),
         );
         transport::socket_read_messages::<_, _>(
             move |message| {
@@ -110,6 +110,7 @@ pub fn spawn_canister_sandbox_process_with_factory(
             socket,
             SocketReaderConfig::default(),
         );
+        reply_handler.flush_with_errors();
         // If we the connection drops, but it is not terminated from
         // our end, that implies that the sandbox process died. At
         // that point we need to terminate replica as we have no way

@@ -1,7 +1,7 @@
 //! The pre signature process manager
 
-use crate::consensus::metrics::{timed_call, EcdsaPayloadMetrics, EcdsaPreSignerMetrics};
 use crate::ecdsa::complaints::EcdsaTranscriptLoader;
+use crate::ecdsa::metrics::{timed_call, EcdsaPayloadMetrics, EcdsaPreSignerMetrics};
 use crate::ecdsa::utils::{load_transcripts, transcript_op_summary, EcdsaBlockReaderImpl};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;
@@ -924,7 +924,9 @@ impl EcdsaPreSigner for EcdsaPreSignerImpl {
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let metrics = self.metrics.clone();
         ecdsa_pool.stats().update_active_transcripts(&block_reader);
-        ecdsa_pool.stats().update_active_quadruples(&block_reader);
+        ecdsa_pool
+            .stats()
+            .update_active_pre_signatures(&block_reader);
 
         let mut changes =
             update_purge_height(&self.prev_finalized_height, block_reader.tip_height())

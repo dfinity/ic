@@ -28,7 +28,6 @@ jobs:
     name: Build Base Container Image
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    if: ${{ vars.RUN_CI == 'true' }}
     strategy:
       matrix:
         include:
@@ -107,7 +106,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [build-base-image]
-    if: ${{ vars.RUN_CI == 'true' && github.ref_name == 'master' }}
+    if: ${{ github.ref_name == 'master' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

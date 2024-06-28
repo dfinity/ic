@@ -52,10 +52,12 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /packages/ic-vetkd-utils/            @dfinity-lab/teams/crypto-owners
 
 # [IC-OS]
-/ic-os/                                          @dfinity-lab/teams/node-team
-/ic-os/boundary-guestos/                         @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
-/ic-os/components/boundary-guestos/              @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
-/toolchains/                                     @dfinity-lab/teams/node-team
+/ic-os/                                                                 @dfinity-lab/teams/node-team
+/ic-os/boundary-guestos/                                                @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
+/ic-os/components/boundary-guestos/                                     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
+/ic-os/components/boundary-guestos.bzl                                  @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
+/ic-os/components/init/bootstrap-ic-node/boundary-guestos/              @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
+/toolchains/                                                            @dfinity-lab/teams/node-team
 
 # [metrics-proxy]
 /ic-os/components/monitoring/metrics-proxy/      @dfinity-lab/teams/DRE
@@ -82,7 +84,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /testnet/env/                                              @dfinity-lab/teams/platform-operations
 /testnet/release/                                          @dfinity-lab/teams/DRE
 /testnet/tools/nns-tools/                                  @dfinity-lab/teams/nns-team
-/testnet/mainnet_revisions.json                            @dfinity-lab/teams/consensus-owners
+/testnet/mainnet_revisions.json                            @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/DRE
 
 # [Rust]
 /rs/                                                    @dfinity-lab/teams/interface-owners
@@ -151,8 +153,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/memory_tracker/                                     @dfinity-lab/teams/runtime-owners
 /rs/messaging/                                          @dfinity-lab/teams/message-routing-owners
 /rs/monitoring/adapter_metrics/                         @dfinity-lab/teams/networking-team
-/rs/monitoring/adapter_metrics_server/                  @dfinity-lab/teams/networking-team
-/rs/monitoring/adapter_metrics_service/                 @dfinity-lab/teams/networking-team
 /rs/monitoring/backtrace/                               @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/networking-team
 /rs/nervous_system/                                     @dfinity-lab/teams/nns-team
 /rs/nns/                                                @dfinity-lab/teams/nns-team

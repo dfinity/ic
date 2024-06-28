@@ -28,8 +28,8 @@ use ic_config::{
     subnet_config::ECDSA_SIGNATURE_FEE,
 };
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
-use ic_management_canister_types::CanisterIdRecord;
 use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
+use ic_management_canister_types::{CanisterIdRecord, MasterPublicKeyId};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -116,25 +116,27 @@ pub(crate) async fn activate_ecdsa_signature(
     );
     let nns = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
     let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-    enable_ecdsa_signing(&governance, app_subnet_id, make_key(key_name)).await;
+    let ecdsa_key_id = make_key(key_name);
+    let key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
+    enable_ecdsa_signing(&governance, app_subnet_id, ecdsa_key_id).await;
     let sys_agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
 
     // Wait for key creation and verify signature (as it's done in tecdsa tests).
     let msg_can = MessageCanister::new(&sys_agent, sys_node.effective_canister_id()).await;
-    let public_key = get_public_key_with_logger(make_key(TEST_KEY_LOCAL), &msg_can, logger)
+    let public_key = get_public_key_with_logger(&key_id, &msg_can, logger)
         .await
         .unwrap();
-    let message_hash = [0xabu8; 32];
+    let message_hash = vec![0xabu8; 32];
     let signature = get_signature_with_logger(
-        &message_hash,
+        message_hash.clone(),
         ECDSA_SIGNATURE_FEE,
-        make_key(TEST_KEY_LOCAL),
+        &key_id,
         &msg_can,
         logger,
     )
     .await
     .unwrap();
-    verify_signature(&message_hash, &public_key, &signature);
+    verify_signature(&key_id, &message_hash, &public_key, &signature);
 }
 
 async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, key_id: EcdsaKeyId) {
@@ -190,15 +192,6 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
         initial_notary_delay_millis: None,
         dkg_interval_length: None,
         dkg_dealings_per_block: None,
-        max_artifact_streams_per_peer: None,
-        max_chunk_wait_ms: None,
-        max_duplicity: None,
-        max_chunk_size: None,
-        receive_check_cache_size: None,
-        pfn_evaluation_period_ms: None,
-        registry_poll_period_ms: None,
-        retransmission_request_ms: None,
-        set_gossip_config_to_default: false,
         start_as_nns: None,
         subnet_type: None,
         is_halted: None,
@@ -210,9 +203,22 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
         ecdsa_config: None,
         ecdsa_key_signing_enable: None,
         ecdsa_key_signing_disable: None,
+        chain_key_config: None,
+        chain_key_signing_disable: None,
+        chain_key_signing_enable: None,
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
+        // Deprecated/unused values follow
+        max_artifact_streams_per_peer: None,
+        max_chunk_wait_ms: None,
+        max_duplicity: None,
+        max_chunk_size: None,
+        receive_check_cache_size: None,
+        pfn_evaluation_period_ms: None,
+        registry_poll_period_ms: None,
+        retransmission_request_ms: None,
+        set_gossip_config_to_default: Default::default(),
     }
 }
 

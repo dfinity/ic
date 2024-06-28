@@ -656,6 +656,7 @@ pub mod nns {
                     Encode!(&ListNeurons {
                         neuron_ids: vec![],
                         include_neurons_readable_by_caller: true,
+                        include_empty_neurons_readable_by_caller: None,
                     })
                     .unwrap(),
                 )
@@ -2337,7 +2338,7 @@ pub mod sns {
         ///        or `auto_finalize_swap_response`.
         ///     2. `auto_finalize_swap_response` does not match the expected pattern for a *committed* SNS
         ///        Swap's `auto_finalize_swap_response`. In particular:
-        ///        - `set_dapp_controllers_call_result` must be `None`,
+        ///        - `set_dapp_controllers_call_result` must be `Some`
         ///        - `sweep_sns_result` must be `Some`.
         /// * `Err` if `auto_finalize_swap_response` contains any errors.
         pub fn is_auto_finalization_status_committed_or_err(
@@ -2359,7 +2360,7 @@ pub mod sns {
                     sweep_sns_result: Some(_),
                     claim_neuron_result: Some(_),
                     set_mode_call_result: Some(_),
-                    set_dapp_controllers_call_result: None,
+                    set_dapp_controllers_call_result: Some(_),
                     settle_community_fund_participation_result: None,
                     error_message: None,
                 }
@@ -2478,8 +2479,7 @@ pub mod sns {
                 last_auto_finalization_status = Some(auto_finalization_status);
             }
             Err(format!(
-                "Looks like the expected SNS auto-finalization status is never going to be reached: {:#?}",
-                last_auto_finalization_status,
+                "Looks like the expected SNS auto-finalization status of {status:?} is never going to be reached: {last_auto_finalization_status:#?}",
             ))
         }
 

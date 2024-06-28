@@ -4,15 +4,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::registry::{
-    crypto::v1::{ChainKeySigningSubnetList, EcdsaSigningSubnetList, PublicKey},
+    crypto::v1::{ChainKeySigningSubnetList, PublicKey},
     subnet::v1::{CatchUpPackageContents, SubnetRecord},
 };
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
-    make_crypto_threshold_signing_pubkey_key, make_ecdsa_signing_subnet_list_key,
-    make_subnet_record_key,
+    make_crypto_threshold_signing_pubkey_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{subnet_id_into_protobuf, RegistryVersion, SubnetId};
@@ -90,24 +89,7 @@ impl InitializedSubnet {
                 self.subnet_threshold_signing_public_key.clone(),
             );
 
-            // set subnet ecdsa signing key
-            // TODO[NNS1-2986]: Remove after replica has been migrated to read MasterPublicKeyId
-            if let Some(ecdsa_config) = &self.subnet_config.ecdsa_config {
-                for key_id in ecdsa_config.key_ids.iter() {
-                    let key_id = EcdsaKeyId::try_from(key_id.clone())
-                        .unwrap_or_else(|err| panic!("Invalid key_id {}", err));
-                    write_registry_entry(
-                        data_provider,
-                        subnet_path.as_path(),
-                        make_ecdsa_signing_subnet_list_key(&key_id).as_ref(),
-                        version,
-                        EcdsaSigningSubnetList {
-                            subnets: vec![subnet_id_into_protobuf(subnet_id)],
-                        },
-                    );
-                }
-            }
-
+            // enable subnet chain key signing
             if let Some(chain_key_config) = &self.subnet_config.chain_key_config {
                 for key_id in chain_key_config
                     .key_configs

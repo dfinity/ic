@@ -435,10 +435,6 @@ pub(crate) fn spawn_tip_thread(
                             checkpointed_state,
                             execution_state,
                         } => {
-                            let mut checkpointed_state = *checkpointed_state;
-                            let mut execution_state = *execution_state;
-                            execution_state.metadata.expected_compiled_wasms = BTreeSet::new();
-                            checkpointed_state.metadata.expected_compiled_wasms = BTreeSet::new();
                             debug_assert!(
                                 checkpointed_state == execution_state,
                                 "Divergence: checkpointed {:#?}, \nexecution: {:#?}",

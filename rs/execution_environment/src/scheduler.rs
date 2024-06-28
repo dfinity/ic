@@ -1418,7 +1418,7 @@ impl Scheduler for SchedulerImpl {
         idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
         idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
         current_round: ExecutionRound,
-        _round_summary: Option<ExecutionRoundSummary>,
+        round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
@@ -1584,15 +1584,22 @@ impl Scheduler for SchedulerImpl {
             }
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
 
-            // See documentation around definition of `heap_delta_estimate` for an explanation.
-            if state.metadata.heap_delta_estimate >= self.config.subnet_heap_delta_capacity {
+            let scheduled_heap_delta_limit = scheduled_heap_delta_limit(
+                current_round,
+                round_summary,
+                self.config.subnet_heap_delta_capacity,
+                self.config.heap_delta_initial_reserve,
+            );
+            if state.metadata.heap_delta_estimate >= scheduled_heap_delta_limit {
                 warn!(
                     round_log,
-                    "At Round {} @ time {}, current heap delta {} exceeds allowed capacity {}, so finish round early possibly not executing some of the messages.",
+                    "At Round {} @ time {}, current heap delta estimate {} \
+                        exceeds scheduled limit {} out of {}, so not executing any messages.",
                     current_round,
                     state.time(),
                     state.metadata.heap_delta_estimate,
-                    self.config.subnet_heap_delta_capacity
+                    scheduled_heap_delta_limit,
+                    self.config.subnet_heap_delta_capacity,
                 );
                 self.finish_round(&mut state, current_round_type);
                 self.metrics
@@ -1693,10 +1700,14 @@ impl Scheduler for SchedulerImpl {
 
         // Update [`SignatureRequestContext`]s by assigning randomness and matching quadruples.
         {
-            let contexts = state
+            // TODO(EXC-1645): temporarily take sign_with_ecdsa contexts to update inner data.
+            // Remove after full migration to `sign_with_threshold_contexts` field.
+            let mut sign_with_ecdsa_contexts = state
                 .metadata
                 .subnet_call_context_manager
-                .sign_with_ecdsa_contexts
+                .take_sign_with_ecdsa_contexts();
+
+            let contexts = sign_with_ecdsa_contexts
                 .values_mut()
                 .map(SignatureRequestContext::Ecdsa)
                 .chain(
@@ -1717,6 +1728,11 @@ impl Scheduler for SchedulerImpl {
                 registry_settings,
                 self.metrics.as_ref(),
             );
+
+            state
+                .metadata
+                .subnet_call_context_manager
+                .put_sign_with_ecdsa_contexts(sign_with_ecdsa_contexts);
         }
 
         // Finalization.
@@ -1801,14 +1817,14 @@ impl Scheduler for SchedulerImpl {
                 {
                     self.metrics.subnet_memory_usage_invariant.inc();
                     warn!(
-                    round_log,
-                    "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Exceeding capacity subnet memory allowed: used {} allowed {}",
-                    SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
-                    current_round,
-                    state.time(),
-                    total_canister_memory_usage,
-                    self.exec_env.subnet_memory_capacity()
-                );
+                        round_log,
+                        "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Exceeding capacity subnet memory allowed: used {} allowed {}",
+                        SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
+                        current_round,
+                        state.time(),
+                        total_canister_memory_usage,
+                        self.exec_env.subnet_memory_capacity()
+                    );
                 }
 
                 // Check if the invariants are still valid after the execution for active canisters.
@@ -2273,6 +2289,21 @@ fn observe_replicated_state_metrics(
     metrics
         .stop_canister_calls_without_call_id
         .set(num_stop_canister_calls_without_call_id as i64);
+
+    // TODO(EXC-1645): temporary code to record the metrics during migration.
+    metrics.sign_with_ecdsa_contexts_len.set(
+        state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts_len() as i64,
+    );
+    // TODO(EXC-1645): temporary code to record the metrics during migration.
+    metrics.sign_with_threshold_contexts_len.set(
+        state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_threshold_contexts_len() as i64,
+    );
 }
 
 fn join_consumed_cycles_by_use_case(
@@ -2453,4 +2484,52 @@ fn enqueue_tasks(
     }
 
     canister.system_state.task_queue.push_front(task);
+}
+
+/// Estimates the heap delta limit for the given round based on the maximum
+/// heap delta limit and the number of rounds between checkpoints.
+///
+/// The scheduler decides whether to execute the current round or not based on
+/// the result of this function. The purpose of this function is to distribute
+/// the heap delta budget equally over all rounds in order to make execution of
+/// rounds more smooth.
+///
+/// Note that this function computes a heuristic, so any positive number
+/// not exceeding the maximum heap delta limit would be a valid result.
+/// The result should be reasonably large to ensure faster progress.
+fn scheduled_heap_delta_limit(
+    current_round: ExecutionRound,
+    round_summary: Option<ExecutionRoundSummary>,
+    subnet_heap_delta_capacity: NumBytes,
+    heap_delta_initial_reserve: NumBytes,
+) -> NumBytes {
+    let Some(round_summary) = round_summary else {
+        // This should happen only in tests.
+        return subnet_heap_delta_capacity;
+    };
+    let next_checkpoint_round = round_summary.next_checkpoint_round;
+    // Plus one is because the interval length is normally 499, not 500.
+    let current_interval_length = round_summary
+        .current_interval_length
+        .get()
+        .saturating_add(1);
+    let remaining_rounds = next_checkpoint_round
+        .get()
+        .saturating_sub(current_round.get());
+
+    // The initial reserve is always available, so it should not be scaled.
+    let heap_delta_capacity_minus_initial_reserve = subnet_heap_delta_capacity
+        .get()
+        .saturating_sub(heap_delta_initial_reserve.get());
+    // The rest of the heap delta capacity is distributed across remaining rounds.
+    let remaining_rounds = remaining_rounds.min(current_interval_length);
+    let remaining_heap_delta_reserve = heap_delta_capacity_minus_initial_reserve
+        .saturating_mul(remaining_rounds)
+        .saturating_div(current_interval_length);
+
+    // The scheduled limit is the capacity minus reserve for the remaining rounds.
+    subnet_heap_delta_capacity
+        .get()
+        .saturating_sub(remaining_heap_delta_reserve)
+        .into()
 }

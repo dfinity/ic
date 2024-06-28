@@ -77,7 +77,7 @@ fn notify(notify_data: &NotifyData) -> Response {
             .write(true)
             .open("/dev/tty1")
             .map_err(|err| {
-                println!("Error opening file: {}", err);
+                println!("Error opening terminal device file: {}", err);
                 err.to_string()
             })?;
 
@@ -85,7 +85,6 @@ fn notify(notify_data: &NotifyData) -> Response {
     let message_clone = notify_data.message.clone();
 
     let write_lambda = move || -> Result<(), String> {
-        println!("Thread spawned");
         for _ in 0..message_output_count {
             match terminal_device_file.write_all(format!("\n{}\n", message_clone).as_bytes()) {
                 Ok(_) => std::thread::sleep(std::time::Duration::from_secs(2)),
@@ -95,7 +94,6 @@ fn notify(notify_data: &NotifyData) -> Response {
         Ok(())
     };
 
-    println!("Spawning thread to write to terminal device file...");
     std::thread::spawn(write_lambda);
 
     Ok(Payload::NoPayload)

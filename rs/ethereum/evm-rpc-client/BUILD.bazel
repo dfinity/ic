@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "evm_rpc_client",
+    srcs = glob(
+        ["src/**/*.rs"],
+    ),
+    proc_macro_deps = [
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        "@crate_index//:candid",
+        "@crate_index//:ic-canister-log",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+    ],
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":evm_rpc_client",
+    deps = [
+        ":evm_rpc_client",
+        "@crate_index//:mockall",
+        "@crate_index//:tokio",
+    ],
+)

@@ -81,8 +81,8 @@ rust_register_toolchains(
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
-        "1.78.0",
-        "nightly/2024-03-14",
+        "1.79.0",
+        "nightly/2024-04-25",
     ],
 )
 
@@ -926,7 +926,3 @@ http_file(
     sha256 = "bf3987bd483cf710ff0c54134350ca188c29ff0fdd38567aa4df5e74131543e4",
     url = "https://raw.githubusercontent.com/dfinity/interface-spec/a82220c1156f5e3e80ea65be6a4f69b766cbe6d1/spec/_attachments/ic.did",
 )
-
-load("//rs/tests:kubeconfig.bzl", "kubeconfig")
-
-kubeconfig()

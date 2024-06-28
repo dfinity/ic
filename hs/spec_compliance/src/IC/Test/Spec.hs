@@ -42,6 +42,7 @@ import IC.Id.Forms hiding (Blob)
 import IC.Id.Fresh
 import IC.Management (Settings, entityIdToPrincipal)
 import IC.Test.Agent
+import IC.Test.Agent.Calls (httpbin_proto)
 import IC.Test.Agent.SafeCalls
 import IC.Test.Agent.UnsafeCalls
 import IC.Test.Agent.UserCalls
@@ -86,7 +87,7 @@ icTests my_sub other_sub =
                                                             _ <- ic_raw_rand (ic00viaWithCyclesSubnet subnet_id cid 0) ecid
                                                             return ()
                                                        in let test_subnet_msg_canister_http sub subnet_id cid = do
-                                                                _ <- ic_http_get_request (ic00viaWithCyclesSubnet subnet_id cid) sub ("equal_bytes/8") Nothing Nothing cid
+                                                                _ <- ic_http_get_request (ic00viaWithCyclesSubnet subnet_id cid) sub httpbin_proto ("equal_bytes/8") Nothing Nothing cid
                                                                 return ()
                                                            in let test_subnet_msg' sub subnet_id cid = do
                                                                     ic_create' (ic00viaWithCyclesSubnet' subnet_id cid 20_000_000_000_000) ecid empty >>= isReject [3]
@@ -95,7 +96,7 @@ icTests my_sub other_sub =
                                                                     ic_install' (ic00viaWithCyclesSubnet' subnet_id cid 0) (enum #install) cid2 trivialWasmModule "" >>= isReject [3]
                                                                     ic_raw_rand' (ic00viaWithCyclesSubnet' subnet_id cid 0) ecid >>= isReject [3]
                                                                in let test_subnet_msg_canister_http' sub subnet_id cid = do
-                                                                        ic_http_get_request' (ic00viaWithCyclesSubnet' subnet_id cid) sub "https://" ("equal_bytes/8") Nothing Nothing cid >>= isReject [3]
+                                                                        ic_http_get_request' (ic00viaWithCyclesSubnet' subnet_id cid) sub httpbin_proto ("equal_bytes/8") Nothing Nothing cid >>= isReject [3]
                                                                    in let install_with_cycles_at_id n cycles prog = do
                                                                             let ecid = rawEntityId $ wordToId n
                                                                             let specified_id = entityIdToPrincipal $ EntityId ecid
@@ -583,7 +584,7 @@ icTests my_sub other_sub =
                                                                                          BS.length r1 @?= 32
                                                                                          BS.length r2 @?= 32
                                                                                          assertBool "random blobs are different" $ r1 /= r2,
-                                                                                       testGroup "canister http outcalls" $ canister_http_calls my_sub,
+                                                                                       testGroup "canister http outcalls" $ canister_http_calls my_sub httpbin_proto,
                                                                                        testGroup
                                                                                          "large calls"
                                                                                          $ let arg n = BS.pack $ take n $ repeat 0
@@ -2353,7 +2354,7 @@ icTests my_sub other_sub =
                                                                                            testCase "management canister: raw_rand not accepted" $ do
                                                                                              ic_raw_rand'' defaultUser ecid >>= isNoErrReject [4],
                                                                                            testCase "management canister: http_request not accepted" $ do
-                                                                                             ic_http_get_request'' defaultUser ecid >>= isNoErrReject [4],
+                                                                                             ic_http_get_request'' defaultUser ecid httpbin_proto >>= isNoErrReject [4],
                                                                                            testCase "management canister: ecdsa_public_key not accepted" $ do
                                                                                              ic_ecdsa_public_key'' defaultUser ecid >>= isNoErrReject [4],
                                                                                            testCase "management canister: sign_with_ecdsa not accepted" $ do

@@ -25,10 +25,10 @@ use super::payload_builder::EcdsaPayloadError;
 use super::pre_signer::EcdsaTranscriptBuilder;
 use super::signer::EcdsaSignatureBuilder;
 use super::utils::{
-    block_chain_cache, get_chain_key_config_if_enabled, EcdsaBlockReaderImpl,
-    InvalidChainCacheError,
+    block_chain_cache, get_chain_key_config_if_enabled, BuildSignatureInputsError,
+    EcdsaBlockReaderImpl, InvalidChainCacheError,
 };
-use crate::consensus::metrics::timed_call;
+use crate::ecdsa::metrics::timed_call;
 use crate::ecdsa::payload_builder::{create_data_payload_helper, create_summary_payload};
 use crate::ecdsa::utils::build_signature_inputs;
 use ic_consensus_utils::crypto::ConsensusCrypto;
@@ -104,7 +104,7 @@ pub(crate) enum InvalidEcdsaPayloadReason {
     NewTranscriptMiscount(u64),
     NewTranscriptMissingParams(IDkgTranscriptId),
     NewSignatureUnexpected(idkg::PseudoRandomId),
-    NewSignatureMissingInput(idkg::PseudoRandomId),
+    NewSignatureBuildInputsError(BuildSignatureInputsError),
     NewSignatureMissingContext(idkg::PseudoRandomId),
     XNetReshareAgreementWithoutRequest(idkg::IDkgReshareRequest),
     XNetReshareRequestDisappeared(idkg::IDkgReshareRequest),
@@ -551,7 +551,6 @@ fn validate_new_signature_agreements(
         .values()
         .map(|c| (c.pseudo_random_id, c))
         .collect::<BTreeMap<_, _>>();
-
     for (random_id, completed) in curr_payload.signature_agreements.iter() {
         if let idkg::CompletedSignature::Unreported(response) = completed {
             if let ic_types::messages::Payload::Data(data) = &response.payload {
@@ -563,9 +562,8 @@ fn validate_new_signature_agreements(
                 let context = context_map.get(random_id).ok_or(
                     InvalidEcdsaPayloadReason::NewSignatureMissingContext(*random_id),
                 )?;
-                let (_, input_ref) = build_signature_inputs(context, block_reader).ok_or(
-                    InvalidEcdsaPayloadReason::NewSignatureMissingInput(*random_id),
-                )?;
+                let (_, input_ref) = build_signature_inputs(context, block_reader)
+                    .map_err(InvalidEcdsaPayloadReason::NewSignatureBuildInputsError)?;
                 match input_ref {
                     ThresholdSigInputsRef::Ecdsa(input_ref) => {
                         let input = input_ref
@@ -621,7 +619,9 @@ mod test {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces_state_manager::CertifiedStateSnapshot;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::{MasterPublicKeyId, Payload, SignWithECDSAReply};
+    use ic_management_canister_types::{
+        MasterPublicKeyId, Payload, SchnorrAlgorithm, SignWithECDSAReply,
+    };
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
@@ -897,7 +897,7 @@ mod test {
             ecdsa_payload.generate_current_key(&key_id, &env, &mut rng);
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
 
-        // Add the quadruples and transcripts to block reader and payload
+        // Add the pre-signatures and transcripts to block reader and payload
         let sig_inputs = (1..4)
             .map(|i| {
                 create_sig_inputs_with_args(
@@ -1021,17 +1021,16 @@ mod test {
         let height = Height::from(0);
         let subnet_id = subnet_test_id(0);
         let crypto = &CryptoReturningOk::default();
-        let block_reader = TestEcdsaBlockReader::new();
+        let mut block_reader = TestEcdsaBlockReader::new();
 
         let mut prev_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let pre_sig_id = prev_payload.uid_generator.next_pre_signature_id();
+        let pre_sig_id2 = prev_payload.uid_generator.next_pre_signature_id();
 
-        let signature_request_contexts =
-            BTreeMap::from_iter([fake_signature_request_context_with_pre_sig(
-                1,
-                key_id.clone(),
-                Some(pre_sig_id),
-            )]);
+        let signature_request_contexts = BTreeMap::from_iter([
+            fake_signature_request_context_with_pre_sig(1, key_id.clone(), Some(pre_sig_id)),
+            fake_completed_signature_request_context(2, key_id.clone(), pre_sig_id2),
+        ]);
         let snapshot =
             fake_state_with_signature_requests(height, signature_request_contexts.clone());
 
@@ -1065,7 +1064,43 @@ mod test {
         assert_matches!(
             res,
             Err(ValidationError::InvalidArtifact(
-                InvalidEcdsaPayloadReason::NewSignatureMissingInput(_)
+                InvalidEcdsaPayloadReason::NewSignatureBuildInputsError(
+                    BuildSignatureInputsError::MissingPreSignature(_)
+                )
+            ))
+        );
+
+        // Insert agreement for context matched with pre-signature of different scheme
+        let mut ecdsa_payload_mismatched_context =
+            empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
+        let wrong_key_id = match key_id {
+            MasterPublicKeyId::Ecdsa(_) => {
+                fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
+            }
+            MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
+        };
+        // Add a pre-signature for the "wrong_key_id"
+        insert_test_sig_inputs(
+            &mut block_reader,
+            &mut ecdsa_payload_mismatched_context,
+            [(pre_sig_id2, create_sig_inputs(2, &wrong_key_id))],
+        );
+        ecdsa_payload_mismatched_context
+            .signature_agreements
+            .insert([2; 32], fake_response.clone());
+        let res = validate_new_signature_agreements(
+            crypto,
+            &block_reader,
+            snapshot.get_state(),
+            &prev_payload,
+            &ecdsa_payload_mismatched_context,
+        );
+        assert_matches!(
+            res,
+            Err(ValidationError::InvalidArtifact(
+                InvalidEcdsaPayloadReason::NewSignatureBuildInputsError(
+                    BuildSignatureInputsError::SignatureSchemeMismatch(_, _)
+                )
             ))
         );
 

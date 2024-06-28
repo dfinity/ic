@@ -48,6 +48,7 @@ component_files = {
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
+    Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("misc/hostos/sudoers"): "/etc/sudoers",
     Label("misc/hostos/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("misc/hostos/20-ipmi.rules"): "/etc/udev/rules.d/20-ipmi.rules",
@@ -63,6 +64,7 @@ component_files = {
     Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys.service"): "/etc/systemd/system/setup-node_exporter-keys.service",
     Label("monitoring/metrics-proxy/hostos/metrics-proxy.yaml"): "/etc/metrics-proxy.yaml",
     Label("monitoring/metrics-proxy/metrics-proxy.service"): "/etc/systemd/system/metrics-proxy.service",
+    Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
 
     # networking
     Label("networking/generate-network-config/hostos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",

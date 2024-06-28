@@ -9,6 +9,7 @@ use crate::{
     signature::*,
     *,
 };
+use ic_base_types::subnet_id_try_from_option;
 use ic_base_types::PrincipalIdError;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -227,6 +228,30 @@ impl HasCommittee for RandomTapeContent {
     }
 }
 
+impl HasVersion for EquivocationProof {
+    fn version(&self) -> &ReplicaVersion {
+        &self.version
+    }
+}
+
+impl HasHeight for EquivocationProof {
+    fn height(&self) -> Height {
+        self.height
+    }
+}
+
+impl HasVersion for BlockMetadata {
+    fn version(&self) -> &ReplicaVersion {
+        &self.version
+    }
+}
+
+impl HasHeight for BlockMetadata {
+    fn height(&self) -> Height {
+        self.height
+    }
+}
+
 /// Rank is used to indicate the priority of a block maker, where 0 indicates
 /// the highest priority.
 #[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -306,6 +331,10 @@ pub struct BlockMetadata {
 }
 
 impl BlockMetadata {
+    pub fn subnet_id(&self) -> SubnetId {
+        self.subnet_id
+    }
+
     pub fn from_block(block: &HashedBlock, config: &ReplicaConfig) -> Self {
         Self {
             version: block.version().clone(),
@@ -314,6 +343,7 @@ impl BlockMetadata {
             hash: block.get_hash().clone(),
         }
     }
+
     /// Creates a signed block metadata instance from a given block proposal.
     pub fn signed_from_proposal(
         proposal: &BlockProposal,
@@ -765,6 +795,90 @@ impl TryFrom<pb::RandomTapeShare> for RandomTapeShare {
     }
 }
 
+/// A proof that shows a block maker has produced equivocating blocks.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct EquivocationProof {
+    pub signer: NodeId,
+    pub version: ReplicaVersion,
+    pub height: Height,
+    pub subnet_id: SubnetId,
+    // Hash and signature of the first and second blocks
+    pub hash1: CryptoHashOf<Block>,
+    pub signature1: BasicSigOf<BlockMetadata>,
+    pub hash2: CryptoHashOf<Block>,
+    pub signature2: BasicSigOf<BlockMetadata>,
+}
+
+impl EquivocationProof {
+    /// Returns two signed block metadata. This function guarantees that the
+    /// signers, replica version, height and subnet id of the two objects are
+    /// identical.
+    pub fn into_signed_metadata(
+        &self,
+    ) -> (
+        Signed<BlockMetadata, BasicSignature<BlockMetadata>>,
+        Signed<BlockMetadata, BasicSignature<BlockMetadata>>,
+    ) {
+        (
+            Signed {
+                content: BlockMetadata {
+                    version: self.version.clone(),
+                    height: self.height,
+                    subnet_id: self.subnet_id,
+                    hash: self.hash1.clone(),
+                },
+                signature: BasicSignature {
+                    signature: self.signature1.clone(),
+                    signer: self.signer,
+                },
+            },
+            Signed {
+                content: BlockMetadata {
+                    version: self.version.clone(),
+                    height: self.height,
+                    subnet_id: self.subnet_id,
+                    hash: self.hash2.clone(),
+                },
+                signature: BasicSignature {
+                    signature: self.signature2.clone(),
+                    signer: self.signer,
+                },
+            },
+        )
+    }
+}
+
+impl From<&EquivocationProof> for pb::EquivocationProof {
+    fn from(proof: &EquivocationProof) -> Self {
+        Self {
+            signer: Some(node_id_into_protobuf(proof.signer)),
+            version: proof.version.to_string(),
+            height: proof.height.get(),
+            subnet_id: Some(subnet_id_into_protobuf(proof.subnet_id)),
+            hash1: proof.hash1.clone().get().0,
+            signature1: proof.signature1.clone().get().0,
+            hash2: proof.hash2.clone().get().0,
+            signature2: proof.signature2.clone().get().0,
+        }
+    }
+}
+
+impl TryFrom<pb::EquivocationProof> for EquivocationProof {
+    type Error = ProxyDecodeError;
+    fn try_from(proof: pb::EquivocationProof) -> Result<Self, Self::Error> {
+        Ok(Self {
+            signer: node_id_try_from_option(proof.signer.clone())?,
+            version: ReplicaVersion::try_from(proof.version.as_str())?,
+            height: Height::new(proof.height),
+            subnet_id: subnet_id_try_from_option(proof.subnet_id.clone())?,
+            hash1: CryptoHashOf::new(CryptoHash(proof.hash1)),
+            signature1: BasicSigOf::new(BasicSig(proof.signature1)),
+            hash2: CryptoHashOf::new(CryptoHash(proof.hash2)),
+            signature2: BasicSigOf::new(BasicSig(proof.signature2)),
+        })
+    }
+}
+
 /// The enum encompassing all of the consensus artifacts exchanged between
 /// replicas.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
@@ -780,6 +894,7 @@ pub enum ConsensusMessage {
     RandomTapeShare(RandomTapeShare),
     CatchUpPackage(CatchUpPackage),
     CatchUpPackageShare(CatchUpPackageShare),
+    EquivocationProof(EquivocationProof),
 }
 
 impl From<ConsensusMessage> for pb::ConsensusMessage {
@@ -797,6 +912,7 @@ impl From<ConsensusMessage> for pb::ConsensusMessage {
                 ConsensusMessage::RandomTapeShare(ref x) => Msg::RandomTapeShare(x.into()),
                 ConsensusMessage::CatchUpPackage(ref x) => Msg::Cup(x.into()),
                 ConsensusMessage::CatchUpPackageShare(ref x) => Msg::CupShare(x.into()),
+                ConsensusMessage::EquivocationProof(ref x) => Msg::EquivocationProof(x.into()),
             }),
         }
     }
@@ -820,6 +936,7 @@ impl TryFrom<pb::ConsensusMessage> for ConsensusMessage {
             Msg::RandomTapeShare(x) => ConsensusMessage::RandomTapeShare(x.try_into()?),
             Msg::Cup(ref x) => ConsensusMessage::CatchUpPackage(x.try_into()?),
             Msg::CupShare(x) => ConsensusMessage::CatchUpPackageShare(x.try_into()?),
+            Msg::EquivocationProof(x) => ConsensusMessage::EquivocationProof(x.try_into()?),
         })
     }
 }
@@ -858,7 +975,7 @@ macro_rules! impl_cm_conversion {
 impl_cm_conversion! {
     RandomBeacon, Finalization, Notarization, BlockProposal, RandomBeaconShare,
     NotarizationShare, FinalizationShare, RandomTape, RandomTapeShare,
-    CatchUpPackage, CatchUpPackageShare
+    CatchUpPackage, CatchUpPackageShare, EquivocationProof
 }
 
 /// ConsensusMessageHash has the same variants as [ConsensusMessage], but
@@ -876,6 +993,7 @@ pub enum ConsensusMessageHash {
     RandomTapeShare(CryptoHashOf<RandomTapeShare>),
     CatchUpPackage(CryptoHashOf<CatchUpPackage>),
     CatchUpPackageShare(CryptoHashOf<CatchUpPackageShare>),
+    EquivocationProof(CryptoHashOf<EquivocationProof>),
 }
 
 impl From<&ConsensusMessageHash> for pb::ConsensusMessageHash {
@@ -893,6 +1011,7 @@ impl From<&ConsensusMessageHash> for pb::ConsensusMessageHash {
             ConsensusMessageHash::RandomTapeShare(x) => Kind::RandomTapeShare(x.get().0),
             ConsensusMessageHash::CatchUpPackage(x) => Kind::CatchUpPackage(x.get().0),
             ConsensusMessageHash::CatchUpPackageShare(x) => Kind::CatchUpPackageShare(x.get().0),
+            ConsensusMessageHash::EquivocationProof(x) => Kind::EquivocationProof(x.get().0),
         };
         Self { kind: Some(kind) }
     }
@@ -941,6 +1060,9 @@ impl TryFrom<&pb::ConsensusMessageHash> for ConsensusMessageHash {
             Kind::CatchUpPackageShare(x) => {
                 ConsensusMessageHash::CatchUpPackageShare(CryptoHashOf::new(CryptoHash(x)))
             }
+            Kind::EquivocationProof(x) => {
+                ConsensusMessageHash::EquivocationProof(CryptoHashOf::new(CryptoHash(x)))
+            }
         })
     }
 }
@@ -961,54 +1083,58 @@ impl<C: PartialEq, S> ContentEq for Signed<C, S> {
     }
 }
 
+impl ContentEq for EquivocationProof {
+    fn content_eq(&self, other: &EquivocationProof) -> bool {
+        let same_hash = (self.hash1 == other.hash1 && self.hash2 == other.hash2)
+            || (self.hash1 == other.hash2 && self.hash2 == other.hash1);
+
+        self.signer == other.signer
+            && self.version == other.version
+            && self.height == other.height
+            && self.subnet_id == other.subnet_id
+            && same_hash
+    }
+}
+
 impl ContentEq for ConsensusMessage {
     fn content_eq(&self, other: &ConsensusMessage) -> bool {
         match self {
-            ConsensusMessage::RandomBeacon(x) => {
-                other.try_into().map(|y: &RandomBeacon| y.content_eq(x)) == Ok(true)
-            }
-            ConsensusMessage::Finalization(x) => {
-                other.try_into().map(|y: &Finalization| y.content_eq(x)) == Ok(true)
-            }
-            ConsensusMessage::Notarization(x) => {
-                other.try_into().map(|y: &Notarization| y.content_eq(x)) == Ok(true)
-            }
-            ConsensusMessage::BlockProposal(x) => {
-                other.try_into().map(|y: &BlockProposal| y.content_eq(x)) == Ok(true)
-            }
-            ConsensusMessage::RandomBeaconShare(x) => {
-                other
-                    .try_into()
-                    .map(|y: &RandomBeaconShare| y.content_eq(x))
-                    == Ok(true)
-            }
-            ConsensusMessage::NotarizationShare(x) => {
-                other
-                    .try_into()
-                    .map(|y: &NotarizationShare| y.content_eq(x))
-                    == Ok(true)
-            }
-            ConsensusMessage::FinalizationShare(x) => {
-                other
-                    .try_into()
-                    .map(|y: &FinalizationShare| y.content_eq(x))
-                    == Ok(true)
-            }
+            ConsensusMessage::RandomBeacon(x) => other
+                .try_into()
+                .is_ok_and(|y: &RandomBeacon| y.content_eq(x)),
+            ConsensusMessage::Finalization(x) => other
+                .try_into()
+                .is_ok_and(|y: &Finalization| y.content_eq(x)),
+            ConsensusMessage::Notarization(x) => other
+                .try_into()
+                .is_ok_and(|y: &Notarization| y.content_eq(x)),
+            ConsensusMessage::BlockProposal(x) => other
+                .try_into()
+                .is_ok_and(|y: &BlockProposal| y.content_eq(x)),
+            ConsensusMessage::RandomBeaconShare(x) => other
+                .try_into()
+                .is_ok_and(|y: &RandomBeaconShare| y.content_eq(x)),
+            ConsensusMessage::NotarizationShare(x) => other
+                .try_into()
+                .is_ok_and(|y: &NotarizationShare| y.content_eq(x)),
+            ConsensusMessage::FinalizationShare(x) => other
+                .try_into()
+                .is_ok_and(|y: &FinalizationShare| y.content_eq(x)),
             ConsensusMessage::RandomTape(x) => {
-                other.try_into().map(|y: &RandomTape| y.content_eq(x)) == Ok(true)
+                other.try_into().is_ok_and(|y: &RandomTape| y.content_eq(x))
             }
-            ConsensusMessage::RandomTapeShare(x) => {
-                other.try_into().map(|y: &RandomTapeShare| y.content_eq(x)) == Ok(true)
-            }
-            ConsensusMessage::CatchUpPackage(x) => {
-                other.try_into().map(|y: &CatchUpPackage| y.content_eq(x)) == Ok(true)
-            }
-            ConsensusMessage::CatchUpPackageShare(x) => {
-                other
-                    .try_into()
-                    .map(|y: &CatchUpPackageShare| y.content_eq(x))
-                    == Ok(true)
-            }
+            ConsensusMessage::RandomTapeShare(x) => other
+                .try_into()
+                .is_ok_and(|y: &RandomTapeShare| y.content_eq(x)),
+            ConsensusMessage::CatchUpPackage(x) => other
+                .try_into()
+                .is_ok_and(|y: &CatchUpPackage| y.content_eq(x)),
+            ConsensusMessage::CatchUpPackageShare(x) => other
+                .try_into()
+                .is_ok_and(|y: &CatchUpPackageShare| y.content_eq(x)),
+            ConsensusMessage::EquivocationProof(x) => other
+                .try_into()
+                .is_ok_and(|y: &EquivocationProof| y.content_eq(x)),
         }
     }
 }
@@ -1027,6 +1153,7 @@ impl HasVersion for ConsensusMessage {
             ConsensusMessage::RandomTapeShare(x) => x.version(),
             ConsensusMessage::CatchUpPackage(x) => x.version(),
             ConsensusMessage::CatchUpPackageShare(x) => x.version(),
+            ConsensusMessage::EquivocationProof(x) => x.version(),
         }
     }
 }
@@ -1045,6 +1172,7 @@ impl HasHeight for ConsensusMessage {
             ConsensusMessage::RandomTapeShare(x) => x.height(),
             ConsensusMessage::CatchUpPackage(x) => x.height(),
             ConsensusMessage::CatchUpPackageShare(x) => x.height(),
+            ConsensusMessage::EquivocationProof(x) => x.height(),
         }
     }
 }
@@ -1057,7 +1185,8 @@ impl IsShare for ConsensusMessage {
             | ConsensusMessage::Notarization(_)
             | ConsensusMessage::Finalization(_)
             | ConsensusMessage::CatchUpPackage(_)
-            | ConsensusMessage::BlockProposal(_) => false,
+            | ConsensusMessage::BlockProposal(_)
+            | ConsensusMessage::EquivocationProof(_) => false,
 
             ConsensusMessage::RandomBeaconShare(_)
             | ConsensusMessage::RandomTapeShare(_)
@@ -1082,6 +1211,7 @@ impl ConsensusMessageHash {
             ConsensusMessageHash::RandomTapeShare(hash) => hash.get_ref(),
             ConsensusMessageHash::CatchUpPackage(hash) => hash.get_ref(),
             ConsensusMessageHash::CatchUpPackageShare(hash) => hash.get_ref(),
+            ConsensusMessageHash::EquivocationProof(hash) => hash.get_ref(),
         }
     }
 }
@@ -1591,6 +1721,31 @@ impl ConsensusMessageHashable for CatchUpPackageShare {
     }
 }
 
+impl ConsensusMessageHashable for EquivocationProof {
+    fn get_id(&self) -> ConsensusMessageId {
+        ConsensusMessageId {
+            hash: self.get_cm_hash(),
+            height: self.height(),
+        }
+    }
+
+    fn get_cm_hash(&self) -> ConsensusMessageHash {
+        ConsensusMessageHash::EquivocationProof(crypto_hash(self))
+    }
+
+    fn assert(msg: &ConsensusMessage) -> Option<&Self> {
+        if let ConsensusMessage::EquivocationProof(value) = msg {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    fn into_message(self) -> ConsensusMessage {
+        ConsensusMessage::EquivocationProof(self)
+    }
+}
+
 impl ConsensusMessageHashable for ConsensusMessage {
     fn get_id(&self) -> ConsensusMessageId {
         ConsensusMessageId {
@@ -1612,6 +1767,7 @@ impl ConsensusMessageHashable for ConsensusMessage {
             ConsensusMessage::RandomTapeShare(value) => value.get_cm_hash(),
             ConsensusMessage::CatchUpPackage(value) => value.get_cm_hash(),
             ConsensusMessage::CatchUpPackageShare(value) => value.get_cm_hash(),
+            ConsensusMessage::EquivocationProof(value) => value.get_cm_hash(),
         }
     }
 
@@ -1636,6 +1792,7 @@ impl ConsensusMessageHashable for ConsensusMessage {
             ConsensusMessage::RandomTapeShare(value) => value.check_integrity(),
             ConsensusMessage::CatchUpPackage(value) => value.check_integrity(),
             ConsensusMessage::CatchUpPackageShare(value) => value.check_integrity(),
+            ConsensusMessage::EquivocationProof(value) => value.check_integrity(),
         }
     }
 }

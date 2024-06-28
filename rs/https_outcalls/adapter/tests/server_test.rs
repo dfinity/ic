@@ -3,7 +3,6 @@
 // We use `hyper-rustls` which uses Rustls, which supports the SSL_CERT_FILE variable.
 mod test {
     use futures::TryFutureExt;
-    use http::{header::HeaderValue, StatusCode};
     use ic_https_outcalls_adapter::{AdapterServer, Config};
     use ic_https_outcalls_service::{
         canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest,
@@ -21,7 +20,10 @@ mod test {
     use tower::service_fn;
     use unix::UnixListenerDrop;
     use uuid::Uuid;
-    use warp::{http::Response, Filter};
+    use warp::{
+        http::{header::HeaderValue, Response, StatusCode},
+        Filter,
+    };
 
     // Selfsigned localhost cert
     const CERT: &str = "
@@ -336,7 +338,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         assert!(response
             .unwrap_err()
             .message()
-            .contains(&"deadline has elapsed".to_string()));
+            .contains(&"Failed to directly connect".to_string()));
     }
 
     #[tokio::test]
@@ -423,7 +425,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         use std::path::{Path, PathBuf};
         use std::{
             pin::Pin,
-            sync::Arc,
             task::{Context, Poll},
         };
         use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -457,20 +458,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         pub struct UnixStream(pub tokio::net::UnixStream);
 
         impl Connected for UnixStream {
-            type ConnectInfo = UdsConnectInfo;
+            type ConnectInfo = ();
 
-            fn connect_info(&self) -> Self::ConnectInfo {
-                UdsConnectInfo {
-                    peer_addr: self.0.peer_addr().ok().map(Arc::new),
-                    peer_cred: self.0.peer_cred().ok(),
-                }
-            }
-        }
-
-        #[derive(Clone, Debug)]
-        pub struct UdsConnectInfo {
-            pub peer_addr: Option<Arc<tokio::net::unix::SocketAddr>>,
-            pub peer_cred: Option<tokio::net::unix::UCred>,
+            fn connect_info(&self) -> Self::ConnectInfo {}
         }
 
         impl AsyncRead for UnixStream {

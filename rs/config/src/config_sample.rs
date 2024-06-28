@@ -191,12 +191,6 @@ pub const SAMPLE_CONFIG: &str = r#"
     // Configuration of the logging setup.
     // ===================================
     logger: {
-        // The node id to append to log lines. [deprecated]
-        node_id: 100,
-
-        // The datacenter id to append to log lines. [deprecated]
-        dc_id: 200,
-
         // The log level to use.
         // EXAMPLE: level: "critical",
         // EXAMPLE: level: "error",
@@ -214,10 +208,6 @@ pub const SAMPLE_CONFIG: &str = r#"
         // Output debug logs for these module paths
         // EXAMPLE: debug_overrides: ["ic_consensus::finalizer", "ic_messaging::coordinator"],
         debug_overrides: [],
-
-        // Output logs for these tags
-        // EXAMPLE: enabled_tags: ["artifact_tracing"],
-        enabled_tags: [],
 
         // If `true` the async channel for low-priority messages will block instead of drop messages.
         // This behavior is required for instrumentation in System Testing until we have a
@@ -231,12 +221,6 @@ pub const SAMPLE_CONFIG: &str = r#"
     // Configuration of the logging setup for the orchestrator.
     // ===================================
     orchestrator_logger: {
-        // The node id to append to log lines. [deprecated]
-        node_id: 100,
-
-        // The datacenter id to append to log lines. [deprecated]
-        dc_id: 200,
-
         // The log level to use.
         // EXAMPLE: level: "critical",
         // EXAMPLE: level: "error",
@@ -255,10 +239,6 @@ pub const SAMPLE_CONFIG: &str = r#"
         // EXAMPLE: debug_overrides: ["ic_consensus::finalizer", "ic_messaging::coordinator"],
         debug_overrides: [],
 
-        // Output logs for these tags
-        // EXAMPLE: enabled_tags: ["artifact_tracing"],
-        enabled_tags: [],
-
         // If `true` the async channel for low-priority messages will block instead of drop messages.
         // This behavior is required for instrumentation in System Testing until we have a
         // dedicated solution for instrumentation.
@@ -271,12 +251,6 @@ pub const SAMPLE_CONFIG: &str = r#"
     // Configuration of the logging setup for the CSP vault.
     // ===================================
     csp_vault_logger: {
-        // The node id to append to log lines. [deprecated]
-        node_id: 100,
-
-        // The datacenter id to append to log lines. [deprecated]
-        dc_id: 200,
-
         // The log level to use.
         // EXAMPLE: level: "critical",
         // EXAMPLE: level: "error",
@@ -294,10 +268,6 @@ pub const SAMPLE_CONFIG: &str = r#"
         // Output debug logs for these module paths
         // EXAMPLE: debug_overrides: ["ic_crypto_internal_csp::vault"],
         debug_overrides: [],
-
-        // Output logs for these tags
-        // EXAMPLE: enabled_tags: ["artifact_tracing"],
-        enabled_tags: [],
 
         // If `true` the async channel for low-priority messages will block instead of drop messages.
         // This behavior is required for instrumentation in System Testing until we have a

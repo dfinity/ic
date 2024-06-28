@@ -251,7 +251,7 @@ fn install_code_validate_input_compute_allocation() {
     let result = check_ingress_status(test.ingress_status(&message_id));
     assert_eq!(
         result,
-        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested a compute allocation of 90% which cannot be satisfied because the Subnet's remaining compute capacity is 49%"))
+        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested a compute allocation of 90% which cannot be satisfied because the Subnet's remaining compute capacity is 49%."))
     );
 }
 
@@ -300,7 +300,7 @@ fn install_code_validate_input_memory_allocation() {
     let result = check_ingress_status(test.ingress_status(&message_id));
     assert_eq!(
         result,
-        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested 260.00 MiB of memory but only 250.00 MiB are available in the subnet"))
+        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested 260.00 MiB of memory but only 250.00 MiB are available in the subnet."))
     );
 }
 
@@ -593,16 +593,13 @@ fn install_code_with_start_with_err() {
 
     let message_id = execute_install_code_message_dts_helper(&mut test, canister_id, wasm);
 
-    let result = check_ingress_status(test.ingress_status(&message_id));
-    assert_eq!(
-        result,
-        Err(UserError::new(
-            ErrorCode::CanisterTrapped,
-            format!(
-                "Error from Canister {}: Canister trapped: unreachable",
-                canister_id
-            )
-        ))
+    let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!(
+            "Error from Canister {}: Canister trapped: unreachable",
+            canister_id
+        ),
     );
 }
 
@@ -707,16 +704,13 @@ fn install_code_with_init_method_with_error() {
 
     let message_id = execute_install_code_init_dts_helper(&mut test, canister_id, wasm);
 
-    let result = check_ingress_status(test.ingress_status(&message_id));
-    assert_eq!(
-        result,
-        Err(UserError::new(
-            ErrorCode::CanisterTrapped,
-            format!(
-                "Error from Canister {}: Canister trapped: unreachable",
-                canister_id
-            )
-        ))
+    let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterTrapped,
+        &format!(
+            "Error from Canister {}: Canister trapped: unreachable",
+            canister_id
+        ),
     );
 }
 
@@ -784,7 +778,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         check_ingress_status(test.ingress_status(&message_id)),
         Err(UserError::new(
             ErrorCode::CanisterOutOfCycles,
-            format!("Canister installation failed with `Canister {} is out of cycles: please top up the canister with at least {} additional cycles`", canister_id, (freezing_threshold_cycles + minimum_balance) - original_balance)
+            format!("Canister installation failed with `Canister {} is out of cycles: please top up the canister with at least {} additional cycles`.", canister_id, (freezing_threshold_cycles + minimum_balance) - original_balance)
         ))
     );
 }
@@ -835,16 +829,15 @@ fn install_code_running_out_of_instructions() {
         NextExecution::None
     );
 
-    assert_eq!(
-        check_ingress_status(test.ingress_status(&message_id)),
-        Err(UserError::new(
-            ErrorCode::CanisterInstructionLimitExceeded,
-            format!(
-                "Error from Canister {}: Canister exceeded the limit of {} instructions for single message execution.",
-                canister_id,
-                test.install_code_instructions_limit(),
-            )
-        ))
+    let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterInstructionLimitExceeded,
+        &format!(
+            "Error from Canister {}: \
+            Canister exceeded the limit of {} instructions for single message execution.",
+            canister_id,
+            test.install_code_instructions_limit(),
+        ),
     );
 }
 

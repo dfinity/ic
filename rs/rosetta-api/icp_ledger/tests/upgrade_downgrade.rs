@@ -29,10 +29,6 @@ const ARCHIVE_NUM_BLOCKS_TO_ARCHIVE: usize = 5;
 /// Trigger archiving after 20 blocks.
 const ARCHIVE_TRIGGER_THRESHOLD_SMALL: usize = 20;
 const INITIAL_USER_ACCOUNT_BALANCE_E8S: u64 = 1_000_000_000_000;
-/// This is the `sha256sum` of `ledger-archive-node-canister.wasm.gz` built using `./gitlab-ci/container/build-ic.sh -c`
-/// from git commit `98eb213581b239c3829eee7076bea74acad9937b`.
-const MAINNET_INTEGRATED_ARCHIVE_CANISTER_SHA256SUM: &str =
-    "549a2b898bd490ff96b6dc3e94be5b44aaa8041d4e5be21339f9298faf759d7c";
 const MINTER_PRINCIPAL: PrincipalId = PrincipalId::new(0, [0u8; 29]);
 const TOO_MANY_BLOCKS: u64 = 100;
 
@@ -404,6 +400,8 @@ fn should_set_up_initial_state_with_mainnet_canisters() {
     assert!(ledger_archives.is_empty());
 }
 
+// TODO(NNS1-3123): re-enable this test once ledger and archive are upgraded to the same version
+#[ignore]
 #[test]
 fn should_spawn_a_new_archive_with_icp_transfers() {
     let mut setup = Setup::builder().build();
@@ -411,8 +409,9 @@ fn should_spawn_a_new_archive_with_icp_transfers() {
     setup.create_icp_transfers_until_archive_is_spawned();
     setup.assert_index_ledger_parity(true);
 
-    let expected_archive_module_hash =
-        hex::decode(MAINNET_INTEGRATED_ARCHIVE_CANISTER_SHA256SUM).unwrap();
+    // This will break if NNS Archive and NNS Ledger get upgraded to versions from
+    // different git revisions.
+    let expected_archive_module_hash = mainnet_archive_canister_sha256sum();
     let ledger_archives = archives(&setup.pocket_ic);
     assert_eq!(ledger_archives.len(), 1);
     for archive in ledger_archives {

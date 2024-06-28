@@ -31,6 +31,18 @@ system_test(
 )
 
 system_test(
+    name = "tschnorr_message_sizes_test",
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
     name = "tecdsa_remove_nodes_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -151,6 +163,9 @@ system_test(
 
 system_test(
     name = "tecdsa_performance",
+    additional_colocate_tags = [
+        "system_test_benchmark",
+    ],
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
@@ -162,7 +177,6 @@ system_test(
     tags = [
         "experimental_system_test_colocation",
         "manual",
-        "system_test_benchmark",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",

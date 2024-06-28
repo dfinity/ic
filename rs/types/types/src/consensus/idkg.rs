@@ -29,7 +29,7 @@ use common::SignatureScheme;
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::{crypto::v1 as crypto_pb, subnet::v1 as subnet_pb},
@@ -391,16 +391,7 @@ impl EcdsaKeyTranscript {
         Self {
             current: None,
             next_in_creation,
-            deprecated_key_id: if let MasterPublicKeyId::Ecdsa(key_id) = key_id.clone() {
-                Some(key_id)
-            } else {
-                // Schnorr key transcripts still receive a dummy ecdsa key ID
-                // until we can set the field to None on mainnet.
-                Some(EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: String::from("fake_dummy_key"),
-                })
-            },
+            deprecated_key_id: None,
             master_key_id: key_id,
         }
     }
@@ -413,7 +404,7 @@ impl EcdsaKeyTranscript {
         Self {
             current: current.or_else(|| self.current.clone()),
             next_in_creation,
-            deprecated_key_id: self.deprecated_key_id.clone(),
+            deprecated_key_id: None,
             master_key_id: self.master_key_id.clone(),
         }
     }
@@ -1957,8 +1948,8 @@ pub trait EcdsaStats: Send + Sync {
     /// Updates the set of transcripts being tracked currently.
     fn update_active_transcripts(&self, block_reader: &dyn EcdsaBlockReader);
 
-    /// Updates the set of quadruples being tracked currently.
-    fn update_active_quadruples(&self, block_reader: &dyn EcdsaBlockReader);
+    /// Updates the set of pre-signatures being tracked currently.
+    fn update_active_pre_signatures(&self, block_reader: &dyn EcdsaBlockReader);
 
     /// Records the time taken to verify the support share received for a dealing.
     fn record_support_validation(&self, support: &IDkgDealingSupport, duration: Duration);

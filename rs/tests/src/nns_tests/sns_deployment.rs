@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::str::FromStr;
 use std::time::Duration;
 use std::time::Instant;
@@ -30,6 +30,7 @@ use ic_agent::Agent;
 use ic_agent::{agent::EnvelopeContent, Identity, Signature};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
+use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::Canister;
@@ -767,7 +768,7 @@ impl SaleParticipant {
         starting_sns_balance: Tokens,
         seed: u64,
     ) -> Self {
-        let key_pair = EdKeypair::generate_from_u64(seed);
+        let key_pair = EdKeypair::generate(seed);
         let principal_id = key_pair.generate_principal_id().unwrap();
         let (secret_key, public_key) = key_pair.serialize_raw();
         Self {
@@ -1420,11 +1421,16 @@ impl<'a> DappCanister<'a> {
         assert_eq!(
             dapp_canister_summary
                 .status
-                .as_ref()
+                .clone()
                 .unwrap()
                 .settings
-                .controllers,
-            vec![sns_client.sns_canisters.root.unwrap()]
+                .controllers
+                .into_iter()
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([
+                sns_client.sns_canisters.root.unwrap(),
+                ROOT_CANISTER_ID.get()
+            ])
         );
 
         info!(

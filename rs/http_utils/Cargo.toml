@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-flate2 = "1.0.20"
+flate2 = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
 tokio = { workspace = true }

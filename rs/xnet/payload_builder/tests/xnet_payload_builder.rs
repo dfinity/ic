@@ -300,7 +300,7 @@ proptest! {
 
             // Build the payload.
             let payload = xnet_payload_builder
-                .get_xnet_payload(std::usize::MAX).0;
+                .get_xnet_payload(usize::MAX).0;
 
             // Payload should contain 1 slice...
             assert_eq!(
@@ -467,7 +467,7 @@ proptest! {
 
             // Build a payload.
             let (payload, byte_size) = xnet_payload_builder
-                .get_xnet_payload(std::usize::MAX);
+                .get_xnet_payload(usize::MAX);
 
             // Payload should be empty (we already have all signals in the slice).
             assert!(payload.is_empty(), "Expecting empty in payload, got a slice");
@@ -475,12 +475,12 @@ proptest! {
 
             // Bump `stream.signals_end` and pool an empty slice again.
             let mut updated_stream = stream.clone();
-            updated_stream.increment_signals_end();
+            updated_stream.push_accept_signal();
             xnet_payload_builder.pool_slice(REMOTE_SUBNET, &updated_stream, from, 0, &log);
 
             // Build a payload again.
             let payload = xnet_payload_builder
-                .get_xnet_payload(std::usize::MAX).0;
+                .get_xnet_payload(usize::MAX).0;
 
             // Payload should now contain 1 empty slice from REMOTE_SUBNET.
             assert_eq!(
@@ -545,7 +545,7 @@ proptest! {
             }
 
             let payload = xnet_payload_builder
-                .get_xnet_payload(std::usize::MAX).0;
+                .get_xnet_payload(usize::MAX).0;
 
             assert_eq!(1, payload.len());
             if let Some(slice) = payload.get(&REMOTE_SUBNET) {

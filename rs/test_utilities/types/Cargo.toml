@@ -15,5 +15,5 @@ rand = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-bincode = "1.2.1"
+bincode = { workspace = true }
 serde_cbor = { workspace = true }

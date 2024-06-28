@@ -2,6 +2,7 @@ use candid::Principal;
 use ic_agent::{agent::EnvelopeContent, Identity, Signature};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
+use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::{neuron::DissolveState, Neuron};
 use ic_rosetta_test_utils::EdKeypair;
@@ -55,7 +56,7 @@ fn initial_nns_neuron(maturity_e8s: u64, rng: &mut ChaChaRng) -> NnsNfNeuron {
 
 fn nns_neuron_info(rng: &mut ChaChaRng) -> (EdKeypair, PrincipalId, NeuronId, Subaccount) {
     let seed = rng.next_u64();
-    let key_pair: EdKeypair = EdKeypair::generate_from_u64(seed);
+    let key_pair: EdKeypair = EdKeypair::generate(seed);
     let principal_id = key_pair.generate_principal_id().unwrap();
 
     let id = NeuronId { id: rng.next_u64() };

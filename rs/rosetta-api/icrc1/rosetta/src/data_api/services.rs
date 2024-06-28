@@ -1,3 +1,6 @@
+use std::sync::Arc;
+use std::sync::Mutex;
+
 use crate::common::constants::DEFAULT_BLOCKCHAIN;
 use crate::common::constants::MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST;
 use crate::common::constants::STATUS_COMPLETED;
@@ -436,6 +439,27 @@ pub fn search_transactions(
         },
     })
 }
+
+pub fn initial_sync_is_completed(
+    storage_client: &StorageClient,
+    sync_state: Arc<Mutex<Option<bool>>>,
+) -> bool {
+    let mut synched = sync_state.lock().unwrap();
+    if synched.is_some() && synched.unwrap() {
+        synched.unwrap()
+    } else {
+        let block_count = storage_client.get_block_count();
+        let highest_index = storage_client.get_highest_block_idx_in_account_balance_table();
+        *synched = Some(match (block_count, highest_index) {
+            // If the blockchain contains no blocks we mark it as not completed
+            (Ok(block_count), Ok(Some(highest_index))) if block_count == highest_index + 1 => true,
+            _ => false,
+        });
+        // Unwrap is safe because it was just set
+        (*synched).unwrap()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

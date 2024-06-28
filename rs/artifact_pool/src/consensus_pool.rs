@@ -821,6 +821,7 @@ fn is_latency_sensitive(msg: &ConsensusMessage) -> bool {
         ConsensusMessage::NotarizationShare(_) => true,
         ConsensusMessage::RandomBeaconShare(_) => true,
         ConsensusMessage::RandomTapeShare(_) => true,
+        ConsensusMessage::EquivocationProof(_) => true,
         // Might be big and is relayed and can cause excessive BW usage.
         ConsensusMessage::CatchUpPackage(_) => false,
         ConsensusMessage::CatchUpPackageShare(_) => true,
@@ -1813,7 +1814,7 @@ mod tests {
                 path.join("2").join("random_tape.bin").exists(),
                 "random tape at height 2 was backed up"
             );
-            // notarization at height 2 was not backed up becasue this is height is not
+            // notarization at height 2 was not backed up because this height is not
             // finalized
             assert!(!notarization_path.exists());
             assert_eq!(

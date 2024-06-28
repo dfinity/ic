@@ -89,7 +89,7 @@ mod tests {
         messages::{RequestMetadata, NO_DEADLINE},
         nominal_cycles::NominalCycles,
         time::CoarseTime,
-        xnet::{StreamFlags, StreamIndex, StreamIndexedQueue},
+        xnet::{RejectReason, StreamFlags, StreamIndex, StreamIndexedQueue},
         CryptoHashOfPartialState, Cycles, ExecutionRound, Time,
     };
     use ic_wasm_types::CanisterModule;
@@ -232,8 +232,7 @@ mod tests {
                 );
             }
             if certification_version >= CertificationVersion::V8 {
-                stream.push_reject_signal(10.into());
-                stream.increment_signals_end();
+                stream.push_reject_signal(RejectReason::CanisterMigrating);
             }
             if certification_version >= CertificationVersion::V17 {
                 stream.set_reverse_stream_flags(StreamFlags {

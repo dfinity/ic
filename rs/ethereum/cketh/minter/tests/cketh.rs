@@ -149,7 +149,7 @@ fn should_retrieve_cache_transaction_price() {
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
 
-    let result = cketh.eip_1559_transaction_price();
+    let result = cketh.eip_1559_transaction_price(None);
     assert_matches!(result, Err(e) if e.code() == ic_state_machine_tests::ErrorCode::CanisterCalledTrap);
 
     let cketh = cketh
@@ -171,14 +171,18 @@ fn should_retrieve_cache_transaction_price() {
         })
         .expect("missing CreatedTransaction event");
 
-    let price = cketh.eip_1559_transaction_price_expecting_ok();
+    let price = cketh.eip_1559_transaction_price_expecting_ok(None);
     assert_eq!(price.max_priority_fee_per_gas, tx.max_priority_fee_per_gas);
     assert_eq!(price.max_fee_per_gas, tx.max_fee_per_gas);
     assert_eq!(price.gas_limit, tx.gas_limit);
 
     cketh.env.tick();
-    let second_price = cketh.eip_1559_transaction_price_expecting_ok();
+    let second_price = cketh.eip_1559_transaction_price_expecting_ok(None);
     assert_eq!(price, second_price);
+
+    let price_using_ledger_id =
+        cketh.eip_1559_transaction_price_expecting_ok(Some(cketh.ledger_id.into()));
+    assert_eq!(price, price_using_ledger_id);
 }
 
 #[test]
@@ -1053,7 +1057,7 @@ fn should_retrieve_minter_info() {
         .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
         .setup;
     let info_after_withdrawal = cketh.get_minter_info();
-    let price = cketh.eip_1559_transaction_price_expecting_ok();
+    let price = cketh.eip_1559_transaction_price_expecting_ok(None);
     assert_eq!(
         info_after_withdrawal,
         MinterInfo {
