@@ -49,7 +49,7 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 720 # 12 hours
     # TODO: disable in GitLab before enabling here
-    if: ${{ && false }}
+    if: ${{ false }}
     strategy:
       matrix:
         targets: ["//rs/crypto/...", "//rs/state_manager/..."]
