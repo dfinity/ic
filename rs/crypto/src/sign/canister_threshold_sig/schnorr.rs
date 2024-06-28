@@ -67,6 +67,7 @@ pub fn create_sig_share(
         .create_schnorr_sig_share(
             inputs.derivation_path().clone(),
             inputs.message().to_vec(),
+            inputs.taproot_tree_root().map(Vec::from),
             *inputs.nonce(),
             IDkgTranscriptInternalBytes::from(key_raw),
             IDkgTranscriptInternalBytes::from(presignature_raw),
@@ -127,6 +128,7 @@ pub fn verify_sig_share(
                 &internal_share,
                 &DerivationPath::from(inputs.derivation_path()),
                 inputs.message(),
+                inputs.taproot_tree_root(),
                 *inputs.nonce(),
                 signer_index,
                 &key,
@@ -208,6 +210,7 @@ pub fn combine_sig_shares(
             let internal_combined_sig = combine_bip340_signature_shares(
                 &DerivationPath::from(inputs.derivation_path()),
                 inputs.message(),
+                inputs.taproot_tree_root(),
                 *inputs.nonce(),
                 &key,
                 &presig,
@@ -383,6 +386,7 @@ pub fn verify_combined_sig(
                 &signature,
                 &DerivationPath::from(inputs.derivation_path()),
                 inputs.message(),
+                inputs.taproot_tree_root(),
                 *inputs.nonce(),
                 &blinder_unmasked,
                 &key,

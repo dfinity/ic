@@ -211,6 +211,7 @@ mock! {
             &self,
             derivation_path: ExtendedDerivationPath,
             message: Vec<u8>,
+            taproot_tree_root: Option<Vec<u8>>,
             nonce: Randomness,
             key_raw: IDkgTranscriptInternalBytes,
             presig_raw: IDkgTranscriptInternalBytes,
