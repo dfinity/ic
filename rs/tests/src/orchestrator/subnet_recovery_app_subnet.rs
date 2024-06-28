@@ -154,7 +154,7 @@ pub fn test_no_upgrade_without_tecdsa(env: TestEnv) {
     app_subnet_recovery_test(env, APP_NODES, false, false);
 }
 
-pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool, ecdsa: bool) {
+pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool, chain_key: bool) {
     let logger = env.logger();
 
     let master_version = env.get_initial_replica_version().unwrap();
@@ -181,15 +181,15 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
     let create_new_subnet = !topology_snapshot
         .subnets()
         .any(|s| s.subnet_type() == SubnetType::Application);
-    assert!(ecdsa >= create_new_subnet);
+    assert!(chain_key >= create_new_subnet);
 
     let key_ids = make_key_ids_for_all_schemes();
-    let ecdsa_pub_keys = ecdsa.then(|| {
-        info!(logger, "ECDSA flag set, creating key on NNS.");
+    let chain_key_pub_keys = chain_key.then(|| {
+        info!(logger, "Chain key flag set, creating key on NNS.");
         if create_new_subnet {
             info!(
                 logger,
-                "No app subnet found, creating a new one with the ECDSA key."
+                "No app subnet found, creating a new one with the Chain keys."
             );
             enable_chain_key_on_new_subnet(
                 &env,
@@ -292,7 +292,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
     };
 
     let subnet_args = AppSubnetRecoveryArgs {
-        keep_downloaded_state: Some(ecdsa),
+        keep_downloaded_state: Some(chain_key),
         subnet_id,
         upgrade_version: version_is_broken
             .then(|| ReplicaVersion::try_from(working_version.clone()).unwrap()),
@@ -303,7 +303,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
         pub_key: Some(pub_key),
         download_node: None,
         upload_node: Some(upload_node.get_ip_addr()),
-        ecdsa_subnet_id: ecdsa.then_some(root_subnet_id),
+        chain_key_subnet_id: chain_key.then_some(root_subnet_id),
         next_step: None,
     };
 
@@ -392,7 +392,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
         assert!(height > Height::from(1000));
     }
 
-    if ecdsa {
+    if chain_key {
         if !create_new_subnet {
             disable_chain_key_on_subnet(
                 &nns_node,
@@ -408,11 +408,11 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
                 key_ids.clone(),
                 &logger,
             );
-            assert_eq!(ecdsa_pub_keys.clone().unwrap(), app_keys)
+            assert_eq!(chain_key_pub_keys.clone().unwrap(), app_keys)
         }
 
-        for (key_id, ecdsa_pub_key) in ecdsa_pub_keys.unwrap() {
-            run_chain_key_signature_test(&nns_canister, &logger, &key_id, ecdsa_pub_key);
+        for (key_id, chain_key_pub_key) in chain_key_pub_keys.unwrap() {
+            run_chain_key_signature_test(&nns_canister, &logger, &key_id, chain_key_pub_key);
         }
     }
 
