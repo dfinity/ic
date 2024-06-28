@@ -188,12 +188,10 @@ impl CanisterQueue {
     }
 
     /// Returns `Ok(())` if there exists at least one reserved response slot,
-    /// `Err(StateError::InvariantBroken)` otherwise.
-    pub(super) fn check_has_reserved_response_slot(&self) -> Result<(), StateError> {
+    /// `Err(())` otherwise.
+    pub(super) fn check_has_reserved_response_slot(&self) -> Result<(), ()> {
         if self.request_slots + self.response_slots <= self.queue.len() {
-            return Err(StateError::InvariantBroken(
-                "No reserved response slot".to_string(),
-            ));
+            return Err(());
         }
 
         Ok(())
@@ -204,7 +202,8 @@ impl CanisterQueue {
     /// Panics if there is no reserved response slot.
     pub(super) fn push_response(&mut self, id: message_pool::Id) {
         debug_assert!(id.kind() == Kind::Response);
-        self.check_has_reserved_response_slot().unwrap();
+        self.check_has_reserved_response_slot()
+            .expect("No reserved response slot");
 
         self.queue.push_back(CanisterQueueItem::Reference(id));
         debug_assert_eq!(Ok(()), self.check_invariants());

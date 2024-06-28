@@ -25,10 +25,7 @@ fn canister_queue_constructor_test() {
     assert_eq!(CAPACITY, queue.available_response_slots());
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(0, queue.reserved_slots());
-    assert_matches!(
-        queue.check_has_reserved_response_slot(),
-        Err(StateError::InvariantBroken(_))
-    );
+    assert_eq!(Err(()), queue.check_has_reserved_response_slot());
     assert_eq!(queue.peek(), None);
     assert_eq!(queue.pop(), None);
 }
@@ -51,10 +48,7 @@ fn canister_queue_push_request_succeeds() {
     );
     assert_eq!(CAPACITY, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
-    assert_matches!(
-        queue.check_has_reserved_response_slot(),
-        Err(StateError::InvariantBroken(_))
-    );
+    assert_eq!(Err(()), queue.check_has_reserved_response_slot());
 
     // Peek, then pop the request.
     assert_eq!(Some(&CanisterQueueItem::Reference(id)), queue.peek());
@@ -66,10 +60,7 @@ fn canister_queue_push_request_succeeds() {
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(CAPACITY, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
-    assert_matches!(
-        queue.check_has_reserved_response_slot(),
-        Err(StateError::InvariantBroken(_))
-    );
+    assert_eq!(Err(()), queue.check_has_reserved_response_slot());
 }
 
 // Reserving a slot, then pushing a response succeeds if there is space.
@@ -101,10 +92,7 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(CAPACITY - 1, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
-    assert_matches!(
-        queue.check_has_reserved_response_slot(),
-        Err(StateError::InvariantBroken(_))
-    );
+    assert_eq!(Err(()), queue.check_has_reserved_response_slot());
 
     // Peek, then pop the response reference.
     assert_eq!(Some(&CanisterQueueItem::Reference(id)), queue.peek());
@@ -116,10 +104,7 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(CAPACITY, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
-    assert_matches!(
-        queue.check_has_reserved_response_slot(),
-        Err(StateError::InvariantBroken(_))
-    );
+    assert_eq!(Err(()), queue.check_has_reserved_response_slot());
 }
 
 /// Test that overfilling an output queue with requests results in failed
@@ -143,10 +128,7 @@ fn canister_queue_push_request_to_full_queue_fails() {
     );
     assert_eq!(CAPACITY, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
-    assert_matches!(
-        queue.check_has_reserved_response_slot(),
-        Err(StateError::InvariantBroken(_))
-    );
+    assert_eq!(Err(()), queue.check_has_reserved_response_slot());
 
     queue.push_request(new_request_message_id(13, Class::BestEffort));
 }
@@ -196,10 +178,7 @@ fn canister_queue_try_reserve_response_slot_in_full_queue_fails() {
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(0, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
-    assert_matches!(
-        queue.check_has_reserved_response_slot(),
-        Err(StateError::InvariantBroken(_))
-    );
+    assert_eq!(Err(()), queue.check_has_reserved_response_slot());
 
     // Trying to reserve a slot still fails.
     assert_eq!(
@@ -236,7 +215,7 @@ fn canister_queue_full_duplex() {
 }
 
 #[test]
-#[should_panic(expected = "InvariantBroken(\"No reserved response slot\")")]
+#[should_panic(expected = "No reserved response slot")]
 fn canister_queue_push_without_reserved_slot_panics() {
     let mut queue = CanisterQueue::new(10);
     queue.push_response(new_response_message_id(13, Class::BestEffort));

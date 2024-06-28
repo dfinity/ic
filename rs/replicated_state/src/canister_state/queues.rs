@@ -351,8 +351,8 @@ impl CanisterQueues {
     ///  * `QueueFull` if pushing a `Request` and the corresponding input or
     ///    output queues are full.
     ///
-    ///  * `InvariantBroken` if pushing a `Response` and the receiving canister is
-    ///    not expecting one.
+    ///  * `NonMatchingResponse` if pushing a `Response` and the receiving canister
+    ///    is not expecting one.
     pub(super) fn push_input(
         &mut self,
         msg: RequestOrResponse,
@@ -373,10 +373,19 @@ impl CanisterQueues {
                 // Make the borrow checker happy.
                 &mut self.canister_queues.get_mut(&sender).unwrap().0
             }
-            RequestOrResponse::Response(_) => match self.canister_queues.get_mut(&sender) {
+            RequestOrResponse::Response(response) => match self.canister_queues.get_mut(&sender) {
                 Some((queue, _)) => {
-                    if let Err(e) = queue.check_has_reserved_response_slot() {
-                        return Err((e, msg));
+                    if queue.check_has_reserved_response_slot().is_err() {
+                        return Err((
+                            StateError::NonMatchingResponse {
+                                err_str: "No reserved response slot".to_string(),
+                                originator: response.originator,
+                                callback_id: response.originator_reply_callback,
+                                respondent: response.respondent,
+                                deadline: response.deadline,
+                            },
+                            msg,
+                        ));
                     }
                     queue
                 }
