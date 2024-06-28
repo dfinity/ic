@@ -315,3 +315,13 @@ pub(crate) async fn collect_metrics(
     out_counter.inc_by(response.body().size_hint().lower());
     response
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tt() {
+        println!("ola");
+    }
+}
