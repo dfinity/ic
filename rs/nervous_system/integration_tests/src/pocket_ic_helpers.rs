@@ -116,7 +116,26 @@ pub fn install_canister(
     wasm: Wasm,
     controller: Option<PrincipalId>,
 ) {
-    let controller_principal = controller.map(|c| c.0);
+    install_canister_with_controllers(
+        pocket_ic,
+        name,
+        canister_id,
+        arg,
+        wasm,
+        controller.into_iter().collect(),
+    )
+}
+
+pub fn install_canister_with_controllers(
+    pocket_ic: &PocketIc,
+    name: &str,
+    canister_id: CanisterId,
+    arg: Vec<u8>,
+    wasm: Wasm,
+    controllers: Vec<PrincipalId>,
+) {
+    let controllers = controllers.into_iter().map(|c| c.0).collect::<Vec<_>>();
+    let controller_principal = controllers.first().cloned();
     let memory_allocation = if ALL_NNS_CANISTER_IDS.contains(&&canister_id) {
         let memory_allocation_bytes = ic_nns_constants::memory_allocation_of(canister_id);
         Some(Nat::from(memory_allocation_bytes))
@@ -125,6 +144,7 @@ pub fn install_canister(
     };
     let settings = Some(CanisterSettings {
         memory_allocation,
+        controllers: Some(controllers),
         ..Default::default()
     });
     let canister_id = pocket_ic
