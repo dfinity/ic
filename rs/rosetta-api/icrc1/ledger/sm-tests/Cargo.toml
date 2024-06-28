@@ -18,7 +18,6 @@ ic-canisters-http-types = { path = "../../../../rust_canisters/http_types" }
 ic-error-types = { path = "../../../../types/error_types" }
 ic-icrc1 = { path = "../.." }
 ic-icrc1-ledger = { path = ".." }
-ic-icrc1-test-utils = { path = "../../test_utils" }
 ic-icrc1-tokens-u256 = { path = "../../tokens_u256", optional = true }
 ic-icrc1-tokens-u64 = { path = "../../tokens_u64" }
 ic-ledger-canister-core = { path = "../../../ledger_canister_core" }

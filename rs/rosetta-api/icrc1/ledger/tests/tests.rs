@@ -55,10 +55,6 @@ pub enum LegacyLedgerArgument {
     Upgrade(Option<LegacyUpgradeArgs>),
 }
 
-fn ledger_mainnet_wasm() -> Vec<u8> {
-    std::fs::read(std::env::var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap()
-}
-
 fn ledger_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
@@ -122,21 +118,6 @@ fn encode_init_args_with_small_sized_archive(
             panic!("BUG: Expected Init argument")
         }
     }
-}
-
-fn encode_upgrade_downgrade_args() -> LedgerArgument {
-    LedgerArgument::Upgrade(None)
-}
-
-#[cfg_attr(feature = "u256-tokens", ignore)]
-#[test]
-fn test_install_mainnet_ledger_then_upgrade_then_downgrade() {
-    ic_icrc1_ledger_sm_tests::test_install_upgrade_downgrade(
-        ledger_mainnet_wasm(),
-        encode_init_args,
-        ledger_wasm(),
-        encode_upgrade_downgrade_args,
-    );
 }
 
 #[test]

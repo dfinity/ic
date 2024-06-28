@@ -8522,7 +8522,6 @@ dependencies = [
  "ic-error-types",
  "ic-icrc1",
  "ic-icrc1-ledger",
- "ic-icrc1-test-utils",
  "ic-icrc1-tokens-u256",
  "ic-icrc1-tokens-u64",
  "ic-ledger-canister-core",

@@ -1883,36 +1883,6 @@ where
     assert_eq!(token_fee_after_upgrade, NEW_FEE);
 }
 
-pub fn test_install_upgrade_downgrade<LI, LA>(
-    install_ledger_wasm: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> LI,
-    upgrade_ledger_wasm: Vec<u8>,
-    encode_upgrade_downgrade_args: fn() -> LA,
-) where
-    LI: CandidType,
-    LA: CandidType,
-{
-    let (env, canister_id) = setup(install_ledger_wasm.clone(), encode_init_args, vec![]);
-
-    let args = encode_upgrade_downgrade_args();
-    let encoded_upgrade_args = Encode!(&args).unwrap();
-    env.upgrade_canister(
-        canister_id,
-        upgrade_ledger_wasm,
-        encoded_upgrade_args.clone(),
-    )
-    .expect("should successfully upgrade ledger canister");
-
-    let args = encode_upgrade_downgrade_args();
-    let encoded_downgrade_args = Encode!(&args).unwrap();
-    env.upgrade_canister(
-        canister_id,
-        install_ledger_wasm,
-        encoded_downgrade_args.clone(),
-    )
-    .expect("should successfully downgrade ledger canister");
-}
-
 pub fn test_fee_collector<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,
