@@ -47,7 +47,7 @@ jobs:
     name: Cut RC
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ github.event_name == 'schedule' }} || ${{ (github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/master') }}
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -70,7 +70,7 @@ jobs:
     <<: *dind-large-setup
     timeout-minutes: 720 # 12 hours
     # TODO: disable in GitLab before enabling here
-    if: ${{ && false }}
+    if: ${{ false }}
     strategy:
       matrix:
         targets: ["//rs/crypto/...", "//rs/state_manager/..."]
