@@ -181,7 +181,7 @@ fn consensus_produces_expected_batches() {
         );
         let certifier = CertifierImpl::new(
             replica_config.clone(),
-            Arc::clone(&membership) as Arc<_>,
+            Arc::clone(&registry_client) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&consensus_cache),

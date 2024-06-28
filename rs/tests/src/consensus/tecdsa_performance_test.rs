@@ -23,12 +23,13 @@ use crate::util::{block_on, get_app_subnet_and_node, get_nns_node, MessageCanist
 
 use candid::{Encode, Principal};
 use futures::future::join_all;
-use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
+use ic_config::subnet_config::{ECDSA_SIGNATURE_FEE, SCHNORR_SIGNATURE_FEE};
 use ic_management_canister_types::{
-    DerivationPath, MasterPublicKeyId, Payload, SignWithECDSAArgs, SignWithECDSAReply,
+    DerivationPath, EcdsaKeyId, MasterPublicKeyId, Payload, SchnorrKeyId, SignWithECDSAArgs,
+    SignWithECDSAReply, SignWithSchnorrArgs,
 };
 use ic_message::ForwardParams;
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::{error, info};
@@ -84,10 +85,12 @@ pub fn setup(env: TestEnv) {
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(vm_resources)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .with_ecdsa_config(EcdsaConfig {
-                    quadruples_to_create_in_advance: QUADRUPLES_TO_CREATE,
-                    key_ids: vec![make_key(KEY_ID1)],
-                    max_queue_size: Some(MAX_QUEUE_SIZE),
+                .with_chain_key_config(ChainKeyConfig {
+                    key_configs: vec![KeyConfig {
+                        max_queue_size: MAX_QUEUE_SIZE,
+                        pre_signatures_to_create_in_advance: QUADRUPLES_TO_CREATE,
+                        key_id: MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)),
+                    }],
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
                 })
@@ -106,34 +109,59 @@ pub fn setup(env: TestEnv) {
 }
 
 #[derive(Clone)]
-pub struct EcdsaSignatureRequest {
+pub struct ChainSignatureRequest {
     pub principal: Principal,
     pub payload: Vec<u8>,
 }
 
-impl EcdsaSignatureRequest {
-    pub fn new(principal: Principal, key_id: &str) -> Self {
-        let message_hash = [1; 32];
-        let signature_request = SignWithECDSAArgs {
-            message_hash,
-            derivation_path: DerivationPath::new(Vec::new()),
-            key_id: make_key(key_id),
+impl ChainSignatureRequest {
+    pub fn new(principal: Principal, key_id: MasterPublicKeyId) -> Self {
+        let params = match key_id {
+            MasterPublicKeyId::Ecdsa(ecdsa_key_id) => Self::ecdsa_params(ecdsa_key_id),
+            MasterPublicKeyId::Schnorr(schnorr_key_id) => Self::schnorr_params(schnorr_key_id),
         };
-        let signature_payload = Encode!(&signature_request).unwrap();
 
-        let params = ForwardParams {
-            receiver: Principal::management_canister(),
-            method: "sign_with_ecdsa".to_string(),
-            cycles: ECDSA_SIGNATURE_FEE.get() * 2,
-            payload: signature_payload,
-        };
         let payload = Encode!(&params).unwrap();
 
         Self { principal, payload }
     }
+
+    fn ecdsa_params(ecdsa_key_id: EcdsaKeyId) -> ForwardParams {
+        let signature_request = SignWithECDSAArgs {
+            message_hash: [1; 32],
+            derivation_path: DerivationPath::new(Vec::new()),
+            key_id: ecdsa_key_id,
+        };
+
+        let signature_payload = Encode!(&signature_request).unwrap();
+
+        ForwardParams {
+            receiver: Principal::management_canister(),
+            method: "sign_with_ecdsa".to_string(),
+            cycles: ECDSA_SIGNATURE_FEE.get() * 2,
+            payload: signature_payload,
+        }
+    }
+
+    fn schnorr_params(schnorr_key_id: SchnorrKeyId) -> ForwardParams {
+        let signature_request = SignWithSchnorrArgs {
+            message: [1; 32].to_vec(),
+            derivation_path: DerivationPath::new(Vec::new()),
+            key_id: schnorr_key_id,
+        };
+
+        let signature_payload = Encode!(&signature_request).unwrap();
+
+        ForwardParams {
+            receiver: Principal::management_canister(),
+            method: "sign_with_schnorr".to_string(),
+            cycles: SCHNORR_SIGNATURE_FEE.get() * 2,
+            payload: signature_payload,
+        }
+    }
 }
 
-impl Request<SignWithECDSAReply> for EcdsaSignatureRequest {
+impl Request<SignWithECDSAReply> for ChainSignatureRequest {
     fn mode(&self) -> CallMode {
         CallMode::Update
     }
@@ -199,7 +227,7 @@ pub fn tecdsa_performance_test(
                 u128::MAX,
             ))
             .canister_id();
-            EcdsaSignatureRequest::new(principal, KEY_ID1)
+            ChainSignatureRequest::new(principal, MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)))
         })
         .collect::<Vec<_>>();
 

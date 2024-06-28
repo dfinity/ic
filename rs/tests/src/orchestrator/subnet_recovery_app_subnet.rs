@@ -37,18 +37,18 @@ use crate::orchestrator::utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message,
 };
 use crate::orchestrator::utils::subnet_recovery::*;
-use crate::tecdsa::{make_key, KEY_ID1, KEY_ID2, KEY_ID3};
+use crate::tecdsa::make_key_ids_for_all_schemes;
 use crate::util::*;
 use ic_base_types::NodeId;
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
 use ic_recovery::RecoveryArgs;
 use ic_recovery::{file_sync_helper, get_node_metrics};
-use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use std::convert::TryFrom;
+use std::time::Duration;
 
 const DKG_INTERVAL: u64 = 9;
 const APP_NODES: usize = 3;
@@ -57,6 +57,8 @@ const UNASSIGNED_NODES: usize = 3;
 const DKG_INTERVAL_LARGE: u64 = 99;
 const NNS_NODES_LARGE: usize = 40;
 const APP_NODES_LARGE: usize = 34;
+
+pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
@@ -75,10 +77,17 @@ pub fn setup(
         Subnet::fast_single_node(SubnetType::System)
             .with_dkg_interval_length(Height::from(dkg_interval))
     };
-    nns = nns.with_ecdsa_config(EcdsaConfig {
-        quadruples_to_create_in_advance: 3,
-        key_ids: vec![make_key(KEY_ID1), make_key(KEY_ID2), make_key(KEY_ID3)],
-        max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+    let key_ids = make_key_ids_for_all_schemes();
+    let key_configs = key_ids
+        .into_iter()
+        .map(|key_id| KeyConfig {
+            key_id,
+            max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+            pre_signatures_to_create_in_advance: 3,
+        })
+        .collect();
+    nns = nns.with_chain_key_config(ChainKeyConfig {
+        key_configs,
         signature_request_timeout_ns: None,
         idkg_key_rotation_period_ms: None,
     });
@@ -174,12 +183,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
         .any(|s| s.subnet_type() == SubnetType::Application);
     assert!(ecdsa >= create_new_subnet);
 
-    let key_ids = vec![
-        MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)),
-        MasterPublicKeyId::Ecdsa(make_key(KEY_ID2)),
-        MasterPublicKeyId::Ecdsa(make_key(KEY_ID3)),
-    ];
-
+    let key_ids = make_key_ids_for_all_schemes();
     let ecdsa_pub_keys = ecdsa.then(|| {
         info!(logger, "ECDSA flag set, creating key on NNS.");
         if create_new_subnet {
@@ -295,6 +299,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
         upgrade_image_url: env.get_ic_os_update_img_test_url().ok(),
         upgrade_image_hash: env.get_ic_os_update_img_test_sha256().ok(),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
+        replay_until_height: None,
         pub_key: Some(pub_key),
         download_node: None,
         upload_node: Some(upload_node.get_ip_addr()),

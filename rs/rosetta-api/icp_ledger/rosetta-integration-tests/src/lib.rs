@@ -8,7 +8,7 @@ use url::Url;
 
 use ic_icrc_rosetta_client::RosettaClient;
 
-const NUM_TRIES: u64 = 100;
+const NUM_TRIES: u64 = 1000;
 const WAIT_BETWEEN_ATTEMPTS: Duration = Duration::from_millis(100);
 
 struct KillOnDrop(Child);
@@ -32,7 +32,10 @@ impl RosettaContext {
 
 impl Drop for KillOnDrop {
     fn drop(&mut self) {
-        let _ = self.0.kill();
+        match self.0.kill() {
+            Ok(_) => println!("Rosetta has been successfully stopped"),
+            Err(err) => println!("Rosetta was NOT sucessfully stopped: {err:?}"),
+        }
     }
 }
 

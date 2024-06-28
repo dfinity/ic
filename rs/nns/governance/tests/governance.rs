@@ -8428,6 +8428,7 @@ fn test_list_neurons() {
     let p1_listing = gov.list_neurons_by_principal(
         &ListNeurons {
             include_neurons_readable_by_caller: true,
+            include_empty_neurons_readable_by_caller: Some(true),
             neuron_ids: vec![],
         },
         &p1,
@@ -8449,6 +8450,7 @@ fn test_list_neurons() {
     let p4_listing = gov.list_neurons_by_principal(
         &ListNeurons {
             include_neurons_readable_by_caller: true,
+            include_empty_neurons_readable_by_caller: Some(true),
             neuron_ids: vec![42, 99],
         },
         &p4,
@@ -8474,6 +8476,7 @@ fn test_list_neurons() {
     let list_neurons_response = gov.list_neurons_by_principal(
         &ListNeurons {
             include_neurons_readable_by_caller: true,
+            include_empty_neurons_readable_by_caller: Some(true),
             neuron_ids: vec![200],
         },
         &principal_with_no_neurons,

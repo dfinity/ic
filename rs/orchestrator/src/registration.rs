@@ -217,9 +217,7 @@ impl NodeRegistration {
             .expect("Invalid endpoints in message routing config."),
             http_endpoint: http_config_to_endpoint(&self.log, &self.node_config.http_handler)
                 .expect("Invalid endpoints in http handler config."),
-            p2p_flow_endpoints: vec![],
             chip_id: None,
-            prometheus_metrics_endpoint: "".to_string(),
             public_ipv4_config: process_ipv4_config(
                 &self.log,
                 &self.node_config.initial_ipv4_config,
@@ -227,6 +225,9 @@ impl NodeRegistration {
             .expect("Invalid IPv4 configuration"),
             domain: process_domain_name(&self.log, &self.node_config.domain)
                 .expect("Domain name is invalid"),
+            // Unused section follows
+            p2p_flow_endpoints: Default::default(),
+            prometheus_metrics_endpoint: Default::default(),
         }
     }
 

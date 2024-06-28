@@ -70,8 +70,6 @@ def icos_build(
 
     # -------------------- Build the container image --------------------
 
-    build_container_filesystem_config_file = Label(image_deps.get("build_container_filesystem_config_file"))
-
     if build_local_base_image:
         base_image_tag = "base-image-" + name  # Reuse for build_container_filesystem_tar
         package_files_arg = "PACKAGE_FILES=packages.common"
@@ -92,7 +90,9 @@ def icos_build(
             name = "rootfs-tree.tar",
             context_files = [image_deps["container_context_files"]],
             component_files = image_deps["component_files"],
-            config_file = build_container_filesystem_config_file,
+            dockerfile = image_deps["dockerfile"],
+            build_args = image_deps["build_args"],
+            file_build_arg = image_deps["file_build_arg"],
             base_image_tar_file = ":base_image.tar",
             base_image_tar_file_tag = base_image_tag,
             target_compatible_with = ["@platforms//os:linux"],
@@ -103,7 +103,9 @@ def icos_build(
             name = "rootfs-tree.tar",
             context_files = [image_deps["container_context_files"]],
             component_files = image_deps["component_files"],
-            config_file = build_container_filesystem_config_file,
+            dockerfile = image_deps["dockerfile"],
+            build_args = image_deps["build_args"],
+            file_build_arg = image_deps["file_build_arg"],
             target_compatible_with = ["@platforms//os:linux"],
             tags = ["manual"],
         )
@@ -670,13 +672,13 @@ def boundary_node_icos_build(
 
     build_grub_partition("partition-grub.tzst", tags = ["manual"])
 
-    build_container_filesystem_config_file = Label(image_deps["build_container_filesystem_config_file"])
-
     build_container_filesystem(
         name = "rootfs-tree.tar",
         context_files = ["//ic-os/boundary-guestos/context:context-files"],
         component_files = boundary_component_files,
-        config_file = build_container_filesystem_config_file,
+        dockerfile = image_deps["dockerfile"],
+        build_args = image_deps["build_args"],
+        file_build_arg = image_deps["file_build_arg"],
         target_compatible_with = ["@platforms//os:linux"],
         tags = ["manual"],
     )

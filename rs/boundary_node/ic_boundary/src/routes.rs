@@ -120,7 +120,6 @@ pub enum RequestType {
 #[strum(serialize_all = "snake_case")]
 pub enum RateLimitCause {
     Normal,
-    LedgerTransfer,
     Bouncer,
     Canister,
 }

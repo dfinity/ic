@@ -7,7 +7,7 @@ use crate::{
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
     messages::CallbackId,
     signature::{BasicSignature, BasicSignatureBatch},
-    CountBytes, Time,
+    Time,
 };
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion};
 use ic_error_types::RejectCode;
@@ -145,14 +145,6 @@ impl TryFrom<pb::CanisterHttpResponseDivergence> for CanisterHttpResponseDiverge
             .map(TryFrom::try_from)
             .collect::<Result<Vec<CanisterHttpResponseShare>, ProxyDecodeError>>()?;
         Ok(CanisterHttpResponseDivergence { shares })
-    }
-}
-
-impl CountBytes for CanisterHttpPayload {
-    fn count_bytes(&self) -> usize {
-        let timeouts_size: usize = self.timeouts.iter().map(CountBytes::count_bytes).sum();
-        let response_size: usize = self.responses.iter().map(CountBytes::count_bytes).sum();
-        timeouts_size + response_size
     }
 }
 

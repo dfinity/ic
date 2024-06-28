@@ -80,7 +80,7 @@ struct Args {
     store_type: StoreType,
 
     /// The file to use for the store if [store_type] is file.
-    #[arg(short = 'f', long, default_value = "db.sqlite")]
+    #[arg(short = 'f', long, default_value = "/data/db.sqlite")]
     store_file: PathBuf,
 
     /// The network type that rosetta connects to.

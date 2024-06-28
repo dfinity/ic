@@ -107,32 +107,39 @@ impl TNode {
         }
     }
 
-    pub async fn deploy_config_image(&self, image_name: &str) -> Result<()> {
+    pub async fn deploy_config_image(
+        &self,
+        image_name: &str,
+        dv_name: &str,
+        content_type: DataVolumeContentType,
+    ) -> Result<()> {
         let client = Client::try_default().await?;
         let gvk = GroupVersionKind::gvk("cdi.kubevirt.io", "v1beta1", "DataVolume");
         let (ar, _) = kube::discovery::pinned_kind(&client, &gvk).await?;
         let api = Api::<DynamicObject>::namespaced_with(client, &TNET_NAMESPACE, &ar);
 
-        let dvname = format!("{}-config", self.name.clone().unwrap());
+        let dvname = format!("{}-{}", self.name.clone().unwrap(), dv_name);
         let source = DvSource::url(format!(
             "{}/{}",
             self.config_url.clone().unwrap(),
             image_name
         ));
-        let dvinfo = DvInfo::new(&dvname, source, "kubevirt", "512Mi");
+        let dvinfo = DvInfo::new(&dvname, source, content_type, "512Mi");
         info!("Creating DV {}", dvname);
         create_datavolume(&api, &dvinfo, self.owner_reference()).await?;
         Ok(())
     }
 
     pub async fn start(&self) -> Result<()> {
-        let _ = start_vm(&self.name.clone().expect("name missing")).await;
-        Ok(())
+        start_vm(&self.name.clone().expect("name missing")).await
     }
 
     pub async fn stop(&self) -> Result<()> {
-        let _ = stop_vm(&self.name.clone().expect("name missing")).await;
-        Ok(())
+        stop_vm(&self.name.clone().expect("name missing")).await
+    }
+
+    pub async fn add_volume(&self, name: &str) -> Result<()> {
+        add_volume(&self.name.clone().expect("name missing"), name).await
     }
 }
 
@@ -285,7 +292,7 @@ impl TNet {
         let api_dv = Api::<DynamicObject>::namespaced_with(client, &TNET_NAMESPACE, &ar);
 
         let source = DvSource::url(url.into());
-        let dvinfo = DvInfo::new(name, source, "archive", "50Gi");
+        let dvinfo = DvInfo::new(name, source, DataVolumeContentType::Archive, "50Gi");
         info!("Creating DV {} from {}", name, url);
         create_datavolume(&api_dv, &dvinfo, self.owner_reference()).await?;
         // wait for the datavolume to be ready

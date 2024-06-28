@@ -628,6 +628,7 @@ haskell_library(
         ":IC-Id-Fresh",
         ":IC-Management",
         ":IC-Test-Agent",
+        ":IC-Test-Agent-Calls",
         ":IC-Test-Agent-SafeCalls",
         ":IC-Test-Agent-UnsafeCalls",
         ":IC-Test-Agent-UserCalls",

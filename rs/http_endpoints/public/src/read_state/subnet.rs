@@ -1,6 +1,6 @@
 use super::{parse_principal_id, verify_principal_ids};
 use crate::{
-    common::{into_cbor, Cbor},
+    common::{into_cbor, Cbor, WithTimeout},
     HttpError, ReplicaHealthStatus,
 };
 
@@ -59,7 +59,7 @@ pub(crate) async fn read_state_subnet(
         delegation_from_nns,
         state_reader,
     }): State<SubnetReadStateService>,
-    Cbor(request): Cbor<HttpRequestEnvelope<HttpReadStateContent>>,
+    WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpReadStateContent>>>,
 ) -> impl IntoResponse {
     if health_status.load() != ReplicaHealthStatus::Healthy {
         let status = StatusCode::SERVICE_UNAVAILABLE;
