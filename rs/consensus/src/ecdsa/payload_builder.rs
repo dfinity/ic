@@ -6,7 +6,7 @@
 use super::pre_signer::{EcdsaTranscriptBuilder, EcdsaTranscriptBuilderImpl};
 use super::signer::{EcdsaSignatureBuilder, EcdsaSignatureBuilderImpl};
 use super::utils::{block_chain_reader, get_chain_key_config_if_enabled, InvalidChainCacheError};
-use crate::consensus::metrics::{EcdsaPayloadMetrics, CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING};
+use crate::ecdsa::metrics::{EcdsaPayloadMetrics, CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING};
 pub(super) use errors::EcdsaPayloadError;
 use errors::MembershipError;
 use ic_consensus_utils::crypto::ConsensusCrypto;

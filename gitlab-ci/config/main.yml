@@ -175,7 +175,7 @@ bazel-system-tests-k8s:
     - .bazel-test-all
   tags:
     - dfinity-ic
-    - sf
+    - ln
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
       when: manual
@@ -186,8 +186,7 @@ bazel-system-tests-k8s:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "system-tests-k8s-nightly"
   variables:
     RUST_LOG: info
-    KUBECONFIG: "$KUBECONFIG_TNET_CREATOR"
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --jobs=7 --test_tag_filters=k8s,-manual --k8s"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --jobs=10 --test_tag_filters=k8s,-manual --k8s"
   timeout: 150 minutes
 
 bazel-system-test-hourly:
@@ -539,7 +538,7 @@ commit-lint:
   needs: []
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      allow_failure: true
+      allow_failure: false
   script:
     - ./gitlab-ci/src/ci-scripts/commit-lint.sh
 

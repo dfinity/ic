@@ -136,7 +136,6 @@ fn main() -> Result<()> {
                 None,
                 None,
                 Some(config.subnet_features),
-                None,
                 chain_key_config,
                 None,
                 vec![],
@@ -644,7 +643,6 @@ impl ValidatedConfig {
             local_store: self.registry_local_store_path.clone(),
         });
         let logger_config = LoggerConfig {
-            node_id: NODE_INDEX,
             level: self.log_level,
             debug_overrides: self.debug_overrides.clone(),
             ..LoggerConfig::default()

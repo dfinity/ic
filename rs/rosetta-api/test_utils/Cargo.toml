@@ -23,3 +23,4 @@ slog = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = "2.1.1"
+ic-icrc1-test-utils = { path = "../icrc1/test_utils" }

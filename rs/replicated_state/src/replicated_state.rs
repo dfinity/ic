@@ -9,9 +9,7 @@ use crate::{
         system_state::{push_input, CanisterOutputQueuesIterator},
     },
     metadata_state::{
-        subnet_call_context_manager::{
-            IDkgDealingsContext, SignWithEcdsaContext, SignWithThresholdContext,
-        },
+        subnet_call_context_manager::{IDkgDealingsContext, SignWithThresholdContext},
         StreamMap,
     },
     CanisterQueues,
@@ -640,31 +638,29 @@ impl ReplicatedState {
         self.metadata.streams.keys().cloned().collect()
     }
 
-    /// Returns all signature request contexts
+    /// Returns all signature request contexts.
     pub fn signature_request_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
-        self.metadata
-            .subnet_call_context_manager
-            .sign_with_threshold_contexts
-            .clone()
+        // TODO(EXC-1645): currently ECDSA context can be stored either in `sign_with_ecdsa_contexts` or
+        // in `sign_with_threshold_contexts`. Therefore, we need to merge them.
+        // Update this code after full migration to `sign_with_threshold_contexts`.
+        self.sign_with_ecdsa_contexts()
             .into_iter()
-            .chain(
-                self.metadata
-                    .subnet_call_context_manager
-                    .sign_with_ecdsa_contexts
-                    .iter()
-                    .map(|(callback, ecdsa_context)| {
-                        (*callback, SignWithThresholdContext::from(ecdsa_context))
-                    }),
-            )
+            .chain(self.sign_with_schnorr_contexts())
             .collect()
     }
 
-    /// Returns all sign with ECDSA contexts
-    pub fn sign_with_ecdsa_contexts(&self) -> &BTreeMap<CallbackId, SignWithEcdsaContext> {
-        &self
-            .metadata
+    /// Returns all `sign_with_ecdsa` contexts.
+    pub fn sign_with_ecdsa_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        self.metadata
             .subnet_call_context_manager
-            .sign_with_ecdsa_contexts
+            .sign_with_ecdsa_contexts()
+    }
+
+    /// Returns all `sign_with_schnorr` contexts.
+    pub fn sign_with_schnorr_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        self.metadata
+            .subnet_call_context_manager
+            .sign_with_schnorr_contexts()
     }
 
     /// Returns all IDKG dealings contexts.

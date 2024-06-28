@@ -109,7 +109,7 @@ impl Registry {
 
         if let Err(e) = result {
             panic!(
-                "{} invariant check failed with message: {}",
+                "{}invariant check failed with message: {}",
                 LOG_PREFIX, e.msg
             );
         }

@@ -18,7 +18,7 @@ use crate::generic_workload_engine::metrics::RequestOutcome;
 use crate::{
     canister_agent::HasCanisterAgentCapability,
     canister_requests,
-    consensus::tecdsa_performance_test::EcdsaSignatureRequest,
+    consensus::tecdsa_performance_test::ChainSignatureRequest,
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
@@ -33,14 +33,14 @@ use crate::{
         subnet_recovery::{enable_chain_key_signing_on_subnet, run_chain_key_signature_test},
         upgrade::*,
     },
-    tecdsa::{make_key, KEY_ID1},
+    tecdsa::make_key_ids_for_all_schemes,
     util::{block_on, get_app_subnet_and_node, MessageCanister},
 };
 use candid::Principal;
 use futures::future::join_all;
 use ic_agent::Agent;
 use ic_management_canister_types::MasterPublicKeyId;
-use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, SubnetId};
 use slog::{info, Logger};
@@ -71,10 +71,15 @@ pub fn config(env: TestEnv, subnet_type: SubnetType, mainnet_version: bool) {
     // Activate ecdsa if we are testing the app subnet
     if subnet_type == SubnetType::Application {
         ic = ic.add_subnet(Subnet::fast_single_node(SubnetType::System));
-        subnet_under_test = subnet_under_test.with_ecdsa_config(EcdsaConfig {
-            quadruples_to_create_in_advance: 5,
-            key_ids: vec![make_key(KEY_ID1)],
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+        subnet_under_test = subnet_under_test.with_chain_key_config(ChainKeyConfig {
+            key_configs: make_key_ids_for_all_schemes()
+                .into_iter()
+                .map(|key_id| KeyConfig {
+                    max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+                    pre_signatures_to_create_in_advance: 5,
+                    key_id,
+                })
+                .collect(),
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
         });
@@ -112,28 +117,29 @@ pub fn upgrade_downgrade_app_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
     let branch_version = bless_branch_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
+    let key_ids = make_key_ids_for_all_schemes();
     get_chain_key_canister_and_public_key(
         &env,
         &nns_node,
         &agent,
         SubnetType::Application,
-        vec![MasterPublicKeyId::Ecdsa(make_key(KEY_ID1))],
+        key_ids.clone(),
     );
 
     let logger = env.logger();
     let (app_subnet, app_node) = get_app_subnet_and_node(&env.topology_snapshot());
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
 
-    let requests = (0..4)
-        .map(|_| {
-            let principal = block_on(MessageCanister::new_with_cycles(
-                &app_agent,
-                app_node.effective_canister_id(),
-                u128::MAX,
-            ))
-            .canister_id();
-            EcdsaSignatureRequest::new(principal, KEY_ID1)
-        })
+    let principal = block_on(MessageCanister::new_with_cycles(
+        &app_agent,
+        app_node.effective_canister_id(),
+        u128::MAX,
+    ))
+    .canister_id();
+
+    let requests = key_ids
+        .iter()
+        .map(|key_id| ChainSignatureRequest::new(principal, key_id.clone()))
         .collect::<Vec<_>>();
 
     let rt: Runtime = Builder::new_multi_thread()
@@ -182,7 +188,7 @@ pub fn downgrade_app_subnet(env: TestEnv) {
         &nns_node,
         &agent,
         SubnetType::Application,
-        vec![MasterPublicKeyId::Ecdsa(make_key(KEY_ID1))],
+        make_key_ids_for_all_schemes(),
     );
 
     upgrade(
@@ -204,7 +210,7 @@ pub fn upgrade_app_subnet(env: TestEnv) {
         &nns_node,
         &agent,
         SubnetType::Application,
-        vec![MasterPublicKeyId::Ecdsa(make_key(KEY_ID1))],
+        make_key_ids_for_all_schemes(),
     );
 
     upgrade(
@@ -216,7 +222,7 @@ pub fn upgrade_app_subnet(env: TestEnv) {
     );
 }
 
-async fn start_workload(subnet: SubnetSnapshot, requests: Vec<EcdsaSignatureRequest>, log: Logger) {
+async fn start_workload(subnet: SubnetSnapshot, requests: Vec<ChainSignatureRequest>, log: Logger) {
     let agents = join_all(
         subnet
             .nodes()

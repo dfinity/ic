@@ -175,6 +175,7 @@ pub fn test(env: TestEnv) {
     let subnet_args = NNSRecoveryFailoverNodesArgs {
         subnet_id: topo_broken_ic.root_subnet_id(),
         replica_version: Some(ic_version),
+        replay_until_height: None,
         aux_ip: None,
         aux_user: None,
         registry_url: None,

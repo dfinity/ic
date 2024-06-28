@@ -34,7 +34,10 @@ pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServic
 use crate::{
     call::ingress_watcher::IngressWatcher,
     catch_up_package::CatchUpPackageService,
-    common::{get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response},
+    common::{
+        get_root_threshold_public_key, make_plaintext_response, map_box_error_to_response,
+        MAX_REQUEST_RECEIVE_TIMEOUT,
+    },
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
     metrics::{
@@ -947,7 +950,7 @@ async fn try_fetch_delegation_from_nns(
     let raw_response_res = request_sender.send_request(nns_request).await?;
 
     let raw_response = match timeout(
-        Duration::from_secs(config.max_request_receive_seconds),
+        MAX_REQUEST_RECEIVE_TIMEOUT,
         http_body_util::Limited::new(
             raw_response_res.into_body(),
             config.max_delegation_certificate_size_bytes as usize,
@@ -968,7 +971,8 @@ async fn try_fetch_delegation_from_nns(
         Err(e) => {
             return Err(format!(
                 "Timeout of {}s reached while receiving http body: {}",
-                config.max_request_receive_seconds, e
+                MAX_REQUEST_RECEIVE_TIMEOUT.as_secs(),
+                e
             )
             .into())
         }

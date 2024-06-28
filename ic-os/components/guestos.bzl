@@ -50,6 +50,7 @@ component_files = {
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/serial-getty@/guestos/serial-getty@.service"): "/etc/systemd/system/serial-getty@.service",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
+    Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
     Label("misc/guestos/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("misc/guestos/sudoers"): "/etc/sudoers",

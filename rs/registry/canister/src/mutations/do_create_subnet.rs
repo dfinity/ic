@@ -85,7 +85,7 @@ impl Registry {
             LOG_PREFIX, payload, subnet_id
         );
 
-        // 2b. Invoke compute_initial_ecdsa_dealings on ic_00
+        // 2b. Invoke compute_initial_i_dkg_dealings on ic_00
 
         // TODO[NNS1-3022]: Stop reading `payload.ecdsa_config` and mutating `payload`.
 
@@ -249,32 +249,41 @@ impl Registry {
             }
         });
 
-        let own_subnet_id = None;
-        match (&payload.ecdsa_config, &payload.chain_key_config) {
-            (Some(_), Some(_)) => {
-                panic!("Deprecated field ecdsa_config cannot be specified with chain_key_config.");
-            }
-            (Some(ecdsa_initial_config), None) => {
-                if let Err(message) =
-                    self.validate_ecdsa_initial_config(ecdsa_initial_config, own_subnet_id)
-                {
-                    panic!("{}Cannot create subnet: {}", LOG_PREFIX, message);
+        let prevalidated_initial_chain_key_config =
+            match (&payload.ecdsa_config, &payload.chain_key_config) {
+                (Some(_), Some(_)) => {
+                    panic!(
+                        "Deprecated field ecdsa_config cannot be specified with chain_key_config."
+                    );
                 }
-            }
-            (None, Some(initial_chain_key_config)) => {
-                let validation_result =
-                    InitialChainKeyConfigInternal::try_from(initial_chain_key_config.clone())
-                        .and_then(|initial_chain_key_config| {
-                            self.validate_initial_chain_key_config(
-                                &initial_chain_key_config,
-                                own_subnet_id,
-                            )
-                        });
-                if let Err(message) = validation_result {
-                    panic!("{}Cannot create subnet: {}", LOG_PREFIX, message);
+                (Some(ecdsa_initial_config), None) => {
+                    let initial_chain_key_config_from_legacy_source =
+                        InitialChainKeyConfigInternal::try_from(ecdsa_initial_config.clone())
+                            .unwrap_or_else(|err| {
+                                panic!(
+                            "{}Cannot prevalidate ChainKeyConfig derived from EcdsaInitialConfig: \
+                            {}", LOG_PREFIX, err
+                        );
+                            });
+                    Some(initial_chain_key_config_from_legacy_source)
                 }
-            }
-            (None, None) => (), // Nothing to do.
+                (None, Some(initial_chain_key_config)) => {
+                    let initial_chain_key_config_from_new_source =
+                        InitialChainKeyConfigInternal::try_from(initial_chain_key_config.clone())
+                            .unwrap_or_else(|err| {
+                                panic!("{}Cannot prevalidate ChainKeyConfig: {}", LOG_PREFIX, err);
+                            });
+                    Some(initial_chain_key_config_from_new_source)
+                }
+                (None, None) => None,
+            };
+        if let Some(prevalidated_initial_chain_key_config) = prevalidated_initial_chain_key_config {
+            let own_subnet_id = None;
+            self.validate_initial_chain_key_config(
+                &prevalidated_initial_chain_key_config,
+                own_subnet_id,
+            )
+            .unwrap_or_else(|err| panic!("{}Cannot validate ChainKeyConfig: {}", LOG_PREFIX, err));
         }
     }
 }
@@ -291,8 +300,6 @@ pub struct CreateSubnetPayload {
 
     pub subnet_id_override: Option<PrincipalId>,
 
-    // Unused.
-    pub ingress_bytes_per_block_soft_cap: u64,
     pub max_ingress_bytes_per_message: u64,
     pub max_ingress_messages_per_block: u64,
     pub max_block_payload_size: u64,
@@ -301,15 +308,6 @@ pub struct CreateSubnetPayload {
     pub replica_version_id: std::string::String,
     pub dkg_interval_length: u64,
     pub dkg_dealings_per_block: u64,
-
-    pub gossip_max_artifact_streams_per_peer: u32,
-    pub gossip_max_chunk_wait_ms: u32,
-    pub gossip_max_duplicity: u32,
-    pub gossip_max_chunk_size: u32,
-    pub gossip_receive_check_cache_size: u32,
-    pub gossip_pfn_evaluation_period_ms: u32,
-    pub gossip_registry_poll_period_ms: u32,
-    pub gossip_retransmission_request_ms: u32,
 
     pub start_as_nns: bool,
 
@@ -333,6 +331,17 @@ pub struct CreateSubnetPayload {
     pub ecdsa_config: Option<EcdsaInitialConfig>,
 
     pub chain_key_config: Option<InitialChainKeyConfig>,
+
+    // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
+    pub ingress_bytes_per_block_soft_cap: u64,
+    pub gossip_max_artifact_streams_per_peer: u32,
+    pub gossip_max_chunk_wait_ms: u32,
+    pub gossip_max_duplicity: u32,
+    pub gossip_max_chunk_size: u32,
+    pub gossip_receive_check_cache_size: u32,
+    pub gossip_pfn_evaluation_period_ms: u32,
+    pub gossip_registry_poll_period_ms: u32,
+    pub gossip_retransmission_request_ms: u32,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
@@ -663,7 +672,7 @@ mod test {
     // for DKG + ECDSA
     #[test]
     #[should_panic(
-        expected = "The requested ECDSA key 'ecdsa:Secp256k1:fake_key_id' was not found in any subnet"
+        expected = "requested chain key 'ecdsa:Secp256k1:fake_key_id' was not found in any subnet"
     )]
     fn should_panic_if_ecdsa_keys_non_existing() {
         let mut registry = invariant_compliant_registry(0);
@@ -676,7 +685,7 @@ mod test {
                         curve: EcdsaCurve::Secp256k1,
                         name: "fake_key_id".to_string(),
                     },
-                    subnet_id: None,
+                    subnet_id: Some(*TEST_USER2_PRINCIPAL),
                 }],
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 signature_request_timeout_ns: None,
@@ -689,9 +698,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(
-        expected = "EcdsaKeyRequest for key 'ecdsa:Secp256k1:fake_key_id' did not specify subnet_id."
-    )]
+    #[should_panic(expected = "EcdsaKeyRequest.subnet_id must be set")]
     fn should_panic_if_ecdsa_keys_subnet_not_specified() {
         // Set up a subnet that has the key but fail to specify subnet_id in request
         let key_id = EcdsaKeyId {
@@ -748,8 +755,8 @@ mod test {
 
     #[test]
     #[should_panic(
-        expected = "The requested ECDSA key 'ecdsa:Secp256k1:fake_key_id' is not available in targeted \
-                    subnet 'l5ckc-b6p6l-4o5gj-fkfvl-3sq56-7vw6s-d6nof-q4j4j-jzead-nnwim-vqe'"
+        expected = "The requested chain key 'ecdsa:Secp256k1:fake_key_id' is not available \
+        in targeted subnet 'l5ckc-b6p6l-4o5gj-fkfvl-3sq56-7vw6s-d6nof-q4j4j-jzead-nnwim-vqe'"
     )]
     fn should_panic_if_ecdsa_keys_non_existing_from_requested_subnet() {
         let key_id = EcdsaKeyId {
@@ -805,11 +812,9 @@ mod test {
     }
 
     #[test]
-    #[should_panic(
-        expected = "[Registry] Cannot create subnet: The requested ECDSA key ids [EcdsaKeyId { curve: \
-                    Secp256k1, name: \"fake_key_id\" }, EcdsaKeyId { curve: Secp256k1, name: \"fake_key_id\" }] \
-                    have duplicates"
-    )]
+    #[should_panic(expected = "The requested chain keys [\
+        Ecdsa(EcdsaKeyId { curve: Secp256k1, name: \"fake_key_id\" }), \
+        Ecdsa(EcdsaKeyId { curve: Secp256k1, name: \"fake_key_id\" })] have duplicates")]
     fn test_disallow_duplicate_ecdsa_keys() {
         // Step 1.1: prepare registry.
         let mut registry = invariant_compliant_registry(0);

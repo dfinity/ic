@@ -263,6 +263,7 @@ type LedgerParameters = record {
 type ListKnownNeuronsResponse = record { known_neurons : vec KnownNeuron };
 type ListNeurons = record {
   neuron_ids : vec nat64;
+  include_empty_neurons_readable_by_caller : opt bool;
   include_neurons_readable_by_caller : bool;
 };
 type ListNeuronsResponse = record {

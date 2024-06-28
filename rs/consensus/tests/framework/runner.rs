@@ -189,7 +189,7 @@ impl<'a> ConsensusRunner<'a> {
         );
         let certifier = CertifierImpl::new(
             deps.replica_config.clone(),
-            membership,
+            Arc::clone(&deps.registry_client),
             certification_crypto,
             deps.state_manager.clone(),
             deps.consensus_pool.read().unwrap().get_cache(),

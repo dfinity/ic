@@ -192,15 +192,6 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
         initial_notary_delay_millis: None,
         dkg_interval_length: None,
         dkg_dealings_per_block: None,
-        max_artifact_streams_per_peer: None,
-        max_chunk_wait_ms: None,
-        max_duplicity: None,
-        max_chunk_size: None,
-        receive_check_cache_size: None,
-        pfn_evaluation_period_ms: None,
-        registry_poll_period_ms: None,
-        retransmission_request_ms: None,
-        set_gossip_config_to_default: false,
         start_as_nns: None,
         subnet_type: None,
         is_halted: None,
@@ -218,6 +209,16 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
+        // Deprecated/unused values follow
+        max_artifact_streams_per_peer: None,
+        max_chunk_wait_ms: None,
+        max_duplicity: None,
+        max_chunk_size: None,
+        receive_check_cache_size: None,
+        pfn_evaluation_period_ms: None,
+        registry_poll_period_ms: None,
+        retransmission_request_ms: None,
+        set_gossip_config_to_default: Default::default(),
     }
 }
 

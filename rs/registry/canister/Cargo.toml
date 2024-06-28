@@ -14,7 +14,6 @@ path = "canister/canister.rs"
 build-info = { workspace = true }
 
 candid = { workspace = true }
-cycles-minting-canister = { path = "../../nns/cmc" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
@@ -51,6 +50,7 @@ url = "2"
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
+cycles-minting-canister = { path = "../../nns/cmc" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto-node-key-generation = { path = "../../crypto/node_key_generation" }

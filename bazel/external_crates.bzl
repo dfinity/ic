@@ -191,7 +191,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.9.0",
             ),
             "bincode": crate.spec(
-                version = "^1.2.1",
+                version = "^1.3.3",
             ),
             "bindgen": crate.spec(
                 version = "^0.65.1",
@@ -501,13 +501,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "full",
                 ],
             ),
-            "hyper-socks2": crate.spec(
-                version = "^0.8.0",
-                default_features = False,
-                features = [
-                    "rustls",
-                ],
-            ),
             "hyper-util": crate.spec(
                 version = "^0.1.3",
                 features = [
@@ -595,7 +588,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "ic-stable-structures": crate.spec(
-                version = "^0.6.4",
+                version = "^0.6.5",
             ),
             "ic-response-verification": crate.spec(
                 version = "2.3.0",
@@ -1022,6 +1015,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "rustls-tls",
                     "rustls-tls-native-roots",
                     "stream",
+                    "socks",
                 ],
             ),
             "ring": crate.spec(
@@ -1455,7 +1449,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.50",
             ),
             "wasmtime": crate.spec(
-                version = "^20.0.2",
+                version = "^21.0.1",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1465,10 +1459,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^20.0.2",
-            ),
-            "wasmtime-runtime": crate.spec(
-                version = "^20.0.2",
+                version = "^21.0.1",
             ),
             "wast": crate.spec(
                 version = "^53.0.0",

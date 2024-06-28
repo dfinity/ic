@@ -1700,10 +1700,14 @@ impl Scheduler for SchedulerImpl {
 
         // Update [`SignatureRequestContext`]s by assigning randomness and matching quadruples.
         {
-            let contexts = state
+            // TODO(EXC-1645): temporarily take sign_with_ecdsa contexts to update inner data.
+            // Remove after full migration to `sign_with_threshold_contexts` field.
+            let mut sign_with_ecdsa_contexts = state
                 .metadata
                 .subnet_call_context_manager
-                .sign_with_ecdsa_contexts
+                .take_sign_with_ecdsa_contexts();
+
+            let contexts = sign_with_ecdsa_contexts
                 .values_mut()
                 .map(SignatureRequestContext::Ecdsa)
                 .chain(
@@ -1724,6 +1728,11 @@ impl Scheduler for SchedulerImpl {
                 registry_settings,
                 self.metrics.as_ref(),
             );
+
+            state
+                .metadata
+                .subnet_call_context_manager
+                .put_sign_with_ecdsa_contexts(sign_with_ecdsa_contexts);
         }
 
         // Finalization.
@@ -1808,14 +1817,14 @@ impl Scheduler for SchedulerImpl {
                 {
                     self.metrics.subnet_memory_usage_invariant.inc();
                     warn!(
-                    round_log,
-                    "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Exceeding capacity subnet memory allowed: used {} allowed {}",
-                    SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
-                    current_round,
-                    state.time(),
-                    total_canister_memory_usage,
-                    self.exec_env.subnet_memory_capacity()
-                );
+                        round_log,
+                        "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Exceeding capacity subnet memory allowed: used {} allowed {}",
+                        SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
+                        current_round,
+                        state.time(),
+                        total_canister_memory_usage,
+                        self.exec_env.subnet_memory_capacity()
+                    );
                 }
 
                 // Check if the invariants are still valid after the execution for active canisters.
@@ -2280,6 +2289,21 @@ fn observe_replicated_state_metrics(
     metrics
         .stop_canister_calls_without_call_id
         .set(num_stop_canister_calls_without_call_id as i64);
+
+    // TODO(EXC-1645): temporary code to record the metrics during migration.
+    metrics.sign_with_ecdsa_contexts_len.set(
+        state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts_len() as i64,
+    );
+    // TODO(EXC-1645): temporary code to record the metrics during migration.
+    metrics.sign_with_threshold_contexts_len.set(
+        state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_threshold_contexts_len() as i64,
+    );
 }
 
 fn join_consumed_cycles_by_use_case(
