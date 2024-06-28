@@ -128,10 +128,14 @@ def icos_build(
         src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["rootfs_size"],
+        # NOTE: e2fsdroid does not support filenames with spaces, fortunately,
+        # there are only two in our build.
         strip_paths = [
             "/run",
             "/boot",
             "/var",
+            "/usr/lib/firmware/brcm/brcmfmac43430a0-sdio.ONDA-V80 PLUS.txt",
+            "/usr/lib/firmware/brcm/brcmfmac43455-sdio.MINIX-NEO Z83-4.txt",
         ],
         target_compatible_with = [
             "@platforms//os:linux",
@@ -146,7 +150,7 @@ def icos_build(
         src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["bootfs_size"],
-        subdir = "boot/",
+        subdir = "boot",
         target_compatible_with = [
             "@platforms//os:linux",
         ],
