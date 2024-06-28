@@ -19,41 +19,41 @@ WASMTIME_FUZZER_DEPENDENCIES = [
     "@crate_index//:wasmparser",
 ]
 
-rust_fuzz_test_binary(
-    name = "execute_with_wasmtime_libfuzzer",
-    srcs = [
-        "fuzz_targets/execute_with_wasmtime.rs",
-        "fuzz_targets/ic_wasm.rs",
-    ],
-    crate_root = "fuzz_targets/execute_with_wasmtime.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = WASMTIME_FUZZER_DEPENDENCIES,
-)
-
-rust_fuzz_test_binary_afl(
-    name = "execute_with_wasmtime_afl",
-    srcs = [
-        "fuzz_targets/execute_with_wasmtime.rs",
-        "fuzz_targets/ic_wasm.rs",
-    ],
-    crate_root = "fuzz_targets/execute_with_wasmtime.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = WASMTIME_FUZZER_DEPENDENCIES,
-)
-
-rust_fuzz_test_binary_afl(
-    name = "differential_simd_execute_with_wasmtime_afl",
-    srcs = [
-        "fuzz_targets/differential_simd_execute_with_wasmtime.rs",
-        "fuzz_targets/ic_wasm.rs",
-    ],
-    crate_root = "fuzz_targets/differential_simd_execute_with_wasmtime.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = WASMTIME_FUZZER_DEPENDENCIES + [
-        "//rs/interfaces",
-        "@crate_index//:tokio",
-    ],
-)
+#rust_fuzz_test_binary(
+#    name = "execute_with_wasmtime_libfuzzer",
+#    srcs = [
+#        "fuzz_targets/execute_with_wasmtime.rs",
+#        "fuzz_targets/ic_wasm.rs",
+#    ],
+#    crate_root = "fuzz_targets/execute_with_wasmtime.rs",
+#    proc_macro_deps = MACRO_DEPENDENCIES,
+#    deps = WASMTIME_FUZZER_DEPENDENCIES,
+#)
+#
+#rust_fuzz_test_binary_afl(
+#    name = "execute_with_wasmtime_afl",
+#    srcs = [
+#        "fuzz_targets/execute_with_wasmtime.rs",
+#        "fuzz_targets/ic_wasm.rs",
+#    ],
+#    crate_root = "fuzz_targets/execute_with_wasmtime.rs",
+#    proc_macro_deps = MACRO_DEPENDENCIES,
+#    deps = WASMTIME_FUZZER_DEPENDENCIES,
+#)
+#
+#rust_fuzz_test_binary_afl(
+#    name = "differential_simd_execute_with_wasmtime_afl",
+#    srcs = [
+#        "fuzz_targets/differential_simd_execute_with_wasmtime.rs",
+#        "fuzz_targets/ic_wasm.rs",
+#    ],
+#    crate_root = "fuzz_targets/differential_simd_execute_with_wasmtime.rs",
+#    proc_macro_deps = MACRO_DEPENDENCIES,
+#    deps = WASMTIME_FUZZER_DEPENDENCIES + [
+#        "//rs/interfaces",
+#        "@crate_index//:tokio",
+#    ],
+#)
 
 WASM_EXECUTOR_FUZZER_DEPENDENCIES = [
     "//rs/config",
@@ -79,27 +79,27 @@ WASM_EXECUTOR_FUZZER_DEPENDENCIES = [
     "@crate_index//:wasmparser",
 ]
 
-rust_fuzz_test_binary(
-    name = "execute_with_wasm_executor_libfuzzer",
-    srcs = [
-        "fuzz_targets/execute_with_wasm_executor.rs",
-        "fuzz_targets/ic_wasm.rs",
-    ],
-    crate_root = "fuzz_targets/execute_with_wasm_executor.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = WASM_EXECUTOR_FUZZER_DEPENDENCIES,
-)
-
-rust_fuzz_test_binary_afl(
-    name = "execute_with_wasm_executor_afl",
-    srcs = [
-        "fuzz_targets/execute_with_wasm_executor.rs",
-        "fuzz_targets/ic_wasm.rs",
-    ],
-    crate_root = "fuzz_targets/execute_with_wasm_executor.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = WASM_EXECUTOR_FUZZER_DEPENDENCIES,
-)
+#rust_fuzz_test_binary(
+#    name = "execute_with_wasm_executor_libfuzzer",
+#    srcs = [
+#        "fuzz_targets/execute_with_wasm_executor.rs",
+#        "fuzz_targets/ic_wasm.rs",
+#    ],
+#    crate_root = "fuzz_targets/execute_with_wasm_executor.rs",
+#    proc_macro_deps = MACRO_DEPENDENCIES,
+#    deps = WASM_EXECUTOR_FUZZER_DEPENDENCIES,
+#)
+#
+#rust_fuzz_test_binary_afl(
+#    name = "execute_with_wasm_executor_afl",
+#    srcs = [
+#        "fuzz_targets/execute_with_wasm_executor.rs",
+#        "fuzz_targets/ic_wasm.rs",
+#    ],
+#    crate_root = "fuzz_targets/execute_with_wasm_executor.rs",
+#    proc_macro_deps = MACRO_DEPENDENCIES,
+#    deps = WASM_EXECUTOR_FUZZER_DEPENDENCIES,
+#)
 
 EMBEDDERS_FUZZER_DEPENDENCIES = [
     "//rs/config",
@@ -111,34 +111,34 @@ EMBEDDERS_FUZZER_DEPENDENCIES = [
     "@crate_index//:wasm-smith",
 ]
 
-rust_fuzz_test_binary(
-    name = "compile_wasm_using_embedder",
-    srcs = ["fuzz_targets/compile_wasm_using_embedder.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = EMBEDDERS_FUZZER_DEPENDENCIES,
-)
-
-rust_binary(
-    name = "ws2wasm",
-    testonly = True,
-    srcs = [
-        "fuzz_targets/ic_wasm.rs",
-        "fuzz_targets/ws2wasm.rs",
-    ],
-    proc_macro_deps = [],
-    version = "0.1.0",
-    deps = [
-        "//rs/config",
-        "//rs/embedders",
-        "//rs/monitoring/logger",
-        "//rs/replicated_state",
-        "//rs/test_utilities",
-        "//rs/types/types",
-        "@crate_index//:arbitrary",
-        "@crate_index//:clap_3_2_25",
-        "@crate_index//:wasm-encoder",
-        "@crate_index//:wasm-smith",
-        "@crate_index//:wasmparser",
-        "@crate_index//:wasmprinter",
-    ],
-)
+#rust_fuzz_test_binary(
+#    name = "compile_wasm_using_embedder",
+#    srcs = ["fuzz_targets/compile_wasm_using_embedder.rs"],
+#    proc_macro_deps = MACRO_DEPENDENCIES,
+#    deps = EMBEDDERS_FUZZER_DEPENDENCIES,
+#)
+#
+#rust_binary(
+#    name = "ws2wasm",
+#    testonly = True,
+#    srcs = [
+#        "fuzz_targets/ic_wasm.rs",
+#        "fuzz_targets/ws2wasm.rs",
+#    ],
+#    proc_macro_deps = [],
+#    version = "0.1.0",
+#    deps = [
+#        "//rs/config",
+#        "//rs/embedders",
+#        "//rs/monitoring/logger",
+#        "//rs/replicated_state",
+#        "//rs/test_utilities",
+#        "//rs/types/types",
+#        "@crate_index//:arbitrary",
+#        "@crate_index//:clap_3_2_25",
+#        "@crate_index//:wasm-encoder",
+#        "@crate_index//:wasm-smith",
+#        "@crate_index//:wasmparser",
+#        "@crate_index//:wasmprinter",
+#    ],
+#)

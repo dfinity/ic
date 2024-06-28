@@ -1,5 +1,5 @@
 {
-  "checksum": "7cfd18a562ef5ce8009a3013a1c17bd012d3bd3f4c86b7177048bef247e5df12",
+  "checksum": "6b721fa64801fcc7966a8f67b8787c93902f8b684721a153032f686254614651",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -277,7 +277,6 @@
             "brotli",
             "compress-brotli",
             "compress-gzip",
-            "compress-zstd",
             "default",
             "flate2",
             "h2",
@@ -285,8 +284,7 @@
             "local-channel",
             "rand",
             "sha1",
-            "ws",
-            "zstd"
+            "ws"
           ],
           "selects": {}
         },
@@ -407,10 +405,6 @@
             {
               "id": "tracing 0.1.40",
               "target": "tracing"
-            },
-            {
-              "id": "zstd 0.12.4",
-              "target": "zstd"
             }
           ],
           "selects": {}
@@ -865,10 +859,8 @@
             "actix-web-codegen",
             "compress-brotli",
             "compress-gzip",
-            "compress-zstd",
             "cookie",
             "cookies",
-            "default",
             "macros"
           ],
           "selects": {}
@@ -2379,23 +2371,7 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "derive",
-            "derive_arbitrary"
-          ],
-          "selects": {}
-        },
         "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "derive_arbitrary 1.3.2",
-              "target": "derive_arbitrary"
-            }
-          ],
-          "selects": {}
-        },
         "version": "1.3.2"
       },
       "license": "MIT OR Apache-2.0",
@@ -4149,7 +4125,6 @@
           "common": [
             "default",
             "form",
-            "headers",
             "http1",
             "json",
             "matched-path",
@@ -4181,10 +4156,6 @@
             {
               "id": "futures-util 0.3.30",
               "target": "futures_util"
-            },
-            {
-              "id": "headers 0.3.8",
-              "target": "headers"
             },
             {
               "id": "http 0.2.12",
@@ -4291,7 +4262,11 @@
       "license_ids": [
         "MIT"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "axum 0.7.4": {
       "name": "axum",
@@ -8244,11 +8219,8 @@
         ],
         "crate_features": {
           "common": [
-            "alloc",
             "check",
-            "default",
-            "sha2",
-            "std"
+            "sha2"
           ],
           "selects": {}
         },
@@ -12291,7 +12263,11 @@
         "Apache-2.0",
         "MIT"
       ],
-      "license_file": "LICENSE-APACHE"
+      "license_file": "LICENSE-APACHE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "clap 4.4.8": {
       "name": "clap",
@@ -12806,8 +12782,7 @@
         "crate_features": {
           "common": [
             "default",
-            "default-tls",
-            "rustls-tls"
+            "default-tls"
           ],
           "selects": {}
         },
@@ -17839,62 +17814,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "derive_arbitrary 1.3.2": {
-      "name": "derive_arbitrary",
-      "version": "1.3.2",
-      "package_url": "https://github.com/rust-fuzz/arbitrary",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/derive_arbitrary/1.3.2/download",
-          "sha256": "67e77553c4162a157adbf834ebae5b415acbecbeafc7a74b0e886657506a7611"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "derive_arbitrary",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "derive_arbitrary",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.85",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.35",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.66",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "1.3.2"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "derive_more 0.99.17": {
       "name": "derive_more",
       "version": "0.99.17",
@@ -18686,165 +18605,16 @@
         "deps": {
           "common": [
             {
-              "id": "actix-rt 2.8.0",
-              "target": "actix_rt"
-            },
-            {
-              "id": "actix-web 4.3.1",
-              "target": "actix_web"
-            },
-            {
-              "id": "addr 0.15.6",
-              "target": "addr"
-            },
-            {
-              "id": "aide 0.13.2",
-              "target": "aide"
-            },
-            {
-              "id": "anyhow 1.0.86",
-              "target": "anyhow"
-            },
-            {
-              "id": "arbitrary 1.3.2",
-              "target": "arbitrary"
-            },
-            {
-              "id": "arc-swap 1.6.0",
-              "target": "arc_swap"
-            },
-            {
-              "id": "arrayvec 0.7.4",
-              "target": "arrayvec"
-            },
-            {
-              "id": "askama 0.12.1",
-              "target": "askama"
-            },
-            {
-              "id": "assert-json-diff 2.0.2",
-              "target": "assert_json_diff"
-            },
-            {
-              "id": "assert_cmd 2.0.12",
-              "target": "assert_cmd"
-            },
-            {
-              "id": "assert_matches 1.5.0",
-              "target": "assert_matches"
-            },
-            {
-              "id": "async-scoped 0.8.0",
-              "target": "async_scoped"
-            },
-            {
-              "id": "async-socks5 0.5.1",
-              "target": "async_socks5"
-            },
-            {
-              "id": "async-stream 0.3.5",
-              "target": "async_stream"
-            },
-            {
-              "id": "axum 0.6.20",
-              "target": "axum",
-              "alias": "axum_0_6_1"
-            },
-            {
-              "id": "axum 0.7.4",
-              "target": "axum"
-            },
-            {
-              "id": "axum-extra 0.9.3",
-              "target": "axum_extra"
-            },
-            {
-              "id": "axum-server 0.5.1",
-              "target": "axum_server"
-            },
-            {
-              "id": "backoff 0.4.0",
-              "target": "backoff"
-            },
-            {
-              "id": "backon 0.4.1",
-              "target": "backon"
-            },
-            {
-              "id": "base32 0.4.0",
-              "target": "base32"
-            },
-            {
-              "id": "base64 0.13.1",
-              "target": "base64"
-            },
-            {
-              "id": "bech32 0.9.1",
-              "target": "bech32"
-            },
-            {
-              "id": "bincode 1.3.3",
-              "target": "bincode"
-            },
-            {
               "id": "bindgen 0.65.1",
               "target": "bindgen"
-            },
-            {
-              "id": "bip32 0.5.1",
-              "target": "bip32"
-            },
-            {
-              "id": "bit-vec 0.6.3",
-              "target": "bit_vec"
-            },
-            {
-              "id": "bitcoin 0.28.2",
-              "target": "bitcoin"
-            },
-            {
-              "id": "bitcoincore-rpc 0.15.0",
-              "target": "bitcoincore_rpc"
-            },
-            {
-              "id": "bitcoind 0.32.0",
-              "target": "bitcoind"
             },
             {
               "id": "bitflags 1.3.2",
               "target": "bitflags"
             },
             {
-              "id": "bs58 0.5.0",
-              "target": "bs58"
-            },
-            {
-              "id": "build-info 0.0.27",
-              "target": "build_info"
-            },
-            {
               "id": "build-info-build 0.0.27",
               "target": "build_info_build"
-            },
-            {
-              "id": "by_address 1.1.0",
-              "target": "by_address"
-            },
-            {
-              "id": "byte-unit 4.0.19",
-              "target": "byte_unit"
-            },
-            {
-              "id": "byteorder 1.5.0",
-              "target": "byteorder"
-            },
-            {
-              "id": "bytes 1.6.0",
-              "target": "bytes"
-            },
-            {
-              "id": "cached 0.49.2",
-              "target": "cached"
             },
             {
               "id": "canbench 0.1.4",
@@ -18855,1192 +18625,28 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.6",
-              "target": "candid"
-            },
-            {
-              "id": "candid_parser 0.1.2",
-              "target": "candid_parser"
-            },
-            {
-              "id": "cargo_metadata 0.14.2",
-              "target": "cargo_metadata"
-            },
-            {
               "id": "cc 1.0.83",
               "target": "cc"
-            },
-            {
-              "id": "cddl 0.9.4",
-              "target": "cddl"
-            },
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "chacha20poly1305 0.10.1",
-              "target": "chacha20poly1305"
-            },
-            {
-              "id": "chrono 0.4.38",
-              "target": "chrono"
-            },
-            {
-              "id": "ciborium 0.2.1",
-              "target": "ciborium"
-            },
-            {
-              "id": "cidr 0.2.2",
-              "target": "cidr"
-            },
-            {
-              "id": "clap 3.2.25",
-              "target": "clap",
-              "alias": "clap_3_2_25"
-            },
-            {
-              "id": "clap 4.4.8",
-              "target": "clap"
-            },
-            {
-              "id": "cloudflare 0.11.0",
-              "target": "cloudflare"
-            },
-            {
-              "id": "colored 2.0.4",
-              "target": "colored"
-            },
-            {
-              "id": "comparable 0.5.4",
-              "target": "comparable"
-            },
-            {
-              "id": "console 0.11.3",
-              "target": "console"
-            },
-            {
-              "id": "convert_case 0.6.0",
-              "target": "convert_case"
-            },
-            {
-              "id": "crc32fast 1.3.2",
-              "target": "crc32fast"
-            },
-            {
-              "id": "criterion 0.5.1",
-              "target": "criterion"
-            },
-            {
-              "id": "crossbeam 0.8.4",
-              "target": "crossbeam"
-            },
-            {
-              "id": "crossbeam-channel 0.5.11",
-              "target": "crossbeam_channel"
-            },
-            {
-              "id": "csv 1.2.2",
-              "target": "csv"
-            },
-            {
-              "id": "curve25519-dalek 4.1.3",
-              "target": "curve25519_dalek"
-            },
-            {
-              "id": "cvt 0.1.2",
-              "target": "cvt"
-            },
-            {
-              "id": "dashmap 5.5.0",
-              "target": "dashmap"
-            },
-            {
-              "id": "dyn-clone 1.0.14",
-              "target": "dyn_clone"
-            },
-            {
-              "id": "ed25519-consensus 2.1.0",
-              "target": "ed25519_consensus"
-            },
-            {
-              "id": "ed25519-dalek 2.1.1",
-              "target": "ed25519_dalek"
-            },
-            {
-              "id": "either 1.8.1",
-              "target": "either"
-            },
-            {
-              "id": "erased-serde 0.3.28",
-              "target": "erased_serde"
-            },
-            {
-              "id": "escargot 0.5.7",
-              "target": "escargot"
-            },
-            {
-              "id": "ethabi 18.0.0",
-              "target": "ethabi"
-            },
-            {
-              "id": "ethers-core 2.0.8",
-              "target": "ethers_core"
-            },
-            {
-              "id": "ethnum 1.3.2",
-              "target": "ethnum"
-            },
-            {
-              "id": "exec 0.3.1",
-              "target": "exec"
-            },
-            {
-              "id": "eyre 0.6.8",
-              "target": "eyre"
-            },
-            {
-              "id": "ff 0.12.1",
-              "target": "ff"
-            },
-            {
-              "id": "flate2 1.0.30",
-              "target": "flate2"
-            },
-            {
-              "id": "form_urlencoded 1.2.0",
-              "target": "form_urlencoded"
-            },
-            {
-              "id": "fs_extra 1.3.0",
-              "target": "fs_extra"
-            },
-            {
-              "id": "futures 0.3.30",
-              "target": "futures"
-            },
-            {
-              "id": "futures-util 0.3.30",
-              "target": "futures_util"
-            },
-            {
-              "id": "get_if_addrs 0.5.3",
-              "target": "get_if_addrs"
-            },
-            {
-              "id": "getrandom 0.2.10",
-              "target": "getrandom"
-            },
-            {
-              "id": "glob 0.3.1",
-              "target": "glob"
-            },
-            {
-              "id": "group 0.13.0",
-              "target": "group"
-            },
-            {
-              "id": "hashlink 0.8.3",
-              "target": "hashlink"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "hex-literal 0.4.1",
-              "target": "hex_literal"
-            },
-            {
-              "id": "hkdf 0.12.4",
-              "target": "hkdf"
-            },
-            {
-              "id": "http 0.2.12",
-              "target": "http",
-              "alias": "http_0_2_12"
-            },
-            {
-              "id": "http 1.1.0",
-              "target": "http"
-            },
-            {
-              "id": "http-body 0.4.6",
-              "target": "http_body",
-              "alias": "http_body_0_4_6"
-            },
-            {
-              "id": "http-body 1.0.0",
-              "target": "http_body"
-            },
-            {
-              "id": "http-body-util 0.1.0",
-              "target": "http_body_util"
-            },
-            {
-              "id": "httptest 0.15.4",
-              "target": "httptest"
-            },
-            {
-              "id": "humantime 2.1.0",
-              "target": "humantime"
-            },
-            {
-              "id": "hyper 0.14.27",
-              "target": "hyper",
-              "alias": "hyper_0_14_27"
-            },
-            {
-              "id": "hyper 1.3.1",
-              "target": "hyper"
-            },
-            {
-              "id": "hyper-rustls 0.24.2",
-              "target": "hyper_rustls"
-            },
-            {
-              "id": "hyper-rustls 0.27.1",
-              "target": "hyper_rustls",
-              "alias": "hyper_rustls_0_27_x"
-            },
-            {
-              "id": "hyper-socks2 0.8.0",
-              "target": "hyper_socks2"
-            },
-            {
-              "id": "hyper-util 0.1.3",
-              "target": "hyper_util"
-            },
-            {
-              "id": "hyperlocal-next 0.9.0",
-              "target": "hyperlocal_next"
-            },
-            {
-              "id": "ic-agent 0.35.0",
-              "target": "ic_agent"
-            },
-            {
-              "id": "ic-btc-interface 0.2.0",
-              "target": "ic_btc_interface"
-            },
-            {
-              "id": "ic-btc-test-utils 0.1.0",
-              "target": "ic_btc_test_utils"
-            },
-            {
-              "id": "ic-btc-validation 0.1.0",
-              "target": "ic_btc_validation"
-            },
-            {
-              "id": "ic-canister-log 0.2.0",
-              "target": "ic_canister_log"
-            },
-            {
-              "id": "ic-cbor 2.3.0",
-              "target": "ic_cbor"
-            },
-            {
-              "id": "ic-cdk 0.13.2",
-              "target": "ic_cdk"
-            },
-            {
-              "id": "ic-cdk-timers 0.7.0",
-              "target": "ic_cdk_timers"
-            },
-            {
-              "id": "ic-certification 2.3.0",
-              "target": "ic_certification"
-            },
-            {
-              "id": "ic-certified-map 0.3.4",
-              "target": "ic_certified_map"
-            },
-            {
-              "id": "ic-http-certification 2.3.0",
-              "target": "ic_http_certification"
-            },
-            {
-              "id": "ic-metrics-encoder 1.1.1",
-              "target": "ic_metrics_encoder"
-            },
-            {
-              "id": "ic-response-verification 2.3.0",
-              "target": "ic_response_verification"
-            },
-            {
-              "id": "ic-stable-structures 0.6.4",
-              "target": "ic_stable_structures"
-            },
-            {
-              "id": "ic-test-state-machine-client 3.0.1",
-              "target": "ic_test_state_machine_client"
-            },
-            {
-              "id": "ic-utils 0.35.0",
-              "target": "ic_utils"
-            },
-            {
-              "id": "ic-wasm 0.7.1",
-              "target": "ic_wasm"
-            },
-            {
-              "id": "ic-xrc-types 1.2.0",
-              "target": "ic_xrc_types"
-            },
-            {
-              "id": "ic0 0.18.11",
-              "target": "ic0"
-            },
-            {
-              "id": "ic_bls12_381 0.8.0",
-              "target": "ic_bls12_381"
-            },
-            {
-              "id": "ic_principal 0.1.1",
-              "target": "ic_principal"
-            },
-            {
-              "id": "icrc1-test-env 0.1.1",
-              "target": "icrc1_test_env"
-            },
-            {
-              "id": "icrc1-test-suite 0.1.1",
-              "target": "icrc1_test_suite"
-            },
-            {
-              "id": "idna 0.3.0",
-              "target": "idna"
-            },
-            {
-              "id": "indexmap 2.2.6",
-              "target": "indexmap"
-            },
-            {
-              "id": "indicatif 0.17.5",
-              "target": "indicatif"
-            },
-            {
-              "id": "inferno 0.11.19",
-              "target": "inferno"
-            },
-            {
-              "id": "insta 1.31.0",
-              "target": "insta"
-            },
-            {
-              "id": "instant-acme 0.3.2",
-              "target": "instant_acme"
-            },
-            {
-              "id": "intmap 1.1.0",
-              "target": "intmap"
-            },
-            {
-              "id": "ipnet 2.8.0",
-              "target": "ipnet"
-            },
-            {
-              "id": "isocountry 0.3.2",
-              "target": "isocountry"
-            },
-            {
-              "id": "itertools 0.12.0",
-              "target": "itertools"
-            },
-            {
-              "id": "jemalloc-ctl 0.3.3",
-              "target": "jemalloc_ctl"
-            },
-            {
-              "id": "jemallocator 0.3.2",
-              "target": "jemallocator"
-            },
-            {
-              "id": "json-patch 0.2.7",
-              "target": "json_patch"
-            },
-            {
-              "id": "json5 0.4.1",
-              "target": "json5"
-            },
-            {
-              "id": "k256 0.13.3",
-              "target": "k256"
-            },
-            {
-              "id": "k8s-openapi 0.20.0",
-              "target": "k8s_openapi"
-            },
-            {
-              "id": "kube 0.87.2",
-              "target": "kube"
-            },
-            {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "leb128 0.2.5",
-              "target": "leb128"
-            },
-            {
-              "id": "libc 0.2.155",
-              "target": "libc"
-            },
-            {
-              "id": "libflate 1.4.0",
-              "target": "libflate"
-            },
-            {
-              "id": "libfuzzer-sys 0.4.7",
-              "target": "libfuzzer_sys"
-            },
-            {
-              "id": "libnss 0.5.0",
-              "target": "libnss"
-            },
-            {
-              "id": "libsecp256k1 0.7.1",
-              "target": "libsecp256k1"
-            },
-            {
-              "id": "little-loadshedder 0.1.0",
-              "target": "little_loadshedder"
-            },
-            {
-              "id": "local-ip-address 0.5.6",
-              "target": "local_ip_address"
-            },
-            {
-              "id": "log 0.4.20",
-              "target": "log"
-            },
-            {
-              "id": "lru 0.7.8",
-              "target": "lru"
-            },
-            {
-              "id": "mach2 0.4.2",
-              "target": "mach2"
-            },
-            {
-              "id": "maplit 1.0.2",
-              "target": "maplit"
-            },
-            {
-              "id": "maxminddb 0.24.0",
-              "target": "maxminddb"
             },
             {
               "id": "metrics-proxy 0.1.0",
               "target": "metrics_proxy"
             },
             {
-              "id": "minicbor 0.19.1",
-              "target": "minicbor"
-            },
-            {
-              "id": "mockall 0.12.1",
-              "target": "mockall"
-            },
-            {
-              "id": "mockito 1.2.0",
-              "target": "mockito"
-            },
-            {
-              "id": "moka 0.12.1",
-              "target": "moka"
-            },
-            {
-              "id": "more-asserts 0.3.1",
-              "target": "more_asserts"
-            },
-            {
-              "id": "nftables 0.4.0",
-              "target": "nftables"
-            },
-            {
-              "id": "nix 0.24.3",
-              "target": "nix"
-            },
-            {
-              "id": "num 0.4.1",
-              "target": "num"
-            },
-            {
-              "id": "num-bigint 0.4.5",
-              "target": "num_bigint"
-            },
-            {
-              "id": "num-bigint-dig 0.8.4",
-              "target": "num_bigint_dig"
-            },
-            {
-              "id": "num-rational 0.2.4",
-              "target": "num_rational"
-            },
-            {
-              "id": "num-traits 0.2.19",
-              "target": "num_traits"
-            },
-            {
-              "id": "num_cpus 1.16.0",
-              "target": "num_cpus"
-            },
-            {
-              "id": "once_cell 1.19.0",
-              "target": "once_cell"
-            },
-            {
-              "id": "openssh-keys 0.5.0",
-              "target": "openssh_keys"
-            },
-            {
-              "id": "opentelemetry 0.20.0",
-              "target": "opentelemetry",
-              "alias": "opentelemetry_0_20_0"
-            },
-            {
-              "id": "opentelemetry 0.23.0",
-              "target": "opentelemetry"
-            },
-            {
-              "id": "opentelemetry-otlp 0.16.0",
-              "target": "opentelemetry_otlp"
-            },
-            {
-              "id": "opentelemetry-prometheus 0.13.0",
-              "target": "opentelemetry_prometheus",
-              "alias": "opentelemetry_prometheus_0_13_0"
-            },
-            {
-              "id": "opentelemetry-prometheus 0.16.0",
-              "target": "opentelemetry_prometheus"
-            },
-            {
-              "id": "opentelemetry_sdk 0.23.0",
-              "target": "opentelemetry_sdk"
-            },
-            {
-              "id": "p256 0.13.2",
-              "target": "p256"
-            },
-            {
-              "id": "pairing 0.22.0",
-              "target": "pairing"
-            },
-            {
-              "id": "parking_lot 0.12.1",
-              "target": "parking_lot"
-            },
-            {
-              "id": "pathdiff 0.2.1",
-              "target": "pathdiff"
-            },
-            {
-              "id": "pcre2 0.2.6",
-              "target": "pcre2"
-            },
-            {
-              "id": "pem 1.1.1",
-              "target": "pem"
-            },
-            {
-              "id": "pin-project-lite 0.2.13",
-              "target": "pin_project_lite"
-            },
-            {
-              "id": "ping 0.5.0",
-              "target": "ping"
-            },
-            {
-              "id": "pkcs8 0.10.2",
-              "target": "pkcs8"
-            },
-            {
               "id": "pkg-config 0.3.27",
               "target": "pkg_config"
-            },
-            {
-              "id": "pprof 0.13.0",
-              "target": "pprof"
-            },
-            {
-              "id": "predicates 3.0.4",
-              "target": "predicates"
-            },
-            {
-              "id": "pretty-bytes 0.2.2",
-              "target": "pretty_bytes"
-            },
-            {
-              "id": "pretty_assertions 1.4.0",
-              "target": "pretty_assertions"
-            },
-            {
-              "id": "priority-queue 1.3.2",
-              "target": "priority_queue"
-            },
-            {
-              "id": "proc-macro2 1.0.85",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "procfs 0.9.1",
-              "target": "procfs"
-            },
-            {
-              "id": "prometheus 0.13.4",
-              "target": "prometheus"
-            },
-            {
-              "id": "prometheus-parse 0.2.4",
-              "target": "prometheus_parse"
-            },
-            {
-              "id": "proptest 1.2.0",
-              "target": "proptest"
-            },
-            {
-              "id": "prost 0.12.6",
-              "target": "prost"
-            },
-            {
-              "id": "prost-build 0.12.6",
-              "target": "prost_build"
-            },
-            {
-              "id": "protobuf 2.28.0",
-              "target": "protobuf"
-            },
-            {
-              "id": "publicsuffix 2.2.3",
-              "target": "publicsuffix"
-            },
-            {
-              "id": "quickcheck 1.0.3",
-              "target": "quickcheck"
-            },
-            {
-              "id": "quinn 0.10.2",
-              "target": "quinn"
-            },
-            {
-              "id": "quinn-udp 0.5.1",
-              "target": "quinn_udp"
-            },
-            {
-              "id": "quote 1.0.35",
-              "target": "quote"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
             },
             {
               "id": "rand_chacha 0.3.1",
               "target": "rand_chacha"
             },
             {
-              "id": "rand_distr 0.4.3",
-              "target": "rand_distr"
-            },
-            {
-              "id": "rand_pcg 0.3.1",
-              "target": "rand_pcg"
-            },
-            {
-              "id": "randomkit 0.1.1",
-              "target": "randomkit"
-            },
-            {
-              "id": "ratelimit 0.9.1",
-              "target": "ratelimit"
-            },
-            {
-              "id": "rayon 1.10.0",
-              "target": "rayon"
-            },
-            {
-              "id": "rcgen 0.13.1",
-              "target": "rcgen"
-            },
-            {
-              "id": "regex 1.10.5",
-              "target": "regex"
-            },
-            {
-              "id": "reqwest 0.11.27",
-              "target": "reqwest",
-              "alias": "reqwest_0_11_27"
-            },
-            {
-              "id": "reqwest 0.12.4",
-              "target": "reqwest"
-            },
-            {
-              "id": "rgb 0.8.37",
-              "target": "rgb"
-            },
-            {
-              "id": "ring 0.17.7",
-              "target": "ring"
-            },
-            {
-              "id": "ripemd 0.1.3",
-              "target": "ripemd"
-            },
-            {
-              "id": "rlp 0.5.2",
-              "target": "rlp"
-            },
-            {
-              "id": "rocksdb 0.22.0",
-              "target": "rocksdb"
-            },
-            {
-              "id": "rolling-file 0.2.0",
-              "target": "rolling_file"
-            },
-            {
-              "id": "rsa 0.9.2",
-              "target": "rsa"
-            },
-            {
-              "id": "rstack-self 0.3.0",
-              "target": "rstack_self"
-            },
-            {
-              "id": "rstest 0.19.0",
-              "target": "rstest"
-            },
-            {
-              "id": "rusb 0.9.3",
-              "target": "rusb"
-            },
-            {
-              "id": "rusqlite 0.28.0",
-              "target": "rusqlite"
-            },
-            {
-              "id": "rust_decimal 1.30.0",
-              "target": "rust_decimal"
-            },
-            {
-              "id": "rustc-hash 1.1.0",
-              "target": "rustc_hash"
-            },
-            {
-              "id": "rustls 0.21.12",
-              "target": "rustls",
-              "alias": "rustls_0_21_12"
-            },
-            {
-              "id": "rustls 0.23.8",
-              "target": "rustls"
-            },
-            {
-              "id": "rustls-native-certs 0.7.0",
-              "target": "rustls_native_certs"
-            },
-            {
-              "id": "rustls-pemfile 2.1.2",
-              "target": "rustls_pemfile"
-            },
-            {
-              "id": "rustls-pki-types 1.7.0",
-              "target": "rustls_pki_types"
-            },
-            {
-              "id": "rusty-fork 0.3.0",
-              "target": "rusty_fork"
-            },
-            {
               "id": "schemars 0.8.16",
               "target": "schemars"
             },
             {
-              "id": "schnorr_fun 0.10.0",
-              "target": "schnorr_fun"
-            },
-            {
-              "id": "scoped_threadpool 0.1.9",
-              "target": "scoped_threadpool"
-            },
-            {
-              "id": "scopeguard 1.2.0",
-              "target": "scopeguard"
-            },
-            {
-              "id": "scraper 0.17.1",
-              "target": "scraper"
-            },
-            {
-              "id": "semver 1.0.22",
-              "target": "semver"
-            },
-            {
-              "id": "serde 1.0.203",
-              "target": "serde"
-            },
-            {
-              "id": "serde-bytes-repr 0.1.5",
-              "target": "serde_bytes_repr"
-            },
-            {
-              "id": "serde_bytes 0.11.14",
-              "target": "serde_bytes"
-            },
-            {
-              "id": "serde_cbor 0.11.2",
-              "target": "serde_cbor"
-            },
-            {
-              "id": "serde_json 1.0.118",
-              "target": "serde_json"
-            },
-            {
-              "id": "serde_regex 1.1.0",
-              "target": "serde_regex"
-            },
-            {
-              "id": "serde_with 1.14.0",
-              "target": "serde_with"
-            },
-            {
-              "id": "serde_yaml 0.9.34+deprecated",
-              "target": "serde_yaml"
-            },
-            {
-              "id": "sha2 0.9.9",
-              "target": "sha2",
-              "alias": "sha2_0_9_1"
-            },
-            {
-              "id": "sha3 0.9.1",
-              "target": "sha3"
-            },
-            {
-              "id": "signal-hook 0.3.17",
-              "target": "signal_hook"
-            },
-            {
-              "id": "signature 2.2.0",
-              "target": "signature"
-            },
-            {
-              "id": "simple_asn1 0.6.2",
-              "target": "simple_asn1"
-            },
-            {
-              "id": "simple_moving_average 1.0.2",
-              "target": "simple_moving_average"
-            },
-            {
-              "id": "slog 2.7.0",
-              "target": "slog"
-            },
-            {
-              "id": "slog-async 2.8.0",
-              "target": "slog_async"
-            },
-            {
-              "id": "slog-envlogger 2.2.0",
-              "target": "slog_envlogger"
-            },
-            {
-              "id": "slog-json 2.6.1",
-              "target": "slog_json"
-            },
-            {
-              "id": "slog-scope 4.4.0",
-              "target": "slog_scope"
-            },
-            {
-              "id": "slog-term 2.9.1",
-              "target": "slog_term"
-            },
-            {
-              "id": "socket2 0.5.7",
-              "target": "socket2"
-            },
-            {
-              "id": "ssh2 0.9.4",
-              "target": "ssh2"
-            },
-            {
-              "id": "strum 0.26.2",
-              "target": "strum"
-            },
-            {
-              "id": "stubborn-io 0.3.2",
-              "target": "stubborn_io"
-            },
-            {
-              "id": "substring 1.4.5",
-              "target": "substring"
-            },
-            {
-              "id": "subtle 2.5.0",
-              "target": "subtle"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            },
-            {
-              "id": "sync_wrapper 1.0.1",
-              "target": "sync_wrapper"
-            },
-            {
-              "id": "tar 0.4.41",
-              "target": "tar"
-            },
-            {
-              "id": "tarpc 0.34.0",
-              "target": "tarpc"
-            },
-            {
-              "id": "tempfile 3.10.1",
-              "target": "tempfile"
-            },
-            {
-              "id": "tester 0.7.0",
-              "target": "tester"
-            },
-            {
-              "id": "textplots 0.8.4",
-              "target": "textplots"
-            },
-            {
-              "id": "thiserror 1.0.57",
-              "target": "thiserror"
-            },
-            {
-              "id": "thousands 0.2.0",
-              "target": "thousands"
-            },
-            {
-              "id": "threadpool 1.8.1",
-              "target": "threadpool"
-            },
-            {
-              "id": "time 0.3.36",
-              "target": "time"
-            },
-            {
-              "id": "tokio 1.38.0",
-              "target": "tokio"
-            },
-            {
-              "id": "tokio-io-timeout 1.2.0",
-              "target": "tokio_io_timeout"
-            },
-            {
-              "id": "tokio-metrics 0.3.1",
-              "target": "tokio_metrics"
-            },
-            {
-              "id": "tokio-rustls 0.24.1",
-              "target": "tokio_rustls",
-              "alias": "tokio_rustls_0_24_1"
-            },
-            {
-              "id": "tokio-rustls 0.26.0",
-              "target": "tokio_rustls"
-            },
-            {
-              "id": "tokio-serde 0.8.0",
-              "target": "tokio_serde"
-            },
-            {
-              "id": "tokio-socks 0.5.1",
-              "target": "tokio_socks"
-            },
-            {
-              "id": "tokio-test 0.4.2",
-              "target": "tokio_test"
-            },
-            {
-              "id": "tokio-util 0.7.11",
-              "target": "tokio_util"
-            },
-            {
-              "id": "toml 0.5.11",
-              "target": "toml"
-            },
-            {
-              "id": "tonic 0.11.0",
-              "target": "tonic"
-            },
-            {
               "id": "tonic-build 0.11.0",
               "target": "tonic_build"
-            },
-            {
-              "id": "tower 0.4.13",
-              "target": "tower"
-            },
-            {
-              "id": "tower-http 0.4.4",
-              "target": "tower_http",
-              "alias": "tower_http_0_4_4"
-            },
-            {
-              "id": "tower-http 0.5.2",
-              "target": "tower_http"
-            },
-            {
-              "id": "tower-request-id 0.3.0",
-              "target": "tower_request_id"
-            },
-            {
-              "id": "tower-test 0.4.0",
-              "target": "tower_test"
-            },
-            {
-              "id": "tower_governor 0.1.0",
-              "target": "tower_governor"
-            },
-            {
-              "id": "tracing 0.1.40",
-              "target": "tracing"
-            },
-            {
-              "id": "tracing-appender 0.2.3",
-              "target": "tracing_appender"
-            },
-            {
-              "id": "tracing-core 0.1.32",
-              "target": "tracing_core"
-            },
-            {
-              "id": "tracing-flame 0.2.0",
-              "target": "tracing_flame"
-            },
-            {
-              "id": "tracing-opentelemetry 0.24.0",
-              "target": "tracing_opentelemetry"
-            },
-            {
-              "id": "tracing-serde 0.1.3",
-              "target": "tracing_serde"
-            },
-            {
-              "id": "tracing-slog 0.2.0",
-              "target": "tracing_slog"
-            },
-            {
-              "id": "tracing-subscriber 0.3.18",
-              "target": "tracing_subscriber"
-            },
-            {
-              "id": "trust-dns-resolver 0.22.0",
-              "target": "trust_dns_resolver"
-            },
-            {
-              "id": "turmoil 0.6.2",
-              "target": "turmoil"
-            },
-            {
-              "id": "url 2.4.1",
-              "target": "url"
-            },
-            {
-              "id": "uuid 1.5.0",
-              "target": "uuid"
-            },
-            {
-              "id": "vsock 0.4.0",
-              "target": "vsock"
-            },
-            {
-              "id": "walkdir 2.5.0",
-              "target": "walkdir"
-            },
-            {
-              "id": "walrus 0.19.0",
-              "target": "walrus"
-            },
-            {
-              "id": "warp 0.3.6",
-              "target": "warp"
-            },
-            {
-              "id": "wasm-bindgen 0.2.87",
-              "target": "wasm_bindgen"
-            },
-            {
-              "id": "wasm-encoder 0.201.0",
-              "target": "wasm_encoder"
-            },
-            {
-              "id": "wasm-smith 0.201.0",
-              "target": "wasm_smith"
-            },
-            {
-              "id": "wasmparser 0.201.0",
-              "target": "wasmparser"
-            },
-            {
-              "id": "wasmprinter 0.2.60",
-              "target": "wasmprinter"
-            },
-            {
-              "id": "wasmtime 21.0.1",
-              "target": "wasmtime"
-            },
-            {
-              "id": "wasmtime-environ 21.0.1",
-              "target": "wasmtime_environ"
-            },
-            {
-              "id": "wast 53.0.0",
-              "target": "wast"
-            },
-            {
-              "id": "wat 1.0.67",
-              "target": "wat"
-            },
-            {
-              "id": "wee_alloc 0.4.5",
-              "target": "wee_alloc"
-            },
-            {
-              "id": "which 4.4.0",
-              "target": "which"
-            },
-            {
-              "id": "wiremock 0.5.19",
-              "target": "wiremock"
-            },
-            {
-              "id": "wsl 0.1.0",
-              "target": "wsl"
-            },
-            {
-              "id": "wycheproof 0.5.1",
-              "target": "wycheproof"
-            },
-            {
-              "id": "x509-cert 0.2.5",
-              "target": "x509_cert"
-            },
-            {
-              "id": "x509-parser 0.16.0",
-              "target": "x509_parser"
-            },
-            {
-              "id": "yansi 0.5.1",
-              "target": "yansi"
-            },
-            {
-              "id": "zeroize 1.8.1",
-              "target": "zeroize"
-            },
-            {
-              "id": "zstd 0.13.1",
-              "target": "zstd"
             }
           ],
           "selects": {}
@@ -20049,56 +18655,8 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-recursion 1.0.5",
-              "target": "async_recursion"
-            },
-            {
-              "id": "async-trait 0.1.73",
-              "target": "async_trait"
-            },
-            {
-              "id": "educe 0.4.22",
-              "target": "educe"
-            },
-            {
-              "id": "ic-cdk-macros 0.9.0",
-              "target": "ic_cdk_macros"
-            },
-            {
-              "id": "indoc 1.0.9",
-              "target": "indoc"
-            },
-            {
-              "id": "minicbor-derive 0.13.0",
-              "target": "minicbor_derive"
-            },
-            {
-              "id": "paste 1.0.14",
-              "target": "paste"
-            },
-            {
-              "id": "proptest-derive 0.3.0",
-              "target": "proptest_derive"
-            },
-            {
-              "id": "prost-derive 0.12.6",
-              "target": "prost_derive"
-            },
-            {
-              "id": "rust_decimal_macros 1.30.0",
-              "target": "rust_decimal_macros"
-            },
-            {
               "id": "rustversion 1.0.14",
               "target": "rustversion"
-            },
-            {
-              "id": "strum_macros 0.26.2",
-              "target": "strum_macros"
-            },
-            {
-              "id": "test-strategy 0.3.1",
-              "target": "test_strategy"
             }
           ],
           "selects": {}
@@ -22570,7 +21128,6 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "full-serde",
             "once_cell",
             "regex",
@@ -23812,13 +22369,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "std"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -28335,7 +26885,11 @@
         "Apache-2.0",
         "MIT"
       ],
-      "license_file": "LICENSE-APACHE"
+      "license_file": "LICENSE-APACHE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "http 1.1.0": {
       "name": "http",
@@ -28457,7 +27011,11 @@
       "license_ids": [
         "MIT"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "http-body 1.0.0": {
       "name": "http-body",
@@ -29329,7 +27887,11 @@
       "license_ids": [
         "MIT"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "hyper 1.3.1": {
       "name": "hyper",
@@ -29644,7 +28206,11 @@
         "ISC",
         "MIT"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "hyper-rustls 0.27.1": {
       "name": "hyper-rustls",
@@ -29741,7 +28307,11 @@
         "ISC",
         "MIT"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "hyper-socks2 0.8.0": {
       "name": "hyper-socks2",
@@ -29775,11 +28345,7 @@
         "crate_features": {
           "common": [
             "default",
-            "hyper-rustls",
             "hyper-tls",
-            "rustls",
-            "rustls-native-certs",
-            "rusttls",
             "tls"
           ],
           "selects": {}
@@ -29803,21 +28369,8 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.24.2",
-              "target": "hyper_rustls"
-            },
-            {
               "id": "hyper-tls 0.5.0",
               "target": "hyper_tls"
-            },
-            {
-              "id": "rustls 0.21.12",
-              "target": "rustls",
-              "alias": "rusttls"
-            },
-            {
-              "id": "rustls-native-certs 0.6.3",
-              "target": "rustls_native_certs"
             },
             {
               "id": "thiserror 1.0.57",
@@ -54426,7 +52979,11 @@
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "ic0 0.21.1": {
       "name": "ic0",
@@ -60098,89 +58655,6 @@
         "MIT"
       ],
       "license_file": "LICENSE"
-    },
-    "libfuzzer-sys 0.4.7": {
-      "name": "libfuzzer-sys",
-      "version": "0.4.7",
-      "package_url": "https://github.com/rust-fuzz/libfuzzer",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/libfuzzer-sys/0.4.7/download",
-          "sha256": "a96cfd5557eb82f2b83fed4955246c988d331975a002961b07c81584d107e7f7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "libfuzzer_sys",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "libfuzzer_sys",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "arbitrary 1.3.2",
-              "target": "arbitrary"
-            },
-            {
-              "id": "libfuzzer-sys 0.4.7",
-              "target": "build_script_build"
-            },
-            {
-              "id": "once_cell 1.19.0",
-              "target": "once_cell"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.4.7"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "cc 1.0.83",
-              "target": "cc"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT/Apache-2.0/NCSA",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT",
-        "NCSA"
-      ],
-      "license_file": "LICENSE-APACHE"
     },
     "libloading 0.7.4": {
       "name": "libloading",
@@ -65890,82 +64364,6 @@
       ],
       "license_file": null
     },
-    "num 0.4.1": {
-      "name": "num",
-      "version": "0.4.1",
-      "package_url": "https://github.com/rust-num/num",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/num/0.4.1/download",
-          "sha256": "b05180d69e3da0e530ba2a1dae5110317e49e3b7f3d41be227dc5f92e49ee7af"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "num",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "num",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "num-bigint",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "num-bigint 0.4.5",
-              "target": "num_bigint"
-            },
-            {
-              "id": "num-complex 0.4.3",
-              "target": "num_complex"
-            },
-            {
-              "id": "num-integer 0.1.46",
-              "target": "num_integer"
-            },
-            {
-              "id": "num-iter 0.1.43",
-              "target": "num_iter"
-            },
-            {
-              "id": "num-rational 0.4.1",
-              "target": "num_rational"
-            },
-            {
-              "id": "num-traits 0.2.19",
-              "target": "num_traits"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.4.1"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "num-bigint 0.2.6": {
       "name": "num-bigint",
       "version": "0.2.6",
@@ -66236,60 +64634,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "num-complex 0.4.3": {
-      "name": "num-complex",
-      "version": "0.4.3",
-      "package_url": "https://github.com/rust-num/num-complex",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/num-complex/0.4.3/download",
-          "sha256": "02e0d21255c828d6f128a1e41534206671e8c3ea0c62f32291e808dc82cff17d"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "num_complex",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "num_complex",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "num-traits 0.2.19",
-              "target": "num_traits"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.4.3"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "num-conv 0.1.0": {
       "name": "num-conv",
       "version": "0.1.0",
@@ -66477,13 +64821,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "i128",
-            "std"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -66615,100 +64952,6 @@
         }
       },
       "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "num-rational 0.4.1": {
-      "name": "num-rational",
-      "version": "0.4.1",
-      "package_url": "https://github.com/rust-num/num-rational",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/num-rational/0.4.1/download",
-          "sha256": "0638a1c9d0a3c0914158145bc76cff373a75a627e6ecbfb71cbe6f453a5a19b0"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "num_rational",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "num_rational",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "num-bigint",
-            "num-bigint-std",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "num-bigint 0.4.5",
-              "target": "num_bigint"
-            },
-            {
-              "id": "num-integer 0.1.46",
-              "target": "num_integer"
-            },
-            {
-              "id": "num-rational 0.4.1",
-              "target": "build_script_build"
-            },
-            {
-              "id": "num-traits 0.2.19",
-              "target": "num_traits"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.4.1"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 1.1.0",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -68005,7 +66248,11 @@
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "opentelemetry 0.20.0": {
       "name": "opentelemetry",
@@ -68064,7 +66311,11 @@
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "opentelemetry 0.21.0": {
       "name": "opentelemetry",
@@ -68151,7 +66402,11 @@
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "opentelemetry 0.23.0": {
       "name": "opentelemetry",
@@ -68397,7 +66652,11 @@
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "opentelemetry-prometheus 0.14.1": {
       "name": "opentelemetry-prometheus",
@@ -68466,7 +66725,11 @@
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "opentelemetry-prometheus 0.16.0": {
       "name": "opentelemetry-prometheus",
@@ -70489,45 +68752,6 @@
         "version": "0.1.18"
       },
       "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "pathdiff 0.2.1": {
-      "name": "pathdiff",
-      "version": "0.2.1",
-      "package_url": "https://github.com/Manishearth/pathdiff",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/pathdiff/0.2.1/download",
-          "sha256": "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "pathdiff",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "pathdiff",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "0.2.1"
-      },
-      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -76243,80 +74467,6 @@
       ],
       "license_file": null
     },
-    "quinn-udp 0.5.1": {
-      "name": "quinn-udp",
-      "version": "0.5.1",
-      "package_url": "https://github.com/quinn-rs/quinn",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/quinn-udp/0.5.1/download",
-          "sha256": "e4f0def2590301f4f667db5a77f9694fb004f82796dc1a8b1508fafa3d0e8b72"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "quinn_udp",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "quinn_udp",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "log"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "libc 0.2.155",
-              "target": "libc"
-            },
-            {
-              "id": "socket2 0.5.7",
-              "target": "socket2"
-            },
-            {
-              "id": "tracing 0.1.40",
-              "target": "tracing"
-            }
-          ],
-          "selects": {
-            "cfg(windows)": [
-              {
-                "id": "once_cell 1.19.0",
-                "target": "once_cell"
-              },
-              {
-                "id": "windows-sys 0.52.0",
-                "target": "windows_sys"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "version": "0.5.1"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "quote 0.6.13": {
       "name": "quote",
       "version": "0.6.13",
@@ -76849,7 +74999,11 @@
         "Apache-2.0",
         "MIT"
       ],
-      "license_file": "LICENSE-APACHE"
+      "license_file": "LICENSE-APACHE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "rand_chacha 0.2.2": {
       "name": "rand_chacha",
@@ -76907,7 +75061,11 @@
         "Apache-2.0",
         "MIT"
       ],
-      "license_file": "LICENSE-APACHE"
+      "license_file": "LICENSE-APACHE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "rand_chacha 0.3.1": {
       "name": "rand_chacha",
@@ -76966,7 +75124,11 @@
         "Apache-2.0",
         "MIT"
       ],
-      "license_file": "LICENSE-APACHE"
+      "license_file": "LICENSE-APACHE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "rand_core 0.3.1": {
       "name": "rand_core",
@@ -77745,75 +75907,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "randomkit 0.1.1": {
-      "name": "randomkit",
-      "version": "0.1.1",
-      "package_url": "https://github.com/stygstra/rust-randomkit",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/randomkit/0.1.1/download",
-          "sha256": "278094e13a8eff59f106bf2a2040d966bd5cddb0c5b639e7447bbd9b1689c15c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "randomkit",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "randomkit",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libc 0.2.155",
-              "target": "libc"
-            },
-            {
-              "id": "randomkit 0.1.1",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.1.1"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "MIT/BSD-3-Clause",
-      "license_ids": [
-        "BSD-3-Clause",
-        "MIT"
-      ],
-      "license_file": "LICENSE"
     },
     "rangemap 1.4.0": {
       "name": "rangemap",
@@ -79213,11 +77306,9 @@
             "rustls-tls",
             "rustls-tls-webpki-roots",
             "serde_json",
-            "socks",
             "stream",
             "tokio-native-tls",
             "tokio-rustls",
-            "tokio-socks",
             "tokio-util",
             "wasm-streams",
             "webpki-roots"
@@ -79351,10 +77442,6 @@
                 "target": "tokio_rustls"
               },
               {
-                "id": "tokio-socks 0.5.1",
-                "target": "tokio_socks"
-              },
-              {
                 "id": "tokio-util 0.7.11",
                 "target": "tokio_util"
               },
@@ -79407,7 +77494,11 @@
         "Apache-2.0",
         "MIT"
       ],
-      "license_file": "LICENSE-APACHE"
+      "license_file": "LICENSE-APACHE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "reqwest 0.12.4": {
       "name": "reqwest",
@@ -82230,7 +80321,11 @@
         "ISC",
         "MIT"
       ],
-      "license_file": "LICENSE-APACHE"
+      "license_file": "LICENSE-APACHE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "rustls 0.22.2": {
       "name": "rustls",
@@ -82340,7 +80435,11 @@
         "ISC",
         "MIT"
       ],
-      "license_file": "LICENSE-APACHE"
+      "license_file": "LICENSE-APACHE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "rustls 0.23.8": {
       "name": "rustls",
@@ -86535,7 +84634,11 @@
         "Apache-2.0",
         "MIT"
       ],
-      "license_file": "LICENSE-APACHE"
+      "license_file": "LICENSE-APACHE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "sha2 0.10.8": {
       "name": "sha2",
@@ -89974,80 +88077,6 @@
         "MIT"
       ],
       "license_file": "LICENSE"
-    },
-    "substring 1.4.5": {
-      "name": "substring",
-      "version": "1.4.5",
-      "package_url": "https://github.com/Anders429/substring",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/substring/1.4.5/download",
-          "sha256": "42ee6433ecef213b2e72f587ef64a2f5943e7cd16fbd82dbe8bc07486c534c86"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "substring",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "substring",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "substring 1.4.5",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "1.4.5"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 1.1.0",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
     },
     "subtle 2.5.0": {
       "name": "subtle",
@@ -93728,7 +91757,11 @@
         "Apache-2.0",
         "MIT"
       ],
-      "license_file": "LICENSE-APACHE"
+      "license_file": "LICENSE-APACHE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "tokio-rustls 0.25.0": {
       "name": "tokio-rustls",
@@ -93794,7 +91827,11 @@
         "Apache-2.0",
         "MIT"
       ],
-      "license_file": "LICENSE-APACHE"
+      "license_file": "LICENSE-APACHE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "tokio-rustls 0.26.0": {
       "name": "tokio-rustls",
@@ -93827,7 +91864,6 @@
         ],
         "crate_features": {
           "common": [
-            "logging",
             "ring",
             "tls12"
           ],
@@ -94339,12 +92375,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "default"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -94940,7 +92970,11 @@
       "license_ids": [
         "MIT"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "tower-http 0.5.2": {
       "name": "tower-http",
@@ -100114,83 +98148,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasm-smith 0.201.0": {
-      "name": "wasm-smith",
-      "version": "0.201.0",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-smith",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasm-smith/0.201.0/download",
-          "sha256": "61ff53a54a853f174b0df74cdb1553f1451e7bcdc23b26b1379f664ee1913d1a"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasm_smith",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasm_smith",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "wasmparser"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "anyhow 1.0.86",
-              "target": "anyhow"
-            },
-            {
-              "id": "arbitrary 1.3.2",
-              "target": "arbitrary"
-            },
-            {
-              "id": "flagset 0.4.3",
-              "target": "flagset"
-            },
-            {
-              "id": "indexmap 2.2.6",
-              "target": "indexmap"
-            },
-            {
-              "id": "leb128 0.2.5",
-              "target": "leb128"
-            },
-            {
-              "id": "wasm-encoder 0.201.0",
-              "target": "wasm_encoder"
-            },
-            {
-              "id": "wasmparser 0.201.0",
-              "target": "wasmparser"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.201.0"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "wasm-streams 0.4.0": {
       "name": "wasm-streams",
       "version": "0.4.0",
@@ -100291,7 +98248,11 @@
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": null
+      "license_file": null,
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "wasmparser 0.80.2": {
       "name": "wasmparser",
@@ -100329,7 +98290,11 @@
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "wasmparser 0.108.0": {
       "name": "wasmparser",
@@ -100380,7 +98345,11 @@
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "wasmparser 0.115.0": {
       "name": "wasmparser",
@@ -100431,7 +98400,11 @@
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "wasmparser 0.119.0": {
       "name": "wasmparser",
@@ -100486,7 +98459,11 @@
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": "LICENSE",
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "wasmparser 0.201.0": {
       "name": "wasmparser",
@@ -100615,7 +98592,11 @@
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": null
+      "license_file": null,
+      "alias_rule": {
+        "bzl": "@ic//bazel:external_crates.bzl",
+        "rule": "foo"
+      }
     },
     "wasmprinter 0.2.60": {
       "name": "wasmprinter",
@@ -105796,15 +103777,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "arrays",
-            "default",
-            "legacy",
-            "zdict_builder"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -105922,10 +103894,7 @@
         ],
         "crate_features": {
           "common": [
-            "arrays",
-            "legacy",
-            "std",
-            "zdict_builder"
+            "std"
           ],
           "selects": {}
         },
@@ -107705,16 +105674,13 @@
     "addr 0.15.6",
     "aide 0.13.2",
     "anyhow 1.0.86",
-    "arbitrary 1.3.2",
     "arc-swap 1.6.0",
     "arrayvec 0.7.4",
     "askama 0.12.1",
     "assert-json-diff 2.0.2",
-    "assert_cmd 2.0.12",
     "assert_matches 1.5.0",
     "async-recursion 1.0.5",
     "async-scoped 0.8.0",
-    "async-socks5 0.5.1",
     "async-stream 0.3.5",
     "async-trait 0.1.73",
     "axum 0.6.20",
@@ -107728,14 +105694,11 @@
     "bech32 0.9.1",
     "bincode 1.3.3",
     "bindgen 0.65.1",
-    "bip32 0.5.1",
     "bit-vec 0.6.3",
     "bitcoin 0.28.2",
     "bitcoincore-rpc 0.15.0",
-    "bitcoind 0.32.0",
     "bitflags 1.3.2",
     "bs58 0.4.0",
-    "bs58 0.5.0",
     "build-info 0.0.27",
     "build-info-build 0.0.27",
     "by_address 1.1.0",
@@ -107761,7 +105724,6 @@
     "colored 2.0.4",
     "comparable 0.5.4",
     "console 0.11.3",
-    "convert_case 0.6.0",
     "crc32fast 1.3.2",
     "criterion 0.5.1",
     "crossbeam 0.8.4",
@@ -107777,12 +105739,10 @@
     "either 1.8.1",
     "erased-serde 0.3.28",
     "escargot 0.5.7",
-    "ethabi 18.0.0",
     "ethers-core 2.0.8",
     "ethnum 1.3.2",
     "exec 0.3.1",
     "eyre 0.6.8",
-    "ff 0.12.1",
     "flate2 1.0.30",
     "form_urlencoded 1.2.0",
     "fs_extra 1.3.0",
@@ -107812,7 +105772,6 @@
     "hyperlocal-next 0.9.0",
     "ic-agent 0.35.0",
     "ic-btc-interface 0.2.0",
-    "ic-btc-test-utils 0.1.0",
     "ic-btc-validation 0.1.0",
     "ic-canister-log 0.2.0",
     "ic-cbor 2.3.0",
@@ -107840,7 +105799,6 @@
     "indicatif 0.17.5",
     "indoc 1.0.9",
     "inferno 0.11.19",
-    "insta 1.31.0",
     "instant-acme 0.3.2",
     "intmap 1.1.0",
     "ipnet 2.8.0",
@@ -107857,7 +105815,6 @@
     "leb128 0.2.5",
     "libc 0.2.155",
     "libflate 1.4.0",
-    "libfuzzer-sys 0.4.7",
     "libnss 0.5.0",
     "libsecp256k1 0.7.1",
     "little-loadshedder 0.1.0",
@@ -107874,12 +105831,9 @@
     "minicbor 0.19.1",
     "minicbor-derive 0.13.0",
     "mockall 0.12.1",
-    "mockito 1.2.0",
     "moka 0.12.1",
-    "more-asserts 0.3.1",
     "nftables 0.4.0",
     "nix 0.24.3",
-    "num 0.4.1",
     "num-bigint 0.4.5",
     "num-bigint-dig 0.8.4",
     "num-rational 0.2.4",
@@ -107897,7 +105851,6 @@
     "pairing 0.22.0",
     "parking_lot 0.12.1",
     "paste 1.0.14",
-    "pathdiff 0.2.1",
     "pcre2 0.2.6",
     "pem 1.1.1",
     "pin-project-lite 0.2.13",
@@ -107905,7 +105858,6 @@
     "pkcs8 0.10.2",
     "pkg-config 0.3.27",
     "pprof 0.13.0",
-    "predicates 3.0.4",
     "pretty-bytes 0.2.2",
     "pretty_assertions 1.4.0",
     "priority-queue 1.3.2",
@@ -107914,7 +105866,6 @@
     "prometheus 0.13.4",
     "prometheus-parse 0.2.4",
     "proptest 1.2.0",
-    "proptest-derive 0.3.0",
     "prost 0.12.6",
     "prost-build 0.12.6",
     "prost-derive 0.12.6",
@@ -107922,13 +105873,11 @@
     "publicsuffix 2.2.3",
     "quickcheck 1.0.3",
     "quinn 0.10.2",
-    "quinn-udp 0.5.1",
     "quote 1.0.35",
     "rand 0.8.5",
     "rand_chacha 0.3.1",
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
-    "randomkit 0.1.1",
     "ratelimit 0.9.1",
     "rayon 1.10.0",
     "rcgen 0.13.1",
@@ -107944,7 +105893,6 @@
     "rolling-file 0.2.0",
     "rsa 0.9.2",
     "rstack-self 0.3.0",
-    "rstest 0.19.0",
     "rusb 0.9.3",
     "rusqlite 0.28.0",
     "rust_decimal 1.30.0",
@@ -107954,15 +105902,11 @@
     "rustls 0.23.8",
     "rustls-native-certs 0.7.0",
     "rustls-pemfile 2.1.2",
-    "rustls-pki-types 1.7.0",
     "rustversion 1.0.14",
-    "rusty-fork 0.3.0",
     "schemars 0.8.16",
     "schnorr_fun 0.10.0",
     "scoped_threadpool 0.1.9",
     "scopeguard 1.2.0",
-    "scraper 0.17.1",
-    "semver 1.0.22",
     "serde 1.0.203",
     "serde-bytes-repr 0.1.5",
     "serde_bytes 0.11.14",
@@ -107974,13 +105918,11 @@
     "sha2 0.9.9",
     "sha2 0.10.8",
     "sha3 0.9.1",
-    "signal-hook 0.3.17",
     "signature 2.2.0",
     "simple_asn1 0.6.2",
     "simple_moving_average 1.0.2",
     "slog 2.7.0",
     "slog-async 2.8.0",
-    "slog-envlogger 2.2.0",
     "slog-json 2.6.1",
     "slog-scope 4.4.0",
     "slog-term 2.9.1",
@@ -107989,14 +105931,12 @@
     "strum 0.26.2",
     "strum_macros 0.26.2",
     "stubborn-io 0.3.2",
-    "substring 1.4.5",
     "subtle 2.5.0",
     "syn 1.0.109",
     "sync_wrapper 1.0.1",
     "tar 0.4.41",
     "tarpc 0.34.0",
     "tempfile 3.10.1",
-    "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",
     "thiserror 1.0.57",
@@ -108010,16 +105950,13 @@
     "tokio-rustls 0.26.0",
     "tokio-serde 0.8.0",
     "tokio-socks 0.5.1",
-    "tokio-test 0.4.2",
     "tokio-util 0.7.11",
-    "toml 0.5.11",
     "tonic 0.11.0",
     "tonic-build 0.11.0",
     "tower 0.4.13",
     "tower-http 0.4.4",
     "tower-http 0.5.2",
     "tower-request-id 0.3.0",
-    "tower-test 0.4.0",
     "tower_governor 0.1.0",
     "tracing 0.1.40",
     "tracing-appender 0.2.3",
@@ -108036,27 +105973,44 @@
     "vsock 0.4.0",
     "walkdir 2.5.0",
     "walrus 0.19.0",
-    "warp 0.3.6",
     "wasm-bindgen 0.2.87",
     "wasm-encoder 0.201.0",
-    "wasm-smith 0.201.0",
     "wasmparser 0.115.0",
     "wasmparser 0.201.0",
     "wasmprinter 0.2.60",
     "wasmtime 21.0.1",
     "wasmtime-environ 21.0.1",
-    "wast 53.0.0",
     "wat 1.0.67",
     "wee_alloc 0.4.5",
     "which 4.4.0",
-    "wiremock 0.5.19",
     "wsl 0.1.0",
-    "wycheproof 0.5.1",
     "x509-cert 0.2.5",
     "x509-parser 0.16.0",
     "yansi 0.5.1",
     "zeroize 1.8.1",
     "zstd 0.13.1"
   ],
-  "direct_dev_deps": []
+  "direct_dev_deps": [
+    "assert_cmd 2.0.12",
+    "bip32 0.5.1",
+    "bitcoind 0.32.0",
+    "convert_case 0.6.0",
+    "ic-btc-test-utils 0.1.0",
+    "insta 1.31.0",
+    "mockito 1.2.0",
+    "more-asserts 0.3.1",
+    "predicates 3.0.4",
+    "proptest-derive 0.3.0",
+    "rstest 0.19.0",
+    "rusty-fork 0.3.0",
+    "scraper 0.17.1",
+    "slog-envlogger 2.2.0",
+    "test-strategy 0.3.1",
+    "tokio-test 0.4.2",
+    "tower-test 0.4.0",
+    "warp 0.3.6",
+    "wast 53.0.0",
+    "wiremock 0.5.19",
+    "wycheproof 0.5.1"
+  ]
 }

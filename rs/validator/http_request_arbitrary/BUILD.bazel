@@ -13,12 +13,12 @@ MACRO_DEPENDENCIES = []
 
 ALIASES = {}
 
-rust_library(
-    name = "http_request_arbitrary",
-    srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
-    crate_name = "ic_validator_http_request_arbitrary",
-    edition = "2021",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
-)
+#rust_library(
+#    name = "http_request_arbitrary",
+#    srcs = glob(["src/**/*.rs"]),
+#    aliases = ALIASES,
+#    crate_name = "ic_validator_http_request_arbitrary",
+#    edition = "2021",
+#    proc_macro_deps = MACRO_DEPENDENCIES,
+#    deps = DEPENDENCIES,
+#)

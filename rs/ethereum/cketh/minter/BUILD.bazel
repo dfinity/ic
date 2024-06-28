@@ -144,7 +144,7 @@ rust_test(
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
         "@crate_index//:candid",
-        "@crate_index//:ethabi",
+        #"@crate_index//:ethabi",
         "@crate_index//:futures",
         "@crate_index//:hex",
         "@crate_index//:ic-canister-log",

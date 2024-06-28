@@ -84,6 +84,8 @@ rust_register_toolchains(
         "1.79.0",
         "nightly/2024-04-25",
     ],
+    sha256s = {"rustc-1.79.0-x86_64-apple-darwin.tar.xz": "3d8ee47604bd18367f0d6d76c10c326544270d3d9fd8fba9c75f75a1ba99aff0", "clippy-1.79.0-x86_64-apple-darwin.tar.xz": "046016dd8f288000bdef73b7c5a67c8d5c38a7a0ebcd4847fdb337b2932b8ff7", "cargo-1.79.0-x86_64-apple-darwin.tar.xz": "e1326c13b7437a72e061a2d662400c114ef87b73c45ef8823ea1b2bdc3140109", "llvm-tools-1.79.0-x86_64-apple-darwin.tar.xz": "a99d7b086d5fa2d377acb7921ee35b7dd06b4033ccc300de555ba8cbf03b2c93", "rust-std-1.79.0-x86_64-apple-darwin.tar.xz": "679a01c48e34fb6034dc1b90dc79d6a70ba5791e4d99bf5dfd872fe7bb3ec7cc"}
+
 )
 
 # Necessary for our ic-os Makefile build

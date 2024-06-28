@@ -367,6 +367,7 @@ members = [
     "rs/validator",
     "rs/validator/ingress_message",
     "rs/validator/ingress_message/test_canister",
+    # rs/validator/http_request_arbitrary missing
     "rs/workload_generator",
     "rs/xnet/endpoint",
     "rs/xnet/hyper",
@@ -455,6 +456,7 @@ clap = { version = "4.4.6", features = ["derive", "string"] }
 # see:
 # - https://github.com/cloudflare/cloudflare-rs/issues/222
 # - https://github.com/cloudflare/cloudflare-rs/issues/236
+# TODO: used?
 cloudflare = { git = "https://github.com/blind-oracle/cloudflare-rs.git", rev = "386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc", feature = [
     "rustls-tls",
 ] }
