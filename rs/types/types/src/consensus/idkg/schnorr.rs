@@ -211,17 +211,12 @@ pub struct ThresholdSchnorrSigInputsRef {
 
 impl fmt::Debug for ThresholdSchnorrSigInputsRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ThresholdSchnorrSigInputsRef {{ ")?;
-        write!(f, "derivation_path: {:?}", self.derivation_path)?;
-        write!(f, ", message_length: {} bytes", self.message.len())?;
-        write!(f, ", nonce: 0x{}", hex::encode(self.nonce.as_ref()))?;
-        write!(
-            f,
-            ", presig_transcript_ref: {:?}",
-            self.presig_transcript_ref
-        )?;
-        write!(f, " }}")?;
-        Ok(())
+        f.debug_struct("ThresholdSchnorrSigInputsRef")
+            .field("derivation_path", &self.derivation_path)
+            .field("message_length_in_bytes", &self.message.len())
+            .field("nonce", &hex::encode(self.nonce.as_ref()))
+            .field("presig_transcript_ref", &self.presig_transcript_ref)
+            .finish()
     }
 }
 
