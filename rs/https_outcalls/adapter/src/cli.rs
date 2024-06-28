@@ -294,7 +294,6 @@ pub mod test {
                     "Path": "/tmp/path.socket"
             },
             "logger": {
-                "node_id": 0,
                 "level": "info",
                 "format": "json",
                 "debug_overrides": []
@@ -318,7 +317,6 @@ pub mod test {
             http_request_timeout_secs: 50,
             incoming_source: IncomingSource::Path(PathBuf::from("/tmp/path.socket")),
             logger: ic_config::logger::Config {
-                node_id: 0,
                 level: slog::Level::Info,
                 format: ic_config::logger::LogFormat::Json,
                 debug_overrides: Vec::new(),
