@@ -480,10 +480,12 @@ impl ApiState {
                 .unwrap();
             agent.fetch_root_key().await.unwrap();
             let replica_uri = Uri::from_str(&replica_url).unwrap();
-            let replicas = vec![(agent, replica_uri.clone())];
-            let replica_host = replica_uri.host().unwrap_or("localhost");
+            let replicas = vec![(agent, replica_uri)];
+            let gateway_domain = http_gateway_config
+                .domain
+                .unwrap_or("localhost".to_string());
             let aliases: Vec<String> = vec![];
-            let suffixes: Vec<String> = vec![replica_host.to_string()];
+            let suffixes: Vec<String> = vec![gateway_domain];
             let resolver = ResolverState {
                 dns: DnsCanisterConfig::new(aliases, suffixes).unwrap(),
             };
