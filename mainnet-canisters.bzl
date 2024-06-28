@@ -1,5 +1,5 @@
 """
-This module defines Bazel targets for the mainnet versions of the core NNS and SNS canisters.
+This module defines Bazel targets for the mainnet versions of the core NNS, SNS, and ck canisters.
 """
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
@@ -22,6 +22,10 @@ CANISTER_NAME_TO_WASM_METADATA = {
     "sns_index": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "110352d412a97dce090dd902e9dbdc874211d0e7a5179b6814ec1694e45a2807"),
     "sns_ledger": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "26de3e745b0e98cc83850ebf0f8fd1a574905bf7c73d52fcf61ee3f35e4875e1"),
     "sns_archive": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "ea2df4e0e3f4e5e91d43baf281728b2443ab3236ba473d78913cfbe2b5763d3c"),
+    "ckbtc_index": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "110352d412a97dce090dd902e9dbdc874211d0e7a5179b6814ec1694e45a2807"),
+    "ckbtc_ledger": ("35e4f2c583b0657aa730740b5c8aca18a8718b8e", "26de3e745b0e98cc83850ebf0f8fd1a574905bf7c73d52fcf61ee3f35e4875e1"),
+    "cketh_index": ("b43280208c32633a29657a1051660324e88a373d", "23b3ee69f3ca906a85b5cf4668a487d9519095121d8d4ccda7a3da4369238311"),
+    "cketh_ledger": ("b43280208c32633a29657a1051660324e88a373d", "d58fc4d707861d93e71a2c5b39353bee703942a94d2f400a6da1cd6a0211c589"),
 }
 
 def canister_url(git_commit_id, filename):
@@ -170,4 +174,43 @@ def mainnet_sns_canisters():
         downloaded_file_path = "ic-icrc1-index-ng.wasm.gz",
         sha256 = sha256,
         url = canister_url(git_commit_id, "ic-icrc1-index-ng.wasm.gz"),
+    )
+
+def mainnet_fi_canisters():
+    """
+    Provides Bazel targets for canisters published to the mainnet for use in testing by the FI team.
+
+    This includes: ckBTC (64-bit tokens), ckETH (256-bit tokens).
+    """
+
+    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["ckbtc_ledger"]
+    http_file(
+        name = "mainnet_ckbtc-ledger",
+        downloaded_file_path = "ic-icrc1-ledger.wasm.gz",
+        sha256 = sha256,
+        url = canister_url(git_commit_id, "ic-icrc1-ledger.wasm.gz"),
+    )
+
+    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["ckbtc_index"]
+    http_file(
+        name = "mainnet_ckbtc-index-ng",
+        downloaded_file_path = "ic-icrc1-index-ng.wasm.gz",
+        sha256 = sha256,
+        url = canister_url(git_commit_id, "ic-icrc1-index-ng.wasm.gz"),
+    )
+
+    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["cketh_ledger"]
+    http_file(
+        name = "mainnet_cketh-ledger",
+        downloaded_file_path = "ic-icrc1-ledger-u256.wasm.gz",
+        sha256 = sha256,
+        url = canister_url(git_commit_id, "ic-icrc1-ledger-u256.wasm.gz"),
+    )
+
+    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["cketh_index"]
+    http_file(
+        name = "mainnet_cketh-index-ng",
+        downloaded_file_path = "ic-icrc1-index-ng-u256.wasm.gz",
+        sha256 = sha256,
+        url = canister_url(git_commit_id, "ic-icrc1-index-ng-u256.wasm.gz"),
     )

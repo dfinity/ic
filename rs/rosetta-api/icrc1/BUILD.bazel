@@ -83,12 +83,16 @@ rust_test(
         srcs = ["tests/upgrade_downgrade.rs"],
         crate_features = features,
         data = [
+            "//rs/rosetta-api/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz",
             "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
-            "@mainnet_ic-icrc1-ledger//file",
+            "@" + mainnet_ledger + "//file",
+            "@" + mainnet_index + "//file",
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1",
-            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
+            "IC_ICRC1_INDEX_NG_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @" + mainnet_index + "//file)",
+            "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz)",
+            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @" + mainnet_ledger + "//file)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
         },
         deps = [
@@ -113,14 +117,18 @@ rust_test(
             "@crate_index//:serde_bytes",
         ] + extra_deps,
     )
-    for (name_suffix, features, extra_deps) in [
+    for (name_suffix, mainnet_ledger, mainnet_index, features, extra_deps) in [
         (
             "",
+            "mainnet_ckbtc-ledger",
+            "mainnet_ckbtc-index-ng",
             [],
             ["//rs/rosetta-api/icrc1/tokens_u64"],
         ),
         (
             "_u256",
+            "mainnet_cketh-ledger",
+            "mainnet_cketh-index-ng",
             ["u256-tokens"],
             ["//rs/rosetta-api/icrc1/tokens_u256"],
         ),
