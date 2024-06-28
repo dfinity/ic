@@ -277,6 +277,7 @@ fat32_image = rule(
 
 def _ext4_image_impl(ctx):
     tool = ctx.files._build_ext4_image[0]
+    diroid = ctx.files._diroid[0]
     dflate = ctx.files._dflate[0]
 
     out = ctx.actions.declare_file(ctx.label.name)
@@ -294,6 +295,8 @@ def _ext4_image_impl(ctx):
         ctx.attr.partition_size,
         "-p",
         ctx.attr.subdir,
+        "--diroid",
+        diroid.path,
         "-d",
         dflate.path,
     ]
@@ -309,7 +312,7 @@ def _ext4_image_impl(ctx):
         arguments = args,
         inputs = inputs,
         outputs = [out],
-        tools = [tool, dflate],
+        tools = [tool, diroid, dflate],
     )
 
     return [DefaultInfo(files = depset([out]))]
@@ -334,6 +337,10 @@ ext4_image = rule(
         "_build_ext4_image": attr.label(
             allow_files = True,
             default = ":build_ext4_image.py",
+        ),
+        "_diroid": attr.label(
+            allow_files = True,
+            default = "//rs/ic_os/diroid",
         ),
         "_dflate": attr.label(
             allow_files = True,
