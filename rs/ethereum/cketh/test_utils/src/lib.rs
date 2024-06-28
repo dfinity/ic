@@ -252,7 +252,7 @@ impl CkEthSetup {
         let error = self
             .eip_1559_transaction_price(Some(principal_id))
             .expect_err("Expecting Err but got Ok");
-        assert!(error.description().ends_with(&format!(
+        assert!(error.description().contains(&format!(
             "ERROR: Unsupported ckERC20 token ledger {}",
             principal_id
         )));

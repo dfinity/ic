@@ -441,7 +441,7 @@ impl ApiState {
         }
 
         let port = http_gateway_config.listen_at.unwrap_or_default();
-        let addr = format!("0.0.0.0:{}", port);
+        let addr = format!("[::]:{}", port);
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
             .unwrap_or_else(|_| panic!("Failed to start HTTP gateway on port {}", port));
@@ -480,10 +480,12 @@ impl ApiState {
                 .unwrap();
             agent.fetch_root_key().await.unwrap();
             let replica_uri = Uri::from_str(&replica_url).unwrap();
-            let replicas = vec![(agent, replica_uri.clone())];
-            let replica_host = replica_uri.host().unwrap_or("localhost");
+            let replicas = vec![(agent, replica_uri)];
+            let gateway_domain = http_gateway_config
+                .domain
+                .unwrap_or("localhost".to_string());
             let aliases: Vec<String> = vec![];
-            let suffixes: Vec<String> = vec![replica_host.to_string()];
+            let suffixes: Vec<String> = vec![gateway_domain];
             let resolver = ResolverState {
                 dns: DnsCanisterConfig::new(aliases, suffixes).unwrap(),
             };

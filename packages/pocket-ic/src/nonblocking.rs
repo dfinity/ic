@@ -315,6 +315,7 @@ impl PocketIc {
         let http_gateway_config = HttpGatewayConfig {
             listen_at,
             forward_to: HttpGatewayBackend::PocketIcInstance(self.instance_id),
+            domain: None,
         };
         let res = self
             .reqwest_client

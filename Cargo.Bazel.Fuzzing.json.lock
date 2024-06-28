@@ -1,5 +1,5 @@
 {
-  "checksum": "6b7514368dc9f8e0002c9729d94fe39284d0dd981ec2245d7cb711e64b408b42",
+  "checksum": "c42b13e3ef8f4290c1ed117050db13a48afea11b41690ca45e45eccbcc08f652",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17364,10 +17364,6 @@
               "alias": "hyper_rustls_0_27_x"
             },
             {
-              "id": "hyper-socks2 0.8.0",
-              "target": "hyper_socks2"
-            },
-            {
               "id": "hyper-util 0.1.3",
               "target": "hyper_util"
             },
@@ -17428,7 +17424,7 @@
               "target": "ic_response_verification"
             },
             {
-              "id": "ic-stable-structures 0.6.4",
+              "id": "ic-stable-structures 0.6.5",
               "target": "ic_stable_structures"
             },
             {
@@ -27047,96 +27043,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "hyper-socks2 0.8.0": {
-      "name": "hyper-socks2",
-      "version": "0.8.0",
-      "package_url": "https://github.com/ark0f/hyper-socks2",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/hyper-socks2/0.8.0/download",
-          "sha256": "cc38166fc2732d450e9372388d269eb38ff0b75a3cfb4c542e65b2f6893629c4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hyper_socks2",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "hyper_socks2",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "hyper-rustls",
-            "rustls",
-            "rustls-native-certs",
-            "rusttls"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "async-socks5 0.5.1",
-              "target": "async_socks5"
-            },
-            {
-              "id": "futures 0.3.30",
-              "target": "futures"
-            },
-            {
-              "id": "http 0.2.12",
-              "target": "http"
-            },
-            {
-              "id": "hyper 0.14.27",
-              "target": "hyper"
-            },
-            {
-              "id": "hyper-rustls 0.24.2",
-              "target": "hyper_rustls"
-            },
-            {
-              "id": "rustls 0.21.12",
-              "target": "rustls",
-              "alias": "rusttls"
-            },
-            {
-              "id": "rustls-native-certs 0.6.3",
-              "target": "rustls_native_certs"
-            },
-            {
-              "id": "thiserror 1.0.57",
-              "target": "thiserror"
-            },
-            {
-              "id": "tokio 1.38.0",
-              "target": "tokio"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.8.0"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE.md"
-    },
     "hyper-timeout 0.4.1": {
       "name": "hyper-timeout",
       "version": "0.4.1",
@@ -28897,14 +28803,14 @@
       ],
       "license_file": null
     },
-    "ic-stable-structures 0.6.4": {
+    "ic-stable-structures 0.6.5": {
       "name": "ic-stable-structures",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "package_url": "https://github.com/dfinity/stable-structures",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-stable-structures/0.6.4/download",
-          "sha256": "07e2282054c8ddf0cb2a7abf5c174c373917b4345c9a096ae4aa7f7185cdcdc7"
+          "url": "https://static.crates.io/crates/ic-stable-structures/0.6.5/download",
+          "sha256": "03f3044466a69802de74e710dc0300b706a05696a0531c942ca856751a13b0db"
         }
       },
       "targets": [
@@ -28958,7 +28864,7 @@
           ],
           "selects": {}
         },
-        "version": "0.6.4"
+        "version": "0.6.5"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -34740,7 +34646,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.102",
+                "id": "openssl-sys 0.9.93",
                 "target": "openssl_sys"
               }
             ]
@@ -34783,7 +34689,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.102",
+                "id": "openssl-sys 0.9.93",
                 "target": "openssl_sys"
               }
             ]
@@ -40587,14 +40493,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl-sys 0.9.102": {
+    "openssl-sys 0.9.93": {
       "name": "openssl-sys",
-      "version": "0.9.102",
+      "version": "0.9.93",
       "package_url": "https://github.com/sfackler/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl-sys/0.9.102/download",
-          "sha256": "c597637d56fbc83893a35eb0dd04b2b8e7a50c91e64e9493e398b5df4fb45fa2"
+          "url": "https://static.crates.io/crates/openssl-sys/0.9.93/download",
+          "sha256": "db4d56a4c0478783083cfafcc42493dd4a981d41669da64b4572a2a089b51b1d"
         }
       },
       "targets": [
@@ -40635,14 +40541,14 @@
               "target": "libc"
             },
             {
-              "id": "openssl-sys 0.9.102",
+              "id": "openssl-sys 0.9.93",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.9.102"
+        "version": "0.9.93"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -77312,7 +77218,6 @@
     "hyper 1.3.1",
     "hyper-rustls 0.24.2",
     "hyper-rustls 0.27.1",
-    "hyper-socks2 0.8.0",
     "hyper-util 0.1.3",
     "hyperlocal-next 0.9.0",
     "ic-agent 0.35.0",
@@ -77329,7 +77234,7 @@
     "ic-http-certification 2.3.0",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 2.3.0",
-    "ic-stable-structures 0.6.4",
+    "ic-stable-structures 0.6.5",
     "ic-test-state-machine-client 3.0.1",
     "ic-utils 0.35.0",
     "ic-wasm 0.7.1",

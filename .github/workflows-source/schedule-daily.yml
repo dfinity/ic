@@ -69,7 +69,7 @@ jobs:
     <<: *dind-large-setup
     timeout-minutes: 720 # 12 hours
     # TODO: disable in GitLab before enabling here
-    if: ${{ && false }}
+    if: ${{ false }}
     strategy:
       matrix:
         targets: ["//rs/crypto/...", "//rs/state_manager/..."]

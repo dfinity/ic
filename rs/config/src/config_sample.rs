@@ -191,9 +191,6 @@ pub const SAMPLE_CONFIG: &str = r#"
     // Configuration of the logging setup.
     // ===================================
     logger: {
-        // The node id to append to log lines. [deprecated]
-        node_id: 100,
-
         // The log level to use.
         // EXAMPLE: level: "critical",
         // EXAMPLE: level: "error",
@@ -224,9 +221,6 @@ pub const SAMPLE_CONFIG: &str = r#"
     // Configuration of the logging setup for the orchestrator.
     // ===================================
     orchestrator_logger: {
-        // The node id to append to log lines. [deprecated]
-        node_id: 100,
-
         // The log level to use.
         // EXAMPLE: level: "critical",
         // EXAMPLE: level: "error",
@@ -257,9 +251,6 @@ pub const SAMPLE_CONFIG: &str = r#"
     // Configuration of the logging setup for the CSP vault.
     // ===================================
     csp_vault_logger: {
-        // The node id to append to log lines. [deprecated]
-        node_id: 100,
-
         // The log level to use.
         // EXAMPLE: level: "critical",
         // EXAMPLE: level: "error",

@@ -1,7 +1,8 @@
 //! Replica -- Internet Computer
 
 use ic_async_utils::{abort_on_panic, shutdown_signal};
-use ic_config::Config;
+use ic_config::logger::LogFormat;
+use ic_config::{logger::Config as LoggingConfig, Config};
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_logger::{info, new_replica_logger_from_config};
@@ -9,6 +10,7 @@ use ic_metrics::MetricsRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
 use ic_tracing::ReloadHandles;
+use ic_types::NodeId;
 use ic_types::{
     consensus::CatchUpPackage, replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion,
     SubnetId,
@@ -21,6 +23,7 @@ use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
 use tracing::Level;
 use tracing_subscriber::{fmt, fmt::writer::MakeWriterExt, layer::SubscriberExt, Layer};
+use tracing_subscriber::fmt::format::Format;
 
 #[cfg(target_os = "linux")]
 mod jemalloc_metrics;
@@ -56,6 +59,56 @@ fn get_replica_binary_hash() -> Result<(PathBuf, String), String> {
         .map_err(|e| format!("Failed to calculate hash for replica binary: {:?}", e))?;
 
     Ok((replica_binary_path, hex::encode(hasher.finish())))
+}
+
+enum InnerFormat {
+    Full(Format<fmt::format::Full>),
+    Json(Format<fmt::format::Json>),
+}
+
+struct LogFormatter {
+    inner: InnerFormat,
+    node_id: NodeId,
+    subnet_id: SubnetId,
+}
+
+impl LogFormatter {
+    fn new(format: LogFormat, node_id: NodeId, subnet_id: SubnetId) -> Self {
+        let inner = match format {
+            LogFormat::Json => InnerFormat::Json(fmt::format::json()),
+            LogFormat::TextFull => InnerFormat::Full(fmt::format::format()),
+        };
+        Self {
+            inner,
+            node_id,
+            subnet_id,
+        }
+    }
+}
+
+impl<S, N> fmt::format::FormatEvent<S, N> for LogFormatter
+where
+    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+    N: for<'a> tracing_subscriber::fmt::FormatFields<'a> + 'static,
+{
+    // Required method
+    fn format_event(
+        &self,
+        ctx: &fmt::FmtContext<'_, S, N>,
+        mut writer: fmt::format::Writer<'_>,
+        event: &tracing::Event<'_>,
+    ) -> std::fmt::Result {
+        write!(
+            &mut writer,
+            "node_id: {} subnet_id:{} ",
+            self.node_id, self.subnet_id
+        )?;
+
+        match &self.inner {
+            InnerFormat::Json(f) => f.format_event(ctx, writer, event),
+            InnerFormat::Full(f) => f.format_event(ctx, writer, event),
+        }
+    }
 }
 
 fn main() -> io::Result<()> {
@@ -240,18 +293,27 @@ fn main() -> io::Result<()> {
     //   2. Layers for generating flamegraphs
     //   3. Jeager exporter if enabled
 
+    //let log_formatter = LogFormatter::new(config.logger.format);
+
+    let log_formatter = fmt::format::format()
+        .json()
+        .with_timer(fmt::time::UtcTime::rfc_3339())
+        .with_level(true)
+        .with_file(true)
+        .with_line_number(true);
+
     let (non_blocking_log_writer, _log_writer_guard) =
         tracing_appender::non_blocking(std::io::stdout());
     let non_blocking_log_writer = non_blocking_log_writer.with_max_level(Level::INFO);
 
     let fmt_layer = fmt::Layer::new()
-        .with_filter()
         .with_timer(fmt::time::UtcTime::rfc_3339())
         .with_span_events(fmt::format::FmtSpan::NONE)
         .with_level(true)
         .with_file(true)
         .with_line_number(true)
         .with_writer(non_blocking_log_writer)
+        .event_format(log_formatter)
         .json()
         .boxed();
 
