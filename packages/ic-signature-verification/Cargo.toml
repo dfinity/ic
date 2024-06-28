@@ -15,6 +15,7 @@ documentation.workspace = true
 [dependencies]
 candid = "0.10"
 ic-cbor = "2.5"
+ic-canister-sig-creation = "1.0"
 ic-certification = "2.5"
 ic-verify-bls-signature = "0.2"
 serde = { version = "1.0", features = ["derive"] }

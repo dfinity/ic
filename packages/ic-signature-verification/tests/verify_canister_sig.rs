@@ -3,7 +3,7 @@ use candid::Principal;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 use ic_crypto_test_utils_canister_sigs::new_valid_sig_and_crypto_component;
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
-use ic_signature_verification::canister_sig_util::CanisterSigPublicKey;
+use ic_canister_sig_creation::CanisterSigPublicKey;
 use ic_types::crypto::threshold_sig::{IcRootOfTrust, ThresholdSigPublicKey};
 use ic_types::crypto::Signable;
 
