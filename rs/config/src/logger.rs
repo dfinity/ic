@@ -39,7 +39,6 @@ pub enum LogDestination {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
-    pub node_id: u64,
     #[serde(with = "LevelDef")]
     pub level: Level,
 
@@ -66,7 +65,6 @@ fn default_block_on_overflow() -> bool {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            node_id: 100,
             level: Level::Debug,
             format: LogFormat::TextFull,
             debug_overrides: vec![],
