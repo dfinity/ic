@@ -450,9 +450,9 @@ impl From<BlockNumber> for BlockSpec {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, CandidType)]
 pub struct Block {
     #[serde(rename = "baseFeePerGas")]
-    pub base_fee_per_gas: Wei,
+    pub base_fee_per_gas: Option<Wei>,
     pub number: BlockNumber,
-    pub difficulty: CheckedAmountOf<()>,
+    pub difficulty: Option<CheckedAmountOf<()>>,
     #[serde(rename = "extraData")]
     pub extra_data: String,
     #[serde(rename = "gasLimit")]
@@ -478,7 +478,7 @@ pub struct Block {
     #[serde(rename = "timestamp")]
     pub timestamp: CheckedAmountOf<()>,
     #[serde(rename = "totalDifficulty")]
-    pub total_difficulty: CheckedAmountOf<()>,
+    pub total_difficulty: Option<CheckedAmountOf<()>>,
     #[serde(default)]
     pub transactions: Vec<String>,
     #[serde(rename = "transactionsRoot")]
