@@ -59,7 +59,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     let data_provider = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&data_provider) as Arc<_>));
 
-    let threshold_keys = vec![
+    let threshold_keys_ids = vec![
         MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "ecdsa_test_key".to_string(),
