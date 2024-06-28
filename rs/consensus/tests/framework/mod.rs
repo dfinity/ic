@@ -77,11 +77,6 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     let subnet_record = SubnetRecordBuilder::from(node_ids)
         .with_dkg_interval_length(19)
         .with_chain_key_config(ChainKeyConfig {
-            // key_configs: vec![KeyConfig {
-            //     key_id: ecdsa_key_id.clone(),
-            //     pre_signatures_to_create_in_advance: 4,
-            //     max_queue_size: 40,
-            // }],
             key_configs: threshold_keys
                 .iter()
                 .map(|key_id| KeyConfig {
