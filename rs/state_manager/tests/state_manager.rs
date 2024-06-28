@@ -3446,7 +3446,9 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
                 let mut tip = dst_state_manager.take_tip().1;
                 let state = expected_state.take();
                 // Because `take_tip()` modifies the `prev_state_hash`, we change it back to compare the rest of state.
-                tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
+                tip.metadata
+                    .prev_state_hash
+                    .clone_from(&state.metadata.prev_state_hash);
                 assert_eq!(tip, *state.as_ref());
 
                 assert_no_remaining_chunks(dst_metrics);
