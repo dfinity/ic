@@ -547,7 +547,8 @@ impl ApiState {
                 loop {
                     let start = Instant::now();
                     let old = std::mem::replace(&mut now, Instant::now());
-                    advance_time += now.duration_since(old);
+                    let elapsed = now.duration_since(old);
+                    advance_time += elapsed * 86400;
                     let cur_op = AdvanceTimeAndTick(advance_time);
                     let retry_immediately = match Self::update_instances_with_timeout(
                         instances.clone(),
