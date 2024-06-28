@@ -4,7 +4,7 @@
 
 use crate::config::Config;
 use clap::Parser;
-use http::Uri;
+use reqwest::Url;
 use slog::Level;
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
@@ -48,17 +48,20 @@ impl Cli {
         let config: Config =
             serde_json::from_reader(file).map_err(|err| CliError::Deserialize(err.to_string()))?;
 
-        // Validate proxy URL.
-        // Check for general validation errors.
-        let uri = &config
-            .socks_proxy
-            .parse::<Uri>()
-            .map_err(|_| CliError::Validation("Failed to parse socks_proxy url".to_string()))?;
-        // scheme, host, port should be present. 'socks5://someproxy.com:80'
-        if uri.scheme().is_none() || uri.host().is_none() || uri.port().is_none() {
-            return Err(CliError::Validation(
-                "Make sure socks proxy url contains (scheme,host,port)".to_string(),
-            ));
+        // The socks_proxy default value is an empty string which causes the socks proxy client to be None.
+        if !config.socks_proxy.is_empty() {
+            // Validate proxy URL.
+            // Check for general validation errors.
+            let uri = &config
+                .socks_proxy
+                .parse::<Url>()
+                .map_err(|_| CliError::Validation("Failed to parse socks_proxy url".to_string()))?;
+            // scheme, host, port should be present. 'socks5://someproxy.com:80'
+            if uri.scheme().is_empty() || uri.host().is_none() || uri.port().is_none() {
+                return Err(CliError::Validation(
+                    "Make sure socks proxy url contains (scheme,host,port)".to_string(),
+                ));
+            }
         }
 
         Ok(config)
@@ -200,7 +203,7 @@ pub mod test {
         assert!(result.is_err());
         let error = result.unwrap_err();
         let matches = match error {
-            CliError::Validation(message) => message.contains("Failed to parse socks_proxy url"),
+            CliError::Validation(message) => message.contains("Make sure socks proxy url contains"),
             _ => false,
         };
         assert!(matches);
