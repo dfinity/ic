@@ -10,6 +10,7 @@ use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::convert::{AsMut, AsRef, TryFrom, TryInto};
+use std::fmt;
 use std::hash::Hash;
 
 use super::{
@@ -199,13 +200,29 @@ impl TryFrom<&pb::PreSignatureTranscriptRef> for PreSignatureTranscriptRef {
 
 /// Counterpart of ThresholdSchnorrSigInputs that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ThresholdSchnorrSigInputsRef {
     pub derivation_path: ExtendedDerivationPath,
     pub message: Vec<u8>,
     pub nonce: Randomness,
     pub presig_transcript_ref: PreSignatureTranscriptRef,
+}
+
+impl fmt::Debug for ThresholdSchnorrSigInputsRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ThresholdSchnorrSigInputsRef {{ ")?;
+        write!(f, "derivation_path: {:?}", self.derivation_path)?;
+        write!(f, ", message_length: {} bytes", self.message.len())?;
+        write!(f, ", nonce: 0x{}", hex::encode(self.nonce.as_ref()))?;
+        write!(
+            f,
+            ", presig_transcript_ref: {:?}",
+            self.presig_transcript_ref
+        )?;
+        write!(f, " }}")?;
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]
