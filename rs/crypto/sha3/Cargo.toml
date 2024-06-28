@@ -7,7 +7,7 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-sha3 = "0.9.1"
+sha3 = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }

@@ -19,7 +19,7 @@ num-bigint = "0.4"
 num-traits = { workspace = true }
 serde_bytes = { workspace = true }
 serde = { workspace = true }
-sha2 = "0.10"
+sha2 = { workspace = true }
 itertools ={ workspace = true }
 strum = {workspace = true}
 [dev-dependencies]

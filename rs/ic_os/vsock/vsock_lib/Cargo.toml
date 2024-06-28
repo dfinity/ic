@@ -12,6 +12,6 @@ tempfile = { workspace = true }
 vsock = "0.4"
 reqwest = { workspace = true }
 regex = { workspace = true }
-sha2 = "0.10"
+sha2 = { workspace = true }
 anyhow = { workspace = true }
 rusb = "0.9"

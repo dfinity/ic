@@ -1872,7 +1872,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
- "sha2 0.10.8",
+ "sha2 0.9.9",
  "thiserror",
  "tokio",
  "tower",
@@ -1931,7 +1931,7 @@ dependencies = [
  "publicsuffix",
  "serde",
  "serde_cbor",
- "sha2 0.10.8",
+ "sha2 0.9.9",
  "thiserror",
 ]
 
@@ -3046,7 +3046,7 @@ dependencies = [
  "rsa",
  "serde",
  "serde_json",
- "sha2 0.10.8",
+ "sha2 0.9.9",
  "tar",
  "tempfile",
  "tokio",
@@ -6461,7 +6461,7 @@ dependencies = [
  "rsa",
  "rustls 0.21.12",
  "serde",
- "sha2 0.10.8",
+ "sha2 0.9.9",
  "simple_asn1",
  "slog",
  "strum 0.26.2",
@@ -6516,7 +6516,7 @@ dependencies = [
  "hkdf",
  "pem 1.1.1",
  "rand 0.8.5",
- "sha2 0.10.8",
+ "sha2 0.9.9",
  "wycheproof",
  "zeroize",
 ]
@@ -6717,7 +6717,7 @@ dependencies = [
  "rsa",
  "serde",
  "serde_json",
- "sha2 0.10.8",
+ "sha2 0.9.9",
  "simple_asn1",
  "wycheproof",
 ]
@@ -6941,7 +6941,7 @@ dependencies = [
 name = "ic-crypto-internal-sha2"
 version = "0.9.0"
 dependencies = [
- "sha2 0.10.8",
+ "sha2 0.9.9",
 ]
 
 [[package]]
@@ -7031,7 +7031,7 @@ dependencies = [
  "p256",
  "rand 0.8.5",
  "schnorr_fun",
- "sha2 0.10.8",
+ "sha2 0.9.9",
 ]
 
 [[package]]
@@ -12603,7 +12603,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_bytes",
- "sha2 0.10.8",
+ "sha2 0.9.9",
  "strum 0.26.2",
 ]
 
@@ -13273,7 +13273,7 @@ dependencies = [
  "ic-certified-map",
  "serde",
  "serde_cbor",
- "sha2 0.10.8",
+ "sha2 0.9.9",
 ]
 
 [[package]]
@@ -14321,7 +14321,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with 1.14.0",
- "sha2 0.10.8",
+ "sha2 0.9.9",
  "utils",
 ]
 
@@ -15509,7 +15509,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
- "sha2 0.10.8",
+ "sha2 0.9.9",
  "tokio",
  "tracing",
  "tracing-appender",
@@ -18957,7 +18957,7 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "serde_yaml 0.9.34+deprecated",
- "sha2 0.10.8",
+ "sha2 0.9.9",
  "slog",
  "slog-async",
  "slog-term",
@@ -20076,7 +20076,7 @@ dependencies = [
  "rusb",
  "serde",
  "serde_json",
- "sha2 0.10.8",
+ "sha2 0.9.9",
  "tempfile",
  "vsock",
 ]
