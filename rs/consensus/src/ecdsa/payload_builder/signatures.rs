@@ -11,7 +11,7 @@ use ic_types::{
     Time,
 };
 
-use crate::{consensus::metrics::EcdsaPayloadMetrics, ecdsa::signer::EcdsaSignatureBuilder};
+use crate::{ecdsa::metrics::EcdsaPayloadMetrics, ecdsa::signer::EcdsaSignatureBuilder};
 
 /// Helper to create a reject response to the management canister
 /// with the given code and message

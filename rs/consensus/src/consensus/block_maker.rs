@@ -1,12 +1,12 @@
 #![deny(missing_docs)]
 use crate::{
     consensus::{
-        metrics::{BlockMakerMetrics, EcdsaPayloadMetrics},
+        metrics::BlockMakerMetrics,
         status::{self, Status},
         ConsensusCrypto,
     },
     dkg::payload_builder::create_payload as create_dkg_payload,
-    ecdsa,
+    ecdsa::{self, metrics::EcdsaPayloadMetrics},
 };
 use ic_consensus_utils::{
     find_lowest_ranked_proposals, get_block_hash_string, get_notarization_delay_settings,
