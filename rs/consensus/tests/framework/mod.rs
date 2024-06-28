@@ -204,7 +204,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
             .add(
                 &ic_registry_keys::make_chain_key_signing_subnet_list_key(&key_id),
                 registry_version,
-                Some(ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList {
+                Some(ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList {
                     subnets: vec![subnet_id_into_protobuf(subnet_id)],
                 }),
             )
