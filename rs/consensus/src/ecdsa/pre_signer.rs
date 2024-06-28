@@ -1,7 +1,7 @@
 //! The pre signature process manager
 
-use crate::consensus::metrics::{timed_call, EcdsaPayloadMetrics, EcdsaPreSignerMetrics};
 use crate::ecdsa::complaints::EcdsaTranscriptLoader;
+use crate::ecdsa::metrics::{timed_call, EcdsaPayloadMetrics, EcdsaPreSignerMetrics};
 use crate::ecdsa::utils::{load_transcripts, transcript_op_summary, EcdsaBlockReaderImpl};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;

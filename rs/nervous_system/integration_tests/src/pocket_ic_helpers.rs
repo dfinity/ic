@@ -2338,7 +2338,7 @@ pub mod sns {
         ///        or `auto_finalize_swap_response`.
         ///     2. `auto_finalize_swap_response` does not match the expected pattern for a *committed* SNS
         ///        Swap's `auto_finalize_swap_response`. In particular:
-        ///        - After NNS1-3117 `set_dapp_controllers_call_result` must be `Some` and not have any errors, but for now it can take any value
+        ///        - `set_dapp_controllers_call_result` must be `Some`
         ///        - `sweep_sns_result` must be `Some`.
         /// * `Err` if `auto_finalize_swap_response` contains any errors.
         pub fn is_auto_finalization_status_committed_or_err(
@@ -2360,8 +2360,7 @@ pub mod sns {
                     sweep_sns_result: Some(_),
                     claim_neuron_result: Some(_),
                     set_mode_call_result: Some(_),
-                    // TODO(NNS1-3117): set_dapp_controllers_call_result should be required to be Some and not have any errors
-                    set_dapp_controllers_call_result: _,
+                    set_dapp_controllers_call_result: Some(_),
                     settle_community_fund_participation_result: None,
                     error_message: None,
                 }

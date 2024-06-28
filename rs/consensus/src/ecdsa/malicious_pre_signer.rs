@@ -1,6 +1,6 @@
 //! The malicious pre signature process manager
 
-use crate::consensus::metrics::EcdsaPreSignerMetrics;
+use crate::ecdsa::metrics::EcdsaPreSignerMetrics;
 use crate::ecdsa::{
     pre_signer::EcdsaPreSignerImpl, utils::transcript_op_summary, EcdsaBlockReaderImpl,
 };

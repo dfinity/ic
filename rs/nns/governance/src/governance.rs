@@ -3362,28 +3362,8 @@ impl Governance {
         by: &NeuronIdOrSubaccount,
         caller: &PrincipalId,
     ) -> Result<NeuronProto, GovernanceError> {
-        let neuron_clone =
-            self.with_neuron_by_neuron_id_or_subaccount(by, |neuron| neuron.clone())?;
-        // Check that the caller is authorized for the requested
-        // neuron (controller or hot key).
-        if !neuron_clone.is_authorized_to_vote(caller) {
-            // If not, check if the caller is authorized for any of
-            // the followees of the requested neuron.
-            let followee_neuron_ids = neuron_clone.neuron_managers();
-
-            let caller_can_vote_with_followee =
-                followee_neuron_ids.iter().any(|followee_neuron_id| {
-                    self.with_neuron(followee_neuron_id, |followee| {
-                        followee.is_authorized_to_vote(caller)
-                    })
-                    .unwrap_or_default()
-                });
-
-            if !caller_can_vote_with_followee {
-                return Err(GovernanceError::new(ErrorType::NotAuthorized));
-            }
-        }
-        Ok(neuron_clone.into())
+        let neuron_id = self.find_neuron_id(by)?;
+        self.get_full_neuron(&neuron_id, caller)
     }
 
     /// Returns the complete neuron data for a given neuron `id` after
@@ -3396,7 +3376,10 @@ impl Governance {
         id: &NeuronId,
         caller: &PrincipalId,
     ) -> Result<NeuronProto, GovernanceError> {
-        self.get_full_neuron_by_id_or_subaccount(&NeuronIdOrSubaccount::NeuronId(*id), caller)
+        self.neuron_store
+            .get_full_neuron(*id, *caller)
+            .map(NeuronProto::from)
+            .map_err(GovernanceError::from)
     }
 
     // Returns the set of currently registered node providers.

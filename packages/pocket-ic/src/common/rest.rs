@@ -24,6 +24,7 @@ pub enum HttpGatewayBackend {
 pub struct HttpGatewayConfig {
     pub listen_at: Option<u16>,
     pub forward_to: HttpGatewayBackend,
+    pub domain: Option<String>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
