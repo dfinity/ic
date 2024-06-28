@@ -484,7 +484,7 @@ ic-response-verification = "2.3.0"
 ic-http-certification = "2.3.0"
 ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
-ic-stable-structures = "0.6.4"
+ic-stable-structures = "0.6.5"
 ic-utils = { version = "0.35.0", features = ["raw"] }
 ic-btc-interface = "0.2.0"
 ic-btc-validation = "0.1.0"
