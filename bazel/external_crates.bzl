@@ -215,7 +215,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "use-serde",
                 ],
             ),
-            "bitcoin-0.32": crate.spec(
+            "bitcoin_0_32": crate.spec(
                 version = "^0.32.2",
                 features = [
                     "default",
