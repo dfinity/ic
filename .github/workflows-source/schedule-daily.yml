@@ -24,14 +24,13 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+    image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
   dind-large-setup: &dind-large-setup
     runs-on:
       group: dind-large
     container:
       <<: *image
     timeout-minutes: 120
-    if: ${{ vars.RUN_CI == 'true' }}
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -70,7 +69,7 @@ jobs:
     <<: *dind-large-setup
     timeout-minutes: 720 # 12 hours
     # TODO: disable in GitLab before enabling here
-    if: ${{ vars.RUN_CI == 'true' && false }}
+    if: ${{ && false }}
     strategy:
       matrix:
         targets: ["//rs/crypto/...", "//rs/state_manager/..."]
@@ -95,7 +94,7 @@ jobs:
     <<: *dind-large-setup
     timeout-minutes: 120
     # TODO: enable when zh1 is active again
-    if: ${{ vars.RUN_CI == 'true' && false }}
+    if: ${{ false }}
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -123,7 +122,6 @@ jobs:
     name: Bazel Test NNS Nightly
     <<: *dind-large-setup
     timeout-minutes: 20
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -142,7 +140,6 @@ jobs:
     name: Bazel System Test Benchmarks
     <<: *dind-large-setup
     timeout-minutes: 480
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - <<: *checkout
       - <<: *before-script

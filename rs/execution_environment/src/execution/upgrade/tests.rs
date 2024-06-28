@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use ic_error_types::ErrorCode;
 use ic_logger::replica_logger::LogEntryLogger;
 use ic_management_canister_types::{CanisterUpgradeOptions, EmptyBlob, Payload};
@@ -78,8 +76,6 @@ fn execution_test_with_max_rounds(max_rounds: u64) -> ExecutionTest {
             LogEntryLogger::new(
                 slog::Logger::root(slog::Discard, slog::o!()),
                 slog::Level::Trace,
-                vec![],
-                HashMap::new(),
                 vec![],
             )
             .into(),

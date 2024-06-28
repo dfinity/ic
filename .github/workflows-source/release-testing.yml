@@ -6,9 +6,6 @@ on:
       - 'hotfix-*-rc--*'
       - 'rc--*'
   workflow_dispatch:
-  pull_request:
-    paths:
-      - '.github/workflows/release-testing.yml'
 
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
@@ -30,14 +27,13 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+    image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
   dind-large-setup: &dind-large-setup
     runs-on:
       group: dind-large
     container:
       <<: *image
     timeout-minutes: 180 # 3 hours
-    if: ${{ vars.RUN_CI == 'true' }}
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4

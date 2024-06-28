@@ -39,9 +39,8 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -87,9 +86,8 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }}
     name: Bazel Build All Config Check
     steps:
       - name: Checkout
@@ -108,12 +106,15 @@ jobs:
           BAZEL_TARGETS: "//rs/..."
           BAZEL_CI_CONFIG: "--config=check --config=ci --keep_going"
           # run on diff only if it is a pull request, otherwise run all targets
-          RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
+          #RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
+          # TODO: disabling until the following issue is resolved
+          # https://github.com/dfinity/ic/actions/runs/9699415138/job/26768332602
+          RUN_ON_DIFF_ONLY: false
   bazel-test-darwin-x86-64:
     name: Bazel Test Darwin x86-64
     timeout-minutes: 120
     # TODO: enable once we have more macos runners
-    if: ${{ vars.RUN_CI == 'true' && github.event_name == 'schedule' }}
+    if: ${{ github.event_name == 'schedule' }}
     runs-on:
       labels: macOS
     steps:
@@ -165,9 +166,8 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -189,9 +189,8 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -212,7 +211,6 @@ jobs:
     name: Python CI Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -238,9 +236,9 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' && github.event_name != 'merge_group' }}
+    if: ${{ github.event_name != 'merge_group' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -276,7 +274,6 @@ jobs:
     name: Build Determinism
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}
     needs: [build-ic, bazel-test-all]
     strategy:
       matrix:
@@ -331,9 +328,8 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -367,9 +363,8 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
