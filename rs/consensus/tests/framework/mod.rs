@@ -208,7 +208,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
                     subnets: vec![subnet_id_into_protobuf(subnet_id)],
                 }),
             )
-            .expect("Could not add ECDSA signing subnet list");
+            .expect("Could not add chain key signing subnet list");
     }
     registry_client.reload();
     registry_client.update_to_latest_version();
