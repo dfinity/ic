@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 assert_matches = { workspace = true }
 ed25519-dalek = { workspace = true }
+bitcoin = "0.32.2"
 ic-crypto-internal-threshold-sig-ecdsa = { path = ".." }
 ic-crypto-sha2 = { path = "../../../../../sha2" }
 ic-types = { path = "../../../../../../types/types" }

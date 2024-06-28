@@ -902,6 +902,7 @@ pub trait ThresholdSchnorrSignerCspVault {
         &self,
         derivation_path: ExtendedDerivationPath,
         message: Vec<u8>,
+        taproot_tree_root: Option<Vec<u8>>,
         nonce: Randomness,
         key_raw: IDkgTranscriptInternalBytes,
         presignature_transcript_raw: IDkgTranscriptInternalBytes,
