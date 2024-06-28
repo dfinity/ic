@@ -14,7 +14,7 @@ use super::types;
 use crate::encoding::types::{Bytes, Cycles, Funds, Response, STREAM_DEFAULT_FLAGS};
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::messages::NO_DEADLINE;
-use ic_types::xnet::{StreamHeader, StreamIndex};
+use ic_types::xnet::{RejectReason, RejectSignal, StreamHeader, StreamIndex};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
@@ -512,10 +512,10 @@ impl From<(&StreamHeader, CertificationVersion)> for StreamHeaderV16 {
 
         let mut next_index = header.signals_end();
         let mut reject_signal_deltas = vec![0; header.reject_signals().len()];
-        for (i, stream_index) in header.reject_signals().iter().enumerate().rev() {
-            assert!(next_index > *stream_index);
-            reject_signal_deltas[i] = next_index.get() - stream_index.get();
-            next_index = *stream_index;
+        for (i, reject_signal) in header.reject_signals().iter().enumerate().rev() {
+            assert!(next_index > reject_signal.index);
+            reject_signal_deltas[i] = next_index.get() - reject_signal.index.get();
+            next_index = reject_signal.index;
         }
 
         Self {
@@ -542,7 +542,10 @@ impl TryFrom<StreamHeaderV16> for StreamHeader {
                 )));
             }
             stream_index -= StreamIndex::new(*delta);
-            reject_signals.push_front(stream_index);
+            reject_signals.push_front(RejectSignal::new(
+                RejectReason::CanisterMigrating,
+                stream_index,
+            ));
         }
 
         Ok(Self::new(

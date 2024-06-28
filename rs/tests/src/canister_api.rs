@@ -732,6 +732,7 @@ impl ListNnsNeuronsRequest {
             payload: ListNnsNeuronsReq {
                 neuron_ids,
                 include_neurons_readable_by_caller,
+                include_empty_neurons_readable_by_caller: None,
             },
         }
     }

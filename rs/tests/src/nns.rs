@@ -577,7 +577,6 @@ pub async fn submit_create_application_subnet_proposal(
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
-        ingress_bytes_per_block_soft_cap: Default::default(),
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,
         max_block_payload_size: config.max_block_payload_size,
@@ -586,14 +585,6 @@ pub async fn submit_create_application_subnet_proposal(
         initial_notary_delay_millis: duration_to_millis(config.initial_notary_delay),
         dkg_interval_length: config.dkg_interval_length.get(),
         dkg_dealings_per_block: config.dkg_dealings_per_block as u64,
-        gossip_max_artifact_streams_per_peer: 0,
-        gossip_max_chunk_wait_ms: 0,
-        gossip_max_duplicity: 0,
-        gossip_max_chunk_size: 0,
-        gossip_receive_check_cache_size: 0,
-        gossip_pfn_evaluation_period_ms: 0,
-        gossip_registry_poll_period_ms: 0,
-        gossip_retransmission_request_ms: 0,
         start_as_nns: false,
         subnet_type: SubnetType::Application,
         is_halted: false,
@@ -605,6 +596,17 @@ pub async fn submit_create_application_subnet_proposal(
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         ecdsa_config: None,
+        chain_key_config: None,
+        // Unused section follows
+        ingress_bytes_per_block_soft_cap: Default::default(),
+        gossip_max_artifact_streams_per_peer: Default::default(),
+        gossip_max_chunk_wait_ms: Default::default(),
+        gossip_max_duplicity: Default::default(),
+        gossip_max_chunk_size: Default::default(),
+        gossip_receive_check_cache_size: Default::default(),
+        gossip_pfn_evaluation_period_ms: Default::default(),
+        gossip_registry_poll_period_ms: Default::default(),
+        gossip_retransmission_request_ms: Default::default(),
     };
 
     submit_external_proposal_with_test_id(governance, NnsFunction::CreateSubnet, payload).await

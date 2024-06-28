@@ -23,7 +23,7 @@ subtle = "2.4"
 sha2 = "0.9"
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-lazy_static = "1.4"
+lazy_static = { workspace = true }
 hex = { workspace = true }
 zeroize = { version = "1", features = ["zeroize_derive"] }
 

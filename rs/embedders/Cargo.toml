@@ -22,7 +22,7 @@ ic-utils = { path = "../utils" }
 ic-utils-lru-cache = { path = "../utils/lru_cache" }
 ic-wasm-transform = { path = "../wasm_transform" }
 ic-wasm-types = { path = "../types/wasm_types" }
-libc = "0.2.91"
+libc = { workspace = true }
 libflate = "1.1.2"
 memory_tracker = { path = "../memory_tracker" }
 nix = { workspace = true }
@@ -31,17 +31,16 @@ rayon = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
-slog-term = "2.6.0"
+slog-term = { workspace = true }
 wasm-encoder = { version = "0.201.0", features = ["wasmparser"] }
 wasmparser = "0.201.0"
-wasmtime = { version = "20.0.2", default-features = false, features = [
+wasmtime = { version = "21.0.1", default-features = false, features = [
     'cranelift',
     'gc',
     'parallel-compilation',
     'runtime',
 ] }
-wasmtime-environ = "20.0.2"
-wasmtime-runtime = "20.0.2"
+wasmtime-environ = "21.0.1"
 
 # Wasmtime depends on 0.4.2 but specifies 0.4.1 in the toml file.
 # Enforce 0.4.2 using a dummy dependency until the upstream issue
@@ -66,7 +65,7 @@ ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 insta = "1.8.0"
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 maplit = "1.0.2"
 pretty_assertions = { workspace = true }
 proptest = "1.0"

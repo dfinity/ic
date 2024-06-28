@@ -785,7 +785,6 @@ pub struct DerivedEcdsaKeyTranscript {
     pub current: Option<UnmaskedTranscriptWithAttributes>,
     pub next_in_creation: KeyTranscriptCreation,
     pub master_key_id: MasterPublicKeyId,
-    pub key_id: EcdsaKeyId,
 }
 
 impl ExhaustiveSet for EcdsaKeyTranscript {
@@ -793,7 +792,7 @@ impl ExhaustiveSet for EcdsaKeyTranscript {
         DerivedEcdsaKeyTranscript::exhaustive_set(rng)
             .into_iter()
             .map(|r| EcdsaKeyTranscript {
-                deprecated_key_id: Some(r.key_id),
+                deprecated_key_id: None,
                 master_key_id: r.master_key_id,
                 current: r.current,
                 next_in_creation: r.next_in_creation,

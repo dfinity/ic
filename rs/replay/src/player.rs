@@ -306,6 +306,7 @@ impl Player {
             None,
             MaliciousFlags::default(),
         ));
+        let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let execution_service = ExecutionServices::setup_execution(
             log.clone(),
             &metrics_registry,
@@ -316,6 +317,7 @@ impl Player {
             Arc::clone(&cycles_account_manager),
             Arc::clone(&state_manager) as Arc<_>,
             state_manager.get_fd_factory(),
+            completed_execution_messages_tx,
         );
         let message_routing = Arc::new(MessageRoutingImpl::new(
             state_manager.clone(),

@@ -20,7 +20,6 @@ ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
 ic-types = { path = "../../types/types" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 num-bigint = "0.4.4"
-rand = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }

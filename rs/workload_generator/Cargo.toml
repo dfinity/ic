@@ -26,14 +26,14 @@ futures = { workspace = true }
 hex = { workspace = true }
 itertools = { workspace = true }
 indicatif = "0.17.3"
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-slog-scope = "4.1.2"
-slog-term = "2.6.0"
+slog-scope = { workspace = true }
+slog-term = { workspace = true }
 tokio = { workspace = true }
 url = "2.1.1"
 wat = "1.0.52"

@@ -181,6 +181,7 @@ mod tests {
                 subnet_id: fake_subnet_id(),
                 upgrade_version: None,
                 replacement_nodes: None,
+                replay_until_height: None,
                 pub_key: Some(String::from("Fake public key")),
                 download_node: None,
                 keep_downloaded_state: Some(false),

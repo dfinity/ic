@@ -20,7 +20,6 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/system_api",
     "//rs/test_utilities",
-    "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
     "//rs/types/error_types",
@@ -32,6 +31,7 @@ DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
+    "@crate_index//:tokio",
     "@crate_index//:wat",
 ]
 

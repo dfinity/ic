@@ -5,7 +5,7 @@ use super::{
     IngressError, IngressValidator,
 };
 use crate::{
-    common::{into_cbor, Cbor},
+    common::{into_cbor, Cbor, WithTimeout},
     metrics::{
         HttpHandlerMetrics, CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
         CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
@@ -177,7 +177,7 @@ async fn call_sync_v3(
         state_reader,
         delegation_from_nns,
     }): State<CallServiceV3>,
-    request: Cbor<HttpRequestEnvelope<HttpCallContent>>,
+    WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> CallV3Response {
     let log = call_handler.log.clone();
 

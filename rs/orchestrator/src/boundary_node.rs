@@ -172,6 +172,9 @@ impl BoundaryNodeManager {
             format!("--bouncer-ban-seconds=300"),
             format!("--bouncer-max-buckets=30000"),
             format!("--bouncer-bucket-ttl=60"),
+            format!("--cache-size-bytes=1073741824"),
+            format!("--cache-max-item-size-bytes=10485760"),
+            format!("--cache-ttl-seconds=1"),
         ];
 
         process

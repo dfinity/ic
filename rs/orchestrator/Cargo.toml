@@ -46,7 +46,7 @@ registry-canister = { path = "../registry/canister" }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
-slog-async = { version = "2.5", features = ["nested-values"] }
+slog-async = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }

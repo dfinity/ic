@@ -1445,6 +1445,7 @@ pub fn list_neurons(state_machine: &StateMachine, sender: PrincipalId) -> ListNe
             Encode!(&ListNeurons {
                 neuron_ids: vec![],
                 include_neurons_readable_by_caller: true,
+                include_empty_neurons_readable_by_caller: None,
             })
             .unwrap(),
         )

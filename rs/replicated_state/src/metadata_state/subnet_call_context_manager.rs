@@ -33,6 +33,7 @@ const NONCE_SIZE: usize = 32;
 
 pub enum SubnetCallContext {
     SetupInitialDKG(SetupInitialDkgContext),
+    // TODO(EXC-1645): deprecated, do not use, it's only kept for backwards compatibility.
     SignWithEcdsa(SignWithEcdsaContext),
     CanisterHttpRequest(CanisterHttpRequestContext),
     // TODO(EXC-1621): remove after fully migrating to `IDkgDealings`.
@@ -216,8 +217,10 @@ pub struct SubnetCallContextManager {
     /// corresponds to a future state.
     next_callback_id: u64,
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
-    // TODO(EXC-1621): remove after fully migrating to `sign_with_threshold_contexts`.
-    pub sign_with_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
+    // TODO(EXC-1645): remove after fully migrating to `sign_with_threshold_contexts`.
+    // Do not make this field public as it is deprecated.
+    // It's only kept for backwards compatibility.
+    sign_with_ecdsa_contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
     pub sign_with_threshold_contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
     // TODO(EXC-1621): remove after fully migrating to `idkg_dealings_contexts`.
@@ -244,7 +247,11 @@ impl SubnetCallContextManager {
                 self.setup_initial_dkg_contexts.insert(callback_id, context);
             }
             SubnetCallContext::SignWithEcdsa(context) => {
-                self.sign_with_ecdsa_contexts.insert(callback_id, context);
+                // TODO(EXC-1645): this is deprecated and should not happen,
+                // but just in case this call should store the context in `sign_with_threshold_contexts`.
+                // Remove after fully migrating to `sign_with_threshold_contexts`.
+                self.sign_with_threshold_contexts
+                    .insert(callback_id, SignWithThresholdContext::from(&context));
             }
             SubnetCallContext::SignWithThreshold(context) => {
                 self.sign_with_threshold_contexts
@@ -298,7 +305,10 @@ impl SubnetCallContextManager {
                             context.pseudo_random_id,
                             context.request.sender
                         );
-                        SubnetCallContext::SignWithEcdsa(context)
+                        // TODO(EXC-1645): this is deprecated and is kept for backwards compatibility.
+                        // It converts ECDSA context to threshold context and stores it in `sign_with_threshold_contexts`.
+                        // Remove after fully migrating to `sign_with_threshold_contexts`.
+                        SubnetCallContext::SignWithThreshold(SignWithThresholdContext::from(&context))
                     })
             })
             .or_else(|| {
@@ -479,6 +489,55 @@ impl SubnetCallContextManager {
                 _ => false,
             })
             .count()
+    }
+
+    // TODO(EXC-1645): Remove after fully migrating to `sign_with_threshold_contexts`.
+    pub fn take_sign_with_ecdsa_contexts(&mut self) -> BTreeMap<CallbackId, SignWithEcdsaContext> {
+        std::mem::take(&mut self.sign_with_ecdsa_contexts)
+    }
+
+    // TODO(EXC-1645): Remove after fully migrating to `sign_with_threshold_contexts`.
+    pub fn put_sign_with_ecdsa_contexts(
+        &mut self,
+        contexts: BTreeMap<CallbackId, SignWithEcdsaContext>,
+    ) {
+        self.sign_with_ecdsa_contexts = contexts;
+    }
+
+    // TODO(EXC-1645): temporary code to record the metrics during migration.
+    pub fn sign_with_ecdsa_contexts_len(&self) -> usize {
+        self.sign_with_ecdsa_contexts.len()
+    }
+
+    // TODO(EXC-1645): temporary code to record the metrics during migration.
+    pub fn sign_with_threshold_contexts_len(&self) -> usize {
+        self.sign_with_threshold_contexts.len()
+    }
+
+    pub fn sign_with_ecdsa_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        // TODO(EXC-1645): Currently ECDSA contexts might be stored in either `sign_with_ecdsa_contexts`
+        // or `sign_with_threshold_contexts`. This function returns all ECDSA contexts.
+        // Remove after fully migrating to `sign_with_threshold_contexts`.
+        self.sign_with_threshold_contexts
+            .iter()
+            .filter(|(_, context)| context.is_ecdsa())
+            .map(|(cid, context)| (*cid, context.clone()))
+            .chain(
+                self.sign_with_ecdsa_contexts
+                    .iter()
+                    .map(|(callback_id, context)| {
+                        (*callback_id, SignWithThresholdContext::from(context))
+                    }),
+            )
+            .collect()
+    }
+
+    pub fn sign_with_schnorr_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
+        self.sign_with_threshold_contexts
+            .iter()
+            .filter(|(_, context)| context.is_schnorr())
+            .map(|(cid, context)| (*cid, context.clone()))
+            .collect()
     }
 }
 
@@ -970,10 +1029,31 @@ pub struct SignWithThresholdContext {
 }
 
 impl SignWithThresholdContext {
+    /// Returns the key id of the master public key.
     pub fn key_id(&self) -> MasterPublicKeyId {
         match &self.args {
             ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
             ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
+        }
+    }
+
+    /// Returns true if arguments are for ECDSA.
+    pub fn is_ecdsa(&self) -> bool {
+        matches!(&self.args, ThresholdArguments::Ecdsa(_))
+    }
+
+    /// Returns true if arguments are for Schnorr.
+    pub fn is_schnorr(&self) -> bool {
+        matches!(&self.args, ThresholdArguments::Schnorr(_))
+    }
+
+    /// Returns ECDSA arguments.
+    /// Panics if arguments are not for ECDSA.
+    /// Should only be called if `is_ecdsa` returns true.
+    pub fn ecdsa_args(&self) -> &EcdsaArguments {
+        match &self.args {
+            ThresholdArguments::Ecdsa(args) => args,
+            _ => panic!("ECDSA arguments not found."),
         }
     }
 }

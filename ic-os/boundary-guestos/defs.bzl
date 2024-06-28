@@ -17,6 +17,8 @@ def image_deps(mode):
       A dict containing all file inputs to build this image.
     """
     deps = {
+        "dockerfile": "//ic-os/boundary-guestos/context:Dockerfile",
+
         # Extra files to be added to rootfs and bootfs
         "bootfs": {},
         "rootfs": {
@@ -31,15 +33,17 @@ def image_deps(mode):
         },
     }
 
-    extra_deps = {
+    image_variants = {
         "dev": {
-            "build_container_filesystem_config_file": "//ic-os/boundary-guestos/envs/dev:build_container_filesystem_config.txt",
+            "build_args": ["BUILD_TYPE=dev", "ROOT_PASSWORD=root"],
+            "file_build_arg": "BASE_IMAGE=docker-base.prod",
         },
         "prod": {
-            "build_container_filesystem_config_file": "//ic-os/boundary-guestos/envs/prod:build_container_filesystem_config.txt",
+            "build_args": ["BUILD_TYPE=prod"],
+            "file_build_arg": "BASE_IMAGE=docker-base.prod",
         },
     }
 
-    deps.update(extra_deps[mode])
+    deps.update(image_variants[mode])
 
     return deps

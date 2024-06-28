@@ -7,7 +7,7 @@ pub use call_v2::CallServiceV2;
 pub use call_v3::CallServiceV3;
 
 use crate::{
-    common::{build_validator, validation_error_to_http_error, Cbor},
+    common::{build_validator, validation_error_to_http_error},
     HttpError, IngressFilterService,
 };
 use hyper::StatusCode;
@@ -15,7 +15,7 @@ use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::UserError;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info_sample, replica_logger::no_op_logger, warn, ReplicaLogger};
+use ic_logger::{error, replica_logger::no_op_logger, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
     crypto::root_of_trust::RegistryRootOfTrustProvider,
     provisional_whitelist::ProvisionalWhitelistRegistry,
@@ -183,7 +183,7 @@ impl IngressValidator {
     /// - The canister is willing to accept it.
     pub(crate) async fn validate_ingress_message(
         self,
-        Cbor(request): Cbor<HttpRequestEnvelope<HttpCallContent>>,
+        request: HttpRequestEnvelope<HttpCallContent>,
         effective_canister_id: CanisterId,
     ) -> Result<IngressMessageSubmitter, IngressError> {
         let Self {
@@ -276,7 +276,6 @@ impl IngressValidator {
         Ok(IngressMessageSubmitter {
             ingress_tx,
             node_id,
-            log,
             message: msg,
         })
     }
@@ -285,7 +284,6 @@ impl IngressValidator {
 pub struct IngressMessageSubmitter {
     ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     node_id: NodeId,
-    log: ReplicaLogger,
     message: SignedIngress,
 }
 
@@ -301,12 +299,8 @@ impl IngressMessageSubmitter {
         let Self {
             ingress_tx,
             node_id,
-            log,
             message,
         } = self;
-
-        let message_id = message.id();
-        let ingress_log_entry = message.log_entry();
 
         // Submission will fail if P2P is not running, meaning there is
         // no receiver for the ingress message.
@@ -315,19 +309,12 @@ impl IngressMessageSubmitter {
             .is_err();
 
         if send_ingress_to_p2p_failed {
-            Err(HttpError {
+            return Err(HttpError {
                 status: StatusCode::INTERNAL_SERVER_ERROR,
                 message: "P2P is not running on this node.".to_string(),
-            })
-        } else {
-            info_sample!(
-                "message_id" => &message_id,
-                &log,
-                "ingress_message_submit";
-                ingress_message => ingress_log_entry
-            );
-            Ok(())
+            });
         }
+        Ok(())
     }
 }
 

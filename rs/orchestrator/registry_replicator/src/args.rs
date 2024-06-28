@@ -24,10 +24,6 @@ pub struct RegistryReplicatorArgs {
     #[clap(long)]
     pub log_as_text: bool,
 
-    /// The datacenter id to append to log lines
-    #[clap(long, default_value = "200")]
-    pub dc_id: u64,
-
     /// The path to the NNS public key file
     #[clap(long, parse(from_os_str))]
     pub nns_pub_key_pem: PathBuf,
@@ -64,7 +60,6 @@ impl RegistryReplicatorArgs {
         } else {
             LogFormat::Json
         };
-        config.logger.dc_id = self.dc_id;
         config.registration.nns_pub_key_pem = Some(self.nns_pub_key_pem.clone());
         config.registration.nns_url = Some(self.nns_url.clone());
         config

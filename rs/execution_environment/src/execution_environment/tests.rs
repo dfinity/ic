@@ -750,7 +750,7 @@ fn get_canister_status_from_another_canister_when_memory_low() {
     let controller = test.universal_canister().unwrap();
     let binary = wat::parse_str("(module)").unwrap();
     let canister = test.create_canister(Cycles::new(1_000_000_000_000));
-    let memory_allocation = NumBytes::from(150);
+    let memory_allocation = NumBytes::from(158);
     test.install_canister_with_allocation(canister, binary, None, Some(memory_allocation.get()))
         .unwrap();
     let canister_status_args = Encode!(&CanisterIdRecord::from(canister)).unwrap();
@@ -2316,14 +2316,12 @@ fn test_sign_with_threshold_key_fee_charged() {
 
         match method {
             Method::SignWithECDSA => {
-                let (_, context) = test
+                let contexts = test
                     .state()
                     .metadata
                     .subnet_call_context_manager
-                    .sign_with_ecdsa_contexts
-                    .iter()
-                    .next()
-                    .unwrap();
+                    .sign_with_ecdsa_contexts();
+                let (_, context) = contexts.iter().next().unwrap();
                 assert_eq!(context.request.payment.get(), payment - fee);
 
                 assert_eq!(
@@ -2335,14 +2333,12 @@ fn test_sign_with_threshold_key_fee_charged() {
                 );
             }
             Method::SignWithSchnorr => {
-                let (_, context) = test
+                let contexts = test
                     .state()
                     .metadata
                     .subnet_call_context_manager
-                    .sign_with_threshold_contexts
-                    .iter()
-                    .next()
-                    .unwrap();
+                    .sign_with_schnorr_contexts();
+                let (_, context) = contexts.iter().next().unwrap();
                 assert_eq!(context.request.payment.get(), payment - fee);
             }
             _ => panic!("Unexpected method"),
@@ -2621,14 +2617,12 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
         );
         match method {
             Method::SignWithECDSA => {
-                let (_, context) = test
+                let contexts = test
                     .state()
                     .metadata
                     .subnet_call_context_manager
-                    .sign_with_ecdsa_contexts
-                    .iter()
-                    .next()
-                    .unwrap();
+                    .sign_with_ecdsa_contexts();
+                let (_, context) = contexts.iter().next().unwrap();
                 assert_eq!(context.request.payment, Cycles::zero());
 
                 assert_eq!(
@@ -2640,14 +2634,12 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
                 );
             }
             Method::SignWithSchnorr => {
-                let (_, context) = test
+                let contexts = test
                     .state()
                     .metadata
                     .subnet_call_context_manager
-                    .sign_with_threshold_contexts
-                    .iter()
-                    .next()
-                    .unwrap();
+                    .sign_with_schnorr_contexts();
+                let (_, context) = contexts.iter().next().unwrap();
                 assert_eq!(context.request.payment, Cycles::zero());
             }
             _ => panic!("Unexpected method"),
@@ -2698,20 +2690,13 @@ fn test_sign_with_threshold_key_queue_fills_up() {
             test.ingress_raw(canister_id, "update", run.clone());
         }
         let result = test.ingress(canister_id, "update", run).unwrap();
-
-        // TODO(EXC-1645): fix error message to follow the same pattern for all `sign_with_*` methods.
-        let message = match method {
-            Method::SignWithECDSA => format!(
-                "{} request failed: the ECDSA signature queue is full.",
-                method,
-            ),
-            Method::SignWithSchnorr => format!(
+        assert_eq!(
+            result,
+            WasmResult::Reject(format!(
                 "{} request failed: signature queue for key {} is full.",
                 method, key_id,
-            ),
-            _ => panic!("Unexpected method"),
-        };
-        assert_eq!(result, WasmResult::Reject(message));
+            ))
+        );
     }
 }
 
