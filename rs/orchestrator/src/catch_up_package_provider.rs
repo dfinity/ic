@@ -176,7 +176,10 @@ impl CatchUpPackageProvider {
             );
             None
         })?;
-        let uri = format!("https://[{}]:{}", http.ip_addr, http.port);
+        let uri = format!(
+            "https://[{}]:{}/_/catch_up_package",
+            http.ip_addr, http.port
+        );
 
         let protobuf = self
             .fetch_catch_up_package(node_id, uri.clone(), param)
@@ -218,8 +221,6 @@ impl CatchUpPackageProvider {
         url: String,
         param: Option<CatchUpPackageParam>,
     ) -> Option<pb::CatchUpPackage> {
-        let url = url + "/_/catch_up_package";
-
         let body = param
             .and_then(|param| serde_cbor::to_vec(&param).ok())
             .unwrap_or_default();
