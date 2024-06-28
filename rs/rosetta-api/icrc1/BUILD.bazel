@@ -98,7 +98,9 @@ rust_test(
         deps = [
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
             "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/registry/subnet_type",
             "//rs/rosetta-api/icrc1",
+            "//rs/rosetta-api/icrc1/index-ng",
             "//rs/rosetta-api/icrc1/ledger",
             "//rs/rosetta-api/icrc1/ledger/sm-tests:sm-tests" + name_suffix,
             "//rs/rosetta-api/ledger_canister_core",
