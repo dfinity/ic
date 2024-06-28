@@ -3,6 +3,7 @@ on:
   schedule:
     - cron: "0 1 * * *"
   workflow_dispatch:
+  pull_request:
 env:
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
@@ -24,7 +25,7 @@ jobs:
     name: Cut RC
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ (github.event_name == 'schedule') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master') }}
+    if: ${{ github.event_name == 'schedule' }} || ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
