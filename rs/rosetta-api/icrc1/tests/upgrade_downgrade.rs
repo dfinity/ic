@@ -18,19 +18,6 @@ const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
 const NUM_BLOCKS_TO_ARCHIVE: usize = 5;
 const MAX_BLOCKS_FROM_ARCHIVE: u64 = 10;
 
-fn default_archive_options() -> ArchiveOptions {
-    ArchiveOptions {
-        trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
-        num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE,
-        node_max_memory_size_bytes: None,
-        max_message_size_bytes: None,
-        controller_id: PrincipalId::new_user_test_id(100),
-        more_controller_ids: None,
-        cycles_for_archive_creation: None,
-        max_transactions_per_response: Some(MAX_BLOCKS_FROM_ARCHIVE),
-    }
-}
-
 #[test]
 fn should_upgrade_and_downgrade_ledger_canister_suite() {
     let now = SystemTime::now();
@@ -76,6 +63,19 @@ fn should_upgrade_and_downgrade_ledger_canister_suite() {
         Encode!(&ledger_upgrade_arg).unwrap(),
     )
     .unwrap();
+}
+
+fn default_archive_options() -> ArchiveOptions {
+    ArchiveOptions {
+        trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
+        num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE,
+        node_max_memory_size_bytes: None,
+        max_message_size_bytes: None,
+        controller_id: PrincipalId::new_user_test_id(100),
+        more_controller_ids: None,
+        cycles_for_archive_creation: None,
+        max_transactions_per_response: Some(MAX_BLOCKS_FROM_ARCHIVE),
+    }
 }
 
 fn index_ng_mainnet_wasm() -> Vec<u8> {
