@@ -55,7 +55,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 let sig_share = create_bip340_signature_share(
                     &derivation_path,
                     &message[..],
-                    taproot_tree_root,
+                    taproot_tree_root.as_deref(),
                     nonce,
                     &key_transcript,
                     &presig_transcript,
