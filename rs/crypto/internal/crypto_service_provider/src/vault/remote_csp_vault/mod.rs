@@ -237,6 +237,7 @@ pub trait TarpcCspVault {
     async fn create_schnorr_sig_share(
         derivation_path: ExtendedDerivationPath,
         message: ByteBuf,
+        taproot_tree_root: Option<ByteBuf>,
         nonce: Randomness,
         key_raw: IDkgTranscriptInternalBytes,
         presig_raw: IDkgTranscriptInternalBytes,

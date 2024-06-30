@@ -962,9 +962,13 @@ impl From<CanisterThresholdError> for ThresholdBip340GenerateSigShareInternalErr
 /// The presig_transcript is the transcript of the pre-signature (kappa)
 ///
 /// The message can be of any length
+///
+/// If taproot_tree_root is Some then this generates a Taproot tweaked
+/// signature, using the provided hash to derive a tweak
 pub fn create_bip340_signature_share(
     derivation_path: &DerivationPath,
     message: &[u8],
+    taproot_tree_root: Option<&[u8]>,
     nonce: Randomness,
     key_transcript: &IDkgTranscriptInternal,
     presig_transcript: &IDkgTranscriptInternal,
@@ -974,6 +978,7 @@ pub fn create_bip340_signature_share(
     ThresholdBip340SignatureShareInternal::new(
         derivation_path,
         message,
+        taproot_tree_root,
         nonce,
         key_transcript,
         key_opening,
@@ -1009,7 +1014,8 @@ impl From<CanisterThresholdError> for ThresholdBip340VerifySigShareInternalError
 pub fn verify_bip340_signature_share(
     sig_share: &ThresholdBip340SignatureShareInternal,
     derivation_path: &DerivationPath,
-    hashed_message: &[u8],
+    message: &[u8],
+    taproot_tree_root: Option<&[u8]>,
     randomness: Randomness,
     signer_index: NodeIndex,
     key_transcript: &IDkgTranscriptInternal,
@@ -1018,7 +1024,8 @@ pub fn verify_bip340_signature_share(
     sig_share
         .verify(
             derivation_path,
-            hashed_message,
+            message,
+            taproot_tree_root,
             randomness,
             signer_index,
             key_transcript,
@@ -1053,6 +1060,7 @@ impl From<CanisterThresholdError> for ThresholdBip340CombineSigSharesInternalErr
 pub fn combine_bip340_signature_shares(
     derivation_path: &DerivationPath,
     message: &[u8],
+    taproot_tree_root: Option<&[u8]>,
     randomness: Randomness,
     key_transcript: &IDkgTranscriptInternal,
     presig_transcript: &IDkgTranscriptInternal,
@@ -1063,6 +1071,7 @@ pub fn combine_bip340_signature_shares(
     ThresholdBip340CombinedSignatureInternal::new(
         derivation_path,
         message,
+        taproot_tree_root,
         randomness,
         key_transcript,
         presig_transcript,
@@ -1100,6 +1109,7 @@ pub fn verify_threshold_bip340_signature(
     signature: &ThresholdBip340CombinedSignatureInternal,
     derivation_path: &DerivationPath,
     message: &[u8],
+    taproot_tree_root: Option<&[u8]>,
     randomness: Randomness,
     presig_transcript: &IDkgTranscriptInternal,
     key_transcript: &IDkgTranscriptInternal,
@@ -1108,6 +1118,7 @@ pub fn verify_threshold_bip340_signature(
         .verify(
             derivation_path,
             message,
+            taproot_tree_root,
             randomness,
             presig_transcript,
             key_transcript,

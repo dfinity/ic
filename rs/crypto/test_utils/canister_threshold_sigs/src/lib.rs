@@ -1981,6 +1981,7 @@ pub fn generate_tschnorr_protocol_inputs<R: RngCore + CryptoRng>(
     ThresholdSchnorrSigInputs::new(
         derivation_path,
         message,
+        None,
         nonce,
         presig,
         key_transcript.clone(),
@@ -2484,6 +2485,7 @@ impl IntoBuilder for ThresholdEcdsaSigInputs {
 pub struct ThresholdSchnorrSigInputsBuilder {
     derivation_path: ExtendedDerivationPath,
     message: Vec<u8>,
+    taproot_tree_root: Option<Vec<u8>>,
     nonce: Randomness,
     presig_transcript: SchnorrPreSignatureTranscript,
     key_transcript: IDkgTranscript,
@@ -2494,6 +2496,7 @@ impl ThresholdSchnorrSigInputsBuilder {
         ThresholdSchnorrSigInputs::new(
             &self.derivation_path,
             &self.message,
+            self.taproot_tree_root.as_deref(),
             self.nonce,
             self.presig_transcript,
             self.key_transcript,
@@ -2519,6 +2522,7 @@ impl IntoBuilder for ThresholdSchnorrSigInputs {
         ThresholdSchnorrSigInputsBuilder {
             derivation_path: self.derivation_path().clone(),
             message: Vec::from(self.message()),
+            taproot_tree_root: self.taproot_tree_root().map(Vec::from),
             nonce: *self.nonce(),
             presig_transcript: self.presig_transcript().clone(),
             key_transcript: self.key_transcript().clone(),
