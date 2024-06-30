@@ -694,7 +694,9 @@ impl ThresholdSchnorrSigInputs {
         match taproot_tree_root {
             None => Ok(()),
             Some(ttr) => {
-                if algorithm == AlgorithmId::ThresholdSchnorrBip340 && (ttr.is_empty() || ttr.len() == 32) {
+                if algorithm == AlgorithmId::ThresholdSchnorrBip340
+                    && (ttr.is_empty() || ttr.len() == 32)
+                {
                     Ok(())
                 } else {
                     Err(error::ThresholdSchnorrSigInputsCreationError::InvalidUseOfTaprootHash)
