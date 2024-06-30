@@ -520,6 +520,7 @@ impl BackupHelper {
         );
         let file_name = self.logs_dir().join(log_file_name);
         debug!(self.log, "Write replay log to: {:?}", file_name);
+        warn!(self.log, "{stdout}");
         let mut file =
             File::create(file_name).map_err(|err| format!("Error creating log file: {:?}", err))?;
         file.write_all(stdout.as_bytes())

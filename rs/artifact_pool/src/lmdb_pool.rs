@@ -1327,12 +1327,8 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
         self
     }
 
-    fn highest_catch_up_package_proto(&self) -> pb::CatchUpPackage {
-        let h = self
-            .catch_up_package()
-            .max_height()
-            .expect("There should always be a CUP in the pool.");
-        let key = HeightKey::from(h);
+    fn get_catch_up_package_proto_at_height(&self, height: Height) -> Option<pb::CatchUpPackage> {
+        let key = HeightKey::from(height);
         let index_db = self.get_index_db(&CatchUpPackage::type_key());
         let log = self.log.clone();
         let artifacts = self.artifacts;
@@ -1360,12 +1356,20 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
             self.log.clone(),
         )
         .next()
-        .unwrap_or_else(|| {
-            panic!(
-                "This should be impossible since we found a max height at {:?}",
-                h
-            )
-        })
+    }
+
+    fn highest_catch_up_package_proto(&self) -> pb::CatchUpPackage {
+        let h = self
+            .catch_up_package()
+            .max_height()
+            .expect("There should always be a CUP in the pool.");
+        self.get_catch_up_package_proto_at_height(h)
+            .unwrap_or_else(|| {
+                panic!(
+                    "This should be impossible since we found a max height at {:?}",
+                    h
+                )
+            })
     }
 
     /// Number of artifacts in the DB.

@@ -252,6 +252,14 @@ impl HasHeight for BlockMetadata {
     }
 }
 
+impl HasHeight for pb::CatchUpPackage {
+    fn height(&self) -> Height {
+        CatchUpPackage::try_from(self)
+            .map(|cup| cup.height())
+            .unwrap_or_default()
+    }
+}
+
 /// Rank is used to indicate the priority of a block maker, where 0 indicates
 /// the highest priority.
 #[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]

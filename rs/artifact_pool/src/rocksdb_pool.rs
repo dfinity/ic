@@ -649,10 +649,9 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
         self
     }
 
-    fn highest_catch_up_package_proto(&self) -> pb::CatchUpPackage {
-        let height_opt = self.max_height::<CatchUpPackage>().unwrap();
-        let min_height_key = make_min_key(height_opt.get());
-        let max_height_key = make_max_key(height_opt.get());
+    fn get_catch_up_package_proto_at_height(&self, height: Height) -> Option<pb::CatchUpPackage> {
+        let min_height_key = make_min_key(height.get());
+        let max_height_key = make_max_key(height.get());
         let mut iter = check_ok_uw!(StandaloneIterator::new(
             self.db.clone(),
             CatchUpPackage::info().name,
@@ -660,9 +659,13 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
             &max_height_key,
             deserialize_catch_up_package_fn
         ));
-        iter.next()
+        iter.next().map(|artifact| artifact.msg)
+    }
+
+    fn highest_catch_up_package_proto(&self) -> pb::CatchUpPackage {
+        let height_opt = self.max_height::<CatchUpPackage>().unwrap();
+        self.get_catch_up_package_proto_at_height(height_opt)
             .expect("There must be a catch up package in the pool")
-            .msg
     }
 
     // TODO(CON-308): Implement size()

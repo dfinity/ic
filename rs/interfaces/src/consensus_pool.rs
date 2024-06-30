@@ -257,6 +257,13 @@ pub trait PoolSection<T> {
         )
     }
 
+    fn get_catch_up_package_proto_at_height(&self, height: Height) -> Option<pb::CatchUpPackage> {
+        self.catch_up_package()
+            .get_only_by_height(height)
+            .map(|cup| pb::CatchUpPackage::from(&cup))
+            .ok()
+    }
+
     fn size(&self) -> u64;
 }
 

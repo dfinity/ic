@@ -24,8 +24,8 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     consensus::{
-        BlockProposal, CatchUpPackage, ConsensusMessage, Finalization, HasHeight, Notarization,
-        RandomBeacon, RandomTape,
+        BlockProposal, ConsensusMessage, Finalization, HasHeight, Notarization, RandomBeacon,
+        RandomTape,
     },
     time::{Time, UNIX_EPOCH},
     Height,
@@ -50,7 +50,33 @@ pub enum BackupArtifact {
     BlockProposal(Box<BlockProposal>),
     RandomBeacon(Box<RandomBeacon>),
     RandomTape(Box<RandomTape>),
-    CatchUpPackage(Box<CatchUpPackage>),
+    CatchUpPackage(Box<pb::CatchUpPackage>),
+}
+
+impl TryFrom<ConsensusMessage> for BackupArtifact {
+    type Error = ();
+    fn try_from(artifact: ConsensusMessage) -> Result<Self, Self::Error> {
+        use ConsensusMessage::*;
+        match artifact {
+            Finalization(artifact) => Ok(BackupArtifact::Finalization(Box::new(artifact))),
+            Notarization(artifact) => Ok(BackupArtifact::Notarization(Box::new(artifact))),
+            BlockProposal(artifact) => Ok(BackupArtifact::BlockProposal(Box::new(artifact))),
+            RandomTape(artifact) => Ok(BackupArtifact::RandomTape(Box::new(artifact))),
+            RandomBeacon(artifact) => Ok(BackupArtifact::RandomBeacon(Box::new(artifact))),
+            // CUPs need to be backed up using the original protobuf bytes
+            CatchUpPackage(artifact) => Ok(BackupArtifact::CatchUpPackage(Box::new(
+                pb::CatchUpPackage::from(&artifact),
+            ))),
+            // Do not replace by a `_` so that we evaluate at this place if we want to
+            // backup a new artifact!
+            RandomBeaconShare(_)
+            | NotarizationShare(_)
+            | FinalizationShare(_)
+            | RandomTapeShare(_)
+            | CatchUpPackageShare(_)
+            | EquivocationProof(_) => Err(()),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -111,6 +137,10 @@ impl BackupThread {
         loop {
             match rx.recv() {
                 Ok(BackupRequest::Backup(artifacts)) => {
+                    let artifacts = artifacts
+                        .into_iter()
+                        .flat_map(BackupArtifact::try_from)
+                        .collect();
                     if let Err(err) = store_artifacts(artifacts, &self.version_path) {
                         error!(self.log, "Backup storing failed: {:?}", err);
                         self.metrics.io_errors.inc();
@@ -385,26 +415,9 @@ impl Backup {
 
 // Write all backup files to the disk. For the sake of simplicity, we write all
 // artifacts sequentially.
-fn store_artifacts(artifacts: Vec<ConsensusMessage>, path: &Path) -> Result<(), io::Error> {
-    use ConsensusMessage::*;
+fn store_artifacts(artifacts: Vec<BackupArtifact>, path: &Path) -> Result<(), io::Error> {
     artifacts
         .into_iter()
-        .filter_map(|artifact| match artifact {
-            Finalization(artifact) => Some(BackupArtifact::Finalization(Box::new(artifact))),
-            Notarization(artifact) => Some(BackupArtifact::Notarization(Box::new(artifact))),
-            BlockProposal(artifact) => Some(BackupArtifact::BlockProposal(Box::new(artifact))),
-            RandomTape(artifact) => Some(BackupArtifact::RandomTape(Box::new(artifact))),
-            RandomBeacon(artifact) => Some(BackupArtifact::RandomBeacon(Box::new(artifact))),
-            CatchUpPackage(artifact) => Some(BackupArtifact::CatchUpPackage(Box::new(artifact))),
-            // Do not replace by a `_` so that we evaluate at this place if we want to
-            // backup a new artifact!
-            RandomBeaconShare(_)
-            | NotarizationShare(_)
-            | FinalizationShare(_)
-            | RandomTapeShare(_)
-            | CatchUpPackageShare(_)
-            | EquivocationProof(_) => None,
-        })
         .try_for_each(|artifact| artifact.write_to_disk(path))
 }
 
@@ -472,7 +485,7 @@ fn get_leaves(dir: &Path, leaves: &mut Vec<PathBuf>) -> std::io::Result<()> {
 }
 
 // Returns all artifacts starting from the latest catch-up package height.
-fn get_all_persisted_artifacts(pool: &dyn ConsensusPool) -> Vec<ConsensusMessage> {
+fn get_all_persisted_artifacts(pool: &dyn ConsensusPool) -> Vec<BackupArtifact> {
     let cup_height = pool.as_cache().catch_up_package().height();
     let notarization_pool = pool.validated().notarization();
     let notarization_range = HeightRange::new(
@@ -526,11 +539,6 @@ fn get_all_persisted_artifacts(pool: &dyn ConsensusPool) -> Vec<ConsensusMessage
                 .map(ConsensusMessage::Notarization),
         )
         .chain(
-            catch_up_package_pool
-                .get_by_height_range(catch_up_package_range)
-                .map(ConsensusMessage::CatchUpPackage),
-        )
-        .chain(
             random_tape_pool
                 .get_by_height_range(random_tape_range)
                 .map(ConsensusMessage::RandomTape),
@@ -544,6 +552,17 @@ fn get_all_persisted_artifacts(pool: &dyn ConsensusPool) -> Vec<ConsensusMessage
             block_proposal_pool
                 .get_by_height_range(block_proposal_range)
                 .map(ConsensusMessage::BlockProposal),
+        )
+        .flat_map(BackupArtifact::try_from)
+        .chain(
+            catch_up_package_pool
+                .get_by_height_range(catch_up_package_range)
+                .map(|cup| cup.height())
+                .flat_map(|height| {
+                    pool.validated()
+                        .get_catch_up_package_proto_at_height(height)
+                })
+                .map(|cup| BackupArtifact::CatchUpPackage(Box::new(cup))),
         )
         .collect()
 }
@@ -588,9 +607,7 @@ impl BackupArtifact {
             BlockProposal(artifact) => pb::BlockProposal::from(artifact.as_ref()).encode(&mut buf),
             RandomTape(artifact) => pb::RandomTape::from(artifact.as_ref()).encode(&mut buf),
             RandomBeacon(artifact) => pb::RandomBeacon::from(artifact.as_ref()).encode(&mut buf),
-            CatchUpPackage(artifact) => {
-                pb::CatchUpPackage::from(artifact.as_ref()).encode(&mut buf)
-            }
+            CatchUpPackage(artifact) => artifact.encode(&mut buf),
         }
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err.to_string()))?;
         Ok(buf)
