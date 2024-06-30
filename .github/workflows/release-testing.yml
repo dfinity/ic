@@ -28,7 +28,7 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 180 # 3 hours
     steps:
       - name: Checkout
@@ -52,7 +52,7 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 180 # 3 hours
     steps:
       - name: Checkout
@@ -75,7 +75,7 @@ jobs:
     runs-on:
       group: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b7d870287df55b9972ed285fe1a9792cb81243523400d83d491f3ee149e8d47c
+      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 90
     steps:
       - name: Checkout
