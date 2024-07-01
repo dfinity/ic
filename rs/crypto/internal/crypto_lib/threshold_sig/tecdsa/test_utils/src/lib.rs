@@ -1262,14 +1262,14 @@ impl Bip340SignatureProtocolExecution {
         if let Some(h) = &self.taproot_tree_root {
             assert!(verify_taproot_signature_using_third_party(
                 &pk,
-                &sig,
+                sig,
                 &self.signed_message,
-                &h,
+                h,
             ));
         } else {
             assert!(verify_bip340_signature_using_third_party(
                 &pk,
-                &sig,
+                sig,
                 &self.signed_message,
             ));
         }
