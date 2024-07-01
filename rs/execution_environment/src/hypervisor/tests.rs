@@ -6332,7 +6332,7 @@ fn call_perform_checks_freezing_threshold_in_update() {
         .with_initial_canister_cycles(1_000_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
-    test.update_freezing_threshold(canister_id, NumSeconds::new(2_500_000_000))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_500_000_000))
         .unwrap();
     let body = wasm()
         .call_simple(
@@ -6357,7 +6357,7 @@ fn call_perform_does_not_check_freezing_threshold_in_reply() {
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
-    test.update_freezing_threshold(canister_id, NumSeconds::new(2_200_000_000))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_200_000_000))
         .unwrap();
     let body = wasm()
         .call_simple(
@@ -6391,7 +6391,7 @@ fn call_perform_does_not_check_freezing_threshold_in_reject() {
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
-    test.update_freezing_threshold(canister_id, NumSeconds::new(2_200_000_000))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_200_000_000))
         .unwrap();
     let body = wasm()
         .call_simple(

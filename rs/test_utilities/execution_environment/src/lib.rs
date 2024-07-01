@@ -1,12 +1,18 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_config::embedders::{MeteringType, StableMemoryDirtyPageLimit};
 use ic_config::{
-    embedders::Config as EmbeddersConfig, execution_environment::Config, flag_status::FlagStatus,
-    subnet_config::SchedulerConfig, subnet_config::SubnetConfig,
+    embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
+    execution_environment::Config,
+    flag_status::FlagStatus,
+    subnet_config::SchedulerConfig,
+    subnet_config::SubnetConfig,
 };
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
+use ic_embedders::{
+    wasm_utils::{compile, decoding::decode_wasm},
+    WasmtimeEmbedder,
+};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
@@ -2331,7 +2337,7 @@ pub fn wat_compilation_cost(wat: &str) -> NumInstructions {
 }
 
 pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
-    let wasm = BinaryEncodedWasm::new(wasm.to_vec());
+    let wasm = decode_wasm(WASM_MAX_SIZE, Arc::new(wasm.to_vec())).unwrap();
     let config = EmbeddersConfig::default();
     let (_, serialized_module) = compile(&WasmtimeEmbedder::new(config, no_op_logger()), &wasm)
         .1

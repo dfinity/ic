@@ -2008,7 +2008,7 @@ fn install_chunked_succeeds_from_store_canister() {
 #[test]
 fn install_with_dts_correctly_updates_system_state() {
     let mut test = ExecutionTestBuilder::new()
-        .with_install_code_instruction_limit(1_000_000_000)
+        .with_install_code_instruction_limit(2_000_000_000)
         .with_install_code_slice_instruction_limit(1_000)
         .with_manual_execution()
         .build();
@@ -2135,7 +2135,7 @@ fn install_with_dts_correctly_updates_system_state() {
 #[test]
 fn upgrade_with_dts_correctly_updates_system_state() {
     let mut test = ExecutionTestBuilder::new()
-        .with_install_code_instruction_limit(1_000_000_000)
+        .with_install_code_instruction_limit(2_000_000_000)
         .with_install_code_slice_instruction_limit(1_000)
         .with_manual_execution()
         .build();

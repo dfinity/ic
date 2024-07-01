@@ -756,7 +756,7 @@ fn queries_to_frozen_canisters_are_rejected() {
     test.update_freezing_threshold(canister_a, freezing_threshold)
         .unwrap();
 
-    let high_cycles = Cycles::new(1_000_000_000_000);
+    let high_cycles = Cycles::new(1_000_000_000_000_000);
     let canister_b = test.universal_canister_with_cycles(high_cycles).unwrap();
     test.update_freezing_threshold(canister_b, freezing_threshold)
         .unwrap();
