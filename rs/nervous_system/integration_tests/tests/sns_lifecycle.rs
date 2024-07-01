@@ -10,12 +10,12 @@ use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
-        add_wasms_to_sns_wasm, install_canister, install_nns_canisters, nns,
+        add_wasms_to_sns_wasm, install_canister_with_controllers, install_nns_canisters, nns,
         sns::{self, swap::SwapFinalizationStatus},
     },
 };
 use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Tokens as TokensPb};
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
     create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution,
     get_neurons_fund_audit_info_response, neurons_fund_snapshot::NeuronsFundNeuronPortion,
@@ -146,6 +146,9 @@ fn test_sns_lifecycle(
         .iter()
         .map(|x| x.controller.unwrap())
         .collect();
+    let fallback_controllers = create_service_nervous_system
+        .fallback_controller_principal_ids
+        .clone();
     let swap_parameters = create_service_nervous_system
         .swap_parameters
         .clone()
@@ -299,28 +302,40 @@ fn test_sns_lifecycle(
         .iter()
         .map(|canister| CanisterId::unchecked_from_principal(canister.id.unwrap()))
         .collect();
+    // Controlled by the original developers, and by NNS Root
+    let original_controllers = developer_neuron_controller_principal_ids
+        .clone()
+        .into_iter()
+        .chain(std::iter::once(ROOT_CANISTER_ID.get()))
+        .collect::<Vec<_>>();
     for dapp_canister_id in dapp_canister_ids.clone() {
-        install_canister(
+        install_canister_with_controllers(
             &pocket_ic,
             "My Test Dapp",
             dapp_canister_id,
             vec![],
             Wasm::from_bytes(UNIVERSAL_CANISTER_WASM),
-            None,
+            original_controllers.clone(),
         );
     }
 
     // Check who has control over the dapp before the swap.
     for dapp_canister_id in dapp_canister_ids.clone() {
         let controllers: BTreeSet<_> = pocket_ic
-            .canister_status(Principal::from(dapp_canister_id), None)
+            .canister_status(
+                Principal::from(dapp_canister_id),
+                Some(Principal::from(ROOT_CANISTER_ID.get())),
+            )
             .unwrap()
             .settings
             .controllers
             .into_iter()
             .map(PrincipalId::from)
             .collect();
-        assert_eq!(controllers, developer_neuron_controller_principal_ids);
+        assert_eq!(
+            controllers,
+            original_controllers.clone().into_iter().collect()
+        );
     }
 
     // 2. Create an SNS instance
@@ -334,6 +349,7 @@ fn test_sns_lifecycle(
         governance_canister_id: Some(sns_governance_canister_id),
         swap_canister_id: Some(swap_canister_id),
         ledger_canister_id: Some(sns_ledger_canister_id),
+        root_canister_id: Some(sns_root_canister_id),
         ..
     } = deployed_sns
     else {
@@ -1612,21 +1628,28 @@ fn test_sns_lifecycle(
     }
 
     // Check who has control over the dapp after the swap.
+    let expected_new_controllers = if swap_finalization_status == SwapFinalizationStatus::Aborted {
+        // The SNS swap has failed  ==>  control should be returned to the fallback controllers.
+        fallback_controllers.into_iter().collect::<BTreeSet<_>>()
+    } else {
+        // The SNS swap has succeeded  ==>  root should have sole control.
+        BTreeSet::from([sns_root_canister_id])
+    };
     for dapp_canister_id in dapp_canister_ids {
+        let sender = expected_new_controllers // the sender must be a controller
+            .first()
+            .cloned()
+            .map(Principal::from);
         let controllers: BTreeSet<_> = pocket_ic
-            .canister_status(Principal::from(dapp_canister_id), None)
+            .canister_status(Principal::from(dapp_canister_id), sender)
             .unwrap()
             .settings
             .controllers
             .into_iter()
             .map(PrincipalId::from)
             .collect();
-        if swap_finalization_status == SwapFinalizationStatus::Aborted {
-            // The SNS swap has failed  ==>  control should be returned to the dapp developers.
-            assert_eq!(controllers, developer_neuron_controller_principal_ids);
-        } else {
-            assert_eq!(controllers, BTreeSet::from([sns_governance_canister_id]));
-        }
+
+        assert_eq!(controllers, expected_new_controllers);
     }
 }
 
@@ -1662,6 +1685,22 @@ fn test_sns_lifecycle_happy_scenario_without_neurons_fund_participation() {
         false,
         CreateServiceNervousSystemBuilder::default()
             .neurons_fund_participation(false)
+            .build(),
+        btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
+    );
+}
+
+#[test]
+fn test_sns_lifecycle_happy_scenario_wih_dapp_canisters() {
+    test_sns_lifecycle(
+        false,
+        CreateServiceNervousSystemBuilder::default()
+            .neurons_fund_participation(false)
+            // If we add dapp canisters, test_sns_lifecycle will automatically create
+            // dapp canisters and set up their controllership appropriately, then
+            // verify that they are controlled only by SNS root after the swap is
+            // finalized.
+            .with_dapp_canisters(vec![CanisterId::from_u64(100)])
             .build(),
         btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
     );

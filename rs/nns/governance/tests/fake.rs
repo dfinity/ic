@@ -455,7 +455,8 @@ impl Environment for FakeDriver {
                 NodeProvidersMonthlyXdrRewards {
                     rewards: hashmap! {
                         PrincipalId::new_user_test_id(1).to_string() => NODE_PROVIDER_REWARD,
-                    }
+                    },
+                    registry_version: Some(5)
                 }
             ))
             .unwrap());
