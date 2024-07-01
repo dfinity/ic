@@ -27,7 +27,8 @@ anchors:
     image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
   dind-large-setup: &dind-large-setup
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-large
     container:
       <<: *image
     timeout-minutes: 120

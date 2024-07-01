@@ -1,0 +1,42 @@
+name: Check for master or prod failure
+on:
+  workflow_run:
+    workflows:
+      - Schedule Hourly
+    types: [completed]
+    branches:
+      - master
+
+jobs:
+  on-failure:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out'
+    steps:
+      - name: Lookup Slack Channel
+        id: lookup
+        if: steps.get-reviewers.outputs.result != '""'
+        run: |
+          TEAM=${{ steps.get-reviewers.outputs.result }}
+          CHANNEL=$(jq -r --arg team "$TEAM" '.[$team]' .github/workflows/team-channels.json)
+          echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
+          echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
+        env:
+          MESSAGE: ":github: <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>"
+      - name: Post Slack Notification
+        if: steps.get-reviewers.outputs.result != '""'
+        id: slack
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        with:
+          channel-id: ${{ steps.lookup.outputs.channel }}
+          slack-message: "${{ steps.lookup.outputs.message }}"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
+
+      - uses: ravsamhq/notify-slack-action@v2
+        with:
+          status: ${{ github.event.workflow_run.conclusion }}
+          notification_title: " ${{github.event.workflow_run.name}} - ${{github.event.workflow_run.conclusion}} on ${{github.event.workflow_run.head_branch}} - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.event.workflow_run.id}}|View Failure>"
+          message_format: ":fire: *${{github.event.workflow_run.name}}* ${{github.event.workflow_run.conclusion}} in <${{github.server_url}}/${{github.repository}}/${{github.event.workflow_run.head_branch}}|${{github.repository}}>"
+          footer: "Linked Repo <${{github.server_url}}/${{github.repository}}|${{github.repository}}> | <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.event.workflow_run.id}}|View Failure>"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.MASTER_PROD_FAIL_SLACK }}
