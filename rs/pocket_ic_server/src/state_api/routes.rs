@@ -7,8 +7,8 @@
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, ExecuteIngressMessage, GetCyclesBalance,
-    GetStableMemory, GetSubnet, GetTime, PubKey, Query, QueryRequest, ReadStateRequest,
-    SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, Tick,
+    GetStableMemory, GetSubnet, GetTime, GetTopology, PubKey, Query, QueryRequest,
+    ReadStateRequest, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, Tick,
 };
 use crate::OpId;
 use crate::{pocket_ic::PocketIc, BlobStore, InstanceId, Operation};
@@ -36,7 +36,7 @@ use ic_types::CanisterId;
 use pocket_ic::common::rest::{
     self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayInfo, RawAddCycles,
     RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId, RawSetStableMemory,
-    RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime, RawWasmResult,
+    RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime, RawWasmResult, Topology,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
@@ -66,6 +66,7 @@ where
 {
     ApiRouter::new()
         .directory_route("/query", post(handler_json_query))
+        .directory_route("/topology", get(handler_topology))
         .directory_route("/get_time", get(handler_get_time))
         .directory_route("/get_cycles", post(handler_get_cycles))
         .directory_route("/get_stable_memory", post(handler_get_stable_memory))
@@ -299,6 +300,16 @@ impl TryFrom<OpOut> for RawTime {
     }
 }
 
+impl TryFrom<OpOut> for Topology {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::Topology(topology) => Ok(topology),
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
 impl TryFrom<OpOut> for () {
     type Error = OpConversionError;
     fn try_from(value: OpOut) -> Result<Self, Self::Error> {
@@ -459,6 +470,17 @@ pub async fn handler_json_query(
             }),
         ),
     }
+}
+
+pub async fn handler_topology(
+    State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
+    Path(instance_id): Path<InstanceId>,
+) -> (StatusCode, Json<ApiResponse<Topology>>) {
+    let timeout = timeout_or_default(headers);
+    let op = GetTopology {};
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
 }
 
 pub async fn handler_get_time(
@@ -656,6 +678,9 @@ fn op_out_to_response(op_out: OpOut) -> Response {
             Json(ApiResponse::Success(())).into_response(),
         )
             .into_response(),
+        OpOut::Topology(topology) => {
+            (StatusCode::OK, Json(ApiResponse::Success(topology))).into_response()
+        }
         opout @ OpOut::Time(_) => (
             StatusCode::OK,
             Json(ApiResponse::Success(RawTime::try_from(opout).unwrap())),

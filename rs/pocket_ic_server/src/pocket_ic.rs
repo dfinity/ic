@@ -47,7 +47,7 @@ use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use std::str::FromStr;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     sync::{Arc, Mutex, RwLock},
     time::{Duration, SystemTime},
 };
@@ -141,7 +141,7 @@ impl PocketIc {
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>> =
             Arc::new(RwLock::new(BTreeMap::new()));
-        let mut topology = Topology(HashMap::new());
+        let mut topology = Topology(BTreeMap::new());
 
         // Create all StateMachines and the topology from the subnet config infos.
         for (
@@ -539,6 +539,19 @@ impl Operation for SetTime {
 
     fn id(&self) -> OpId {
         OpId(format!("set_time_{}", self.time))
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct GetTopology;
+
+impl Operation for GetTopology {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        OpOut::Topology(pic.topology.clone())
+    }
+
+    fn id(&self) -> OpId {
+        OpId("get_topology".into())
     }
 }
 
