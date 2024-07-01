@@ -12154,6 +12154,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-validator-http-request-arbitrary"
+version = "0.9.0"
+dependencies = [
+ "arbitrary",
+ "ic-base-types",
+ "ic-crypto-tree-hash",
+ "ic-types",
+]
+
+[[package]]
 name = "ic-validator-http-request-test-utils"
 version = "0.9.0"
 dependencies = [
