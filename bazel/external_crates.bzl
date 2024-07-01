@@ -146,9 +146,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "use-tokio",
                 ],
             ),
-            "async-socks5": crate.spec(
-                version = "^0.5.1",
-            ),
             "async-stream": crate.spec(
                 version = "^0.3.5",
             ),
