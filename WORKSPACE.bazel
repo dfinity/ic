@@ -18,6 +18,7 @@ load("@aspect_rules_sol//sol:repositories.bzl", "rules_sol_dependencies", "sol_r
 
 rules_sol_dependencies()
 
+# comment
 sol_register_toolchains(
     name = "solc",
     sol_version = "0.8.18",
