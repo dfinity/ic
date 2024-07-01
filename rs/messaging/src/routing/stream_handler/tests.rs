@@ -1427,7 +1427,11 @@ fn reroute_rejected_messages_success() {
 /// directly.
 fn check_stream_handler_generated_reject_response_impl(
     mut available_guaranteed_response_memory: i64,
-    canister_state_putter: &dyn Fn(CanisterState, &mut ReplicatedState),
+    // This function will be fed with a local canister and a state prepared for testing.
+    // It's purpose is to set the stage as required such that inducting the `loopback_stream`
+    // induces the type of reject response that will be be compared against a reference given
+    // by `expected_reject_code` and `expected_state_error`.
+    canister_setup: &dyn Fn(CanisterState, &mut ReplicatedState),
     expected_reject_code: RejectCode,
     expected_state_error: StateError,
 ) {
@@ -1458,8 +1462,8 @@ fn check_stream_handler_generated_reject_response_impl(
 
         state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
 
-        // Put a local canister into `state`.
-        canister_state_putter(
+        // Setup the canister testing environment using a local canister and a state for testing.
+        canister_setup(
             new_canister_state(
                 *LOCAL_CANISTER,
                 user_test_id(24).get(),
@@ -1551,6 +1555,26 @@ fn check_stream_handler_generated_reject_response_out_of_memory() {
         StateError::OutOfMemory {
             requested: (MAX_RESPONSE_COUNT_BYTES as u64).into(),
             available: 0,
+        },
+    );
+}
+
+#[test]
+fn check_stream_handler_generated_reject_response_canister_migrating() {
+    check_stream_handler_generated_reject_response_impl(
+        i64::MAX / 2, // `available_guaranteed_response_memory`
+        &|_, state| {
+            *state = simulate_canister_migration(
+                state.clone(),
+                *LOCAL_CANISTER,
+                LOCAL_SUBNET,
+                CANISTER_MIGRATION_SUBNET,
+            );
+        },
+        RejectCode::SysTransient,
+        StateError::CanisterMigrating {
+            canister_id: *LOCAL_CANISTER,
+            host_subnet: CANISTER_MIGRATION_SUBNET,
         },
     );
 }
