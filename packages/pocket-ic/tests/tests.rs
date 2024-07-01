@@ -896,3 +896,27 @@ fn install_very_large_wasm() {
         _ => panic!("Unexpected update call response: {:?}", res),
     };
 }
+
+#[test]
+fn test_uninstall_canister() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, INIT_CYCLES);
+
+    // Install the counter canister wasm file on the canister.
+    let counter_wasm = counter_wasm();
+    pic.install_canister(can_id, counter_wasm, vec![], None);
+
+    // The module hash should be set after the canister is installed.
+    let status = pic.canister_status(can_id, None).unwrap();
+    assert!(status.module_hash.is_some());
+
+    // Uninstall the canister.
+    pic.uninstall_canister(can_id, None).unwrap();
+
+    // The module hash should be unset after the canister is uninstalled.
+    let status = pic.canister_status(can_id, None).unwrap();
+    assert!(status.module_hash.is_none());
+}
