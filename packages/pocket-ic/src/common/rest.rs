@@ -9,7 +9,7 @@ use reqwest::Response;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 pub type InstanceId = usize;
@@ -218,7 +218,7 @@ pub struct RawCycles {
     pub cycles: u128,
 }
 
-#[derive(Clone, Serialize, Eq, PartialEq, Deserialize, Debug, JsonSchema)]
+#[derive(Clone, Serialize, Eq, PartialEq, Ord, PartialOrd, Deserialize, Debug, JsonSchema)]
 pub struct RawCanisterId {
     // raw bytes of the principal
     #[serde(deserialize_with = "base64::deserialize")]
@@ -318,7 +318,9 @@ pub mod base64 {
 
 // ================================================================================================================= //
 
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, Eq, Hash, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema,
+)]
 pub enum SubnetKind {
     Application,
     Bitcoin,
@@ -482,7 +484,9 @@ impl Default for SubnetSpec {
 }
 
 /// Specifies instruction limits for canister execution on this subnet.
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Eq, Hash, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema,
+)]
 pub enum SubnetInstructionConfig {
     /// Use default instruction limits as in production.
     Production,
@@ -597,7 +601,7 @@ impl ExtendedSubnetConfigSet {
 }
 
 /// Configuration details for a subnet, returned by PocketIc server
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
 pub struct SubnetConfig {
     pub subnet_kind: SubnetKind,
     /// Instruction limits for canister execution on this subnet.
@@ -608,14 +612,14 @@ pub struct SubnetConfig {
     pub canister_ranges: Vec<CanisterIdRange>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
 pub struct CanisterIdRange {
     pub start: RawCanisterId,
     pub end: RawCanisterId,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct Topology(pub HashMap<SubnetId, SubnetConfig>);
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
+pub struct Topology(pub BTreeMap<SubnetId, SubnetConfig>);
 
 impl Topology {
     pub fn get_app_subnets(&self) -> Vec<SubnetId> {
