@@ -10,7 +10,8 @@ use ic_async_utils::{
     incoming_from_path,
 };
 use ic_https_outcalls_adapter::{AdapterServer, Cli, IncomingSource};
-use ic_logger::{error, info, new_replica_logger_from_config};
+use ic_logging::get_logging_layer;
+use tracing::{error, info);
 use ic_metrics::MetricsRegistry;
 use serde_json::to_string_pretty;
 
@@ -30,6 +31,7 @@ pub async fn main() {
         }
     };
 
+    let (log_layer, _log_guard) = get_logging_layer(config, )
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
 
     let metrics_registry = MetricsRegistry::global();
@@ -52,7 +54,7 @@ pub async fn main() {
     );
 
     // Create server with https enforcement.
-    let server = AdapterServer::new(config.clone(), logger.clone(), &metrics_registry);
+    let server = AdapterServer::new(config.clone(), &metrics_registry);
     match config.incoming_source {
         IncomingSource::Path(uds_path) => server
             .serve(incoming_from_path(uds_path))

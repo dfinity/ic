@@ -207,8 +207,6 @@ fn plain_authentication_with_one_scoped_delegation() {
     );
 }
 
-
-
 #[test]
 fn plain_authentication_with_multiple_delegations() {
     let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));

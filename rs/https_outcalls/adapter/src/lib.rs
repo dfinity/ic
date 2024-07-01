@@ -18,7 +18,6 @@ pub use rpc_server::CanisterHttp;
 
 use futures::{Future, Stream};
 use ic_https_outcalls_service::canister_http_service_server::CanisterHttpServiceServer;
-use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -27,11 +26,12 @@ use tonic::transport::{
     Server,
 };
 use tower::layer::util::Identity;
+use tracing::info;
 
 pub struct AdapterServer(Router<Identity>);
 
 impl AdapterServer {
-    pub fn new(config: Config, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
+    pub fn new(config: Config, metrics: &MetricsRegistry) -> Self {
         let timeout = Duration::from_secs(config.http_connect_timeout_secs);
 
         // TODO: NET-1703
@@ -51,7 +51,6 @@ impl AdapterServer {
 
                     if client.is_err() {
                         info!(
-                            logger,
                             "Socks Client not created: Reqwest client builder failed: {:?}", client
                         );
                     }
@@ -60,7 +59,6 @@ impl AdapterServer {
                 }
                 Err(err) => {
                     info!(
-                        logger,
                         "Socks Client not created: Failed to create https proxy: {:?}", err
                     );
                     None
@@ -68,7 +66,6 @@ impl AdapterServer {
             },
             Err(err) => {
                 info!(
-                    logger,
                     "Socks Client not created: Failed to parse socks url: {:?}", err
                 );
                 None
@@ -86,7 +83,7 @@ impl AdapterServer {
             .build()
             .expect("Failed to create HTTPS client");
 
-        let canister_http = CanisterHttp::new(https_client, socks_client, logger, metrics);
+        let canister_http = CanisterHttp::new(https_client, socks_client, metrics);
 
         Self(
             Server::builder()

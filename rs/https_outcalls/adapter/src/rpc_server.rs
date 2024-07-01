@@ -9,7 +9,6 @@ use ic_https_outcalls_service::{
     canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
     CanisterHttpSendResponse, HttpHeader, HttpMethod,
 };
-use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue, ToStrError, USER_AGENT},
@@ -17,6 +16,7 @@ use reqwest::{
 };
 use std::str::FromStr;
 use tonic::{Request, Response, Status};
+use tracing::debug;
 
 /// Hyper only supports a maximum of 32768 headers https://docs.rs/hyper/0.14.23/hyper/header/index.html#limitations-1
 /// and it panics if we try to allocate more headers. And since hyper sometimes grows the map by doubling the entries
@@ -32,7 +32,6 @@ const USER_AGENT_ADAPTER: &str = "ic/1.0";
 pub struct CanisterHttp {
     client: Client,
     socks_client: Option<Client>,
-    logger: ReplicaLogger,
     metrics: AdapterMetrics,
 }
 
@@ -40,13 +39,11 @@ impl CanisterHttp {
     pub fn new(
         client: Client,
         socks_client: Option<Client>,
-        logger: ReplicaLogger,
         metrics: &MetricsRegistry,
     ) -> Self {
         Self {
             client,
             socks_client,
-            logger,
             metrics: AdapterMetrics::new(metrics),
         }
     }
@@ -63,7 +60,7 @@ impl CanisterHttpService for CanisterHttp {
         let req = request.into_inner();
 
         if !req.url.is_ascii() {
-            debug!(self.logger, "URL contains non-ascii characters");
+            debug!("URL contains non-ascii characters");
             self.metrics
                 .request_errors
                 .with_label_values(&[LABEL_URL_PARSE])
@@ -75,7 +72,7 @@ impl CanisterHttpService for CanisterHttp {
         }
 
         let url = req.url.parse::<Url>().map_err(|err| {
-            debug!(self.logger, "Failed to parse URL: {}", err);
+            debug!("Failed to parse URL: {}", err);
             self.metrics
                 .request_errors
                 .with_label_values(&[LABEL_URL_PARSE])
@@ -88,7 +85,6 @@ impl CanisterHttpService for CanisterHttp {
 
         if url.scheme() != "https" {
             debug!(
-                self.logger,
                 "Got request with no or http scheme specified. {}", url
             );
             self.metrics
@@ -165,7 +161,7 @@ impl CanisterHttpService for CanisterHttp {
             }
         }
         .map_err(|err| {
-            debug!(self.logger, "Failed to connect: {}", err);
+            debug!("Failed to connect: {}", err);
             self.metrics
                 .request_errors
                 .with_label_values(&[LABEL_CONNECT])
@@ -202,7 +198,7 @@ impl CanisterHttpService for CanisterHttp {
             })
             .collect::<Result<Vec<_>, ToStrError>>()
             .map_err(|err| {
-                debug!(self.logger, "Failed to parse headers: {}", err);
+                debug!("Failed to parse headers: {}", err);
                 self.metrics
                     .request_errors
                     .with_label_values(&[LABEL_RESPONSE_HEADERS])
@@ -247,7 +243,7 @@ impl CanisterHttpService for CanisterHttp {
         let mut body_bytes: Vec<u8> = Vec::with_capacity(length);
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(|err| {
-                debug!(self.logger, "Failed to fetch body: {}", err);
+                debug!("Failed to fetch body: {}", err);
                 self.metrics
                     .request_errors
                     .with_label_values(&[LABEL_BODY_RECEIVE_TIMEOUT])

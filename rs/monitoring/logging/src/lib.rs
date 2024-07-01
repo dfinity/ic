@@ -1,4 +1,4 @@
-use ic_config::logger::{Config as LoggingConfig, LogFormat};
+use ic_config::logger::{Config as LoggingConfig, LogDestination, LogFormat};
 use ic_types::{NodeId, SubnetId};
 use time::format_description::well_known::Rfc3339;
 use tracing::Subscriber;
@@ -74,13 +74,24 @@ pub fn get_logging_layer(
 ) -> (Box<dyn Layer<Registry> + Send + Sync>, Option<WorkerGuard>) {
     let formatter = Formatter::new(config.format, node_id, subnet_id);
 
+    let log_destination = config.log_destination.clone();
+    let make_writer = move || -> Box<dyn std::io::Write + Send> {
+        match &log_destination {
+            LogDestination::Stderr => Box::new(std::io::stderr()),
+            LogDestination::Stdout => Box::new(std::io::stdout()),
+            LogDestination::File(path) => {
+                Box::new(std::fs::File::create(path).expect("Couldn't open/create log file"))
+            }
+        }
+    };
+
     if config.block_on_overflow {
         let layer = fmt::Layer::new()
             .event_format(formatter)
-            .with_writer(std::io::stdout);
+            .with_writer(make_writer);
         (layer.boxed(), None)
     } else {
-        let (non_blocking_writer, guard) = non_blocking(std::io::stdout());
+        let (non_blocking_writer, guard) = non_blocking(make_writer());
         let layer = fmt::Layer::new()
             .event_format(formatter)
             .with_writer(non_blocking_writer);

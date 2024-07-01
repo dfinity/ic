@@ -5,7 +5,6 @@
 use crate::config::Config;
 use clap::Parser;
 use reqwest::Url;
-use slog::Level;
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
 
@@ -32,15 +31,6 @@ pub struct Cli {
 }
 
 impl Cli {
-    /// Gets the log filter level by checking the verbose field.
-    pub fn get_logging_level(&self) -> Level {
-        if self.verbose {
-            Level::Debug
-        } else {
-            Level::Info
-        }
-    }
-
     /// Loads the config from the provided `config` argument.
     pub fn get_config(&self) -> Result<Config, CliError> {
         // The expected JSON config.
@@ -76,24 +66,6 @@ pub mod test {
     use std::path::PathBuf;
     use std::str::FromStr;
     use tempfile::NamedTempFile;
-
-    /// This function tests the `Cli::get_logging_level()` function.
-    #[test]
-    fn test_cli_get_logging_level() {
-        let cli = Cli {
-            config: PathBuf::new(),
-            verbose: false,
-        };
-
-        assert_eq!(cli.get_logging_level(), Level::Info);
-
-        let cli = Cli {
-            config: PathBuf::new(),
-            verbose: true,
-        };
-
-        assert_eq!(cli.get_logging_level(), Level::Debug);
-    }
 
     // This function tests opening a config file that does not exist.
     #[test]
@@ -316,7 +288,6 @@ pub mod test {
             http_request_timeout_secs: 50,
             incoming_source: IncomingSource::Path(PathBuf::from("/tmp/path.socket")),
             logger: ic_config::logger::Config {
-                level: slog::Level::Info,
                 format: ic_config::logger::LogFormat::Json,
                 ..Default::default()
             },

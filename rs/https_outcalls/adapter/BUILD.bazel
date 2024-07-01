@@ -7,7 +7,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/https_outcalls/service",
     "//rs/monitoring/adapter_metrics/server",
-    "//rs/monitoring/logger",
+    "//rs/monitoring/logging",
     "//rs/monitoring/metrics",
     "@crate_index//:byte-unit",
     "@crate_index//:clap_3_2_25",
@@ -16,11 +16,11 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
-    "@crate_index//:slog",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tonic",
     "@crate_index//:tower",
+    "@crate_index//:tracing",
 ]
 
 MACRO_DEPENDENCIES = []
