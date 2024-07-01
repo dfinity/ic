@@ -145,7 +145,6 @@ rust_test(
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
         "@crate_index//:candid",
-        "@crate_index//:ethabi",
         "@crate_index//:futures",
         "@crate_index//:hex",
         "@crate_index//:ic-canister-log",
@@ -154,7 +153,6 @@ rust_test(
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:num-traits",
         "@crate_index//:serde_bytes",
-        "@crate_index//:serde_json",
         "@crate_index//:time",
     ],
 ) for (target_suffix, features) in [

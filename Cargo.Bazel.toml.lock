@@ -2929,7 +2929,6 @@ dependencies = [
  "either",
  "erased-serde",
  "escargot",
- "ethabi",
  "ethers-core",
  "ethnum",
  "exec",
