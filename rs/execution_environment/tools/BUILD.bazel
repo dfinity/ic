@@ -1,0 +1,33 @@
+
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library")
+load("//bazel:defs.bzl", "rust_ic_bench", "rust_ic_test", "rust_ic_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+DATA = []
+
+ENV = {}
+
+rust_binary(
+    name = "fees_and_limits",
+    srcs = ["src/fees_and_limits.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [
+        "//rs/config",
+        "//rs/embedders",
+        "//rs/replicated_state",
+        "//rs/system_api",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:clap_3_2_25",
+        "@crate_index//:eyre",
+        "@crate_index//:ic-agent",
+        "@crate_index//:serde_json",
+        "@crate_index//:tokio",
+    ],
+)

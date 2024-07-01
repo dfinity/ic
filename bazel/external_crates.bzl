@@ -1049,13 +1049,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             #        "wasmparser",
             #    ],
             #),
-            #"wasm-smith": crate.spec(
-            #    version = "^0.201.0",
-            #    default_features = False,
-            #    features = [
-            #        "wasmparser",
-            #    ],
-            #),
+            # # TODO: needed for rs/embedders/fuzz
+            # XXX: missing from Cargo.toml?
+            # NOTE: rs/embedders/fuzz does not have a cargo toml :(
+            "wasm-smith": crate.spec(
+                version = "^0.201.0",
+                default_features = False,
+                features = [
+                    "wasmparser",
+                ],
+            ),
             #"wasmparser": crate.spec(
             #    version = "^0.201.0",
             #),
