@@ -58,7 +58,6 @@ pub struct PocketIc {
     // how long a get/post request may retry or poll
     max_request_time_ms: Option<u64>,
     http_gateway: Option<HttpGatewayInfo>,
-    topology: Topology,
     server_url: Url,
     reqwest_client: reqwest::Client,
     _log_guard: Option<WorkerGuard>,
@@ -113,7 +112,7 @@ impl PocketIc {
         let log_guard = setup_tracing(parent_pid);
 
         let reqwest_client = reqwest::Client::new();
-        let (instance_id, topology) = match reqwest_client
+        let instance_id = match reqwest_client
             .post(server_url.join("instances").unwrap())
             .json(&config)
             .send()
@@ -123,10 +122,7 @@ impl PocketIc {
             .await
             .expect("Could not parse response for create instance request")
         {
-            CreateInstanceResponse::Created {
-                instance_id,
-                topology,
-            } => (instance_id, topology),
+            CreateInstanceResponse::Created { instance_id, .. } => instance_id,
             CreateInstanceResponse::Error { message } => panic!("{}", message),
         };
         debug!("instance_id={} New instance created.", instance_id);
@@ -135,7 +131,6 @@ impl PocketIc {
             instance_id,
             max_request_time_ms,
             http_gateway: None,
-            topology,
             server_url,
             reqwest_client,
             _log_guard: log_guard,
@@ -144,7 +139,8 @@ impl PocketIc {
 
     /// Returns the topology of the different subnets of this PocketIC instance.
     pub async fn topology(&self) -> Topology {
-        self.topology.clone()
+        let endpoint = "read/topology";
+        self.get(endpoint).await
     }
 
     /// Upload and store a binary blob to the PocketIC server.
@@ -373,7 +369,7 @@ impl PocketIc {
     /// Get the root key of this IC instance. Returns `None` if the IC has no NNS subnet.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn root_key(&self) -> Option<Vec<u8>> {
-        let subnet_id = self.topology.get_nns()?;
+        let subnet_id = self.topology().await.get_nns()?;
         let subnet_id: RawSubnetId = subnet_id.into();
         let endpoint = "read/pub_key";
         let res = self.post::<Vec<u8>, _>(endpoint, subnet_id).await;

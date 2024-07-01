@@ -1,5 +1,5 @@
 {
-  "checksum": "26f9d3c20340bdce0d732a7492a82ee00e59e45663d0c847dcb88caab0e3a92f",
+  "checksum": "74c8f9b45c9788e4a08a17fa88e5161de167b65c0f5122773922852e3c55abbd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17008,10 +17008,6 @@
               "target": "escargot"
             },
             {
-              "id": "ethabi 18.0.0",
-              "target": "ethabi"
-            },
-            {
               "id": "ethers-core 2.0.8",
               "target": "ethers_core"
             },
@@ -20321,7 +20317,6 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "full-serde",
             "once_cell",
             "regex",
@@ -77280,7 +77275,6 @@
     "either 1.8.1",
     "erased-serde 0.3.28",
     "escargot 0.5.7",
-    "ethabi 18.0.0",
     "ethers-core 2.0.8",
     "ethnum 1.3.2",
     "exec 0.3.1",
