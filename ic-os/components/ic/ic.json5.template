@@ -163,7 +163,6 @@
         level: "info",
         // The format of emitted log lines
         format: "json",
-        debug_overrides: {{ replica_log_debug_overrides }},
     },
 
     // ==================================

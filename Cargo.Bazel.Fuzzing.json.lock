@@ -1,5 +1,5 @@
 {
-  "checksum": "9be1a3589eb238baa3d8e563810aefeceb5111c2d06f39e1af5390ecff75ad1f",
+  "checksum": "135698f4e98f7ca1be7caad6962cc28fc1ab70ba4f4f95c28507f52343aa7085",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3628,67 +3628,6 @@
         "MIT"
       ],
       "license_file": null
-    },
-    "async-socks5 0.5.1": {
-      "name": "async-socks5",
-      "version": "0.5.1",
-      "package_url": "https://github.com/ark0f/async-socks5",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/async-socks5/0.5.1/download",
-          "sha256": "77f634add2445eb2c1f785642a67ca1073fedd71e73dc3ca69435ef9b9bdedc7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "async_socks5",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "async_socks5",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "thiserror 1.0.57",
-              "target": "thiserror"
-            },
-            {
-              "id": "tokio 1.38.0",
-              "target": "tokio"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.74",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.5.1"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE.md"
     },
     "async-stream 0.3.5": {
       "name": "async-stream",
@@ -16996,10 +16935,6 @@
             {
               "id": "async-scoped 0.8.0",
               "target": "async_scoped"
-            },
-            {
-              "id": "async-socks5 0.5.1",
-              "target": "async_socks5"
             },
             {
               "id": "async-stream 0.3.5",
@@ -77282,7 +77217,6 @@
     "assert_matches 1.5.0",
     "async-recursion 1.0.5",
     "async-scoped 0.8.0",
-    "async-socks5 0.5.1",
     "async-stream 0.3.5",
     "async-trait 0.1.74",
     "axum 0.6.20",

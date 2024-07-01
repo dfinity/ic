@@ -72,6 +72,9 @@ impl Node {
             RequestType::Unknown => {
                 panic!("can't construct url for unknown request type")
             }
+            RequestType::CallV3 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v3/canister/{principal}/call",
+            )),
             RequestType::ReadStateSubnet => Url::from_str(&format!(
                 "https://{node_id}:{node_port}/api/v2/subnet/{principal}/read_state",
             )),
