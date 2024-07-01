@@ -8894,6 +8894,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-logging"
+version = "0.9.0"
+dependencies = [
+ "ic-config",
+ "ic-types",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "ic-mainnet-nns-recovery"
 version = "0.9.0"
 dependencies = [

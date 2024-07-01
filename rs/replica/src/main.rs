@@ -61,55 +61,6 @@ fn get_replica_binary_hash() -> Result<(PathBuf, String), String> {
     Ok((replica_binary_path, hex::encode(hasher.finish())))
 }
 
-enum InnerFormat {
-    Full(Format<fmt::format::Full>),
-    Json(Format<fmt::format::Json>),
-}
-
-struct LogFormatter {
-    inner: InnerFormat,
-    node_id: NodeId,
-    subnet_id: SubnetId,
-}
-
-impl LogFormatter {
-    fn new(format: LogFormat, node_id: NodeId, subnet_id: SubnetId) -> Self {
-        let inner = match format {
-            LogFormat::Json => InnerFormat::Json(fmt::format::json()),
-            LogFormat::TextFull => InnerFormat::Full(fmt::format::format()),
-        };
-        Self {
-            inner,
-            node_id,
-            subnet_id,
-        }
-    }
-}
-
-impl<S, N> fmt::format::FormatEvent<S, N> for LogFormatter
-where
-    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
-    N: for<'a> tracing_subscriber::fmt::FormatFields<'a> + 'static,
-{
-    // Required method
-    fn format_event(
-        &self,
-        ctx: &fmt::FmtContext<'_, S, N>,
-        mut writer: fmt::format::Writer<'_>,
-        event: &tracing::Event<'_>,
-    ) -> std::fmt::Result {
-        write!(
-            &mut writer,
-            "node_id: {} subnet_id:{} ",
-            self.node_id, self.subnet_id
-        )?;
-
-        match &self.inner {
-            InnerFormat::Json(f) => f.format_event(ctx, writer, event),
-            InnerFormat::Full(f) => f.format_event(ctx, writer, event),
-        }
-    }
-}
 
 fn main() -> io::Result<()> {
     // We do not support 32 bits architectures and probably never will.

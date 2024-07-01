@@ -158,6 +158,7 @@ members = [
     "rs/monitoring/adapter_metrics/service",
     "rs/monitoring/backtrace",
     "rs/monitoring/logger",
+    "rs/monitoring/logging",
     "rs/monitoring/metrics",
     "rs/monitoring/pprof",
     "rs/nervous_system/clients",
