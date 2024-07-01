@@ -18,7 +18,7 @@ use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
-    CanisterStatusType, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, Method, Payload as _,
+    CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload as _,
     TakeCanisterSnapshotArgs, UninstallCodeArgs,
 };
 use ic_registry_routing_table::CanisterIdRange;
@@ -3480,12 +3480,9 @@ fn scheduler_maintains_canister_order() {
 
 #[test]
 fn ecdsa_signature_agreements_metric_is_updated() {
-    let ecdsa_key = EcdsaKeyId {
-        curve: EcdsaCurve::Secp256k1,
-        name: String::from("secp256k1"),
-    };
+    let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
-        .with_ecdsa_key(ecdsa_key.clone())
+        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
 
     let canister_id = test.create_canister();
@@ -3493,7 +3490,7 @@ fn ecdsa_signature_agreements_metric_is_updated() {
     let payload = Encode!(&SignWithECDSAArgs {
         message_hash: [0; 32],
         derivation_path: DerivationPath::new(Vec::new()),
-        key_id: ecdsa_key
+        key_id,
     })
     .unwrap();
 
@@ -3613,13 +3610,9 @@ fn ecdsa_signature_agreements_metric_is_updated() {
 
 #[test]
 fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
-    let ecdsa_key = EcdsaKeyId {
-        curve: EcdsaCurve::Secp256k1,
-        name: String::from("secp256k1"),
-    };
-
+    let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
-        .with_ecdsa_key(ecdsa_key.clone())
+        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
 
     let fee = test.ecdsa_signature_fee();
@@ -3648,7 +3641,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         Encode!(&SignWithECDSAArgs {
             message_hash: [0; 32],
             derivation_path: DerivationPath::new(Vec::new()),
-            key_id: ecdsa_key
+            key_id,
         })
         .unwrap(),
         payment,
@@ -5333,7 +5326,7 @@ fn test_is_next_method_added_to_task_queue() {
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
 }
 
-pub(crate) fn make_key_id(id: u64) -> EcdsaKeyId {
+pub(crate) fn make_ecdsa_key_id(id: u64) -> EcdsaKeyId {
     EcdsaKeyId::from_str(&format!("Secp256k1:key_{:?}", id)).unwrap()
 }
 
@@ -5358,9 +5351,9 @@ fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {
 
 #[test]
 fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
-    let key_id = make_key_id(0);
+    let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
-        .with_ecdsa_key(key_id.clone())
+        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
 
     inject_ecdsa_signing_request(&mut test, &key_id);
@@ -5380,9 +5373,9 @@ fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
 
 #[test]
 fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
-    let key_id = make_key_id(0);
+    let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
-        .with_ecdsa_key(key_id.clone())
+        .with_idkg_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     let pre_sig_id = PreSigId(0);
     let pre_sig_ids = BTreeSet::from_iter([pre_sig_id]);
@@ -5431,9 +5424,15 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
 
 #[test]
 fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
-    let key_ids: Vec<_> = (0..3).map(make_key_id).collect();
+    let key_ids: Vec<_> = (0..3).map(make_ecdsa_key_id).collect();
     let mut test = SchedulerTestBuilder::new()
-        .with_ecdsa_keys(key_ids.clone())
+        .with_idkg_keys(
+            key_ids
+                .iter()
+                .cloned()
+                .map(MasterPublicKeyId::Ecdsa)
+                .collect(),
+        )
         .build();
 
     // Deliver 2 quadruples for the first key, 1 for the second, 0 for the third

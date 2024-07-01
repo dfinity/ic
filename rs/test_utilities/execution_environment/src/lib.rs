@@ -1720,8 +1720,7 @@ impl ExecutionTestBuilder {
     }
 
     pub fn with_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
-        self.idkg_keys_with_signing_enabled
-            .insert(key_id.clone(), true);
+        self.idkg_keys_with_signing_enabled.insert(key_id, true);
         self
     }
 
