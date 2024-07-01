@@ -232,6 +232,7 @@ fn printable_logger() -> MockLogger {
 mod mock {
     use crate::Runtime;
     use async_trait::async_trait;
+    use candid::utils::ArgumentEncoder;
     use candid::{CandidType, Principal};
     use ic_canister_log::{LogEntry, Sink};
     use ic_cdk::api::call::RejectionCode;
@@ -251,7 +252,7 @@ mod mock {
                 cycles: u128,
             ) -> Result<Out, (RejectionCode, String)>
             where
-                In: CandidType + Send + 'static,
+                In: ArgumentEncoder + Send + 'static,
                 Out: CandidType + DeserializeOwned + 'static;
         }
     }

@@ -7,6 +7,7 @@ use crate::types::candid::{
     Block, BlockTag, MultiRpcResult, ProviderError, RpcConfig, RpcError, RpcServices,
 };
 use async_trait::async_trait;
+use candid::utils::ArgumentEncoder;
 use candid::{CandidType, Principal};
 use ic_canister_log::{log, Sink};
 use ic_cdk::api::call::RejectionCode;
@@ -23,10 +24,11 @@ pub trait Runtime {
         cycles: u128,
     ) -> Result<Out, (RejectionCode, String)>
     where
-        In: CandidType + Send + 'static,
+        In: ArgumentEncoder + Send + 'static,
         Out: CandidType + DeserializeOwned + 'static;
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EvmRpcClient<R: Runtime, L: Sink> {
     runtime: R,
     logger: L,
@@ -34,6 +36,12 @@ pub struct EvmRpcClient<R: Runtime, L: Sink> {
     evm_canister_id: Principal,
     min_attached_cycles: u128,
     max_num_retries: u32,
+}
+
+impl<L: Sink> EvmRpcClient<IcRuntime, L> {
+    pub fn builder_for_ic(logger: L) -> EvmRpcClientBuilder<IcRuntime, L> {
+        EvmRpcClientBuilder::new(IcRuntime {}, logger)
+    }
 }
 
 impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
@@ -147,8 +155,27 @@ impl<R: Runtime, L: Sink> EvmRpcClientBuilder<R, L> {
         }
     }
 
+    pub fn with_runtime<OtherRuntime: Runtime>(
+        self,
+        runtime: OtherRuntime,
+    ) -> EvmRpcClientBuilder<OtherRuntime, L> {
+        EvmRpcClientBuilder {
+            runtime,
+            logger: self.logger,
+            providers: self.providers,
+            evm_canister_id: self.evm_canister_id,
+            min_attached_cycles: self.min_attached_cycles,
+            max_num_retries: self.max_num_retries,
+        }
+    }
+
     pub fn with_providers(mut self, providers: RpcServices) -> Self {
         self.providers = providers;
+        self
+    }
+
+    pub fn with_evm_canister_id(mut self, evm_canister_id: Principal) -> Self {
+        self.evm_canister_id = evm_canister_id;
         self
     }
 
@@ -171,5 +198,27 @@ impl<R: Runtime, L: Sink> EvmRpcClientBuilder<R, L> {
             min_attached_cycles: self.min_attached_cycles,
             max_num_retries: self.max_num_retries,
         }
+    }
+}
+
+#[derive(Clone, Debug, Copy, Eq, PartialEq)]
+pub struct IcRuntime {}
+
+#[async_trait]
+impl Runtime for IcRuntime {
+    async fn call<In, Out>(
+        &self,
+        id: Principal,
+        method: &str,
+        args: In,
+        cycles: u128,
+    ) -> Result<Out, (RejectionCode, String)>
+    where
+        In: ArgumentEncoder + Send + 'static,
+        Out: CandidType + DeserializeOwned + 'static,
+    {
+        ic_cdk::api::call::call_with_payment128(id, method, args, cycles)
+            .await
+            .map(|(res,)| res)
     }
 }

@@ -4,7 +4,7 @@ use crate::flow::{
 };
 use crate::mock::JsonRpcMethod;
 use assert_matches::assert_matches;
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
 use ic_cketh_minter::endpoints::{
@@ -89,6 +89,7 @@ pub struct CkEthSetup {
     pub caller: PrincipalId,
     pub ledger_id: CanisterId,
     pub minter_id: CanisterId,
+    pub evm_rpc_id: Option<CanisterId>,
 }
 
 impl Default for CkEthSetup {
@@ -132,6 +133,7 @@ impl CkEthSetup {
             caller,
             ledger_id,
             minter_id,
+            evm_rpc_id: None,
         };
 
         assert_eq!(
@@ -139,6 +141,32 @@ impl CkEthSetup {
             Address::from_str(&cketh.minter_address()).unwrap()
         );
         cketh
+    }
+
+    fn new_with_evm_rpc(env: Arc<StateMachine>) -> Self {
+        // install ckETH first to keep the same canisterID and minter Ethereum address.
+        let mut cketh = Self::new(env);
+        let evm_rpc_id = cketh.env.create_canister(None);
+        install_evm_rpc(&cketh.env, evm_rpc_id);
+        cketh.upgrade_minter(UpgradeArg {
+            evm_rpc_id: Some(evm_rpc_id.into()),
+            ..Default::default()
+        });
+        cketh.evm_rpc_id = Some(evm_rpc_id);
+        cketh.env.tick();
+        cketh.env.tick(); //to load tECDSA key and minter's address
+        cketh
+    }
+
+    pub fn default_with_maybe_evm_rpc() -> Self {
+        Self::maybe_evm_rpc(Arc::new(new_state_machine()))
+    }
+
+    pub fn maybe_evm_rpc(env: Arc<StateMachine>) -> Self {
+        match std::env::var("EVM_RPC_CANISTER_WASM_PATH") {
+            Ok(_) => CkEthSetup::new_with_evm_rpc(env),
+            Err(_) => CkEthSetup::new(env),
+        }
     }
 
     pub fn deposit(self, params: DepositParams) -> DepositFlow {
@@ -395,6 +423,10 @@ impl CkEthSetup {
         serde_json::from_slice(&response.body).expect("failed to parse ckbtc minter log")
     }
 
+    pub fn check_events(self) -> MinterEventAssert<Self> {
+        MinterEventAssert::from_fetching_all_events(self)
+    }
+
     pub fn assert_has_unique_events_in_order(self, expected_events: &[EventPayload]) -> Self {
         MinterEventAssert::from_fetching_all_events(self)
             .assert_has_unique_events_in_order(expected_events)
@@ -583,6 +615,14 @@ fn minter_wasm() -> Vec<u8> {
     )
 }
 
+fn evm_rpc_wasm() -> Vec<u8> {
+    load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "evm_rpc_canister",
+        &[],
+    )
+}
+
 fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: CanisterId) -> CanisterId {
     let args = MinterInitArgs {
         ecdsa_key_name: "master_ecdsa_public_key".parse().unwrap(),
@@ -598,6 +638,20 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: Canister
     env.install_existing_canister(minter_id, minter_wasm(), Encode!(&minter_arg).unwrap())
         .unwrap();
     minter_id
+}
+
+fn install_evm_rpc(env: &StateMachine, evm_rpc_id: CanisterId) {
+    let args = EvmRpcInitArgs {
+        nodes_in_subnet: 28,
+    };
+    env.install_existing_canister(evm_rpc_id, evm_rpc_wasm(), Encode!(&args).unwrap())
+        .unwrap();
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct EvmRpcInitArgs {
+    #[serde(rename = "nodesInSubnet")]
+    pub nodes_in_subnet: u32,
 }
 
 fn assert_reply(result: WasmResult) -> Vec<u8> {
