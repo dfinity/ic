@@ -509,25 +509,6 @@ fn create_config_disk_image(
             .arg(elasticsearch_hosts.join(" "));
     }
 
-    let replica_log_debug_overrides: Vec<String> = test_env.get_replica_log_debug_overrides()?;
-
-    info!(
-        test_env.logger(),
-        "replica-log-debug-overrides args are {:?}", replica_log_debug_overrides
-    );
-
-    if !replica_log_debug_overrides.is_empty() {
-        let replica_log_debug_overrides_val = format!(
-            "[{}]",
-            replica_log_debug_overrides
-                .iter()
-                .map(|component_unquoted| format!("\"{}\"", component_unquoted))
-                .collect::<Vec<_>>()
-                .join(",")
-        );
-        cmd.arg("--replica_log_debug_overrides")
-            .arg(replica_log_debug_overrides_val);
-    }
     // --bitcoind_addr indicates the local bitcoin node that the bitcoin adapter should be connected to in the system test environment.
     if let Ok(arg) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
         cmd.arg("--bitcoind_addr").arg(arg);

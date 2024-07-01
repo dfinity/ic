@@ -39,9 +39,10 @@ use crate::orchestrator::utils::{
         UpdateImageType,
     },
 };
-use crate::util::{block_on, runtime_from_url};
+use crate::util::{block_on, runtime_from_url, MetricsFetcher};
 use ic_registry_subnet_type::SubnetType;
 use slog::{info, Logger};
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 const DKG_INTERVAL: u64 = 9;
@@ -190,6 +191,8 @@ pub async fn test_async(env: TestEnv) {
     )
     .await;
 
+    assert_no_critical_errors(&env, &logger).await;
+
     info!(&logger, "Upgrading 1 app subnet.");
 
     upgrade_to(
@@ -211,6 +214,8 @@ pub async fn test_async(env: TestEnv) {
     )
     .await;
 
+    assert_no_critical_errors(&env, &logger).await;
+
     info!(&logger, "Downgrading app subnet back to initial version.");
 
     upgrade_to(
@@ -224,7 +229,13 @@ pub async fn test_async(env: TestEnv) {
 
     info!(&logger, "Starting XNet test between 2 app subnets.");
 
-    xnet_slo_test::test_async_impl(env, app_subnet_runtimes, xnet_config.clone(), &logger).await;
+    xnet_slo_test::test_async_impl(
+        env.clone(),
+        app_subnet_runtimes,
+        xnet_config.clone(),
+        &logger,
+    )
+    .await;
 
     info!(&logger, "Tearing down long running canisters.");
 
@@ -233,6 +244,8 @@ pub async fn test_async(env: TestEnv) {
         xnet_slo_test::check_success(metrics, &long_xnet_config, &logger),
         "Long running canisters didn't meet success conditions."
     );
+
+    assert_no_critical_errors(&env, &logger).await;
 }
 
 async fn upgrade_to(
@@ -249,4 +262,34 @@ async fn upgrade_to(
     )
     .await;
     assert_assigned_replica_version(subnet_node, target_version, logger.clone());
+}
+
+async fn assert_no_critical_errors(env: &TestEnv, log: &slog::Logger) {
+    let nodes = env.topology_snapshot().subnets().flat_map(|s| s.nodes());
+    const NUM_RETRIES: u32 = 10;
+    const BACKOFF_TIME_MILLIS: u64 = 500;
+
+    let metrics = MetricsFetcher::new(nodes, vec!["critical_errors".to_string()]);
+    for i in 0..NUM_RETRIES {
+        match metrics.fetch::<u64>().await {
+            Ok(result) => {
+                assert!(!result.is_empty());
+                let filtered_results = result
+                    .iter()
+                    .filter(|(_, v)| v.iter().any(|x| *x > 0))
+                    .collect::<BTreeMap<_, _>>();
+                assert!(
+                    filtered_results.is_empty(),
+                    "Critical error detected: {:?}",
+                    filtered_results
+                );
+                return;
+            }
+            Err(e) => {
+                info!(log, "Could not scrape metrics: {e}, attempt {i}.");
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
+    }
+    panic!("Couldn't obtain metrics after {NUM_RETRIES} attempts.");
 }

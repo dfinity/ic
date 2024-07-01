@@ -1776,23 +1776,21 @@ pub mod test {
     use ic_test_utilities_consensus::{assert_changeset_matches_pattern, fake::*, matches_pattern};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_test_utilities_types::messages::SignedIngressBuilder;
-    use ic_types::batch::IngressPayload;
-    use ic_types::crypto::BasicSig;
-    use ic_types::crypto::BasicSigOf;
-    use ic_types::Time;
+    use ic_test_utilities_types::{
+        ids::{node_test_id, subnet_test_id},
+        messages::SignedIngressBuilder,
+    };
     use ic_types::{
-        batch::BatchPayload,
+        batch::{BatchPayload, IngressPayload},
         consensus::{
             dkg, idkg::PreSigId, BlockPayload, CatchUpPackageShare, DataPayload, EquivocationProof,
             Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare,
             Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
         },
-        crypto::{CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
+        crypto::{BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
-        CryptoHashOfState, ReplicaVersion,
+        CryptoHashOfState, ReplicaVersion, Time,
     };
     use std::{
         borrow::Borrow,
