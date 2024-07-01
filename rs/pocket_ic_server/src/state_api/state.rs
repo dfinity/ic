@@ -7,7 +7,7 @@ use crate::{OpId, Operation};
 use base64;
 use ic_http_endpoints_public::cors_layer;
 use ic_types::{CanisterId, SubnetId};
-use pocket_ic::common::rest::{HttpGatewayBackend, HttpGatewayConfig};
+use pocket_ic::common::rest::{HttpGatewayBackend, HttpGatewayConfig, Topology};
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -161,6 +161,7 @@ pub enum OpOut {
     ApiV2Response((u16, BTreeMap<String, Vec<u8>>, Vec<u8>)),
     Pruned,
     MessageId((EffectivePrincipal, Vec<u8>)),
+    Topology(Topology),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -210,6 +211,7 @@ impl std::fmt::Debug for OpOut {
         match self {
             OpOut::NoOutput => write!(f, "NoOutput"),
             OpOut::Time(x) => write!(f, "Time({})", x),
+            OpOut::Topology(t) => write!(f, "Topology({:?})", t),
             OpOut::CanisterId(cid) => write!(f, "CanisterId({})", cid),
             OpOut::Cycles(x) => write!(f, "Cycles({})", x),
             OpOut::CanisterResult(Ok(x)) => write!(f, "CanisterResult: Ok({:?})", x),

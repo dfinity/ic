@@ -389,9 +389,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.7",
                 features = ["print"],
             ),
-            "ethabi": crate.spec(
-                version = "^18.0.0",
-            ),
             "ethers-core": crate.spec(
                 version = "^2.0.7",
             ),
