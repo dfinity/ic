@@ -43,6 +43,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",
     "@crate_index//:criterion",
+    "@crate_index//:rand",
     "@crate_index//:turmoil",
 ]
 

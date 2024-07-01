@@ -6,7 +6,6 @@
 use std::{
     cmp::Reverse,
     collections::{BTreeMap, BinaryHeap, HashMap},
-    time::Instant,
 };
 
 use anyhow::{anyhow, Context};
@@ -20,7 +19,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
 use quinn::{Chunk, RecvStream, SendStream, VarInt, WriteError};
-use reed_solomon_erasure::ReedSolomon;
+use reed_solomon_simd::ReedSolomonDecoder;
 
 use crate::metrics::QuicTransportMetrics;
 
@@ -102,152 +101,91 @@ impl Assembler {
             }
         }
         self.header
-            .is_some_and(|h| h.scheme.0 <= decoded_map.len() as u32)
+            .is_some_and(|h| h.scheme.0 <= self.full_messages.len() as u32)
+    }
+    fn assemble(self) -> Bytes {
+        let header = self.header.unwrap();
+        let mut decoder = ReedSolomonDecoder::new(
+            header.scheme.0 as usize,
+            header.scheme.1 as usize,
+            Self::CHUNK_SIZE,
+        )
+        .unwrap();
+
+        for (idx, data) in &self.full_messages {
+            if *idx < header.scheme.0 as usize {
+                decoder.add_original_shard(*idx, data).unwrap();
+            } else {
+                decoder
+                    .add_recovery_shard(idx - header.scheme.0 as usize, data)
+                    .unwrap();
+            }
+        }
+        let missing_data_shards = decoder.decode().unwrap();
+
+        let mut data = BytesMut::zeroed(header.len as usize + header.padding as usize);
+        for (idx, d) in self
+            .full_messages
+            .into_iter()
+            .filter(|(idx, _)| *idx < header.scheme.0 as usize)
+        {
+            let idx = idx * Assembler::CHUNK_SIZE;
+            data[idx..idx + d.len()].copy_from_slice(&d)
+        }
+        for (idx, d) in missing_data_shards.restored_original_iter() {
+            let idx = idx * Assembler::CHUNK_SIZE;
+            data[idx..idx + d.len()].copy_from_slice(d)
+        }
+        let a = data.split_to(data.len() - header.padding as usize);
+
+        assert_eq!(a.len(), header.len as usize);
+
+        a.freeze()
+    }
+
+    fn split_message(mut bytes: Vec<u8>) -> Vec<Bytes> {
+        let len_bytes = bytes.len();
+        let padding = Self::CHUNK_SIZE - bytes.len() % Self::CHUNK_SIZE;
+        bytes.resize(Self::CHUNK_SIZE * bytes.len().div_ceil(Self::CHUNK_SIZE), 0);
+        assert!(bytes.len() % Self::CHUNK_SIZE == 0);
+        let data_shards = std::cmp::max(1, bytes.len() / Self::CHUNK_SIZE);
+        let parity_shards = std::cmp::max(1, data_shards / 2);
+        bytes.resize(data_shards * Self::CHUNK_SIZE, 0);
+        let shards: Vec<_> = bytes.chunks(Self::CHUNK_SIZE).collect();
+        let parity = reed_solomon_simd::encode(data_shards, parity_shards, &shards).unwrap();
+        let ecs: Vec<Bytes> = shards
+            .into_iter()
+            .chain(parity.iter().map(|x| x.as_slice()))
+            .map(|x| {
+                let mut b = BytesMut::new();
+                b.extend_from_slice(x);
+                b.put_u32(len_bytes as u32);
+                b.put_u32(data_shards as u32);
+                b.put_u32(parity_shards as u32);
+                b.put_u32(padding as u32);
+                b.freeze()
+            })
+            .collect();
+        ecs
     }
 }
 
 async fn assemble(mut recv_stream: RecvStream) -> Result<Bytes, anyhow::Error> {
-    let chunk_size = 1280;
-    let ec_header_size = 4 + 4 + 4 + 4;
-    let tot_ec_size = chunk_size + ec_header_size;
-
-    let mut header = None;
-
-    let mut chunk_map: HashMap<usize, BinaryHeap<_>> = HashMap::new();
-    let mut decoded_map: BTreeMap<usize, Bytes> = BTreeMap::new();
-    while let Some(Chunk { offset, mut bytes }) = recv_stream
+    let mut assembler = Assembler::default();
+    while let Some(Chunk { offset, bytes }) = recv_stream
         .read_chunk(MAX_MESSAGE_SIZE_BYTES, false)
         .await?
     {
-        let mut pos = offset as usize;
-        while !bytes.is_empty() {
-            let ec_idx = pos / tot_ec_size;
-            // offset is at chunk boundary
-            let c = if pos % tot_ec_size == 0 {
-                if bytes.len() < tot_ec_size {
-                    pos += bytes.len();
-                    let b = bytes.split_to(bytes.len());
-                    assert!(bytes.is_empty());
-                    b
-                } else {
-                    pos += tot_ec_size;
-                    assert!(pos % tot_ec_size == 0);
-                    bytes.split_to(tot_ec_size)
-                }
-            } else {
-                let dist_to_next_ec = tot_ec_size - (pos % tot_ec_size);
-                if bytes.len() < dist_to_next_ec {
-                    pos += bytes.len();
-                    let b = bytes.split_to(bytes.len());
-                    assert!(bytes.is_empty());
-                    b
-                } else {
-                    pos += dist_to_next_ec;
-                    assert!(pos % tot_ec_size == 0);
-                    bytes.split_to(dist_to_next_ec)
-                }
-            };
-            let e = chunk_map.entry(ec_idx).or_default();
-            e.push((Reverse(pos), c));
-
-            let sum = e.iter().map(|c| c.1.len()).sum::<usize>();
-            assert!(sum <= tot_ec_size);
-            if sum == tot_ec_size {
-                let mut bm = BytesMut::new();
-                while let Some((Reverse(_), s)) = e.pop() {
-                    bm.extend_from_slice(&s);
-                }
-
-                let mut ec_header = bm.split_off(bm.len() - ec_header_size);
-                if header.is_none() {
-                    header = Some(EcHeader {
-                        len: ec_header.get_u32(),
-                        scheme: (ec_header.get_u32(), ec_header.get_u32()),
-                        padding: ec_header.get_u32(),
-                    });
-                }
-                decoded_map.insert(ec_idx, bm.freeze());
-            }
-        }
-
-        let h1 = header.clone();
-        if h1.is_some_and(|h| h.scheme.0 <= decoded_map.len() as u32) {
-            let header = h1.unwrap();
-            let shards: (Vec<(usize, Bytes)>, Vec<(usize, Bytes)>) =
-                decoded_map
-                    .into_iter()
-                    .fold((Vec::new(), Vec::new()), |mut acc, x| {
-                        assert!(x.1.len() == chunk_size);
-                        if x.0 < header.scheme.0 as usize {
-                            acc.0.push(x);
-                        } else {
-                            println!(" header {header:?}");
-                            println!(" d {} {}", x.0, x.0 - header.scheme.0 as usize);
-                            acc.1.push((x.0 - header.scheme.0 as usize, x.1));
-                        }
-                        acc
-                    });
-            println!("shards 0 {} shards 1 {}", shards.0.len(), shards.1.len());
-            let now = Instant::now();
-            let mut v: Vec<_> = if shards.0.len() == header.scheme.0 as usize {
-                shards.0.into_iter().map(|(i, b)| (i, b.to_vec())).collect()
-            } else {
-                println!("reconstructing");
-                reed_solomon_simd::decode(
-                    header.scheme.0 as usize,
-                    header.scheme.1 as usize,
-                    shards.0,
-                    shards.1,
-                )
-                .unwrap()
-                .into_iter()
-                .collect()
-            };
-            println!("after decode{:?}", now.elapsed());
-            v.sort_unstable();
-            println!("after sort {:?}", now.elapsed());
-            let data: Vec<u8> = v.into_iter().map(|x| x.1).flatten().collect();
-            let mut data = Bytes::from(data);
-            println!("after asse {:?}", now.elapsed());
-            let a = data.split_to(data.len() - header.padding as usize);
-            println!("raw send {a:?}");
-            assert!(a.len() == header.len as usize);
-
-            recv_stream.stop(VarInt::from_u32(1)).unwrap();
-            return Ok(a);
+        if assembler.add_chunk(offset as usize, bytes) {
+            return Ok(assembler.assemble());
         }
     }
+
     panic!("ah")
 }
 
-async fn disassemble(
-    send_stream: &mut SendStream,
-    mut bytes: Vec<u8>,
-) -> Result<(), anyhow::Error> {
-    println!("raw send {bytes:?}");
-    let len_bytes = bytes.len();
-    let chunk_size = 1280;
-    let padding = chunk_size - bytes.len() % chunk_size;
-    bytes.resize(chunk_size * bytes.len().div_ceil(chunk_size), 0);
-    assert!(bytes.len() % chunk_size == 0);
-    let data_shards = std::cmp::max(1, bytes.len() / chunk_size);
-    let parity_shards = std::cmp::max(1, data_shards / 2);
-    bytes.resize(data_shards * chunk_size, 0);
-    let shards: Vec<_> = bytes.chunks(chunk_size).collect();
-    let parity = reed_solomon_simd::encode(data_shards, parity_shards, &shards).unwrap();
-    let mut ecs: Vec<Bytes> = shards
-        .into_iter()
-        .chain(parity.iter().map(|x| x.as_slice()))
-        .map(|x| {
-            let mut b = BytesMut::new();
-            b.extend_from_slice(x);
-            b.put_u32(len_bytes as u32);
-            b.put_u32(data_shards as u32);
-            b.put_u32(parity_shards as u32);
-            b.put_u32(padding as u32);
-            b.freeze()
-        })
-        .collect();
+async fn disassemble(send_stream: &mut SendStream, bytes: Vec<u8>) -> Result<(), anyhow::Error> {
+    let mut ecs = Assembler::split_message(bytes);
     let write_result = send_stream.write_all_chunks(&mut ecs).await;
     match write_result {
         Ok(()) => {}
@@ -423,10 +361,28 @@ pub(crate) async fn collect_metrics(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use rand::{seq::SliceRandom, thread_rng};
 
+    use super::*;
     #[test]
     fn tt() {
-        println!("ola");
+        let vals: Vec<u8> = (0..100000_u64).map(|v| (7 * v * v * v) as u8).collect();
+
+        let mut data: Vec<(usize, Bytes)> = Assembler::split_message(vals.clone())
+            .into_iter()
+            .enumerate()
+            .map(|(i, d)| (i * d.len(), d))
+            .collect();
+        data.shuffle(&mut thread_rng());
+
+        let mut assembler = Assembler::default();
+        for (offset, d) in data {
+            if assembler.add_chunk(offset, d) {
+                let reasseblmed = assembler.assemble();
+                assert_eq!(reasseblmed, vals);
+                return;
+            }
+        }
+        unreachable!()
     }
 }

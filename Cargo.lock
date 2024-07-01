@@ -10061,6 +10061,7 @@ dependencies = [
  "prometheus",
  "prost",
  "quinn",
+ "rand 0.8.5",
  "raptor-code",
  "reed-solomon-erasure",
  "reed-solomon-simd",

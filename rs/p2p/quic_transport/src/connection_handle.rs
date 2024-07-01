@@ -11,8 +11,8 @@ use quinn::Connection;
 
 use crate::{
     metrics::{
-        QuicTransportMetrics, ERROR_TYPE_FINISH, ERROR_TYPE_OPEN, ERROR_TYPE_READ,
-        ERROR_TYPE_WRITE, REQUEST_TYPE_PUSH, REQUEST_TYPE_RPC,
+        QuicTransportMetrics, ERROR_TYPE_OPEN, ERROR_TYPE_READ, ERROR_TYPE_WRITE,
+        REQUEST_TYPE_PUSH, REQUEST_TYPE_RPC,
     },
     utils::{read_response, write_request},
     ConnId, MessagePriority,
@@ -63,7 +63,7 @@ impl ConnectionHandle {
             .connection_handle_bytes_received_total
             .with_label_values(&[request.uri().path()]);
 
-        let (mut send_stream, recv_stream) = self.connection.open_bi().await.map_err(|err| {
+        let (send_stream, recv_stream) = self.connection.open_bi().await.map_err(|err| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
@@ -111,7 +111,7 @@ impl ConnectionHandle {
             .with_label_values(&[request.uri().path()])
             .inc_by(request.body().len() as u64);
 
-        let mut send_stream = self.connection.open_uni().await.map_err(|err| {
+        let send_stream = self.connection.open_uni().await.map_err(|err| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_OPEN]);
