@@ -683,6 +683,7 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_algorithms() {
             ThresholdSchnorrSigInputs::new(
                 &derivation_path,
                 &message,
+                None,
                 nonce,
                 presignature_transcript.clone(),
                 key_transcript,
@@ -701,6 +702,7 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_algorithms() {
         ThresholdSchnorrSigInputs::new(
             &derivation_path,
             &message,
+            None,
             nonce,
             presignature_transcript,
             key_transcript,
@@ -736,6 +738,7 @@ fn should_fail_creating_schnorr_sig_inputs_with_unsupported_algorithm() {
         ThresholdSchnorrSigInputs::new(
             &derivation_path,
             &message,
+            None,
             nonce,
             presignature_transcript,
             key_transcript,
@@ -770,6 +773,7 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_receivers() {
         ThresholdSchnorrSigInputs::new(
             &derivation_path(),
             &message_in_size_range(0..1_000, rng),
+            None,
             nonce(),
             presignature_transcript,
             key_transcript,
@@ -812,6 +816,7 @@ fn should_fail_creating_schnorr_sig_inputs_with_invalid_transcript_origin() {
             ThresholdSchnorrSigInputs::new(
                 &derivation_path,
                 &message,
+                None,
                 nonce,
                 presignature_transcript.clone(),
                 key_transcript.clone(),
