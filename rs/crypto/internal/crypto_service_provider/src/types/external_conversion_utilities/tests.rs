@@ -27,7 +27,7 @@ fn should_not_obtain_threshold_sig_share_of_from_csp_signature_if_csp_sig_type_d
         result.unwrap_err(),
         CryptoError::MalformedSignature {
             algorithm: AlgorithmId::ThresBls12_381,
-            sig_bytes: sig_bytes.as_ref().to_owned(),
+            sig_bytes: sig_bytes.to_vec(),
             internal_error: "Not an individual threshold signature".to_string(),
         }
     );
@@ -56,7 +56,7 @@ fn should_not_obtain_combined_threshold_sig_of_from_csp_signature_if_csp_sig_typ
         result.unwrap_err(),
         CryptoError::MalformedSignature {
             algorithm: AlgorithmId::ThresBls12_381,
-            sig_bytes: sig_bytes.as_ref().to_owned(),
+            sig_bytes: sig_bytes.to_vec(),
             internal_error: "Not a combined threshold signature".to_string(),
         }
     );
