@@ -624,6 +624,7 @@ fn should_create_schnorr_sig_inputs_correctly() {
     let tschnorr_sig_inputs = ThresholdSchnorrSigInputs::new(
         &derivation_path,
         &message,
+        None,
         nonce,
         presignature_transcript.clone(),
         key_transcript.clone(),
