@@ -6311,6 +6311,7 @@ dependencies = [
  "mockall",
  "phantom_newtype",
  "prometheus",
+ "prost",
  "rand 0.8.5",
  "slog",
  "tokio",
