@@ -846,7 +846,7 @@ mod tests {
         // See note [Handling changes to Enums in Replicated State] for how to proceed.
         assert_eq!(
             CanisterTask::iter().map(|x| x as i32).collect::<Vec<i32>>(),
-            [1, 2]
+            [1, 2, 3]
         );
     }
 

@@ -417,7 +417,7 @@ mod tests {
         // See note [Handling changes to Enums in Replicated State] for how to proceed.
         assert_eq!(
             SystemMethod::iter().map(|x| x as i32).collect::<Vec<i32>>(),
-            [1, 2, 3, 4, 5, 6, 7]
+            [1, 2, 3, 4, 5, 6, 7, 8]
         );
     }
 
