@@ -215,13 +215,15 @@ async fn tests_for_illegal_data_buffer_access(agent: &ic_agent::Agent, canister_
         .call()
         .await;
     let containing_str = "violated contract: ic0.msg_arg_data_copy heap: src=65536 + length=10 exceeds the slice size=65536";
-    assert!(
-        matches!(
-            ret_val,
-            Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
-        ),
-        "Should return error if input data is copied to out of bound internal buffer"
-    );
+
+    match ret_val {
+        Err(AgentError::UncertifiedReject(RejectResponse { reject_message, reject_code, error_code})) => {
+            assert!(reject_message.contains(containing_str), "Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected message: {}.", reject_message);
+            assert_eq!(reject_code, ic_agent::agent::RejectCode::CanisterError);
+            assert_eq!(error_code, Some("IC0504".into()));
+        }
+        _ => panic!("Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected reply: {:?}.", ret_val)
+    };
 
     // Calls msg caller with correct size = 29 bytes
     let ret_val = agent
