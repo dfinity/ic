@@ -1,12 +1,13 @@
 use ic_config::logger::{Config as LoggingConfig, LogFormat};
 use ic_types::{NodeId, SubnetId};
-use tracing::{Level, Subscriber};
+use time::format_description::well_known::Rfc3339;
+use tracing::Subscriber;
 use tracing_appender::{non_blocking, non_blocking::WorkerGuard};
-use tracing_subscriber::{fmt, layer::Layer, registry::LookupSpan, reload::Handle, Registry};
+use tracing_subscriber::{fmt, layer::Layer, registry::LookupSpan, Registry};
 
 enum InnerFormat {
-    Full(fmt::format::Format<fmt::format::Full>),
-    Json(fmt::format::Format<fmt::format::Json>),
+    Full(fmt::format::Format<fmt::format::Full, fmt::time::UtcTime<Rfc3339>>),
+    Json(fmt::format::Format<fmt::format::Json, fmt::time::UtcTime<Rfc3339>>),
 }
 
 struct Formatter {
@@ -25,7 +26,13 @@ impl Formatter {
                     .with_file(true)
                     .with_line_number(true),
             ),
-            LogFormat::TextFull => InnerFormat::Full(fmt::format::format()),
+            LogFormat::TextFull => InnerFormat::Full(
+                fmt::format()
+                    .with_timer(fmt::time::UtcTime::rfc_3339())
+                    .with_level(true)
+                    .with_file(true)
+                    .with_line_number(true),
+            ),
         };
         Self {
             inner,
@@ -67,12 +74,16 @@ pub fn get_logging_layer<T>(
 ) -> (Box<dyn Layer<Registry> + Send + Sync>, Option<WorkerGuard>) {
     let formatter = Formatter::new(config.format, node_id, subnet_id);
 
-    //let non_blocking_log_writer = non_blocking_log_writer.with_max_level(Level::INFO);
-
-    let (non_blocking_writer, guard) = non_blocking(std::io::stdout());
-
-    let mut layer = fmt::Layer::new()
-        .event_format(formatter)
-        .with_writer(non_blocking_writer);
-    (layer.boxed(), None)
+    if config.block_on_overflow {
+        let layer = fmt::Layer::new()
+            .event_format(formatter)
+            .with_writer(std::io::stdout);
+        (layer.boxed(), None)
+    } else {
+        let (non_blocking_writer, guard) = non_blocking(std::io::stdout());
+        let layer = fmt::Layer::new()
+            .event_format(formatter)
+            .with_writer(non_blocking_writer);
+        (layer.boxed(), Some(guard))
+    }
 }

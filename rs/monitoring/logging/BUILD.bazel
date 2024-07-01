@@ -13,5 +13,6 @@ rust_library(
         "@crate_index//:tracing",
         "@crate_index//:tracing-appender",
         "@crate_index//:tracing-subscriber",
+        "@crate_index//:time",
     ],
 )
