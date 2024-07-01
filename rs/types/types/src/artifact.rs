@@ -145,7 +145,6 @@ pub struct Advert<Artifact: ArtifactKind> {
     /// The id _must_ contain the integrity hash of the message.
     pub id: Artifact::Id,
     pub attribute: Artifact::Attribute,
-    pub size: usize,
 }
 
 // -----------------------------------------------------------------------------

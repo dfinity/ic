@@ -27,6 +27,7 @@ use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, SubnetTopology, Transport};
 use ic_types::artifact::{ArtifactKind, Priority, PriorityFn, UnvalidatedArtifactMutation};
+use prost::Message;
 use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
 use tokio::{
     runtime::Handle,
@@ -95,8 +96,31 @@ async fn update_handler<Artifact: ArtifactKind>(
     Extension(conn_id): Extension<ConnId>,
     payload: Bytes,
 ) -> Result<(), StatusCode> {
-    let update: SlotUpdate<Artifact> =
-        pb::SlotUpdate::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let pb_slot_update = pb::SlotUpdate::decode(payload).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    let update = SlotUpdate {
+        commit_id: CommitId::from(pb_slot_update.commit_id),
+        slot_number: SlotNumber::from(pb_slot_update.slot_id),
+        update: match pb_slot_update.update {
+            Some(pb::slot_update::Update::Advert(advert)) => {
+                let id: Artifact::Id = Artifact::PbId::decode(advert.id.as_slice())
+                    .map(|pb_id| pb_id.try_into().map_err(|_| StatusCode::BAD_REQUEST))
+                    .map_err(|_| StatusCode::BAD_REQUEST)??;
+                let attr: Artifact::Attribute =
+                    Artifact::PbAttribute::decode(advert.attribute.as_slice())
+                        .map(|pb_attr| pb_attr.try_into().map_err(|_| StatusCode::BAD_REQUEST))
+                        .map_err(|_| StatusCode::BAD_REQUEST)??;
+                Update::Advert((id, attr))
+            }
+            Some(pb::slot_update::Update::Artifact(artifact)) => {
+                let message: Artifact::Message = Artifact::PbMessage::decode(artifact.as_slice())
+                    .map(|pb_msg| pb_msg.try_into().map_err(|_| StatusCode::BAD_REQUEST))
+                    .map_err(|_| StatusCode::BAD_REQUEST)??;
+                Update::Artifact(message)
+            }
+            None => return Err(StatusCode::BAD_REQUEST),
+        },
+    };
 
     if sender.send((update, peer, conn_id)).await.is_err() {
         error!(
@@ -1807,13 +1831,14 @@ mod tests {
             Arc::new(RwLock::new(MockValidatedPoolReader::default())),
         );
 
-        let slot_update = SlotUpdate::<BigArtifact> {
-            slot_number: 0.into(),
-            commit_id: 0.into(),
-            update: Update::Artifact(vec![0; 100_000_000]),
-        };
-
-        let req_pb = pb::SlotUpdate::proxy_encode(slot_update);
+        let req_pb = pb::SlotUpdate {
+            commit_id: 0,
+            slot_id: 0,
+            update: Some(pb::slot_update::Update::Artifact(
+                vec![0; 100_000_000].encode_to_vec(),
+            )),
+        }
+        .encode_to_vec();
 
         let resp = router
             .oneshot(

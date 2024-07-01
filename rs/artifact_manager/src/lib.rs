@@ -2,12 +2,13 @@ use ic_interfaces::{
     p2p::{
         artifact_manager::{ArtifactProcessorEvent, JoinGuard},
         consensus::{
-            ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+            ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifact,
+            ValidatedPoolReader,
         },
     },
     time_source::TimeSource,
 };
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::MetricsRegistry;
 use ic_types::{artifact::*, artifact_kind::*};
 use prometheus::{histogram_opts, labels, Histogram};
 use std::{
@@ -31,7 +32,6 @@ struct ArtifactProcessorMetrics {
     processing_time: Histogram,
     /// The processing interval histogram.
     processing_interval: Histogram,
-    outbound_artifact_bytes: Histogram,
     /// The last update time.
     last_update: std::time::Instant,
 }
@@ -65,20 +65,9 @@ impl ArtifactProcessorMetrics {
             .unwrap(),
         );
 
-        let outbound_artifact_bytes = metrics_registry.register(
-            Histogram::with_opts(histogram_opts!(
-                "artifact_manager_outbound_artifact_bytes",
-                "Distribution of bytes from artifacts that should be delivered to all peers.",
-                decimal_buckets(0, 6),
-                const_labels.clone()
-            ))
-            .unwrap(),
-        );
-
         Self {
             processing_time,
             processing_interval,
-            outbound_artifact_bytes,
             last_update: std::time::Instant::now(),
         }
     }
@@ -146,6 +135,7 @@ pub fn run_artifact_processor<Artifact: ArtifactKind + 'static>(
     metrics_registry: MetricsRegistry,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: Sender<ArtifactProcessorEvent<Artifact>>,
+    initial_artifacts: Vec<Artifact::Message>,
 ) -> (Box<dyn JoinGuard>, ArtifactEventSender<Artifact>)
 where
     <Artifact as ic_types::artifact::ArtifactKind>::Message: Send,
@@ -166,6 +156,13 @@ where
     let handle = ThreadBuilder::new()
         .name(format!("{}_Processor", Artifact::TAG))
         .spawn(move || {
+            for artifact in initial_artifacts {
+                let _ =
+                    send_advert.blocking_send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+                        artifact,
+                        is_latency_sensitive: false,
+                    }));
+            }
             process_messages(
                 time_source,
                 client,
@@ -236,9 +233,6 @@ fn process_messages<Artifact: ArtifactKind + 'static>(
         } = metrics
             .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifact_events));
         for artifact_with_opt in artifacts_with_opt {
-            metrics
-                .outbound_artifact_bytes
-                .observe(artifact_with_opt.advert.size as f64);
             let _ = send_advert.blocking_send(ArtifactProcessorEvent::Artifact(artifact_with_opt));
         }
 
@@ -276,6 +270,7 @@ pub fn create_ingress_handlers<
         metrics_registry,
         Box::new(client),
         send_advert,
+        vec![],
     );
     (sender, jh)
 }
@@ -294,12 +289,14 @@ pub fn create_artifact_handler<
     UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     Box<dyn JoinGuard>,
 ) {
-    let client = Processor::new(pool.clone(), change_set_producer);
+    let inital_artifacts: Vec<_> = pool.read().unwrap().get_all_validated().collect();
+    let client = Processor::new(pool, change_set_producer);
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
         send_advert,
+        inital_artifacts,
     );
     (sender, jh)
 }
@@ -417,5 +414,72 @@ impl<P: MutablePool<IngressArtifact> + Send + Sync + 'static> ArtifactProcessor<
             .client
             .on_state_change(&self.ingress_pool.read().unwrap());
         self.ingress_pool.write().unwrap().apply_changes(change_set)
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::{convert::Infallible, sync::Arc};
+
+    use ic_interfaces::time_source::SysTimeSource;
+    use ic_metrics::MetricsRegistry;
+    use ic_types::artifact::{ArtifactKind, ArtifactTag, UnvalidatedArtifactMutation};
+
+    use crate::{run_artifact_processor, ArtifactProcessor};
+
+    #[test]
+    fn send_initial_artifacts() {
+        struct DummyArtifact;
+        impl ArtifactKind for DummyArtifact {
+            const TAG: ic_types::artifact::ArtifactTag = ArtifactTag::ConsensusArtifact;
+            type PbId = ();
+            type PbIdError = Infallible;
+            type Id = ();
+            type PbMessage = u64;
+            type PbMessageError = Infallible;
+            type Message = u64;
+            type PbAttribute = ();
+            type PbAttributeError = Infallible;
+            type Attribute = ();
+            fn message_to_advert(
+                _: &<Self as ArtifactKind>::Message,
+            ) -> ic_types::artifact::Advert<Self> {
+                todo!()
+            }
+        }
+        struct DummyProcessor;
+        impl ArtifactProcessor<DummyArtifact> for DummyProcessor {
+            fn process_changes(
+                &self,
+                _: &dyn TimeSource,
+                _: Vec<UnvalidatedArtifactMutation<DummyArtifact>>,
+            ) -> ChangeResult<DummyArtifact> {
+                ChangeResult {
+                    purged: Vec::new(),
+                    artifacts_with_opt: Vec::new(),
+                    poll_immediately: false,
+                }
+            }
+        }
+
+        let time_source = Arc::new(SysTimeSource::new());
+        let (send_tx, mut send_rx) = tokio::sync::mpsc::channel(100);
+        run_artifact_processor::<DummyArtifact>(
+            time_source,
+            MetricsRegistry::default(),
+            Box::new(DummyProcessor),
+            send_tx,
+            (0..10).collect(),
+        );
+
+        for i in 0..10 {
+            match send_rx.blocking_recv().unwrap() {
+                ArtifactProcessorEvent::Artifact(a) => {
+                    assert_eq!(a.artifact, i);
+                }
+                _ => panic!("initial events are not purge"),
+            }
+        }
     }
 }
