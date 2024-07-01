@@ -392,6 +392,7 @@ impl TryFrom<(OutputQueue, &mut MessagePool)> for CanisterQueue {
                             .checked_sub(REQUEST_LIFETIME)
                             .unwrap()
                     } else {
+                        // Irrelevant for best-effort messages, they have explicit deadlines.
                         UNIX_EPOCH
                     };
                     pool.insert_outbound_request(req, enqueuing_time)

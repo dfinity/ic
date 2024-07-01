@@ -320,6 +320,9 @@ fn test_shed_largest_message() {
     // But no output.
     assert!(!queues.has_output());
     assert!(queues.output_into_iter().next().is_none());
+
+    // And nothing else to shed.
+    assert!(!queues.shed_largest_message(&this, &local_canisters));
 }
 
 /// Enqueues 3 requests for the same canister and consumes them.
@@ -647,7 +650,7 @@ fn test_split_input_schedules() {
 }
 
 #[test]
-fn test_peek_round_robin() {
+fn test_peek_input_round_robin() {
     let mut queues = CanisterQueues::default();
     assert!(!queues.has_input());
 
@@ -731,7 +734,7 @@ fn test_peek_round_robin() {
 }
 
 #[test]
-fn test_skip_round_robin() {
+fn test_skip_input_round_robin() {
     let mut queues = CanisterQueues::default();
     assert!(!queues.has_input());
 
@@ -795,6 +798,50 @@ fn test_skip_round_robin() {
     queues.skip_input(&mut loop_detector);
     assert_eq!(loop_detector.ingress_queue_skip_count, 2);
     assert!(loop_detector.detected_loop(&queues));
+}
+
+#[test]
+fn test_peek_input_with_stale_references() {
+    let mut queues = CanisterQueues::default();
+
+    let senders = [
+        canister_test_id(1),
+        canister_test_id(2),
+        canister_test_id(1),
+        canister_test_id(3),
+    ];
+    let requests = senders
+        .iter()
+        .enumerate()
+        .map(|(i, sender)| {
+            RequestBuilder::default()
+                .sender(*sender)
+                .deadline(time(1000 + i as u32))
+                .build()
+        })
+        .collect::<Vec<_>>();
+
+    push_requests(&mut queues, InputQueueType::LocalSubnet, &requests);
+
+    let own_canister_id = canister_test_id(13);
+    let local_canisters = BTreeMap::new();
+    // Time out the first two requests, including the only request from canister 2.
+    queues.time_out_messages(time(1002).into(), &own_canister_id, &local_canisters);
+
+    assert!(queues.has_input());
+
+    // 1. Request from canister 1 (index 2).
+    let peeked_input = CanisterMessage::Request(Arc::new(requests.get(2).unwrap().clone()));
+    assert_eq!(queues.peek_input().unwrap(), peeked_input);
+    assert_eq!(queues.pop_input().unwrap(), peeked_input);
+
+    // 2. Request from canister 3 (index 3).
+    let peeked_input = CanisterMessage::Request(Arc::new(requests.get(3).unwrap().clone()));
+    assert_eq!(queues.peek_input().unwrap(), peeked_input);
+    assert_eq!(queues.pop_input().unwrap(), peeked_input);
+
+    assert!(!queues.has_input());
+    assert!(queues.pool.len() == 0);
 }
 
 /// Enqueues 6 output requests across 3 canisters and consumes them.
@@ -1854,6 +1901,57 @@ fn test_output_queues_for_each() {
     assert!(queues.pool.len() == 0);
 }
 
+#[test]
+fn test_peek_output_with_stale_references() {
+    let mut queues = CanisterQueues::default();
+    let canister1 = canister_test_id(1);
+    let canister2 = canister_test_id(2);
+    let canister3 = canister_test_id(3);
+
+    let receivers = [canister1, canister2, canister1, canister3];
+    let requests = receivers
+        .iter()
+        .enumerate()
+        .map(|(i, receiver)| {
+            RequestBuilder::default()
+                .receiver(*receiver)
+                .deadline(time(1000 + i as u32))
+                .build()
+        })
+        .collect::<Vec<_>>();
+
+    for request in requests.iter() {
+        queues
+            .push_output_request(request.clone().into(), UNIX_EPOCH)
+            .unwrap();
+    }
+
+    let own_canister_id = canister_test_id(13);
+    let local_canisters = BTreeMap::new();
+    // Time out the first two requests, including the only request to canister 2.
+    queues.time_out_messages(time(1002).into(), &own_canister_id, &local_canisters);
+
+    assert!(queues.has_output());
+
+    // One message to canister 1.
+    let peeked = requests.get(2).unwrap().clone().into();
+    assert_eq!(Some(&peeked), queues.peek_output(&canister1));
+    assert_eq!(Some(peeked), queues.pop_canister_output(&canister1));
+    assert_eq!(None, queues.peek_output(&canister1));
+
+    // No message to canister 2.
+    assert_eq!(None, queues.peek_output(&canister2));
+
+    // One message to canister 3.
+    let peeked = requests.get(3).unwrap().clone().into();
+    assert_eq!(Some(&peeked), queues.peek_output(&canister3));
+    assert_eq!(Some(peeked), queues.pop_canister_output(&canister3));
+    assert_eq!(None, queues.peek_output(&canister3));
+
+    assert!(!queues.has_output());
+    assert!(queues.pool.len() == 2);
+}
+
 // Must be duplicated here, because the `ic_test_utilities` one pulls in the
 // `CanisterQueues` defined by its `ic_replicated_state`, not the ones from
 // `crate` and we wouldn't have access to its non-public methods.
@@ -2036,6 +2134,7 @@ proptest! {
         while output_iter.peek().is_some() {
             output_iter.next();
         }
+        assert_eq!(None, output_iter.next());
     }
 
     #[test]
@@ -2055,6 +2154,26 @@ proptest! {
             }
             output_iter.next();
         }
+    }
+
+    #[test]
+    fn peek_with_stale_references(
+        (mut canister_queues, _) in arb_canister_queues(100, Some(10)),
+        deadline in any::<u32>(),
+    ) {
+        let own_canister_id = canister_test_id(13);
+        let local_canisters = BTreeMap::new();
+        // Time out some messages.
+        canister_queues.time_out_messages(time(deadline).into(), &own_canister_id, &local_canisters);
+        // And shed one more.
+        canister_queues.shed_largest_message(&own_canister_id, &local_canisters);
+
+        // Peek and pop until the output queues are empty.
+        let mut output_iter = canister_queues.output_into_iter();
+        while output_iter.peek().is_some() {
+            output_iter.next();
+        }
+        assert_eq!(None, output_iter.next());
     }
 }
 
