@@ -365,6 +365,7 @@ members = [
     "rs/utils/lru_cache",
     "rs/utils/rustfmt",
     "rs/validator",
+    "rs/validator/http_request_arbitrary",
     "rs/validator/ingress_message",
     "rs/validator/ingress_message/test_canister",
     "rs/workload_generator",

@@ -6311,6 +6311,7 @@ dependencies = [
  "mockall",
  "phantom_newtype",
  "prometheus",
+ "prost",
  "rand 0.8.5",
  "slog",
  "tokio",
@@ -12151,6 +12152,16 @@ dependencies = [
  "mockall",
  "rand 0.8.5",
  "thiserror",
+]
+
+[[package]]
+name = "ic-validator-http-request-arbitrary"
+version = "0.9.0"
+dependencies = [
+ "arbitrary",
+ "ic-base-types",
+ "ic-crypto-tree-hash",
+ "ic-types",
 ]
 
 [[package]]

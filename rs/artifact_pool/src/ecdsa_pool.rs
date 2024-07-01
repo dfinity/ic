@@ -30,10 +30,7 @@ use ic_types::consensus::{
     CatchUpPackage,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
-use ic_types::{
-    artifact::{ArtifactKind, EcdsaMessageId},
-    consensus::idkg::SigShare,
-};
+use ic_types::{artifact::EcdsaMessageId, consensus::idkg::SigShare};
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -438,7 +435,7 @@ impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
             match action {
                 EcdsaChangeAction::AddToValidated(message) => {
                     artifacts_with_opt.push(ArtifactWithOpt {
-                        advert: EcdsaArtifact::message_to_advert(&message),
+                        artifact: message.clone(),
                         is_latency_sensitive: true,
                     });
                     validated_ops.insert(message);
@@ -450,7 +447,7 @@ impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
                         | EcdsaMessage::SchnorrSigShare(_)
                         | EcdsaMessage::EcdsaSignedDealing(_) => (),
                         _ => artifacts_with_opt.push(ArtifactWithOpt {
-                            advert: EcdsaArtifact::message_to_advert(&message),
+                            artifact: message.clone(),
                             // relayed
                             is_latency_sensitive: false,
                         }),
@@ -514,6 +511,7 @@ mod tests {
     use ic_test_utilities_types::ids::{
         subnet_test_id, NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6,
     };
+    use ic_types::artifact::ArtifactKind;
     use ic_types::consensus::idkg::{dealing_support_prefix, EcdsaObject};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
@@ -650,7 +648,10 @@ mod tests {
                 )];
                 let result = ecdsa_pool.apply_changes(change_set);
                 assert!(result.purged.is_empty());
-                assert_eq!(result.artifacts_with_opt[0].advert.id, support.message_id());
+                assert_eq!(
+                    EcdsaArtifact::message_to_advert(&result.artifacts_with_opt[0].artifact).id,
+                    support.message_id()
+                );
                 assert!(result.poll_immediately);
             }
         }

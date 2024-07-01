@@ -21,7 +21,6 @@ pub fn no_op_logger() -> ReplicaLogger {
     LogEntryLogger::new(
         slog::Logger::root(slog::Discard, slog::o!()),
         slog::Level::Critical,
-        vec![],
     )
     .into()
 }
@@ -37,16 +36,14 @@ pub struct LogEntryLogger {
     pub root: slog::Logger,
     // Only logs at `level` or above
     pub level: slog::Level,
-    pub debug_overrides: Vec<String>,
     pub last_log: Mutex<HashMap<String, Instant>>,
 }
 
 impl LogEntryLogger {
-    pub fn new(root: slog::Logger, level: slog::Level, debug_overrides: Vec<String>) -> Self {
+    pub fn new(root: slog::Logger, level: slog::Level) -> Self {
         Self {
             root,
             level,
-            debug_overrides,
             last_log: Mutex::new(HashMap::new()),
         }
     }
@@ -60,7 +57,7 @@ impl From<slog::Logger> for LogEntryLogger {
             slog::Level::Info
         };
 
-        Self::new(root, level, vec![])
+        Self::new(root, level)
     }
 }
 
@@ -69,7 +66,6 @@ impl Clone for LogEntryLogger {
         Self {
             root: self.root.new(slog::o!()),
             level: self.level,
-            debug_overrides: self.debug_overrides.clone(),
             // `last_log` is not cloned because different instances of this
             // logger will log at disjoint module/line pairs, so these
             // instances don't need to share the same mutex, or need to both
@@ -112,15 +108,8 @@ impl Logger<LogEntry> for LogEntryLogger {
         }
     }
 
-    fn is_enabled_at(&self, level: slog::Level, module_path: &'static str) -> bool {
-        if !self.debug_overrides.is_empty()
-            && level == slog::Level::Debug
-            && self.debug_overrides.contains(&module_path.to_string())
-        {
-            true
-        } else {
-            level.is_at_least(self.level)
-        }
+    fn is_enabled_at(&self, level: slog::Level) -> bool {
+        level.is_at_least(self.level)
     }
 
     fn is_n_seconds<T: Into<i32>>(&self, seconds: T, metadata: LogMetadata) -> bool {
@@ -167,7 +156,6 @@ mod tests {
         let logger = LogEntryLogger::new(
             slog::Logger::root(slog::Discard, slog::o!()),
             slog::Level::Critical,
-            vec![],
         );
 
         for i in 1u32..10u32 {

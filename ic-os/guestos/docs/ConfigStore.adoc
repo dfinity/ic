@@ -106,20 +106,6 @@ Must be a file of key/value pairs separated by "=" (one per line) with the follo
 
 If left unspecified, filebeat will be left unconfigured and no logs are exported.
 
-=== log.conf
-
-Detailed configuration for the IC logger.
-
-Must be a file of key/value pairs separated by "=" (one per line) with the following possible keys:
-
-- replica_log_debug_overrides: A list of fully qualified Rust module paths. For each of the listed modules, at least DEBUG logs will be produced by the node software. Primarily intended for testing.
-
-The list must be provided as a serialized JSON-array. The value is inserted into the configuration file as is. E.g.:
-
-'["ic_consensus::consensus::finalizer",\
-
-"ic_consensus::consensus::catchup_package_maker"]'
-
 === socks_proxy.conf
 
 Configuration for socks proxy.
