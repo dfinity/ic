@@ -3267,6 +3267,8 @@ dependencies = [
 name = "diroid"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "clap 4.4.6",
  "walkdir",
 ]
 
@@ -3786,6 +3788,7 @@ dependencies = [
  "ic-cdk 0.13.2",
  "mockall",
  "serde",
+ "thiserror",
  "tokio",
 ]
 
@@ -4931,9 +4934,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-rustls"
-version = "0.27.2"
+version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ee4be2c948921a1a5320b629c4193916ed787a7f7f293fd3f7f5a6c9de74155"
+checksum = "908bb38696d7a037a01ebcc68a00634112ac2bbf8ca74e30a2c3d2f4f021302b"
 dependencies = [
  "futures-util",
  "http 1.1.0",
@@ -6123,6 +6126,7 @@ dependencies = [
  "candid_parser",
  "ethers-core",
  "ethnum",
+ "evm-rpc-client",
  "flate2",
  "futures",
  "hex",
@@ -12660,7 +12664,7 @@ dependencies = [
  "http-body-util",
  "httptest",
  "hyper 1.3.1",
- "hyper-rustls 0.27.2",
+ "hyper-rustls 0.27.1",
  "hyper-util",
  "hyperlocal-next",
  "ic-agent",

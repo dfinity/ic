@@ -24,14 +24,16 @@ use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
-use ic_types::{batch::BatchSummary, crypto::threshold_sig::ThresholdSigPublicKey};
 use ic_types::{
-    batch::{Batch, BatchMessages, BlockmakerMetrics, ConsensusResponse},
+    batch::{Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse},
     consensus::{
         idkg::{self, CompletedSignature},
         Block,
     },
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+    crypto::threshold_sig::{
+        ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+        ThresholdSigPublicKey,
+    },
     messages::{CallbackId, Payload, RejectContext},
     Height, PrincipalId, Randomness, ReplicaVersion, SubnetId,
 };

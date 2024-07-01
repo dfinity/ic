@@ -67,7 +67,7 @@ where
     }
 }
 
-pub fn get_logging_layer<T>(
+pub fn get_logging_layer(
     config: &LoggingConfig,
     node_id: NodeId,
     subnet_id: SubnetId,

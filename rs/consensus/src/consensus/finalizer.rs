@@ -250,13 +250,12 @@ mod tests {
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::consensus::{HasHeight, HashedBlock};
-    use ic_types::messages::{Payload, NO_DEADLINE};
     use ic_types::{
+        consensus::{HasHeight, HashedBlock},
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
-        messages::{CallbackId, Request},
+        messages::{CallbackId, Payload, Request, NO_DEADLINE},
+        CanisterId, Cycles, PrincipalId, RegistryVersion, SubnetId,
     };
-    use ic_types::{CanisterId, Cycles, PrincipalId, RegistryVersion, SubnetId};
     use std::{
         collections::{BTreeMap, BTreeSet},
         str::FromStr,
