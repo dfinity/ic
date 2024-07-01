@@ -330,6 +330,12 @@ pub mod canister_queues {
 pub enum RejectReason {
     Unspecified = 0,
     CanisterMigrating = 1,
+    CanisterNotFound = 2,
+    CanisterStopped = 3,
+    CanisterStopping = 4,
+    QueueFull = 5,
+    OutOfMemory = 6,
+    Unknown = 7,
 }
 impl RejectReason {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -340,6 +346,12 @@ impl RejectReason {
         match self {
             RejectReason::Unspecified => "REJECT_REASON_UNSPECIFIED",
             RejectReason::CanisterMigrating => "REJECT_REASON_CANISTER_MIGRATING",
+            RejectReason::CanisterNotFound => "REJECT_REASON_CANISTER_NOT_FOUND",
+            RejectReason::CanisterStopped => "REJECT_REASON_CANISTER_STOPPED",
+            RejectReason::CanisterStopping => "REJECT_REASON_CANISTER_STOPPING",
+            RejectReason::QueueFull => "REJECT_REASON_QUEUE_FULL",
+            RejectReason::OutOfMemory => "REJECT_REASON_OUT_OF_MEMORY",
+            RejectReason::Unknown => "REJECT_REASON_UNKNOWN",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -347,6 +359,12 @@ impl RejectReason {
         match value {
             "REJECT_REASON_UNSPECIFIED" => Some(Self::Unspecified),
             "REJECT_REASON_CANISTER_MIGRATING" => Some(Self::CanisterMigrating),
+            "REJECT_REASON_CANISTER_NOT_FOUND" => Some(Self::CanisterNotFound),
+            "REJECT_REASON_CANISTER_STOPPED" => Some(Self::CanisterStopped),
+            "REJECT_REASON_CANISTER_STOPPING" => Some(Self::CanisterStopping),
+            "REJECT_REASON_QUEUE_FULL" => Some(Self::QueueFull),
+            "REJECT_REASON_OUT_OF_MEMORY" => Some(Self::OutOfMemory),
+            "REJECT_REASON_UNKNOWN" => Some(Self::Unknown),
             _ => None,
         }
     }

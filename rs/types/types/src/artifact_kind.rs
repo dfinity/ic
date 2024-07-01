@@ -12,7 +12,6 @@ use crate::{
         ConsensusMessage,
     },
     messages::SignedIngress,
-    CountBytes,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
 use prost::bytes::Bytes;
@@ -41,7 +40,6 @@ impl ArtifactKind for ConsensusArtifact {
         Advert {
             id: ConsensusMessageId::from(msg),
             attribute: (),
-            size: bincode::serialized_size(&msg).unwrap() as usize,
         }
     }
 }
@@ -69,7 +67,6 @@ impl ArtifactKind for IngressArtifact {
         Advert {
             id: IngressMessageId::from(msg),
             attribute: (),
-            size: msg.count_bytes(),
         }
     }
 }
@@ -97,7 +94,6 @@ impl ArtifactKind for CertificationArtifact {
         Advert {
             id: CertificationMessageId::from(msg),
             attribute: (),
-            size: bincode::serialized_size(&msg).unwrap() as usize,
         }
     }
 }
@@ -125,7 +121,6 @@ impl ArtifactKind for DkgArtifact {
         Advert {
             id: DkgMessageId::from(msg),
             attribute: (),
-            size: bincode::serialized_size(&msg).unwrap() as usize,
         }
     }
 }
@@ -153,7 +148,6 @@ impl ArtifactKind for EcdsaArtifact {
         Advert {
             id: EcdsaMessageId::from(msg),
             attribute: EcdsaMessageAttribute::from(msg),
-            size: bincode::serialized_size(&msg).unwrap() as usize,
         }
     }
 }
@@ -181,7 +175,6 @@ impl ArtifactKind for CanisterHttpArtifact {
         Advert {
             id: msg.clone(),
             attribute: (),
-            size: bincode::serialized_size(&msg).unwrap() as usize,
         }
     }
 }
