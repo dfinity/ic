@@ -3088,11 +3088,9 @@ dependencies = [
  "rand_distr",
  "rand_pcg 0.3.1",
  "randomkit",
- "raptor-code",
  "ratelimit",
  "rayon",
  "rcgen",
- "reed-solomon-erasure",
  "reed-solomon-simd",
  "regex",
  "reqwest 0.11.27",
@@ -6176,9 +6174,6 @@ name = "lru"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e999beba7b6e8345721bd280141ed958096a2e4abdf74f67ff4ce49b4b54e47a"
-dependencies = [
- "hashbrown 0.12.3",
-]
 
 [[package]]
 name = "lru-cache"
@@ -7891,12 +7886,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "primes"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68a61082d8bceecd71a3870e9162002bb75f7ba9c7aa8b76227e887782fef9c8"
-
-[[package]]
 name = "primitive-types"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8549,16 +8538,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "977b1e897f9d764566891689e642653e5ed90c6895106acd005eb4c1d0203991"
 
 [[package]]
-name = "raptor-code"
-version = "1.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "842f8ab0b62f5670639474e2b6ec7c235610fe1b5dbf5f09ea4a85701e4a15bd"
-dependencies = [
- "log",
- "primes",
-]
-
-[[package]]
 name = "ratelimit"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8654,19 +8633,6 @@ dependencies = [
  "getrandom 0.2.10",
  "redox_syscall 0.2.16",
  "thiserror",
-]
-
-[[package]]
-name = "reed-solomon-erasure"
-version = "6.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7263373d500d4d4f505d43a2a662d475a894aa94503a1ee28e9188b5f3960d4f"
-dependencies = [
- "libm",
- "lru",
- "parking_lot 0.11.2",
- "smallvec",
- "spin 0.9.8",
 ]
 
 [[package]]

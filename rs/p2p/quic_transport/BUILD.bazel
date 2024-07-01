@@ -27,7 +27,6 @@ DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:quinn",
     "@crate_index//:rustls_0_21_12",
-    "@crate_index//:reed-solomon-erasure",
     "@crate_index//:reed-solomon-simd",
     "@crate_index//:slog",
     "@crate_index//:socket2",
