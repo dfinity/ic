@@ -495,7 +495,7 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
 
     // Check the first transaction of the first Rossetta Block
     assert_eq!(
-        block1.transactions.get(0).unwrap(),
+        block1.transactions.first().unwrap(),
         &convert::to_rosetta_core_transaction(
             /* block_index: */ 1,
             Transaction {
