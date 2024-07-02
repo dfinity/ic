@@ -220,9 +220,7 @@ impl TestEnv {
                 }
                 Err(Error(err)) if matches_blockchain_is_empty_error(&err) => {
                     println!("Found \"Blockchain is empty\" error, retrying in {DURATION_BETWEEN_ATTEMPTS:?} (retries: {retries})");
-                    println!("Found \"Blockchain is empty\" error, retrying in {DURATION_BETWEEN_ATTEMPTS:?} (retries: {retries})");
                     retries -= 1;
-                    sleep(DURATION_BETWEEN_ATTEMPTS);
                     sleep(DURATION_BETWEEN_ATTEMPTS);
                 }
                 Err(Error(err)) => {
