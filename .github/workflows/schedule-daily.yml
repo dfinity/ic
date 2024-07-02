@@ -3,7 +3,6 @@ on:
   schedule:
     - cron: "0 1 * * *"
   workflow_dispatch:
-  pull_request:
 env:
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
@@ -80,14 +79,12 @@ jobs:
           TARGETS: ${{ matrix.targets }}
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
-    runs-on:
-      group: zh1
-      labels: dind-large
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 120
-    # TODO: enable when zh1 is active again
-    if: ${{ false }}
+    runs-on:
+      group: zh1
+      labels: dind-large
     steps:
       - name: Checkout
         uses: actions/checkout@v4
