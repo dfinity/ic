@@ -1,0 +1,52 @@
+name: Slack CI Main
+
+# Send Slack Notification on completed "CI Main" Workflow
+#  * success
+#    - rc--* branch
+#  * failure,timed_out
+#    - rc--* and master branch
+
+on:
+  workflow_run:
+    types:
+      - completed
+    branches:
+      - master
+      - rc--*
+    workflows:
+      - CI Main
+
+jobs:
+  slack-ci-main:
+    name: Send Notification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Message and Channels
+        id: setup
+        shell: bash
+        run: |
+          # TODO: change to 'eng-idx-bots,release-management-alerts'
+          CHANNEL="eng-idx-bots"
+          echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
+
+          FULL_MESSAGE=""
+          if [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(success)$ ]]; then
+            if [[ "$BRANCH_NAME" =~ rc--.* ]]; then
+              FULL_MESSAGE=":white_check_mark: ${MESSAGE}"
+            fi
+          elif [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(failure|timed_out)$ ]]; then
+            FULL_MESSAGE=":fire: ${MESSAGE}"
+          fi
+          echo "message=${FULL_MESSAGE}" >> $GITHUB_OUTPUT
+        env:
+          BRANCH_NAME: "${{ github.head_ref || github.ref_name }}"
+          MESSAGE: "*${{github.event.workflow_run.name}}* ${{github.event.workflow_run.conclusion}} in <${{github.server_url}}/${{github.repository}}/${{github.event.workflow_run.head_branch}}|${{github.repository}}>"
+
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        if: steps.setup.outputs.message != '""'
+        with:
+          channel-id: ${{ steps.setup.outputs.channel }}
+          slack-message: "${{ steps.setup.outputs.message }}"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
