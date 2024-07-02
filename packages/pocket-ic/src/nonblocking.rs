@@ -820,6 +820,28 @@ impl PocketIc {
         .await
     }
 
+    /// Update canister settings.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn update_canister_settings(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        settings: CanisterSettings,
+    ) -> Result<(), CallError> {
+        call_candid_as::<_, ()>(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "update_settings",
+            (UpdateSettingsArgument {
+                canister_id,
+                settings,
+            },),
+        )
+        .await
+    }
+
     /// Set canister's controllers.
     #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub async fn set_controllers(
