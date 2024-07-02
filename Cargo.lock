@@ -7710,6 +7710,7 @@ dependencies = [
  "ic-base-types",
  "ic-config",
  "ic-cycles-account-manager",
+ "ic-error-types",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",

@@ -1131,7 +1131,7 @@ fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation_wasm
         (module
             (import "ic0" "msg_reply" (func $msg_reply))
             (import "ic0" "msg_reply_data_append"
-                (func $msg_reply_data_append (param i32 i32)))
+                (func $msg_reply_data_append (param i64 i64)))
             (func $update
                 (if (i64.ne (memory.grow (i64.const 400)) (i64.const 1))
                   (then (unreachable))

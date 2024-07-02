@@ -2348,6 +2348,49 @@ fn ic0_call_perform_enqueues_request() {
 }
 
 #[test]
+fn wasm64_ic0_call_perform_enqueues_request() {
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let wat = r#"
+        (module
+            (import "ic0" "call_new"
+                (func $ic0_call_new
+                    (param i64 i64)
+                    (param $method_name_src i64)    (param $method_name_len i64)
+                    (param $reply_fun i64)          (param $reply_env i64)
+                    (param $reject_fun i64)         (param $reject_env i64)
+                )
+            )
+            (import "ic0" "call_data_append"
+                (func $ic0_call_data_append (param $src i64) (param $size i64))
+            )
+            (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update test")
+                (call $ic0_call_new
+                    (i64.const 100) (i64.const 10)  ;; callee canister id = 777
+                    (i64.const 0) (i64.const 18)    ;; refers to "some_remote_method" on the heap
+                    (i64.const 11) (i64.const 22)   ;; fictive on_reply closure
+                    (i64.const 33) (i64.const 44)   ;; fictive on_reject closure
+                )
+                (call $ic0_call_data_append
+                    (i64.const 19) (i64.const 3)    ;; refers to "XYZ" on the heap
+                )
+                (call $ic0_call_perform)
+                drop
+                (call $msg_reply)
+            )
+            (memory i64 1 1)
+            (data (i64.const 0) "some_remote_method XYZ")
+            (data (i64.const 100) "\09\03\00\00\00\00\00\00\ff\01")
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(WasmResult::Reply(vec![]), result);
+    let canister_state = test.canister_state(canister_id);
+    assert_eq!(1, canister_state.system_state.queues().output_queues_len());
+}
+
+#[test]
 fn ic0_trap_works() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
@@ -2805,6 +2848,63 @@ fn ic0_msg_cycles_available_works_for_calls() {
         .build();
     let result = test.ingress(caller_id, "update", caller).unwrap();
     assert_eq!(WasmResult::Reply(vec![]), result);
+}
+
+#[test]
+fn wasm64_ic0_msg_cycles_available128_works_for_calls() {
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_cycles_available128" (func $msg_cycles_available128 (param i64)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+              (func $ic0_msg_reply_data_append (param i64) (param i64)))
+            (func (export "canister_update test")
+                (call $msg_cycles_available128 (i64.const 0))
+                (call $ic0_msg_reply_data_append (i64.const 0) (i64.const 16))
+                (call $msg_reply)
+            )
+            (memory i64 1)
+        )"#;
+    let callee_id = test.canister_from_wat(wat).unwrap();
+    let caller_id = test.universal_canister().unwrap();
+    let caller = wasm()
+        .call_with_cycles(callee_id, "test", call_args(), Cycles::from(50u128))
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+
+    let x = 50u128;
+    let x = Vec::from(x.to_le_bytes());
+    assert_eq!(WasmResult::Reply(x), result);
+}
+
+#[test]
+fn wasm64_ic0_msg_cycles_accept128_works_for_calls() {
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_cycles_accept128"
+              (func $ic0_msg_cycles_accept128 (param i64) (param i64) (param i64)))
+            (import "ic0" "msg_reply" (func $ic0_msg_reply))
+            (import "ic0" "msg_reply_data_append"
+              (func $ic0_msg_reply_data_append (param i64) (param i64)))
+            (func (export "canister_update test")
+                (call $ic0_msg_cycles_accept128 (i64.const 0) (i64.const 22) (i64.const 0))
+                (call $ic0_msg_reply_data_append (i64.const 0) (i64.const 16))
+                (call $ic0_msg_reply)
+            )
+            (memory i64 1)
+        )"#;
+    let callee_id = test.canister_from_wat(wat).unwrap();
+    let caller_id = test.universal_canister().unwrap();
+    let caller = wasm()
+        .call_with_cycles(callee_id, "test", call_args(), Cycles::from(50u128))
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+
+    let x = 22u128;
+    let x = Vec::from(x.to_le_bytes());
+    assert_eq!(WasmResult::Reply(x), result);
 }
 
 #[test]
