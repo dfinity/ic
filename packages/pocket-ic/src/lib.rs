@@ -583,11 +583,11 @@ impl PocketIc {
 
     /// Creates a canister with a specific canister ID and optional custom settings.
     /// Returns an error if the canister ID is already in use.
-    /// Panics if the canister ID is not contained in any of the subnets.
+    /// Creates a new subnet if the canister ID is not contained in any of the subnets.
     ///
-    /// The canister ID must be contained in the Bitcoin, Fiduciary, II, SNS or NNS
-    /// subnet range, it is not intended to be used on regular app or system subnets,
-    /// where it can lead to conflicts on which the function panics.
+    /// The canister ID must be an IC mainnet canister ID that does not belong to the NNS or II subnet,
+    /// otherwise the function might panic (for NNS and II canister IDs,
+    /// the PocketIC instance should already be created with those subnets).
     #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), settings = ?settings, canister_id = %canister_id.to_string()))]
     pub fn create_canister_with_id(
         &self,

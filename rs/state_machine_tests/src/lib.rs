@@ -242,7 +242,12 @@ fn make_nodes_registry(
     public_key: ThresholdSigPublicKey,
     ni_dkg_transcript: NiDkgTranscript,
 ) -> FakeRegistryClient {
-    let registry_version = INITIAL_REGISTRY_VERSION;
+    let registry_version = if registry_data_provider.is_empty() {
+        INITIAL_REGISTRY_VERSION
+    } else {
+        let latest_registry_version = registry_data_provider.latest_version();
+        RegistryVersion::from(latest_registry_version.get() + 1)
+    };
     // ECDSA subnet_id must be different from nns_subnet_id, otherwise
     // `sign_with_ecdsa` won't be charged.
     let subnet_id_proto = SubnetIdProto {
@@ -336,7 +341,7 @@ fn make_nodes_registry(
     registry_data_provider
         .add(
             &make_catch_up_package_contents_key(subnet_id),
-            INITIAL_REGISTRY_VERSION,
+            registry_version,
             Some(cup_contents),
         )
         .expect("Failed to add subnet record.");
