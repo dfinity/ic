@@ -1,6 +1,6 @@
 use candid::{decode_one, encode_one, Principal};
 use ic_base_types::PrincipalId;
-use ic_cdk::api::management_canister::provisional::CanisterId;
+use ic_cdk::api::management_canister::main::{CanisterId, CanisterSettings};
 use ic_universal_canister::{wasm, CallArgs, UNIVERSAL_CANISTER_WASM};
 use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, LedgerCanisterInitPayload, Memo, Name,
@@ -933,6 +933,33 @@ fn test_uninstall_canister() {
 }
 
 #[test]
+fn test_update_canister_settings() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 200T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, 100 * INIT_CYCLES);
+
+    // The compute allocation of the canister should be zero.
+    let status = pic.canister_status(can_id, None).unwrap();
+    let zero: candid::Nat = 0_u64.into();
+    assert_eq!(status.settings.compute_allocation, zero);
+
+    // Set the compute allocation to 1.
+    let new_compute_allocation: candid::Nat = 1_u64.into();
+    let settings = CanisterSettings {
+        compute_allocation: Some(new_compute_allocation.clone()),
+        ..Default::default()
+    };
+    pic.update_canister_settings(can_id, None, settings)
+        .unwrap();
+
+    // Check that the compute allocation has been set.
+    let status = pic.canister_status(can_id, None).unwrap();
+    assert_eq!(status.settings.compute_allocation, new_compute_allocation);
+}
+
+#[test]
 fn test_xnet_call_and_create_canister_with_specified_id() {
     // We start with a PocketIC instance consisting of two application subnets.
     let pic = PocketIcBuilder::new()
@@ -970,6 +997,7 @@ fn test_xnet_call_and_create_canister_with_specified_id() {
     // but belongs to the canister ranges of no subnet on the PocketIC instance.
     let bitcoin_canister_id = Principal::from_text("ghsi2-tqaaa-aaaan-aaaca-cai").unwrap();
     assert!(pic.get_subnet(bitcoin_canister_id).is_none());
+    assert!(pic.topology().get_bitcoin().is_none());
 
     // We create a canister with that specified canister ID: this should succeed
     // and a new subnet should be created.
@@ -978,6 +1006,7 @@ fn test_xnet_call_and_create_canister_with_specified_id() {
         .unwrap();
     assert_eq!(canister_4, bitcoin_canister_id);
     let subnet_id_4 = pic.get_subnet(bitcoin_canister_id).unwrap();
+    assert_eq!(pic.topology().get_bitcoin().unwrap(), subnet_id_4);
     assert_ne!(subnet_id_1, subnet_id_4);
     assert_ne!(subnet_id_2, subnet_id_4);
     assert_ne!(subnet_id_3, subnet_id_4);

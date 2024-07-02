@@ -15,7 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   support installing canisters with a large WASM as a sequence of chunks (transparently, i.e.,
   the user does not need to take any extra action).
 - The maximum duration (timeout) of a PocketIC operation is configurable and can be deactivated by specifying it as `None` (the default is a timeout of 5 minutes).
+- The library function `PocketIc::create_canister_with_id` works for all IC mainnet canister IDs that do not belong to the NNS or II subnet.
 - The library function `PocketIc::uninstall_canister` to uninstall code of an existing canister.
+- The library function `PocketIc::update_canister_settings` to update settings (e.g., compute allocation) of an existing canister.
 
 ### Removed
 - Public field `instance_id` in the synchronous PocketIc library, use the function `instance_id` instead

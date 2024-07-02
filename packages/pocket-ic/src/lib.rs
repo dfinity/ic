@@ -681,6 +681,22 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.uninstall_canister(canister_id, sender).await })
     }
 
+    /// Update canister settings.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn update_canister_settings(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        settings: CanisterSettings,
+    ) -> Result<(), CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .update_canister_settings(canister_id, sender, settings)
+                .await
+        })
+    }
+
     /// Set canister's controllers.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn set_controllers(
