@@ -275,10 +275,38 @@ fn test_create_canister_with_used_id_fails() {
 }
 
 #[test]
-#[should_panic(expected = "not contained on any subnet")]
+#[should_panic(
+    expected = "The binary representation 04 of effective canister ID 2vxsx-fae should consist of 10 bytes."
+)]
 fn test_create_canister_with_not_contained_id_panics() {
     let pic = PocketIc::new();
     let _ = pic.create_canister_with_id(None, None, Principal::anonymous());
+}
+
+#[test]
+#[should_panic(
+    expected = "The effective canister ID rwlgt-iiaaa-aaaaa-aaaaa-cai belongs to the NNS or II subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."
+)]
+fn test_create_canister_with_special_mainnet_id_panics() {
+    let pic = PocketIc::new();
+    let _ = pic.create_canister_with_id(
+        None,
+        None,
+        Principal::from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01]),
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "The effective canister ID nti35-np7aa-aaaaa-aaaaa-cai does not belong to an existing subnet and it is not a mainnet canister ID."
+)]
+fn test_create_canister_with_not_mainnet_id_panics() {
+    let pic = PocketIc::new();
+    let _ = pic.create_canister_with_id(
+        None,
+        None,
+        Principal::from_slice(&[0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01]),
+    );
 }
 
 #[test]
@@ -352,24 +380,7 @@ fn test_random_subnet_selection() {
     assert_eq!(subnet_kind, SubnetKind::System);
 }
 
-#[test]
-fn test_xnet_call() {
-    let pic = PocketIcBuilder::new()
-        .with_application_subnet()
-        .with_application_subnet()
-        .build();
-
-    let subnet_id_1 = pic.topology().get_app_subnets()[0];
-    let subnet_id_2 = pic.topology().get_app_subnets()[1];
-
-    let canister_1 = pic.create_canister_on_subnet(None, None, subnet_id_1);
-    let canister_2 = pic.create_canister_on_subnet(None, None, subnet_id_2);
-    pic.add_cycles(canister_1, INIT_CYCLES);
-    pic.add_cycles(canister_2, INIT_CYCLES);
-
-    pic.install_canister(canister_1, UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None);
-    pic.install_canister(canister_2, UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None);
-
+fn xnet_calls(pic: &PocketIc, canister_1: Principal, canister_2: Principal) {
     let result = pic.update_call(
         canister_1,
         Principal::anonymous(),
@@ -919,4 +930,71 @@ fn test_uninstall_canister() {
     // The module hash should be unset after the canister is uninstalled.
     let status = pic.canister_status(can_id, None).unwrap();
     assert!(status.module_hash.is_none());
+}
+
+#[test]
+fn test_xnet_call_and_create_canister_with_specified_id() {
+    // We start with a PocketIC instance consisting of two application subnets.
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_application_subnet()
+        .build();
+
+    // We retrieve these two (distinct) subnet IDs from the topology.
+    let subnet_id_1 = pic.topology().get_app_subnets()[0];
+    let subnet_id_2 = pic.topology().get_app_subnets()[1];
+    assert_ne!(subnet_id_1, subnet_id_2);
+
+    // We create canisters on those two subnets.
+    let canister_1 = pic.create_canister_on_subnet(None, None, subnet_id_1);
+    assert_eq!(pic.get_subnet(canister_1), Some(subnet_id_1));
+    let canister_2 = pic.create_canister_on_subnet(None, None, subnet_id_2);
+    assert_eq!(pic.get_subnet(canister_2), Some(subnet_id_2));
+
+    // We define a "specified" canister ID that exists on the IC mainnet,
+    // but belongs to the canister ranges of no subnet on the PocketIC instance.
+    let specified_id = Principal::from_text("rimrc-piaaa-aaaao-aaljq-cai").unwrap();
+    assert!(pic.get_subnet(specified_id).is_none());
+
+    // We create a canister with that specified canister ID: this should succeed
+    // and a new subnet should be created.
+    let canister_3 = pic
+        .create_canister_with_id(None, None, specified_id)
+        .unwrap();
+    assert_eq!(canister_3, specified_id);
+    let subnet_id_3 = pic.get_subnet(specified_id).unwrap();
+    assert_ne!(subnet_id_1, subnet_id_3);
+    assert_ne!(subnet_id_2, subnet_id_3);
+
+    // We also define a "specified" canister ID that corresponds to the Bitcoin mainnet canister,
+    // but belongs to the canister ranges of no subnet on the PocketIC instance.
+    let bitcoin_canister_id = Principal::from_text("ghsi2-tqaaa-aaaan-aaaca-cai").unwrap();
+    assert!(pic.get_subnet(bitcoin_canister_id).is_none());
+
+    // We create a canister with that specified canister ID: this should succeed
+    // and a new subnet should be created.
+    let canister_4 = pic
+        .create_canister_with_id(None, None, bitcoin_canister_id)
+        .unwrap();
+    assert_eq!(canister_4, bitcoin_canister_id);
+    let subnet_id_4 = pic.get_subnet(bitcoin_canister_id).unwrap();
+    assert_ne!(subnet_id_1, subnet_id_4);
+    assert_ne!(subnet_id_2, subnet_id_4);
+    assert_ne!(subnet_id_3, subnet_id_4);
+
+    // We top up the canisters with cycles and install the universal canister WASM to them.
+    for canister in [canister_1, canister_2, canister_3, canister_4] {
+        pic.add_cycles(canister, INIT_CYCLES);
+        pic.install_canister(canister, UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None);
+    }
+
+    // We test if xnet calls work between all pairs of canisters
+    // (in particular, including the canisters on the new subnets).
+    for canister_a in [canister_1, canister_2, canister_3, canister_4] {
+        for canister_b in [canister_1, canister_2, canister_3, canister_4] {
+            if canister_a != canister_b {
+                xnet_calls(&pic, canister_a, canister_b);
+            }
+        }
+    }
 }
