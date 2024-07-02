@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: "0 1 * * *"
   workflow_dispatch:
+  pull_request:
 
 env:
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
@@ -47,7 +48,8 @@ jobs:
     name: Cut RC
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
+    if: ${{ false }}
+    # if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -94,8 +96,9 @@ jobs:
     name: Bazel Test Bare Metal
     <<: *dind-large-setup
     timeout-minutes: 120
-    # TODO: enable when zh1 is active again
-    if: ${{ false }}
+    runs-on:
+      group: zh1
+      labels: dind-large
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -123,6 +126,7 @@ jobs:
     name: Bazel Test NNS Nightly
     <<: *dind-large-setup
     timeout-minutes: 20
+    if: ${{ false }}
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -141,6 +145,7 @@ jobs:
     name: Bazel System Test Benchmarks
     <<: *dind-large-setup
     timeout-minutes: 480
+    if: ${{ false }}
     steps:
       - <<: *checkout
       - <<: *before-script
