@@ -12,12 +12,15 @@ use crate::{
     IntoInner,
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
-use ic_interfaces::ecdsa::{
-    EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, EcdsaPoolSectionOp,
-    EcdsaPoolSectionOps, MutableEcdsaPoolSection,
-};
 use ic_interfaces::p2p::consensus::{
     ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+};
+use ic_interfaces::{
+    ecdsa::{
+        EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, EcdsaPoolSectionOp,
+        EcdsaPoolSectionOps, MutableEcdsaPoolSection,
+    },
+    time_source::TimeSource,
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -359,8 +362,12 @@ impl EcdsaPoolImpl {
         }
     }
 
-    // Populates the validated pool with the initial dealings from the CUP.
-    pub fn add_initial_dealings(&mut self, catch_up_package: &CatchUpPackage) {
+    // Populates the unvalidated pool with the initial dealings from the CUP.
+    pub fn add_initial_dealings(
+        &mut self,
+        catch_up_package: &CatchUpPackage,
+        time_source: &dyn TimeSource,
+    ) {
         let block = catch_up_package.content.block.get_value();
 
         let mut initial_dealings = Vec::new();
@@ -375,7 +382,6 @@ impl EcdsaPoolImpl {
             return;
         }
 
-        let mut change_set = Vec::new();
         for signed_dealing in initial_dealings
             .iter()
             .flat_map(|initial_dealings| initial_dealings.dealings())
@@ -387,12 +393,12 @@ impl EcdsaPoolImpl {
                 signed_dealing.idkg_dealing().transcript_id,
             );
 
-            change_set.push(EcdsaChangeAction::AddToValidated(
-                EcdsaMessage::EcdsaSignedDealing(signed_dealing.clone()),
-            ));
+            self.insert(UnvalidatedArtifact {
+                message: EcdsaMessage::EcdsaSignedDealing(signed_dealing.clone()),
+                peer_id: signed_dealing.dealer_id(),
+                timestamp: time_source.get_relative_time(),
+            })
         }
-
-        self.apply_changes(change_set);
     }
 }
 
