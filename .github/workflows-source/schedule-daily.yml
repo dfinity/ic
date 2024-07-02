@@ -103,8 +103,9 @@ jobs:
     name: Bazel Test Bare Metal
     <<: *dind-large-setup
     timeout-minutes: 120
-    # TODO: enable when zh1 is active again
-    if: ${{ false }}
+    runs-on:
+      group: zh1
+      labels: dind-large
     steps:
       - <<: *checkout
       - <<: *before-script
