@@ -45,10 +45,11 @@ jobs:
           git push --force --set-upstream origin "$RC_BRANCH_NAME"
   rust-benchmarks:
     name: Bazel Run Rust Benchmarks
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     runs-on:
       labels: rust-benchmarks
+    container:
+      options: --user ubuntu
+      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 720 # 12 hours
     strategy:
       matrix:
