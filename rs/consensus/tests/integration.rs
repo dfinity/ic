@@ -5,6 +5,7 @@ use crate::framework::{
     malicious, setup_subnet, ComponentModifier, ConsensusDependencies, ConsensusInstance,
     ConsensusRunner, ConsensusRunnerConfig, StopPredicate,
 };
+use framework::test_threshold_key_ids;
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::consensus_pool::ConsensusPool;
 use ic_interfaces::messaging::MessageRouting;
@@ -40,7 +41,7 @@ fn single_node_is_live() {
 }
 
 #[test]
-fn ecdsa_pubkey_is_produced() -> Result<(), String> {
+fn master_pubkey_is_produced() -> Result<(), String> {
     ConsensusRunnerConfig::new_from_env(4, 0)
         .and_then(|config| config.parse_extra_config())
         .map(|mut config| {
@@ -333,7 +334,14 @@ fn run_n_rounds_and_check_pubkey(
         let Some(batch) = batches.last() else {
             return false;
         };
-        if !batch.idkg_subnet_public_keys.is_empty() {
+
+        let mut found_keys = 0;
+        for key_id in test_threshold_key_ids() {
+            if batch.idkg_subnet_public_keys.contains_key(&key_id) {
+                found_keys += 1
+            }
+        }
+        if found_keys == test_threshold_key_ids().len() {
             *pubkey_exists_clone.borrow_mut() = true;
         }
         *pubkey_exists_clone.borrow()
