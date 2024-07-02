@@ -72,6 +72,9 @@ jobs:
     <<: *dind-large-setup
     runs-on:
       labels: rust-benchmarks
+    container:
+      options: --user ubuntu
+      <<: *image
     timeout-minutes: 720 # 12 hours
     strategy:
       matrix:
