@@ -1,0 +1,40 @@
+name: Slack CI Main
+
+on:
+  workflow_run:
+    types:
+      - completed
+    branches:
+      - master
+      - rc--*
+      - marko-workflow-notifications
+    workflows:
+      - CI Main
+
+jobs:
+  on-failure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Message and Channels
+        id: setup
+        shell: bash
+        run: |
+          CHANNEL="markos-void"
+          echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
+
+          if [ "${{ github.event.workflow_run.conclusion }}" == "success" ]; then || \
+            echo "message=:white_check_mark: ${MESSAGE}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.workflow_run.conclusion }}" == "failure" ] || \
+               [ "${{ github.event.workflow_run.conclusion }}" == "timed_out" ]; then
+            echo "message=:fire: ${MESSAGE}" >> $GITHUB_OUTPUT
+          fi
+        env:
+          MESSAGE: "*${{github.event.workflow_run.name}}* ${{github.event.workflow_run.conclusion}} in <${{github.server_url}}/${{github.repository}}/${{github.event.workflow_run.head_branch}}|${{github.repository}}>"
+      - name: Post Slack Notification
+        id: slack
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        with:
+          channel-id: ${{ steps.setup.outputs.channel }}
+          slack-message: "${{ steps.setup.outputs.message }}"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
