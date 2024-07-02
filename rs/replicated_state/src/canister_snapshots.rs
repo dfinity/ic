@@ -174,7 +174,7 @@ impl CanisterSnapshots {
             let snapshot = snapshots.get(&snapshot_id).unwrap();
             if !is_local_canister(snapshot.canister_id) {
                 snapshots.remove(&snapshot_id);
-                // TODO: Enable after checkpointing logic is implemented.
+                // TODO(EXC-1656): Add SnapshotOperation::Delete when a snapshot is discarded during a subnet split.
                 // unflushed_changes.push(SnapshotOperation::Delete(snapshot_id));
             }
         }
