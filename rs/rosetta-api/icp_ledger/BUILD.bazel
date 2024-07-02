@@ -180,13 +180,8 @@ rust_ic_test_suite(
         "tests/golden_nns_state.rs",
     ],
     data = [
-        "ledger.did",
-        "ledger_archive.did",
-        ":ledger_proxy.wasm",
-        ":test_notified_canister",
         "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
         "//rs/rosetta-api/icp_ledger/index:ic-icp-index-canister",
-        "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
         "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
         "@mainnet_icp_index_canister//file",
         "@mainnet_icp_ledger-archive-node-canister//file",
@@ -197,12 +192,9 @@ rust_ic_test_suite(
         "IC_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/index:ic-icp-index-canister)",
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
-        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
-        "LEDGER_PROXY_WASM_PATH": "$(rootpath :ledger_proxy.wasm)",
         "MAINNET_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_index_canister//file)",
         "MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger-archive-node-canister//file)",
         "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
-        "TEST_NOTIFIED_WASM_PATH": "$(rootpath :test_notified_canister)",
     },
     tags = [
         "manual",  # CI should not be downloading nns_state.tar.zst.
