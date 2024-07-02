@@ -27,10 +27,8 @@ url = "2.2.1"
 
 [dev-dependencies]
 actix-rt = "2.2.0"
-actix-web = { version = "4.0.1", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies"] }
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "test_utils" }
 proptest = "1.0"
-serde_bytes = { workspace = true }
 
 [lib]
 path = "src/lib.rs"
