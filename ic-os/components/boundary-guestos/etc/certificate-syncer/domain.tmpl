@@ -9,22 +9,6 @@ server {
 
     include "includes/error_pages.conf";
 
-    # Match all requests to /sw.js that also have the header 'Service-Worker: script' and deliver the service worker uninstall script instead.
-    location /sw.js {
-        if ($http_service_worker = "script") {
-            rewrite ^ /uninstall-script.js break;
-        }
-
-        try_files /dev/null @raw;
-    }
-
-    location /uninstall-script.js {
-        # Observability
-        include "includes/request_id.conf";
-
-        try_files /uninstall-script.js =500;
-    }
-
     location / {
         try_files /dev/null @raw;
     }
