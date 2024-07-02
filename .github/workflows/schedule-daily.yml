@@ -3,6 +3,7 @@ on:
   schedule:
     - cron: "0 1 * * *"
   workflow_dispatch:
+  pull_request:
 env:
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
@@ -44,16 +45,20 @@ jobs:
   rust-benchmarks:
     name: Bazel Run Rust Benchmarks
     runs-on:
-      group: zh1
-      labels: dind-large
+      # see linux-x86-64 runner group
+      labels: rust-benchmarks
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      # running on bare metal machine using ubuntu user
+      options: --user ubuntu
     timeout-minutes: 720 # 12 hours
-    # TODO: disable in GitLab before enabling here
-    if: ${{ false }}
     strategy:
       matrix:
-        targets: ["//rs/crypto/...", "//rs/state_manager/..."]
+        targets:
+          - "//rs/crypto/..."
+          - "//rs/state_manager/..."
+          - "//rs/certification/..."
+          - "//rs/boundary_node/ic_boundary/..."
     steps:
       - name: Checkout
         uses: actions/checkout@v4
