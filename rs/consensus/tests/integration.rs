@@ -193,7 +193,7 @@ fn majority_maliciouly_finalize_all_would_diverge() -> Result<(), String> {
 }
 
 #[test]
-fn minority_maliciouly_ecdsa_dealers_would_pass() -> Result<(), String> {
+fn minority_maliciouly_idkg_dealers_would_pass() -> Result<(), String> {
     ConsensusRunnerConfig::new_from_env(4, 0)
         .and_then(|config| config.parse_extra_config())
         .map(|mut config| {
