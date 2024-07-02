@@ -1,4 +1,6 @@
+import random
 import re
+import string
 from unittest.mock import Mock
 
 import pytest
@@ -34,6 +36,8 @@ def jira_lib_mock():
 def jira_ds(jira_lib_mock):
     return JiraFindingDataSource([], jira_lib_mock)
 
+def random_string(n):
+    return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(n))
 
 def test_get_risk_assessor_return_single_user(jira_ds, jira_lib_mock):
     user = Mock()
@@ -505,6 +509,76 @@ def test_create_finding_special_character_escaping(jira_ds, jira_lib_mock):
     )
 
 
+def test_dont_create_finding_with_too_long_field(jira_ds, jira_lib_mock):
+    mem = InMemoryJira(jira_lib_mock)
+    finding_in = Finding(
+        "repo",
+        "scanner",
+        Dependency("dep_id", "dep_name", "dep_vers"),
+        [Vulnerability("vuln_id", "vuln_name", "vuln_version")],
+        [],
+        ["project"],
+        [],
+        None,
+        [],
+        [],
+        None,
+    )
+    for i in range(1000):
+        finding_in.vulnerabilities.append(Vulnerability(id=random_string(10),name=random_string(10),description=random_string(10),risk_note=random_string(10)))
+    jira_lib_mock.search_issues.return_value = []
+
+    jira_ds.create_or_update_open_finding(finding_in)
+
+    assert len(mem.store) == 0
+
+
+def test_dont_update_finding_with_too_long_field(jira_ds, jira_lib_mock):
+    issue_data = {
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("repository")[0]: "repo",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0]: "scanner",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerable_dependency_id")[0]: "dep_id",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerable_dependency_version")[0]: "dep_vers",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0]: "scanner",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("dependencies")[0]: "||*id*||*name*||*version*||\n"
+                                                             "|dep_id|dep_name|dep_vers|\n",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]: "||*id*||*name*||*description*||*score*||*risk*||\n"
+                                                                "|vuln_id|vuln_name|vuln_version|-1| |\n",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("projects")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("risk_assessor")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("risk")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("owning_teams")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_responsible")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("due_date")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("score")[0]: None,
+    }
+    issue = Mock()
+    issue.get_field.side_effect = lambda x: issue_data[x]
+    issue.permalink.return_value = "https://dfinity.atlassian.net/browse/SCAVM-4"
+    jira_lib_mock.search_issues.return_value = [issue]
+
+    finding_in = Finding(
+        "repo",
+        "scanner",
+        Dependency("dep_id", "dep_name", "dep_vers"),
+        [Vulnerability("vuln_id", "vuln_name", "vuln_version")],
+        [],
+        [],
+        [],
+        None,
+        [],
+        [],
+        None,
+    )
+    for i in range(1000):
+        finding_in.vulnerabilities.append(Vulnerability(id=random_string(10),name=random_string(10),description=random_string(10),risk_note=random_string(10)))
+
+    jira_ds.create_or_update_open_finding(finding_in)
+
+    issue.update.assert_not_called()
+
+
 def test_delete_finding():
     jira_lib_mock = Mock()
     sub = Mock()
@@ -560,9 +634,8 @@ def test_owning_team_mapping_complete(jira_ds, jira_lib_mock):
 
 
 class InMemoryJira:
-    store = {}
-
     def __init__(self, jira_lib_mock):
+        self.store = {}
         jira_lib_mock.create_issue.side_effect = lambda x: self.create_issue(x)
         # jira_lib_mock.search_issues.side_effect = lambda x: self.query_issue(x)
 
