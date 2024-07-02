@@ -6,6 +6,7 @@ members = [
     "packages/icrc-ledger-client-cdk",
     "packages/icrc-ledger-types",
     "packages/ic-ledger-hash-of",
+    "packages/ic-signature-verification",
     "packages/pocket-ic",
     "packages/ic-vetkd-utils",
     "rs/artifact_manager",
