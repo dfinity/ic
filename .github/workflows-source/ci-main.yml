@@ -62,7 +62,7 @@ anchors:
     uses: actions/setup-python@v5
     with:
       python-version: '3.10'
-  check-rc-hotfix-branch:
+  check-rc-hotfix-branch: &check-rc-hotfix-branch
     name: Check if RC or hotfix branch
     id: branch_check
     run: |
