@@ -11,6 +11,7 @@ on:
     branches:
       - 'hotfix-*-rc--*'
       - 'rc--*'
+      - 'master'
 
 # runs for the same workflow are cancelled on PRs but not on master
 concurrency:
