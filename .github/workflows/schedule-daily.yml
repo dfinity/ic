@@ -25,8 +25,7 @@ jobs:
     name: Cut RC
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ false }}
-    # if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,10 +45,12 @@ jobs:
   rust-benchmarks:
     name: Bazel Run Rust Benchmarks
     runs-on:
+      # see linux-x86-64 runner group
       labels: rust-benchmarks
     container:
-      options: --user ubuntu
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      # running on bare metal machine using ubuntu user
+      options: --user ubuntu
     timeout-minutes: 720 # 12 hours
     strategy:
       matrix:
@@ -121,7 +122,6 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 20
-    if: ${{ false }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
