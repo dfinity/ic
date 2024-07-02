@@ -10,7 +10,7 @@ axum = { workspace = true }
 bytes = { workspace = true }
 either = "1.6.0"
 futures = { workspace = true }
-ic-artifact-manager = { path = "../../artifact_manager" }
+ic-artifact-manager = { path = "../../p2p/artifact_manager" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-consensus-manager = { path = "../consensus_manager" }
