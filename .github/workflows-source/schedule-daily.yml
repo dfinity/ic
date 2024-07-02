@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: "0 1 * * *"
   workflow_dispatch:
+  pull_request:
 
 env:
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
@@ -47,7 +48,8 @@ jobs:
     name: Cut RC
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
+    if: ${{ false }}
+    # if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -68,12 +70,16 @@ jobs:
   rust-benchmarks:
     name: Bazel Run Rust Benchmarks
     <<: *dind-large-setup
+    runs-on:
+      labels: rust-benchmarks
     timeout-minutes: 720 # 12 hours
-    # TODO: disable in GitLab before enabling here
-    if: ${{ false }}
     strategy:
       matrix:
-        targets: ["//rs/crypto/...", "//rs/state_manager/..."]
+        targets:
+          - "//rs/crypto/..."
+          - "//rs/state_manager/..."
+          - "//rs/certification/..."
+          - "//rs/boundary_node/ic_boundary/..."
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -123,6 +129,7 @@ jobs:
     name: Bazel Test NNS Nightly
     <<: *dind-large-setup
     timeout-minutes: 20
+    if: ${{ false }}
     steps:
       - <<: *checkout
       - <<: *before-script
