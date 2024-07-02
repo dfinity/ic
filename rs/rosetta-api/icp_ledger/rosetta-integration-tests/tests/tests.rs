@@ -1,7 +1,6 @@
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
-use ic_agent::Identity;
 use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
@@ -27,11 +26,8 @@ use std::thread::sleep;
 use std::time::Duration;
 use tempfile::TempDir;
 use url::Url;
-use url::Url;
 
 pub const LEDGER_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 2;
-const MAX_ATTEMPTS: u16 = 1000;
-const DURATION_BETWEEN_ATTEMPTS: Duration = Duration::from_millis(100);
 const MAX_ATTEMPTS: u16 = 1000;
 const DURATION_BETWEEN_ATTEMPTS: Duration = Duration::from_millis(100);
 
@@ -98,14 +94,6 @@ impl RosettaTestingClient {
             .expect("Unable to call /block")
             .block
             .unwrap_or_else(|| panic!("Block with id {id:?} not found"))
-    }
-
-    async fn block_by_index_or_panic(&self, n: u64) -> rosetta_core::objects::Block {
-        self.block_or_panic(PartialBlockIdentifier {
-            index: Some(n),
-            hash: None,
-        })
-        .await
     }
 
     async fn network_list_or_panic(&self) -> NetworkListResponse {
@@ -196,17 +184,10 @@ impl TestEnv {
         rosetta_state_directory: PathBuf,
         enable_rosetta_blocks: bool,
     ) -> (RosettaClient, RosettaContext) {
-    async fn setup_rosetta(
-        replica_url: Url,
-        ledger_canister_id: Principal,
-        rosetta_state_directory: PathBuf,
-        enable_rosetta_blocks: bool,
-    ) -> (RosettaClient, RosettaContext) {
         let (rosetta_client, rosetta_context) = start_rosetta(
             &get_rosetta_path(),
             replica_url.clone(),
             ledger_canister_id,
-            Some(rosetta_state_directory),
             Some(rosetta_state_directory),
             enable_rosetta_blocks,
         )
@@ -231,13 +212,8 @@ impl TestEnv {
         // String("Blockchain is empty")}) }` while then fails the test.
         // The following code waits until network status doesn't return that error anymore or a maximum number of retries have been attempted.
         let mut retries = MAX_ATTEMPTS;
-        let mut retries = MAX_ATTEMPTS;
         while retries > 0 {
             match rosetta_client.network_status(network.clone()).await {
-                Ok(_) => {
-                    println!("call to /network/status was successfull");
-                    break;
-                }
                 Ok(_) => {
                     println!("call to /network/status was successfull");
                     break;
@@ -519,60 +495,87 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
 
     env.pocket_ic.auto_progress().await;
 
-    let old_block0 = env.rosetta.block_by_index_or_panic(0).await;
+    let old_block0 = env
+        .rosetta
+        .block_or_panic(PartialBlockIdentifier {
+            index: Some(0),
+            hash: None,
+        })
+        .await;
 
     env.rosetta.wait_or_panic_until_synced_up_to(2).await;
 
     // Enabling Rosetta Blocks Mode should not change blocks before
     // the first rosetta index, in this case block 0
-    let block0 = env.rosetta.block_by_index_or_panic(0).await;
+    let block0 = env
+        .rosetta
+        .block_or_panic(PartialBlockIdentifier {
+            index: Some(0),
+            hash: None,
+        })
+        .await;
     assert_eq!(old_block0, block0);
 
     // Block 1 must be a Rosetta block with 2 transactions
-    let block1 = env.rosetta.block_by_index_or_panic(1).await;
-    assert_eq!(block1.block_identifier.index, 1);
-    assert_eq!(block1.parent_block_identifier, block0.block_identifier);
-    assert_eq!(block1.timestamp, rosetta_block1_expected_time_millis);
-    assert_eq!(block1.metadata, None);
-    assert_eq!(block1.transactions.len(), 2);
+    let block1_hash = env
+        .rosetta
+        .block_or_panic(PartialBlockIdentifier {
+            index: Some(1),
+            hash: None,
+        })
+        .await
+        .block_identifier
+        .hash;
+    for (index, hash) in [(Some(1), None), (Some(1), Some(block1_hash.clone()))] {
+        let block1 = env
+            .rosetta
+            .block_or_panic(PartialBlockIdentifier { index, hash })
+            .await;
+        assert_eq!(block1.block_identifier.index, 1);
+        assert_eq!(block1.block_identifier.hash, block1_hash);
+        assert_eq!(block1.parent_block_identifier, block0.block_identifier);
+        assert_eq!(block1.timestamp, rosetta_block1_expected_time_millis);
+        assert_eq!(block1.metadata, None);
+        assert_eq!(block1.transactions.len(), 2);
 
-    // Check the first transaction of the first Rossetta Block
-    assert_eq!(
-        block1.transactions.first().unwrap(),
-        &convert::to_rosetta_core_transaction(
-            /* block_index: */ 1,
-            Transaction {
-                operation: Operation::Mint {
-                    to: AccountIdentifier::new(Principal::anonymous().into(), None),
-                    amount: Tokens::from_e8s(1u64),
+        // Check the first transaction of the first Rossetta Block
+        assert_eq!(
+            block1.transactions.first().unwrap(),
+            &convert::to_rosetta_core_transaction(
+                /* block_index: */ 1,
+                Transaction {
+                    operation: Operation::Mint {
+                        to: AccountIdentifier::new(Principal::anonymous().into(), None),
+                        amount: Tokens::from_e8s(1u64),
+                    },
+                    memo: Memo(0),
+                    created_at_time: None,
+                    icrc1_memo: None,
                 },
-                memo: Memo(0),
-                created_at_time: None,
-                icrc1_memo: None,
-            },
-            rosetta_block1_expected_time_ts,
-            "ICP"
-        )
-        .unwrap(),
-    );
+                rosetta_block1_expected_time_ts,
+                "ICP"
+            )
+            .unwrap(),
+        );
 
-    // Check the second transaction of the firsst Rosetta Block
-    assert_eq!(
-        block1.transactions.get(1).unwrap(),
-        &convert::to_rosetta_core_transaction(
-            /* block_index: */ 2,
-            Transaction {
-                operation: Operation::Mint {
-                    to: AccountIdentifier::new(Principal::anonymous().into(), None),
-                    amount: Tokens::from_e8s(2u64),
+        // Check the second transaction of the firsst Rosetta Block
+        assert_eq!(
+            block1.transactions.get(1).unwrap(),
+            &convert::to_rosetta_core_transaction(
+                /* block_index: */ 2,
+                Transaction {
+                    operation: Operation::Mint {
+                        to: AccountIdentifier::new(Principal::anonymous().into(), None),
+                        amount: Tokens::from_e8s(2u64),
+                    },
+                    memo: Memo(0),
+                    created_at_time: None,
+                    icrc1_memo: None,
                 },
-                memo: Memo(0),
-                created_at_time: None,
-                icrc1_memo: None,
-            },
-            rosetta_block1_expected_time_ts,
-            "ICP"
-        )
-        .unwrap(),
-    );
+                rosetta_block1_expected_time_ts,
+                "ICP"
+            )
+            .unwrap(),
+        );
+    }
 }
