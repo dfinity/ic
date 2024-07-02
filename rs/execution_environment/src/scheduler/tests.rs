@@ -4148,6 +4148,46 @@ fn dts_long_execution_completes() {
     );
 }
 
+fn can_execute_multiple_messages_per_round_with_dts(mut test: SchedulerTest) {
+    let canister = test.create_canister();
+    let num_messages = 1000;
+    for _ in 0..num_messages {
+        test.send_ingress(canister, ingress(1000));
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        num_messages
+    );
+}
+
+// The following two tests check that we can execute multiple messages per round
+// with DTS enabled on both app and system subnets. The tests are explicitly
+// checking with production configurations to ensure that we don't accidentally
+// set incompatible limits and end up reducing throughput a lot (e.g. execute
+// only one message per round).
+#[test]
+fn can_execute_multiple_messages_per_round_on_app_subnets_with_dts() {
+    let test = SchedulerTestBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    can_execute_multiple_messages_per_round_with_dts(test);
+}
+
+#[test]
+fn can_execute_multiple_messages_per_round_on_system_subnets_with_dts() {
+    let test = SchedulerTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .build();
+
+    can_execute_multiple_messages_per_round_with_dts(test);
+}
+
 #[test]
 fn cannot_execute_management_message_for_targeted_long_execution_canister() {
     let mut test = SchedulerTestBuilder::new()
