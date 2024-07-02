@@ -93,9 +93,10 @@ impl PocketIc {
     fn sm_builder(
         runtime: Arc<Runtime>,
         subnet_kind: SubnetKind,
+        ranges: Vec<CanisterIdRange>,
+        alloc_range: Option<CanisterIdRange>,
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
-        subnet_seq_no: usize,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
@@ -122,10 +123,13 @@ impl PocketIc {
             .feature_flags
             .rate_limiting_of_debug_prints = FlagStatus::Disabled;
         let sm_config = StateMachineConfig::new(subnet_config, hypervisor_config);
+        let mut hasher = Sha256::new();
+        hasher.write(format!("SubnetCanisterRanges({:?},{:?})", ranges, alloc_range).as_bytes());
+        let subnet_seed = hasher.finish();
         StateMachineBuilder::new()
             .with_runtime(runtime)
             .with_config(Some(sm_config))
-            .with_subnet_seq_no(subnet_seq_no as u8)
+            .with_subnet_seed(subnet_seed)
             .with_subnet_size(subnet_size.try_into().unwrap())
             .with_subnet_type(subnet_type)
             .with_registry_data_provider(registry_data_provider.clone())
@@ -199,24 +203,22 @@ impl PocketIc {
         let mut topology = Topology(BTreeMap::new());
 
         // Create all StateMachines and the topology from the subnet config infos.
-        for (
-            subnet_seq_no,
-            SubnetConfigInfo {
-                ranges,
-                alloc_range,
-                subnet_kind,
-                state_dir,
-                instruction_config,
-                dts_flag,
-            },
-        ) in subnet_config_info.into_iter().enumerate()
+        for SubnetConfigInfo {
+            ranges,
+            alloc_range,
+            subnet_kind,
+            state_dir,
+            instruction_config,
+            dts_flag,
+        } in subnet_config_info.into_iter()
         {
             let mut builder = Self::sm_builder(
                 runtime.clone(),
                 subnet_kind,
+                ranges.clone(),
+                alloc_range,
                 instruction_config.clone(),
                 registry_data_provider.clone(),
-                subnet_seq_no,
             );
 
             if let DtsFlag::Disabled = dts_flag {
@@ -1597,7 +1599,6 @@ fn route(
                         return Err(format!("The effective canister ID {canister_id} belongs to the NNS or II subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."));
                     }
                     let instruction_config = SubnetInstructionConfig::Production;
-                    let subnet_seq_no: usize = pic.subnets.read().unwrap().len();
                     // The binary representation of canister IDs on the IC mainnet consists of exactly 10 bytes.
                     let canister_id_slice: &[u8] = canister_id.as_ref();
                     if canister_id_slice.len() != 10 {
@@ -1625,9 +1626,10 @@ fn route(
                     let builder = PocketIc::sm_builder(
                         pic.runtime.clone(),
                         subnet_kind,
+                        vec![range],
+                        Some(canister_allocation_range),
                         instruction_config.clone(),
                         pic.registry_data_provider.clone(),
-                        subnet_seq_no,
                     );
                     let sm = builder.build_with_subnets(pic.subnets.clone());
                     // We insert the new subnet into the routing table.
