@@ -28,7 +28,6 @@ use ic_system_api::SystemApiImpl;
 /// The amount of instructions required to process a single byte in a payload.
 /// This includes the cost of memory as well as time passing the payload
 /// from wasm sandbox to the replica execution environment.
-
 const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
 
 fn unexpected_err(s: String) -> HypervisorError {
@@ -299,13 +298,27 @@ fn ic0_performance_counter_helper(
     }
 }
 
-pub(crate) fn syscalls(
+pub(crate) fn syscalls<
+    I: TryInto<usize>
+        + TryInto<u64>
+        + TryInto<u32>
+        + TryFrom<usize>
+        + wasmtime::WasmTy
+        + std::fmt::Display
+        + Copy,
+>(
     linker: &mut Linker<StoreData>,
     feature_flags: FeatureFlags,
     stable_memory_dirty_page_limit: StableMemoryDirtyPageLimit,
     stable_memory_access_page_limit: NumOsPages,
     main_memory_type: WasmMemoryType,
-) {
+) where
+    <I as TryInto<usize>>::Error: std::fmt::Display,
+    <I as TryInto<usize>>::Error: std::fmt::Debug,
+    <I as TryFrom<usize>>::Error: std::fmt::Display,
+    <I as TryInto<u64>>::Error: std::fmt::Debug,
+    <I as TryInto<u32>>::Error: std::fmt::Display,
+{
     fn with_system_api<T>(
         mut caller: &mut Caller<'_, StoreData>,
         f: impl Fn(&mut SystemApiImpl) -> HypervisorResult<T>,
@@ -384,8 +397,10 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_caller_copy", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::MSG_CALLER_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_caller_copy(dst, offset, size, memory)
@@ -404,7 +419,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_CALLER_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_msg_caller_size()).and_then(|s| {
-                    i32::try_from(s).map_err(|e| {
+                    I::try_from(s).map_err(|e| {
                         anyhow::Error::msg(format!("ic0::msg_caller_size failed: {}", e))
                     })
                 })
@@ -417,7 +432,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_ARG_DATA_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_msg_arg_data_size()).and_then(|s| {
-                    i32::try_from(s).map_err(|e| {
+                    I::try_from(s).map_err(|e| {
                         anyhow::Error::msg(format!("ic0::msg_arg_data_size failed: {}", e))
                     })
                 })
@@ -427,8 +442,10 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_arg_data_copy", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::MSG_ARG_DATA_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, mem| {
                     system_api.ic0_msg_arg_data_copy(dst, offset, size, mem)
@@ -447,7 +464,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_METHOD_NAME_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_msg_method_name_size()).and_then(|s| {
-                    i32::try_from(s).map_err(|e| {
+                    I::try_from(s).map_err(|e| {
                         anyhow::Error::msg(format!("ic0::msg_metohd_name_size failed: {}", e))
                     })
                 })
@@ -457,8 +474,10 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_method_name_copy", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::MSG_METHOD_NAME_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_method_name_copy(dst, offset, size, memory)
@@ -483,12 +502,13 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_reply_data_append", {
-            move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
-                let (src, size) = (src as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead::MSG_REPLY_DATA_APPEND,
-                    size.saturating_mul(BYTE_TRANSMISSION_COST_FACTOR),
+                    BYTE_TRANSMISSION_COST_FACTOR.saturating_mul(size),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reply_data_append(src, size, memory)
@@ -517,12 +537,13 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_reject", {
-            move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
-                let (src, size) = (src as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead::MSG_REJECT,
-                    size.saturating_mul(BYTE_TRANSMISSION_COST_FACTOR),
+                    BYTE_TRANSMISSION_COST_FACTOR.saturating_mul(size),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject(src, size, memory)
@@ -536,7 +557,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_REJECT_MSG_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_msg_reject_msg_size()).and_then(|s| {
-                    i32::try_from(s).map_err(|e| {
+                    I::try_from(s).map_err(|e| {
                         anyhow::Error::msg(format!("ic0_msg_reject_msg_size failed: {}", e))
                     })
                 })
@@ -546,8 +567,10 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_reject_msg_copy", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::MSG_REJECT_MSG_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_reject_msg_copy(dst, offset, size, memory)
@@ -566,7 +589,7 @@ pub(crate) fn syscalls(
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::CANISTER_SELF_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_canister_self_size()).and_then(|s| {
-                    i32::try_from(s).map_err(|e| {
+                    I::try_from(s).map_err(|e| {
                         anyhow::Error::msg(format!("ic0_canister_self_size failed: {}", e))
                     })
                 })
@@ -576,8 +599,10 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "canister_self_copy", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::CANISTER_SELF_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_canister_self_copy(dst, offset, size, memory)
@@ -593,19 +618,21 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "debug_print", {
-            move |mut caller: Caller<'_, StoreData>, offset: u32, length: u32| {
+            move |mut caller: Caller<'_, StoreData>, offset: I, length: I| {
+                let length: u64 = length.try_into().expect("Failed to convert I to u64");
                 let mut num_bytes = 0;
                 let canister_logging_is_enabled =
                     feature_flags.canister_logging == FlagStatus::Enabled;
                 if canister_logging_is_enabled {
-                    num_bytes += logging_charge_bytes(&mut caller, length as u64)?
+                    num_bytes += logging_charge_bytes(&mut caller, length)?
                 }
                 let debug_print_is_enabled = debug_print_is_enabled(&mut caller, feature_flags)?;
                 if debug_print_is_enabled {
-                    num_bytes += length as u64;
+                    num_bytes += length;
                 }
                 charge_for_cpu_and_mem(&mut caller, overhead::DEBUG_PRINT, num_bytes as usize)?;
-                let (offset, length) = (offset as usize, length as usize);
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let length = length as usize;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.save_log_message(
                         canister_logging_is_enabled,
@@ -625,8 +652,9 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "trap", {
-            move |mut caller: Caller<'_, StoreData>, offset: u32, length: u32| -> Result<(), _> {
-                let (offset, length) = (offset as usize, length as usize);
+            move |mut caller: Caller<'_, StoreData>, offset: I, length: I| -> Result<(), _> {
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let length: usize = length.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::TRAP, length)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_trap(offset, length, memory)
@@ -638,22 +666,46 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "call_new", {
             move |mut caller: Caller<'_, StoreData>,
-                  callee_src: u32,
-                  callee_size: u32,
-                  name_src: u32,
-                  name_len: u32,
-                  reply_fun: u32,
-                  reply_env: u32,
-                  reject_fun: u32,
-                  reject_env: u32| {
-                let (callee_src, callee_size) = (callee_src as usize, callee_size as usize);
-                let (name_src, name_len) = (name_src as usize, name_len as usize);
+                  callee_src: I,
+                  callee_size: I,
+                  name_src: I,
+                  name_len: I,
+                  reply_fun: I,
+                  reply_env: I,
+                  reject_fun: I,
+                  reject_env: I| {
+                let callee_src: usize =
+                    callee_src.try_into().expect("Failed to convert I to usize");
+                let callee_size: usize = callee_size
+                    .try_into()
+                    .expect("Failed to convert I to usize");
+                let name_src: usize = name_src.try_into().expect("Failed to convert I to usize");
+                let name_len: usize = name_len.try_into().expect("Failed to convert I to usize");
+                let reply_env: u64 = reply_env.try_into().expect("Failed to convert I to u64");
+                let reject_env: u64 = reject_env.try_into().expect("Failed to convert I to u64");
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead::CALL_NEW,
                     callee_size.saturating_add(name_len),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    // A valid function index should be much smaller than u32::max
+                    let reply_fun: u32 = reply_fun.try_into().map_err(|_| {
+                        HypervisorError::ToolchainContractViolation {
+                            error: format!(
+                                "ic0_call_new: reply function index out of bounds: {}",
+                                reply_fun
+                            ),
+                        }
+                    })?;
+                    let reject_fun: u32 = reject_fun.try_into().map_err(|_| {
+                        HypervisorError::ToolchainContractViolation {
+                            error: format!(
+                                "ic0_call_new: reject function index out of bounds: {}",
+                                reject_fun
+                            ),
+                        }
+                    })?;
                     system_api.ic0_call_new(
                         callee_src,
                         callee_size,
@@ -672,12 +724,13 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "call_data_append", {
-            move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
-                let (src, size) = (src as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead::CALL_DATA_APPEND,
-                    size.saturating_mul(BYTE_TRANSMISSION_COST_FACTOR),
+                    BYTE_TRANSMISSION_COST_FACTOR.saturating_mul(size),
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_call_data_append(src, size, memory)
@@ -688,9 +741,21 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "call_on_cleanup", {
-            move |mut caller: Caller<'_, StoreData>, fun: u32, env: u32| {
+            move |mut caller: Caller<'_, StoreData>, fun: I, env: I| {
+                let env: u64 = env.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::CALL_ON_CLEANUP)?;
-                with_system_api(&mut caller, |s| s.ic0_call_on_cleanup(fun, env))
+                with_system_api(&mut caller, |s| {
+                    // A valid function index should be much smaller than u32::max
+                    let fun: u32 = fun.try_into().map_err(|_| {
+                        HypervisorError::ToolchainContractViolation {
+                            error: format!(
+                                "ic0_call_on_cleanup: function index out of bounds: {}",
+                                fun
+                            ),
+                        }
+                    })?;
+                    s.ic0_call_on_cleanup(fun, env)
+                })
             }
         })
         .unwrap();
@@ -907,8 +972,8 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "canister_cycle_balance128", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32| {
-                let dst = dst as usize;
+            move |mut caller: Caller<'_, StoreData>, dst: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::CANISTER_CYCLE_BALANCE128)?;
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     s.ic0_canister_cycle_balance128(dst, memory)
@@ -937,8 +1002,8 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_cycles_available128", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32| {
-                let dst = dst as usize;
+            move |mut caller: Caller<'_, StoreData>, dst: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_AVAILABLE128)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_available128(dst, memory)
@@ -967,8 +1032,8 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_cycles_refunded128", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32| {
-                let dst = dst as usize;
+            move |mut caller: Caller<'_, StoreData>, dst: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_REFUNDED128)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_refunded128(dst, memory)
@@ -993,8 +1058,8 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "msg_cycles_accept128", {
-            move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: u32| {
-                let dst = dst as usize;
+            move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_ACCEPT128)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_accept128(
@@ -1096,8 +1161,9 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "certified_data_set", {
-            move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
-                let (src, size) = (src as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::CERTIFIED_DATA_SET, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_certified_data_set(src, size, memory)
@@ -1119,8 +1185,10 @@ pub(crate) fn syscalls(
         .func_wrap("ic0", "data_certificate_size", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::DATA_CERTIFICATE_SIZE)?;
-                with_system_api(&mut caller, |s| {
-                    s.ic0_data_certificate_size().map(|x| x as u32)
+                with_system_api(&mut caller, |s| s.ic0_data_certificate_size()).and_then(|x| {
+                    I::try_from(x).map_err(|e| {
+                        anyhow::Error::msg(format!("ic0::data_certificate_size failed: {}", e))
+                    })
                 })
             }
         })
@@ -1128,8 +1196,9 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "is_controller", {
-            move |mut caller: Caller<'_, StoreData>, src: u32, size: u32| {
-                let (src, size) = (src as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, src: I, size: I| {
+                let src: usize = src.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::IS_CONTROLLER, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_is_controller(src, size, memory)
@@ -1149,8 +1218,10 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "data_certificate_copy", {
-            move |mut caller: Caller<'_, StoreData>, dst: u32, offset: u32, size: u32| {
-                let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
+            move |mut caller: Caller<'_, StoreData>, dst: I, offset: I, size: I| {
+                let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                let offset: usize = offset.try_into().expect("Failed to convert I to usize");
+                let size: usize = size.try_into().expect("Failed to convert I to usize");
                 charge_for_cpu_and_mem(&mut caller, overhead::DATA_CERTIFICATE_COPY, size)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_data_certificate_copy(dst, offset, size, memory)
@@ -1177,9 +1248,9 @@ pub(crate) fn syscalls(
 
     linker
         .func_wrap("ic0", "cycles_burn128", {
-            move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: u32| {
-                let dst = dst as usize;
+            move |mut caller: Caller<'_, StoreData>, amount_high: u64, amount_low: u64, dst: I| {
                 with_memory_and_system_api(&mut caller, |s, memory| {
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cycles_burn128(Cycles::from_parts(amount_high, amount_low), dst, memory)
                 })
                 .map_err(|e| anyhow::Error::msg(format!("ic0_cycles_burn128 failed: {}", e)))

@@ -241,13 +241,26 @@ impl WasmtimeEmbedder {
             }
         }
 
-        system_api::syscalls(
-            &mut linker,
-            self.config.feature_flags,
-            self.config.stable_memory_dirty_page_limit,
-            self.config.stable_memory_accessed_page_limit,
-            main_memory_type,
-        );
+        match main_memory_type {
+            WasmMemoryType::Wasm32 => {
+                system_api::syscalls::<u32>(
+                    &mut linker,
+                    self.config.feature_flags,
+                    self.config.stable_memory_dirty_page_limit,
+                    self.config.stable_memory_accessed_page_limit,
+                    main_memory_type,
+                );
+            }
+            WasmMemoryType::Wasm64 => {
+                system_api::syscalls::<u64>(
+                    &mut linker,
+                    self.config.feature_flags,
+                    self.config.stable_memory_dirty_page_limit,
+                    self.config.stable_memory_accessed_page_limit,
+                    main_memory_type,
+                );
+            }
+        }
 
         let instance_pre = linker.instantiate_pre(module).map_err(|e| {
             HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(format!(
@@ -482,6 +495,12 @@ impl WasmtimeEmbedder {
         let memory_trackers = sigsegv_memory_tracker(memories, &mut store, self.log.clone());
 
         let signal_stack = WasmtimeSignalStack::new();
+        let mut main_memory_type = WasmMemoryType::Wasm32;
+        if let Some(mem) = instance.get_memory(&mut store, WASM_HEAP_MEMORY_NAME) {
+            if mem.ty(&store).is_64() {
+                main_memory_type = WasmMemoryType::Wasm64;
+            }
+        }
         Ok(WasmtimeInstance {
             instance,
             memory_trackers,
@@ -496,6 +515,7 @@ impl WasmtimeEmbedder {
             #[cfg(debug_assertions)]
             stable_memory_dirty_page_limit: current_dirty_page_limit,
             stable_memory_page_access_limit: self.config.stable_memory_accessed_page_limit,
+            main_memory_type,
         })
     }
 
@@ -743,6 +763,7 @@ pub struct WasmtimeInstance {
     #[allow(dead_code)]
     stable_memory_dirty_page_limit: ic_types::NumOsPages,
     stable_memory_page_access_limit: ic_types::NumOsPages,
+    main_memory_type: WasmMemoryType,
 }
 
 impl WasmtimeInstance {
@@ -955,13 +976,22 @@ impl WasmtimeInstance {
         let result = match &func_ref {
             FuncRef::Method(wasm_method) => self.invoke_export(&wasm_method.to_string(), &[]),
             FuncRef::QueryClosure(closure) | FuncRef::UpdateClosure(closure) => {
-                // As the 64-bit `env` values will be supported in `wasm64`,
-                // which is disabled for now, the conversion should always succeed.
-                let Ok(env32): Result<u32, _> = closure.env.try_into() else {
-                    return Err(HypervisorError::ToolchainContractViolation {
-                        error: format!("error converting additional value {} to u32", closure.env),
-                    });
+                let call_args = match self.main_memory_type {
+                    WasmMemoryType::Wasm32 => {
+                        // Wasm32 closure should hold a value which fits in u32
+                        let Ok(env32): Result<u32, _> = closure.env.try_into() else {
+                            return Err(HypervisorError::ToolchainContractViolation {
+                                error: format!(
+                                    "error converting additional value {} to u32",
+                                    closure.env
+                                ),
+                            });
+                        };
+                        [Val::I32(env32 as i32)]
+                    }
+                    WasmMemoryType::Wasm64 => [Val::I64(closure.env as i64)],
                 };
+
                 self.instance
                     .get_export(&mut self.store, "table")
                     .ok_or_else(|| HypervisorError::ToolchainContractViolation {
@@ -980,7 +1010,7 @@ impl WasmtimeInstance {
                     .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                         error: "unexpected null function reference".to_string(),
                     })?
-                    .call(&mut self.store, &[Val::I32(env32 as i32)], &mut [])
+                    .call(&mut self.store, &call_args, &mut [])
                     .map_err(wasmtime_error_to_hypervisor_error)
             }
         }
