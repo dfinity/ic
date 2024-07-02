@@ -211,6 +211,16 @@ message Neuron {
   // with the oldest entries first, i.e. it holds for all i that:
   // entry[i].timestamp_of_disbursement_seconds <= entry[i+1].timestamp_of_disbursement_seconds
   repeated DisburseMaturityInProgress disburse_maturity_in_progress = 18;
+
+  message NeuronRewardPortion {
+    // the sum of the neuron_reward_e8s for all neurons in this reward event. 
+    uint64 reward_event_total_distributed_e8s_equivalent = 1;
+    // this specific neuron's neuron_reward_e8s
+    uint64 neuron_reward_e8s = 2;
+  }
+  // The keys are the reward-event-timestamps (end_timestamp_seconds) and the values are the distributed_e8s_equivalent and this specific neuron_reward_e8s for this reward-event.   
+  map<uint64, NeuronRewardPortion> reward_events_to_neuron_reward_portion = 19;
+
 }
 
 // The types of votes a neuron can issue.
