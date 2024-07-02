@@ -151,8 +151,10 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/state_manager/                           @dfinity/ic-message-routing-owners
 /rs/memory_tracker/                                     @dfinity/runtime
 /rs/messaging/                                          @dfinity/ic-message-routing-owners
-/rs/monitoring/adapter_metrics/                         @dfinity/networking
-/rs/monitoring/backtrace/                               @dfinity/ic-message-routing-owners @dfinity/networking
+/rs/monitoring/                                         @dfinity/networking
+/rs/monitoring/backtrace/                               @dfinity/networking @dfinity/ic-message-routing-owners
+/rs/monitoring/metrics                                  @dfinity/networking @dfinity/ic-message-routing-owners
+/rs/monitoring/pprof/                                   @dfinity/networking @dfinity/ic-message-routing-owners
 /rs/nervous_system/                                     @dfinity/nns-team
 /rs/nns/                                                @dfinity/nns-team
 /rs/orchestrator/                                       @dfinity/consensus
