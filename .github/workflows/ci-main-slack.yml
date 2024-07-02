@@ -29,7 +29,7 @@ jobs:
           CHANNEL="eng-idx-bots"
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
 
-          FULL_MESSAGE=""
+          FULL_MESSAGE="nothing"
           if [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(success)$ ]]; then
             if [[ "$BRANCH_NAME" =~ rc--.* ]]; then
               FULL_MESSAGE=":white_check_mark: ${MESSAGE}"
@@ -44,7 +44,7 @@ jobs:
 
       - name: Post Slack Notification
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
-        if: steps.setup.outputs.message != '""'
+        if: ${{ steps.setup.outputs.message != "nothing" }}
         with:
           channel-id: ${{ steps.setup.outputs.channel }}
           slack-message: "${{ steps.setup.outputs.message }}"
