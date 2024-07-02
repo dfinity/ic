@@ -108,11 +108,7 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
                 "ingress_message_insert_validated";
                 ingress_message.message_id => format!("{}", ingress_object.message_id),
             );
-            MoveToValidated((
-                IngressMessageId::from(ingress_object),
-                artifact.peer_id,
-                size,
-            ))
+            MoveToValidated((IngressMessageId::from(ingress_object), artifact.peer_id))
         }));
 
         // Check validated messages and remove if they are not required anymore (i.e.
@@ -203,9 +199,8 @@ mod tests {
                     ingress_manager.on_state_change(ingress_pool)
                 });
 
-                let size = ingress_message.count_bytes();
                 let expected_change_action =
-                    ChangeAction::MoveToValidated((message_id, node_test_id(0), size));
+                    ChangeAction::MoveToValidated((message_id, node_test_id(0)));
                 assert!(change_set.contains(&expected_change_action));
             },
         )
@@ -415,11 +410,8 @@ mod tests {
                 let good_id = IngressMessageId::from(&good_msg);
                 let bad_id = IngressMessageId::from(&bad_msg);
                 let expected_change_action0 = PurgeBelowExpiry(batch_time);
-                let expected_change_action1 = ChangeAction::MoveToValidated((
-                    good_id,
-                    node_test_id(0),
-                    good_msg.count_bytes(),
-                ));
+                let expected_change_action1 =
+                    ChangeAction::MoveToValidated((good_id, node_test_id(0)));
                 let expected_change_action2 = ChangeAction::RemoveFromUnvalidated(bad_id);
                 assert_eq!(change_set.len(), 3);
                 assert!(change_set.contains(&expected_change_action0));

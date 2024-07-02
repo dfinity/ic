@@ -301,6 +301,7 @@ pub fn setup_test_router(
         routing_table,
         http_client,
         None,
+        None,
         &cli,
         &metrics_registry,
         enable_cache.then_some(Arc::new(

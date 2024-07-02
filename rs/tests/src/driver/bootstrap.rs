@@ -14,6 +14,7 @@ use crate::driver::{
     },
     test_setup::InfraProvider,
 };
+use crate::k8s::datavolume::DataVolumeContentType;
 use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
@@ -152,7 +153,6 @@ pub fn init_ic(
                 subnet.max_instructions_per_round,
                 subnet.max_instructions_per_install_code,
                 subnet.features,
-                subnet.ecdsa_config.clone().map(|c| c.into()),
                 subnet.chain_key_config.clone().map(|c| c.into()),
                 subnet.max_number_of_canisters,
                 subnet.ssh_readonly_access.clone(),
@@ -297,8 +297,12 @@ pub fn setup_and_start_vms(
                     );
                     block_on(upload_image(conf_img_path.as_path(), &url))
                         .expect("Failed to upload config image");
-                    block_on(tnet_node.deploy_config_image(CONF_IMG_FNAME))
-                        .expect("deploying config image failed");
+                    block_on(tnet_node.deploy_config_image(
+                        CONF_IMG_FNAME,
+                        "config",
+                        DataVolumeContentType::Kubevirt,
+                    ))
+                    .expect("deploying config image failed");
                     block_on(tnet_node.start()).expect("starting vm failed");
                 }
                 InfraProvider::Farm => {
@@ -505,25 +509,6 @@ fn create_config_disk_image(
             .arg(elasticsearch_hosts.join(" "));
     }
 
-    let replica_log_debug_overrides: Vec<String> = test_env.get_replica_log_debug_overrides()?;
-
-    info!(
-        test_env.logger(),
-        "replica-log-debug-overrides args are {:?}", replica_log_debug_overrides
-    );
-
-    if !replica_log_debug_overrides.is_empty() {
-        let replica_log_debug_overrides_val = format!(
-            "[{}]",
-            replica_log_debug_overrides
-                .iter()
-                .map(|component_unquoted| format!("\"{}\"", component_unquoted))
-                .collect::<Vec<_>>()
-                .join(",")
-        );
-        cmd.arg("--replica_log_debug_overrides")
-            .arg(replica_log_debug_overrides_val);
-    }
     // --bitcoind_addr indicates the local bitcoin node that the bitcoin adapter should be connected to in the system test environment.
     if let Ok(arg) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
         cmd.arg("--bitcoind_addr").arg(arg);

@@ -2097,6 +2097,7 @@ impl CanisterManager {
             origin,
             CanisterChangeDetails::load_snapshot(
                 new_canister.system_state.canister_version,
+                snapshot_id.to_vec(),
                 snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
             ),
         );
@@ -2248,6 +2249,13 @@ pub(crate) enum CanisterManagerError {
         requested: Cycles,
         limit: Cycles,
     },
+    // TODO(RUN-1001): Use this error type after successful rollout of the next
+    // replica version.
+    #[allow(dead_code)]
+    ReservedCyclesLimitIsTooLow {
+        cycles: Cycles,
+        limit: Cycles,
+    },
     WasmChunkStoreError {
         message: String,
     },
@@ -2305,6 +2313,7 @@ impl AsErrorHelp for CanisterManagerError {
             | CanisterManagerError::InsufficientCyclesInMemoryGrow { .. }
             | CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation { .. }
             | CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow { .. }
+            | CanisterManagerError::ReservedCyclesLimitIsTooLow { .. }
             | CanisterManagerError::WasmChunkStoreError { .. }
             | CanisterManagerError::CanisterSnapshotNotFound { .. }
             | CanisterManagerError::CanisterHeapDeltaRateLimited { .. }
@@ -2549,6 +2558,16 @@ impl From<CanisterManagerError> for UserError {
                         "Canister cannot grow memory by {} bytes due to its reserved cycles limit. \
                          The current limit ({}) would exceeded by {}.{additional_help}",
                         bytes, limit, requested - limit,
+                    ),
+                )
+            }
+            ReservedCyclesLimitIsTooLow { cycles, limit } => {
+                Self::new(
+                    ErrorCode::ReservedCyclesLimitIsTooLow,
+                    format!(
+                        "Cannot set the reserved cycles limit {} below the reserved cycles balance of \
+                        the canister {}.{additional_help}",
+                        limit, cycles,
                     ),
                 )
             }

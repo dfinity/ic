@@ -1928,15 +1928,21 @@ impl Governance {
     ///
     /// Preconditions:
     /// - the given `neuron` already exists in `self.neuron_store.neurons`
-    /// - the controller principal is self-authenticating
     #[cfg(feature = "test")]
     pub fn update_neuron(&mut self, neuron: NeuronProto) -> Result<(), GovernanceError> {
-        let neuron_id = neuron.id.expect("Neuron must have a NeuronId");
-        // Must clobber an existing neuron.
-        self.with_neuron_mut(&neuron_id, |old_neuron| {
-            // Converting from API type to internal type.
-            *old_neuron = Neuron::try_from(neuron).unwrap();
-        })
+        // Converting from API type to internal type.
+        let new_neuron = Neuron::try_from(neuron).expect("Neuron must be valid");
+
+        self.with_neuron_mut(&new_neuron.id(), |old_neuron| {
+            if new_neuron.subaccount() != old_neuron.subaccount() {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Cannot change the subaccount of a neuron".to_string(),
+                ));
+            }
+            *old_neuron = new_neuron;
+            Ok(())
+        })?
     }
 
     /// Add a neuron to the list of neurons.
@@ -2043,7 +2049,16 @@ impl Governance {
     ) -> ListNeuronsResponse {
         let now = self.env.now();
         let implicitly_requested_neurons = if req.include_neurons_readable_by_caller {
-            self.get_neuron_ids_by_principal(caller)
+            // To maintain compatibility with the old API, we include all neurons readable by the
+            // caller when the param is not set.
+            let include_empty_neurons =
+                req.include_empty_neurons_readable_by_caller.unwrap_or(true);
+            if include_empty_neurons {
+                self.get_neuron_ids_by_principal(caller)
+            } else {
+                self.neuron_store
+                    .get_non_empty_neuron_ids_readable_by_caller(*caller)
+            }
         } else {
             Vec::new()
         };
@@ -3356,28 +3371,8 @@ impl Governance {
         by: &NeuronIdOrSubaccount,
         caller: &PrincipalId,
     ) -> Result<NeuronProto, GovernanceError> {
-        let neuron_clone =
-            self.with_neuron_by_neuron_id_or_subaccount(by, |neuron| neuron.clone())?;
-        // Check that the caller is authorized for the requested
-        // neuron (controller or hot key).
-        if !neuron_clone.is_authorized_to_vote(caller) {
-            // If not, check if the caller is authorized for any of
-            // the followees of the requested neuron.
-            let followee_neuron_ids = neuron_clone.neuron_managers();
-
-            let caller_can_vote_with_followee =
-                followee_neuron_ids.iter().any(|followee_neuron_id| {
-                    self.with_neuron(followee_neuron_id, |followee| {
-                        followee.is_authorized_to_vote(caller)
-                    })
-                    .unwrap_or_default()
-                });
-
-            if !caller_can_vote_with_followee {
-                return Err(GovernanceError::new(ErrorType::NotAuthorized));
-            }
-        }
-        Ok(neuron_clone.into())
+        let neuron_id = self.find_neuron_id(by)?;
+        self.get_full_neuron(&neuron_id, caller)
     }
 
     /// Returns the complete neuron data for a given neuron `id` after
@@ -3390,7 +3385,10 @@ impl Governance {
         id: &NeuronId,
         caller: &PrincipalId,
     ) -> Result<NeuronProto, GovernanceError> {
-        self.get_full_neuron_by_id_or_subaccount(&NeuronIdOrSubaccount::NeuronId(*id), caller)
+        self.neuron_store
+            .get_full_neuron(*id, *caller)
+            .map(NeuronProto::from)
+            .map_err(GovernanceError::from)
     }
 
     // Returns the set of currently registered node providers.

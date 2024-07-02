@@ -1,7 +1,7 @@
 //! The signature process manager
 
-use crate::consensus::metrics::{timed_call, EcdsaPayloadMetrics, EcdsaSignerMetrics};
 use crate::ecdsa::complaints::EcdsaTranscriptLoader;
+use crate::ecdsa::metrics::{timed_call, EcdsaPayloadMetrics, EcdsaSignerMetrics};
 use crate::ecdsa::utils::{load_transcripts, EcdsaBlockReaderImpl};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::RoundRobin;

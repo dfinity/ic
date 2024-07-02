@@ -1,0 +1,50 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# See rs/nervous_system/feature_test.md
+BASE_DEPENDENCIES = [
+    "//rs/nervous_system/clients",
+    "//rs/nervous_system/proto",
+    "//rs/nns/common",
+    "//rs/protobuf",
+    "//rs/rosetta-api/icp_ledger",
+    "//rs/sns/root",
+    "//rs/sns/swap",
+    "//rs/types/base_types",
+    "//rs/types/types",
+    "@crate_index//:bytes",
+    "@crate_index//:candid",
+    "@crate_index//:comparable",
+    "@crate_index//:itertools",
+    "@crate_index//:prost",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:strum",
+]
+
+# Each target declared in this file may choose either these (release-ready)
+# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
+DEPENDENCIES = BASE_DEPENDENCIES
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
+
+ALIASES = {}
+
+rust_library(
+    name = "api",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["**/*tests.rs"],
+    ),
+    aliases = ALIASES,
+    crate_name = "ic_nns_governance_api",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+# needed for check_generated_files test
+exports_files(["src"])

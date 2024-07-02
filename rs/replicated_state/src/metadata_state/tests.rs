@@ -1430,9 +1430,9 @@ fn stream_discard_messages_before_returns_expected_messages() {
     let slice_signals_end = 40.into();
     let slice_reject_signals: VecDeque<RejectSignal> = vec![
         RejectSignal::new(RejectReason::CanisterMigrating, 28.into()), // before the stream
-        RejectSignal::new(RejectReason::CanisterMigrating, 29.into()), // before the stream
-        RejectSignal::new(RejectReason::CanisterMigrating, 32.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 35.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 29.into()),  // before the stream
+        RejectSignal::new(RejectReason::QueueFull, 32.into()),
+        RejectSignal::new(RejectReason::Unknown, 35.into()),
     ]
     .into();
 
@@ -1445,11 +1445,11 @@ fn stream_discard_messages_before_returns_expected_messages() {
     );
     let expected_rejected_messages = vec![
         (
-            RejectReason::CanisterMigrating,
+            RejectReason::QueueFull,
             stream.messages().get(32.into()).unwrap().clone(),
         ),
         (
-            RejectReason::CanisterMigrating,
+            RejectReason::Unknown,
             stream.messages().get(35.into()).unwrap().clone(),
         ),
     ];
@@ -1475,8 +1475,8 @@ fn stream_discard_messages_before_removes_no_messages() {
     );
     let expected_stream = stream.clone();
     let slice_reject_signals = vec![
-        RejectSignal::new(RejectReason::CanisterMigrating, 28.into()), // before the stream
-        RejectSignal::new(RejectReason::CanisterMigrating, 29.into()), // before the stream
+        RejectSignal::new(RejectReason::CanisterStopped, 28.into()), // before the stream
+        RejectSignal::new(RejectReason::OutOfMemory, 29.into()),     // before the stream
     ]
     .into();
     let slice_signals_end = stream.messages_begin();
@@ -1524,9 +1524,9 @@ fn stream_discard_signals_before_drops_no_reject_signals() {
     );
     stream.reject_signals = vec![
         RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+        RejectSignal::new(RejectReason::CanisterStopped, 139.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 142.into()),
+        RejectSignal::new(RejectReason::Unknown, 145.into()),
     ]
     .into();
 
@@ -1549,9 +1549,9 @@ fn stream_discard_signals_before_drops_expected_signals() {
     );
     stream.reject_signals = vec![
         RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
+        RejectSignal::new(RejectReason::QueueFull, 139.into()),
         RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 145.into()),
     ]
     .into();
 
@@ -1560,7 +1560,7 @@ fn stream_discard_signals_before_drops_expected_signals() {
     let new_signals_begin = 140.into();
     let expected_reject_signals: VecDeque<RejectSignal> = [
         RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 145.into()),
     ]
     .into();
     stream.discard_signals_before(new_signals_begin);
@@ -1577,21 +1577,18 @@ fn stream_discard_signals_before_drops_expected_signals_for_existing_reject_sign
         SignalConfig { end: 153 },
     );
     stream.reject_signals = vec![
-        RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+        RejectSignal::new(RejectReason::QueueFull, 138.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 139.into()),
+        RejectSignal::new(RejectReason::Unknown, 142.into()),
+        RejectSignal::new(RejectReason::OutOfMemory, 145.into()),
     ]
     .into();
 
     // Check that `discard_signals_before()` drops the expected reject signals
     // for an existing reject signal `new_signals_begin`.
     let new_signals_begin = 145.into();
-    let expected_reject_signals: VecDeque<RejectSignal> = [RejectSignal::new(
-        RejectReason::CanisterMigrating,
-        145.into(),
-    )]
-    .into();
+    let expected_reject_signals: VecDeque<RejectSignal> =
+        [RejectSignal::new(RejectReason::OutOfMemory, 145.into())].into();
 
     stream.discard_signals_before(new_signals_begin);
     assert_eq!(stream.reject_signals(), &expected_reject_signals);
@@ -1607,10 +1604,10 @@ fn stream_discard_signals_before_drops_all_signals() {
         SignalConfig { end: 153 },
     );
     stream.reject_signals = vec![
-        RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+        RejectSignal::new(RejectReason::QueueFull, 138.into()),
         RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
-        RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+        RejectSignal::new(RejectReason::CanisterStopped, 142.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 145.into()),
     ]
     .into();
 
@@ -1619,6 +1616,54 @@ fn stream_discard_signals_before_drops_all_signals() {
     let new_signals_begin = 150.into();
     stream.discard_signals_before(new_signals_begin);
     assert_eq!(stream.reject_signals(), &VecDeque::new());
+}
+
+#[test]
+fn stream_pushing_signals_increments_signals_end() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 0,
+        },
+        SignalConfig { end: 30 },
+    );
+    assert!(stream.reject_signals().is_empty());
+
+    stream.push_accept_signal();
+    assert_eq!(StreamIndex::new(31), stream.signals_end());
+    stream.push_reject_signal(RejectReason::CanisterMigrating);
+    assert_eq!(
+        &VecDeque::from([RejectSignal::new(
+            RejectReason::CanisterMigrating,
+            31.into()
+        )]),
+        stream.reject_signals()
+    );
+    assert_eq!(StreamIndex::new(32), stream.signals_end());
+}
+
+#[test]
+fn stream_handle_pushing_signals_increments_signals_end() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 0,
+        },
+        SignalConfig { end: 30 },
+    );
+    assert!(stream.reject_signals().is_empty());
+
+    let mut responses_size_bytes = BTreeMap::default();
+    let mut handle = StreamHandle::new(&mut stream, &mut responses_size_bytes);
+
+    handle.push_accept_signal();
+    assert_eq!(StreamIndex::new(31), handle.signals_end());
+    handle.push_reject_signal(RejectReason::CanisterNotFound);
+    assert_eq!(
+        &VecDeque::from([RejectSignal::new(RejectReason::CanisterNotFound, 31.into()),]),
+        handle.reject_signals()
+    );
+    assert_eq!(StreamIndex::new(32), handle.signals_end());
 }
 
 #[test]
@@ -1781,7 +1826,7 @@ fn compatibility_for_reject_reason() {
         RejectReason::iter()
             .map(|reason| reason as i32)
             .collect::<Vec<i32>>(),
-        [1]
+        [1, 2, 3, 4, 5, 6, 7]
     );
 }
 

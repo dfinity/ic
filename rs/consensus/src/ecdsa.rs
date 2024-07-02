@@ -169,11 +169,11 @@
 //!   the first 4-tuple from the available 4 tuples and make an entry in ongoing
 //!   signatures with the signing request and the 4-tuple.
 
-use crate::consensus::metrics::{
+use crate::ecdsa::complaints::{EcdsaComplaintHandler, EcdsaComplaintHandlerImpl};
+use crate::ecdsa::metrics::{
     timed_call, EcdsaClientMetrics, EcdsaGossipMetrics,
     CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
 };
-use crate::ecdsa::complaints::{EcdsaComplaintHandler, EcdsaComplaintHandlerImpl};
 use crate::ecdsa::pre_signer::{EcdsaPreSigner, EcdsaPreSignerImpl};
 use crate::ecdsa::signer::{EcdsaSigner, EcdsaSignerImpl};
 use crate::ecdsa::utils::EcdsaBlockReaderImpl;
@@ -208,6 +208,7 @@ use std::time::{Duration, Instant};
 pub(crate) mod complaints;
 #[cfg(any(feature = "malicious_code", test))]
 pub mod malicious_pre_signer;
+pub(crate) mod metrics;
 pub(crate) mod payload_builder;
 pub(crate) mod payload_verifier;
 pub(crate) mod pre_signer;

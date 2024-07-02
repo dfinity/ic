@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The argument of the endpoint `/http_gateway` takes an additional optional field `domain` specifying the domain at which the PocketIC server (and thus HTTP gateway) is listening.
+- A new subnet is created on an existing PocketIC instance if a new canister is created with a specified mainnet canister ID that does not belong to any existing subnet's canister range.
+
 ## 4.0.0 - 2024-04-30
 
 ### Added

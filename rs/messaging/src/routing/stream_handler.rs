@@ -2,7 +2,7 @@ use crate::message_routing::LatencyMetrics;
 use ic_base_types::NumBytes;
 use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;
-use ic_error_types::{ErrorCode, RejectCode};
+use ic_error_types::RejectCode;
 use ic_logger::{debug, error, fatal, trace, ReplicaLogger};
 use ic_metrics::{
     buckets::{add_bucket, decimal_buckets},
@@ -12,16 +12,17 @@ use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::{
     metadata_state::{StreamHandle, Streams},
     replicated_state::{
-        ReplicatedStateMessageRouting, LABEL_VALUE_CANISTER_NOT_FOUND,
-        LABEL_VALUE_CANISTER_OUT_OF_CYCLES, LABEL_VALUE_CANISTER_STOPPED,
-        LABEL_VALUE_CANISTER_STOPPING, LABEL_VALUE_INVALID_SUBNET_PAYLOAD, LABEL_VALUE_QUEUE_FULL,
-        LABEL_VALUE_UNKNOWN_SUBNET_METHOD, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+        ReplicatedStateMessageRouting, LABEL_VALUE_CANISTER_METHOD_NOT_FOUND,
+        LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
+        LABEL_VALUE_CANISTER_STOPPED, LABEL_VALUE_CANISTER_STOPPING,
+        LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD, LABEL_VALUE_QUEUE_FULL,
+        MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
     },
     ReplicatedState, StateError,
 };
 use ic_types::{
     messages::{
-        Payload, RejectContext, RequestOrResponse, Response,
+        Payload, RejectContext, Request, RequestOrResponse, Response,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
     },
     xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice},
@@ -145,8 +146,8 @@ impl StreamHandlerMetrics {
                 LABEL_VALUE_SENDER_SUBNET_MISMATCH,
                 LABEL_VALUE_RECEIVER_SUBNET_MISMATCH,
                 LABEL_VALUE_CANISTER_MIGRATED,
-                LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
-                LABEL_VALUE_INVALID_SUBNET_PAYLOAD,
+                LABEL_VALUE_CANISTER_METHOD_NOT_FOUND,
+                LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
             ] {
                 inducted_xnet_messages.with_label_values(&[msg_type, status]);
             }
@@ -579,10 +580,16 @@ impl StreamHandlerImpl {
             let mut stream = streams.get_mut_or_insert(remote_subnet_id);
 
             while let Some((stream_index, msg)) = stream_slice.pop_message() {
+                assert_eq!(
+                    stream.signals_end(),
+                    stream_index,
+                    "Expecting signal with stream index {}, got {}",
+                    stream.signals_end(),
+                    stream_index
+                );
                 self.induct_message(
                     msg,
                     remote_subnet_id,
-                    stream_index,
                     &mut state,
                     &mut stream,
                     available_guaranteed_response_memory,
@@ -621,11 +628,47 @@ impl StreamHandlerImpl {
         &self,
         msg: RequestOrResponse,
         remote_subnet_id: SubnetId,
-        stream_index: StreamIndex,
         state: &mut ReplicatedState,
         stream: &mut StreamHandle,
         available_guaranteed_response_memory: &mut i64,
     ) {
+        match self.induct_message_impl(
+            msg,
+            remote_subnet_id,
+            state,
+            available_guaranteed_response_memory,
+        ) {
+            Ok(()) => {
+                // Message successfully inducted or dropped.
+                stream.push_accept_signal();
+            }
+            Err((StateError::CanisterMigrating { .. }, RequestOrResponse::Response(_))) => {
+                // Unable to deliver a response due to migrating canister, push reject signal.
+                stream.push_reject_signal(RejectReason::CanisterMigrating);
+            }
+            Err((err, RequestOrResponse::Request(request))) => {
+                // TODO(MR-249): Replace generating reject responses with pushing reject signals.
+                // Unable to induct a request, generate reject response and push it into `stream`.
+                *available_guaranteed_response_memory -= stream.push(generate_reject_response(
+                    &request,
+                    (&err).into(),
+                    err.to_string(),
+                )) as i64;
+                stream.push_accept_signal()
+            }
+            Err((_, RequestOrResponse::Response(_))) => {
+                unreachable!("No signals are generated for response induction failures except for CanisterMigrating");
+            }
+        }
+    }
+
+    fn induct_message_impl(
+        &self,
+        msg: RequestOrResponse,
+        remote_subnet_id: SubnetId,
+        state: &mut ReplicatedState,
+        available_guaranteed_response_memory: &mut i64,
+    ) -> Result<(), (StateError, RequestOrResponse)> {
         let msg_type = match msg {
             RequestOrResponse::Request(_) => LABEL_VALUE_TYPE_REQUEST,
             RequestOrResponse::Response(_) => LABEL_VALUE_TYPE_RESPONSE,
@@ -657,17 +700,14 @@ impl StreamHandlerImpl {
                             self.observe_inducted_message_status(msg_type, err.to_label_value());
 
                             match msg {
-                                RequestOrResponse::Request(_) => {
+                                RequestOrResponse::Request(ref request) => {
                                     debug!(
-                                    self.log,
-                                    "Induction failed with error '{}', generating reject Response for {:?}",
-                                    &err,
-                                    &msg
-                                );
-                                    let code = reject_code_for_state_error(&err);
-                                    *available_guaranteed_response_memory -= stream
-                                        .push(generate_reject_response(msg, code, err.to_string()))
-                                        as i64;
+                                        self.log,
+                                        "Induction failed with error '{}', generating reject Response for {:?}",
+                                        &err,
+                                        &request
+                                    );
+                                    return Err((err, msg));
                                 }
                                 RequestOrResponse::Response(response) => {
                                     // Critical error, responses should always be inducted successfully.
@@ -678,7 +718,7 @@ impl StreamHandlerImpl {
                                         err,
                                         response
                                     );
-                                    self.metrics.critical_error_induct_response_failed.inc()
+                                    self.metrics.critical_error_induct_response_failed.inc();
                                 }
                             }
                         }
@@ -688,29 +728,37 @@ impl StreamHandlerImpl {
                 // Receiver canister is migrating to/from this subnet.
                 Some(host_subnet) if self.should_reroute_message_to(&msg, host_subnet, state) => {
                     self.observe_inducted_message_status(msg_type, LABEL_VALUE_CANISTER_MIGRATED);
+                    let err = StateError::CanisterMigrating {
+                        canister_id: msg.receiver(),
+                        host_subnet,
+                    };
 
                     match &msg {
-                        RequestOrResponse::Request(_) => {
-                            let reject_message = format!(
-                                "Canister {} is being migrated to/from {}",
-                                msg.receiver(),
-                                host_subnet
+                        RequestOrResponse::Request(request) => {
+                            debug!(
+                                self.log,
+                                "Canister {} is being migrated, generating reject response for {:?}",
+                                request.receiver,
+                                request
                             );
-                            debug!(self.log, "Canister {} is being migrated, generating reject response for {:?}", msg.receiver(), msg);
-                            *available_guaranteed_response_memory -=
-                                stream.push(generate_reject_response(
-                                    msg,
-                                    RejectCode::SysTransient,
-                                    reject_message,
-                                )) as i64;
+                            return Err((err, msg));
                         }
-
-                        RequestOrResponse::Response(_) => {
+                        RequestOrResponse::Response(response) => {
                             if state.metadata.certification_version >= CertificationVersion::V9 {
-                                debug!(self.log, "Canister {} is being migrated, generating reject signal for {:?}", msg.receiver(), msg);
-                                stream.push_reject_signal(stream_index);
+                                debug!(
+                                    self.log,
+                                    "Canister {} is being migrated, generating reject signal for {:?}",
+                                    response.originator,
+                                    response
+                                );
+                                return Err((err, msg));
                             } else {
-                                fatal!(self.log, "Canister {} is being migrated, but cannot produce reject signal for response {:?}", msg.receiver(), msg);
+                                fatal!(
+                                    self.log,
+                                    "Canister {} is being migrated, but cannot produce reject signal for response {:?}",
+                                    response.originator,
+                                    response
+                                );
                             }
                         }
                     }
@@ -752,15 +800,8 @@ impl StreamHandlerImpl {
             self.metrics.critical_error_sender_subnet_mismatch.inc();
         }
 
-        // Signals use the `StreamIndex` of the incoming message.
-        assert_eq!(
-            stream.signals_end(),
-            stream_index,
-            "Expecting signal with stream index {}, got {}",
-            stream.signals_end(),
-            stream_index
-        );
-        stream.increment_signals_end();
+        // Any reject signals generated were returned before this point.
+        Ok(())
     }
 
     /// Checks whether `actual_subnet_id` is a valid host subnet for `msg.sender()`
@@ -890,32 +931,23 @@ impl StreamHandlerImpl {
 /// Generates a reject `Response` for a `Request` message with the provided
 /// `RejectCode` and error message.
 fn generate_reject_response(
-    msg: RequestOrResponse,
+    request: &Request,
     reject_code: RejectCode,
     message: String,
 ) -> RequestOrResponse {
-    if let RequestOrResponse::Request(msg) = msg {
-        Response {
-            originator: msg.sender,
-            respondent: msg.receiver,
-            originator_reply_callback: msg.sender_reply_callback,
-            refund: msg.payment,
-            response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
-                reject_code,
-                message,
-                MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
-            )),
-            deadline: msg.deadline,
-        }
-        .into()
-    } else {
-        unreachable!("Can't have a response to a response: {:?}", msg)
+    Response {
+        originator: request.sender,
+        respondent: request.receiver,
+        originator_reply_callback: request.sender_reply_callback,
+        refund: request.payment,
+        response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
+            reject_code,
+            message,
+            MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+        )),
+        deadline: request.deadline,
     }
-}
-
-/// Maps a `StateError` resulting from a failed induction to a `RejectCode`.
-fn reject_code_for_state_error(err: &StateError) -> RejectCode {
-    ErrorCode::from(err).into()
+    .into()
 }
 
 /// Ensures that the given signals are valid (strictly increasing, before

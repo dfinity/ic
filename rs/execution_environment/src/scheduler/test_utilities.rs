@@ -20,14 +20,14 @@ use ic_embedders::{
 };
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{
-    ChainKeySettings, ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter,
-    InstanceStats, RegistryExecutionSettings, Scheduler, SystemApiCallCounters,
-    WasmExecutionOutput,
+    ChainKeySettings, ExecutionRoundSummary, ExecutionRoundType, HypervisorError, HypervisorResult,
+    IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler,
+    SystemApiCallCounters, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
-    CanisterInstallMode, CanisterStatusType, EcdsaKeyId, InstallCodeArgs, MasterPublicKeyId,
-    Method, Payload, IC_00,
+    CanisterInstallMode, CanisterStatusType, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
+    IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -42,6 +42,7 @@ use ic_system_api::{
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
     ApiType, ExecutionParameters,
 };
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::{generate_subnets, test_registry_settings};
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::{
@@ -96,6 +97,8 @@ pub(crate) struct SchedulerTest {
     next_canister_id: u64,
     // Monotonically increasing counter that specifies the current round.
     round: ExecutionRound,
+    /// Round summary collected form the last DKG summary block.
+    round_summary: Option<ExecutionRoundSummary>,
     // The amount of cycles that new canisters have by default.
     initial_canister_cycles: Cycles,
     // The id of the user that sends ingress messages.
@@ -503,7 +506,7 @@ impl SchedulerTest {
             self.idkg_subnet_public_keys.clone(),
             self.idkg_pre_signature_ids.clone(),
             self.round,
-            None,
+            self.round_summary.clone(),
             round_type,
             self.registry_settings(),
         );
@@ -645,8 +648,9 @@ pub(crate) struct SchedulerTestBuilder {
     rate_limiting_of_heap_delta: bool,
     deterministic_time_slicing: bool,
     log: ReplicaLogger,
-    ecdsa_keys: Vec<EcdsaKeyId>,
+    idkg_keys: Vec<MasterPublicKeyId>,
     metrics_registry: MetricsRegistry,
+    round_summary: Option<ExecutionRoundSummary>,
     canister_snapshot_flag: bool,
 }
 
@@ -669,8 +673,9 @@ impl Default for SchedulerTestBuilder {
             rate_limiting_of_heap_delta: false,
             deterministic_time_slicing: true,
             log: no_op_logger(),
-            ecdsa_keys: vec![],
+            idkg_keys: vec![],
             metrics_registry: MetricsRegistry::new(),
+            round_summary: None,
             canister_snapshot_flag: false,
         }
     }
@@ -718,19 +723,26 @@ impl SchedulerTestBuilder {
         }
     }
 
-    pub fn with_ecdsa_key(self, ecdsa_key: EcdsaKeyId) -> Self {
+    pub fn with_idkg_key(self, idkg_key: MasterPublicKeyId) -> Self {
         Self {
-            ecdsa_keys: vec![ecdsa_key],
+            idkg_keys: vec![idkg_key],
             ..self
         }
     }
 
-    pub fn with_ecdsa_keys(self, ecdsa_keys: Vec<EcdsaKeyId>) -> Self {
-        Self { ecdsa_keys, ..self }
+    pub fn with_idkg_keys(self, idkg_keys: Vec<MasterPublicKeyId>) -> Self {
+        Self { idkg_keys, ..self }
     }
 
     pub fn with_batch_time(self, batch_time: Time) -> Self {
         Self { batch_time, ..self }
+    }
+
+    pub fn with_round_summary(self, round_summary: ExecutionRoundSummary) -> Self {
+        Self {
+            round_summary: Some(round_summary),
+            ..self
+        }
     }
 
     pub fn with_canister_snapshots(self, canister_snapshot_flag: bool) -> Self {
@@ -763,11 +775,12 @@ impl SchedulerTestBuilder {
         state.metadata.batch_time = self.batch_time;
 
         let config = SubnetConfig::new(self.subnet_type).cycles_account_manager_config;
-        for ecdsa_key in &self.ecdsa_keys {
-            state.metadata.network_topology.idkg_signing_subnets.insert(
-                MasterPublicKeyId::Ecdsa(ecdsa_key.clone()),
-                vec![self.own_subnet_id],
-            );
+        for idkg_key in &self.idkg_keys {
+            state
+                .metadata
+                .network_topology
+                .idkg_signing_subnets
+                .insert(idkg_key.clone(), vec![self.own_subnet_id]);
             state
                 .metadata
                 .network_topology
@@ -775,10 +788,10 @@ impl SchedulerTestBuilder {
                 .get_mut(&self.own_subnet_id)
                 .unwrap()
                 .idkg_keys_held
-                .insert(MasterPublicKeyId::Ecdsa(ecdsa_key.clone()));
+                .insert(idkg_key.clone());
 
             registry_settings.chain_key_settings.insert(
-                MasterPublicKeyId::Ecdsa(ecdsa_key.clone()),
+                idkg_key.clone(),
                 ChainKeySettings {
                     max_queue_size: 20,
                     pre_signatures_to_create_in_advance: 5,
@@ -786,11 +799,11 @@ impl SchedulerTestBuilder {
             );
         }
         let idkg_subnet_public_keys: BTreeMap<_, _> = self
-            .ecdsa_keys
+            .idkg_keys
             .into_iter()
             .map(|key_id| {
                 (
-                    MasterPublicKeyId::Ecdsa(key_id),
+                    key_id,
                     MasterPublicKey {
                         algorithm_id: AlgorithmId::Secp256k1,
                         public_key: b"abababab".to_vec(),
@@ -851,10 +864,18 @@ impl SchedulerTestBuilder {
             SchedulerConfig::application_subnet().dirty_page_overhead,
         );
         let hypervisor = Arc::new(hypervisor);
-        let ingress_history_writer =
-            IngressHistoryWriterImpl::new(config.clone(), self.log.clone(), &self.metrics_registry);
+        let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
+        let state_reader = Arc::new(FakeStateManager::new());
+        let ingress_history_writer = IngressHistoryWriterImpl::new(
+            config.clone(),
+            self.log.clone(),
+            &self.metrics_registry,
+            completed_execution_messages_tx,
+            state_reader,
+        );
         let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
             Arc::new(ingress_history_writer);
+
         let exec_env = ExecutionEnvironment::new(
             self.log.clone(),
             hypervisor,
@@ -887,6 +908,7 @@ impl SchedulerTestBuilder {
             state: Some(state),
             next_canister_id: 0,
             round: ExecutionRound::new(0),
+            round_summary: self.round_summary,
             initial_canister_cycles: self.initial_canister_cycles,
             user_id: user_test_id(1),
             xnet_canister_id: canister_test_id(first_xnet_canister),

@@ -1237,10 +1237,13 @@ impl Default for Stream {
 impl From<&Stream> for pb_queues::Stream {
     fn from(item: &Stream) -> Self {
         // TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
-        let deprecated_reject_signals = item
+        let reject_signals = item
             .reject_signals()
             .iter()
-            .map(|signal| signal.index.get())
+            .map(|signal| pb_queues::RejectSignal {
+                reason: pb_queues::RejectReason::from(signal.reason).into(),
+                index: signal.index.get(),
+            })
             .collect();
         Self {
             messages_begin: item.messages.begin().get(),
@@ -1250,8 +1253,8 @@ impl From<&Stream> for pb_queues::Stream {
                 .map(|(_, req_or_resp)| req_or_resp.into())
                 .collect(),
             signals_end: item.signals_end.get(),
-            deprecated_reject_signals,
-            reject_signals: Vec::new(),
+            deprecated_reject_signals: Vec::new(),
+            reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
                 deprecated_responses_only: item.reverse_stream_flags.deprecated_responses_only,
             }),
@@ -1349,7 +1352,7 @@ impl Stream {
         }
     }
 
-    /// Creates a new `Stream` with the given `messages` and `signals_end`.
+    /// Creates a new `Stream` with the given `messages`, `signals_end` and `reject_signals`.
     pub fn with_signals(
         messages: StreamIndexedQueue<RequestOrResponse>,
         signals_end: StreamIndex,
@@ -1477,24 +1480,18 @@ impl Stream {
         self.signals_end
     }
 
-    /// Increments the index of the last sent signal.
-    pub fn increment_signals_end(&mut self) {
+    /// Pushes an accept signal. Since these are not explicitly encoded, this
+    /// just increments `signals_end`.
+    pub fn push_accept_signal(&mut self) {
         self.signals_end.inc_assign()
     }
 
-    /// Appends the given reject signal to the tail of the reject signals.
-    pub fn push_reject_signal(&mut self, index: StreamIndex) {
-        assert_eq!(index, self.signals_end);
-        if let Some(last_signal) = self.reject_signals.back() {
-            assert!(
-                last_signal.index < index,
-                "The signal to be pushed ({}) should be larger than the last signal ({})",
-                index,
-                last_signal.index
-            );
-        }
+    /// Appends a reject signal (the current `signals_end`) to the tail of the
+    /// reject signals; and then increments `signals_end`.
+    pub fn push_reject_signal(&mut self, reason: RejectReason) {
         self.reject_signals
-            .push_back(RejectSignal::new(RejectReason::CanisterMigrating, index));
+            .push_back(RejectSignal::new(reason, self.signals_end));
+        self.signals_end.inc_assign();
     }
 
     /// Calculates the estimated byte size of the given messages.
@@ -1707,14 +1704,16 @@ impl<'a> StreamHandle<'a> {
         size_bytes
     }
 
-    /// Increments the index of the last sent signal.
-    pub fn increment_signals_end(&mut self) {
-        self.stream.increment_signals_end();
+    /// Pushes an accept signal. Since these are not explicitly encoded, this
+    /// just increments `signals_end`.
+    pub fn push_accept_signal(&mut self) {
+        self.stream.push_accept_signal();
     }
 
-    /// Appends the given reject signal to the tail of the reject signals.
-    pub fn push_reject_signal(&mut self, index: StreamIndex) {
-        self.stream.push_reject_signal(index)
+    /// Appends a reject signal (the current `signals_end`) to the tail of the
+    /// reject signals; and then increments `signals_end`.
+    pub fn push_reject_signal(&mut self, reason: RejectReason) {
+        self.stream.push_reject_signal(reason);
     }
 
     /// Garbage collects messages before `new_begin`, collecting and returning all

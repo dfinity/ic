@@ -71,6 +71,9 @@ fs_getattr_xattr_fs(node_exporter_t)
 # Allow to read the process state of init
 init_read_state(node_exporter_t)
 
+# Allow for /proc: get attributes such as size, permissions, and creation time.
+allow node_exporter_t proc_t:filesystem getattr;
+
 # Allow to read Kernel metrics
 kernel_read_fs_sysctls(node_exporter_t)
 kernel_read_kernel_sysctls(node_exporter_t)

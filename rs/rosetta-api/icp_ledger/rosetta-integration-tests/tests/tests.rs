@@ -1,6 +1,7 @@
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
+use ic_agent::Identity;
 use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
@@ -26,8 +27,11 @@ use std::thread::sleep;
 use std::time::Duration;
 use tempfile::TempDir;
 use url::Url;
+use url::Url;
 
 pub const LEDGER_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 2;
+const MAX_ATTEMPTS: u16 = 1000;
+const DURATION_BETWEEN_ATTEMPTS: Duration = Duration::from_millis(100);
 const MAX_ATTEMPTS: u16 = 1000;
 const DURATION_BETWEEN_ATTEMPTS: Duration = Duration::from_millis(100);
 
@@ -192,10 +196,17 @@ impl TestEnv {
         rosetta_state_directory: PathBuf,
         enable_rosetta_blocks: bool,
     ) -> (RosettaClient, RosettaContext) {
+    async fn setup_rosetta(
+        replica_url: Url,
+        ledger_canister_id: Principal,
+        rosetta_state_directory: PathBuf,
+        enable_rosetta_blocks: bool,
+    ) -> (RosettaClient, RosettaContext) {
         let (rosetta_client, rosetta_context) = start_rosetta(
             &get_rosetta_path(),
             replica_url.clone(),
             ledger_canister_id,
+            Some(rosetta_state_directory),
             Some(rosetta_state_directory),
             enable_rosetta_blocks,
         )
@@ -220,15 +231,22 @@ impl TestEnv {
         // String("Blockchain is empty")}) }` while then fails the test.
         // The following code waits until network status doesn't return that error anymore or a maximum number of retries have been attempted.
         let mut retries = MAX_ATTEMPTS;
+        let mut retries = MAX_ATTEMPTS;
         while retries > 0 {
             match rosetta_client.network_status(network.clone()).await {
                 Ok(_) => {
                     println!("call to /network/status was successfull");
                     break;
                 }
+                Ok(_) => {
+                    println!("call to /network/status was successfull");
+                    break;
+                }
                 Err(Error(err)) if matches_blockchain_is_empty_error(&err) => {
                     println!("Found \"Blockchain is empty\" error, retrying in {DURATION_BETWEEN_ATTEMPTS:?} (retries: {retries})");
+                    println!("Found \"Blockchain is empty\" error, retrying in {DURATION_BETWEEN_ATTEMPTS:?} (retries: {retries})");
                     retries -= 1;
+                    sleep(DURATION_BETWEEN_ATTEMPTS);
                     sleep(DURATION_BETWEEN_ATTEMPTS);
                 }
                 Err(Error(err)) => {
@@ -383,10 +401,35 @@ async fn test_rosetta_blocks_mode_enabled() {
         env.rosetta.status_or_panic().await.rosetta_blocks_mode,
         RosettaBlocksMode::Disabled
     );
+    // Check that restarting Rosetta doesn't enable the
+    // rosetta blocks mode
+    env.restart_rosetta_node(false).await;
+    assert_eq!(
+        env.rosetta.status_or_panic().await.rosetta_blocks_mode,
+        RosettaBlocksMode::Disabled
+    );
 
     // Check that passing --enable-rosetta-blocks enables the
     // rosetta blocks mode for the next block
+    // Check that passing --enable-rosetta-blocks enables the
+    // rosetta blocks mode for the next block
 
+    // The first rosetta block index is the same as the index
+    // of the next block to sync (i.e. current block index + 1)
+    let first_rosetta_block_index = env
+        .rosetta
+        .network_status_or_panic()
+        .await
+        .current_block_identifier
+        .index
+        + 1;
+    env.restart_rosetta_node(true).await;
+    assert_eq!(
+        env.rosetta.status_or_panic().await.rosetta_blocks_mode,
+        RosettaBlocksMode::Enabled {
+            first_rosetta_block_index
+        }
+    );
     // The first rosetta block index is the same as the index
     // of the next block to sync (i.e. current block index + 1)
     let first_rosetta_block_index = env

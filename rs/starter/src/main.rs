@@ -136,7 +136,6 @@ fn main() -> Result<()> {
                 None,
                 None,
                 Some(config.subnet_features),
-                None,
                 chain_key_config,
                 None,
                 vec![],
@@ -274,10 +273,6 @@ struct CliArgs {
                 possible_values = &["critical", "error", "warning", "info", "debug", "trace"],
                 ignore_case = true)]
     log_level: Option<String>,
-
-    /// Debug overrides to show debug logs for certain components.
-    #[clap(long = "debug-overrides", multiple_values(true))]
-    debug_overrides: Vec<String>,
 
     /// Metrics port. Default is None, i.e. periodically dump metrics on stdout.
     #[clap(long = "metrics-port")]
@@ -549,7 +544,6 @@ impl CliArgs {
             replica_path,
             replica_version,
             log_level,
-            debug_overrides: self.debug_overrides.clone(),
             cargo_bin,
             cargo_opts,
             state_dir,
@@ -591,7 +585,6 @@ struct ValidatedConfig {
     replica_path: Option<PathBuf>,
     replica_version: ReplicaVersion,
     log_level: slog::Level,
-    debug_overrides: Vec<String>,
     cargo_bin: String,
     cargo_opts: String,
     state_dir: PathBuf,
@@ -644,9 +637,7 @@ impl ValidatedConfig {
             local_store: self.registry_local_store_path.clone(),
         });
         let logger_config = LoggerConfig {
-            node_id: NODE_INDEX,
             level: self.log_level,
-            debug_overrides: self.debug_overrides.clone(),
             ..LoggerConfig::default()
         };
         let logger = Some(logger_config);
@@ -668,6 +659,7 @@ impl ValidatedConfig {
                 feature_flags: FeatureFlags {
                     rate_limiting_of_debug_prints: FlagStatus::Disabled,
                     canister_logging: FlagStatus::Enabled,
+                    best_effort_responses: FlagStatus::Enabled,
                     ..FeatureFlags::default()
                 },
                 ..EmbeddersConfig::default()

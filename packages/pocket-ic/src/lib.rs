@@ -62,10 +62,14 @@ use tracing::{instrument, warn};
 pub mod common;
 pub mod nonblocking;
 
+// the default timeout of a PocketIC operation
+const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
+
 const LOCALHOST: &str = "127.0.0.1";
 
 pub struct PocketIcBuilder {
     config: ExtendedSubnetConfigSet,
+    max_request_time_ms: Option<u64>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -73,15 +77,23 @@ impl PocketIcBuilder {
     pub fn new() -> Self {
         Self {
             config: ExtendedSubnetConfigSet::default(),
+            max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
         }
     }
 
     pub fn build(self) -> PocketIc {
-        PocketIc::from_config(self.config)
+        PocketIc::from_config_and_max_request_time(self.config, self.max_request_time_ms)
     }
 
     pub async fn build_async(self) -> PocketIcAsync {
-        PocketIcAsync::from_config(self.config).await
+        PocketIcAsync::from_config_and_max_request_time(self.config, self.max_request_time_ms).await
+    }
+
+    pub fn with_max_request_time_ms(self, max_request_time_ms: Option<u64>) -> Self {
+        Self {
+            max_request_time_ms,
+            ..self
+        }
     }
 
     /// Add an empty NNS subnet
@@ -91,6 +103,7 @@ impl PocketIcBuilder {
                 nns: Some(SubnetSpec::default()),
                 ..self.config
             },
+            ..self
         }
     }
 
@@ -133,6 +146,7 @@ impl PocketIcBuilder {
                 nns: Some(SubnetSpec::default().with_state_dir(path_to_state, nns_subnet_id)),
                 ..self.config
             },
+            ..self
         }
     }
 
@@ -143,6 +157,7 @@ impl PocketIcBuilder {
                 sns: Some(SubnetSpec::default()),
                 ..self.config
             },
+            ..self
         }
     }
     /// Add an empty internet identity subnet
@@ -152,6 +167,7 @@ impl PocketIcBuilder {
                 ii: Some(SubnetSpec::default()),
                 ..self.config
             },
+            ..self
         }
     }
 
@@ -162,6 +178,7 @@ impl PocketIcBuilder {
                 fiduciary: Some(SubnetSpec::default()),
                 ..self.config
             },
+            ..self
         }
     }
 
@@ -172,6 +189,7 @@ impl PocketIcBuilder {
                 bitcoin: Some(SubnetSpec::default()),
                 ..self.config
             },
+            ..self
         }
     }
 
@@ -230,7 +248,18 @@ impl PocketIc {
     /// The server is started if it's not already running.
     pub fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_config_and_server_url(config, server_url)
+        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS))
+    }
+
+    /// Creates a new PocketIC instance with the specified subnet config and max request duration in milliseconds
+    /// (`None` means that there is no timeout).
+    /// The server is started if it's not already running.
+    pub fn from_config_and_max_request_time(
+        config: impl Into<ExtendedSubnetConfigSet>,
+        max_request_time_ms: Option<u64>,
+    ) -> Self {
+        let server_url = crate::start_or_reuse_server();
+        Self::from_components(config, server_url, max_request_time_ms)
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and server url.
@@ -238,6 +267,14 @@ impl PocketIc {
     pub fn from_config_and_server_url(
         config: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
+    ) -> Self {
+        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS))
+    }
+
+    fn from_components(
+        config: impl Into<ExtendedSubnetConfigSet>,
+        server_url: Url,
+        max_request_time_ms: Option<u64>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -250,7 +287,7 @@ impl PocketIc {
         let runtime = rx.recv().unwrap();
 
         let pocket_ic = runtime.block_on(async {
-            PocketIcAsync::from_config_and_server_url(config, server_url).await
+            PocketIcAsync::from_components(config, server_url, max_request_time_ms).await
         });
 
         Self {
@@ -546,11 +583,11 @@ impl PocketIc {
 
     /// Creates a canister with a specific canister ID and optional custom settings.
     /// Returns an error if the canister ID is already in use.
-    /// Panics if the canister ID is not contained in any of the subnets.
+    /// Creates a new subnet if the canister ID is not contained in any of the subnets.
     ///
-    /// The canister ID must be contained in the Bitcoin, Fiduciary, II, SNS or NNS
-    /// subnet range, it is not intended to be used on regular app or system subnets,
-    /// where it can lead to conflicts on which the function panics.
+    /// The canister ID must be an IC mainnet canister ID that does not belong to the NNS or II subnet,
+    /// otherwise the function might panic (for NNS and II canister IDs,
+    /// the PocketIC instance should already be created with those subnets).
     #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), settings = ?settings, canister_id = %canister_id.to_string()))]
     pub fn create_canister_with_id(
         &self,
@@ -631,6 +668,17 @@ impl PocketIc {
                 .reinstall_canister(canister_id, wasm_module, arg, sender)
                 .await
         })
+    }
+
+    /// Uninstall a canister.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn uninstall_canister(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<(), CallError> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.uninstall_canister(canister_id, sender).await })
     }
 
     /// Set canister's controllers.

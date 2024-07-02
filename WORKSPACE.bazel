@@ -653,6 +653,16 @@ http_file(
     url = "https://download.dfinity.systems/ic/300dc603a92b5f70dae79229793c902f346af3cc/canisters/ic-icrc1-ledger-u256.wasm.gz",
 )
 
+# XC artifacts for testing
+
+# EVM RPC canister
+
+http_file(
+    name = "evm_rpc.wasm.gz",
+    sha256 = "ccce0d8e3210db42ff12b03360c20246855ad8529da0f844faa343bf8b393529",
+    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/release-2024-05-23/evm_rpc.wasm.gz",
+)
+
 # Haskell toolchain for spec_compliance tests
 
 http_archive(
@@ -926,7 +936,3 @@ http_file(
     sha256 = "bf3987bd483cf710ff0c54134350ca188c29ff0fdd38567aa4df5e74131543e4",
     url = "https://raw.githubusercontent.com/dfinity/interface-spec/a82220c1156f5e3e80ea65be6a4f69b766cbe6d1/spec/_attachments/ic.did",
 )
-
-load("//rs/tests:kubeconfig.bzl", "kubeconfig")
-
-kubeconfig()

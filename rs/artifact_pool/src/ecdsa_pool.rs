@@ -12,12 +12,15 @@ use crate::{
     IntoInner,
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
-use ic_interfaces::ecdsa::{
-    EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, EcdsaPoolSectionOp,
-    EcdsaPoolSectionOps, MutableEcdsaPoolSection,
-};
 use ic_interfaces::p2p::consensus::{
     ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+};
+use ic_interfaces::{
+    ecdsa::{
+        EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, EcdsaPoolSectionOp,
+        EcdsaPoolSectionOps, MutableEcdsaPoolSection,
+    },
+    time_source::TimeSource,
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -30,10 +33,7 @@ use ic_types::consensus::{
     CatchUpPackage,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
-use ic_types::{
-    artifact::{ArtifactKind, EcdsaMessageId},
-    consensus::idkg::SigShare,
-};
+use ic_types::{artifact::EcdsaMessageId, consensus::idkg::SigShare};
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -362,8 +362,12 @@ impl EcdsaPoolImpl {
         }
     }
 
-    // Populates the validated pool with the initial dealings from the CUP.
-    pub fn add_initial_dealings(&mut self, catch_up_package: &CatchUpPackage) {
+    // Populates the unvalidated pool with the initial dealings from the CUP.
+    pub fn add_initial_dealings(
+        &mut self,
+        catch_up_package: &CatchUpPackage,
+        time_source: &dyn TimeSource,
+    ) {
         let block = catch_up_package.content.block.get_value();
 
         let mut initial_dealings = Vec::new();
@@ -378,7 +382,6 @@ impl EcdsaPoolImpl {
             return;
         }
 
-        let mut change_set = Vec::new();
         for signed_dealing in initial_dealings
             .iter()
             .flat_map(|initial_dealings| initial_dealings.dealings())
@@ -390,12 +393,12 @@ impl EcdsaPoolImpl {
                 signed_dealing.idkg_dealing().transcript_id,
             );
 
-            change_set.push(EcdsaChangeAction::AddToValidated(
-                EcdsaMessage::EcdsaSignedDealing(signed_dealing.clone()),
-            ));
+            self.insert(UnvalidatedArtifact {
+                message: EcdsaMessage::EcdsaSignedDealing(signed_dealing.clone()),
+                peer_id: signed_dealing.dealer_id(),
+                timestamp: time_source.get_relative_time(),
+            })
         }
-
-        self.apply_changes(change_set);
     }
 }
 
@@ -438,7 +441,7 @@ impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
             match action {
                 EcdsaChangeAction::AddToValidated(message) => {
                     artifacts_with_opt.push(ArtifactWithOpt {
-                        advert: EcdsaArtifact::message_to_advert(&message),
+                        artifact: message.clone(),
                         is_latency_sensitive: true,
                     });
                     validated_ops.insert(message);
@@ -450,7 +453,7 @@ impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
                         | EcdsaMessage::SchnorrSigShare(_)
                         | EcdsaMessage::EcdsaSignedDealing(_) => (),
                         _ => artifacts_with_opt.push(ArtifactWithOpt {
-                            advert: EcdsaArtifact::message_to_advert(&message),
+                            artifact: message.clone(),
                             // relayed
                             is_latency_sensitive: false,
                         }),
@@ -514,6 +517,7 @@ mod tests {
     use ic_test_utilities_types::ids::{
         subnet_test_id, NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6,
     };
+    use ic_types::artifact::ArtifactKind;
     use ic_types::consensus::idkg::{dealing_support_prefix, EcdsaObject};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
@@ -650,7 +654,10 @@ mod tests {
                 )];
                 let result = ecdsa_pool.apply_changes(change_set);
                 assert!(result.purged.is_empty());
-                assert_eq!(result.artifacts_with_opt[0].advert.id, support.message_id());
+                assert_eq!(
+                    EcdsaArtifact::message_to_advert(&result.artifacts_with_opt[0].artifact).id,
+                    support.message_id()
+                );
                 assert!(result.poll_immediately);
             }
         }

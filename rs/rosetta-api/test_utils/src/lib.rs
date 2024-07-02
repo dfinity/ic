@@ -1,3 +1,4 @@
+use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_rosetta_api::convert::{
     from_hex, from_model_account_identifier, operations_to_requests, to_hex,
     to_model_account_identifier,
@@ -45,7 +46,7 @@ pub fn to_public_key<T: RosettaSupportedKeyPair>(keypair: &T) -> PublicKey {
 }
 
 pub fn make_user_ed25519(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, PrincipalId) {
-    let kp = EdKeypair::generate_from_u64(seed);
+    let kp = EdKeypair::generate(seed);
     let pid = kp.generate_principal_id().unwrap();
     let aid: AccountIdentifier = pid.into();
     let pb = to_public_key(&kp);
@@ -56,7 +57,7 @@ pub fn make_user_ed25519(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey,
 pub fn make_user_ecdsa_secp256k1(
     seed: u64,
 ) -> (AccountIdentifier, Secp256k1KeyPair, PublicKey, PrincipalId) {
-    let kp = Secp256k1KeyPair::generate_from_u64(seed);
+    let kp = Secp256k1KeyPair::generate(seed);
     let pid = kp.generate_principal_id().unwrap();
     let aid: AccountIdentifier = pid.into();
     let pb = to_public_key(&kp);
@@ -700,10 +701,10 @@ fn compare_accounts(
 #[test]
 fn test_keypair_encoding() {
     //Create keypairs of each type
-    let kp_ed_keypair = EdKeypair::generate_from_u64(100);
-    let kp_secp256k1_key_pair = Secp256k1KeyPair::generate_from_u64(200);
+    let kp_ed_keypair = EdKeypair::generate(100);
+    let kp_secp256k1_key_pair = Secp256k1KeyPair::generate(200);
 
-    //Testing the functions of RosettaSupportedKeypair for EdKeyPair
+    //Testing the functions of RosettaSupportedKeypair for EdKeypair
     assert_eq!(kp_ed_keypair.get_curve_type(), CurveType::Edwards25519);
     let pid = kp_ed_keypair.generate_principal_id().unwrap();
     //RosettaSupportedKeyPairs supports two encoding types: HEX and DER.

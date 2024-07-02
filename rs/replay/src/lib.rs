@@ -32,6 +32,7 @@ pub mod cmd;
 pub mod ingress;
 mod mocks;
 pub mod player;
+mod registry_helper;
 mod validator;
 
 /// Replays the past blocks and creates a checkpoint of the latest state.

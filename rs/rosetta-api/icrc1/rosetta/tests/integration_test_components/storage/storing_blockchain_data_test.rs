@@ -19,6 +19,7 @@ use ic_ledger_core::tokens::Zero;
 use icrc_ledger_agent::CallMode;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::TransferArg;
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
@@ -152,4 +153,87 @@ proptest! {
             }
         });
     }
+}
+
+#[test]
+fn test_self_transfer() {
+    // Create a tokio environment to conduct async calls
+    let rt = Runtime::new().unwrap();
+    let account = Account::from(test_identity().sender().unwrap());
+
+    let mut pocket_ic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .build();
+    let init_args = InitArgsBuilder::for_tests()
+        .with_minting_account(MINTER_IDENTITY.clone().sender().unwrap())
+        .with_transfer_fee(DEFAULT_TRANSFER_FEE)
+        .with_feature_flags(FeatureFlags { icrc2: true })
+        .with_initial_balance(account, Nat::from(100_000_000_u64))
+        .build();
+
+    let icrc_ledger_canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args);
+    let endpoint = pocket_ic.make_live(None);
+    let port = endpoint.port().unwrap();
+
+    rt.block_on(async {
+        let agent = Arc::new(Icrc1Agent {
+            agent: local_replica::get_testing_agent(port).await,
+            ledger_canister_id: icrc_ledger_canister_id,
+        });
+        let storage_client = Arc::new(StorageClient::new_in_memory().unwrap());
+
+        blocks_synchronizer::start_synching_blocks(
+            agent.clone(),
+            storage_client.clone(),
+            10,
+            Arc::new(AsyncMutex::new(vec![])),
+        )
+        .await
+        .unwrap();
+        storage_client.update_account_balances().unwrap();
+
+        let balance = agent.balance_of(account, CallMode::Query).await.unwrap();
+        assert_eq!(balance, Nat::from(100_000_000_u64));
+        assert_eq!(
+            storage_client
+                .get_account_balance(&account)
+                .unwrap()
+                .unwrap(),
+            Nat::from(100_000_000_u64)
+        );
+
+        agent
+            .transfer(TransferArg {
+                to: account,
+                amount: 1000u64.into(),
+                fee: Some(DEFAULT_TRANSFER_FEE.into()),
+                from_subaccount: None,
+                created_at_time: None,
+                memo: None,
+            })
+            .await
+            .unwrap()
+            .unwrap();
+
+        blocks_synchronizer::start_synching_blocks(
+            agent.clone(),
+            storage_client.clone(),
+            10,
+            Arc::new(AsyncMutex::new(vec![])),
+        )
+        .await
+        .unwrap();
+        storage_client.update_account_balances().unwrap();
+
+        let balance = agent.balance_of(account, CallMode::Query).await.unwrap();
+        assert_eq!(balance, Nat::from(100_000_000 - DEFAULT_TRANSFER_FEE));
+        assert_eq!(
+            storage_client
+                .get_account_balance(&account)
+                .unwrap()
+                .unwrap(),
+            Nat::from(100_000_000 - DEFAULT_TRANSFER_FEE)
+        );
+    });
 }

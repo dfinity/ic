@@ -7,7 +7,7 @@ use crate::{OpId, Operation};
 use base64;
 use ic_http_endpoints_public::cors_layer;
 use ic_types::{CanisterId, SubnetId};
-use pocket_ic::common::rest::{HttpGatewayBackend, HttpGatewayConfig};
+use pocket_ic::common::rest::{HttpGatewayBackend, HttpGatewayConfig, Topology};
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -161,6 +161,7 @@ pub enum OpOut {
     ApiV2Response((u16, BTreeMap<String, Vec<u8>>, Vec<u8>)),
     Pruned,
     MessageId((EffectivePrincipal, Vec<u8>)),
+    Topology(Topology),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -210,6 +211,7 @@ impl std::fmt::Debug for OpOut {
         match self {
             OpOut::NoOutput => write!(f, "NoOutput"),
             OpOut::Time(x) => write!(f, "Time({})", x),
+            OpOut::Topology(t) => write!(f, "Topology({:?})", t),
             OpOut::CanisterId(cid) => write!(f, "CanisterId({})", cid),
             OpOut::Cycles(x) => write!(f, "Cycles({})", x),
             OpOut::CanisterResult(Ok(x)) => write!(f, "CanisterResult: Ok({:?})", x),
@@ -441,7 +443,7 @@ impl ApiState {
         }
 
         let port = http_gateway_config.listen_at.unwrap_or_default();
-        let addr = format!("127.0.0.1:{}", port);
+        let addr = format!("[::]:{}", port);
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
             .unwrap_or_else(|_| panic!("Failed to start HTTP gateway on port {}", port));
@@ -479,9 +481,13 @@ impl ApiState {
                 .build()
                 .unwrap();
             agent.fetch_root_key().await.unwrap();
-            let replicas = vec![(agent, Uri::from_str(&replica_url).unwrap())];
+            let replica_uri = Uri::from_str(&replica_url).unwrap();
+            let replicas = vec![(agent, replica_uri)];
+            let gateway_domain = http_gateway_config
+                .domain
+                .unwrap_or("localhost".to_string());
             let aliases: Vec<String> = vec![];
-            let suffixes: Vec<String> = vec!["localhost".to_string()];
+            let suffixes: Vec<String> = vec![gateway_domain];
             let resolver = ResolverState {
                 dns: DnsCanisterConfig::new(aliases, suffixes).unwrap(),
             };

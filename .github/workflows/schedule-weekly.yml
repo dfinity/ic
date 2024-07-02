@@ -4,9 +4,6 @@ on:
   schedule:
     - cron: "0 8 * * 3"
   workflow_dispatch:
-  pull_request:
-    paths:
-      - '.github/workflows/schedule-weekly.yml'
 
 env:
   DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
@@ -15,11 +12,10 @@ env:
 jobs:
   bazel-build-fuzzers-weekly:
     runs-on:
-      group: dind-large
+      labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
     timeout-minutes: 60 # 1 hour
-    if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     steps:
       - name: Checkout
         uses: actions/checkout@v4

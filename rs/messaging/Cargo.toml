@@ -25,9 +25,7 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-query-stats = { path = "../query_stats" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-keys = { path = "../registry/keys" }
-ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
@@ -48,9 +46,11 @@ xnet-test = { path = "../rust_canisters/xnet_test" }
 canister-test = { path = "../rust_canisters/canister_test" }
 ic-registry-transport = { path = "../registry/transport" }
 downstream-calls-test = { path = "../rust_canisters/downstream_calls_test" }
+ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-local-registry = { path = "../registry/local_registry" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-local-store-artifacts = { path = "../registry/local_store/artifacts" }
+ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
@@ -60,7 +60,7 @@ ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 candid = { workspace = true }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 maplit = "1.0.2"
 mockall = { workspace = true }
 rand = { workspace = true }

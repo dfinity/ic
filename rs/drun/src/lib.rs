@@ -225,6 +225,9 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
         None,
         ic_types::malicious_flags::MaliciousFlags::default(),
     ));
+
+    let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
+
     let (_, ingress_history_writer, ingress_hist_reader, query_handler, scheduler) =
         ExecutionServices::setup_execution(
             log.clone().into(),
@@ -236,6 +239,7 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
             Arc::clone(&cycles_account_manager),
             Arc::clone(&state_manager) as Arc<_>,
             state_manager.get_fd_factory(),
+            completed_execution_messages_tx,
         )
         .into_parts();
 

@@ -735,9 +735,9 @@ pub trait SystemApi {
         name_src: usize,
         name_len: usize,
         reply_fun: u32,
-        reply_env: u32,
+        reply_env: u64,
         reject_fun: u32,
-        reject_env: u32,
+        reject_env: u64,
         heap: &[u8],
     ) -> HypervisorResult<()>;
 
@@ -774,7 +774,7 @@ pub trait SystemApi {
     /// `ic0.call_perform`.
     ///
     /// See <https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-call>
-    fn ic0_call_on_cleanup(&mut self, fun: u32, env: u32) -> HypervisorResult<()>;
+    fn ic0_call_on_cleanup(&mut self, fun: u32, env: u64) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_call_cycles_add128` instead, as this API
     /// can only add a 64-bit value.
@@ -1162,7 +1162,7 @@ pub enum ExecutionRoundType {
 }
 
 /// Execution round properties collected form the last DKG summary block.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExecutionRoundSummary {
     /// The next checkpoint round height.
     ///

@@ -116,7 +116,26 @@ pub fn install_canister(
     wasm: Wasm,
     controller: Option<PrincipalId>,
 ) {
-    let controller_principal = controller.map(|c| c.0);
+    install_canister_with_controllers(
+        pocket_ic,
+        name,
+        canister_id,
+        arg,
+        wasm,
+        controller.into_iter().collect(),
+    )
+}
+
+pub fn install_canister_with_controllers(
+    pocket_ic: &PocketIc,
+    name: &str,
+    canister_id: CanisterId,
+    arg: Vec<u8>,
+    wasm: Wasm,
+    controllers: Vec<PrincipalId>,
+) {
+    let controllers = controllers.into_iter().map(|c| c.0).collect::<Vec<_>>();
+    let controller_principal = controllers.first().cloned();
     let memory_allocation = if ALL_NNS_CANISTER_IDS.contains(&&canister_id) {
         let memory_allocation_bytes = ic_nns_constants::memory_allocation_of(canister_id);
         Some(Nat::from(memory_allocation_bytes))
@@ -125,6 +144,7 @@ pub fn install_canister(
     };
     let settings = Some(CanisterSettings {
         memory_allocation,
+        controllers: Some(controllers),
         ..Default::default()
     });
     let canister_id = pocket_ic
@@ -656,6 +676,7 @@ pub mod nns {
                     Encode!(&ListNeurons {
                         neuron_ids: vec![],
                         include_neurons_readable_by_caller: true,
+                        include_empty_neurons_readable_by_caller: None,
                     })
                     .unwrap(),
                 )
@@ -2337,7 +2358,7 @@ pub mod sns {
         ///        or `auto_finalize_swap_response`.
         ///     2. `auto_finalize_swap_response` does not match the expected pattern for a *committed* SNS
         ///        Swap's `auto_finalize_swap_response`. In particular:
-        ///        - After NNS1-3117 `set_dapp_controllers_call_result` must be `Some` and not have any errors, but for now it can take any value
+        ///        - `set_dapp_controllers_call_result` must be `Some`
         ///        - `sweep_sns_result` must be `Some`.
         /// * `Err` if `auto_finalize_swap_response` contains any errors.
         pub fn is_auto_finalization_status_committed_or_err(
@@ -2359,8 +2380,7 @@ pub mod sns {
                     sweep_sns_result: Some(_),
                     claim_neuron_result: Some(_),
                     set_mode_call_result: Some(_),
-                    // TODO(NNS1-3117): set_dapp_controllers_call_result should be required to be Some and not have any errors
-                    set_dapp_controllers_call_result: _,
+                    set_dapp_controllers_call_result: Some(_),
                     settle_community_fund_participation_result: None,
                     error_message: None,
                 }

@@ -24,7 +24,6 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/types/base_types",
     "//rs/types/types",
-    "//rs/types/management_canister_types",
     "@crate_index//:anyhow",
     "@crate_index//:arc-swap",
     "@crate_index//:async-scoped",
@@ -41,9 +40,9 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:http_0_2_12",
     "@crate_index//:http_body_0_4_6",
+    "@crate_index//:humantime",
     "@crate_index//:hyper_0_14_27",
     "@crate_index//:hyper-rustls",
-    "@crate_index//:ic-btc-interface",
     "@crate_index//:instant-acme",
     "@crate_index//:jemallocator",
     "@crate_index//:jemalloc-ctl",
@@ -66,6 +65,8 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
+    "@crate_index//:serde_regex",
+    "@crate_index//:serde_yaml",
     "@crate_index//:slog",
     "@crate_index//:strum",
     "@crate_index//:thiserror",
@@ -95,7 +96,9 @@ DEV_DEPENDENCIES = [
     "@crate_index//:wiremock",
 ]
 
-MACRO_DEV_DEPENDENCIES = []
+MACRO_DEV_DEPENDENCIES = [
+    "@crate_index//:indoc",
+]
 
 ALIASES = {}
 

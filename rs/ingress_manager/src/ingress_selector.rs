@@ -819,7 +819,6 @@ mod tests {
                         ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                             message_id.clone(),
                             node_test_id(0),
-                            m.count_bytes(),
                         ))]);
                         // check that message is indeed in the pool
                         assert!(ingress_pool.get(&message_id).is_some());
@@ -999,11 +998,9 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    let ingress_size1 = ingress_msg1.count_bytes();
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id,
                         node_test_id(0),
-                        ingress_size1,
                     ))]);
                 });
 
@@ -1053,11 +1050,9 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    let ingress_size1 = ingress_msg1.count_bytes();
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id,
                         node_test_id(0),
-                        ingress_size1,
                     ))]);
                 });
 
@@ -1127,7 +1122,6 @@ mod tests {
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id,
                         node_test_id(0),
-                        ingress_msg1.count_bytes(),
                     ))]);
 
                     let message_id = IngressMessageId::from(&ingress_msg2);
@@ -1139,7 +1133,6 @@ mod tests {
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id,
                         node_test_id(0),
-                        ingress_msg2.count_bytes(),
                     ))]);
                 });
 
@@ -1205,7 +1198,6 @@ mod tests {
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id,
                         node_test_id(0),
-                        ingress_msg1.count_bytes(),
                     ))]);
 
                     let message_id = IngressMessageId::from(&ingress_msg2);
@@ -1217,7 +1209,6 @@ mod tests {
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id,
                         node_test_id(0),
-                        ingress_msg2.count_bytes(),
                     ))]);
                 });
 
@@ -1380,7 +1371,6 @@ mod tests {
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id1,
                         node_test_id(0),
-                        ingress_msg1.count_bytes(),
                     ))]);
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg2.clone(),
@@ -1390,7 +1380,6 @@ mod tests {
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id2,
                         node_test_id(0),
-                        ingress_msg2.count_bytes(),
                     ))]);
                 });
 
@@ -1572,7 +1561,6 @@ mod tests {
                         ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                             message_id.clone(),
                             node_test_id(0),
-                            m.count_bytes(),
                         ))]);
                         // check that message is indeed in the pool
                         assert!(ingress_pool.get(&message_id).is_some());
@@ -2095,7 +2083,6 @@ mod tests {
                     .apply_changes(vec![ChangeAction::MoveToValidated((
                         msg_id,
                         node_test_id(0),
-                        0,
                     ))]);
 
                 let validation_context = ValidationContext {
@@ -2129,7 +2116,6 @@ mod tests {
                 ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                     message_id.clone(),
                     node_test_id(0),
-                    m.count_bytes(),
                 ))]);
                 // check that message is indeed in the pool
                 assert!(ingress_pool.get(&message_id).is_some());
