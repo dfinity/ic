@@ -6,6 +6,13 @@ load("@io_bazel_rules_docker//docker/package_managers:install_pkgs.bzl", "instal
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES", "mainnet_nns_canisters", "mainnet_sns_canisters", "qualifying_nns_canisters", "qualifying_sns_canisters", "symlink_dir", "symlink_dir_test", "symlink_dirs", "tip_nns_canisters", "tip_sns_canisters")
 load(":system_tests.bzl", "uvm_config_image")
+load("//bazel:fixtures.bzl", "rust_fixture_generator")
+
+rust_fixture_generator(
+    name = "dummy_fixture",
+    srcs = ["dummy_fixture.rs"],
+    edition = "2021",
+)
 
 package(default_visibility = ["//visibility:public"])
 
