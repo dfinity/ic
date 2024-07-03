@@ -21,10 +21,17 @@ pub enum HttpGatewayBackend {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct HttpsConfig {
+    pub cert_path: String,
+    pub key_path: String,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct HttpGatewayConfig {
     pub listen_at: Option<u16>,
     pub forward_to: HttpGatewayBackend,
     pub domain: Option<String>,
+    pub https_config: Option<HttpsConfig>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]

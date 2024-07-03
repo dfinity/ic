@@ -34,8 +34,8 @@
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
 use crate::common::rest::{
-    BlobCompression, BlobId, DtsFlag, ExtendedSubnetConfigSet, InstanceId, RawEffectivePrincipal,
-    RawMessageId, SubnetId, SubnetSpec, Topology,
+    BlobCompression, BlobId, DtsFlag, ExtendedSubnetConfigSet, HttpsConfig, InstanceId,
+    RawEffectivePrincipal, RawMessageId, SubnetId, SubnetSpec, Topology,
 };
 use crate::nonblocking::PocketIc as PocketIcAsync;
 use candid::{
@@ -410,6 +410,28 @@ impl PocketIc {
     pub fn make_live(&mut self, listen_at: Option<u16>) -> Url {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.make_live(listen_at).await })
+    }
+
+    /// Creates an HTTPS gateway for this IC instance
+    /// listening on an optionally specified domain and port
+    /// and configures the IC instance to make progress
+    /// automatically, i.e., periodically update the time
+    /// of the IC to the real time and execute rounds on the subnets.
+    /// Returns the URL at which `/api/v2` requests
+    /// for this instance can be made.
+    #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub async fn make_live_https(
+        &mut self,
+        listen_at: Option<u16>,
+        domain: String,
+        https_config: HttpsConfig,
+    ) -> Url {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .make_live_https(listen_at, domain, https_config)
+                .await
+        })
     }
 
     /// Stops auto progress (automatic time updates and round executions)
