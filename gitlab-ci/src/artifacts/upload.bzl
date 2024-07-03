@@ -152,7 +152,6 @@ def _generate_fixtures_bzl_impl(ctx):
         commands += [cmd + ">> " + out.path for cmd in file_commands]
     commands += ["echo ']' >> {out_path}".format(out_path = out.path)]
     command = '; '.join(commands)
-    print("command is:\n", command)
     ctx.actions.run_shell(
         inputs = ctx.files.uploaded_files,
         command = command,
