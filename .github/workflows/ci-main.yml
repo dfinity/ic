@@ -87,9 +87,11 @@ jobs:
             bazel-targets
   bazel-build-all-config-check:
     runs-on:
-      labels: dind-large
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 90
     name: Bazel Build All Config Check
     steps:
@@ -170,9 +172,11 @@ jobs:
   bazel-build-fuzzers:
     name: Bazel Build Fuzzers
     runs-on:
-      labels: dind-large
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -193,9 +197,11 @@ jobs:
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     runs-on:
-      labels: dind-large
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -240,9 +246,11 @@ jobs:
   build-ic:
     name: Build IC
     runs-on:
-      labels: dind-large
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 90
     if: ${{ github.event_name != 'merge_group' }}
     steps:
@@ -332,9 +340,11 @@ jobs:
   cargo-clippy-linux:
     name: Cargo Clippy Linux
     runs-on:
-      labels: dind-large
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -367,9 +377,11 @@ jobs:
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     runs-on:
-      labels: dind-large
+      labels: dind-runner-large-p
     container:
       image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 90
     steps:
       - name: Checkout
