@@ -4,7 +4,11 @@
 use crate::pocket_ic::{AdvanceTimeAndTick, EffectivePrincipal, PocketIc};
 use crate::InstanceId;
 use crate::{OpId, Operation};
+use axum_server::tls_rustls::RustlsConfig;
+use axum_server::Handle;
 use base64;
+use hyper::header::{HeaderValue, HOST};
+use hyper::Version;
 use ic_http_endpoints_public::cors_layer;
 use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{HttpGatewayBackend, HttpGatewayConfig, Topology};
@@ -12,6 +16,7 @@ use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
+    path::PathBuf,
     sync::Arc,
     time::Duration,
 };
@@ -21,7 +26,7 @@ use tokio::{
     task::{spawn, spawn_blocking, JoinHandle},
     time::{self, sleep},
 };
-use tracing::{info, trace};
+use tracing::{error, info, trace};
 
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
@@ -366,8 +371,10 @@ impl ApiState {
         http_gateway_config: HttpGatewayConfig,
     ) -> (InstanceId, u16) {
         use crate::state_api::routes::verify_cbor_content_header;
-        use axum::extract::{DefaultBodyLimit, Path, State};
+        use axum::extract::{DefaultBodyLimit, Path, Request as AxumRequest, State};
         use axum::handler::Handler;
+        use axum::middleware::{self, Next};
+        use axum::response::Response as AxumResponse;
         use axum::routing::{get, post};
         use axum::Router;
         use http_body_util::Full;
@@ -442,10 +449,32 @@ impl ApiState {
             handler_api_v2_canister(replica_url, effective_canister_id, "read_state", bytes).await
         }
 
+        // converts an HTTP request to an HTTP/1.1 request required by icx-proxy
+        async fn http2_middleware(mut request: AxumRequest, next: Next) -> AxumResponse {
+            let uri = Uri::try_from(
+                request
+                    .uri()
+                    .path_and_query()
+                    .map(|v| v.as_str())
+                    .unwrap_or(request.uri().path()),
+            )
+            .unwrap();
+            let authority = request.uri().authority().map(|a| a.to_string());
+            *request.version_mut() = Version::HTTP_11;
+            *request.uri_mut() = uri;
+            if let Some(authority) = authority {
+                if !request.headers().contains_key(HOST) {
+                    request
+                        .headers_mut()
+                        .insert(HOST, HeaderValue::from_str(&authority).unwrap());
+                }
+            }
+            next.run(request).await
+        }
+
         let port = http_gateway_config.listen_at.unwrap_or_default();
         let addr = format!("[::]:{}", port);
-        let listener = tokio::net::TcpListener::bind(&addr)
-            .await
+        let listener = std::net::TcpListener::bind(&addr)
             .unwrap_or_else(|_| panic!("Failed to start HTTP gateway on port {}", port));
         let real_port = listener.local_addr().unwrap().port();
 
@@ -455,16 +484,6 @@ impl ApiState {
         drop(http_gateways);
 
         let http_gateways = self.http_gateways.clone();
-        let shutdown_signal = async move {
-            loop {
-                let guard = http_gateways.read().await;
-                if !guard[instance_id] {
-                    break;
-                }
-                drop(guard);
-                tokio::time::sleep(Duration::from_secs(1)).await;
-            }
-        };
         let pocket_ic_server_port = self.port.unwrap();
         spawn(async move {
             let replica_url = match http_gateway_config.forward_to {
@@ -514,13 +533,52 @@ impl ApiState {
                 .fallback_service(fallback_handler)
                 .layer(DefaultBodyLimit::disable())
                 .layer(cors_layer())
+                .layer(middleware::from_fn(http2_middleware))
                 .with_state(replica_url.trim_end_matches('/').to_string())
                 .into_make_service();
 
-            axum::serve(listener, router)
-                .with_graceful_shutdown(shutdown_signal)
-                .await
-                .unwrap();
+            let handle = Handle::new();
+            let shutdown_handle = handle.clone();
+            let http_gateways_for_shutdown = http_gateways.clone();
+            tokio::spawn(async move {
+                loop {
+                    let guard = http_gateways_for_shutdown.read().await;
+                    if !guard[instance_id] {
+                        shutdown_handle.shutdown();
+                        break;
+                    }
+                    drop(guard);
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+            });
+            if let Some(https_config) = http_gateway_config.https_config {
+                let config = RustlsConfig::from_pem_file(
+                    PathBuf::from(https_config.cert_path),
+                    PathBuf::from(https_config.key_path),
+                )
+                .await;
+                match config {
+                    Ok(config) => {
+                        axum_server::from_tcp_rustls(listener, config)
+                            .handle(handle)
+                            .serve(router)
+                            .await
+                            .unwrap();
+                    }
+                    Err(e) => {
+                        error!("TLS config could not be created: {:?}", e);
+                        let mut guard = http_gateways.write().await;
+                        guard[instance_id] = false;
+                        return;
+                    }
+                }
+            } else {
+                axum_server::from_tcp(listener)
+                    .handle(handle)
+                    .serve(router)
+                    .await
+                    .unwrap();
+            }
 
             info!("Terminating HTTP gateway.");
         });

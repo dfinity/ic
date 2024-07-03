@@ -29,6 +29,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:aide",
     "@crate_index//:axum",
     "@crate_index//:axum-extra",
+    "@crate_index//:axum_server_0_6_0",
     "@crate_index//:backoff",
     "@crate_index//:http-body-util",
     "@crate_index//:hyper-util",
@@ -67,6 +68,8 @@ TEST_DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:tokio",
     "@crate_index//:wat",
+    "@crate_index//:rcgen",
+    "@crate_index//:tempfile",
 ]
 
 SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
@@ -91,7 +94,7 @@ rust_library(
         "src/lib.rs",
         "src/pocket_ic.rs",
     ] + glob([
-        "src/state_api/**",
+        "src/state_api/**/*.rs",
     ]),
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
