@@ -47,7 +47,7 @@ def _upload_artifact_impl(ctx):
     out = []
 
     for f in ctx.files.inputs:
-        filesum = ctx.actions.declare_file(filesum_file(ctx.label.name, f.basename))
+        filesum = ctx.actions.declare_file(filesum_file(ctx.label.name, f))
         ctx.actions.run_shell(
             command = "(cd {path} && shasum --algorithm 256 --binary {src}) > {out}".format(path = f.dirname, src = f.basename, out = filesum.path),
             inputs = [f],
