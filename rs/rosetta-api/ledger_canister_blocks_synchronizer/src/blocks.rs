@@ -1,14 +1,17 @@
 use self::database_access::INSERT_INTO_TRANSACTIONS_STATEMENT;
-use crate::iso8601_to_timestamp;
+use crate::rosetta_block::RosettaBlock;
+use crate::{iso8601_to_timestamp, timestamp_to_iso8601};
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_hash_of::HashOf;
-use icp_ledger::{AccountIdentifier, Block, TimeStamp, Tokens};
-use rusqlite::{params, OptionalExtension, Row};
+use icp_ledger::{AccountIdentifier, Block, TimeStamp, Tokens, Transaction};
+use rusqlite::{named_params, params, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Mutex;
+use tracing::info;
 
 mod database_access {
     use super::{sql_bytes_to_block, vec_into_array};
@@ -850,6 +853,7 @@ impl Blocks {
                 r#"
                 CREATE TABLE IF NOT EXISTS rosetta_blocks (
                     idx INTEGER NOT NULL PRIMARY KEY,
+                    parent_hash BLOB,
                     hash BLOB NOT NULL,
                     timestamp TEXT
                 )
@@ -917,6 +921,9 @@ impl Blocks {
                 })?
                 .unwrap_or(0),
         };
+        info!(
+            "Rosetta blocks mode enabled, first rosetta block index is {first_rosetta_block_index}"
+        );
         self.rosetta_blocks_mode = RosettaBlocksMode::Enabled {
             first_rosetta_block_index,
         };
@@ -1343,6 +1350,139 @@ impl Blocks {
             }
         }
     }
+
+    #[allow(dead_code)]
+    pub(crate) fn store_rosetta_block(
+        &self,
+        rosetta_block: RosettaBlock,
+    ) -> Result<(), BlockStoreError> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+
+        let transaction = connection
+            .transaction()
+            .map_err(|e| format!("Unable to initialize a transaction: {e:?}"))?;
+
+        // Store the metainfo of the rosetta block
+        {
+            let mut statement = transaction
+                .prepare_cached(
+                    r#"INSERT INTO rosetta_blocks (idx, hash, timestamp)
+                                VALUES (:idx, :hash, :timestamp)"#,
+                )
+                .map_err(|e| format!("Unable to insert into rosetta_blocks table: {e:?}"))?;
+            let _ = statement
+                .execute(named_params! {
+                    ":idx": rosetta_block.index,
+                    ":hash": rosetta_block.hash(),
+                    ":timestamp": timestamp_to_iso8601(rosetta_block.timestamp)
+                })
+                .map_err(|e| format!("Unable to insert into rosetta_blocks table: {e:?}"))?;
+        }
+
+        // Store the blocks that form this rosetta block
+        {
+            let mut statement = transaction
+                .prepare_cached(
+                    r#"INSERT INTO rosetta_blocks_transactions (idx, block_idx)
+                    VALUES (:idx, :block_idx)"#,
+                )
+                .map_err(|e| {
+                    format!("Unable to insert into rosetta_blocks_transactions table: {e:?}")
+                })?;
+            for block_index in rosetta_block.transactions.keys() {
+                let _ = statement
+                    .execute(named_params! {
+                        ":idx": rosetta_block.index,
+                        ":block_idx": block_index,
+                    })
+                    .map_err(|e| {
+                        format!("Unable to insert into rosetta_blocks_transactions table: {e:?}")
+                    })?;
+            }
+        }
+
+        transaction.commit().map_err(|e| {
+            format!("Error while finishing the transaction to store a rosetta block: {e:?}")
+        })?;
+        Ok(())
+    }
+
+    pub fn get_rosetta_block(
+        &self,
+        rosetta_block_index: BlockIndex,
+    ) -> Result<RosettaBlock, BlockStoreError> {
+        let (parent_hash, timestamp) =
+            self.get_rosetta_block_phash_timestamp(rosetta_block_index)?;
+        let transactions = self.get_rosetta_block_transactions(rosetta_block_index)?;
+        Ok(RosettaBlock {
+            index: rosetta_block_index,
+            parent_hash,
+            timestamp,
+            transactions,
+        })
+    }
+
+    fn get_rosetta_block_phash_timestamp(
+        &self,
+        rosetta_block_index: BlockIndex,
+    ) -> Result<(Option<[u8; 32]>, TimeStamp), BlockStoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+        let mut statement = connection
+            .prepare_cached("SELECT parent_hash, timestamp FROM rosetta_blocks WHERE idx=:idx")
+            .map_err(|e| format!("Unable to prepare query: {e:?}"))?;
+        let mut blocks = statement
+            .query_map(named_params! { ":idx": rosetta_block_index }, |row| {
+                let parent_hash = row.get(0)?;
+                let timestamp = row.get(1).map(iso8601_to_timestamp)?;
+                Ok((parent_hash, timestamp))
+            })
+            .map_err(|e| {
+                BlockStoreError::from(format!("Unable to select from rosetta_blocks: {e:?}"))
+            })?;
+        match blocks.next() {
+            Some(block) => block.map_err(|e| BlockStoreError::Other(e.to_string())),
+            None => Err(BlockStoreError::NotFound(rosetta_block_index)),
+        }
+    }
+
+    fn get_rosetta_block_transactions(
+        &self,
+        rosetta_block_index: BlockIndex,
+    ) -> Result<BTreeMap<BlockIndex, Transaction>, BlockStoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+        let mut statement = connection
+            .prepare_cached(
+                r#"SELECT blocks.idx, block
+                   FROM rosetta_blocks_transactions JOIN blocks
+                   ON rosetta_blocks_transactions.block_idx = blocks.idx
+                   WHERE rosetta_blocks_transactions.idx=:idx"#,
+            )
+            .map_err(|e| format!("Unable to select block: {e:?}"))?;
+        let blocks = statement
+            .query_map(named_params! { ":idx": rosetta_block_index }, |row| {
+                let block_index: BlockIndex = row.get(0)?;
+                let block = row.get(1).and_then(sql_bytes_to_block)?;
+                Ok((block_index, block))
+            })
+            .map_err(|e| format!("Unable to select block: {e:?}"))?;
+        let mut transactions = BTreeMap::new();
+        for index_and_block in blocks {
+            let (block_index, block) =
+                index_and_block.map_err(|e| format!("Unable to select block: {e:?}"))?;
+            let transaction = block.transaction;
+            transactions.insert(block_index, transaction);
+        }
+        Ok(transactions)
+    }
 }
 
 fn sql_bytes_to_block(cell: Vec<u8>) -> Result<Block, rusqlite::Error> {
@@ -1354,4 +1494,75 @@ fn sql_bytes_to_block(cell: Vec<u8>) -> Result<Block, rusqlite::Error> {
             format!("Unable to decode block: {e:?}").into(),
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use candid::Principal;
+    use ic_ledger_core::block::BlockType;
+    use icp_ledger::{AccountIdentifier, Block, Memo, Operation, TimeStamp, Tokens, Transaction};
+
+    use crate::rosetta_block::RosettaBlock;
+
+    use super::Blocks;
+
+    #[test]
+    fn test_store_load_rosetta_block() {
+        let to = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
+        let transaction0 = Transaction {
+            operation: Operation::Mint {
+                to,
+                amount: Tokens::from_e8s(1),
+            },
+            memo: Memo(0),
+            created_at_time: None,
+            icrc1_memo: None,
+        };
+        let block0 = Block {
+            parent_hash: None,
+            transaction: transaction0.clone(),
+            timestamp: TimeStamp::from_nanos_since_unix_epoch(1),
+        };
+        let encoded_block0 = block0.clone().encode();
+        let hashed_block0 = crate::blocks::HashedBlock::hash_block(
+            encoded_block0.clone(),
+            block0.parent_hash,
+            0,
+            block0.timestamp,
+        );
+        let transaction1 = Transaction {
+            operation: Operation::Mint {
+                to,
+                amount: Tokens::from_e8s(2),
+            },
+            memo: Memo(1),
+            created_at_time: None,
+            icrc1_memo: None,
+        };
+        let block1 = Block {
+            parent_hash: Some(Block::block_hash(&encoded_block0)),
+            transaction: transaction1.clone(),
+            timestamp: TimeStamp::from_nanos_since_unix_epoch(1),
+        };
+        let encoded_block1 = block1.clone().encode();
+        let hashed_block1 = crate::blocks::HashedBlock::hash_block(
+            encoded_block1,
+            block1.parent_hash,
+            1,
+            block1.timestamp,
+        );
+        let rosetta_block = RosettaBlock {
+            index: 0,
+            parent_hash: None,
+            timestamp: TimeStamp::from_nanos_since_unix_epoch(1),
+            transactions: [(0, transaction0), (1, transaction1)].into_iter().collect(),
+        };
+
+        let mut blocks = Blocks::new_in_memory(true).unwrap();
+        blocks.push(&hashed_block0).unwrap();
+        blocks.push(&hashed_block1).unwrap();
+        blocks.store_rosetta_block(rosetta_block.clone()).unwrap();
+        let actual_rosetta_block = blocks.get_rosetta_block(0).unwrap();
+        assert_eq!(rosetta_block, actual_rosetta_block);
+    }
 }
