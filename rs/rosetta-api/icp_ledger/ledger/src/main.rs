@@ -9,6 +9,7 @@ use dfn_core::{
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
+use ic_canister_log::log;
 use ic_canister_log::{LogEntry, Sink};
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
@@ -51,7 +52,10 @@ use icrc_ledger_types::{
     icrc1::transfer::TransferArg,
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
-use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES};
+use ledger_canister::{
+    Ledger, LedgerState, LedgerStateType, ALLOWANCES_ARRIVALS_MEMORY,
+    ALLOWANCES_EXPIRATIONS_MEMORY, ALLOWANCES_MEMORY, LEDGER, MAX_MESSAGE_SIZE_BYTES,
+};
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
 use on_wire::IntoWire;
@@ -769,11 +773,116 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
 
 #[export_name = "canister_post_upgrade"]
 fn post_upgrade_() {
+    let start = ic_cdk::api::instruction_counter();
+    let start_mem = (dfn_core::api::stable_memory_size_in_pages() * 64 * 1024) as f64;
+
     over_init(|CandidOne(args)| post_upgrade(args));
+
+    let mut ledger = LEDGER.write().unwrap();
+    ledger.compute_ledger_state(DebugOutSink);
+    if ledger.is_migrating() {
+        ic_cdk_timers::set_timer(Duration::from_secs(0), migrate_next_part);
+    }
+
+    let end = ic_cdk::api::instruction_counter();
+    let end_mem = (dfn_core::api::stable_memory_size_in_pages() * 64 * 1024) as f64;
+    ic_cdk::eprintln!(
+        "{}",
+        format!("instructions used in post_upgrade {}", end - start)
+    );
+    ic_cdk::eprintln!(
+        "{}",
+        format!(
+            "post_upgrade stable mem start: {}, end: {}, diff {}",
+            start_mem,
+            end_mem,
+            end_mem - start_mem
+        )
+    );
+}
+
+fn migrate_next_part() {
+    use ic_cdk::api::instruction_counter;
+    use ledger_canister::{AllowanceTableField::*, LedgerField::*};
+
+    const MAX_INSTRUCTIONS_PER_CALL: u64 = 5_000_000_000;
+
+    let mut migrated_allowances = 0;
+    let mut migrated_expirations = 0;
+    let mut migrated_arrivals = 0;
+
+    ic_cdk::println!("Migration started.");
+    log!(DebugOutSink, "Migration started.");
+
+    let mut ledger = LEDGER.write().unwrap();
+
+    while instruction_counter() < MAX_INSTRUCTIONS_PER_CALL {
+        let field = match ledger.state.clone() {
+            LedgerState::Migrating(field) => field,
+            LedgerState::Ready => break,
+        };
+        match field {
+            AllowanceTable(Allowances) => {
+                match ledger.approvals.allowances.pop_first() {
+                    Some((key, value)) => {
+                        ALLOWANCES_MEMORY
+                            .with_borrow_mut(|allowances| allowances.insert(key, value));
+                        migrated_allowances += 1;
+                    }
+                    None => {
+                        ledger.state = LedgerState::Migrating(AllowanceTable(Expirations));
+                    }
+                };
+            }
+            AllowanceTable(Expirations) => {
+                match ledger.approvals.expiration_queue.pop_first() {
+                    Some(key) => {
+                        ALLOWANCES_EXPIRATIONS_MEMORY
+                            .with_borrow_mut(|expirations| expirations.insert(key, ()));
+                        migrated_expirations += 1;
+                    }
+                    None => {
+                        ledger.state = LedgerState::Migrating(AllowanceTable(Arrivals));
+                    }
+                };
+            }
+            AllowanceTable(Arrivals) => match ledger.approvals.arrival_queue.pop_first() {
+                Some(key) => {
+                    ALLOWANCES_ARRIVALS_MEMORY.with_borrow_mut(|arrivals| arrivals.insert(key, ()));
+                    migrated_arrivals += 1;
+                }
+                None => {
+                    ledger.state = LedgerState::Ready;
+                }
+            },
+        }
+    }
+    ledger.rounds += 1;
+    let msg = format!("Round {}. Number of elements migrated: allowances:{migrated_allowances} expirations:{migrated_expirations} arrivals:{migrated_arrivals}. Instructions used {}.",
+            ledger.rounds,
+            instruction_counter());
+    if ledger.is_migrating() {
+        ic_cdk::println!("Migration partially done. Scheduling the next part. {msg}");
+        log!(
+            DebugOutSink,
+            "Migration partially done. Scheduling the next part. {msg}"
+        );
+        ic_cdk_timers::set_timer(Duration::from_secs(0), migrate_next_part);
+    } else {
+        ic_cdk::println!("Migration completed! {msg}");
+        log!(DebugOutSink, "Migration completed! {msg}");
+    }
+}
+
+fn is_ledger_ready() -> bool {
+    LEDGER.read().unwrap().is_ready()
 }
 
 #[export_name = "canister_pre_upgrade"]
 fn pre_upgrade() {
+    let start = ic_cdk::api::instruction_counter();
+    let start_mem = (dfn_core::api::stable_memory_size_in_pages() * 64 * 1024) as f64;
+
     setup::START.call_once(|| {
         printer::hook();
     });
@@ -784,6 +893,31 @@ fn pre_upgrade() {
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     ciborium::ser::into_writer(&*ledger, stable::StableWriter::new())
         .expect("failed to write ledger state to stable memory");
+
+    let end = ic_cdk::api::instruction_counter();
+    let end_mem = (dfn_core::api::stable_memory_size_in_pages() * 64 * 1024) as f64;
+    ic_cdk::eprintln!(
+        "{}",
+        format!("instructions used in pre_upgrade {}", end - start)
+    );
+    ic_cdk::eprintln!(
+        "{}",
+        format!(
+            "pre_upgrade stable mem start: {}, end: {}, diff {}",
+            start_mem,
+            end_mem,
+            end_mem - start_mem
+        )
+    );
+}
+
+fn state() -> LedgerStateType {
+    LEDGER.read().unwrap().state.type_()
+}
+
+#[export_name = "canister_query state"]
+fn state_candid() {
+    over(candid_one, |()| state())
 }
 
 struct Access;
@@ -1440,7 +1574,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
                 let current_allowance = LEDGER
                     .read()
                     .unwrap()
-                    .approvals
+                    .stable_approvals
                     .allowance(&from, &spender, now)
                     .amount;
                 return Err(ApproveError::AllowanceChanged {
@@ -1517,7 +1651,7 @@ fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
     let ledger = LEDGER.read().unwrap();
     let account = AccountIdentifier::from(arg.account);
     let spender = AccountIdentifier::from(arg.spender);
-    let allowance = ledger.approvals.allowance(&account, &spender, now);
+    let allowance = ledger.stable_approvals.allowance(&account, &spender, now);
     Allowance {
         allowance: Nat::from(allowance.amount.get_e8s()),
         expires_at: allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),

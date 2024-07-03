@@ -39,6 +39,7 @@ rust_library(
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/on_wire",
         "//rs/types/base_types",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:candid",
         "@crate_index//:comparable",
         "@crate_index//:crc32fast",

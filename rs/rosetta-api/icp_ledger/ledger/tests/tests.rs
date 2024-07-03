@@ -1103,6 +1103,221 @@ fn test_feature_flags() {
     assert_eq!(balance_of(&env, canister_id, spender.0), 0);
 }
 
+use ic_state_machine_tests::WasmResult;
+
+pub fn assert_reply(result: WasmResult) -> Vec<u8> {
+    match result {
+        WasmResult::Reply(bytes) => bytes,
+        WasmResult::Reject(reject) => {
+            panic!("Expected a successful reply, got a reject: {}", reject)
+        }
+    }
+}
+
+use std::fs::File;
+use std::io::Read;
+
+pub(crate) fn get_file_as_byte_vec(filename: &String) -> Vec<u8> {
+    let mut f = File::open(&filename).expect("File not found.");
+    let metadata = std::fs::metadata(&filename).expect("Unable to read file metadata.");
+    let mut buffer = vec![0; metadata.len() as usize];
+    f.read(&mut buffer).expect("File length increased.");
+    buffer
+}
+
+use std::time::Instant;
+
+fn account(n: u64) -> Account {
+    Account {
+        owner: Principal::from_slice(max_length_principal(n as u32).as_slice()),
+        subaccount: Some([11_u8; 32]),
+    }
+}
+
+#[test]
+fn test_icp_upgrade() {
+    let ledger_wasm_add_acc = get_file_as_byte_vec(
+        &"/home/maciejmodelski/ledger-canister_notify-method-add_accounts.wasm.gz".to_string(),
+    );
+
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    let from = Account {
+        owner: PrincipalId::new_user_test_id(1).0,
+        subaccount: Some([11_u8; 32]),
+    };
+    initial_balances.insert(from.into(), Tokens::from_e8s(100_000_000_000_000));
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .icrc1_minting_account(MINTER)
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .feature_flags(FeatureFlags { icrc2: true })
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(
+            ledger_wasm_add_acc,
+            CandidOne(payload).into_bytes().unwrap(),
+            None,
+        )
+        .expect("Unable to install the Ledger canister with the new init");
+
+    let num_approvals = 100_000;
+    let num_balances = 0;
+
+    let balances_batch_size = 100_000u32;
+    let approvals_batch_size = 50_000u32;
+
+    println!("adding {num_balances} balances");
+
+    let state = || {
+        Decode!(
+            &env.query(canister_id, "state", Encode!().unwrap())
+                .expect("Unable to call the state endpoint")
+                .bytes(),
+            ledger_canister::LedgerStateType
+        )
+        .expect("Unable to decode the result of the state endpoint")
+    };
+
+    let send_batch = |method_name: &str, start: u64, num: u64| {
+        let payload = Encode!(&(start as u64, num as u64)).unwrap();
+
+        let before = Instant::now();
+        let result = env
+            .execute_ingress_as(
+                ic_base_types::PrincipalId(from.owner),
+                canister_id,
+                method_name,
+                payload,
+            )
+            .expect(&format!("{} failed", method_name));
+        let after = Instant::now();
+
+        println!(
+            "{} took {} ms",
+            method_name,
+            after.duration_since(before).as_millis()
+        );
+        let res = Decode!(&assert_reply(result), Result<u64, String>).unwrap();
+        match res {
+            Ok(x) => {
+                println!("all added by {}: {x}", method_name);
+                return x;
+            }
+            Err(e) => panic!("failed with {e}"),
+        }
+    };
+
+    let print_mem = || {
+        let mem = env
+            .canister_status(canister_id)
+            .unwrap()
+            .unwrap()
+            .memory_size()
+            .get();
+
+        println!("total memory: {mem}");
+    };
+
+    let mut balances_count = 0;
+    for i in 0..num_balances / balances_batch_size {
+        balances_count = send_batch(
+            "add_accounts",
+            (i * balances_batch_size).into(),
+            balances_batch_size.into(),
+        );
+    }
+    balances_count = send_batch(
+        "add_accounts",
+        balances_count,
+        (num_balances % balances_batch_size).into(),
+    );
+    assert!(balances_count >= num_balances as u64);
+
+    print_mem();
+
+    let mut approval_count = 0;
+    for i in 0..num_approvals / approvals_batch_size {
+        approval_count = send_batch(
+            "add_approvals",
+            (i * approvals_batch_size).into(),
+            approvals_batch_size.into(),
+        );
+    }
+    approval_count = send_batch(
+        "add_approvals",
+        approval_count,
+        (num_approvals % approvals_batch_size).into(),
+    );
+    assert!(approval_count >= num_approvals as u64);
+
+    println!("upgrading with {balances_count} balances and {approval_count} approvals");
+
+    print_mem();
+
+    // collect the approvals before the upgrade
+    let mut expected_allowances = vec![];
+    for spender in 0..20 {
+        expected_allowances.push(ic_icrc1_ledger_sm_tests::get_allowance(
+            &env,
+            canister_id,
+            from,
+            account(spender),
+        ));
+    }
+
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm(),
+        Encode!(&LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
+            maximum_number_of_accounts: None,
+            icrc1_minting_account: None,
+            feature_flags: Some(FeatureFlags { icrc2: true }),
+        })))
+        .unwrap(),
+    )
+    .unwrap();
+
+    print_mem();
+
+    // wait until the Ledger is ready
+    let mut num_retry = 1000;
+    while num_retry > 0 && state() != ledger_canister::LedgerStateType::Ready {
+        num_retry -= 1;
+        env.advance_time(std::time::Duration::from_secs(1));
+        env.tick();
+    }
+    if num_retry == 0 && state() != ledger_canister::LedgerStateType::Ready {
+        panic!("Ledger is not ready");
+    }
+
+    // verify that the approvals are still there
+    let mut actual_allowances = vec![];
+    for spender in 0..20 {
+        let allowance =
+            ic_icrc1_ledger_sm_tests::get_allowance(&env, canister_id, from, account(spender));
+        println!("allowance for spender {}: {:?}", spender, allowance);
+        actual_allowances.push(allowance);
+    }
+
+    assert_eq!(expected_allowances, actual_allowances);
+}
+
+
+fn max_length_principal(index: u32) -> [u8; 29] {
+    const MAX_PRINCIPAL: [u8; 29] = [1_u8; 29];
+    let bytes: [u8; 4] = index.to_be_bytes();
+    let mut principal = MAX_PRINCIPAL;
+    principal[0] = bytes[0];
+    principal[1] = bytes[1];
+    principal[2] = bytes[2];
+    principal[3] = bytes[3];
+    principal
+}
+
 #[test]
 fn test_transfer_from_smoke() {
     ic_icrc1_ledger_sm_tests::test_transfer_from_smoke(ledger_wasm(), encode_init_args);

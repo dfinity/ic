@@ -9,6 +9,7 @@ rust_library(
     version = "0.9.0",
     deps = [
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:candid",
         "@crate_index//:num-traits",
         "@crate_index//:serde",

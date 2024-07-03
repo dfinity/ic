@@ -12,6 +12,11 @@ use ic_ledger_core::{
 };
 use ic_ledger_hash_of::HashOf;
 use ic_ledger_hash_of::HASH_LENGTH;
+use ic_stable_structures::{
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
+    storable::Bound,
+    RestrictedMemory, Storable, MAX_PAGES,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
 use serde::{Deserialize, Serialize};
@@ -28,6 +33,7 @@ pub use ic_ledger_core::{
     timestamp::TimeStamp,
     tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY},
 };
+use std::io::{Cursor, Read};
 
 pub mod account_identifier;
 #[allow(clippy::all)]
@@ -330,7 +336,7 @@ impl Transaction {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct ApprovalKey(AccountIdentifier, AccountIdentifier);
+pub struct ApprovalKey(pub AccountIdentifier, pub AccountIdentifier);
 
 impl From<(&AccountIdentifier, &AccountIdentifier)> for ApprovalKey {
     fn from((account, spender): (&AccountIdentifier, &AccountIdentifier)) -> Self {
@@ -342,6 +348,41 @@ impl From<ApprovalKey> for (AccountIdentifier, AccountIdentifier) {
     fn from(key: ApprovalKey) -> Self {
         (key.0, key.1)
     }
+}
+
+impl Storable for ApprovalKey {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buffer: Vec<u8> = vec![0; 2 * 28];
+
+        for i in 0..28 {
+            buffer[i] = self.0.hash[i];
+        }
+        for i in 28..2 * 28 {
+            buffer[i] = self.1.hash[i - 28];
+        }
+
+        Cow::Owned(buffer)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        let mut cursor = Cursor::new(bytes);
+
+        let mut from = AccountIdentifier { hash: [7; 28] };
+        cursor
+            .read_exact(&mut from.hash)
+            .expect("Unable to read the from of the approval key");
+        let mut spender = AccountIdentifier { hash: [7; 28] };
+        cursor
+            .read_exact(&mut spender.hash)
+            .expect("Unable to read the spender of the approvals key");
+
+        Self(from, spender)
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 2 * 28,
+        is_fixed_size: true,
+    };
 }
 
 /// A transaction with the metadata the canister generated attached to it

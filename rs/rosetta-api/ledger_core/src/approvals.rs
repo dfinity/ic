@@ -1,8 +1,13 @@
 use crate::timestamp::TimeStamp;
 use crate::tokens::{TokensType, Zero};
+use candid::Nat;
+use ic_stable_structures::storable::Bound;
+use ic_stable_structures::Storable;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::{Cursor, Read};
 use std::marker::PhantomData;
 
 #[cfg(test)]
@@ -85,15 +90,56 @@ impl<Tokens: Zero> Default for Allowance<Tokens> {
     }
 }
 
+impl<Tokens: Clone + Into<Nat> + TryFrom<Nat, Error = String>> Storable for Allowance<Tokens> {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buffer = vec![];
+        let amount: Nat = self.amount.clone().into();
+        amount
+            .encode(&mut buffer)
+            .expect("Unable to serialize amount");
+        buffer.extend(self.arrived_at.as_nanos_since_unix_epoch().to_le_bytes());
+        if let Some(expires_at) = self.expires_at {
+            buffer.extend(expires_at.as_nanos_since_unix_epoch().to_le_bytes());
+        }
+        Cow::Owned(buffer)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        let mut cursor = Cursor::new(bytes.into_owned());
+        let amount = Nat::decode(&mut cursor).expect("Unable to deserialize amount");
+        let amount = Tokens::try_from(amount).expect("Unable to deserialize amount");
+        let mut arrived_at_bytes = [0u8; 8];
+        cursor
+            .read_exact(&mut arrived_at_bytes)
+            .expect("Unable to read arrived_at bytes");
+        let arrived_at =
+            TimeStamp::from_nanos_since_unix_epoch(u64::from_le_bytes(arrived_at_bytes));
+        let mut expires_at_bytes = [0u8; 8];
+        let expires_at = match cursor.read_exact(&mut expires_at_bytes) {
+            Ok(()) => Some(TimeStamp::from_nanos_since_unix_epoch(u64::from_le_bytes(
+                expires_at_bytes,
+            ))),
+            _ => None,
+        };
+        Self {
+            amount,
+            arrived_at,
+            expires_at,
+        }
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AllowanceTable<K, AccountId, Tokens>
 where
     K: Ord,
 {
-    allowances: BTreeMap<K, Allowance<Tokens>>,
-    expiration_queue: BTreeSet<(TimeStamp, K)>,
+    pub allowances: BTreeMap<K, Allowance<Tokens>>,
+    pub expiration_queue: BTreeSet<(TimeStamp, K)>,
     #[serde(default = "Default::default")]
-    arrival_queue: BTreeSet<(TimeStamp, K)>,
+    pub arrival_queue: BTreeSet<(TimeStamp, K)>,
     #[serde(skip)]
     #[serde(default)]
     _marker: PhantomData<fn(&AccountId, &AccountId) -> K>,
@@ -349,6 +395,6 @@ where
     }
 }
 
-fn remote_future() -> TimeStamp {
+pub fn remote_future() -> TimeStamp {
     TimeStamp::from_nanos_since_unix_epoch(u64::MAX)
 }
