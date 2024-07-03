@@ -6409,7 +6409,6 @@ dependencies = [
  "bincode 1.3.3",
  "clap 3.2.25",
  "criterion",
- "ed25519-consensus",
  "hex",
  "ic-adapter-metrics-server",
  "ic-async-utils",
@@ -6418,6 +6417,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-ecdsa-secp256r1",
+ "ic-crypto-ed25519",
  "ic-crypto-for-verification-only",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -6671,6 +6671,7 @@ dependencies = [
  "curve25519-dalek",
  "ed25519-consensus",
  "hex",
+ "ic-crypto-ed25519",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-seed",
  "ic-crypto-internal-test-vectors",
@@ -7266,14 +7267,13 @@ dependencies = [
 name = "ic-crypto-test-utils"
 version = "0.9.0"
 dependencies = [
- "ed25519-consensus",
+ "ic-crypto-ed25519",
  "ic-crypto-internal-csp-test-utils",
  "ic-interfaces-registry",
  "ic-registry-client-fake",
  "ic-registry-proto-data-provider",
  "ic-types",
  "rand 0.8.5",
- "rand_chacha 0.3.1",
 ]
 
 [[package]]
