@@ -67,15 +67,12 @@ anchors:
 jobs:
   bazel-test-all:
     name: Bazel Test All
-    <<: *dind-large-setup
     runs-on:
       labels: dind-runner-large-p
     container:
       <<: *image
-      options: -e NODE_NAME=test
-    runs-on:
-      group: zh1
-      labels: dind-large
+      options: -e NODE_NAME
+    timeout-minutes: 90
     steps:
       - <<: *checkout
       - <<: *before-script
