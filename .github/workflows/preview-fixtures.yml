@@ -17,22 +17,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Generate and upload fixtures
-        shell: bash
-        run: |
-          AWS_CREDS="${HOME}/.aws/credentials"
-          mkdir -p "$(dirname "${AWS_CREDS}")"
-
-          # handle github and gitlab differently
-          if [ -n "${AWS_SHARED_CREDENTIALS_FILE+x}" ]; then
-              ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
-          elif [ -n "${AWS_SHARED_CREDENTIALS_CONTENT+x}" ]; then
-              echo "$AWS_SHARED_CREDENTIALS_CONTENT" >"$AWS_CREDS"
-          else
-              echo '$AWS_SHARED_CREDENTIALS_CONTENT or $AWS_SHARED_CREDENTIALS_FILE has to be set' >&2
-              exit 1
-          fi
-          
-          bazel build //publish/fixtures:upload_fixtures
+        uses: ./.github/actions/bazel-test-all/
+        with:
+          BAZEL_COMMAND: "build"
+          BAZEL_TARGETS: "//publish/fixtures:upload_fixtures"
+          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
+          # check if PR title contains release and set timeout filters accordingly
+          RUN_ON_DIFF_ONLY: 'false'
+          HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Commit the new fixtures
         shell: bash
         run: |
