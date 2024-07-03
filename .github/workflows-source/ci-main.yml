@@ -72,7 +72,7 @@ jobs:
       labels: dind-runner-large-p
     container:
       <<: *image
-      options: -e NODE_NAME
+      options: -e NODE_NAME=test
     runs-on:
       group: zh1
       labels: dind-large
