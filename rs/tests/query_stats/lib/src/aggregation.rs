@@ -15,7 +15,7 @@ statistics, whilein the other cases we expect the test to succeed.
 end::catalog[] */
 use crate::{round_robin_query_call, single_update_call, wait_until_next_epoch};
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::{
+use ic_system_test_driver::{
     driver::{
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},

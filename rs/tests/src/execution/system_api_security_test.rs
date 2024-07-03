@@ -3,13 +3,15 @@
    data, write into unauthorized memory etc.
 */
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer};
-use crate::util::*;
 use core::fmt::Write;
 use ic_agent::{agent::RejectResponse, export::Principal, AgentError, RequestId};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+};
+use ic_system_test_driver::util::*;
 use ic_utils::interfaces::ManagementCanister;
 use slog::{debug, Logger};
 use std::{time::Duration, time::Instant};

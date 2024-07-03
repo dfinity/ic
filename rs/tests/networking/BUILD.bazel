@@ -11,6 +11,7 @@ CANISTER_HTTP_BASE_DEPS = [
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/proxy_canister:lib",
     "//rs/tests",
+    "//rs/tests/driver:ic-system-test-driver",
     "//rs/tests/networking/canister_http:canister_http",
     "//rs/types/management_canister_types",
     "@crate_index//:anyhow",

@@ -2,9 +2,9 @@
 
 use anyhow::Result;
 
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::basic_health_test::{config_single_host, test};
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

@@ -37,8 +37,8 @@
 use anyhow::Result;
 
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::boundary_node::BoundaryNodeVm;
-use ic_tests::driver::{
+use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
+use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
@@ -48,12 +48,12 @@ use ic_tests::driver::{
         await_boundary_node_healthy, HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy,
     },
 };
+use ic_system_test_driver::sns_client::add_all_wasms_to_sns_wasm;
 use ic_tests::nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, install_sns_aggregator, nns_dapp_customizations,
     set_authorized_subnets, set_sns_subnet,
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use ic_tests::sns_client::add_all_wasms_to_sns_wasm;
 use slog::info;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";

@@ -1,12 +1,12 @@
 use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::{
+use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
     test_env_api::{HasDependencies, HasTopologySnapshot, IcNodeContainer},
 };
-use ic_tests::systest;
+use ic_system_test_driver::systest;
 use sdk_system_tests::{config::configure_local_network, dfx::DfxCommandContext};
 use slog::info;
 use std::fs;

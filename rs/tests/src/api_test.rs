@@ -3,14 +3,14 @@
 //! itself.
 //!
 //! For more information about the Test Environment API itself, please see
-//! [crate::driver::test_env_api].
+//! [ic_system_test_driver::driver::test_env_api].
 
-use crate::driver::{
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
     test_env_api::*,
 };
-use ic_registry_subnet_type::SubnetType;
 use slog::info;
 
 /// The following setup function demonstrates how to create more than one
@@ -39,7 +39,7 @@ pub fn setup_two_ics(test_env: TestEnv) {
 /// and unnamed Internet Computer instance.
 ///
 /// See the [TopologySnapshot] and the documentation in the
-/// [crate::driver::test_env_api] for more information.
+/// [ic_system_test_driver::driver::test_env_api] for more information.
 pub fn ics_have_correct_subnet_count(test_env: TestEnv) {
     let topo_snapshot = test_env.topology_snapshot();
     assert_eq!(topo_snapshot.subnets().count(), 1);

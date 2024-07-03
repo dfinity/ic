@@ -21,32 +21,31 @@ Success::
 
 end::catalog[] */
 
-use std::collections::BTreeMap;
-
 use super::DKG_INTERVAL;
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    secs, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-    SubnetSnapshot,
-};
 use crate::orchestrator::utils::rw_message::cert_state_makes_progress_with_retries;
 use crate::tecdsa::{
     enable_chain_key_signing, get_public_key_and_test_signature, get_public_key_with_logger,
     make_key_ids_for_all_schemes,
-};
-use crate::{
-    nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
-    util::*,
 };
 use canister_test::Canister;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    secs, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+    SubnetSnapshot,
+};
+use ic_system_test_driver::{
+    nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
+    util::*,
+};
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use slog::{info, Logger};
+use std::collections::BTreeMap;
 
 const NODES_COUNT: usize = 4;
 const UNASSIGNED_NODES_COUNT: usize = 3;
