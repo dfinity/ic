@@ -4943,7 +4943,9 @@ impl Governance {
                 // prune
                 while neuron.reward_events_to_neuron_reward_e8s.len() > 10 {
                     // prune earliest. 
-                    
+                    neuron.reward_events_to_neuron_reward_e8s.remove(
+                        neuron.reward_events_to_neuron_reward_e8s.keys().min().clone()
+                    );
                 }
                 distributed_e8s_equivalent += neuron_reward_e8s;
             }
