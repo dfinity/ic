@@ -41,7 +41,7 @@ fn single_node_is_live() {
 }
 
 #[test]
-fn master_pubkey_is_produced() -> Result<(), String> {
+fn master_pubkeys_are_produced() -> Result<(), String> {
     ConsensusRunnerConfig::new_from_env(4, 0)
         .and_then(|config| config.parse_extra_config())
         .map(|mut config| {
