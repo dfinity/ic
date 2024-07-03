@@ -1,13 +1,12 @@
 name: Release Testing
 on:
-  push:
-    workflow_run:
-      workflows: ["CI Main"]
-      types:
-        - completed
-      branches:
-        - 'hotfix-*-rc--*'
-        - 'rc--*'
+  workflow_run:
+    workflows: ["CI Main"]
+    types:
+      - completed
+    branches:
+      - 'hotfix-*-rc--*'
+      - 'rc--*'
   workflow_dispatch:
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
@@ -27,6 +26,7 @@ env:
   BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
+  name: Check CI Main Failure
   ci-main-failure:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'failure' }}
