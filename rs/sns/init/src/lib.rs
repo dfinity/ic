@@ -73,6 +73,12 @@ pub const MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP: u64 = 1_000_000_000 * E8;
 /// This constant must not exceed `NervousSystemParameters::MAX_NUMBER_OF_NEURONS_CEILING`.
 pub const MAX_NEURONS_FOR_DIRECT_PARTICIPANTS: u64 = 100_000;
 
+/// Minimum allowed number of SNS neurons per neuron basket.
+pub const MIN_SNS_NEURONS_PER_BASKET: u64 = 2;
+
+/// Maximum allowed number of SNS neurons per neuron basket.
+pub const MAX_SNS_NEURONS_PER_BASKET: u64 = 10;
+
 pub const ICRC1_TOKEN_LOGO_KEY: &str = "icrc1:logo";
 
 enum MinDirectParticipationThresholdValidationError {
@@ -277,7 +283,8 @@ impl From<RestrictedCountriesValidationError> for Result<(), String> {
 pub enum NeuronBasketConstructionParametersValidationError {
     ExceedsMaximalDissolveDelay(u64),
     ExceedsU64,
-    InadequateBasketSize,
+    BasketSizeTooSmall,
+    BasketSizeTooBig,
     InadequateDissolveDelay,
     UnexpectedInLegacyFlow,
 }
@@ -297,7 +304,14 @@ impl std::fmt::Display for NeuronBasketConstructionParametersValidationError {
                     < SnsInitPayload.max_dissolve_delay_seconds = {max_dissolve_delay_seconds}"
                 )
             }
-            Self::InadequateBasketSize => "basket count must be at least 2".to_string(),
+            Self::BasketSizeTooSmall => format!(
+                "basket count must be at least {}",
+                MIN_SNS_NEURONS_PER_BASKET
+            ),
+            Self::BasketSizeTooBig => format!(
+                "basket count must be at most {}",
+                MAX_SNS_NEURONS_PER_BASKET
+            ),
             Self::InadequateDissolveDelay => {
                 "dissolve_delay_interval_seconds must be at least 1".to_string()
             }
@@ -1517,8 +1531,11 @@ impl SnsInitPayload {
         } else {
             return NeuronBasketConstructionParametersValidationError::ExceedsU64.into();
         }
-        if neuron_basket_construction_parameters.count < 2 {
-            return NeuronBasketConstructionParametersValidationError::InadequateBasketSize.into();
+        if neuron_basket_construction_parameters.count < MIN_SNS_NEURONS_PER_BASKET {
+            return NeuronBasketConstructionParametersValidationError::BasketSizeTooSmall.into();
+        }
+        if neuron_basket_construction_parameters.count > MAX_SNS_NEURONS_PER_BASKET {
+            return NeuronBasketConstructionParametersValidationError::BasketSizeTooBig.into();
         }
         if neuron_basket_construction_parameters.dissolve_delay_interval_seconds < 1 {
             return NeuronBasketConstructionParametersValidationError::InadequateDissolveDelay
@@ -1551,7 +1568,7 @@ impl SnsInitPayload {
 
     /// Validates that swap participation-related parameters<sup>*</sup> pass the following checks:
     /// (1) All participation-related parameters are set.
-    /// (2) Minimum parameters are greater than zero and below expected constant upper bounds.
+    /// (2) All participation-related parameters are within expected constant lower/upper bounds.
     /// (3) Minimum is less than or equal to maximum for the same parameter.
     /// (4) One participation cannot exceed the maximum ICP amount that the swap can obtain.
     /// (5) No more than `MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP` may be collected from direct swap
@@ -2612,7 +2629,22 @@ mod test {
                 }),
                 ..sns_init_payload.clone()
             };
-            let expected = NeuronBasketConstructionParametersValidationError::InadequateBasketSize;
+            let expected = NeuronBasketConstructionParametersValidationError::BasketSizeTooSmall;
+            assert_error(sns_init_payload.validate_post_execution(), expected);
+            sns_init_payload.validate_pre_execution().unwrap_err();
+        }
+        // Test that validation fails when basket count is too high
+        {
+            let sns_init_payload = SnsInitPayload {
+                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                    count: 11,
+                    dissolve_delay_interval_seconds: 12_345_678_u64, // arbitrary valid value
+                }),
+                min_participant_icp_e8s: Some(65000000000),
+                min_participants: Some(1),
+                ..sns_init_payload.clone()
+            };
+            let expected = NeuronBasketConstructionParametersValidationError::BasketSizeTooBig;
             assert_error(sns_init_payload.validate_post_execution(), expected);
             sns_init_payload.validate_pre_execution().unwrap_err();
         }
