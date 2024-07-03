@@ -138,7 +138,7 @@ def _generate_fixtures_bzl_impl(ctx):
         [f for f in ctx.files.uploaded_files if f.path.endswith(url_file(ctx.attr.upload_label.label.name, file))][0] 
         ) for (input, file) in zip(ctx.attr.inputs, ctx.files.inputs)
     ]
-    # As we're only constructing the rule and don't have access to the URLs right now, we create
+    # As we're only constructing the rule and don't have access to the actual sha256/URLs right now, we create
     # a single large shell command that iterates over all the inputs and writes the corresponding information
     commands = ["echo 'TEST_FIXTURES = [' > {out_path}".format(out_path = out.path)]
     for (name, sha256sum, url) in triples:
@@ -157,7 +157,7 @@ def _generate_fixtures_bzl_impl(ctx):
         command = command,
         outputs = [out]
     )
-    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
+    return [DefaultInfo(files = depset([out]))]
 
 generate_fixtures_bzl = rule(
     implementation = _generate_fixtures_bzl_impl,
@@ -171,14 +171,15 @@ generate_fixtures_bzl = rule(
 
 def upload_fixtures(name, out, **kwargs):
     """
-    Upload the specified fixtures and generate a release_fixtures.bzl file.
+    Upload the specified fixtures and generate a file defining RELEASE_FIXTURES.
 
     Args:
       name: name of the rule
+      out: the output file (where the RELEASE_FIXTURES variable is written to)
       **kwargs: all arguments to pass to upload_artifacts (should include at least inputs)
 
-    The output release_fixturs.bzl file defines a RELEASE_FIXTURES variable that can then
-    serve as a basis for downloading the fixtures in the Bazel WORKSPACE file.
+    The RELEASE_FIXTURES variable that can then serve as a basis for downloading the fixtures 
+    in the Bazel WORKSPACE file.
     """
     intermediate_name = name + "_upload"
 
@@ -194,20 +195,4 @@ def upload_fixtures(name, out, **kwargs):
         uploaded_files = [":" + intermediate_name],
         inputs = kwargs["inputs"],
         upload_label = ":" + intermediate_name,
-    )
-
-def rust_fixture_generator(name, **kwargs):
-    binary_name = name + "_binary"
-    rust_binary(
-        name = binary_name,
-        **kwargs,
-    )
-
-    native.genrule(
-        name = name,
-        tools = [
-            ":" + binary_name,
-        ],
-        outs = [name + ".fixture"],
-        cmd = "$(location :{binary_name}) > $@".format(binary_name = binary_name),
     )

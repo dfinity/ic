@@ -1,5 +1,5 @@
-# This is just a temporarily placeholder for testing; when merged, this should go into 
-# the tag-release workflow
+# This is just a temporarily location for testing; when merged, this should be renamed
+# and perhapsed merged into some other file
 
 name: Fixture generation and upload
 on:
