@@ -71,7 +71,7 @@ jobs:
       labels: dind-runner-large-p
     container:
       <<: *image
-      options: -e NODE_NAME
+      options: --privileged --cgroupns host --network host -e NODE_NAME
     timeout-minutes: 90
     steps:
       - <<: *checkout
